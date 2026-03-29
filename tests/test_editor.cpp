@@ -1,0 +1,563 @@
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+
+#include "editor/EditorSchema.h"
+#include "editor/Raycaster.h"
+#include "editor/SceneDocument.h"
+#include "editor/SceneSerializer.h"
+#include "renderer/Camera.h"
+
+using namespace Monolith;
+using namespace Monolith::Editor;
+using Catch::Approx;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static std::string TmpPath(const std::string& name) {
+    return (std::filesystem::temp_directory_path() / name).string();
+}
+
+static void WriteFile(const std::string& path, const std::string& content) {
+    std::ofstream f(path);
+    f << content;
+}
+
+// ===========================================================================
+// EditorSchema
+// ===========================================================================
+
+TEST_CASE("EditorSchema: missing file is silently ignored", "[editor][schema]") {
+    EditorSchema schema;
+    REQUIRE_NOTHROW(schema.LoadFromFile("/nonexistent/path/schema.json"));
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
+}
+
+TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema]") {
+    WriteFile(TmpPath("schema_empty.json"), "{}");
+    EditorSchema schema;
+    REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_empty.json")));
+    REQUIRE(schema.GetSchema(SceneObjectType::Panel) == nullptr);
+}
+
+TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]") {
+    WriteFile(TmpPath("schema_bad.json"), "{ this is not valid json !!!}");
+    EditorSchema schema;
+    REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
+}
+
+TEST_CASE("EditorSchema: loads Prop schema with string field", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [
+                    {"key": "mesh", "label": "Mesh", "type": "string", "default": "box.obj"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_prop.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_prop.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Prop);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields.size() == 1);
+    REQUIRE(ts->fields[0].key == "mesh");
+    REQUIRE(ts->fields[0].label == "Mesh");
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::String);
+    REQUIRE(ts->fields[0].defaultValue == "box.obj");
+}
+
+TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Light": {
+                "fields": [
+                    {"key": "intensity", "label": "Intensity", "type": "float", "min": 0.0, "max": 10.0, "default": "1.0"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_light.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_light.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Light);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Float);
+    REQUIRE(ts->fields[0].minVal == Approx(0.0f));
+    REQUIRE(ts->fields[0].maxVal == Approx(10.0f));
+}
+
+TEST_CASE("EditorSchema: loads bool field", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [
+                    {"key": "visible", "label": "Visible", "type": "bool", "default": "true"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_bool.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_bool.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Prop);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Bool);
+}
+
+TEST_CASE("EditorSchema: loads enum field with options", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Panel": {
+                "fields": [
+                    {
+                        "key": "material",
+                        "label": "Material",
+                        "type": "enum",
+                        "options": ["wood", "metal", "stone"],
+                        "default": "wood"
+                    }
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_enum.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_enum.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Panel);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Enum);
+    REQUIRE(ts->fields[0].options.size() == 3);
+    REQUIRE(ts->fields[0].options[0] == "wood");
+    REQUIRE(ts->fields[0].options[1] == "metal");
+    REQUIRE(ts->fields[0].options[2] == "stone");
+}
+
+TEST_CASE("EditorSchema: loads color3 field", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Light": {
+                "fields": [
+                    {"key": "color", "label": "Color", "type": "color3"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_color.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_color.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Light);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Color3);
+}
+
+TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [{"key": "x", "label": "X", "type": "string"}]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_partial.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_partial.json"));
+
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop) != nullptr);
+    REQUIRE(schema.GetSchema(SceneObjectType::Light) == nullptr);
+    REQUIRE(schema.GetSchema(SceneObjectType::Panel) == nullptr);
+}
+
+TEST_CASE("EditorSchema: loads multiple types", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [{"key": "mesh", "label": "Mesh", "type": "string"}]
+            },
+            "Light": {
+                "fields": [
+                    {"key": "intensity", "label": "Intensity", "type": "float"},
+                    {"key": "color", "label": "Color", "type": "color3"}
+                ]
+            },
+            "Panel": {
+                "fields": [{"key": "text", "label": "Text", "type": "string"}]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_multi.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_multi.json"));
+
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop) != nullptr);
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop)->fields.size() == 1);
+
+    REQUIRE(schema.GetSchema(SceneObjectType::Light) != nullptr);
+    REQUIRE(schema.GetSchema(SceneObjectType::Light)->fields.size() == 2);
+
+    REQUIRE(schema.GetSchema(SceneObjectType::Panel) != nullptr);
+    REQUIRE(schema.GetSchema(SceneObjectType::Panel)->fields.size() == 1);
+}
+
+TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {}
+        }
+    })";
+    WriteFile(TmpPath("schema_nofields.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_nofields.json"));
+
+    REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
+}
+
+// ===========================================================================
+// SceneSerializer
+// ===========================================================================
+
+TEST_CASE("SceneSerializer: LoadFromFile throws on missing file", "[editor][serializer]") {
+    REQUIRE_THROWS_AS(
+        SceneSerializer::LoadFromFile("/nonexistent/scene.json"),
+        std::runtime_error);
+}
+
+TEST_CASE("SceneSerializer: LoadFromFile throws on invalid JSON", "[editor][serializer]") {
+    WriteFile(TmpPath("bad_scene.json"), "{ not json!!! }");
+    REQUIRE_THROWS_AS(
+        SceneSerializer::LoadFromFile(TmpPath("bad_scene.json")),
+        std::runtime_error);
+}
+
+TEST_CASE("SceneSerializer: round-trip empty scene", "[editor][serializer]") {
+    SceneDocument doc;
+    doc.filePath = "test.json";
+
+    const std::string path = TmpPath("empty_scene.json");
+    REQUIRE_NOTHROW(SceneSerializer::SaveToFile(doc, path));
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.filePath == path);
+    REQUIRE(loaded.objects.empty());
+    REQUIRE(loaded.assets.empty());
+}
+
+TEST_CASE("SceneSerializer: round-trip single Panel object", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject obj;
+    obj.id = "panel_001";
+    obj.type = SceneObjectType::Panel;
+    obj.position = {1.0f, 2.0f, 3.0f};
+    obj.scale = {0.5f, 0.5f, 0.5f};
+    obj.yaw = 45.0f;
+    obj.props["texture"] = "wood.png";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("panel_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    const auto& o = loaded.objects[0];
+    REQUIRE(o.id == "panel_001");
+    REQUIRE(o.type == SceneObjectType::Panel);
+    REQUIRE(o.position.x == Approx(1.0f));
+    REQUIRE(o.position.y == Approx(2.0f));
+    REQUIRE(o.position.z == Approx(3.0f));
+    REQUIRE(o.scale.x == Approx(0.5f));
+    REQUIRE(o.yaw == Approx(45.0f));
+    REQUIRE(o.props.at("texture") == "wood.png");
+}
+
+TEST_CASE("SceneSerializer: round-trip Prop and Light types", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject prop;
+    prop.id = "prop_a";
+    prop.type = SceneObjectType::Prop;
+    prop.position = {10.0f, 0.0f, -5.0f};
+    doc.objects.push_back(prop);
+
+    SceneObject light;
+    light.id = "light_1";
+    light.type = SceneObjectType::Light;
+    light.position = {0.0f, 10.0f, 0.0f};
+    doc.objects.push_back(light);
+
+    const std::string path = TmpPath("proplight_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 2);
+    bool foundProp = false, foundLight = false;
+    for (const auto& o : loaded.objects) {
+        if (o.id == "prop_a") { foundProp = true; REQUIRE(o.type == SceneObjectType::Prop); }
+        if (o.id == "light_1") { foundLight = true; REQUIRE(o.type == SceneObjectType::Light); }
+    }
+    REQUIRE(foundProp);
+    REQUIRE(foundLight);
+}
+
+TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") {
+    SceneDocument doc;
+
+    AssetDef asset;
+    asset.mesh = "stone.obj";
+    asset.renderScale = "2.0000,2.0000,2.0000";
+    doc.assets["stone_asset"] = asset;
+
+    SceneObject obj;
+    obj.id = "obj_with_asset";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "stone_asset";
+    obj.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("asset_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.assets.count("stone_asset") == 1);
+    REQUIRE(loaded.assets.at("stone_asset").mesh == "stone.obj");
+    REQUIRE(loaded.assets.at("stone_asset").renderScale == "2.0000,2.0000,2.0000");
+    REQUIRE(loaded.objects[0].assetId == "stone_asset");
+}
+
+TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj1";
+    obj.type = SceneObjectType::Panel;
+    obj.props["_eid"] = "42";  // runtime-only, should not be persisted
+    obj.props["visible"] = "true";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("eid_strip_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].props.count("_eid") == 0);
+    REQUIRE(loaded.objects[0].props.count("visible") == 1);
+}
+
+TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]") {
+    SceneDocument doc;
+    REQUIRE_THROWS_AS(
+        SceneSerializer::SaveToFile(doc, "/nonexistent/dir/scene.json"),
+        std::runtime_error);
+}
+
+TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]") {
+    SceneDocument doc;
+    const std::string path = TmpPath("filepath_test.json");
+    SceneSerializer::SaveToFile(doc, path);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.filePath == path);
+}
+
+TEST_CASE("SceneSerializer: multiple props round-trip", "[editor][serializer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "multi_prop";
+    obj.type = SceneObjectType::Panel;
+    obj.props["alpha"] = "0.5";
+    obj.props["color"] = "red";
+    obj.props["count"] = "10";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("multi_prop_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects[0].props.at("alpha") == "0.5");
+    REQUIRE(loaded.objects[0].props.at("color") == "red");
+    REQUIRE(loaded.objects[0].props.at("count") == "10");
+}
+
+// ===========================================================================
+// Raycaster — RayVsAABB
+// ===========================================================================
+
+TEST_CASE("RayVsAABB: direct hit along +X axis", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {-5.0f, 0.0f, 0.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f};
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t >= 0.0f);
+    REQUIRE(t == Approx(4.0f).epsilon(1e-4f));  // ray travels 4 units before hitting near face
+}
+
+TEST_CASE("RayVsAABB: miss — ray passes above the box", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {-5.0f, 3.0f, 0.0f};  // y=3, above a box with half=1
+    ray.direction = {1.0f, 0.0f, 0.0f};
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t < 0.0f);
+}
+
+TEST_CASE("RayVsAABB: ray origin inside box returns 0", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {0.0f, 0.0f, 0.0f};  // inside the box
+    ray.direction = {1.0f, 0.0f, 0.0f};
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t >= 0.0f);
+    REQUIRE(t == Approx(0.0f).margin(1e-5f));
+}
+
+TEST_CASE("RayVsAABB: parallel ray outside slab misses", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {5.0f, 5.0f, 0.0f};   // outside x-slab of box centered at origin
+    ray.direction = {0.0f, 0.0f, 1.0f};   // moves in Z only — parallel to Y slab
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t < 0.0f);
+}
+
+TEST_CASE("RayVsAABB: parallel ray inside slab hits", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {-5.0f, 0.0f, 0.0f};
+    ray.direction = {0.0f, 0.0f, 1.0f};   // moves in Z, inside x and y slabs
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    // parallel x-axis: origin.x=-5 is outside [-1,1] → should miss
+    REQUIRE(t < 0.0f);
+}
+
+TEST_CASE("RayVsAABB: hit along -Z axis", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {0.0f, 0.0f, 10.0f};
+    ray.direction = {0.0f, 0.0f, -1.0f};
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {0.5f, 0.5f, 0.5f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t >= 0.0f);
+    REQUIRE(t == Approx(9.5f).epsilon(1e-4f));
+}
+
+TEST_CASE("RayVsAABB: hit along +Y axis", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {0.0f, -5.0f, 0.0f};
+    ray.direction = {0.0f, 1.0f, 0.0f};
+
+    Vec3 center = {0.0f, 2.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t >= 0.0f);
+    REQUIRE(t == Approx(6.0f).epsilon(1e-4f));
+}
+
+TEST_CASE("RayVsAABB: ray pointing away from box misses", "[editor][raycaster]") {
+    Ray ray;
+    ray.origin    = {10.0f, 0.0f, 0.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f};  // pointing away from origin box
+
+    Vec3 center = {0.0f, 0.0f, 0.0f};
+    Vec3 half   = {1.0f, 1.0f, 1.0f};
+
+    float t = RayVsAABB(ray, center, half);
+    REQUIRE(t < 0.0f);
+}
+
+// ===========================================================================
+// Raycaster — ScreenToRay
+// ===========================================================================
+
+TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[editor][raycaster]") {
+    Camera cam;
+    cam.position = {0.0f, 0.0f, 5.0f};
+    cam.target   = {0.0f, 0.0f, 0.0f};
+    cam.up       = Vec3::Up();
+    cam.fovY     = 60.0f;
+    cam.aspect   = 1.0f;
+    cam.zNear    = 0.1f;
+    cam.zFar     = 100.0f;
+
+    int W = 800, H = 800;
+    Ray ray = ScreenToRay(W / 2.0f, H / 2.0f, W, H, cam);
+
+    REQUIRE(ray.direction.x == Approx(0.0f).margin(1e-3f));
+    REQUIRE(ray.direction.y == Approx(0.0f).margin(1e-3f));
+    REQUIRE(ray.direction.z < 0.0f);  // pointing toward -Z (into the scene)
+}
+
+TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]") {
+    Camera cam;
+    cam.position = {0.0f, 0.0f, 5.0f};
+    cam.target   = {0.0f, 0.0f, 0.0f};
+    cam.up       = Vec3::Up();
+    cam.fovY     = 60.0f;
+    cam.aspect   = 16.0f / 9.0f;
+    cam.zNear    = 0.1f;
+    cam.zFar     = 100.0f;
+
+    // Test multiple screen positions
+    for (auto [mx, my] : std::initializer_list<std::pair<float,float>>{
+        {0.0f, 0.0f}, {200.0f, 150.0f}, {400.0f, 300.0f}, {799.0f, 449.0f}
+    }) {
+        Ray r = ScreenToRay(mx, my, 800, 450, cam);
+        REQUIRE(r.direction.Length() == Approx(1.0f).epsilon(1e-4f));
+    }
+}
+
+TEST_CASE("ScreenToRay: origin is at/near camera position", "[editor][raycaster]") {
+    Camera cam;
+    cam.position = {3.0f, 2.0f, 7.0f};
+    cam.target   = {0.0f, 0.0f, 0.0f};
+    cam.up       = Vec3::Up();
+    cam.fovY     = 60.0f;
+    cam.aspect   = 1.0f;
+    cam.zNear    = 0.1f;
+    cam.zFar     = 100.0f;
+
+    Ray ray = ScreenToRay(400.0f, 300.0f, 800, 600, cam);
+
+    // Origin should be near the near plane (close to camera)
+    Vec3 diff = ray.origin - cam.position;
+    REQUIRE(diff.Length() < 1.0f);
+}
