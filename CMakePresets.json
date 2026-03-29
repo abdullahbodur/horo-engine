@@ -30,7 +30,7 @@
     },
     {
       "name": "debug-msvc",
-      "displayName": "Debug (MSVC)",
+      "displayName": "Debug (MSVC 2022)",
       "inherits": "base",
       "generator": "Visual Studio 17 2022",
       "condition": {
@@ -45,8 +45,32 @@
     },
     {
       "name": "release-msvc",
-      "displayName": "Release (MSVC)",
+      "displayName": "Release (MSVC 2022)",
       "inherits": "debug-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MONOLITH_ENGINE_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "debug-msvc-2026",
+      "displayName": "Debug (MSVC 2026)",
+      "inherits": "base",
+      "generator": "Visual Studio 18 2026",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MONOLITH_ENGINE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "release-msvc-2026",
+      "displayName": "Release (MSVC 2026)",
+      "inherits": "debug-msvc-2026",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "MONOLITH_ENGINE_BUILD_TESTS": "OFF"
@@ -78,12 +102,38 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "debug-msvc",
+      "configurePreset": "debug-msvc"
+    },
+    {
+      "name": "release-msvc",
+      "configurePreset": "release-msvc"
+    },
+    {
+      "name": "debug-msvc-2026",
+      "configurePreset": "debug-msvc-2026"
+    },
+    {
+      "name": "release-msvc-2026",
+      "configurePreset": "release-msvc-2026"
     }
   ],
   "testPresets": [
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug-msvc",
+      "configurePreset": "debug-msvc",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug-msvc-2026",
+      "configurePreset": "debug-msvc-2026",
       "output": { "outputOnFailure": true }
     }
   ]
