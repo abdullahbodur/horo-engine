@@ -141,6 +141,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawToolbar();
     DrawViewGimbal();
     DrawObjectList();
+    DrawAssetsPanel();
     DrawPropertiesPanel();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
@@ -232,6 +233,7 @@ void EditorLayer::DrawToolbar() {
       m_document.objects.push_back(std::move(o));
       m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
       m_document.dirty = true;
+      TriggerReload();
     }
     ImGui::SameLine();
   };
@@ -356,11 +358,12 @@ void EditorLayer::DrawViewGimbal() {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 220.0f;
+  const float W = 260.0f;
   const float Y = 36.0f;
+  const float H = io.DisplaySize.y * 0.52f - Y;
 
   ImGui::SetNextWindowPos(ImVec2(0, Y));
-  ImGui::SetNextWindowSize(ImVec2(W, io.DisplaySize.y - Y));
+  ImGui::SetNextWindowSize(ImVec2(W, H));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
       "Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -371,8 +374,11 @@ void EditorLayer::DrawObjectList() {
                       : (obj.type == SceneObjectType::Light) ? "L"
                                                              : "B";
 
-    char label[128];
-    std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
+    char label[192];
+    if (!obj.assetId.empty())
+      std::snprintf(label, sizeof(label), "[%s] %s  {%s}##%d", tag, obj.id.c_str(), obj.assetId.c_str(), i);
+    else
+      std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
 
     if (ImGui::Selectable(label, IsSelected(i))) {
       if (ImGui::GetIO().KeyShift)
@@ -381,6 +387,101 @@ void EditorLayer::DrawObjectList() {
         m_selectedIndices = {i};
     }
   }
+
+  ImGui::End();
+}
+
+void EditorLayer::DrawAssetsPanel() {
+  ImGuiIO& io = ImGui::GetIO();
+  const float W = 260.0f;
+  const float Y = io.DisplaySize.y * 0.52f;
+
+  ImGui::SetNextWindowPos(ImVec2(0, Y));
+  ImGui::SetNextWindowSize(ImVec2(W, io.DisplaySize.y - Y));
+  ImGui::SetNextWindowBgAlpha(0.85f);
+  ImGui::Begin(
+      "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+  ImGui::TextDisabled("Registry");
+  ImGui::Separator();
+
+  std::vector<std::string> assetIds;
+  assetIds.reserve(m_document.assets.size());
+  for (const auto& [assetId, _] : m_document.assets)
+    assetIds.push_back(assetId);
+  std::sort(assetIds.begin(), assetIds.end());
+
+  std::string assetToDelete;
+  for (const auto& assetId : assetIds) {
+    const auto assetIt = m_document.assets.find(assetId);
+    if (assetIt == m_document.assets.end())
+      continue;
+    const auto& asset = assetIt->second;
+
+    ImGui::PushID(assetId.c_str());
+    ImGui::Text("%s", assetId.c_str());
+    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+    ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
+
+    if (ImGui::Button("Add Prop")) {
+      SceneObject obj;
+      obj.id = GenerateId(m_document);
+      obj.type = SceneObjectType::Prop;
+      obj.assetId = assetId;
+      ApplySchemaDefaults(obj);
+      m_document.objects.push_back(std::move(obj));
+      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+      m_document.dirty = true;
+      TriggerReload();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Delete Asset"))
+      assetToDelete = assetId;
+    ImGui::Separator();
+    ImGui::PopID();
+  }
+
+  if (!assetToDelete.empty()) {
+    for (auto& obj : m_document.objects) {
+      if (obj.assetId == assetToDelete)
+        obj.assetId.clear();
+    }
+    m_document.assets.erase(assetToDelete);
+    m_document.dirty = true;
+    TriggerReload();
+  }
+
+  char idBuf[128] = {};
+  std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
+  if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
+    m_assetDraftId = idBuf;
+
+  char meshBuf[256] = {};
+  std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
+  if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
+    m_assetDraftMesh = meshBuf;
+
+  char scaleBuf[128] = {};
+  std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
+  if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
+    m_assetDraftRenderScale = scaleBuf;
+
+  const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
+  if (!canCreate)
+    ImGui::BeginDisabled();
+  if (ImGui::Button("Create Asset")) {
+    AssetDef def;
+    def.mesh = m_assetDraftMesh;
+    def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
+    m_document.assets[m_assetDraftId] = std::move(def);
+    m_assetDraftId.clear();
+    m_assetDraftMesh.clear();
+    m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+    m_document.dirty = true;
+    TriggerReload();
+  }
+  if (!canCreate)
+    ImGui::EndDisabled();
 
   ImGui::End();
 }
@@ -454,6 +555,40 @@ void EditorLayer::DrawPropertiesPanel() {
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
+  }
+
+  ImGui::Separator();
+  ImGui::Text("Asset");
+
+  std::vector<const char*> assetItems;
+  assetItems.reserve(m_document.assets.size() + 1);
+  assetItems.push_back("<none>");
+  int currentAssetIndex = 0;
+  int assetIndex = 1;
+  for (const auto& [assetId, _] : m_document.assets) {
+    assetItems.push_back(assetId.c_str());
+    if (obj.assetId == assetId)
+      currentAssetIndex = assetIndex;
+    ++assetIndex;
+  }
+
+  if (ImGui::Combo("Asset ID", &currentAssetIndex, assetItems.data(), static_cast<int>(assetItems.size()))) {
+    if (currentAssetIndex == 0)
+      obj.assetId.clear();
+    else
+      obj.assetId = assetItems[static_cast<size_t>(currentAssetIndex)];
+    m_document.dirty = true;
+    TriggerReload();
+  }
+
+  if (!obj.assetId.empty()) {
+    auto assetIt = m_document.assets.find(obj.assetId);
+    if (assetIt != m_document.assets.end()) {
+      ImGui::TextDisabled("mesh: %s", assetIt->second.mesh.c_str());
+      ImGui::TextDisabled("renderScale: %s", assetIt->second.renderScale.c_str());
+    } else {
+      ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Missing asset: %s", obj.assetId.c_str());
+    }
   }
 
   ImGui::Separator();

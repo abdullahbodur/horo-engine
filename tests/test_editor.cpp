@@ -346,6 +346,57 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
 }
 
+TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
+    SceneDocument doc;
+
+    AssetDef asset;
+    asset.mesh = "crate.obj";
+    asset.renderScale = "1.0000,1.5000,1.0000";
+    doc.assets["crate"] = asset;
+
+    SceneObject obj;
+    obj.id = "crate_instance";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    obj.props["mesh"] = "should_not_be_saved.obj";
+    obj.props["renderScale"] = "9,9,9";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("asset_backed_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+
+    std::ifstream in(path);
+    REQUIRE(in.is_open());
+    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    REQUIRE(saved.find("\"asset\": \"crate\"") != std::string::npos);
+    REQUIRE(saved.find("should_not_be_saved.obj") == std::string::npos);
+    REQUIRE(saved.find("\"props\"") == std::string::npos);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].assetId == "crate");
+}
+
+TEST_CASE("SceneSerializer: inline props survive when object has no asset reference", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject obj;
+    obj.id = "inline_prop_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.props["mesh"] = "barrel.obj";
+    obj.props["renderScale"] = "1.2500,1.2500,1.2500";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("inline_props_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].assetId.empty());
+    REQUIRE(loaded.objects[0].props.at("mesh") == "barrel.obj");
+    REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
+}
+
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
     SceneDocument doc;
     SceneObject obj;

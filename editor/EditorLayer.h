@@ -100,6 +100,7 @@ class EditorLayer {
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
   void DrawObjectList();
+  void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
@@ -112,6 +113,10 @@ class EditorLayer {
   std::string m_hotReloadOverlayLabel;
   float m_clipboardToastTime = 0.0f;
   std::string m_clipboardToastLabel;
+
+  std::string m_assetDraftId;
+  std::string m_assetDraftMesh;
+  std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
 
   static std::string GenerateId(const SceneDocument& doc);
   void ApplySchemaDefaults(SceneObject& obj) const;
