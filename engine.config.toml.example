@@ -1,0 +1,12 @@
+[window]
+width = 1600
+height = 900
+vsync = true
+
+[runtime]
+max_ram_mb = 2048
+max_cpu_percent = 70
+default_scene = "assets/scenes/main.json"
+
+[assets]
+directories = ["assets", "mods/base"]

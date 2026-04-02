@@ -118,3 +118,8 @@ add_test(NAME test_gjk_extended COMMAND test_gjk_extended)
 add_executable(test_quaternion_extended test_quaternion_extended.cpp)
 target_link_libraries(test_quaternion_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
 add_test(NAME test_quaternion_extended COMMAND test_quaternion_extended)
+
+# ---- test_engine_config ----
+add_executable(test_engine_config test_engine_config.cpp)
+target_link_libraries(test_engine_config PRIVATE MonolithEngine Catch2::Catch2WithMain)
+add_test(NAME test_engine_config COMMAND test_engine_config)

@@ -13,14 +13,6 @@ namespace Monolith {
 namespace Editor {
 
 // In-game editor overlay.
-//
-// Usage (from CharacterApp):
-//   OnInit  → editor.Init(window)
-//   OnUpdate→ if F10 pressed: editor.Toggle()
-//              editor.OnUpdate(dt, cam, w, h)  — returns true if ImGui consumed input
-//   OnRender→ editor.Render(cam)               — call after game scene, before EndFrame
-//   OnShutdown → editor.Shutdown()
-//   Reload  → if editor.WantsSceneReload(): reload from editor.GetPendingDocument()
 class EditorLayer {
  public:
   void Init(GLFWwindow* window);
@@ -89,6 +81,11 @@ class EditorLayer {
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
   std::function<void(const SceneObject&)> m_transformCb;
 
+  std::string m_selectedAssetId;
+  char m_newAssetId[64] = "asset_001";
+  char m_newAssetMesh[256] = "";
+  char m_newAssetScale[64] = "1.0000,1.0000,1.0000";
+
   // Helpers
   bool IsSelected(int i) const;
   int PrimaryIdx() const;    // last selected index, or -1 if empty
@@ -100,11 +97,14 @@ class EditorLayer {
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
   void DrawObjectList();
+  void DrawAssetRegistryPanel();
   void DrawPropertiesPanel();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
+  void CreateObjectFromAsset(const std::string& assetId);
+  static const char* TypeToLabel(SceneObjectType type);
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;

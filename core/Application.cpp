@@ -2,13 +2,22 @@
 
 #include <glad/glad.h>
 
+#include "core/EngineConfig.h"
 #include "core/Logger.h"
 #include "core/Time.h"
 #include "input/Input.h"
 
 namespace Monolith {
 
-Application::Application(const AppSpec& spec) {
+AppSpec AppSpec::FromConfig(const std::string& path, const std::string& appName) {
+  AppSpec spec;
+  spec.name = appName;
+  spec.configPath = path;
+  EngineRuntimeConfig::LoadOrDefault(path).ApplyTo(spec);
+  return spec;
+}
+
+Application::Application(const AppSpec& spec) : m_spec(spec) {
   WindowSpec ws;
   ws.title = spec.name;
   ws.width = spec.width;
@@ -19,6 +28,11 @@ Application::Application(const AppSpec& spec) {
   m_window->SetCloseCallback([this]() { m_running = false; });
 
   Input::Init(m_window->GetNativeHandle());
+
+  if (!m_spec.configPath.empty()) {
+    LOG_INFO("Application config: %s", m_spec.configPath.c_str());
+    LOG_INFO("Runtime budgets — RAM: %d MB, CPU: %d%%", m_spec.maxRamMb, m_spec.maxCpuPercent);
+  }
 }
 
 Application::~Application() = default;

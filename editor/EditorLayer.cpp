@@ -16,13 +16,28 @@
 
 #include "core/Logger.h"
 #include "editor/Raycaster.h"
-#include "math/MathUtils.h"
 #include "editor/SceneSerializer.h"
+#include "math/MathUtils.h"
 #include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
 
 namespace Monolith {
 namespace Editor {
+
+namespace {
+const char* kDefaultScenePath = "assets/scenes/dungeon.json";
+}
+
+const char* EditorLayer::TypeToLabel(SceneObjectType type) {
+  switch (type) {
+    case SceneObjectType::Prop:
+      return "Prop";
+    case SceneObjectType::Light:
+      return "Light";
+    default:
+      return "Panel";
+  }
+}
 
 // ---- Lifecycle ---------------------------------------------------------------
 
@@ -59,9 +74,13 @@ void EditorLayer::Toggle() {
 
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
-    doc.filePath = "assets/scenes/dungeon.json";
+    doc.filePath = kDefaultScenePath;
   m_document = std::move(doc);
   m_selectedIndices.clear();
+  if (!m_document.assets.empty())
+    m_selectedAssetId = m_document.assets.begin()->first;
+  else
+    m_selectedAssetId.clear();
 }
 
 // ---- Per-frame update --------------------------------------------------------
@@ -141,6 +160,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawToolbar();
     DrawViewGimbal();
     DrawObjectList();
+    DrawAssetRegistryPanel();
     DrawPropertiesPanel();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
@@ -240,6 +260,12 @@ void EditorLayer::DrawToolbar() {
   addObj(SceneObjectType::Prop, "+ Prop");
   addObj(SceneObjectType::Light, "+ Light");
 
+  if (!m_selectedAssetId.empty()) {
+    if (ImGui::Button("Place Selected Asset"))
+      CreateObjectFromAsset(m_selectedAssetId);
+    ImGui::SameLine();
+  }
+
   // Fly camera toggle — green when active, Tab also toggles
   const bool flyActiveNow = m_flyMode;  // capture before button may flip it
   if (flyActiveNow)
@@ -252,7 +278,7 @@ void EditorLayer::DrawToolbar() {
                      m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
   }
   if (flyActiveNow) {
-    ImGui::PopStyleColor();  // always balanced with the push above
+    ImGui::PopStyleColor();
     ImGui::SameLine();
     ImGui::TextDisabled("WASD + mouse  |  Tab to exit");
   }
@@ -260,13 +286,11 @@ void EditorLayer::DrawToolbar() {
   ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
   ImGui::SameLine();
 
-  // Right-aligned controls
   const float rightW = 260.0f;
   ImGui::SetCursorPosX(io.DisplaySize.x - rightW);
 
   if (ImGui::Button("Load")) {
-    std::string path =
-        m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+    std::string path = m_document.filePath.empty() ? kDefaultScenePath : m_document.filePath;
     try {
       m_document = SceneSerializer::LoadFromFile(path);
       m_selectedIndices.clear();
@@ -281,14 +305,14 @@ void EditorLayer::DrawToolbar() {
     if (!canSave)
       ImGui::BeginDisabled();
     if (ImGui::Button("Save")) {
-      std::string path =
-          m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+      std::string path = m_document.filePath.empty() ? kDefaultScenePath : m_document.filePath;
       m_document.filePath = path;
       try {
         SceneSerializer::SaveToFile(m_document, path);
-      } catch (...) {}
+      } catch (...) {
+      }
       m_document.dirty = false;
-      TriggerReload();  // rebuild scene so changes are immediately visible
+      TriggerReload();
     }
     if (!canSave)
       ImGui::EndDisabled();
@@ -356,11 +380,12 @@ void EditorLayer::DrawViewGimbal() {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 220.0f;
+  const float W = 260.0f;
   const float Y = 36.0f;
+  const float H = (io.DisplaySize.y - Y) * 0.52f;
 
   ImGui::SetNextWindowPos(ImVec2(0, Y));
-  ImGui::SetNextWindowSize(ImVec2(W, io.DisplaySize.y - Y));
+  ImGui::SetNextWindowSize(ImVec2(W, H));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
       "Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -371,8 +396,12 @@ void EditorLayer::DrawObjectList() {
                       : (obj.type == SceneObjectType::Light) ? "L"
                                                              : "B";
 
-    char label[128];
-    std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
+    std::string assetSuffix;
+    if (!obj.assetId.empty())
+      assetSuffix = " @" + obj.assetId;
+
+    char label[196];
+    std::snprintf(label, sizeof(label), "[%s] %s%s##%d", tag, obj.id.c_str(), assetSuffix.c_str(), i);
 
     if (ImGui::Selectable(label, IsSelected(i))) {
       if (ImGui::GetIO().KeyShift)
@@ -385,11 +414,100 @@ void EditorLayer::DrawObjectList() {
   ImGui::End();
 }
 
+void EditorLayer::DrawAssetRegistryPanel() {
+  ImGuiIO& io = ImGui::GetIO();
+  const float W = 260.0f;
+  const float Y = 36.0f + (io.DisplaySize.y - 36.0f) * 0.52f;
+  const float H = io.DisplaySize.y - Y;
+
+  ImGui::SetNextWindowPos(ImVec2(0, Y));
+  ImGui::SetNextWindowSize(ImVec2(W, H));
+  ImGui::SetNextWindowBgAlpha(0.85f);
+  ImGui::Begin(
+      "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+  ImGui::InputText("ID", m_newAssetId, sizeof(m_newAssetId));
+  ImGui::InputText("Mesh", m_newAssetMesh, sizeof(m_newAssetMesh));
+  ImGui::InputText("Render Scale", m_newAssetScale, sizeof(m_newAssetScale));
+
+  if (ImGui::Button("Add Asset")) {
+    const std::string id = m_newAssetId;
+    if (!id.empty()) {
+      AssetDef def;
+      def.mesh = m_newAssetMesh;
+      def.renderScale = m_newAssetScale;
+      m_document.assets[id] = def;
+      m_selectedAssetId = id;
+      m_document.dirty = true;
+    }
+  }
+  ImGui::SameLine();
+  if (!m_selectedAssetId.empty()) {
+    if (ImGui::Button("Place Asset"))
+      CreateObjectFromAsset(m_selectedAssetId);
+  }
+
+  ImGui::Separator();
+  ImGui::Text("Registered assets: %d", static_cast<int>(m_document.assets.size()));
+
+  std::vector<std::string> ids;
+  ids.reserve(m_document.assets.size());
+  for (const auto& kv : m_document.assets)
+    ids.push_back(kv.first);
+  std::sort(ids.begin(), ids.end());
+
+  for (const auto& id : ids) {
+    const AssetDef& asset = m_document.assets.at(id);
+    const bool selected = (m_selectedAssetId == id);
+    std::string label = id + "##asset_" + id;
+    if (ImGui::Selectable(label.c_str(), selected))
+      m_selectedAssetId = id;
+    ImGui::TextDisabled("mesh: %s", asset.mesh.empty() ? "<none>" : asset.mesh.c_str());
+    if (!asset.renderScale.empty())
+      ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
+    ImGui::Separator();
+  }
+
+  if (!m_selectedAssetId.empty()) {
+    auto it = m_document.assets.find(m_selectedAssetId);
+    if (it != m_document.assets.end()) {
+      ImGui::Text("Edit asset");
+      ImGui::LabelText("Selected", "%s", m_selectedAssetId.c_str());
+
+      char meshBuf[256] = {};
+      std::snprintf(meshBuf, sizeof(meshBuf), "%s", it->second.mesh.c_str());
+      if (ImGui::InputText("Asset Mesh", meshBuf, sizeof(meshBuf))) {
+        it->second.mesh = meshBuf;
+        m_document.dirty = true;
+      }
+
+      char scaleBuf[64] = {};
+      std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", it->second.renderScale.c_str());
+      if (ImGui::InputText("Asset Scale", scaleBuf, sizeof(scaleBuf))) {
+        it->second.renderScale = scaleBuf;
+        m_document.dirty = true;
+      }
+
+      if (ImGui::Button("Delete Asset")) {
+        for (auto& obj : m_document.objects) {
+          if (obj.assetId == m_selectedAssetId)
+            obj.assetId.clear();
+        }
+        m_document.assets.erase(it);
+        m_selectedAssetId.clear();
+        m_document.dirty = true;
+      }
+    }
+  }
+
+  ImGui::End();
+}
+
 // ---- Properties panel --------------------------------------------------------
 
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 280.0f;
+  const float W = 300.0f;
   const float Y = 36.0f;
 
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, Y));
@@ -398,12 +516,10 @@ void EditorLayer::DrawPropertiesPanel() {
   ImGui::Begin(
       "Properties", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-  // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
     ImGui::Text("%d objects selected", static_cast<int>(m_selectedIndices.size()));
     ImGui::Separator();
     if (ImGui::Button("Delete Selected")) {
-      // Erase in reverse index order so earlier indices stay valid
       std::vector<int> sorted = m_selectedIndices;
       std::sort(sorted.rbegin(), sorted.rend());
       for (int i : sorted)
@@ -425,15 +541,10 @@ void EditorLayer::DrawPropertiesPanel() {
 
   SceneObject& obj = m_document.objects[primaryIdx];
 
-  // ---- Identity ----
   ImGui::LabelText("ID", "%s", obj.id.c_str());
-  const char* typeName = (obj.type == SceneObjectType::Prop)    ? "Prop"
-                         : (obj.type == SceneObjectType::Light) ? "Light"
-                                                                : "Panel";
-  ImGui::LabelText("Type", "%s", typeName);
+  ImGui::LabelText("Type", "%s", TypeToLabel(obj.type));
   ImGui::Separator();
 
-  // ---- Transform ----
   float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
   if (ImGui::DragFloat3("Position", pos, 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
@@ -457,9 +568,50 @@ void EditorLayer::DrawPropertiesPanel() {
   }
 
   ImGui::Separator();
+  ImGui::Text("Asset Binding");
+
+  std::vector<std::string> assetIds;
+  assetIds.push_back("<Inline>");
+  for (const auto& kv : m_document.assets)
+    assetIds.push_back(kv.first);
+  std::sort(assetIds.begin() + 1, assetIds.end());
+
+  int currentAssetIndex = 0;
+  if (!obj.assetId.empty()) {
+    for (int i = 1; i < static_cast<int>(assetIds.size()); ++i) {
+      if (assetIds[i] == obj.assetId) {
+        currentAssetIndex = i;
+        break;
+      }
+    }
+  }
+
+  std::string comboItems;
+  for (const auto& id : assetIds) {
+    comboItems += id;
+    comboItems.push_back('\0');
+  }
+  comboItems.push_back('\0');
+
+  if (ImGui::Combo("Asset", &currentAssetIndex, comboItems.c_str())) {
+    obj.assetId = (currentAssetIndex == 0) ? "" : assetIds[static_cast<size_t>(currentAssetIndex)];
+    if (!obj.assetId.empty())
+      m_selectedAssetId = obj.assetId;
+    m_document.dirty = true;
+  }
+
+  if (!obj.assetId.empty()) {
+    auto it = m_document.assets.find(obj.assetId);
+    if (it != m_document.assets.end()) {
+      ImGui::TextDisabled("mesh: %s", it->second.mesh.empty() ? "<none>" : it->second.mesh.c_str());
+      ImGui::TextDisabled("renderScale: %s",
+                          it->second.renderScale.empty() ? "<none>" : it->second.renderScale.c_str());
+    }
+  }
+
+  ImGui::Separator();
   ImGui::Text("Props");
 
-  // ---- Schema-driven fields ----
   const TypeSchema* schema = m_schema.GetSchema(obj.type);
   if (schema) {
     for (const auto& fd : schema->fields) {
@@ -503,7 +655,6 @@ void EditorLayer::DrawPropertiesPanel() {
               break;
             }
 
-          // Build null-separated list for ImGui::Combo
           std::string items;
           for (auto& opt : fd.options) {
             items += opt;
@@ -520,7 +671,6 @@ void EditorLayer::DrawPropertiesPanel() {
         case FieldDef::Widget::Color3: {
           float col[3] = {1.0f, 1.0f, 1.0f};
           if (!val.empty()) {
-            // Parse "r,g,b" using strtof to avoid MSVC sscanf deprecation
             char tmp[64] = {};
             std::snprintf(tmp, sizeof(tmp), "%s", val.c_str());
             char* p = tmp;
@@ -680,19 +830,29 @@ void EditorLayer::TriggerReload() {
   m_wantsReload = true;
 }
 
-std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) const {
-  auto typeToStr = [](SceneObjectType t) {
-    switch (t) {
-      case SceneObjectType::Panel:
-        return "Panel";
-      case SceneObjectType::Prop:
-        return "Prop";
-      case SceneObjectType::Light:
-        return "Light";
-    }
-    return "Unknown";
-  };
+void EditorLayer::CreateObjectFromAsset(const std::string& assetId) {
+  auto it = m_document.assets.find(assetId);
+  if (it == m_document.assets.end())
+    return;
 
+  SceneObject obj;
+  obj.id = GenerateId(m_document);
+  obj.type = SceneObjectType::Prop;
+  obj.assetId = assetId;
+  ApplySchemaDefaults(obj);
+
+  if (!it->second.mesh.empty())
+    obj.props["mesh"] = it->second.mesh;
+  if (!it->second.renderScale.empty())
+    obj.props["renderScale"] = it->second.renderScale;
+
+  m_document.objects.push_back(std::move(obj));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) const {
   auto getProp = [&](const char* key) -> std::string {
     auto it = obj.props.find(key);
     return (it != obj.props.end()) ? it->second : "";
@@ -701,15 +861,18 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
   std::ostringstream ss;
   ss.setf(std::ios::fixed);
   ss.precision(4);
-  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  const std::string scenePath = m_document.filePath.empty() ? kDefaultScenePath : m_document.filePath;
   ss << "EDITOR_REF"
      << " scene=\"" << scenePath << "\""
      << " id=" << obj.id
      << " idx=" << idx
-     << " type=" << typeToStr(obj.type)
+     << " type=" << TypeToLabel(obj.type)
      << " pos=(" << obj.position.x << "," << obj.position.y << "," << obj.position.z << ")"
      << " scale=(" << obj.scale.x << "," << obj.scale.y << "," << obj.scale.z << ")"
      << " yaw=" << obj.yaw;
+
+  if (!obj.assetId.empty())
+    ss << " asset=\"" << obj.assetId << "\"";
 
   const std::string mesh = getProp("mesh");
   if (!mesh.empty())
@@ -736,14 +899,12 @@ void EditorLayer::ToggleFlyMode(Camera& cam) {
   m_prevCursorInit = false;
   glfwSetInputMode(m_window, GLFW_CURSOR,
                    m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-  (void)cam;  // camera sync happens lazily in UpdateFlyCamera
+  (void)cam;
 }
 
 void EditorLayer::UpdateFlyCamera(float dt, Camera& cam) {
-  // Fly mode always uses world-up to avoid inverted controls after view snaps.
   cam.up = Vec3::Up();
 
-  // --- Sync yaw/pitch from live camera on first frame ---
   if (!m_flyCamInitialized) {
     Vec3 dir = cam.target - cam.position;
     float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
@@ -754,8 +915,6 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera& cam) {
     }
     m_flyPitch = std::asin(std::max(-1.0f, std::min(1.0f, dir.y))) * (180.0f / PI);
 
-    // If the camera is nearly vertical (Top/Bottom snap), yaw is ill-defined.
-    // Keep previous yaw to avoid sudden axis flips when entering fly mode.
     const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
     if (horizLen > 0.0001f)
       m_flyYaw = -std::atan2(dir.x, -dir.z) * (180.0f / PI);
@@ -763,7 +922,6 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera& cam) {
     m_flyCamInitialized = true;
   }
 
-  // --- Mouse look ---
   double cx, cy;
   glfwGetCursorPos(m_window, &cx, &cy);
   if (!m_prevCursorInit) {
@@ -778,7 +936,6 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera& cam) {
   m_prevCursorX = cx;
   m_prevCursorY = cy;
 
-  // --- Compute forward/right from yaw/pitch ---
   const float yawRad = m_flyYaw * (PI / 180.0f);
   const float pitchRad = m_flyPitch * (PI / 180.0f);
   Vec3 forward = {-std::sin(yawRad) * std::cos(pitchRad), std::sin(pitchRad),
@@ -791,7 +948,6 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera& cam) {
     right.z /= rLen;
   }
 
-  // --- WASD movement ---
   const float FLY_SPEED = 8.0f;
   Vec3 move = {0.0f, 0.0f, 0.0f};
   if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS)
