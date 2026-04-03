@@ -372,8 +372,8 @@ void EditorLayer::DrawToolbar() {
 void EditorLayer::DrawViewGimbal() {
   ImGuiIO& io = ImGui::GetIO();
   const float panelW = 280.0f;
-  const float width = 104.0f;
-  const float height = 132.0f;
+  const float width = 108.0f;
+  const float height = 92.0f;
   const float x = io.DisplaySize.x - panelW - width - 10.0f;
   const float y = 42.0f;
 
@@ -384,8 +384,6 @@ void EditorLayer::DrawViewGimbal() {
                nullptr,
                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-  ImGui::TextUnformatted("View");
 
   const int idx = PrimaryIdx();
   const bool hasSelection = (idx >= 0 && idx < static_cast<int>(m_document.objects.size()));
@@ -406,25 +404,27 @@ void EditorLayer::DrawViewGimbal() {
       ImGui::SetTooltip("%s", hint);
   };
 
-  ImGui::Dummy(ImVec2(0, 2));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+
   ImGui::SetCursorPosX(40.0f);
   snapArrow("##view_top", ImGuiDir_Up, "Top", ViewSnap::Top);
 
+  ImGui::SetCursorPosX(4.0f);
   snapArrow("##view_left", ImGuiDir_Left, "Left", ViewSnap::Left);
   ImGui::SameLine();
-  snapBtn("F", "Front", ViewSnap::Front, ImVec2(28.0f, 22.0f));
+  snapBtn("F", "Front", ViewSnap::Front, ImVec2(22.0f, 22.0f));
+  ImGui::SameLine();
+  snapBtn("B", "Back", ViewSnap::Back, ImVec2(22.0f, 22.0f));
   ImGui::SameLine();
   snapArrow("##view_right", ImGuiDir_Right, "Right", ViewSnap::Right);
 
   ImGui::SetCursorPosX(40.0f);
   snapArrow("##view_bottom", ImGuiDir_Down, "Bottom", ViewSnap::Bottom);
 
-  ImGui::SetCursorPosX(40.0f);
-  snapBtn("B", "Back", ViewSnap::Back, ImVec2(22.0f, 20.0f));
+  ImGui::PopStyleVar();
 
   if (!hasSelection) {
     ImGui::EndDisabled();
-    ImGui::TextDisabled("Select object");
   }
 
   ImGui::End();
