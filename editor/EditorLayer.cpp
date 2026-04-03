@@ -464,6 +464,12 @@ void EditorLayer::DrawAssetsPanel() {
       "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
   ImGui::TextDisabled("Registry");
+  ImGui::SameLine();
+  ImGui::SetCursorPosX(W - 74.0f);
+  if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
+    m_assetSearchOpen = true;
+    m_assetSearchQuery.clear();
+  }
   ImGui::Separator();
 
   std::vector<std::string> assetIds;
@@ -473,32 +479,99 @@ void EditorLayer::DrawAssetsPanel() {
   std::sort(assetIds.begin(), assetIds.end());
 
   std::string assetToDelete;
+  if (m_assetSearchOpen) {
+    ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Asset Spotlight", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextDisabled("Search assets");
+      ImGui::SetNextItemWidth(420.0f);
+      char searchBuf[256] = {};
+      std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_assetSearchQuery.c_str());
+      if (ImGui::InputTextWithHint("##asset_search_input", "Type an asset id or mesh...", searchBuf, sizeof(searchBuf)))
+        m_assetSearchQuery = searchBuf;
+
+      ImGui::Separator();
+      bool picked = false;
+      for (const auto& assetId : assetIds) {
+        const auto assetIt = m_document.assets.find(assetId);
+        if (assetIt == m_document.assets.end())
+          continue;
+        const auto& asset = assetIt->second;
+
+        std::string haystack = assetId + " " + asset.mesh;
+        std::string query = m_assetSearchQuery;
+        std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (!query.empty() && haystack.find(query) == std::string::npos)
+          continue;
+
+        if (ImGui::Selectable(assetId.c_str(), m_selectedAssetId == assetId)) {
+          m_selectedAssetId = assetId;
+          picked = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+      }
+
+      if (picked || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        m_assetSearchOpen = false;
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    } else {
+      ImGui::OpenPopup("Asset Spotlight");
+    }
+  }
+
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
     if (assetIt == m_document.assets.end())
       continue;
     const auto& asset = assetIt->second;
 
+    std::string haystack = assetId + " " + asset.mesh;
+    std::string query = m_assetSearchQuery;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!query.empty() && haystack.find(query) == std::string::npos)
+      continue;
+
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
-    if (ImGui::Selectable((std::string("##select_asset_") + assetId).c_str(), isSelectedAsset, 0, ImVec2(14.0f, 14.0f)))
-      m_selectedAssetId = assetId;
-    ImGui::SameLine();
-    ImGui::Text("%s%s", assetId.c_str(), isSelectedAsset ? " [selected]" : "");
-    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
-    ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
 
-    if (ImGui::Button("Add Prop")) {
-      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
-      m_document.objects.push_back(std::move(obj));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
-    }
+    // Tint the row background when selected
+    if (isSelectedAsset)
+      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.45f, 0.70f, 0.55f));
+    if (ImGui::Selectable("##row", isSelectedAsset, ImGuiSelectableFlags_SpanAllColumns))
+      m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
+    if (isSelectedAsset)
+      ImGui::PopStyleColor();
+
     ImGui::SameLine();
-    if (ImGui::Button("Delete Asset"))
-      assetToDelete = assetId;
-    ImGui::Separator();
+    ImGui::Text("%s", assetId.c_str());
+
+    // [×] deselect button — only visible for the selected asset
+    if (isSelectedAsset) {
+      ImGui::SameLine();
+      ImGui::TextDisabled("[x]");
+      if (ImGui::IsItemClicked())
+        m_selectedAssetId.clear();
+
+      ImGui::TextDisabled("  mesh: %s", asset.mesh.c_str());
+      ImGui::TextDisabled("  scale: %s", asset.renderScale.c_str());
+
+      if (ImGui::Button("Add Prop")) {
+        SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
+        m_document.objects.push_back(std::move(obj));
+        m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+        m_document.dirty = true;
+        TriggerReload();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Delete Asset"))
+        assetToDelete = assetId;
+    }
+
+    ImGui::Spacing();
     ImGui::PopID();
   }
 
@@ -514,38 +587,41 @@ void EditorLayer::DrawAssetsPanel() {
     TriggerReload();
   }
 
-  char idBuf[128] = {};
-  std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
-  if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
-    m_assetDraftId = idBuf;
+  ImGui::Separator();
+  if (ImGui::CollapsingHeader("+ New Asset")) {
+    char idBuf[128] = {};
+    std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
+    if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
+      m_assetDraftId = idBuf;
 
-  char meshBuf[256] = {};
-  std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
-  if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
-    m_assetDraftMesh = meshBuf;
+    char meshBuf[256] = {};
+    std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
+    if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
+      m_assetDraftMesh = meshBuf;
 
-  char scaleBuf[128] = {};
-  std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
-  if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
-    m_assetDraftRenderScale = scaleBuf;
+    char scaleBuf[128] = {};
+    std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
+    if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
+      m_assetDraftRenderScale = scaleBuf;
 
-  const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
-  if (!canCreate)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("Create Asset")) {
-    AssetDef def;
-    def.mesh = m_assetDraftMesh;
-    def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
-    m_document.assets[m_assetDraftId] = std::move(def);
-    m_selectedAssetId = m_assetDraftId;
-    m_assetDraftId.clear();
-    m_assetDraftMesh.clear();
-    m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
-    m_document.dirty = true;
-    TriggerReload();
+    const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
+    if (!canCreate)
+      ImGui::BeginDisabled();
+    if (ImGui::Button("Create Asset")) {
+      AssetDef def;
+      def.mesh = m_assetDraftMesh;
+      def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
+      m_document.assets[m_assetDraftId] = std::move(def);
+      m_selectedAssetId = m_assetDraftId;
+      m_assetDraftId.clear();
+      m_assetDraftMesh.clear();
+      m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+      m_document.dirty = true;
+      TriggerReload();
+    }
+    if (!canCreate)
+      ImGui::EndDisabled();
   }
-  if (!canCreate)
-    ImGui::EndDisabled();
 
   ImGui::End();
 }
