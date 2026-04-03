@@ -13,6 +13,14 @@ if(NOT TARGET glfw)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(glfw)
+
+    # Treat GLFW as third-party code and suppress its warnings in our builds.
+    # This keeps CI and local logs focused on engine warnings.
+    target_compile_options(glfw PRIVATE
+        $<$<C_COMPILER_ID:MSVC>:/W0>
+        $<$<CXX_COMPILER_ID:MSVC>:/W0>
+        $<$<AND:$<NOT:$<C_COMPILER_ID:MSVC>>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-w>
+    )
 endif()
 
 # ---- glad (OpenGL 4.1 Core, pre-generated, committed) ----
