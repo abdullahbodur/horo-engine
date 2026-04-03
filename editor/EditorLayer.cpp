@@ -712,6 +712,11 @@ void EditorLayer::DrawAssetsPanel() {
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
     if (ImGui::Button("Import .obj...")) {
+      m_assetImportError.clear();
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+      m_assetImportError = "Import dialog is not supported on this platform yet.";
+#else
       const std::string picked = PickObjFilePath();
       if (!picked.empty()) {
         if (!IsObjFilePath(picked)) {
@@ -743,6 +748,7 @@ void EditorLayer::DrawAssetsPanel() {
           }
         }
       }
+#endif
     }
     if (!m_assetImportError.empty()) {
       ImGui::SameLine();
