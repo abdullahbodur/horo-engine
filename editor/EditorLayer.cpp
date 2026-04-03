@@ -67,6 +67,22 @@ bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
          keys.find(query) != std::string::npos;
 }
 
+bool ContainsCaseInsensitive(const std::string& textRaw, const std::string& queryRaw) {
+  if (queryRaw.empty())
+    return true;
+
+  auto lower = [](std::string v) {
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    return v;
+  };
+
+  const std::string text = lower(textRaw);
+  const std::string query = lower(queryRaw);
+  return text.find(query) != std::string::npos;
+}
+
 }  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
@@ -119,6 +135,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
   if (m_active) {
     ImGuiIO& io = ImGui::GetIO();
 
+    const bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
     const bool shiftHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
                            glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
     const bool slashHeld = glfwGetKey(m_window, GLFW_KEY_SLASH) == GLFW_PRESS;
@@ -131,6 +151,14 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevHelpToggle = currHelpToggle;
 
+    const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    if (currQuickOpenToggle && !m_prevQuickOpenToggle && !m_flyMode && !io.WantTextInput &&
+        !ImGui::IsAnyItemActive()) {
+      m_quickOpenOpen = true;
+      m_quickOpenQuery.clear();
+    }
+    m_prevQuickOpenToggle = currQuickOpenToggle;
+
     // Tab toggles fly mode
     bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
     if (currTab && !m_prevTab)
@@ -141,10 +169,6 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       UpdateFlyCamera(dt, cam);
     } else {
       // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
-      bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
       if (currCopyRef && !m_prevCopyRef && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
         const int idx = PrimaryIdx();
@@ -193,6 +217,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawAssetsPanel();
     DrawPropertiesPanel();
     DrawHelpPopup();
+    DrawQuickOpenPopup();
     DrawDeleteConfirmModals();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
@@ -345,6 +370,8 @@ void EditorLayer::DrawToolbar() {
   ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
   ImGui::SameLine();
   ImGui::TextDisabled("Help: ? / F1");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Quick Open: Ctrl/Cmd+P");
   ImGui::SameLine();
 
   // Right-aligned controls
@@ -713,8 +740,9 @@ void EditorLayer::DrawHelpPopup() {
   if (!m_helpOpen)
     return;
 
-  constexpr std::array<ShortcutRow, 13> kRows = {{{"Editor", "Toggle editor mode", "F10"},
+  constexpr std::array<ShortcutRow, 14> kRows = {{{"Editor", "Toggle editor mode", "F10"},
                                                    {"Editor", "Toggle shortcuts help", "? or F1"},
+                                                   {"Editor", "Quick open", "Ctrl/Cmd + P"},
                                                    {"Camera", "Toggle fly mode", "Tab"},
                                                    {"Camera", "Move in fly mode", "W A S D"},
                                                    {"Camera", "Look around in fly mode", "Mouse"},
@@ -776,6 +804,80 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::Separator();
   ImGui::TextDisabled("Tip: press ? or F1 to close this window quickly.");
   ImGui::End();
+}
+
+void EditorLayer::DrawQuickOpenPopup() {
+  if (m_quickOpenOpen) {
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::IsPopupOpen("Quick Open"))
+      ImGui::OpenPopup("Quick Open");
+  }
+
+  if (!ImGui::BeginPopupModal("Quick Open", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Open object or asset");
+  ImGui::SetNextItemWidth(520.0f);
+  char queryBuf[256] = {};
+  std::snprintf(queryBuf, sizeof(queryBuf), "%s", m_quickOpenQuery.c_str());
+  if (ImGui::InputTextWithHint("##quick_open_input", "Type id, type, asset, or mesh...", queryBuf, sizeof(queryBuf)))
+    m_quickOpenQuery = queryBuf;
+
+  ImGui::Separator();
+
+  bool picked = false;
+  int shownCount = 0;
+
+  ImGui::TextDisabled("Objects");
+  for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+    const auto& obj = m_document.objects[i];
+    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
+                           : (obj.type == SceneObjectType::Light) ? "light"
+                                                                   : "board";
+
+    const std::string haystack = obj.id + " " + typeName + " " + obj.assetId;
+    if (!ContainsCaseInsensitive(haystack, m_quickOpenQuery))
+      continue;
+
+    const std::string label = "Object: " + obj.id + "##quick_open_obj_" + std::to_string(i);
+    if (ImGui::Selectable(label.c_str(), IsSelected(i))) {
+      m_selectedIndices = {i};
+      picked = true;
+    }
+    ImGui::SameLine();
+    if (obj.assetId.empty())
+      ImGui::TextDisabled("type: %s", typeName);
+    else
+      ImGui::TextDisabled("type: %s  |  asset: %s", typeName, obj.assetId.c_str());
+    ++shownCount;
+  }
+
+  ImGui::Spacing();
+  ImGui::TextDisabled("Assets");
+  for (const auto& [assetId, asset] : m_document.assets) {
+    const std::string haystack = assetId + " " + asset.mesh;
+    if (!ContainsCaseInsensitive(haystack, m_quickOpenQuery))
+      continue;
+
+    const std::string label = "Asset: " + assetId + "##quick_open_asset_" + assetId;
+    if (ImGui::Selectable(label.c_str(), m_selectedAssetId == assetId)) {
+      m_selectedAssetId = assetId;
+      picked = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+    ++shownCount;
+  }
+
+  if (shownCount == 0)
+    ImGui::TextDisabled("No match for '%s'", m_quickOpenQuery.c_str());
+
+  if (picked || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    m_quickOpenOpen = false;
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
 }
 
 void EditorLayer::DrawDeleteConfirmModals() {

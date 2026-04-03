@@ -103,6 +103,7 @@ class EditorLayer {
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
+  void DrawQuickOpenPopup();
   void DrawDeleteConfirmModals();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
@@ -129,6 +130,9 @@ class EditorLayer {
   bool m_helpOpen = false;
   bool m_prevHelpToggle = false;
   std::string m_helpSearchQuery;
+  bool m_quickOpenOpen = false;
+  bool m_prevQuickOpenToggle = false;
+  std::string m_quickOpenQuery;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
   std::vector<int> m_pendingDeleteObjectIndices;
