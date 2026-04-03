@@ -390,13 +390,6 @@ void EditorLayer::DrawViewGimbal() {
   if (!hasSelection)
     ImGui::BeginDisabled();
 
-  auto snapBtn = [&](const char* label, const char* hint, ViewSnap snap, ImVec2 size) {
-    if (ImGui::Button(label, size))
-      m_pendingViewSnap = snap;
-    if (ImGui::IsItemHovered() && hint)
-      ImGui::SetTooltip("%s", hint);
-  };
-
   auto snapArrow = [&](const char* id, ImGuiDir dir, const char* hint, ViewSnap snap) {
     if (ImGui::ArrowButton(id, dir))
       m_pendingViewSnap = snap;
@@ -412,9 +405,14 @@ void EditorLayer::DrawViewGimbal() {
   ImGui::SetCursorPosX(4.0f);
   snapArrow("##view_left", ImGuiDir_Left, "Left", ViewSnap::Left);
   ImGui::SameLine();
-  snapBtn("F", "Front", ViewSnap::Front, ImVec2(22.0f, 22.0f));
-  ImGui::SameLine();
-  snapBtn("B", "Back", ViewSnap::Back, ImVec2(22.0f, 22.0f));
+  const char* fbLabel = m_frontSnapNext ? "F" : "B";
+  const char* fbHint = m_frontSnapNext ? "Front" : "Back";
+  if (ImGui::Button(fbLabel, ImVec2(48.0f, 22.0f))) {
+    m_pendingViewSnap = m_frontSnapNext ? ViewSnap::Front : ViewSnap::Back;
+    m_frontSnapNext = !m_frontSnapNext;
+  }
+  if (ImGui::IsItemHovered())
+    ImGui::SetTooltip("%s", fbHint);
   ImGui::SameLine();
   snapArrow("##view_right", ImGuiDir_Right, "Right", ViewSnap::Right);
 

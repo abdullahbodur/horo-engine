@@ -79,6 +79,7 @@ class EditorLayer {
   bool m_prevCursorInit = false;
   bool m_prevTab = false;
   ViewSnap m_pendingViewSnap = ViewSnap::None;
+  bool m_frontSnapNext = true;
 
   void ToggleFlyMode(Camera& cam);
   void UpdateFlyCamera(float dt, Camera& cam);
