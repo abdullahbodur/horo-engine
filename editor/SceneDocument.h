@@ -16,6 +16,7 @@ enum class SceneObjectType { Panel, Prop, Light };
 struct AssetDef {
   std::string mesh;         // mesh tag, e.g. "stone.obj"
   std::string renderScale;  // "x,y,z" — matches the renderScale prop convention
+  std::string albedoMap;    // optional diffuse texture path (e.g. assets/models/foo.png)
 };
 
 // One generic scene object: transform + optional asset reference + props bag.

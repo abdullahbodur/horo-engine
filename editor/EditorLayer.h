@@ -10,6 +10,9 @@
 struct GLFWwindow;
 
 namespace Monolith {
+
+class Registry;
+
 namespace Editor {
 
 // In-game editor overlay.
@@ -42,6 +45,16 @@ class EditorLayer {
   // Replace the current document with a live-scene snapshot (called on editor open).
   void LoadDocument(SceneDocument doc);
 
+  // GLFW file drop (UTF-8 paths). dropX/dropY = cursor in same coordinates as ImGui (glfwGetCursorPos).
+  void OnPathsDropped(int pathCount, const char** utf8Paths, float dropX, float dropY);
+
+  // After a full scene rebuild, map each Prop row to its mesh entity so transform
+  // callbacks can update TransformComponent (runtime-only _eid props).
+  void SyncRuntimeEntityIds(Registry& registry);
+
+  // Live ECS for accurate selection boxes / picking while the editor is open.
+  void SetLiveRegistry(Registry* registry) { m_liveRegistry = registry; }
+
   // Called every time position/scale/yaw is dragged in the properties panel.
   // Use to update the live scene without a full Apply/reload.
   // Signature: void(const SceneObject& changedObj)
@@ -61,6 +74,17 @@ class EditorLayer {
 
  private:
   enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
+
+  // Run native file dialogs on the next Render() tick so GLFW/ImGui is not mid-frame.
+  enum class DeferredFilePick {
+    None,
+    ImportObjBulk,
+    NewAssetAlbedo,
+    SelectedAssetAlbedo,
+  };
+  DeferredFilePick m_deferredFilePick = DeferredFilePick::None;
+  void ProcessDeferredFilePicks();
+  void ProcessPendingPathDrops();
 
   GLFWwindow* m_window = nullptr;
   bool m_active = false;
@@ -91,6 +115,7 @@ class EditorLayer {
   EditorSchema m_schema;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
   std::function<void(const SceneObject&)> m_transformCb;
+  Registry* m_liveRegistry = nullptr;
 
   // Helpers
   bool IsSelected(int i) const;
@@ -129,7 +154,26 @@ class EditorLayer {
   std::string m_assetDraftId;
   std::string m_assetDraftMesh;
   std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+  std::string m_assetDraftAlbedoMap;
   std::string m_assetImportError;
+  bool m_openNewAssetHeader = false;
+
+  bool m_hasPendingPathDrop = false;
+  float m_pendingPathDropX = 0.0f;
+  float m_pendingPathDropY = 0.0f;
+  std::vector<std::string> m_pendingPathDropPaths;
+
+  bool m_albedoDraftDropValid = false;
+  float m_albedoDraftDropX0 = 0.0f;
+  float m_albedoDraftDropY0 = 0.0f;
+  float m_albedoDraftDropX1 = 0.0f;
+  float m_albedoDraftDropY1 = 0.0f;
+  bool m_albedoSelDropValid = false;
+  float m_albedoSelDropX0 = 0.0f;
+  float m_albedoSelDropY0 = 0.0f;
+  float m_albedoSelDropX1 = 0.0f;
+  float m_albedoSelDropY1 = 0.0f;
+
   std::string m_selectedAssetId;
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;

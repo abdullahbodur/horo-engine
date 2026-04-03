@@ -249,3 +249,28 @@ TEST_CASE("Transform::ToMatrix and TransformPoint agree", "[transform]") {
     REQUIRE(matResult.y == Approx(funcResult.y).epsilon(1e-4f));
     REQUIRE(matResult.z == Approx(funcResult.z).epsilon(1e-4f));
 }
+
+TEST_CASE("WorldAabbFromLocalBox: translated unit cube", "[transform][aabb]") {
+    Transform t;
+    t.position = {10.0f, 0.0f, -5.0f};
+    Vec3 wc, wh;
+    WorldAabbFromLocalBox(Vec3::Zero(), {0.5f, 0.5f, 0.5f}, t, wc, wh);
+    REQUIRE(wc.x == Approx(10.0f));
+    REQUIRE(wc.y == Approx(0.0f));
+    REQUIRE(wc.z == Approx(-5.0f));
+    REQUIRE(wh.x == Approx(0.5f));
+    REQUIRE(wh.y == Approx(0.5f));
+    REQUIRE(wh.z == Approx(0.5f));
+}
+
+TEST_CASE("WorldAabbFromLocalBox: offset local center expands world AABB", "[transform][aabb]") {
+    Transform t;
+    t.position = {0.0f, 0.0f, 0.0f};
+    Vec3 wc, wh;
+    // Local box [0,1]^3 → center 0.5, half 0.5
+    WorldAabbFromLocalBox({0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, t, wc, wh);
+    REQUIRE(wc.x == Approx(0.5f));
+    REQUIRE(wc.y == Approx(0.5f));
+    REQUIRE(wc.z == Approx(0.5f));
+    REQUIRE(wh.x == Approx(0.5f));
+}

@@ -29,6 +29,7 @@ class Mesh {
   bool IsValid() const { return m_vao != 0; }
   int GetIndexCount() const { return m_indexCount; }
   Vec3 GetHalfExtents() const { return m_halfExtents; }
+  Vec3 GetLocalAabbCenter() const { return m_localAabbCenter; }
 
   // --- Procedural generators ---
   static Mesh CreateSphere(float radius = 1.0f, int stacks = 16, int slices = 16);
@@ -44,6 +45,7 @@ class Mesh {
   unsigned int m_ebo = 0;
   int m_indexCount = 0;
   Vec3 m_halfExtents = {0.5f, 0.5f, 0.5f};
+  Vec3 m_localAabbCenter = Vec3::Zero();
 
   void Upload(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
   void Release();

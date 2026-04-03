@@ -370,6 +370,42 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
 }
 
+TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "prop.obj";
+    asset.renderScale = "1.0000,1.0000,1.0000";
+    asset.albedoMap = "assets/models/custom_Albedo.png";
+    doc.assets["tex_asset"] = asset;
+
+    SceneObject obj;
+    obj.id = "inst";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "tex_asset";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("albedo_asset_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.assets.at("tex_asset").albedoMap == "assets/models/custom_Albedo.png");
+}
+
+TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "x.obj";
+    asset.renderScale = "1,1,1";
+    doc.assets["x"] = asset;
+
+    const std::string path = TmpPath("no_albedo_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    std::ifstream in(path);
+    REQUIRE(in.is_open());
+    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    REQUIRE(saved.find("albedoMap") == std::string::npos);
+}
+
 TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
     SceneDocument doc;
 
