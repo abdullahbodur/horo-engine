@@ -477,12 +477,14 @@ void EditorLayer::DrawObjectList() {
     ++shownObjectCount;
   }
 
-  if (shownObjectCount == 0) {
+  const FilteredListState objectState =
+      EvaluateFilteredListState(m_document.objects.size(), shownObjectCount, m_objectSearchQuery);
+  if (objectState != FilteredListState::None) {
     ImGui::Spacing();
-    if (m_document.objects.empty()) {
+    if (objectState == FilteredListState::EmptyData) {
       ImGui::TextDisabled("No objects in scene");
       ImGui::TextDisabled("Tip: add from '+ Prop from Asset' or create one from Assets panel.");
-    } else {
+    } else if (objectState == FilteredListState::NoMatches) {
       ImGui::TextDisabled("No objects match '%s'", m_objectSearchQuery.c_str());
       if (ImGui::Button("Clear Object Search"))
         m_objectSearchQuery.clear();
@@ -610,14 +612,16 @@ void EditorLayer::DrawAssetsPanel() {
   }
 
   bool openNewAssetSection = false;
-  if (shownAssetCount == 0) {
+  const FilteredListState assetState =
+      EvaluateFilteredListState(assetIds.size(), shownAssetCount, m_assetSearchQuery);
+  if (assetState != FilteredListState::None) {
     ImGui::Spacing();
-    if (assetIds.empty()) {
+    if (assetState == FilteredListState::EmptyData) {
       ImGui::TextDisabled("Asset registry is empty");
       ImGui::TextDisabled("Create your first asset to enable fast prop placement.");
       if (ImGui::Button("Create First Asset"))
         openNewAssetSection = true;
-    } else {
+    } else if (assetState == FilteredListState::NoMatches) {
       ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
       if (ImGui::Button("Clear Asset Search"))
         m_assetSearchQuery.clear();

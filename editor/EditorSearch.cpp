@@ -56,5 +56,17 @@ bool AssetMatchesQuickOpenQuery(const std::string& assetId,
   return ContainsCaseInsensitive(assetId + " " + asset.mesh, queryRaw);
 }
 
+FilteredListState EvaluateFilteredListState(size_t totalCount,
+                                            int shownCount,
+                                            const std::string& queryRaw) {
+  if (shownCount > 0)
+    return FilteredListState::None;
+  if (totalCount == 0)
+    return FilteredListState::EmptyData;
+  if (!queryRaw.empty())
+    return FilteredListState::NoMatches;
+  return FilteredListState::None;
+}
+
 }  // namespace Editor
 }  // namespace Monolith

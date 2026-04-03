@@ -499,6 +499,13 @@ TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor
     REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
 }
 
+TEST_CASE("Editor helpers: filtered list state handles empty and no-match cases", "[editor]") {
+    REQUIRE(EvaluateFilteredListState(3, 1, "") == FilteredListState::None);
+    REQUIRE(EvaluateFilteredListState(0, 0, "") == FilteredListState::EmptyData);
+    REQUIRE(EvaluateFilteredListState(4, 0, "torch") == FilteredListState::NoMatches);
+    REQUIRE(EvaluateFilteredListState(4, 0, "") == FilteredListState::None);
+}
+
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
     SceneDocument doc;
     SceneObject obj;
