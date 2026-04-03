@@ -30,6 +30,7 @@
 #include <string>
 
 #include "core/Logger.h"
+#include "editor/EditorSearch.h"
 #include "editor/Raycaster.h"
 #include "math/MathUtils.h"
 #include "editor/SceneSerializer.h"
@@ -38,52 +39,6 @@
 
 namespace Monolith {
 namespace Editor {
-
-namespace {
-
-struct ShortcutRow {
-  const char* category;
-  const char* command;
-  const char* keys;
-};
-
-bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
-  if (queryRaw.empty())
-    return true;
-
-  auto lower = [](std::string v) {
-    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
-      return static_cast<char>(std::tolower(c));
-    });
-    return v;
-  };
-
-  const std::string query = lower(queryRaw);
-  const std::string category = lower(row.category);
-  const std::string command = lower(row.command);
-  const std::string keys = lower(row.keys);
-
-  return category.find(query) != std::string::npos || command.find(query) != std::string::npos ||
-         keys.find(query) != std::string::npos;
-}
-
-bool ContainsCaseInsensitive(const std::string& textRaw, const std::string& queryRaw) {
-  if (queryRaw.empty())
-    return true;
-
-  auto lower = [](std::string v) {
-    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
-      return static_cast<char>(std::tolower(c));
-    });
-    return v;
-  };
-
-  const std::string text = lower(textRaw);
-  const std::string query = lower(queryRaw);
-  return text.find(query) != std::string::npos;
-}
-
-}  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
 
@@ -835,8 +790,7 @@ void EditorLayer::DrawQuickOpenPopup() {
                            : (obj.type == SceneObjectType::Light) ? "light"
                                                                    : "board";
 
-    const std::string haystack = obj.id + " " + typeName + " " + obj.assetId;
-    if (!ContainsCaseInsensitive(haystack, m_quickOpenQuery))
+    if (!ObjectMatchesQuickOpenQuery(obj, m_quickOpenQuery))
       continue;
 
     const std::string label = "Object: " + obj.id + "##quick_open_obj_" + std::to_string(i);
@@ -855,8 +809,7 @@ void EditorLayer::DrawQuickOpenPopup() {
   ImGui::Spacing();
   ImGui::TextDisabled("Assets");
   for (const auto& [assetId, asset] : m_document.assets) {
-    const std::string haystack = assetId + " " + asset.mesh;
-    if (!ContainsCaseInsensitive(haystack, m_quickOpenQuery))
+    if (!AssetMatchesQuickOpenQuery(assetId, asset, m_quickOpenQuery))
       continue;
 
     const std::string label = "Asset: " + assetId + "##quick_open_asset_" + assetId;

@@ -1,0 +1,49 @@
+#include "editor/EditorSearch.h"
+
+#include <algorithm>
+#include <cctype>
+
+namespace Monolith {
+namespace Editor {
+
+namespace {
+
+std::string ToLower(std::string text) {
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return text;
+}
+
+}  // namespace
+
+bool ContainsCaseInsensitive(const std::string& textRaw, const std::string& queryRaw) {
+  if (queryRaw.empty())
+    return true;
+  return ToLower(textRaw).find(ToLower(queryRaw)) != std::string::npos;
+}
+
+bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
+  if (queryRaw.empty())
+    return true;
+
+  return ContainsCaseInsensitive(row.category, queryRaw) ||
+         ContainsCaseInsensitive(row.command, queryRaw) ||
+         ContainsCaseInsensitive(row.keys, queryRaw);
+}
+
+bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& queryRaw) {
+  const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
+                         : (obj.type == SceneObjectType::Light) ? "light"
+                                                                 : "board";
+  return ContainsCaseInsensitive(obj.id + " " + typeName + " " + obj.assetId, queryRaw);
+}
+
+bool AssetMatchesQuickOpenQuery(const std::string& assetId,
+                                const AssetDef& asset,
+                                const std::string& queryRaw) {
+  return ContainsCaseInsensitive(assetId + " " + asset.mesh, queryRaw);
+}
+
+}  // namespace Editor
+}  // namespace Monolith
