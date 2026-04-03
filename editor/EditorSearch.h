@@ -13,6 +13,7 @@ struct ShortcutRow {
   const char* keys;
 };
 
+const char* ObjectTypeLabel(SceneObjectType type);
 bool ContainsCaseInsensitive(const std::string& textRaw, const std::string& queryRaw);
 bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw);
 bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& queryRaw);

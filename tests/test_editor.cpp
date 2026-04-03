@@ -467,6 +467,30 @@ TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[
     REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
 }
 
+TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Prop)) == "prop");
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Light)) == "light");
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Panel)) == "board");
+    REQUIRE(std::string(ObjectTypeLabel(static_cast<SceneObjectType>(999))) == "unknown");
+}
+
+TEST_CASE("Editor helpers: generic search helpers handle empty query", "[editor]") {
+    ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
+    REQUIRE(MatchesShortcutQuery(row, ""));
+    REQUIRE(ContainsCaseInsensitive("Any Text", ""));
+    REQUIRE_FALSE(ContainsCaseInsensitive("Any Text", "missing"));
+
+    SceneObject obj;
+    obj.id = "crate_01";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, ""));
+
+    AssetDef asset;
+    asset.mesh = "assets/models/crate.obj";
+    REQUIRE(AssetMatchesQuickOpenQuery("crate_asset", asset, ""));
+}
+
 TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor]") {
     AssetDef asset;
     asset.mesh = "assets/models/torch.obj";
