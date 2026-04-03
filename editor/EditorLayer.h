@@ -104,6 +104,7 @@ class EditorLayer {
   void DrawPropertiesPanel();
   void DrawHelpPopup();
   void DrawQuickOpenPopup();
+  void DrawStatusBar();
   void DrawDeleteConfirmModals();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();

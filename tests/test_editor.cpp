@@ -6,11 +6,14 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <algorithm>
 #include <cctype>
 
 #include "editor/EditorSchema.h"
+#include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
+#include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
@@ -497,6 +500,92 @@ TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor
     REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "torch"));
     REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "models"));
     REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
+}
+
+TEST_CASE("Editor helpers: filtered list state handles empty and no-match cases", "[editor]") {
+    REQUIRE(EvaluateFilteredListState(3, 1, "") == FilteredListState::None);
+    REQUIRE(EvaluateFilteredListState(0, 0, "") == FilteredListState::EmptyData);
+    REQUIRE(EvaluateFilteredListState(4, 0, "torch") == FilteredListState::NoMatches);
+    REQUIRE(EvaluateFilteredListState(4, 0, "") == FilteredListState::None);
+}
+
+TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]") {
+    const auto rows = GetEditorShortcuts();
+    REQUIRE_FALSE(rows.empty());
+
+    auto hasCommandWithKeys = [&](const char* command, const char* keys) {
+        return std::any_of(rows.begin(), rows.end(), [&](const ShortcutRow& row) {
+            return std::string(row.command) == command && std::string(row.keys) == keys;
+        });
+    };
+
+    REQUIRE(hasCommandWithKeys("Toggle editor mode", "F10"));
+    REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
+    REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
+}
+
+TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
+    const auto rows = GetEditorShortcuts();
+    std::unordered_set<std::string> commandSet;
+
+    for (const auto& row : rows) {
+        const auto [_, inserted] = commandSet.insert(row.command);
+        REQUIRE(inserted);
+    }
+}
+
+TEST_CASE("Editor asset import: validates obj extension case-insensitively", "[editor]") {
+    REQUIRE(IsObjFilePath("/tmp/mesh.obj"));
+    REQUIRE(IsObjFilePath("/tmp/MESH.OBJ"));
+    REQUIRE_FALSE(IsObjFilePath("/tmp/mesh.fbx"));
+    REQUIRE_FALSE(IsObjFilePath(""));
+}
+
+TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[editor]") {
+    const std::string path = "/Users/bodur/Downloads/torch_model.obj";
+    REQUIRE(AssetIdFromImportedPath(path) == "torch_model");
+    REQUIRE(MeshTagFromImportedPath(path) == "assets/models/torch_model.obj");
+
+    REQUIRE(AssetIdFromImportedPath("").empty());
+    REQUIRE(MeshTagFromImportedPath("").empty());
+}
+
+TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
+    REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, true, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
+}
+
+TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]") {
+    REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]") {
+    REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
+    REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
+    REQUIRE(ShouldRequestDeleteSelection(true, false, true));
+    REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true));
+    REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
+}
+
+TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
+    EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
+    REQUIRE(status.selectionCount == 0);
+    REQUIRE(std::string(status.dirtyText) == "yes");
+    REQUIRE(std::string(status.flyText) == "off");
+    REQUIRE(std::string(status.reloadText) == "pending");
+
+    status = BuildEditorStatusText(EditorStatusSnapshot{3, false, true, false});
+    REQUIRE(status.selectionCount == 3);
+    REQUIRE(std::string(status.dirtyText) == "no");
+    REQUIRE(std::string(status.flyText) == "on");
+    REQUIRE(std::string(status.reloadText) == "idle");
 }
 
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {

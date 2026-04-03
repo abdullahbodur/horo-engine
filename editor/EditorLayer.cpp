@@ -29,7 +29,9 @@
 #include <string>
 
 #include "core/Logger.h"
+#include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
+#include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
 #include "math/MathUtils.h"
 #include "editor/SceneSerializer.h"
@@ -38,6 +40,47 @@
 
 namespace Horo {
 namespace Editor {
+
+namespace {
+
+std::string PickObjFilePath() {
+#ifdef _WIN32
+  char filePath[MAX_PATH] = {};
+  OPENFILENAMEA ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = "OBJ Files\0*.obj\0All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameA(&ofn))
+    return filePath;
+  return {};
+#elif defined(__APPLE__)
+  const char* cmd =
+      "osascript -e 'try' "
+      "-e 'POSIX path of (choose file of type {\"obj\"} with prompt \"Select OBJ file\")' "
+      "-e 'on error' -e 'return \"\"' -e 'end try'";
+  FILE* pipe = popen(cmd, "r");
+  if (!pipe)
+    return {};
+
+  char buf[1024] = {};
+  std::string out;
+  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
+    out += buf;
+  pclose(pipe);
+
+  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
+              return c == '\n' || c == '\r';
+            }),
+            out.end());
+  return out;
+#else
+  return {};
+#endif
+}
+
+}  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
 
@@ -98,7 +141,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     const bool slashHeld = glfwGetKey(m_window, GLFW_KEY_SLASH) == GLFW_PRESS;
     const bool f1Held = glfwGetKey(m_window, GLFW_KEY_F1) == GLFW_PRESS;
     const bool currHelpToggle = f1Held || (slashHeld && shiftHeld);
-    if (currHelpToggle && !m_prevHelpToggle && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
+    if (ShouldToggleHelpPopup(currHelpToggle, m_prevHelpToggle, io.WantTextInput,
+                              ImGui::IsAnyItemActive())) {
       m_helpOpen = !m_helpOpen;
       if (!m_helpOpen)
         m_helpSearchQuery.clear();
@@ -106,8 +150,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     m_prevHelpToggle = currHelpToggle;
 
     const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
-    if (currQuickOpenToggle && !m_prevQuickOpenToggle && !m_flyMode && !io.WantTextInput &&
-        !ImGui::IsAnyItemActive()) {
+    if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle, m_flyMode,
+                            io.WantTextInput, ImGui::IsAnyItemActive())) {
       m_quickOpenOpen = true;
       m_quickOpenQuery.clear();
     }
@@ -124,8 +168,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     } else {
       // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
-      if (currCopyRef && !m_prevCopyRef && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
-        const int idx = PrimaryIdx();
+      const int idx = PrimaryIdx();
+      const bool hasPrimarySelection = idx >= 0 && idx < static_cast<int>(m_document.objects.size());
+      if (ShouldCopySelectionRef(currCopyRef, m_prevCopyRef, io.WantTextInput,
+                                 ImGui::IsAnyItemActive(), hasPrimarySelection)) {
         if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
           const std::string code = BuildSelectionRefCode(m_document.objects[idx], idx);
           glfwSetClipboardString(m_window, code.c_str());
@@ -139,7 +185,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
       // Del key — delete all selected objects immediately
       bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
-      if (currDel && !m_prevDel && !m_selectedIndices.empty())
+      if (ShouldRequestDeleteSelection(currDel, m_prevDel, !m_selectedIndices.empty()))
         RequestDeleteSelectedObjects();
       m_prevDel = currDel;
     }
@@ -170,6 +216,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
+    DrawStatusBar();
     DrawHelpPopup();
     DrawQuickOpenPopup();
     DrawDeleteConfirmModals();
@@ -369,6 +416,37 @@ void EditorLayer::DrawToolbar() {
   ImGui::End();
 }
 
+void EditorLayer::DrawStatusBar() {
+  ImGuiIO& io = ImGui::GetIO();
+  constexpr float kStatusH = 24.0f;
+  const EditorStatusText status = BuildEditorStatusText(
+      EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()), m_document.dirty, m_flyMode, m_wantsReload});
+
+  ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kStatusH));
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kStatusH));
+  ImGui::SetNextWindowBgAlpha(0.82f);
+  ImGui::Begin("##editor_statusbar",
+               nullptr,
+               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+  ImGui::TextDisabled("Sel: %d", status.selectionCount);
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Dirty: %s", status.dirtyText);
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Fly: %s", status.flyText);
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Reload: %s", status.reloadText);
+
+  ImGui::End();
+}
+
 void EditorLayer::DrawViewGimbal() {
   ImGuiIO& io = ImGui::GetIO();
   const float panelW = 280.0f;
@@ -440,6 +518,7 @@ void EditorLayer::DrawObjectList() {
     m_objectSearchQuery = searchBuf;
   ImGui::Separator();
 
+  int shownObjectCount = 0;
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
     if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
@@ -472,6 +551,21 @@ void EditorLayer::DrawObjectList() {
         ImGui::TextDisabled("> %s", obj.assetId.c_str());
       }
       ImGui::EndGroup();
+    }
+    ++shownObjectCount;
+  }
+
+  const FilteredListState objectState =
+      EvaluateFilteredListState(m_document.objects.size(), shownObjectCount, m_objectSearchQuery);
+  if (objectState != FilteredListState::None) {
+    ImGui::Spacing();
+    if (objectState == FilteredListState::EmptyData) {
+      ImGui::TextDisabled("No objects in scene");
+      ImGui::TextDisabled("Tip: add from '+ Prop from Asset' or create one from Assets panel.");
+    } else if (objectState == FilteredListState::NoMatches) {
+      ImGui::TextDisabled("No objects match '%s'", m_objectSearchQuery.c_str());
+      if (ImGui::Button("Clear Object Search"))
+        m_objectSearchQuery.clear();
     }
   }
 
@@ -543,6 +637,7 @@ void EditorLayer::DrawAssetsPanel() {
     }
   }
 
+  int shownAssetCount = 0;
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
     if (assetIt == m_document.assets.end())
@@ -551,6 +646,8 @@ void EditorLayer::DrawAssetsPanel() {
 
     if (!AssetMatchesQuickOpenQuery(assetId, asset, m_assetSearchQuery))
       continue;
+
+    ++shownAssetCount;
 
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
@@ -592,42 +689,66 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::PopID();
   }
 
+  bool openNewAssetSection = false;
+  const FilteredListState assetState =
+      EvaluateFilteredListState(assetIds.size(), shownAssetCount, m_assetSearchQuery);
+  if (assetState != FilteredListState::None) {
+    ImGui::Spacing();
+    if (assetState == FilteredListState::EmptyData) {
+      ImGui::TextDisabled("Asset registry is empty");
+      ImGui::TextDisabled("Create your first asset to enable fast prop placement.");
+      if (ImGui::Button("Create First Asset"))
+        openNewAssetSection = true;
+    } else if (assetState == FilteredListState::NoMatches) {
+      ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
+      if (ImGui::Button("Clear Asset Search"))
+        m_assetSearchQuery.clear();
+    }
+  }
+
   ImGui::Separator();
+  if (openNewAssetSection)
+    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
     if (ImGui::Button("Import .obj...")) {
-      std::string picked;
-#ifdef _WIN32
-      char filePath[MAX_PATH] = {};
-      OPENFILENAMEA ofn = {};
-      ofn.lStructSize   = sizeof(ofn);
-      ofn.lpstrFilter   = "OBJ Files\0*.obj\0All Files\0*.*\0";
-      ofn.lpstrFile     = filePath;
-      ofn.nMaxFile      = sizeof(filePath);
-      ofn.Flags         = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-      if (GetOpenFileNameA(&ofn))
-        picked = filePath;
-#endif
+      m_assetImportError.clear();
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+      m_assetImportError = "Import dialog is not supported on this platform yet.";
+#else
+      const std::string picked = PickObjFilePath();
       if (!picked.empty()) {
-        namespace fs = std::filesystem;
-        const fs::path src(picked);
-        const fs::path destDir("assets/models");
-        std::error_code ec;
-        fs::create_directories(destDir, ec);
-        const fs::path dest = destDir / src.filename();
-        fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
-        if (!ec) {
-          // Auto-fill draft fields from filename
-          const std::string meshTag = (destDir / src.filename()).generic_string();
-          const std::string assetId = src.stem().generic_string();
-          m_assetDraftMesh = meshTag;
-          if (m_assetDraftId.empty())
-            m_assetDraftId = assetId;
-          m_assetImportError.clear();
+        if (!IsObjFilePath(picked)) {
+          m_assetImportError = "Selected file is not .obj";
         } else {
-          m_assetImportError = "Copy failed: " + ec.message();
+          namespace fs = std::filesystem;
+          const fs::path src(picked);
+          const fs::path destDir("assets/models");
+
+          std::error_code createEc;
+          fs::create_directories(destDir, createEc);
+          if (createEc) {
+            m_assetImportError = "Cannot create assets/models: " + createEc.message();
+          } else {
+            std::error_code copyEc;
+            const fs::path dest = destDir / src.filename();
+            fs::copy_file(src, dest, fs::copy_options::overwrite_existing, copyEc);
+            if (!copyEc) {
+              // Auto-fill draft fields from filename
+              const std::string meshTag = MeshTagFromImportedPath(picked);
+              const std::string assetId = AssetIdFromImportedPath(picked);
+              m_assetDraftMesh = meshTag;
+              if (m_assetDraftId.empty())
+                m_assetDraftId = assetId;
+              m_assetImportError.clear();
+            } else {
+              m_assetImportError = "Copy failed: " + copyEc.message();
+            }
+          }
         }
       }
+#endif
     }
     if (!m_assetImportError.empty()) {
       ImGui::SameLine();
@@ -678,21 +799,7 @@ void EditorLayer::DrawAssetsPanel() {
 void EditorLayer::DrawHelpPopup() {
   if (!m_helpOpen)
     return;
-
-  constexpr std::array<ShortcutRow, 14> kRows = {{{"Editor", "Toggle editor mode", "F10"},
-                                                   {"Editor", "Toggle shortcuts help", "? or F1"},
-                                                   {"Editor", "Quick open", "Ctrl/Cmd + P"},
-                                                   {"Camera", "Toggle fly mode", "Tab"},
-                                                   {"Camera", "Move in fly mode", "W A S D"},
-                                                   {"Camera", "Look around in fly mode", "Mouse"},
-                                                   {"Selection", "Select object", "Left click"},
-                                                   {"Selection", "Multi-select", "Shift + Left click"},
-                                                   {"Selection", "Delete selected object(s)", "Delete"},
-                                                   {"Selection", "Duplicate selected object", "Toolbar: Duplicate"},
-                                                   {"Scene", "Load scene", "Toolbar: Load"},
-                                                   {"Scene", "Save scene", "Toolbar: Save"},
-                                                   {"Assets", "Add prop from selected asset", "Toolbar: + Prop from Asset"},
-                                                   {"Clipboard", "Copy selected object reference", "Ctrl/Cmd + Shift + C"}}};
+  const std::span<const ShortcutRow> shortcuts = GetEditorShortcuts();
 
   ImGuiIO& io = ImGui::GetIO();
   ImGui::SetNextWindowSize(ImVec2(620.0f, 420.0f), ImGuiCond_FirstUseEver);
@@ -723,7 +830,7 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::Separator();
 
   int shownCount = 0;
-  for (const auto& row : kRows) {
+  for (const auto& row : shortcuts) {
     if (!MatchesShortcutQuery(row, m_helpSearchQuery))
       continue;
 
