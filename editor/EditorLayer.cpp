@@ -161,15 +161,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
       // Del key — delete all selected objects immediately
       bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
-      if (currDel && !m_prevDel && !m_selectedIndices.empty()) {
-        std::vector<int> sorted = m_selectedIndices;
-        std::sort(sorted.rbegin(), sorted.rend());
-        for (int i : sorted)
-          m_document.objects.erase(m_document.objects.begin() + i);
-        m_selectedIndices.clear();
-        m_document.dirty = true;
-        TriggerReload();
-      }
+      if (currDel && !m_prevDel && !m_selectedIndices.empty())
+        RequestDeleteSelectedObjects();
       m_prevDel = currDel;
     }
 
@@ -200,6 +193,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawAssetsPanel();
     DrawPropertiesPanel();
     DrawHelpPopup();
+    DrawDeleteConfirmModals();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
@@ -536,7 +530,6 @@ void EditorLayer::DrawAssetsPanel() {
     assetIds.push_back(assetId);
   std::sort(assetIds.begin(), assetIds.end());
 
-  std::string assetToDelete;
   if (m_assetSearchOpen) {
     ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Asset Spotlight", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -626,23 +619,11 @@ void EditorLayer::DrawAssetsPanel() {
       }
       ImGui::SameLine();
       if (ImGui::Button("Delete Asset"))
-        assetToDelete = assetId;
+        RequestDeleteAsset(assetId);
     }
 
     ImGui::Spacing();
     ImGui::PopID();
-  }
-
-  if (!assetToDelete.empty()) {
-    for (auto& obj : m_document.objects) {
-      if (obj.assetId == assetToDelete)
-        obj.assetId.clear();
-    }
-    if (m_selectedAssetId == assetToDelete)
-      m_selectedAssetId.clear();
-    m_document.assets.erase(assetToDelete);
-    m_document.dirty = true;
-    TriggerReload();
   }
 
   ImGui::Separator();
@@ -797,6 +778,98 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::End();
 }
 
+void EditorLayer::DrawDeleteConfirmModals() {
+  if (m_confirmDeleteObjectsOpen)
+    ImGui::OpenPopup("Confirm Delete Objects");
+
+  if (ImGui::BeginPopupModal("Confirm Delete Objects", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    int validCount = 0;
+    for (int idx : m_pendingDeleteObjectIndices)
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+        ++validCount;
+
+    if (validCount <= 0) {
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+      return;
+    }
+
+    ImGui::Text("Delete %d selected object(s)?", validCount);
+    ImGui::TextDisabled("This action cannot be undone.");
+    ImGui::Separator();
+
+    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+      std::vector<int> sorted = m_pendingDeleteObjectIndices;
+      std::sort(sorted.rbegin(), sorted.rend());
+      for (int idx : sorted) {
+        if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+          m_document.objects.erase(m_document.objects.begin() + idx);
+      }
+      m_selectedIndices.clear();
+      m_document.dirty = true;
+      TriggerReload();
+
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (m_confirmDeleteAssetOpen)
+    ImGui::OpenPopup("Confirm Delete Asset");
+
+  if (ImGui::BeginPopupModal("Confirm Delete Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (m_pendingDeleteAssetId.empty() ||
+        m_document.assets.find(m_pendingDeleteAssetId) == m_document.assets.end()) {
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+      return;
+    }
+
+    ImGui::Text("Delete asset '%s'?", m_pendingDeleteAssetId.c_str());
+    ImGui::TextDisabled("All object bindings to this asset will be cleared.");
+    ImGui::Separator();
+
+    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+      for (auto& obj : m_document.objects) {
+        if (obj.assetId == m_pendingDeleteAssetId)
+          obj.assetId.clear();
+      }
+      if (m_selectedAssetId == m_pendingDeleteAssetId)
+        m_selectedAssetId.clear();
+      m_document.assets.erase(m_pendingDeleteAssetId);
+      m_document.dirty = true;
+      TriggerReload();
+
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+}
+
 // ---- Properties panel --------------------------------------------------------
 
 void EditorLayer::DrawPropertiesPanel() {
@@ -815,14 +888,7 @@ void EditorLayer::DrawPropertiesPanel() {
     ImGui::Text("%d objects selected", static_cast<int>(m_selectedIndices.size()));
     ImGui::Separator();
     if (ImGui::Button("Delete Selected")) {
-      // Erase in reverse index order so earlier indices stay valid
-      std::vector<int> sorted = m_selectedIndices;
-      std::sort(sorted.rbegin(), sorted.rend());
-      for (int i : sorted)
-        m_document.objects.erase(m_document.objects.begin() + i);
-      m_selectedIndices.clear();
-      m_document.dirty = true;
-      TriggerReload();
+      RequestDeleteSelectedObjects();
     }
     ImGui::End();
     return;
@@ -993,10 +1059,7 @@ void EditorLayer::DrawPropertiesPanel() {
 
   ImGui::Separator();
   if (ImGui::Button("Delete")) {
-    m_document.objects.erase(m_document.objects.begin() + primaryIdx);
-    m_selectedIndices.clear();
-    m_document.dirty = true;
-    TriggerReload();
+    RequestDeleteSelectedObjects();
   }
 
   ImGui::End();
@@ -1124,6 +1187,24 @@ void EditorLayer::ToggleSelect(int i) {
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
+}
+
+void EditorLayer::RequestDeleteSelectedObjects() {
+  if (m_selectedIndices.empty())
+    return;
+
+  m_pendingDeleteObjectIndices = m_selectedIndices;
+  m_confirmDeleteObjectsOpen = true;
+}
+
+void EditorLayer::RequestDeleteAsset(const std::string& assetId) {
+  if (assetId.empty())
+    return;
+  if (m_document.assets.find(assetId) == m_document.assets.end())
+    return;
+
+  m_pendingDeleteAssetId = assetId;
+  m_confirmDeleteAssetOpen = true;
 }
 
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,

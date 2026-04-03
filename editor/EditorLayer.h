@@ -103,10 +103,13 @@ class EditorLayer {
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
+  void DrawDeleteConfirmModals();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
+  void RequestDeleteSelectedObjects();
+  void RequestDeleteAsset(const std::string& assetId);
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;
@@ -126,6 +129,10 @@ class EditorLayer {
   bool m_helpOpen = false;
   bool m_prevHelpToggle = false;
   std::string m_helpSearchQuery;
+  bool m_confirmDeleteObjectsOpen = false;
+  bool m_confirmDeleteAssetOpen = false;
+  std::vector<int> m_pendingDeleteObjectIndices;
+  std::string m_pendingDeleteAssetId;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,
