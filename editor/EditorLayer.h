@@ -163,16 +163,23 @@ class EditorLayer {
   float m_pendingPathDropY = 0.0f;
   std::vector<std::string> m_pendingPathDropPaths;
 
-  bool m_albedoDraftDropValid = false;
-  float m_albedoDraftDropX0 = 0.0f;
-  float m_albedoDraftDropY0 = 0.0f;
-  float m_albedoDraftDropX1 = 0.0f;
-  float m_albedoDraftDropY1 = 0.0f;
-  bool m_albedoSelDropValid = false;
-  float m_albedoSelDropX0 = 0.0f;
-  float m_albedoSelDropY0 = 0.0f;
-  float m_albedoSelDropX1 = 0.0f;
-  float m_albedoSelDropY1 = 0.0f;
+  // Last-frame ImGui screen rects for albedo texture drops (Assets panel).
+  struct ScreenRectDropZone {
+    bool valid = false;
+    float minX = 0.0f;
+    float minY = 0.0f;
+    float maxX = 0.0f;
+    float maxY = 0.0f;
+    void Clear() noexcept { valid = false; }
+    bool Contains(float x, float y, float paddingPx) const noexcept {
+      if (!valid)
+        return false;
+      const float p = paddingPx;
+      return x >= minX - p && x <= maxX + p && y >= minY - p && y <= maxY + p;
+    }
+  };
+  ScreenRectDropZone m_albedoDraftDrop;
+  ScreenRectDropZone m_albedoSelDrop;
 
   std::string m_selectedAssetId;
   bool m_assetSearchOpen = false;

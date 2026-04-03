@@ -95,6 +95,24 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   return true;
 }
 
+#if defined(__APPLE__)
+static std::string ReadPathFromOsascript(const char* cmd) {
+  FILE* pipe = popen(cmd, "r");
+  if (!pipe)
+    return {};
+  char buf[1024] = {};
+  std::string out;
+  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
+    out += buf;
+  pclose(pipe);
+  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
+              return c == '\n' || c == '\r';
+            }),
+            out.end());
+  return out;
+}
+#endif
+
 std::string PickObjFilePath() {
 #ifdef _WIN32
   char filePath[MAX_PATH] = {};
@@ -109,25 +127,10 @@ std::string PickObjFilePath() {
   return {};
 #elif defined(__APPLE__)
   // Avoid `of type {"obj"}` — it often fails on modern macOS; we validate extension in code.
-  const char* cmd =
+  return ReadPathFromOsascript(
       "/usr/bin/osascript -e 'try' "
       "-e 'POSIX path of (choose file with prompt \"Select OBJ file\")' "
-      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null";
-  FILE* pipe = popen(cmd, "r");
-  if (!pipe)
-    return {};
-
-  char buf[1024] = {};
-  std::string out;
-  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
-    out += buf;
-  pclose(pipe);
-
-  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
-              return c == '\n' || c == '\r';
-            }),
-            out.end());
-  return out;
+      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null");
 #else
   return {};
 #endif
@@ -161,25 +164,10 @@ std::string PickTextureFilePath() {
     return filePath;
   return {};
 #elif defined(__APPLE__)
-  const char* cmd =
+  return ReadPathFromOsascript(
       "/usr/bin/osascript -e 'try' "
       "-e 'POSIX path of (choose file with prompt \"Select texture image\")' "
-      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null";
-  FILE* pipe = popen(cmd, "r");
-  if (!pipe)
-    return {};
-
-  char buf[1024] = {};
-  std::string out;
-  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
-    out += buf;
-  pclose(pipe);
-
-  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
-              return c == '\n' || c == '\r';
-            }),
-            out.end());
-  return out;
+      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null");
 #else
   return {};
 #endif
@@ -223,72 +211,61 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
 }
 
 // Copy the .mtl referenced by objSrcPath and all textures it references
-// into destDirStr.  Silently skips any file that cannot be copied.
-static void CopyCompanionAssets(const std::string& objSrcPath,
-                                const std::string& destDirStr)
-{
-    namespace fs = std::filesystem;
-    const fs::path srcDir(fs::path(objSrcPath).parent_path());
-    const fs::path destDir(destDirStr);
+// into destDirStr. Silently skips any file that cannot be copied.
+static void CopyCompanionAssets(const std::string& objSrcPath, const std::string& destDirStr) {
+  namespace fs = std::filesystem;
+  const fs::path srcDir(fs::path(objSrcPath).parent_path());
+  const fs::path destDir(destDirStr);
 
-    // 1. Parse OBJ for "mtllib <name>"
-    std::ifstream objFile(objSrcPath);
-    if (!objFile.is_open())
-        return;
+  std::ifstream objFile(objSrcPath);
+  if (!objFile.is_open())
+    return;
 
-    std::string mtlName;
-    std::string line;
-    while (std::getline(objFile, line))
-    {
-        if (line.rfind("mtllib ", 0) == 0)
-        {
-            mtlName = line.substr(7);
-            while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
-                mtlName.pop_back();
-            break;
-        }
+  std::string mtlName;
+  std::string line;
+  while (std::getline(objFile, line)) {
+    if (line.rfind("mtllib ", 0) == 0) {
+      mtlName = line.substr(7);
+      while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
+        mtlName.pop_back();
+      break;
     }
-    if (mtlName.empty())
-        return;
+  }
+  if (mtlName.empty())
+    return;
 
-    // 2. Copy MTL file
-    const fs::path mtlSrc = srcDir / mtlName;
-    if (!fs::exists(mtlSrc))
-        return;
-    std::error_code ec;
-    fs::copy_file(mtlSrc, destDir / mtlName, fs::copy_options::overwrite_existing, ec);
+  const fs::path mtlSrc = srcDir / mtlName;
+  if (!fs::exists(mtlSrc))
+    return;
+  std::error_code ec;
+  fs::copy_file(mtlSrc, destDir / mtlName, fs::copy_options::overwrite_existing, ec);
 
-    // 3. Parse MTL for texture references (map_Kd, map_Ks, map_bump, etc.)
-    std::ifstream mtlFile(mtlSrc.string());
-    if (!mtlFile.is_open())
-        return;
+  std::ifstream mtlFile(mtlSrc.string());
+  if (!mtlFile.is_open())
+    return;
 
-    while (std::getline(mtlFile, line))
-    {
-        if (line.size() < 8)
-            continue;
-        // Check for any map_ directive
-        std::string prefix = line.substr(0, 4);
-        std::transform(prefix.begin(), prefix.end(), prefix.begin(),
-                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
-        if (prefix != "map_")
-            continue;
+  while (std::getline(mtlFile, line)) {
+    if (line.size() < 8)
+      continue;
+    std::string prefix = line.substr(0, 4);
+    std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (prefix != "map_")
+      continue;
 
-        // Value is everything after the first space
-        const size_t spacePos = line.find(' ');
-        if (spacePos == std::string::npos)
-            continue;
-        std::string texName = line.substr(spacePos + 1);
-        while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
-            texName.pop_back();
-        if (texName.empty())
-            continue;
+    const size_t spacePos = line.find(' ');
+    if (spacePos == std::string::npos)
+      continue;
+    std::string texName = line.substr(spacePos + 1);
+    while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
+      texName.pop_back();
+    if (texName.empty())
+      continue;
 
-        const fs::path texSrc = srcDir / texName;
-        if (fs::exists(texSrc))
-            fs::copy_file(texSrc, destDir / texName,
-                          fs::copy_options::overwrite_existing, ec);
-    }
+    const fs::path texSrc = srcDir / texName;
+    if (fs::exists(texSrc))
+      fs::copy_file(texSrc, destDir / texName, fs::copy_options::overwrite_existing, ec);
+  }
 }
 
 // Copy picked .obj into assets/models (and companion MTL/textures). Returns project-relative
@@ -390,40 +367,44 @@ void EditorLayer::ProcessPendingPathDrops() {
     return;
   m_hasPendingPathDrop = false;
 
+  constexpr float kTextureDropHitSlopPx = 6.0f;
   const float px = m_pendingPathDropX;
   const float py = m_pendingPathDropY;
-  auto hit = [](float x, float y, float x0, float y0, float x1, float y1) {
-    constexpr float s = 6.0f;
-    return x >= x0 - s && x <= x1 + s && y >= y0 - s && y <= y1 + s;
+  auto showAlbedoTextureToast = [this] {
+    m_clipboardToastLabel = "Albedo texture set";
+    m_clipboardToastTime = 2.0f;
   };
 
   for (const std::string& path : m_pendingPathDropPaths) {
     if (!IsTextureFilePath(path))
       continue;
-    std::string err;
-    const std::string rel = ImportTextureToAssetsModels(path, &err);
-    if (rel.empty()) {
-      if (!err.empty())
-        LOG_WARN("Texture drop: %s", err.c_str());
-      continue;
-    }
 
-    if (m_albedoDraftDropValid &&
-        hit(px, py, m_albedoDraftDropX0, m_albedoDraftDropY0, m_albedoDraftDropX1, m_albedoDraftDropY1)) {
+    if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
+      std::string err;
+      const std::string rel = ImportTextureToAssetsModels(path, &err);
+      if (rel.empty()) {
+        if (!err.empty())
+          LOG_WARN("Texture drop: %s", err.c_str());
+        continue;
+      }
       m_assetDraftAlbedoMap = rel;
-      m_clipboardToastLabel = "Albedo texture set";
-      m_clipboardToastTime = 2.0f;
+      showAlbedoTextureToast();
       m_pendingPathDropPaths.clear();
       return;
     }
-    if (m_albedoSelDropValid && !m_selectedAssetId.empty() &&
-        hit(px, py, m_albedoSelDropX0, m_albedoSelDropY0, m_albedoSelDropX1, m_albedoSelDropY1)) {
+    if (m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) && !m_selectedAssetId.empty()) {
       const auto it = m_document.assets.find(m_selectedAssetId);
       if (it != m_document.assets.end()) {
+        std::string err;
+        const std::string rel = ImportTextureToAssetsModels(path, &err);
+        if (rel.empty()) {
+          if (!err.empty())
+            LOG_WARN("Texture drop: %s", err.c_str());
+          continue;
+        }
         it->second.albedoMap = rel;
         m_document.dirty = true;
-        m_clipboardToastLabel = "Albedo texture set";
-        m_clipboardToastTime = 2.0f;
+        showAlbedoTextureToast();
       }
       m_pendingPathDropPaths.clear();
       return;
@@ -653,8 +634,8 @@ void EditorLayer::ProcessDeferredFilePicks() {
 void EditorLayer::Render(const Camera& cam) {
   ProcessDeferredFilePicks();
   if (!m_active) {
-    m_albedoDraftDropValid = false;
-    m_albedoSelDropValid = false;
+    m_albedoDraftDrop.Clear();
+    m_albedoSelDrop.Clear();
   }
   ProcessPendingPathDrops();
 
@@ -1042,8 +1023,8 @@ void EditorLayer::DrawAssetsPanel() {
   ImGui::Begin(
       "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-  m_albedoDraftDropValid = false;
-  m_albedoSelDropValid = false;
+  m_albedoDraftDrop.Clear();
+  m_albedoSelDrop.Clear();
 
   ImGui::TextDisabled("Registry");
   ImGui::SameLine();
@@ -1190,11 +1171,11 @@ void EditorLayer::DrawAssetsPanel() {
       {
         const ImVec2 fMin = ImGui::GetItemRectMin();
         const ImVec2 fMax = ImGui::GetItemRectMax();
-        m_albedoSelDropValid = true;
-        m_albedoSelDropX0 = std::min(selAlbLabelMin.x, fMin.x);
-        m_albedoSelDropY0 = selAlbLabelMin.y;
-        m_albedoSelDropX1 = std::max(selAlbLabelMax.x, fMax.x);
-        m_albedoSelDropY1 = fMax.y;
+        m_albedoSelDrop.valid = true;
+        m_albedoSelDrop.minX = std::min(selAlbLabelMin.x, fMin.x);
+        m_albedoSelDrop.minY = selAlbLabelMin.y;
+        m_albedoSelDrop.maxX = std::max(selAlbLabelMax.x, fMax.x);
+        m_albedoSelDrop.maxY = fMax.y;
       }
 #if defined(_WIN32) || defined(__APPLE__)
       if (ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(innerW, 0.0f))) {
@@ -1319,11 +1300,11 @@ void EditorLayer::DrawAssetsPanel() {
     {
       const ImVec2 fMin = ImGui::GetItemRectMin();
       const ImVec2 fMax = ImGui::GetItemRectMax();
-      m_albedoDraftDropValid = true;
-      m_albedoDraftDropX0 = std::min(draftAlbLabelMin.x, fMin.x);
-      m_albedoDraftDropY0 = draftAlbLabelMin.y;
-      m_albedoDraftDropX1 = std::max(draftAlbLabelMax.x, fMax.x);
-      m_albedoDraftDropY1 = fMax.y;
+      m_albedoDraftDrop.valid = true;
+      m_albedoDraftDrop.minX = std::min(draftAlbLabelMin.x, fMin.x);
+      m_albedoDraftDrop.minY = draftAlbLabelMin.y;
+      m_albedoDraftDrop.maxX = std::max(draftAlbLabelMax.x, fMax.x);
+      m_albedoDraftDrop.maxY = fMax.y;
     }
 #if defined(_WIN32) || defined(__APPLE__)
     if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f))) {
