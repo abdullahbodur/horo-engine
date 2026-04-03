@@ -15,6 +15,23 @@
 
 using namespace Monolith;
 using namespace Monolith::Editor;
+
+namespace {
+Monolith::Editor::SceneObject MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument&, const std::string& assetId) {
+    Monolith::Editor::SceneObject obj;
+    obj.id = "generated";
+    obj.type = Monolith::Editor::SceneObjectType::Prop;
+    obj.assetId = assetId;
+    return obj;
+}
+
+Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::SceneDocument& doc, const Monolith::Editor::SceneObject& src) {
+    Monolith::Editor::SceneObject clone = src;
+    clone.id = "copy_" + std::to_string(doc.objects.size());
+    clone.props.erase("_eid");
+    return clone;
+}
+}
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
@@ -395,6 +412,35 @@ TEST_CASE("SceneSerializer: inline props survive when object has no asset refere
     REQUIRE(loaded.objects[0].assetId.empty());
     REQUIRE(loaded.objects[0].props.at("mesh") == "barrel.obj");
     REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
+}
+
+TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]") {
+    SceneDocument doc;
+    SceneObject src;
+    src.id = "prop_001";
+    src.type = SceneObjectType::Prop;
+    src.assetId = "crate";
+    src.props["_eid"] = "42";
+    src.props["mesh"] = "crate.obj";
+    doc.objects.push_back(src);
+
+    SceneObject clone = DuplicateObjectForTest(doc, src);
+    REQUIRE(clone.id != src.id);
+    REQUIRE(clone.assetId == "crate");
+    REQUIRE(clone.props.count("_eid") == 0);
+    REQUIRE(clone.props.at("mesh") == "crate.obj");
+}
+
+TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[editor]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "torch.obj";
+    asset.renderScale = "0.5000,0.5000,0.5000";
+    doc.assets["torch"] = asset;
+
+    SceneObject created = MakeObjectFromAssetForTest(doc, "torch");
+    REQUIRE(created.type == SceneObjectType::Prop);
+    REQUIRE(created.assetId == "torch");
 }
 
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {

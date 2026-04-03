@@ -62,6 +62,7 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
     doc.filePath = "assets/scenes/dungeon.json";
   m_document = std::move(doc);
   m_selectedIndices.clear();
+  m_selectedAssetId.clear();
 }
 
 // ---- Per-frame update --------------------------------------------------------
@@ -242,6 +243,38 @@ void EditorLayer::DrawToolbar() {
   addObj(SceneObjectType::Prop, "+ Prop");
   addObj(SceneObjectType::Light, "+ Light");
 
+  const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
+                                m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
+  if (!hasSelectedAsset)
+    ImGui::BeginDisabled();
+  if (ImGui::Button("+ Prop from Asset")) {
+    SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
+    m_document.objects.push_back(std::move(obj));
+    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    m_document.dirty = true;
+    TriggerReload();
+  }
+  if (!hasSelectedAsset)
+    ImGui::EndDisabled();
+  ImGui::SameLine();
+
+  const int primaryIdx = PrimaryIdx();
+  const bool canDuplicate = primaryIdx >= 0 && primaryIdx < static_cast<int>(m_document.objects.size());
+  if (!canDuplicate)
+    ImGui::BeginDisabled();
+  if (ImGui::Button("Duplicate")) {
+    SceneObject clone = DuplicateObject(m_document, m_document.objects[primaryIdx]);
+    clone.position.x += 1.0f;
+    clone.position.z += 1.0f;
+    m_document.objects.push_back(std::move(clone));
+    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    m_document.dirty = true;
+    TriggerReload();
+  }
+  if (!canDuplicate)
+    ImGui::EndDisabled();
+  ImGui::SameLine();
+
   // Fly camera toggle — green when active, Tab also toggles
   const bool flyActiveNow = m_flyMode;  // capture before button may flip it
   if (flyActiveNow)
@@ -419,16 +452,16 @@ void EditorLayer::DrawAssetsPanel() {
     const auto& asset = assetIt->second;
 
     ImGui::PushID(assetId.c_str());
-    ImGui::Text("%s", assetId.c_str());
+    const bool isSelectedAsset = (m_selectedAssetId == assetId);
+    if (ImGui::Selectable((std::string("##select_asset_") + assetId).c_str(), isSelectedAsset, 0, ImVec2(14.0f, 14.0f)))
+      m_selectedAssetId = assetId;
+    ImGui::SameLine();
+    ImGui::Text("%s%s", assetId.c_str(), isSelectedAsset ? " [selected]" : "");
     ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
     ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
 
     if (ImGui::Button("Add Prop")) {
-      SceneObject obj;
-      obj.id = GenerateId(m_document);
-      obj.type = SceneObjectType::Prop;
-      obj.assetId = assetId;
-      ApplySchemaDefaults(obj);
+      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
       m_document.objects.push_back(std::move(obj));
       m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
       m_document.dirty = true;
@@ -446,6 +479,8 @@ void EditorLayer::DrawAssetsPanel() {
       if (obj.assetId == assetToDelete)
         obj.assetId.clear();
     }
+    if (m_selectedAssetId == assetToDelete)
+      m_selectedAssetId.clear();
     m_document.assets.erase(assetToDelete);
     m_document.dirty = true;
     TriggerReload();
@@ -474,6 +509,7 @@ void EditorLayer::DrawAssetsPanel() {
     def.mesh = m_assetDraftMesh;
     def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
     m_document.assets[m_assetDraftId] = std::move(def);
+    m_selectedAssetId = m_assetDraftId;
     m_assetDraftId.clear();
     m_assetDraftMesh.clear();
     m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
@@ -813,6 +849,30 @@ void EditorLayer::ToggleSelect(int i) {
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
+}
+
+SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,
+                                             const std::string& assetId,
+                                             const EditorSchema& schema) {
+  SceneObject obj;
+  obj.id = GenerateId(doc);
+  obj.type = SceneObjectType::Prop;
+  obj.assetId = assetId;
+
+  const TypeSchema* typeSchema = schema.GetSchema(obj.type);
+  if (typeSchema) {
+    for (const auto& fd : typeSchema->fields)
+      obj.props[fd.key] = fd.defaultValue;
+  }
+
+  return obj;
+}
+
+SceneObject EditorLayer::DuplicateObject(const SceneDocument& doc, const SceneObject& src) {
+  SceneObject clone = src;
+  clone.id = GenerateId(doc);
+  clone.props.erase("_eid");
+  return clone;
 }
 
 std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) const {
