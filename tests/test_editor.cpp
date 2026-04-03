@@ -6,6 +6,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
+#include <cctype>
 
 #include "editor/EditorSchema.h"
 #include "editor/EditorSearch.h"
