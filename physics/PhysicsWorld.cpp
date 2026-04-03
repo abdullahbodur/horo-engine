@@ -11,7 +11,7 @@
 #include "physics/narrowphase/GJK.h"
 #include "physics/narrowphase/SAT.h"
 
-namespace Monolith {
+namespace Horo {
 
 RigidBody* PhysicsWorld::AddBody(RigidBody body) {
   m_bodies.push_back(std::make_unique<RigidBody>(std::move(body)));
@@ -141,4 +141,4 @@ void PhysicsWorld::SolveBoxPlane(RigidBody& box,
   }
 }
 
-}  // namespace Monolith
+}  // namespace Horo

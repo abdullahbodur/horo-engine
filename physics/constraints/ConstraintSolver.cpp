@@ -1,6 +1,6 @@
 #include "physics/constraints/ConstraintSolver.h"
 
-namespace Monolith {
+namespace Horo {
 
 void ConstraintSolver::Solve(std::vector<ContactConstraint>& constraints, int iterations) {
   for (int i = 0; i < iterations; i++)
@@ -8,4 +8,4 @@ void ConstraintSolver::Solve(std::vector<ContactConstraint>& constraints, int it
       c.Solve();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

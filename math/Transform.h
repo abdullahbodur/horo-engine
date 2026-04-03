@@ -3,7 +3,7 @@
 #include "math/Quaternion.h"
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct Transform {
   Vec3 position = Vec3::Zero();
@@ -30,4 +30,4 @@ struct Transform {
   static Transform Identity() { return {}; }
 };
 
-}  // namespace Monolith
+}  // namespace Horo

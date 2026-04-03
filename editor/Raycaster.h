@@ -2,7 +2,7 @@
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 struct Ray {
@@ -19,4 +19,4 @@ Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH, const Came
 float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half);
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

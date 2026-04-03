@@ -6,7 +6,7 @@
 #include "core/Time.h"
 #include "input/Input.h"
 
-namespace Monolith {
+namespace Horo {
 
 Application::Application(const AppSpec& spec) {
   WindowSpec ws;
@@ -49,4 +49,4 @@ void Application::Run() {
   LOG_INFO("Application shut down cleanly.");
 }
 
-}  // namespace Monolith
+}  // namespace Horo

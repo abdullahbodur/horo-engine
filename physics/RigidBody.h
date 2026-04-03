@@ -6,7 +6,7 @@
 #include "math/Vec3.h"
 #include "physics/Collider.h"
 
-namespace Monolith {
+namespace Horo {
 
 class RigidBody {
  public:
@@ -59,4 +59,4 @@ class RigidBody {
   void UpdateWorldInertia();
 };
 
-}  // namespace Monolith
+}  // namespace Horo

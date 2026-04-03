@@ -8,7 +8,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 Mesh::~Mesh() {
   Release();
@@ -351,4 +351,4 @@ Mesh Mesh::CreateQuad() {
   return m;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

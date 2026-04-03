@@ -7,7 +7,7 @@
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
 
-namespace Monolith {
+namespace Horo {
 
 Mat4 Renderer::s_view;
 Mat4 Renderer::s_projection;
@@ -73,4 +73,4 @@ void Renderer::SubmitWireframe(
   ++s_drawCalls;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

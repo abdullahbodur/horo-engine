@@ -3,7 +3,7 @@
 #include "math/MathUtils.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace SemiImplicitEuler {
 
@@ -40,4 +40,4 @@ void Integrate(RigidBody& body, float dt) {
 }
 
 }  // namespace SemiImplicitEuler
-}  // namespace Monolith
+}  // namespace Horo

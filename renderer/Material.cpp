@@ -1,6 +1,6 @@
 #include "renderer/Material.h"
 
-namespace Monolith {
+namespace Horo {
 
 void Material::Apply() const {
   if (!shader || !shader->IsValid())
@@ -17,4 +17,4 @@ void Material::Apply() const {
   shader->SetFloat("u_uvScale", uvScale);
 }
 
-}  // namespace Monolith
+}  // namespace Horo

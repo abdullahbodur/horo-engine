@@ -3,7 +3,7 @@
 #include "math/MathUtils.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith {
+namespace Horo {
 
 void ContactConstraint::Solve() {
   if (!bodyA || !bodyB)
@@ -99,4 +99,4 @@ void ContactConstraint::Solve() {
   }
 }
 
-}  // namespace Monolith
+}  // namespace Horo

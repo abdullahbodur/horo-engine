@@ -5,7 +5,7 @@
 #include "renderer/Camera.h"
 #include "renderer/Light.h"
 
-namespace Monolith {
+namespace Horo {
 
 class Mesh;
 class Shader;
@@ -41,4 +41,4 @@ class Renderer {
   static unsigned int s_lastLightProgram;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

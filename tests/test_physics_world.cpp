@@ -8,7 +8,7 @@
 #include "math/Vec3.h"
 #include "math/MathUtils.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

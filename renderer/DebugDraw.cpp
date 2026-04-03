@@ -7,7 +7,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 std::vector<DebugDraw::LineVertex> DebugDraw::s_lines;
 Shader* DebugDraw::s_shader = nullptr;
@@ -158,4 +158,4 @@ void DebugDraw::Flush(const Camera& camera) {
   s_lines.clear();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

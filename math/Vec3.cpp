@@ -4,7 +4,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 float Vec3::Dot(const Vec3& a, const Vec3& b) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -39,4 +39,4 @@ std::string Vec3::ToString() const {
   return ss.str();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

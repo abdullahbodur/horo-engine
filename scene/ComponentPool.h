@@ -6,7 +6,7 @@
 #include "scene/Entity.h"
 #include "scene/IComponentPoolBase.h"
 
-namespace Monolith {
+namespace Horo {
 
 // Dense SoA component pool.
 // Provides O(1) add/get/remove with packed storage.
@@ -68,4 +68,4 @@ class ComponentPool : public IComponentPoolBase {
   std::vector<Entity> m_denseEntities;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

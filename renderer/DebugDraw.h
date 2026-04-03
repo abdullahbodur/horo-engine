@@ -6,7 +6,7 @@
 #include "renderer/Camera.h"
 #include "renderer/Shader.h"
 
-namespace Monolith {
+namespace Horo {
 
 class DebugDraw {
  public:
@@ -40,4 +40,4 @@ class DebugDraw {
   static bool s_initialized;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

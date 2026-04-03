@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace Monolith {
+namespace Horo {
 
 // Captures the current OpenGL framebuffer and writes it to a BMP file.
 // Call from the render thread (after SwapBuffers or just before it).
@@ -13,4 +13,4 @@ class Screenshot {
   static std::string Save(int viewportW, int viewportH, const std::string& folder);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

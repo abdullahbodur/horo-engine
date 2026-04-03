@@ -6,7 +6,7 @@
 #include "math/Vec3.h"
 #include "renderer/Shader.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct HUDStats {
   float fps, frameTimeMs;
@@ -74,4 +74,4 @@ class DebugHUD {
   static void FlushGlyphs();
 };
 
-}  // namespace Monolith
+}  // namespace Horo

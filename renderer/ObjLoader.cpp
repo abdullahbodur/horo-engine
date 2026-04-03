@@ -8,7 +8,7 @@
 
 #include "math/Vec2.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace ObjLoader {
 
@@ -122,4 +122,4 @@ Mesh Load(const std::string& path) {
 
 }  // namespace ObjLoader
 
-}  // namespace Monolith
+}  // namespace Horo

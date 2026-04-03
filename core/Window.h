@@ -4,10 +4,10 @@
 
 struct GLFWwindow;
 
-namespace Monolith {
+namespace Horo {
 
 struct WindowSpec {
-  std::string title = "Monolith";
+  std::string title = "Horo";
   int width = 1280;
   int height = 720;
   bool vsync = true;
@@ -48,4 +48,4 @@ class Window {
   static void WindowCloseCallback(GLFWwindow* win);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

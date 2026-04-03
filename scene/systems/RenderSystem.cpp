@@ -6,7 +6,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
 
 // Submits all visible mesh entities.  BeginScene/EndScene are called by the
 // owner (GameScene::Render) so they bracket this submission pass.
@@ -31,4 +31,4 @@ void RenderSystem::OnUpdate(Registry& registry, float dt) {
   }
 }
 
-}  // namespace Monolith
+}  // namespace Horo

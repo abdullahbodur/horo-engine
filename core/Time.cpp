@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace Monolith {
+namespace Horo {
 
 double Time::s_lastTime = 0.0;
 float Time::s_deltaTime = 0.0f;
@@ -35,4 +35,4 @@ bool Time::ConsumeFixedStep() {
   return false;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

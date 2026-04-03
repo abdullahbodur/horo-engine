@@ -2,7 +2,7 @@
 #include "math/Mat4.h"
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 class Camera {
  public:
@@ -27,4 +27,4 @@ class Camera {
   Vec3 GetRight() const { return Vec3::Cross(GetForward(), up).Normalized(); }
 };
 
-}  // namespace Monolith
+}  // namespace Horo

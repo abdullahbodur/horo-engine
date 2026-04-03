@@ -5,7 +5,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 static const char* TypeName(SceneObjectType t) {
@@ -75,4 +75,4 @@ const TypeSchema* EditorSchema::GetSchema(SceneObjectType t) const {
 }
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

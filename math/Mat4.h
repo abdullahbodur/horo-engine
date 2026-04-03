@@ -4,7 +4,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct Quaternion;
 
@@ -54,4 +54,4 @@ struct Mat4 {
   std::string ToString() const;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

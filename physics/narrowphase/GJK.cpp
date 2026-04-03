@@ -8,7 +8,7 @@
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace GJK {
 
@@ -63,4 +63,4 @@ ContactManifold Test(const RigidBody& a, const RigidBody& b) {
 }
 
 }  // namespace GJK
-}  // namespace Monolith
+}  // namespace Horo

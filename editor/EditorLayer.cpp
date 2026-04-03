@@ -36,7 +36,7 @@
 #include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 // ---- Lifecycle ---------------------------------------------------------------
@@ -1411,4 +1411,4 @@ void EditorLayer::ApplySchemaDefaults(SceneObject& obj) const {
 }
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

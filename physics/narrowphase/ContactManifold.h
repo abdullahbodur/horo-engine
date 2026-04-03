@@ -1,7 +1,7 @@
 #pragma once
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct ContactPoint {
   Vec3 point;         // contact position in world space
@@ -26,4 +26,4 @@ struct ContactManifold {
   }
 };
 
-}  // namespace Monolith
+}  // namespace Horo

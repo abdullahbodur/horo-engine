@@ -2,7 +2,7 @@
 
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
 
 void Scene::AddSystem(std::unique_ptr<System> system) {
   m_systems.push_back(std::move(system));
@@ -36,4 +36,4 @@ void Scene::Clear() {
   registry.Clear();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

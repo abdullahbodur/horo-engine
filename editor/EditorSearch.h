@@ -4,7 +4,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 struct ShortcutRow {
@@ -20,4 +20,4 @@ bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& quer
 bool AssetMatchesQuickOpenQuery(const std::string& assetId, const AssetDef& asset, const std::string& queryRaw);
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

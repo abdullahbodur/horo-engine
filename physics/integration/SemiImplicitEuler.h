@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
 
 class RigidBody;
 
@@ -13,4 +13,4 @@ namespace SemiImplicitEuler {
 void Integrate(RigidBody& body, float dt);
 
 }  // namespace SemiImplicitEuler
-}  // namespace Monolith
+}  // namespace Horo

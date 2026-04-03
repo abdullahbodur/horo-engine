@@ -6,7 +6,7 @@
 #include "math/MathUtils.h"
 #include "math/Quaternion.h"
 
-namespace Monolith {
+namespace Horo {
 
 Mat4::Mat4() {
   std::memset(m, 0, sizeof(m));
@@ -255,4 +255,4 @@ std::string Mat4::ToString() const {
   return ss.str();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

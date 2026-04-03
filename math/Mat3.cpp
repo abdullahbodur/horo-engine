@@ -5,7 +5,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 Mat3::Mat3() {
   std::memset(m, 0, sizeof(m));
@@ -144,4 +144,4 @@ std::string Mat3::ToString() const {
   return ss.str();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

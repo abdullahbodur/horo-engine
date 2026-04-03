@@ -5,7 +5,7 @@
 
 #include "renderer/Mesh.h"
 
-namespace Monolith {
+namespace Horo {
 
 // File-path keyed cache that avoids reloading the same .obj more than once.
 class MeshCache {
@@ -20,4 +20,4 @@ class MeshCache {
   std::unordered_map<std::string, std::shared_ptr<Mesh>> m_cache;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

@@ -3,7 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-namespace Monolith {
+namespace Horo {
 
 void Log(LogLevel level, const char* file, int line, const char* fmt, ...) {
   const char* prefix;
@@ -40,4 +40,4 @@ void Log(LogLevel level, const char* file, int line, const char* fmt, ...) {
     std::printf("%s%s\n", prefix, msg);
 }
 
-}  // namespace Monolith
+}  // namespace Horo

@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace Monolith {
+namespace Horo {
 
 class Texture {
  public:
@@ -29,4 +29,4 @@ class Texture {
   int m_height = 0;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

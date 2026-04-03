@@ -7,7 +7,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
 
 class Shader {
  public:
@@ -49,4 +49,4 @@ class Shader {
   static unsigned int LinkProgram(unsigned int vert, unsigned int frag);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

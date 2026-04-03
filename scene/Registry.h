@@ -11,7 +11,7 @@
 #include "scene/Entity.h"
 #include "scene/IComponentPoolBase.h"
 
-namespace Monolith {
+namespace Horo {
 
 // Type-indexed ECS registry.  Adding a new component type requires zero Registry edits.
 // Add<T>, Get<T>, Has<T>, Remove<T>, GetEntities<T> all work for any T.
@@ -96,4 +96,4 @@ class Registry {
   }
 };
 
-}  // namespace Monolith
+}  // namespace Horo

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
 
 enum class MouseButton : int {
   Left = 0,
@@ -8,4 +8,4 @@ enum class MouseButton : int {
   Middle = 2,
 };
 
-}  // namespace Monolith
+}  // namespace Horo

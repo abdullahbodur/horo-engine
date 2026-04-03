@@ -1,6 +1,6 @@
 #include "scene/Registry.h"
 
-namespace Monolith {
+namespace Horo {
 
 Entity Registry::Create() {
   Entity e;
@@ -34,4 +34,4 @@ void Registry::Clear() {
   m_nextId = 0;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

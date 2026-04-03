@@ -1,7 +1,7 @@
 #pragma once
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
 
 // Thin wrapper around OpenGL state that should only be set once per frame
 // rather than per draw call.
@@ -19,4 +19,4 @@ class RenderContext {
   static void SetBlend(bool enabled);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

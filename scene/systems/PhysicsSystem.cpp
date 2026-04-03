@@ -5,7 +5,7 @@
 #include "scene/components/RigidBodyComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
 
 void PhysicsSystem::OnUpdate(Registry& registry, float dt) {
   m_world.Step(dt);
@@ -26,4 +26,4 @@ void PhysicsSystem::OnUpdate(Registry& registry, float dt) {
   }
 }
 
-}  // namespace Monolith
+}  // namespace Horo

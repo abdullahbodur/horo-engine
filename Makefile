@@ -1,4 +1,4 @@
-# monolith-engine — convenience wrapper around CMake presets
+# horo-engine — convenience wrapper around CMake presets
 # Usage: make [target]
 #
 # On Windows (MSVC):  uses debug-msvc / release-msvc presets automatically
@@ -8,8 +8,8 @@ ifeq ($(OS),Windows_NT)
     PRESET_DBG  ?= debug-msvc
     PRESET_REL  ?= release-msvc
     TESTS_BIN   := $(CURDIR)/build/$(PRESET_DBG)/bin/Debug
-    SENTINEL_DBG := build/$(PRESET_DBG)/MonolithEngine.sln
-    SENTINEL_REL := build/$(PRESET_REL)/MonolithEngine.sln
+    SENTINEL_DBG := build/$(PRESET_DBG)/HoroEngine.sln
+    SENTINEL_REL := build/$(PRESET_REL)/HoroEngine.sln
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
@@ -140,7 +140,7 @@ coverage: $(SENTINEL_COV)
 	genhtml $(COV_DIR)/filtered.info \
 	        --output-directory $(COV_DIR)/html \
 	        --branch-coverage \
-	        --title "MonolithEngine Coverage"
+	        --title "HoroEngine Coverage"
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 

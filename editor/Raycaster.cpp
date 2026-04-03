@@ -7,7 +7,7 @@
 #include "math/Mat4.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH, const Camera& cam) {
@@ -62,4 +62,4 @@ float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half) {
 }
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

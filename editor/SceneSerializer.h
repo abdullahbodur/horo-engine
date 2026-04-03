@@ -3,7 +3,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 class SceneSerializer {
@@ -16,4 +16,4 @@ class SceneSerializer {
 };
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

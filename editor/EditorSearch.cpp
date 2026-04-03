@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 namespace {
@@ -57,4 +57,4 @@ bool AssetMatchesQuickOpenQuery(const std::string& assetId,
 }
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

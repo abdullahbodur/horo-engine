@@ -5,7 +5,7 @@
 #include "math/Mat3.h"
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 Quaternion Quaternion::FromAxisAngle(const Vec3& axis, float radians) {
   float half = radians * 0.5f;
@@ -172,4 +172,4 @@ std::string Quaternion::ToString() const {
   return ss.str();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

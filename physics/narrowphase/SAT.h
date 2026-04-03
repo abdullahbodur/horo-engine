@@ -1,7 +1,7 @@
 #pragma once
 #include "physics/narrowphase/ContactManifold.h"
 
-namespace Monolith {
+namespace Horo {
 
 class RigidBody;
 
@@ -12,4 +12,4 @@ namespace SAT {
 ContactManifold TestBoxBox(const RigidBody& a, const RigidBody& b);
 
 }  // namespace SAT
-}  // namespace Monolith
+}  // namespace Horo

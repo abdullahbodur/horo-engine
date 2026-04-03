@@ -9,7 +9,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
 
 Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height) {
   if (!glfwInit())
@@ -81,4 +81,4 @@ void Window::WindowCloseCallback(GLFWwindow* win) {
     self->m_closeCb();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

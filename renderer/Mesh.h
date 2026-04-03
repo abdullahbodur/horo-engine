@@ -4,7 +4,7 @@
 #include "math/Vec2.h"
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct Vertex {
   Vec3 position;
@@ -49,4 +49,4 @@ class Mesh {
   void Release();
 };
 
-}  // namespace Monolith
+}  // namespace Horo

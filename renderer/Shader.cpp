@@ -8,7 +8,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
 
 Shader::~Shader() {
   if (m_program)
@@ -136,4 +136,4 @@ void Shader::SetMat4(const std::string& name, const Mat4& m) const {
   glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, m.Data());
 }
 
-}  // namespace Monolith
+}  // namespace Horo

@@ -5,7 +5,7 @@
 #include "scene/Entity.h"
 #include "math/Vec3.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 // Simple test components — no dependencies on ECS components
 struct Position { float x = 0, y = 0, z = 0; };

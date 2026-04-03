@@ -4,10 +4,10 @@
 
 #include "core/Window.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct AppSpec {
-  std::string name = "Monolith App";
+  std::string name = "Horo App";
   int width = 1280;
   int height = 720;
   bool vsync = true;
@@ -38,4 +38,4 @@ class Application {
   bool m_running = true;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

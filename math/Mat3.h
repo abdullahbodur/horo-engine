@@ -3,7 +3,7 @@
 
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 // Column-major 3x3 matrix.
 // m[col][row]
@@ -42,4 +42,4 @@ struct Mat3 {
   std::string ToString() const;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

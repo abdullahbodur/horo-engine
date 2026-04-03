@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-namespace Monolith {
+namespace Horo {
 
 GLFWwindow* Input::s_window = nullptr;
 bool Input::s_keys[MAX_KEYS] = {};
@@ -76,4 +76,4 @@ void Input::ScrollCallback(GLFWwindow*, double, double yOffset) {
   s_scrollDelta += static_cast<float>(yOffset);
 }
 
-}  // namespace Monolith
+}  // namespace Horo

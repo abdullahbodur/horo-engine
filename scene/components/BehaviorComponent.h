@@ -3,7 +3,7 @@
 
 #include "scene/Entity.h"
 
-namespace Monolith {
+namespace Horo {
 
 class Registry;
 
@@ -19,4 +19,4 @@ struct BehaviorComponent {
   std::unique_ptr<Behavior> behavior;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

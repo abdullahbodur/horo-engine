@@ -4,7 +4,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
 
 Vec2 Vec2::Normalized() const {
   float len = Length();
@@ -19,4 +19,4 @@ std::string Vec2::ToString() const {
   return ss.str();
 }
 
-}  // namespace Monolith
+}  // namespace Horo

@@ -10,7 +10,7 @@
 #include "math/Transform.h"
 #include "math/MathUtils.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

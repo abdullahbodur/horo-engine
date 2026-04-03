@@ -16,20 +16,20 @@
 #include "editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 
 namespace {
-Monolith::Editor::SceneObject MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument&, const std::string& assetId) {
-    Monolith::Editor::SceneObject obj;
+Horo::Editor::SceneObject MakeObjectFromAssetForTest(const Horo::Editor::SceneDocument&, const std::string& assetId) {
+    Horo::Editor::SceneObject obj;
     obj.id = "generated";
-    obj.type = Monolith::Editor::SceneObjectType::Prop;
+    obj.type = Horo::Editor::SceneObjectType::Prop;
     obj.assetId = assetId;
     return obj;
 }
 
-Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::SceneDocument& doc, const Monolith::Editor::SceneObject& src) {
-    Monolith::Editor::SceneObject clone = src;
+Horo::Editor::SceneObject DuplicateObjectForTest(const Horo::Editor::SceneDocument& doc, const Horo::Editor::SceneObject& src) {
+    Horo::Editor::SceneObject clone = src;
     clone.id = "copy_" + std::to_string(doc.objects.size());
     clone.props.erase("_eid");
     return clone;

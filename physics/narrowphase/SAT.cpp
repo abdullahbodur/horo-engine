@@ -8,7 +8,7 @@
 #include "physics/BoxCollider.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace SAT {
 
@@ -148,4 +148,4 @@ ContactManifold TestBoxBox(const RigidBody& a, const RigidBody& b) {
 }
 
 }  // namespace SAT
-}  // namespace Monolith
+}  // namespace Horo

@@ -7,7 +7,7 @@
 #include "core/Logger.h"
 #include "renderer/ObjLoader.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace {
 
@@ -61,4 +61,4 @@ std::shared_ptr<Mesh> MeshCache::Get(const std::string& path) {
   return mesh;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

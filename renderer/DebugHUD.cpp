@@ -16,7 +16,7 @@
 #undef DrawText
 #endif
 
-namespace Monolith {
+namespace Horo {
 
 // ---- Static member definitions ----
 
@@ -1620,4 +1620,4 @@ void DebugHUD::FlushGlyphs() {
   s_glyphCount = 0;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

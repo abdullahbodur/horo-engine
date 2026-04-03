@@ -7,7 +7,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
 
 Texture::~Texture() {
   if (m_id)
@@ -77,4 +77,4 @@ void Texture::Unbind() const {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-}  // namespace Monolith
+}  // namespace Horo

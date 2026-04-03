@@ -3,9 +3,9 @@
 #include <cstdlib>
 
 #ifdef NDEBUG
-#define MONOLITH_ASSERT(expr, msg) ((void)0)
+#define HORO_ASSERT(expr, msg) ((void)0)
 #else
-#define MONOLITH_ASSERT(expr, msg)                                             \
+#define HORO_ASSERT(expr, msg)                                             \
   do {                                                                         \
     if (!(expr)) {                                                             \
       std::fprintf(stderr,                                                     \

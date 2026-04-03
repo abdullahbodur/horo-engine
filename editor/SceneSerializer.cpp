@@ -8,7 +8,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 static SceneObjectType TypeFromString(const std::string& s) {
@@ -166,4 +166,4 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
 }
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

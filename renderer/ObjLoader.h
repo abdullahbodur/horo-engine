@@ -3,7 +3,7 @@
 
 #include "renderer/Mesh.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace ObjLoader {
 // Load a triangulated .obj file (v/vt/vn lines, triangulated f lines).
@@ -12,4 +12,4 @@ Mesh Load(const std::string& path);
 
 }  // namespace ObjLoader
 
-}  // namespace Monolith
+}  // namespace Horo

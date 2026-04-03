@@ -1,7 +1,7 @@
 #pragma once
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct Light {
   enum class Type { Directional = 0, Point = 1 };
@@ -14,4 +14,4 @@ struct Light {
   float radius = 10.0f;  // effective range in metres (Point only)
 };
 
-}  // namespace Monolith
+}  // namespace Horo

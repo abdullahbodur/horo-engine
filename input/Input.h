@@ -5,7 +5,7 @@
 
 struct GLFWwindow;
 
-namespace Monolith {
+namespace Horo {
 
 class Input {
  public:
@@ -44,4 +44,4 @@ class Input {
   static void ScrollCallback(GLFWwindow*, double, double yOffset);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

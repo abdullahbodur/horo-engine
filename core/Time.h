@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Monolith {
+namespace Horo {
 
 class Time {
  public:
@@ -33,4 +33,4 @@ class Time {
   static uint64_t s_frameCount;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

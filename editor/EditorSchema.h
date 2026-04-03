@@ -5,7 +5,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 struct FieldDef {
@@ -39,4 +39,4 @@ class EditorSchema {
 };
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

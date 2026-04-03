@@ -2,7 +2,7 @@
 #include "math/Vec3.h"
 #include "physics/Collider.h"
 
-namespace Monolith {
+namespace Horo {
 
 struct BoxCollider : Collider {
   Vec3 halfExtents;  // half-widths in each axis
@@ -11,4 +11,4 @@ struct BoxCollider : Collider {
       : Collider(ColliderType::Box), halfExtents(half) {}
 };
 
-}  // namespace Monolith
+}  // namespace Horo

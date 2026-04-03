@@ -2,7 +2,7 @@
 #include <cmath>
 #include <string>
 
-namespace Monolith {
+namespace Horo {
 
 struct Vec3;
 
@@ -64,4 +64,4 @@ inline Vec4 operator*(float s, const Vec4& v) {
   return v * s;
 }
 
-}  // namespace Monolith
+}  // namespace Horo

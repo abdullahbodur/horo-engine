@@ -177,7 +177,7 @@ jobs:
             --branch-coverage \
             --ignore-errors mismatch,source \
             --synthesize-missing \
-            --title "MonolithEngine — ${{ github.ref_name }} @ ${{ github.sha }}"
+            --title "HoroEngine — ${{ github.ref_name }} @ ${{ github.sha }}"
 
       - name: Print summary
         run: |

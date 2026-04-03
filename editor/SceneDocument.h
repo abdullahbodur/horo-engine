@@ -5,7 +5,7 @@
 
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 enum class SceneObjectType { Panel, Prop, Light };
@@ -43,4 +43,4 @@ struct SceneDocument {
 };
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo

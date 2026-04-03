@@ -3,7 +3,7 @@
 
 #include "physics/constraints/ContactConstraint.h"
 
-namespace Monolith {
+namespace Horo {
 
 class ConstraintSolver {
  public:
@@ -12,4 +12,4 @@ class ConstraintSolver {
   void Solve(std::vector<ContactConstraint>& constraints, int iterations = DEFAULT_ITERATIONS);
 };
 
-}  // namespace Monolith
+}  // namespace Horo

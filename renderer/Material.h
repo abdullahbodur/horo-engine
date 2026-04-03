@@ -5,7 +5,7 @@
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"
 
-namespace Monolith {
+namespace Horo {
 
 class Material {
  public:
@@ -21,4 +21,4 @@ class Material {
   void Apply() const;
 };
 
-}  // namespace Monolith
+}  // namespace Horo

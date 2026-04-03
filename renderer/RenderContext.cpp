@@ -2,7 +2,7 @@
 
 #include <glad/glad.h>
 
-namespace Monolith {
+namespace Horo {
 
 void RenderContext::Init() {
   glEnable(GL_DEPTH_TEST);
@@ -45,4 +45,4 @@ void RenderContext::SetBlend(bool enabled) {
   }
 }
 
-}  // namespace Monolith
+}  // namespace Horo

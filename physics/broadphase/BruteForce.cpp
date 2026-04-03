@@ -5,7 +5,7 @@
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 
-namespace Monolith {
+namespace Horo {
 
 namespace BruteForce {
 
@@ -50,4 +50,4 @@ std::vector<std::pair<int, int>> FindOverlappingPairs(const std::vector<RigidBod
 }
 
 }  // namespace BruteForce
-}  // namespace Monolith
+}  // namespace Horo

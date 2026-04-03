@@ -9,7 +9,7 @@
 
 struct GLFWwindow;
 
-namespace Monolith {
+namespace Horo {
 namespace Editor {
 
 // In-game editor overlay.
@@ -148,4 +148,4 @@ class EditorLayer {
 };
 
 }  // namespace Editor
-}  // namespace Monolith
+}  // namespace Horo
