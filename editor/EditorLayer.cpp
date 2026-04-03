@@ -390,6 +390,12 @@ void EditorLayer::DrawViewGimbal() {
   if (!hasSelection)
     ImGui::BeginDisabled();
 
+  constexpr float kBtn = 22.0f;
+  constexpr float kGap = 6.0f;
+  const float rowWidth = kBtn * 3.0f + kGap * 2.0f;
+  const float rowStartX = (width - rowWidth) * 0.5f;
+  const float centerColX = rowStartX + kBtn + kGap;
+
   auto snapArrow = [&](const char* id, ImGuiDir dir, const char* hint, ViewSnap snap) {
     if (ImGui::ArrowButton(id, dir))
       m_pendingViewSnap = snap;
@@ -397,26 +403,26 @@ void EditorLayer::DrawViewGimbal() {
       ImGui::SetTooltip("%s", hint);
   };
 
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kGap, kGap));
 
-  ImGui::SetCursorPosX(40.0f);
+  ImGui::SetCursorPosX(centerColX);
   snapArrow("##view_top", ImGuiDir_Up, "Top", ViewSnap::Top);
 
-  ImGui::SetCursorPosX(4.0f);
+  ImGui::SetCursorPosX(rowStartX);
   snapArrow("##view_left", ImGuiDir_Left, "Left", ViewSnap::Left);
-  ImGui::SameLine();
+  ImGui::SameLine(0.0f, kGap);
   const char* fbLabel = m_frontSnapNext ? "F" : "B";
   const char* fbHint = m_frontSnapNext ? "Front" : "Back";
-  if (ImGui::Button(fbLabel, ImVec2(48.0f, 22.0f))) {
+  if (ImGui::Button(fbLabel, ImVec2(kBtn, kBtn))) {
     m_pendingViewSnap = m_frontSnapNext ? ViewSnap::Front : ViewSnap::Back;
     m_frontSnapNext = !m_frontSnapNext;
   }
   if (ImGui::IsItemHovered())
     ImGui::SetTooltip("%s", fbHint);
-  ImGui::SameLine();
+  ImGui::SameLine(0.0f, kGap);
   snapArrow("##view_right", ImGuiDir_Right, "Right", ViewSnap::Right);
 
-  ImGui::SetCursorPosX(40.0f);
+  ImGui::SetCursorPosX(centerColX);
   snapArrow("##view_bottom", ImGuiDir_Down, "Bottom", ViewSnap::Bottom);
 
   ImGui::PopStyleVar();
