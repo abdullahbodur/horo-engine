@@ -1,12 +1,28 @@
 #include "editor/EditorSearch.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 namespace Monolith {
 namespace Editor {
 
 namespace {
+
+constexpr std::array<ShortcutRow, 14> kEditorShortcuts = {{{"Editor", "Toggle editor mode", "F10"},
+                                                            {"Editor", "Toggle shortcuts help", "? or F1"},
+                                                            {"Editor", "Quick open", "Ctrl/Cmd + P"},
+                                                            {"Camera", "Toggle fly mode", "Tab"},
+                                                            {"Camera", "Move in fly mode", "W A S D"},
+                                                            {"Camera", "Look around in fly mode", "Mouse"},
+                                                            {"Selection", "Select object", "Left click"},
+                                                            {"Selection", "Multi-select", "Shift + Left click"},
+                                                            {"Selection", "Delete selected object(s)", "Delete"},
+                                                            {"Selection", "Duplicate selected object", "Toolbar: Duplicate"},
+                                                            {"Scene", "Load scene", "Toolbar: Load"},
+                                                            {"Scene", "Save scene", "Toolbar: Save"},
+                                                            {"Assets", "Add prop from selected asset", "Toolbar: + Prop from Asset"},
+                                                            {"Clipboard", "Copy selected object reference", "Ctrl/Cmd + Shift + C"}}};
 
 std::string ToLower(std::string text) {
   std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
@@ -43,6 +59,10 @@ bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
   return ContainsCaseInsensitive(row.category, queryRaw) ||
          ContainsCaseInsensitive(row.command, queryRaw) ||
          ContainsCaseInsensitive(row.keys, queryRaw);
+}
+
+std::span<const ShortcutRow> GetEditorShortcuts() {
+  return kEditorShortcuts;
 }
 
 bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& queryRaw) {
