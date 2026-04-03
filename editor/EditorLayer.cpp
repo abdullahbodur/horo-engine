@@ -121,6 +121,7 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/dungeon.json";
   m_document = std::move(doc);
+  m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
 }
@@ -165,7 +166,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                                   m_confirmExitOpen;
     if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput, ImGui::IsAnyItemActive(),
                                  hasBlockingPopup)) {
-      if (m_document.dirty) {
+      if (ResolveEditorExitDecision(m_document.dirty) ==
+          EditorExitDecision::PromptUnsavedConfirm) {
         m_confirmExitOpen = true;
         m_exitConfirmError.clear();
       } else {
@@ -424,7 +426,8 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
 
   if (ImGui::Button("Exit [F10]")) {
-    if (m_document.dirty) {
+    if (ResolveEditorExitDecision(m_document.dirty) ==
+        EditorExitDecision::PromptUnsavedConfirm) {
       m_confirmExitOpen = true;
       m_exitConfirmError.clear();
     } else {
@@ -1055,6 +1058,7 @@ void EditorLayer::DrawExitConfirmModal() {
 
   ImGui::SameLine();
   if (ImGui::Button("Discard & Exit", ImVec2(120.0f, 0.0f))) {
+    DiscardUnsavedChanges();
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
     ImGui::CloseCurrentPopup();
@@ -1406,6 +1410,7 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   try {
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
+    m_lastSavedDocument = m_document;
     TriggerReload();  // rebuild scene so changes are immediately visible
     return true;
   } catch (const std::exception& e) {
@@ -1413,6 +1418,16 @@ bool EditorLayer::SaveDocument(std::string* outError) {
       *outError = e.what();
     return false;
   }
+}
+
+void EditorLayer::DiscardUnsavedChanges() {
+  if (!m_document.dirty)
+    return;
+
+  m_document = m_lastSavedDocument;
+  m_selectedIndices.clear();
+  m_selectedAssetId.clear();
+  TriggerReload();
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {

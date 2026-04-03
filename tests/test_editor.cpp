@@ -582,6 +582,11 @@ TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[e
     REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, false, false, true));
 }
 
+TEST_CASE("Editor UI logic: exit decision reflects unsaved state", "[editor]") {
+    REQUIRE(ResolveEditorExitDecision(false) == EditorExitDecision::ExitImmediately);
+    REQUIRE(ResolveEditorExitDecision(true) == EditorExitDecision::PromptUnsavedConfirm);
+}
+
 TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
     EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
     REQUIRE(status.selectionCount == 0);

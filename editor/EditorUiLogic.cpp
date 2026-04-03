@@ -40,6 +40,11 @@ bool ShouldHandleEditorEscape(bool currEsc,
   return currEsc && !prevEsc && !wantsTextInput && !anyItemActive && !hasBlockingPopup;
 }
 
+EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges) {
+  return hasUnsavedChanges ? EditorExitDecision::PromptUnsavedConfirm
+                           : EditorExitDecision::ExitImmediately;
+}
+
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot) {
   EditorStatusText out;
   out.selectionCount = std::max(0, snapshot.selectionCount);

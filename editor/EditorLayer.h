@@ -85,6 +85,7 @@ class EditorLayer {
   void UpdateFlyCamera(float dt, Camera& cam);
 
   SceneDocument m_document;
+  SceneDocument m_lastSavedDocument;
   SceneDocument m_pendingDoc;
   EditorSchema m_schema;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
@@ -115,6 +116,7 @@ class EditorLayer {
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
   bool SaveDocument(std::string* outError);
+  void DiscardUnsavedChanges();
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;

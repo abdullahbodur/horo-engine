@@ -42,6 +42,13 @@ struct EditorStatusText {
   const char* reloadText = "idle";
 };
 
+enum class EditorExitDecision {
+  ExitImmediately,
+  PromptUnsavedConfirm,
+};
+
+EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges);
+
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
 
 }  // namespace Editor
