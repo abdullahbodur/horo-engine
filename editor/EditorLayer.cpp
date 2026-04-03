@@ -401,15 +401,28 @@ void EditorLayer::DrawObjectList() {
   ImGui::Begin(
       "Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+  char searchBuf[256] = {};
+  std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_objectSearchQuery.c_str());
+  if (ImGui::InputTextWithHint("##object_search", "Search objects...", searchBuf, sizeof(searchBuf)))
+    m_objectSearchQuery = searchBuf;
+  ImGui::Separator();
+
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
     const char* tag = (obj.type == SceneObjectType::Prop)    ? "P"
                       : (obj.type == SceneObjectType::Light) ? "L"
                                                              : "B";
 
+    std::string haystack = obj.id + " " + tag + " " + obj.assetId;
+    std::string query = m_objectSearchQuery;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!query.empty() && haystack.find(query) == std::string::npos)
+      continue;
+
     char label[192];
     if (!obj.assetId.empty())
-      std::snprintf(label, sizeof(label), "[%s] %s  {%s}##%d", tag, obj.id.c_str(), obj.assetId.c_str(), i);
+      std::snprintf(label, sizeof(label), "[%s] %s · %s##%d", tag, obj.id.c_str(), obj.assetId.c_str(), i);
     else
       std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
 
