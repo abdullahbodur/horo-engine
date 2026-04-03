@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -443,16 +442,9 @@ void EditorLayer::DrawObjectList() {
 
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
-    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
-                           : (obj.type == SceneObjectType::Light) ? "light"
-                                                                  : "board";
-
-    std::string haystack = obj.id + " " + typeName + " " + obj.assetId;
-    std::string query = m_objectSearchQuery;
-    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (!query.empty() && haystack.find(query) == std::string::npos)
+    if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
       continue;
+    const char* typeName = ObjectTypeLabel(obj.type);
 
     char selectableId[32];
     std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
@@ -530,11 +522,7 @@ void EditorLayer::DrawAssetsPanel() {
           continue;
         const auto& asset = assetIt->second;
 
-        std::string haystack = assetId + " " + asset.mesh;
-        std::string query = m_assetSearchQuery;
-        std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (!query.empty() && haystack.find(query) == std::string::npos)
+        if (!AssetMatchesQuickOpenQuery(assetId, asset, m_assetSearchQuery))
           continue;
 
         if (ImGui::Selectable(assetId.c_str(), m_selectedAssetId == assetId)) {
@@ -561,11 +549,7 @@ void EditorLayer::DrawAssetsPanel() {
       continue;
     const auto& asset = assetIt->second;
 
-    std::string haystack = assetId + " " + asset.mesh;
-    std::string query = m_assetSearchQuery;
-    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (!query.empty() && haystack.find(query) == std::string::npos)
+    if (!AssetMatchesQuickOpenQuery(assetId, asset, m_assetSearchQuery))
       continue;
 
     ImGui::PushID(assetId.c_str());
@@ -786,9 +770,7 @@ void EditorLayer::DrawQuickOpenPopup() {
   ImGui::TextDisabled("Objects");
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     const auto& obj = m_document.objects[i];
-    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
-                           : (obj.type == SceneObjectType::Light) ? "light"
-                                                                   : "board";
+    const char* typeName = ObjectTypeLabel(obj.type);
 
     if (!ObjectMatchesQuickOpenQuery(obj, m_quickOpenQuery))
       continue;

@@ -17,6 +17,19 @@ std::string ToLower(std::string text) {
 
 }  // namespace
 
+const char* ObjectTypeLabel(SceneObjectType type) {
+  switch (type) {
+    case SceneObjectType::Prop:
+      return "prop";
+    case SceneObjectType::Light:
+      return "light";
+    case SceneObjectType::Panel:
+      return "board";
+    default:
+      return "unknown";
+  }
+}
+
 bool ContainsCaseInsensitive(const std::string& textRaw, const std::string& queryRaw) {
   if (queryRaw.empty())
     return true;
@@ -33,9 +46,7 @@ bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
 }
 
 bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& queryRaw) {
-  const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
-                         : (obj.type == SceneObjectType::Light) ? "light"
-                                                                 : "board";
+  const char* typeName = ObjectTypeLabel(obj.type);
   return ContainsCaseInsensitive(obj.id + " " + typeName + " " + obj.assetId, queryRaw);
 }
 
