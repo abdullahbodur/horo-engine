@@ -372,12 +372,13 @@ void EditorLayer::DrawToolbar() {
 void EditorLayer::DrawViewGimbal() {
   ImGuiIO& io = ImGui::GetIO();
   const float panelW = 280.0f;
-  const float size = 150.0f;
-  const float x = io.DisplaySize.x - panelW - size - 10.0f;
+  const float width = 104.0f;
+  const float height = 132.0f;
+  const float x = io.DisplaySize.x - panelW - width - 10.0f;
   const float y = 42.0f;
 
   ImGui::SetNextWindowPos(ImVec2(x, y));
-  ImGui::SetNextWindowSize(ImVec2(size, size));
+  ImGui::SetNextWindowSize(ImVec2(width, height));
   ImGui::SetNextWindowBgAlpha(0.75f);
   ImGui::Begin("##view_gimbal",
                nullptr,
@@ -391,26 +392,35 @@ void EditorLayer::DrawViewGimbal() {
   if (!hasSelection)
     ImGui::BeginDisabled();
 
-  auto snapBtn = [&](const char* label, ViewSnap snap, float w = 40.0f) {
-    if (ImGui::Button(label, ImVec2(w, 22.0f)))
+  auto snapBtn = [&](const char* label, const char* hint, ViewSnap snap, ImVec2 size) {
+    if (ImGui::Button(label, size))
       m_pendingViewSnap = snap;
+    if (ImGui::IsItemHovered() && hint)
+      ImGui::SetTooltip("%s", hint);
+  };
+
+  auto snapArrow = [&](const char* id, ImGuiDir dir, const char* hint, ViewSnap snap) {
+    if (ImGui::ArrowButton(id, dir))
+      m_pendingViewSnap = snap;
+    if (ImGui::IsItemHovered() && hint)
+      ImGui::SetTooltip("%s", hint);
   };
 
   ImGui::Dummy(ImVec2(0, 2));
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Top", ViewSnap::Top);
+  ImGui::SetCursorPosX(40.0f);
+  snapArrow("##view_top", ImGuiDir_Up, "Top", ViewSnap::Top);
 
-  snapBtn("Left", ViewSnap::Left);
+  snapArrow("##view_left", ImGuiDir_Left, "Left", ViewSnap::Left);
   ImGui::SameLine();
-  snapBtn("Front", ViewSnap::Front);
+  snapBtn("F", "Front", ViewSnap::Front, ImVec2(28.0f, 22.0f));
   ImGui::SameLine();
-  snapBtn("Right", ViewSnap::Right);
+  snapArrow("##view_right", ImGuiDir_Right, "Right", ViewSnap::Right);
 
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Back", ViewSnap::Back);
+  ImGui::SetCursorPosX(40.0f);
+  snapArrow("##view_bottom", ImGuiDir_Down, "Bottom", ViewSnap::Bottom);
 
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Bottom", ViewSnap::Bottom);
+  ImGui::SetCursorPosX(40.0f);
+  snapBtn("B", "Back", ViewSnap::Back, ImVec2(22.0f, 20.0f));
 
   if (!hasSelection) {
     ImGui::EndDisabled();
