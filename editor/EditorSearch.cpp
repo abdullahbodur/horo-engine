@@ -73,7 +73,7 @@ bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& quer
 bool AssetMatchesQuickOpenQuery(const std::string& assetId,
                                 const AssetDef& asset,
                                 const std::string& queryRaw) {
-  return ContainsCaseInsensitive(assetId + " " + asset.mesh, queryRaw);
+  return ContainsCaseInsensitive(assetId + " " + asset.mesh + " " + asset.albedoMap, queryRaw);
 }
 
 FilteredListState EvaluateFilteredListState(size_t totalCount,

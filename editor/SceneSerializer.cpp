@@ -1,6 +1,7 @@
 #include "editor/SceneSerializer.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -62,6 +63,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
       AssetDef ad;
       ad.mesh = def.value("mesh", "");
       ad.renderScale = def.value("renderScale", "1.0000,1.0000,1.0000");
+      ad.albedoMap = def.value("albedoMap", "");
       doc.assets[id] = std::move(ad);
     }
   }
@@ -122,6 +124,8 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     json d;
     d["mesh"] = def.mesh;
     d["renderScale"] = def.renderScale;
+    if (!def.albedoMap.empty())
+      d["albedoMap"] = def.albedoMap;
     assets[id] = d;
   }
   j["assets"] = assets;
@@ -158,6 +162,11 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
 
     j["objects"].push_back(obj);
   }
+
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  fs::path out(path);
+  fs::create_directories(out.parent_path(), ec);
 
   std::ofstream f(path);
   if (!f.is_open())

@@ -20,9 +20,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -34,14 +36,82 @@
 #include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
 #include "math/MathUtils.h"
+#include "math/Transform.h"
 #include "editor/SceneSerializer.h"
 #include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
+#include "scene/Entity.h"
+#include "scene/Registry.h"
+#include "scene/components/MeshComponent.h"
+#include "scene/components/PlayerTagComponent.h"
+#include "scene/components/TransformComponent.h"
 
 namespace Monolith {
 namespace Editor {
 
 namespace {
+
+// Must match DrawToolbar / DrawStatusBar so left-column windows do not overlap each other
+// or the status strip.
+constexpr float kEditorToolbarH = 36.0f;
+constexpr float kEditorStatusH = 24.0f;
+constexpr float kLeftDockW = 308.0f;
+
+// Split Objects (top) vs Assets (bottom) within [toolbar .. status]. Small gap so they
+// never z-fight at the seam.
+static void ComputeLeftColumnLayout(const ImGuiIO& io,
+                                    float* outObjectsTop,
+                                    float* outObjectsH,
+                                    float* outAssetsTop,
+                                    float* outAssetsH) {
+  const float workTop = kEditorToolbarH;
+  const float workBottom = io.DisplaySize.y - kEditorStatusH;
+  const float workH = std::max(0.0f, workBottom - workTop);
+  constexpr float kMidGap = 4.0f;
+  const float mid = workTop + workH * 0.52f;
+  *outObjectsTop = workTop;
+  *outObjectsH = std::max(48.0f, mid - workTop - kMidGap * 0.5f);
+  *outAssetsTop = mid + kMidGap * 0.5f;
+  *outAssetsH = std::max(64.0f, workBottom - *outAssetsTop);
+}
+
+// World-space selection / picking bounds for a prop when ECS has a valid _eid.
+bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Vec3& outHalf) {
+  if (obj.type != SceneObjectType::Prop)
+    return false;
+  auto it = obj.props.find("_eid");
+  if (it == obj.props.end())
+    return false;
+  Entity e = static_cast<Entity>(std::stoul(it->second));
+  if (!reg.IsAlive(e) || !reg.Has<MeshComponent>(e) || !reg.Has<TransformComponent>(e))
+    return false;
+  const auto& mc = reg.Get<MeshComponent>(e);
+  const auto& tc = reg.Get<TransformComponent>(e);
+  if (!mc.mesh)
+    return false;
+  Transform wt(tc.current.position, tc.current.rotation, tc.current.scale);
+  WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(), wt, outCenter,
+                        outHalf);
+  return true;
+}
+
+#if defined(__APPLE__)
+static std::string ReadPathFromOsascript(const char* cmd) {
+  FILE* pipe = popen(cmd, "r");
+  if (!pipe)
+    return {};
+  char buf[1024] = {};
+  std::string out;
+  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
+    out += buf;
+  pclose(pipe);
+  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
+              return c == '\n' || c == '\r';
+            }),
+            out.end());
+  return out;
+}
+#endif
 
 std::string PickObjFilePath() {
 #ifdef _WIN32
@@ -56,28 +126,177 @@ std::string PickObjFilePath() {
     return filePath;
   return {};
 #elif defined(__APPLE__)
-  const char* cmd =
-      "osascript -e 'try' "
-      "-e 'POSIX path of (choose file of type {\"obj\"} with prompt \"Select OBJ file\")' "
-      "-e 'on error' -e 'return \"\"' -e 'end try'";
-  FILE* pipe = popen(cmd, "r");
-  if (!pipe)
-    return {};
-
-  char buf[1024] = {};
-  std::string out;
-  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
-    out += buf;
-  pclose(pipe);
-
-  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
-              return c == '\n' || c == '\r';
-            }),
-            out.end());
-  return out;
+  // Avoid `of type {"obj"}` — it often fails on modern macOS; we validate extension in code.
+  return ReadPathFromOsascript(
+      "/usr/bin/osascript -e 'try' "
+      "-e 'POSIX path of (choose file with prompt \"Select OBJ file\")' "
+      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null");
 #else
   return {};
 #endif
+}
+
+static bool IsTextureFilePath(const std::string& path) {
+  if (path.empty())
+    return false;
+  namespace fs = std::filesystem;
+  std::string ext = fs::path(path).extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga" ||
+         ext == ".webp" || ext == ".hdr";
+}
+
+std::string PickTextureFilePath() {
+#ifdef _WIN32
+  char filePath[MAX_PATH] = {};
+  OPENFILENAMEA ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = "Images\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.webp\0"
+                    "PNG\0*.png\0"
+                    "JPEG\0*.jpg;*.jpeg\0"
+                    "All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameA(&ofn))
+    return filePath;
+  return {};
+#elif defined(__APPLE__)
+  return ReadPathFromOsascript(
+      "/usr/bin/osascript -e 'try' "
+      "-e 'POSIX path of (choose file with prompt \"Select texture image\")' "
+      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null");
+#else
+  return {};
+#endif
+}
+
+// Copy a picked texture into assets/models (same convention as OBJ import) and return
+// a project-relative path for the scene JSON / LevelLoader.
+static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError) {
+  namespace fs = std::filesystem;
+  if (pickedPath.empty())
+    return {};
+  const fs::path src(pickedPath);
+  std::error_code ec;
+  if (!fs::is_regular_file(src, ec) || ec) {
+    if (outError)
+      *outError = "Texture path is not a file.";
+    return {};
+  }
+  if (!IsTextureFilePath(pickedPath)) {
+    if (outError)
+      *outError = "Unsupported image type (use png, jpg, bmp, tga, webp, …).";
+    return {};
+  }
+
+  const fs::path destDir("assets/models");
+  fs::create_directories(destDir, ec);
+  if (ec) {
+    if (outError)
+      *outError = "Cannot create assets/models: " + ec.message();
+    return {};
+  }
+
+  const fs::path dest = destDir / src.filename();
+  fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
+  if (ec) {
+    if (outError)
+      *outError = "Copy failed: " + ec.message();
+    return {};
+  }
+  return dest.generic_string();
+}
+
+// Copy the .mtl referenced by objSrcPath and all textures it references
+// into destDirStr. Silently skips any file that cannot be copied.
+static void CopyCompanionAssets(const std::string& objSrcPath, const std::string& destDirStr) {
+  namespace fs = std::filesystem;
+  const fs::path srcDir(fs::path(objSrcPath).parent_path());
+  const fs::path destDir(destDirStr);
+
+  std::ifstream objFile(objSrcPath);
+  if (!objFile.is_open())
+    return;
+
+  std::string mtlName;
+  std::string line;
+  while (std::getline(objFile, line)) {
+    if (line.rfind("mtllib ", 0) == 0) {
+      mtlName = line.substr(7);
+      while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
+        mtlName.pop_back();
+      break;
+    }
+  }
+  if (mtlName.empty())
+    return;
+
+  const fs::path mtlSrc = srcDir / mtlName;
+  if (!fs::exists(mtlSrc))
+    return;
+  std::error_code ec;
+  fs::copy_file(mtlSrc, destDir / mtlName, fs::copy_options::overwrite_existing, ec);
+
+  std::ifstream mtlFile(mtlSrc.string());
+  if (!mtlFile.is_open())
+    return;
+
+  while (std::getline(mtlFile, line)) {
+    if (line.size() < 8)
+      continue;
+    std::string prefix = line.substr(0, 4);
+    std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (prefix != "map_")
+      continue;
+
+    const size_t spacePos = line.find(' ');
+    if (spacePos == std::string::npos)
+      continue;
+    std::string texName = line.substr(spacePos + 1);
+    while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
+      texName.pop_back();
+    if (texName.empty())
+      continue;
+
+    const fs::path texSrc = srcDir / texName;
+    if (fs::exists(texSrc))
+      fs::copy_file(texSrc, destDir / texName, fs::copy_options::overwrite_existing, ec);
+  }
+}
+
+// Copy picked .obj into assets/models (and companion MTL/textures). Returns project-relative
+// mesh path (e.g. assets/models/foo.obj) or empty on failure.
+static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError) {
+  namespace fs = std::filesystem;
+  if (pickedPath.empty())
+    return {};
+  if (!IsObjFilePath(pickedPath)) {
+    if (outError)
+      *outError = "Selected file is not .obj";
+    return {};
+  }
+  const fs::path src(pickedPath);
+  const fs::path destDir("assets/models");
+  std::error_code ec;
+  fs::create_directories(destDir, ec);
+  if (ec) {
+    if (outError)
+      *outError = "Cannot create assets/models: " + ec.message();
+    return {};
+  }
+  const fs::path dest = destDir / src.filename();
+  fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
+  if (ec) {
+    if (outError)
+      *outError = "Copy failed: " + ec.message();
+    return {};
+  }
+  CopyCompanionAssets(src.string(), destDir.string());
+  return MeshTagFromImportedPath(pickedPath);
 }
 
 }  // namespace
@@ -125,6 +344,132 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
+}
+
+void EditorLayer::OnPathsDropped(int pathCount, const char** utf8Paths, float dropX, float dropY) {
+  if (!utf8Paths || pathCount <= 0)
+    return;
+  m_pendingPathDropPaths.clear();
+  m_pendingPathDropPaths.reserve(static_cast<size_t>(pathCount));
+  for (int i = 0; i < pathCount; ++i) {
+    if (utf8Paths[i])
+      m_pendingPathDropPaths.emplace_back(utf8Paths[i]);
+  }
+  if (m_pendingPathDropPaths.empty())
+    return;
+  m_pendingPathDropX = dropX;
+  m_pendingPathDropY = dropY;
+  m_hasPendingPathDrop = true;
+}
+
+void EditorLayer::ProcessPendingPathDrops() {
+  if (!m_hasPendingPathDrop)
+    return;
+  m_hasPendingPathDrop = false;
+
+  constexpr float kTextureDropHitSlopPx = 6.0f;
+  const float px = m_pendingPathDropX;
+  const float py = m_pendingPathDropY;
+  auto showAlbedoTextureToast = [this] {
+    m_clipboardToastLabel = "Albedo texture set";
+    m_clipboardToastTime = 2.0f;
+  };
+
+  for (const std::string& path : m_pendingPathDropPaths) {
+    if (!IsTextureFilePath(path))
+      continue;
+
+    if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
+      std::string err;
+      const std::string rel = ImportTextureToAssetsModels(path, &err);
+      if (rel.empty()) {
+        if (!err.empty())
+          LOG_WARN("Texture drop: %s", err.c_str());
+        continue;
+      }
+      m_assetDraftAlbedoMap = rel;
+      showAlbedoTextureToast();
+      m_pendingPathDropPaths.clear();
+      return;
+    }
+    if (m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) && !m_selectedAssetId.empty()) {
+      const auto it = m_document.assets.find(m_selectedAssetId);
+      if (it != m_document.assets.end()) {
+        std::string err;
+        const std::string rel = ImportTextureToAssetsModels(path, &err);
+        if (rel.empty()) {
+          if (!err.empty())
+            LOG_WARN("Texture drop: %s", err.c_str());
+          continue;
+        }
+        it->second.albedoMap = rel;
+        m_document.dirty = true;
+        showAlbedoTextureToast();
+      }
+      m_pendingPathDropPaths.clear();
+      return;
+    }
+  }
+
+  for (const std::string& path : m_pendingPathDropPaths) {
+    if (!IsObjFilePath(path))
+      continue;
+    std::string err;
+    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err);
+    if (meshTag.empty()) {
+      if (!err.empty())
+        LOG_WARN("Drop import: %s", err.c_str());
+      m_assetImportError = err.empty() ? "Drop import failed." : err;
+      m_openNewAssetHeader = true;
+      m_pendingPathDropPaths.clear();
+      return;
+    }
+    m_assetDraftMesh = meshTag;
+    if (m_assetDraftId.empty())
+      m_assetDraftId = AssetIdFromImportedPath(path);
+    m_assetDraftRenderScale = SuggestRenderScale(meshTag);
+    m_assetImportError.clear();
+    m_openNewAssetHeader = true;
+    m_clipboardToastLabel = "OBJ dropped — draft ready";
+    m_clipboardToastTime = 2.2f;
+    m_pendingPathDropPaths.clear();
+    return;
+  }
+
+  m_pendingPathDropPaths.clear();
+}
+
+void EditorLayer::SyncRuntimeEntityIds(Registry& registry) {
+  std::vector<int> propIndices;
+  propIndices.reserve(m_document.objects.size());
+  for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+    if (m_document.objects[static_cast<size_t>(i)].type == SceneObjectType::Prop)
+      propIndices.push_back(i);
+  }
+
+  std::vector<Entity> meshEntities;
+  for (Entity e : registry.GetEntities<MeshComponent>()) {
+    if (registry.Has<PlayerTagComponent>(e))
+      continue;
+    meshEntities.push_back(e);
+  }
+  std::sort(meshEntities.begin(), meshEntities.end());
+
+  const size_t propN = propIndices.size();
+  const size_t meshN = meshEntities.size();
+  const size_t n = std::min(propN, meshN);
+  if (propN != meshN) {
+    LOG_WARN(
+        "EditorLayer::SyncRuntimeEntityIds: %zu prop(s) vs %zu mesh entity(ies); mapping first %zu",
+        propN, meshN, n);
+  }
+
+  for (size_t j = 0; j < n; ++j) {
+    m_document.objects[static_cast<size_t>(propIndices[j])].props["_eid"] =
+        std::to_string(meshEntities[j]);
+  }
+  for (size_t j = n; j < propN; ++j)
+    m_document.objects[static_cast<size_t>(propIndices[j])].props.erase("_eid");
 }
 
 // ---- Per-frame update --------------------------------------------------------
@@ -230,7 +575,70 @@ void EditorLayer::SetHotReloadOverlay(
   m_hotReloadOverlayLabel = label;
 }
 
+void EditorLayer::ProcessDeferredFilePicks() {
+  const DeferredFilePick pick = m_deferredFilePick;
+  if (pick == DeferredFilePick::None)
+    return;
+  m_deferredFilePick = DeferredFilePick::None;
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+  (void)pick;
+  return;
+#endif
+
+  switch (pick) {
+    case DeferredFilePick::None:
+      break;
+    case DeferredFilePick::ImportObjBulk: {
+      m_assetImportError.clear();
+      const std::string chosen = PickObjFilePath();
+      if (chosen.empty())
+        break;
+      std::string err;
+      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err);
+      if (!meshTag.empty()) {
+        m_assetDraftMesh = meshTag;
+        if (m_assetDraftId.empty())
+          m_assetDraftId = AssetIdFromImportedPath(chosen);
+        m_assetDraftRenderScale = SuggestRenderScale(meshTag);
+        m_assetImportError.clear();
+      } else if (!err.empty())
+        m_assetImportError = err;
+      break;
+    }
+    case DeferredFilePick::NewAssetAlbedo: {
+      std::string err;
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      if (!rel.empty())
+        m_assetDraftAlbedoMap = rel;
+      else if (!err.empty())
+        LOG_WARN("Texture browse: %s", err.c_str());
+      break;
+    }
+    case DeferredFilePick::SelectedAssetAlbedo: {
+      const std::string id = m_selectedAssetId;
+      if (id.empty() || m_document.assets.find(id) == m_document.assets.end())
+        break;
+      std::string err;
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      if (!rel.empty()) {
+        m_document.assets[id].albedoMap = rel;
+        m_document.dirty = true;
+      } else if (!err.empty())
+        LOG_WARN("Texture browse: %s", err.c_str());
+      break;
+    }
+  }
+}
+
 void EditorLayer::Render(const Camera& cam) {
+  ProcessDeferredFilePicks();
+  if (!m_active) {
+    m_albedoDraftDrop.Clear();
+    m_albedoSelDrop.Clear();
+  }
+  ProcessPendingPathDrops();
+
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
@@ -315,7 +723,7 @@ void EditorLayer::DrawHotReloadOverlay() {
 void EditorLayer::DrawToolbar() {
   ImGuiIO& io = ImGui::GetIO();
   ImGui::SetNextWindowPos(ImVec2(0, 0));
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 36));
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorToolbarH));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin("##toolbar",
                nullptr,
@@ -446,12 +854,11 @@ void EditorLayer::DrawToolbar() {
 
 void EditorLayer::DrawStatusBar() {
   ImGuiIO& io = ImGui::GetIO();
-  constexpr float kStatusH = 24.0f;
   const EditorStatusText status = BuildEditorStatusText(
       EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()), m_document.dirty, m_flyMode, m_wantsReload});
 
-  ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kStatusH));
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kStatusH));
+  ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kEditorStatusH));
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorStatusH));
   ImGui::SetNextWindowBgAlpha(0.82f);
   ImGui::Begin("##editor_statusbar",
                nullptr,
@@ -530,12 +937,14 @@ void EditorLayer::DrawViewGimbal() {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 260.0f;
-  const float Y = 36.0f;
-  const float H = io.DisplaySize.y * 0.52f - Y;
+  float objTop = 0.0f;
+  float objH = 0.0f;
+  float asTop = 0.0f;
+  float asH = 0.0f;
+  ComputeLeftColumnLayout(io, &objTop, &objH, &asTop, &asH);
 
-  ImGui::SetNextWindowPos(ImVec2(0, Y));
-  ImGui::SetNextWindowSize(ImVec2(W, H));
+  ImGui::SetNextWindowPos(ImVec2(0.0f, objTop));
+  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, objH));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
       "Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -602,23 +1011,33 @@ void EditorLayer::DrawObjectList() {
 
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 260.0f;
-  const float Y = io.DisplaySize.y * 0.52f;
+  float objTop = 0.0f;
+  float objH = 0.0f;
+  float assetsTop = 0.0f;
+  float assetsH = 0.0f;
+  ComputeLeftColumnLayout(io, &objTop, &objH, &assetsTop, &assetsH);
 
-  ImGui::SetNextWindowPos(ImVec2(0, Y));
-  ImGui::SetNextWindowSize(ImVec2(W, io.DisplaySize.y - Y));
+  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop));
+  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, assetsH));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
       "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+  m_albedoDraftDrop.Clear();
+  m_albedoSelDrop.Clear();
+
   ImGui::TextDisabled("Registry");
   ImGui::SameLine();
-  ImGui::SetCursorPosX(W - 74.0f);
+  ImGui::SetCursorPosX(kLeftDockW - 74.0f);
   if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
     m_assetSearchOpen = true;
     m_assetSearchQuery.clear();
   }
   ImGui::Separator();
+
+  const float belowHeader = ImGui::GetContentRegionAvail().y;
+  const float footerMinH = std::clamp(belowHeader * 0.36f, 150.0f, 280.0f);
+  const float listH = std::max(48.0f, belowHeader - footerMinH);
 
   std::vector<std::string> assetIds;
   assetIds.reserve(m_document.assets.size());
@@ -665,6 +1084,12 @@ void EditorLayer::DrawAssetsPanel() {
     }
   }
 
+  bool openNewAssetSection = m_openNewAssetHeader;
+  if (m_openNewAssetHeader)
+    m_openNewAssetHeader = false;
+
+  ImGui::BeginChild("##asset_registry_scroll", ImVec2(0, listH), true);
+
   int shownAssetCount = 0;
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
@@ -691,33 +1116,107 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::SameLine();
     ImGui::Text("%s", assetId.c_str());
 
-    // [×] deselect button — only visible for the selected asset
+    // Expanded inspector — vertical stack below the list row (no label-on-right cramming)
     if (isSelectedAsset) {
       ImGui::SameLine();
       ImGui::TextDisabled("[x]");
       if (ImGui::IsItemClicked())
         m_selectedAssetId.clear();
 
-      ImGui::TextDisabled("  mesh: %s", asset.mesh.c_str());
-      ImGui::TextDisabled("  scale: %s", asset.renderScale.c_str());
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 8.0f));
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.10f, 0.12f, 0.16f, 0.95f));
+      ImGui::BeginChild("##asset_detail", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders,
+                        ImGuiWindowFlags_NoScrollbar);
 
-      if (ImGui::Button("Add Prop")) {
+      const float innerW = ImGui::GetContentRegionAvail().x;
+      ImGui::PushItemWidth(innerW);
+
+      ImGui::TextDisabled("Asset");
+      ImGui::TextUnformatted(assetId.c_str());
+      if (ImGui::Button("Deselect##sel_asset_close", ImVec2(innerW, 0.0f)))
+        m_selectedAssetId.clear();
+
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+
+      ImGui::TextDisabled("Mesh path");
+      char meshEditBuf[512] = {};
+      std::snprintf(meshEditBuf, sizeof(meshEditBuf), "%s", assetIt->second.mesh.c_str());
+      if (ImGui::InputText("##sel_mesh", meshEditBuf, sizeof(meshEditBuf))) {
+        m_document.assets[assetId].mesh = meshEditBuf;
+        m_document.dirty = true;
+      }
+
+      ImGui::TextDisabled("Render scale (x, y, z)");
+      char scaleEditBuf[128] = {};
+      std::snprintf(scaleEditBuf, sizeof(scaleEditBuf), "%s", assetIt->second.renderScale.c_str());
+      if (ImGui::InputText("##sel_scale", scaleEditBuf, sizeof(scaleEditBuf))) {
+        m_document.assets[assetId].renderScale = scaleEditBuf;
+        m_document.dirty = true;
+        TriggerReload();
+      }
+
+      ImGui::TextDisabled("Albedo map (optional)");
+      const ImVec2 selAlbLabelMin = ImGui::GetItemRectMin();
+      const ImVec2 selAlbLabelMax = ImGui::GetItemRectMax();
+      char albBuf[512] = {};
+      std::snprintf(albBuf, sizeof(albBuf), "%s", assetIt->second.albedoMap.c_str());
+      if (ImGui::InputText("##sel_alb", albBuf, sizeof(albBuf))) {
+        m_document.assets[assetId].albedoMap = albBuf;
+        m_document.dirty = true;
+      }
+      {
+        const ImVec2 fMin = ImGui::GetItemRectMin();
+        const ImVec2 fMax = ImGui::GetItemRectMax();
+        m_albedoSelDrop.valid = true;
+        m_albedoSelDrop.minX = std::min(selAlbLabelMin.x, fMin.x);
+        m_albedoSelDrop.minY = selAlbLabelMin.y;
+        m_albedoSelDrop.maxX = std::max(selAlbLabelMax.x, fMax.x);
+        m_albedoSelDrop.maxY = fMax.y;
+      }
+#if defined(_WIN32) || defined(__APPLE__)
+      if (ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(innerW, 0.0f))) {
+        m_deferredFilePick = DeferredFilePick::SelectedAssetAlbedo;
+      }
+#else
+      ImGui::BeginDisabled();
+      ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(innerW, 0.0f));
+      ImGui::EndDisabled();
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Texture file dialog is not available on this platform.");
+#endif
+
+      ImGui::Spacing();
+      const float gap = ImGui::GetStyle().ItemSpacing.x;
+      const float btnW = std::max(60.0f, (innerW - gap) * 0.5f);
+      if (ImGui::Button("Add Prop##sel_add", ImVec2(btnW, 0.0f))) {
         SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
         m_document.objects.push_back(std::move(obj));
         m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
         m_document.dirty = true;
         TriggerReload();
       }
-      ImGui::SameLine();
-      if (ImGui::Button("Delete Asset"))
+      ImGui::SameLine(0.0f, gap);
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.18f, 0.18f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.22f, 0.22f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+      if (ImGui::Button("Delete Asset##sel_del", ImVec2(btnW, 0.0f)))
         RequestDeleteAsset(assetId);
+      ImGui::PopStyleColor(3);
+
+      ImGui::PopItemWidth();
+      ImGui::EndChild();
+      ImGui::PopStyleColor();
+      ImGui::PopStyleVar();
     }
 
     ImGui::Spacing();
     ImGui::PopID();
   }
 
-  bool openNewAssetSection = false;
   const FilteredListState assetState =
       EvaluateFilteredListState(assetIds.size(), shownAssetCount, m_assetSearchQuery);
   if (assetState != FilteredListState::None) {
@@ -734,85 +1233,105 @@ void EditorLayer::DrawAssetsPanel() {
     }
   }
 
+  ImGui::EndChild();
+
   ImGui::Separator();
+
+  const float footerH = ImGui::GetContentRegionAvail().y;
+  ImGui::BeginChild("##new_asset_footer", ImVec2(0, footerH), true);
+
+  const float footerInnerW = ImGui::GetContentRegionAvail().x;
+  // Use almost full footer width so labels + fields are not clipped (was capped ~228px).
+  const float blockW = std::max(160.0f, footerInnerW - 12.0f);
+  const float padX = std::max(0.0f, (footerInnerW - blockW) * 0.5f);
+  ImGui::Dummy(ImVec2(0.0f, 6.0f));
+  ImGui::Dummy(ImVec2(padX, 0.0f));
+  ImGui::SameLine(0.0f, 0.0f);
+  ImGui::BeginGroup();
+  ImGui::PushItemWidth(blockW);
+
   if (openNewAssetSection)
     ImGui::SetNextItemOpen(true, ImGuiCond_Always);
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
-    if (ImGui::Button("Import .obj...")) {
+    if (ImGui::Button("Import .obj...", ImVec2(blockW, 0.0f))) {
       m_assetImportError.clear();
 
 #if !defined(_WIN32) && !defined(__APPLE__)
       m_assetImportError = "Import dialog is not supported on this platform yet.";
 #else
-      const std::string picked = PickObjFilePath();
-      if (!picked.empty()) {
-        if (!IsObjFilePath(picked)) {
-          m_assetImportError = "Selected file is not .obj";
-        } else {
-          namespace fs = std::filesystem;
-          const fs::path src(picked);
-          const fs::path destDir("assets/models");
-
-          std::error_code createEc;
-          fs::create_directories(destDir, createEc);
-          if (createEc) {
-            m_assetImportError = "Cannot create assets/models: " + createEc.message();
-          } else {
-            std::error_code copyEc;
-            const fs::path dest = destDir / src.filename();
-            fs::copy_file(src, dest, fs::copy_options::overwrite_existing, copyEc);
-            if (!copyEc) {
-              // Auto-fill draft fields from filename
-              const std::string meshTag = MeshTagFromImportedPath(picked);
-              const std::string assetId = AssetIdFromImportedPath(picked);
-              m_assetDraftMesh = meshTag;
-              if (m_assetDraftId.empty())
-                m_assetDraftId = assetId;
-              m_assetImportError.clear();
-            } else {
-              m_assetImportError = "Copy failed: " + copyEc.message();
-            }
-          }
-        }
-      }
+      m_deferredFilePick = DeferredFilePick::ImportObjBulk;
 #endif
     }
     if (!m_assetImportError.empty()) {
-      ImGui::SameLine();
+      ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + blockW);
       ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
+      ImGui::PopTextWrapPos();
     }
 
     ImGui::Spacing();
 
-    // -- Manual fields ----------------------------------------------------------
+    // -- Manual fields (label above field: avoids clipped right-side labels in narrow panel)
     char idBuf[128] = {};
     std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
-    if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
+    ImGui::TextDisabled("Asset ID");
+    if (ImGui::InputText("##draft_id", idBuf, sizeof(idBuf)))
       m_assetDraftId = idBuf;
 
     char meshBuf[256] = {};
     std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
-    if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
+    ImGui::TextDisabled("Mesh");
+    if (ImGui::InputText("##draft_mesh", meshBuf, sizeof(meshBuf)))
       m_assetDraftMesh = meshBuf;
 
     char scaleBuf[128] = {};
     std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
-    if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
+    ImGui::TextDisabled("Render scale");
+    if (ImGui::InputText("##draft_scale", scaleBuf, sizeof(scaleBuf)))
       m_assetDraftRenderScale = scaleBuf;
+
+    char albDraftBuf[512] = {};
+    std::snprintf(albDraftBuf, sizeof(albDraftBuf), "%s", m_assetDraftAlbedoMap.c_str());
+    ImGui::TextDisabled("Albedo map (optional)");
+    const ImVec2 draftAlbLabelMin = ImGui::GetItemRectMin();
+    const ImVec2 draftAlbLabelMax = ImGui::GetItemRectMax();
+    if (ImGui::InputText("##draft_albedo", albDraftBuf, sizeof(albDraftBuf)))
+      m_assetDraftAlbedoMap = albDraftBuf;
+    {
+      const ImVec2 fMin = ImGui::GetItemRectMin();
+      const ImVec2 fMax = ImGui::GetItemRectMax();
+      m_albedoDraftDrop.valid = true;
+      m_albedoDraftDrop.minX = std::min(draftAlbLabelMin.x, fMin.x);
+      m_albedoDraftDrop.minY = draftAlbLabelMin.y;
+      m_albedoDraftDrop.maxX = std::max(draftAlbLabelMax.x, fMax.x);
+      m_albedoDraftDrop.maxY = fMax.y;
+    }
+#if defined(_WIN32) || defined(__APPLE__)
+    if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f))) {
+      m_deferredFilePick = DeferredFilePick::NewAssetAlbedo;
+    }
+#else
+    ImGui::BeginDisabled();
+    ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f));
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+      ImGui::SetTooltip("Texture file dialog is not available on this platform.");
+#endif
 
     const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
     if (!canCreate)
       ImGui::BeginDisabled();
-    if (ImGui::Button("Create Asset")) {
+    if (ImGui::Button("Create Asset", ImVec2(blockW, 0.0f))) {
       AssetDef def;
       def.mesh = m_assetDraftMesh;
       def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
+      def.albedoMap = m_assetDraftAlbedoMap;
       m_document.assets[m_assetDraftId] = std::move(def);
       m_selectedAssetId = m_assetDraftId;
       m_assetDraftId.clear();
       m_assetDraftMesh.clear();
       m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+      m_assetDraftAlbedoMap.clear();
       m_assetImportError.clear();
       m_document.dirty = true;
       TriggerReload();
@@ -820,6 +1339,11 @@ void EditorLayer::DrawAssetsPanel() {
     if (!canCreate)
       ImGui::EndDisabled();
   }
+
+  ImGui::PopItemWidth();
+  ImGui::EndGroup();
+
+  ImGui::EndChild();
 
   ImGui::End();
 }
@@ -1092,10 +1616,11 @@ void EditorLayer::DrawExitConfirmModal() {
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
   const float W = 280.0f;
-  const float Y = 36.0f;
+  const float workTop = kEditorToolbarH;
+  const float workBottom = io.DisplaySize.y - kEditorStatusH;
 
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, Y));
-  ImGui::SetNextWindowSize(ImVec2(W, io.DisplaySize.y - Y));
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, workTop));
+  ImGui::SetNextWindowSize(ImVec2(W, workBottom - workTop));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
       "Properties", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -1304,9 +1829,15 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
 
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     const auto& obj = m_document.objects[i];
-    Vec3 half = {
-        std::max(obj.scale.x, 0.25f), std::max(obj.scale.y, 0.25f), std::max(obj.scale.z, 0.25f)};
-    float t = RayVsAABB(ray, obj.position, half);
+    Vec3 center = obj.position;
+    Vec3 half = {std::max(obj.scale.x, 0.25f), std::max(obj.scale.y, 0.25f),
+                 std::max(obj.scale.z, 0.25f)};
+    if (m_liveRegistry && TryPropWorldAabb(*m_liveRegistry, obj, center, half)) {
+      half.x = std::max(half.x, 0.25f);
+      half.y = std::max(half.y, 0.25f);
+      half.z = std::max(half.z, 0.25f);
+    }
+    float t = RayVsAABB(ray, center, half);
     if (t >= 0.0f && t < bestT) {
       bestT = t;
       bestIdx = i;
@@ -1332,7 +1863,16 @@ void EditorLayer::DrawSelectionHighlight() {
     if (i < 0 || i >= n)
       continue;
     const auto& obj = m_document.objects[i];
-    DebugDraw::Box(obj.position, obj.scale, {0.2f, 0.7f, 1.0f, 1.0f});
+    Vec3 center = obj.position;
+    Vec3 half = obj.scale;
+    if (!m_liveRegistry || !TryPropWorldAabb(*m_liveRegistry, obj, center, half))
+      half = {std::max(half.x, 0.25f), std::max(half.y, 0.25f), std::max(half.z, 0.25f)};
+    else {
+      half.x = std::max(half.x, 0.25f);
+      half.y = std::max(half.y, 0.25f);
+      half.z = std::max(half.z, 0.25f);
+    }
+    DebugDraw::Box(center, half, {0.2f, 0.7f, 1.0f, 1.0f});
   }
 }
 

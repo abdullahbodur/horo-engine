@@ -17,6 +17,7 @@ class Window {
  public:
   using ResizeCallback = std::function<void(int w, int h)>;
   using CloseCallback = std::function<void()>;
+  using FileDropCallback = std::function<void(int pathCount, const char** utf8Paths)>;
 
   explicit Window(const WindowSpec& spec);
   ~Window();
@@ -34,8 +35,9 @@ class Window {
 
   GLFWwindow* GetNativeHandle() const { return m_window; }
 
-  void SetResizeCallback(ResizeCallback cb) { m_resizeCb = cb; }
-  void SetCloseCallback(CloseCallback cb) { m_closeCb = cb; }
+  void SetResizeCallback(ResizeCallback cb) { m_resizeCb = std::move(cb); }
+  void SetCloseCallback(CloseCallback cb) { m_closeCb = std::move(cb); }
+  void SetFileDropCallback(FileDropCallback cb) { m_fileDropCb = std::move(cb); }
 
  private:
   GLFWwindow* m_window = nullptr;
@@ -43,9 +45,11 @@ class Window {
   int m_height = 0;
   ResizeCallback m_resizeCb;
   CloseCallback m_closeCb;
+  FileDropCallback m_fileDropCb;
 
   static void FramebufferSizeCallback(GLFWwindow* win, int w, int h);
   static void WindowCloseCallback(GLFWwindow* win);
+  static void DropPathsThunk(GLFWwindow* win, int count, const char** paths);
 };
 
 }  // namespace Monolith

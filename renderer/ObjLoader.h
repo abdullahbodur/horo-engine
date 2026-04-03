@@ -10,6 +10,20 @@ namespace ObjLoader {
 // Throws std::runtime_error on failure.
 Mesh Load(const std::string& path);
 
+struct ObjAABB
+{
+    Vec3 min = {  1e30f,  1e30f,  1e30f };
+    Vec3 max = { -1e30f, -1e30f, -1e30f };
+    bool valid = false;
+};
+// Parse only vertex positions; no GPU upload. Returns {valid=false} on any error.
+ObjAABB ComputeAABB(const std::string& path);
+
+// Parse the MTL file referenced by the given OBJ and return the path to
+// the map_Kd (diffuse) texture, resolved relative to the OBJ directory.
+// Returns empty string if the MTL is absent or has no map_Kd.
+std::string FindDiffuseTexture(const std::string& objPath);
+
 }  // namespace ObjLoader
 
 }  // namespace Monolith

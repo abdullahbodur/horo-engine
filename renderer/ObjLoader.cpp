@@ -1,5 +1,7 @@
 #include "renderer/ObjLoader.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -112,12 +114,113 @@ Mesh Load(const std::string& path) {
     }
   }
 
+  // Auto-generate flat normals for meshes that shipped without vn lines
+  if (normals.empty()) {
+    for (size_t i = 0; i + 2 < vertices.size(); i += 3) {
+      Vec3 e1 = vertices[i + 1].position - vertices[i].position;
+      Vec3 e2 = vertices[i + 2].position - vertices[i].position;
+      Vec3 n = Vec3::Cross(e1, e2).Normalized();
+      vertices[i].normal = n;
+      vertices[i + 1].normal = n;
+      vertices[i + 2].normal = n;
+    }
+  }
+
   if (vertices.empty())
     throw std::runtime_error("ObjLoader: no geometry in '" + path + "'");
 
   Mesh mesh;
   mesh.SetData(vertices, indices);
   return mesh;
+}
+
+ObjAABB ComputeAABB(const std::string& path)
+{
+    ObjAABB result;
+    std::ifstream file(path);
+    if (!file.is_open())
+        return result;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.size() < 2 || line[0] != 'v' || line[1] != ' ')
+            continue;
+        std::istringstream ss(line);
+        std::string kw;
+        float x, y, z;
+        ss >> kw >> x >> y >> z;
+        if (ss.fail())
+            continue;
+        if (!result.valid) {
+            result.min = result.max = {x, y, z};
+            result.valid = true;
+        } else {
+            result.min.x = std::min(result.min.x, x);
+            result.min.y = std::min(result.min.y, y);
+            result.min.z = std::min(result.min.z, z);
+            result.max.x = std::max(result.max.x, x);
+            result.max.y = std::max(result.max.y, y);
+            result.max.z = std::max(result.max.z, z);
+        }
+    }
+    return result;
+}
+
+std::string FindDiffuseTexture(const std::string& objPath)
+{
+    // 1. Read the OBJ to find "mtllib <name>"
+    std::ifstream objFile(objPath);
+    if (!objFile.is_open())
+        return {};
+
+    std::string mtlName;
+    std::string line;
+    while (std::getline(objFile, line))
+    {
+        if (line.rfind("mtllib ", 0) == 0)
+        {
+            mtlName = line.substr(7);
+            // Trim trailing whitespace/CR
+            while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
+                mtlName.pop_back();
+            break;
+        }
+    }
+    if (mtlName.empty())
+        return {};
+
+    // 2. Resolve MTL path relative to the OBJ directory
+    namespace fs = std::filesystem;
+    const fs::path objDir = fs::path(objPath).parent_path();
+    const std::string mtlPath = (objDir / mtlName).string();
+
+    std::ifstream mtlFile(mtlPath);
+    if (!mtlFile.is_open())
+        return {};
+
+    // 3. Find "map_Kd <texture>" in the MTL
+    std::string texName;
+    while (std::getline(mtlFile, line))
+    {
+        // map_Kd may appear as "map_Kd" or "map_kd" (case-insensitive)
+        if (line.size() < 7)
+            continue;
+        std::string prefix = line.substr(0, 7);
+        std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        if (prefix == "map_kd ")
+        {
+            texName = line.substr(7);
+            while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
+                texName.pop_back();
+            break;
+        }
+    }
+    if (texName.empty())
+        return {};
+
+    // 4. Resolve texture path relative to MTL directory (same as OBJ dir)
+    return (objDir / texName).generic_string();
 }
 
 }  // namespace ObjLoader

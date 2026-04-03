@@ -9,112 +9,152 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
+# Unit tests live under build/bin/tests/ so build/bin/ only holds MonolithApp (+ copied assets).
+set(MONOLITH_TEST_BIN_DIR "${CMAKE_BINARY_DIR}/bin/tests")
+file(MAKE_DIRECTORY "${MONOLITH_TEST_BIN_DIR}")
+function(monolith_set_test_output_dir target_name)
+  set_target_properties(${target_name} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${MONOLITH_TEST_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${MONOLITH_TEST_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${MONOLITH_TEST_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${MONOLITH_TEST_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${MONOLITH_TEST_BIN_DIR}")
+endfunction()
+
 # ---- test_math ----
 add_executable(test_math test_math.cpp)
 target_link_libraries(test_math PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_math COMMAND test_math)
+monolith_set_test_output_dir(test_math)
+add_test(NAME test_math COMMAND $<TARGET_FILE:test_math>)
 
 # ---- test_physics ----
 add_executable(test_physics test_physics.cpp)
 target_link_libraries(test_physics PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_physics COMMAND test_physics)
+monolith_set_test_output_dir(test_physics)
+add_test(NAME test_physics COMMAND $<TARGET_FILE:test_physics>)
 
 # ---- test_math_extended ----
 add_executable(test_math_extended test_math_extended.cpp)
 target_link_libraries(test_math_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_math_extended COMMAND test_math_extended)
+monolith_set_test_output_dir(test_math_extended)
+add_test(NAME test_math_extended COMMAND $<TARGET_FILE:test_math_extended>)
 
 # ---- test_physics_extended ----
 add_executable(test_physics_extended test_physics_extended.cpp)
 target_link_libraries(test_physics_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_physics_extended COMMAND test_physics_extended)
+monolith_set_test_output_dir(test_physics_extended)
+add_test(NAME test_physics_extended COMMAND $<TARGET_FILE:test_physics_extended>)
 
 # ---- test_ecs ----
 add_executable(test_ecs test_ecs.cpp)
 target_link_libraries(test_ecs PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_ecs COMMAND test_ecs)
+monolith_set_test_output_dir(test_ecs)
+add_test(NAME test_ecs COMMAND $<TARGET_FILE:test_ecs>)
 
 # ---- test_gjk ----
 add_executable(test_gjk test_gjk.cpp)
 target_link_libraries(test_gjk PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_gjk COMMAND test_gjk)
+monolith_set_test_output_dir(test_gjk)
+add_test(NAME test_gjk COMMAND $<TARGET_FILE:test_gjk>)
 
 # ---- test_integration ----
 add_executable(test_integration test_integration.cpp)
 target_link_libraries(test_integration PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_integration COMMAND test_integration)
+monolith_set_test_output_dir(test_integration)
+add_test(NAME test_integration COMMAND $<TARGET_FILE:test_integration>)
 
 # ---- test_constraints ----
 add_executable(test_constraints test_constraints.cpp)
 target_link_libraries(test_constraints PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_constraints COMMAND test_constraints)
+monolith_set_test_output_dir(test_constraints)
+add_test(NAME test_constraints COMMAND $<TARGET_FILE:test_constraints>)
 
 # ---- test_physics_world ----
 add_executable(test_physics_world test_physics_world.cpp)
 target_link_libraries(test_physics_world PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_physics_world COMMAND test_physics_world)
+monolith_set_test_output_dir(test_physics_world)
+add_test(NAME test_physics_world COMMAND $<TARGET_FILE:test_physics_world>)
 
 # ---- test_scene ----
 add_executable(test_scene test_scene.cpp)
 target_link_libraries(test_scene PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_scene COMMAND test_scene)
+monolith_set_test_output_dir(test_scene)
+add_test(NAME test_scene COMMAND $<TARGET_FILE:test_scene>)
 
 # ---- test_camera ----
 add_executable(test_camera test_camera.cpp)
 target_link_libraries(test_camera PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_camera COMMAND test_camera)
+monolith_set_test_output_dir(test_camera)
+add_test(NAME test_camera COMMAND $<TARGET_FILE:test_camera>)
 
 # ---- test_math_coverage ----
 add_executable(test_math_coverage test_math_coverage.cpp)
 target_link_libraries(test_math_coverage PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_math_coverage COMMAND test_math_coverage)
+monolith_set_test_output_dir(test_math_coverage)
+add_test(NAME test_math_coverage COMMAND $<TARGET_FILE:test_math_coverage>)
 
 # ---- test_physics_coverage ----
 add_executable(test_physics_coverage test_physics_coverage.cpp)
 target_link_libraries(test_physics_coverage PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_physics_coverage COMMAND test_physics_coverage)
+monolith_set_test_output_dir(test_physics_coverage)
+add_test(NAME test_physics_coverage COMMAND $<TARGET_FILE:test_physics_coverage>)
 
 # ---- test_editor ----
 add_executable(test_editor test_editor.cpp)
 target_link_libraries(test_editor PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_editor COMMAND test_editor)
+monolith_set_test_output_dir(test_editor)
+add_test(NAME test_editor COMMAND $<TARGET_FILE:test_editor>)
 
 # ---- test_transform ----
 add_executable(test_transform test_transform.cpp)
 target_link_libraries(test_transform PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_transform COMMAND test_transform)
+monolith_set_test_output_dir(test_transform)
+add_test(NAME test_transform COMMAND $<TARGET_FILE:test_transform>)
 
 # ---- test_physics_deep ----
 add_executable(test_physics_deep test_physics_deep.cpp)
 target_link_libraries(test_physics_deep PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_physics_deep COMMAND test_physics_deep)
+monolith_set_test_output_dir(test_physics_deep)
+add_test(NAME test_physics_deep COMMAND $<TARGET_FILE:test_physics_deep>)
 
 # ---- test_registry_extended ----
 add_executable(test_registry_extended test_registry_extended.cpp)
 target_link_libraries(test_registry_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_registry_extended COMMAND test_registry_extended)
+monolith_set_test_output_dir(test_registry_extended)
+add_test(NAME test_registry_extended COMMAND $<TARGET_FILE:test_registry_extended>)
 
 # ---- test_camera_extended ----
 add_executable(test_camera_extended test_camera_extended.cpp)
 target_link_libraries(test_camera_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_camera_extended COMMAND test_camera_extended)
+monolith_set_test_output_dir(test_camera_extended)
+add_test(NAME test_camera_extended COMMAND $<TARGET_FILE:test_camera_extended>)
 
 # ---- test_core ----
 add_executable(test_core test_core.cpp)
 target_link_libraries(test_core PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_core COMMAND test_core)
+monolith_set_test_output_dir(test_core)
+add_test(NAME test_core COMMAND $<TARGET_FILE:test_core>)
 
 # ---- test_scene_systems ----
 add_executable(test_scene_systems test_scene_systems.cpp)
 target_link_libraries(test_scene_systems PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_scene_systems COMMAND test_scene_systems)
+monolith_set_test_output_dir(test_scene_systems)
+add_test(NAME test_scene_systems COMMAND $<TARGET_FILE:test_scene_systems>)
 
 # ---- test_gjk_extended ----
 add_executable(test_gjk_extended test_gjk_extended.cpp)
 target_link_libraries(test_gjk_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_gjk_extended COMMAND test_gjk_extended)
+monolith_set_test_output_dir(test_gjk_extended)
+add_test(NAME test_gjk_extended COMMAND $<TARGET_FILE:test_gjk_extended>)
 
 # ---- test_quaternion_extended ----
 add_executable(test_quaternion_extended test_quaternion_extended.cpp)
 target_link_libraries(test_quaternion_extended PRIVATE MonolithEngine Catch2::Catch2WithMain)
-add_test(NAME test_quaternion_extended COMMAND test_quaternion_extended)
+monolith_set_test_output_dir(test_quaternion_extended)
+add_test(NAME test_quaternion_extended COMMAND $<TARGET_FILE:test_quaternion_extended>)
+
+# ---- test_obj_import ----
+add_executable(test_obj_import test_obj_import.cpp)
+target_link_libraries(test_obj_import PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_obj_import)
+add_test(NAME test_obj_import COMMAND $<TARGET_FILE:test_obj_import>)

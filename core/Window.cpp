@@ -43,6 +43,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   glfwSetWindowUserPointer(m_window, this);
   glfwSetFramebufferSizeCallback(m_window, FramebufferSizeCallback);
   glfwSetWindowCloseCallback(m_window, WindowCloseCallback);
+  glfwSetDropCallback(m_window, DropPathsThunk);
 
   LOG_INFO("OpenGL %s — %s", glGetString(GL_VERSION), glGetString(GL_RENDERER));
 }
@@ -79,6 +80,12 @@ void Window::WindowCloseCallback(GLFWwindow* win) {
   auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
   if (self->m_closeCb)
     self->m_closeCb();
+}
+
+void Window::DropPathsThunk(GLFWwindow* win, int count, const char** paths) {
+  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
+  if (self->m_fileDropCb)
+    self->m_fileDropCb(count, paths);
 }
 
 }  // namespace Monolith

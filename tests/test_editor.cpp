@@ -370,6 +370,42 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
 }
 
+TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "prop.obj";
+    asset.renderScale = "1.0000,1.0000,1.0000";
+    asset.albedoMap = "assets/models/custom_Albedo.png";
+    doc.assets["tex_asset"] = asset;
+
+    SceneObject obj;
+    obj.id = "inst";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "tex_asset";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("albedo_asset_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.assets.at("tex_asset").albedoMap == "assets/models/custom_Albedo.png");
+}
+
+TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "x.obj";
+    asset.renderScale = "1,1,1";
+    doc.assets["x"] = asset;
+
+    const std::string path = TmpPath("no_albedo_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    std::ifstream in(path);
+    REQUIRE(in.is_open());
+    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    REQUIRE(saved.find("albedoMap") == std::string::npos);
+}
+
 TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
     SceneDocument doc;
 
@@ -627,9 +663,16 @@ TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer
 
 TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]") {
     SceneDocument doc;
-    REQUIRE_THROWS_AS(
-        SceneSerializer::SaveToFile(doc, "/nonexistent/dir/scene.json"),
-        std::runtime_error);
+    // Unix: true root path — mkdir/open fail without privileges.
+    // Windows: a leading "/" is *not* filesystem root; it resolves under the current drive
+    // (e.g. C:\nonexistent\...) and is often writable in CI. Use a drive letter that is
+    // virtually never mounted on runners.
+#ifdef _WIN32
+    const std::string badPath = R"(Z:\.__horo_engine_ci_unwritable__\scene.json)";
+#else
+    const std::string badPath = "/nonexistent/dir/scene.json";
+#endif
+    REQUIRE_THROWS_AS(SceneSerializer::SaveToFile(doc, badPath), std::runtime_error);
 }
 
 TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]") {

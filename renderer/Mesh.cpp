@@ -19,7 +19,8 @@ Mesh::Mesh(Mesh&& o) noexcept
       m_vbo(o.m_vbo),
       m_ebo(o.m_ebo),
       m_indexCount(o.m_indexCount),
-      m_halfExtents(o.m_halfExtents) {
+      m_halfExtents(o.m_halfExtents),
+      m_localAabbCenter(o.m_localAabbCenter) {
   o.m_vao = o.m_vbo = o.m_ebo = 0;
   o.m_indexCount = 0;
 }
@@ -32,6 +33,7 @@ Mesh& Mesh::operator=(Mesh&& o) noexcept {
     m_ebo = o.m_ebo;
     m_indexCount = o.m_indexCount;
     m_halfExtents = o.m_halfExtents;
+    m_localAabbCenter = o.m_localAabbCenter;
     o.m_vao = o.m_vbo = o.m_ebo = 0;
     o.m_indexCount = 0;
   }
@@ -66,6 +68,7 @@ void Mesh::SetData(const std::vector<Vertex>& vertices, const std::vector<unsign
       hi.z = std::max(hi.z, v.position.z);
     }
     m_halfExtents = (hi - lo) * 0.5f;
+    m_localAabbCenter = (lo + hi) * 0.5f;
   }
 }
 
@@ -109,6 +112,21 @@ void Mesh::Upload(const std::vector<Vertex>& vertices, const std::vector<unsigne
       2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, uv)));
 
   glBindVertexArray(0);
+
+  if (!vertices.empty()) {
+    Vec3 lo = vertices[0].position;
+    Vec3 hi = vertices[0].position;
+    for (const auto& v : vertices) {
+      lo.x = std::min(lo.x, v.position.x);
+      lo.y = std::min(lo.y, v.position.y);
+      lo.z = std::min(lo.z, v.position.z);
+      hi.x = std::max(hi.x, v.position.x);
+      hi.y = std::max(hi.y, v.position.y);
+      hi.z = std::max(hi.z, v.position.z);
+    }
+    m_halfExtents = (hi - lo) * 0.5f;
+    m_localAabbCenter = (lo + hi) * 0.5f;
+  }
 }
 
 void Mesh::Draw() const {

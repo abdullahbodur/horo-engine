@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
+
+#include "renderer/ObjLoader.h"
 
 namespace Monolith {
 namespace Editor {
@@ -29,6 +32,20 @@ std::string MeshTagFromImportedPath(const std::string& path) {
     return {};
   const std::filesystem::path src(path);
   return (std::filesystem::path("assets/models") / src.filename()).generic_string();
+}
+
+std::string SuggestRenderScale(const std::string& meshTag, float targetHeight)
+{
+    auto aabb = ObjLoader::ComputeAABB(meshTag);
+    if (!aabb.valid)
+        return "1.0000,1.0000,1.0000";
+    float height = aabb.max.y - aabb.min.y;
+    if (height < 1e-6f)
+        return "1.0000,1.0000,1.0000";
+    float scale = targetHeight / height;
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.4f,%.4f,%.4f", scale, scale, scale);
+    return buf;
 }
 
 }  // namespace Editor
