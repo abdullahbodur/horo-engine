@@ -663,9 +663,16 @@ TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer
 
 TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]") {
     SceneDocument doc;
-    REQUIRE_THROWS_AS(
-        SceneSerializer::SaveToFile(doc, "/nonexistent/dir/scene.json"),
-        std::runtime_error);
+    // Unix: true root path — mkdir/open fail without privileges.
+    // Windows: a leading "/" is *not* filesystem root; it resolves under the current drive
+    // (e.g. C:\nonexistent\...) and is often writable in CI. Use a drive letter that is
+    // virtually never mounted on runners.
+#ifdef _WIN32
+    const std::string badPath = R"(Z:\.__horo_engine_ci_unwritable__\scene.json)";
+#else
+    const std::string badPath = "/nonexistent/dir/scene.json";
+#endif
+    REQUIRE_THROWS_AS(SceneSerializer::SaveToFile(doc, badPath), std::runtime_error);
 }
 
 TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]") {
