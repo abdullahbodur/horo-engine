@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -78,6 +79,75 @@ std::string PickObjFilePath() {
 #else
   return {};
 #endif
+}
+
+// Copy the .mtl referenced by objSrcPath and all textures it references
+// into destDirStr.  Silently skips any file that cannot be copied.
+static void CopyCompanionAssets(const std::string& objSrcPath,
+                                const std::string& destDirStr)
+{
+    namespace fs = std::filesystem;
+    const fs::path srcDir(fs::path(objSrcPath).parent_path());
+    const fs::path destDir(destDirStr);
+
+    // 1. Parse OBJ for "mtllib <name>"
+    std::ifstream objFile(objSrcPath);
+    if (!objFile.is_open())
+        return;
+
+    std::string mtlName;
+    std::string line;
+    while (std::getline(objFile, line))
+    {
+        if (line.rfind("mtllib ", 0) == 0)
+        {
+            mtlName = line.substr(7);
+            while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
+                mtlName.pop_back();
+            break;
+        }
+    }
+    if (mtlName.empty())
+        return;
+
+    // 2. Copy MTL file
+    const fs::path mtlSrc = srcDir / mtlName;
+    if (!fs::exists(mtlSrc))
+        return;
+    std::error_code ec;
+    fs::copy_file(mtlSrc, destDir / mtlName, fs::copy_options::overwrite_existing, ec);
+
+    // 3. Parse MTL for texture references (map_Kd, map_Ks, map_bump, etc.)
+    std::ifstream mtlFile(mtlSrc.string());
+    if (!mtlFile.is_open())
+        return;
+
+    while (std::getline(mtlFile, line))
+    {
+        if (line.size() < 8)
+            continue;
+        // Check for any map_ directive
+        std::string prefix = line.substr(0, 4);
+        std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        if (prefix != "map_")
+            continue;
+
+        // Value is everything after the first space
+        const size_t spacePos = line.find(' ');
+        if (spacePos == std::string::npos)
+            continue;
+        std::string texName = line.substr(spacePos + 1);
+        while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
+            texName.pop_back();
+        if (texName.empty())
+            continue;
+
+        const fs::path texSrc = srcDir / texName;
+        if (fs::exists(texSrc))
+            fs::copy_file(texSrc, destDir / texName,
+                          fs::copy_options::overwrite_existing, ec);
+    }
 }
 
 }  // namespace
@@ -771,6 +841,9 @@ void EditorLayer::DrawAssetsPanel() {
                 m_assetDraftId = assetId;
               // Auto-suggest a render scale so the model appears ~2 units tall
               m_assetDraftRenderScale = SuggestRenderScale(meshTag);
+              // Also copy the companion MTL + its referenced textures so the
+              // material pipeline can find them relative to the OBJ directory.
+              CopyCompanionAssets(src.string(), destDir.string());
               m_assetImportError.clear();
             } else {
               m_assetImportError = "Copy failed: " + copyEc.message();

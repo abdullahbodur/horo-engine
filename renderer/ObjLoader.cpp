@@ -1,6 +1,7 @@
 #include "renderer/ObjLoader.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -163,6 +164,63 @@ ObjAABB ComputeAABB(const std::string& path)
         }
     }
     return result;
+}
+
+std::string FindDiffuseTexture(const std::string& objPath)
+{
+    // 1. Read the OBJ to find "mtllib <name>"
+    std::ifstream objFile(objPath);
+    if (!objFile.is_open())
+        return {};
+
+    std::string mtlName;
+    std::string line;
+    while (std::getline(objFile, line))
+    {
+        if (line.rfind("mtllib ", 0) == 0)
+        {
+            mtlName = line.substr(7);
+            // Trim trailing whitespace/CR
+            while (!mtlName.empty() && (mtlName.back() == '\r' || mtlName.back() == ' '))
+                mtlName.pop_back();
+            break;
+        }
+    }
+    if (mtlName.empty())
+        return {};
+
+    // 2. Resolve MTL path relative to the OBJ directory
+    namespace fs = std::filesystem;
+    const fs::path objDir = fs::path(objPath).parent_path();
+    const std::string mtlPath = (objDir / mtlName).string();
+
+    std::ifstream mtlFile(mtlPath);
+    if (!mtlFile.is_open())
+        return {};
+
+    // 3. Find "map_Kd <texture>" in the MTL
+    std::string texName;
+    while (std::getline(mtlFile, line))
+    {
+        // map_Kd may appear as "map_Kd" or "map_kd" (case-insensitive)
+        if (line.size() < 7)
+            continue;
+        std::string prefix = line.substr(0, 7);
+        std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        if (prefix == "map_kd ")
+        {
+            texName = line.substr(7);
+            while (!texName.empty() && (texName.back() == '\r' || texName.back() == ' '))
+                texName.pop_back();
+            break;
+        }
+    }
+    if (texName.empty())
+        return {};
+
+    // 4. Resolve texture path relative to MTL directory (same as OBJ dir)
+    return (objDir / texName).generic_string();
 }
 
 }  // namespace ObjLoader
