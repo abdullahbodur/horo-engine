@@ -11,6 +11,7 @@
 #include <cctype>
 
 #include "editor/EditorSchema.h"
+#include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
@@ -531,6 +532,22 @@ TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
         const auto [_, inserted] = commandSet.insert(row.command);
         REQUIRE(inserted);
     }
+}
+
+TEST_CASE("Editor asset import: validates obj extension case-insensitively", "[editor]") {
+    REQUIRE(IsObjFilePath("/tmp/mesh.obj"));
+    REQUIRE(IsObjFilePath("/tmp/MESH.OBJ"));
+    REQUIRE_FALSE(IsObjFilePath("/tmp/mesh.fbx"));
+    REQUIRE_FALSE(IsObjFilePath(""));
+}
+
+TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[editor]") {
+    const std::string path = "/Users/bodur/Downloads/torch_model.obj";
+    REQUIRE(AssetIdFromImportedPath(path) == "torch_model");
+    REQUIRE(MeshTagFromImportedPath(path) == "assets/models/torch_model.obj");
+
+    REQUIRE(AssetIdFromImportedPath("").empty());
+    REQUIRE(MeshTagFromImportedPath("").empty());
 }
 
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
