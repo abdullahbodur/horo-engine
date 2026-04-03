@@ -409,28 +409,43 @@ void EditorLayer::DrawObjectList() {
 
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
-    const char* tag = (obj.type == SceneObjectType::Prop)    ? "P"
-                      : (obj.type == SceneObjectType::Light) ? "L"
-                                                             : "B";
+    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
+                           : (obj.type == SceneObjectType::Light) ? "light"
+                                                                  : "board";
 
-    std::string haystack = obj.id + " " + tag + " " + obj.assetId;
+    std::string haystack = obj.id + " " + typeName + " " + obj.assetId;
     std::string query = m_objectSearchQuery;
     std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (!query.empty() && haystack.find(query) == std::string::npos)
       continue;
 
-    char label[192];
-    if (!obj.assetId.empty())
-      std::snprintf(label, sizeof(label), "[%s] %s · %s##%d", tag, obj.id.c_str(), obj.assetId.c_str(), i);
-    else
-      std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
+    char selectableId[32];
+    std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
 
-    if (ImGui::Selectable(label, IsSelected(i))) {
+    // Reserve enough height for two lines (type+id on first, asset on second)
+    const float lineH = ImGui::GetTextLineHeight();
+    const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
+
+    if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
       if (ImGui::GetIO().KeyShift)
         ToggleSelect(i);
       else
         m_selectedIndices = {i};
+    }
+    ImGui::SameLine();
+    {
+      // Draw type tag dimmed, then object id in normal color
+      const ImVec2 pos = ImGui::GetCursorScreenPos();
+      ImGui::BeginGroup();
+      ImGui::TextDisabled("%s", typeName);
+      ImGui::SameLine(0.0f, 4.0f);
+      ImGui::Text("%s", obj.id.c_str());
+      if (!obj.assetId.empty()) {
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
+        ImGui::TextDisabled("\xe2\x86\xb3 %s", obj.assetId.c_str());  // UTF-8 ↳
+      }
+      ImGui::EndGroup();
     }
   }
 
