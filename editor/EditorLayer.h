@@ -120,6 +120,7 @@ class EditorLayer {
   std::string m_selectedAssetId;
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;
+  std::string m_objectSearchQuery;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,
