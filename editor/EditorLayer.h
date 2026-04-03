@@ -68,6 +68,7 @@ class EditorLayer {
   bool m_prevMouseL = false;
   bool m_prevDel = false;
   bool m_prevCopyRef = false;
+  bool m_prevEsc = false;
 
   // Fly camera
   bool m_flyMode = false;
@@ -106,12 +107,14 @@ class EditorLayer {
   void DrawQuickOpenPopup();
   void DrawStatusBar();
   void DrawDeleteConfirmModals();
+  void DrawExitConfirmModal();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
+  bool SaveDocument(std::string* outError);
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;
@@ -136,8 +139,10 @@ class EditorLayer {
   std::string m_quickOpenQuery;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
+  bool m_confirmExitOpen = false;
   std::vector<int> m_pendingDeleteObjectIndices;
   std::string m_pendingDeleteAssetId;
+  std::string m_exitConfirmError;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

@@ -574,6 +574,14 @@ TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]")
     REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
 }
 
+TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[editor]") {
+    REQUIRE(ShouldHandleEditorEscape(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldHandleEditorEscape(true, true, false, false, false));
+    REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, true, false, false));
+    REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, false, true, false));
+    REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, false, false, true));
+}
+
 TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
     EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
     REQUIRE(status.selectionCount == 0);
