@@ -769,6 +769,8 @@ void EditorLayer::DrawAssetsPanel() {
               m_assetDraftMesh = meshTag;
               if (m_assetDraftId.empty())
                 m_assetDraftId = assetId;
+              // Auto-suggest a render scale so the model appears ~2 units tall
+              m_assetDraftRenderScale = SuggestRenderScale(meshTag);
               m_assetImportError.clear();
             } else {
               m_assetImportError = "Copy failed: " + copyEc.message();
