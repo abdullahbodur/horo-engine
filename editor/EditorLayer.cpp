@@ -29,6 +29,7 @@
 #include <string>
 
 #include "core/Logger.h"
+#include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
@@ -39,6 +40,47 @@
 
 namespace Monolith {
 namespace Editor {
+
+namespace {
+
+std::string PickObjFilePath() {
+#ifdef _WIN32
+  char filePath[MAX_PATH] = {};
+  OPENFILENAMEA ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = "OBJ Files\0*.obj\0All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameA(&ofn))
+    return filePath;
+  return {};
+#elif defined(__APPLE__)
+  const char* cmd =
+      "osascript -e 'try' "
+      "-e 'POSIX path of (choose file of type {\"obj\"} with prompt \"Select OBJ file\")' "
+      "-e 'on error' -e 'return \"\"' -e 'end try'";
+  FILE* pipe = popen(cmd, "r");
+  if (!pipe)
+    return {};
+
+  char buf[1024] = {};
+  std::string out;
+  while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
+    out += buf;
+  pclose(pipe);
+
+  out.erase(std::remove_if(out.begin(), out.end(), [](char c) {
+              return c == '\n' || c == '\r';
+            }),
+            out.end());
+  return out;
+#else
+  return {};
+#endif
+}
+
+}  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
 
@@ -670,36 +712,35 @@ void EditorLayer::DrawAssetsPanel() {
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
     if (ImGui::Button("Import .obj...")) {
-      std::string picked;
-#ifdef _WIN32
-      char filePath[MAX_PATH] = {};
-      OPENFILENAMEA ofn = {};
-      ofn.lStructSize   = sizeof(ofn);
-      ofn.lpstrFilter   = "OBJ Files\0*.obj\0All Files\0*.*\0";
-      ofn.lpstrFile     = filePath;
-      ofn.nMaxFile      = sizeof(filePath);
-      ofn.Flags         = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-      if (GetOpenFileNameA(&ofn))
-        picked = filePath;
-#endif
+      const std::string picked = PickObjFilePath();
       if (!picked.empty()) {
-        namespace fs = std::filesystem;
-        const fs::path src(picked);
-        const fs::path destDir("assets/models");
-        std::error_code ec;
-        fs::create_directories(destDir, ec);
-        const fs::path dest = destDir / src.filename();
-        fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
-        if (!ec) {
-          // Auto-fill draft fields from filename
-          const std::string meshTag = (destDir / src.filename()).generic_string();
-          const std::string assetId = src.stem().generic_string();
-          m_assetDraftMesh = meshTag;
-          if (m_assetDraftId.empty())
-            m_assetDraftId = assetId;
-          m_assetImportError.clear();
+        if (!IsObjFilePath(picked)) {
+          m_assetImportError = "Selected file is not .obj";
         } else {
-          m_assetImportError = "Copy failed: " + ec.message();
+          namespace fs = std::filesystem;
+          const fs::path src(picked);
+          const fs::path destDir("assets/models");
+
+          std::error_code createEc;
+          fs::create_directories(destDir, createEc);
+          if (createEc) {
+            m_assetImportError = "Cannot create assets/models: " + createEc.message();
+          } else {
+            std::error_code copyEc;
+            const fs::path dest = destDir / src.filename();
+            fs::copy_file(src, dest, fs::copy_options::overwrite_existing, copyEc);
+            if (!copyEc) {
+              // Auto-fill draft fields from filename
+              const std::string meshTag = MeshTagFromImportedPath(picked);
+              const std::string assetId = AssetIdFromImportedPath(picked);
+              m_assetDraftMesh = meshTag;
+              if (m_assetDraftId.empty())
+                m_assetDraftId = assetId;
+              m_assetImportError.clear();
+            } else {
+              m_assetImportError = "Copy failed: " + copyEc.message();
+            }
+          }
         }
       }
     }
