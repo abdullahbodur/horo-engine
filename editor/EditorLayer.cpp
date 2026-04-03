@@ -437,13 +437,11 @@ void EditorLayer::DrawAssetsPanel() {
 
   ImGui::TextDisabled("Registry");
   ImGui::SameLine();
-  ImGui::SetCursorPosX(W - 34.0f);
-  if (ImGui::Button("##asset_search", ImVec2(24.0f, 0.0f))) {
+  ImGui::SetCursorPosX(W - 74.0f);
+  if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
     m_assetSearchOpen = true;
     m_assetSearchQuery.clear();
   }
-  ImGui::SameLine();
-  ImGui::TextDisabled("/\\");
   ImGui::Separator();
 
   std::vector<std::string> assetIds;
@@ -457,8 +455,6 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Asset Spotlight", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::TextDisabled("Search assets");
-      ImGui::SameLine();
-      ImGui::TextUnformatted("/\\");
       ImGui::SetNextItemWidth(420.0f);
       char searchBuf[256] = {};
       std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_assetSearchQuery.c_str());
@@ -514,22 +510,25 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
     if (ImGui::Selectable((std::string("##select_asset_") + assetId).c_str(), isSelectedAsset, 0, ImVec2(14.0f, 14.0f)))
-      m_selectedAssetId = assetId;
+      m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
     ImGui::SameLine();
-    ImGui::Text("%s%s", assetId.c_str(), isSelectedAsset ? " [selected]" : "");
-    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
-    ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
+    ImGui::Text("%s%s", assetId.c_str(), isSelectedAsset ? " · selected" : "");
 
-    if (ImGui::Button("Add Prop")) {
-      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
-      m_document.objects.push_back(std::move(obj));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
+    if (isSelectedAsset) {
+      ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+      ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
+
+      if (ImGui::Button("Add Prop")) {
+        SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
+        m_document.objects.push_back(std::move(obj));
+        m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+        m_document.dirty = true;
+        TriggerReload();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Delete Asset"))
+        assetToDelete = assetId;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Delete Asset"))
-      assetToDelete = assetId;
     ImGui::Separator();
     ImGui::PopID();
   }
