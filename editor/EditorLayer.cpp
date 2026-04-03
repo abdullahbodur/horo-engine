@@ -440,6 +440,7 @@ void EditorLayer::DrawObjectList() {
     m_objectSearchQuery = searchBuf;
   ImGui::Separator();
 
+  int shownObjectCount = 0;
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
     if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
@@ -472,6 +473,19 @@ void EditorLayer::DrawObjectList() {
         ImGui::TextDisabled("> %s", obj.assetId.c_str());
       }
       ImGui::EndGroup();
+    }
+    ++shownObjectCount;
+  }
+
+  if (shownObjectCount == 0) {
+    ImGui::Spacing();
+    if (m_document.objects.empty()) {
+      ImGui::TextDisabled("No objects in scene");
+      ImGui::TextDisabled("Tip: add from '+ Prop from Asset' or create one from Assets panel.");
+    } else {
+      ImGui::TextDisabled("No objects match '%s'", m_objectSearchQuery.c_str());
+      if (ImGui::Button("Clear Object Search"))
+        m_objectSearchQuery.clear();
     }
   }
 
@@ -543,6 +557,7 @@ void EditorLayer::DrawAssetsPanel() {
     }
   }
 
+  int shownAssetCount = 0;
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
     if (assetIt == m_document.assets.end())
@@ -551,6 +566,8 @@ void EditorLayer::DrawAssetsPanel() {
 
     if (!AssetMatchesQuickOpenQuery(assetId, asset, m_assetSearchQuery))
       continue;
+
+    ++shownAssetCount;
 
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
@@ -592,7 +609,24 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::PopID();
   }
 
+  bool openNewAssetSection = false;
+  if (shownAssetCount == 0) {
+    ImGui::Spacing();
+    if (assetIds.empty()) {
+      ImGui::TextDisabled("Asset registry is empty");
+      ImGui::TextDisabled("Create your first asset to enable fast prop placement.");
+      if (ImGui::Button("Create First Asset"))
+        openNewAssetSection = true;
+    } else {
+      ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
+      if (ImGui::Button("Clear Asset Search"))
+        m_assetSearchQuery.clear();
+    }
+  }
+
   ImGui::Separator();
+  if (openNewAssetSection)
+    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
     if (ImGui::Button("Import .obj...")) {
