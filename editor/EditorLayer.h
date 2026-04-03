@@ -102,6 +102,7 @@ class EditorLayer {
   void DrawObjectList();
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
+  void DrawHelpPopup();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
@@ -122,6 +123,9 @@ class EditorLayer {
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;
   std::string m_objectSearchQuery;
+  bool m_helpOpen = false;
+  bool m_prevHelpToggle = false;
+  std::string m_helpSearchQuery;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

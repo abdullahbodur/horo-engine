@@ -18,6 +18,8 @@
 #include <imgui_impl_opengl3.h>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -36,6 +38,36 @@
 
 namespace Monolith {
 namespace Editor {
+
+namespace {
+
+struct ShortcutRow {
+  const char* category;
+  const char* command;
+  const char* keys;
+};
+
+bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
+  if (queryRaw.empty())
+    return true;
+
+  auto lower = [](std::string v) {
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    return v;
+  };
+
+  const std::string query = lower(queryRaw);
+  const std::string category = lower(row.category);
+  const std::string command = lower(row.command);
+  const std::string keys = lower(row.keys);
+
+  return category.find(query) != std::string::npos || command.find(query) != std::string::npos ||
+         keys.find(query) != std::string::npos;
+}
+
+}  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
 
@@ -87,6 +119,18 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
   if (m_active) {
     ImGuiIO& io = ImGui::GetIO();
 
+    const bool shiftHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    const bool slashHeld = glfwGetKey(m_window, GLFW_KEY_SLASH) == GLFW_PRESS;
+    const bool f1Held = glfwGetKey(m_window, GLFW_KEY_F1) == GLFW_PRESS;
+    const bool currHelpToggle = f1Held || (slashHeld && shiftHeld);
+    if (currHelpToggle && !m_prevHelpToggle && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
+      m_helpOpen = !m_helpOpen;
+      if (!m_helpOpen)
+        m_helpSearchQuery.clear();
+    }
+    m_prevHelpToggle = currHelpToggle;
+
     // Tab toggles fly mode
     bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
     if (currTab && !m_prevTab)
@@ -101,8 +145,6 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                        glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
                        glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
                        glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
-      bool shiftHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
       if (currCopyRef && !m_prevCopyRef && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
         const int idx = PrimaryIdx();
@@ -157,6 +199,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
+    DrawHelpPopup();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
@@ -306,6 +349,8 @@ void EditorLayer::DrawToolbar() {
   }
   ImGui::SameLine();
   ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Help: ? / F1");
   ImGui::SameLine();
 
   // Right-aligned controls
@@ -680,6 +725,75 @@ void EditorLayer::DrawAssetsPanel() {
       ImGui::EndDisabled();
   }
 
+  ImGui::End();
+}
+
+void EditorLayer::DrawHelpPopup() {
+  if (!m_helpOpen)
+    return;
+
+  constexpr std::array<ShortcutRow, 13> kRows = {{{"Editor", "Toggle editor mode", "F10"},
+                                                   {"Editor", "Toggle shortcuts help", "? or F1"},
+                                                   {"Camera", "Toggle fly mode", "Tab"},
+                                                   {"Camera", "Move in fly mode", "W A S D"},
+                                                   {"Camera", "Look around in fly mode", "Mouse"},
+                                                   {"Selection", "Select object", "Left click"},
+                                                   {"Selection", "Multi-select", "Shift + Left click"},
+                                                   {"Selection", "Delete selected object(s)", "Delete"},
+                                                   {"Selection", "Duplicate selected object", "Toolbar: Duplicate"},
+                                                   {"Scene", "Load scene", "Toolbar: Load"},
+                                                   {"Scene", "Save scene", "Toolbar: Save"},
+                                                   {"Assets", "Add prop from selected asset", "Toolbar: + Prop from Asset"},
+                                                   {"Clipboard", "Copy selected object reference", "Ctrl/Cmd + Shift + C"}}};
+
+  ImGuiIO& io = ImGui::GetIO();
+  ImGui::SetNextWindowSize(ImVec2(620.0f, 420.0f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - 620.0f) * 0.5f, (io.DisplaySize.y - 420.0f) * 0.5f),
+                          ImGuiCond_FirstUseEver);
+
+  if (!ImGui::Begin("Help - Keyboard Shortcuts", &m_helpOpen, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::End();
+    return;
+  }
+
+  ImGui::TextDisabled("Search by category, command, or key");
+  char searchBuf[256] = {};
+  std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_helpSearchQuery.c_str());
+  if (ImGui::InputTextWithHint("##shortcut_search", "Find shortcut...", searchBuf, sizeof(searchBuf)))
+    m_helpSearchQuery = searchBuf;
+
+  ImGui::Separator();
+  ImGui::Columns(3, "shortcut_columns", false);
+  ImGui::SetColumnWidth(0, 130.0f);
+  ImGui::SetColumnWidth(1, 300.0f);
+  ImGui::TextUnformatted("Category");
+  ImGui::NextColumn();
+  ImGui::TextUnformatted("Command");
+  ImGui::NextColumn();
+  ImGui::TextUnformatted("Shortcut");
+  ImGui::NextColumn();
+  ImGui::Separator();
+
+  int shownCount = 0;
+  for (const auto& row : kRows) {
+    if (!MatchesShortcutQuery(row, m_helpSearchQuery))
+      continue;
+
+    ImGui::TextDisabled("%s", row.category);
+    ImGui::NextColumn();
+    ImGui::TextUnformatted(row.command);
+    ImGui::NextColumn();
+    ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "%s", row.keys);
+    ImGui::NextColumn();
+    ++shownCount;
+  }
+
+  ImGui::Columns(1);
+  if (shownCount == 0)
+    ImGui::TextDisabled("No shortcut matches '%s'", m_helpSearchQuery.c_str());
+
+  ImGui::Separator();
+  ImGui::TextDisabled("Tip: press ? or F1 to close this window quickly.");
   ImGui::End();
 }
 
