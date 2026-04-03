@@ -6,6 +6,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
+#include <cctype>
 
 #include "editor/EditorSchema.h"
 #include "editor/Raycaster.h"
@@ -30,6 +32,14 @@ Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::Sce
     clone.id = "copy_" + std::to_string(doc.objects.size());
     clone.props.erase("_eid");
     return clone;
+}
+
+bool ObjectMatchesQueryForTest(const Monolith::Editor::SceneObject& obj, const std::string& query) {
+    std::string haystack = obj.id + " " + obj.assetId;
+    std::string q = query;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return q.empty() || haystack.find(q) != std::string::npos;
 }
 }
 using Catch::Approx;
@@ -441,6 +451,17 @@ TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[edit
     SceneObject created = MakeObjectFromAssetForTest(doc, "torch");
     REQUIRE(created.type == SceneObjectType::Prop);
     REQUIRE(created.assetId == "torch");
+}
+
+TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]") {
+    SceneObject obj;
+    obj.id = "prop_007";
+    obj.assetId = "stone_obj";
+
+    REQUIRE(ObjectMatchesQueryForTest(obj, "prop"));
+    REQUIRE(ObjectMatchesQueryForTest(obj, "stone"));
+    REQUIRE(ObjectMatchesQueryForTest(obj, "STONE_OBJ"));
+    REQUIRE_FALSE(ObjectMatchesQueryForTest(obj, "torch"));
 }
 
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
