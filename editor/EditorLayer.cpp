@@ -110,6 +110,7 @@ void EditorLayer::Toggle() {
     m_flyMode = false;
     m_flyCamInitialized = false;
   }
+  m_closeRequested = false;
   m_confirmExitOpen = false;
   m_exitConfirmError.clear();
   glfwSetInputMode(m_window, GLFW_CURSOR, m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
@@ -133,6 +134,11 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     m_clipboardToastTime = std::max(0.0f, m_clipboardToastTime - dt);
 
   if (m_active) {
+    if (ShouldFinalizeEditorClose(m_closeRequested, m_wantsReload)) {
+      Toggle();
+      return false;
+    }
+
     ImGuiIO& io = ImGui::GetIO();
 
     const bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
@@ -171,7 +177,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
         m_confirmExitOpen = true;
         m_exitConfirmError.clear();
       } else {
-        Toggle();
+        m_closeRequested = true;
       }
     }
     m_prevEsc = currEsc;
@@ -431,7 +437,7 @@ void EditorLayer::DrawToolbar() {
       m_confirmExitOpen = true;
       m_exitConfirmError.clear();
     } else {
-      Toggle();
+      m_closeRequested = true;
     }
   }
 
@@ -1062,7 +1068,7 @@ void EditorLayer::DrawExitConfirmModal() {
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
     ImGui::CloseCurrentPopup();
-    Toggle();
+    m_closeRequested = true;
   }
 
   ImGui::SameLine();
@@ -1072,7 +1078,7 @@ void EditorLayer::DrawExitConfirmModal() {
       m_confirmExitOpen = false;
       m_exitConfirmError.clear();
       ImGui::CloseCurrentPopup();
-      Toggle();
+      m_closeRequested = true;
     } else {
       m_exitConfirmError = saveError;
     }

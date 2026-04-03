@@ -48,6 +48,7 @@ enum class EditorExitDecision {
 };
 
 EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges);
+bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload);
 
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
 

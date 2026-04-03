@@ -69,6 +69,7 @@ class EditorLayer {
   bool m_prevDel = false;
   bool m_prevCopyRef = false;
   bool m_prevEsc = false;
+  bool m_closeRequested = false;
 
   // Fly camera
   bool m_flyMode = false;

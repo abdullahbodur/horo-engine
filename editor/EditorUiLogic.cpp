@@ -45,6 +45,10 @@ EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges) {
                            : EditorExitDecision::ExitImmediately;
 }
 
+bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload) {
+  return closeRequested && !hasPendingReload;
+}
+
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot) {
   EditorStatusText out;
   out.selectionCount = std::max(0, snapshot.selectionCount);

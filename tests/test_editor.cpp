@@ -587,6 +587,12 @@ TEST_CASE("Editor UI logic: exit decision reflects unsaved state", "[editor]") {
     REQUIRE(ResolveEditorExitDecision(true) == EditorExitDecision::PromptUnsavedConfirm);
 }
 
+TEST_CASE("Editor UI logic: close finalization waits for pending reload", "[editor]") {
+    REQUIRE_FALSE(ShouldFinalizeEditorClose(false, false));
+    REQUIRE_FALSE(ShouldFinalizeEditorClose(true, true));
+    REQUIRE(ShouldFinalizeEditorClose(true, false));
+}
+
 TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
     EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
     REQUIRE(status.selectionCount == 0);
