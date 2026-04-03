@@ -61,7 +61,7 @@ target_link_libraries(MonolithEngine
 if(APPLE)
     target_link_libraries(MonolithEngine PUBLIC "-framework OpenGL")
 elseif(WIN32)
-    target_link_libraries(MonolithEngine PUBLIC opengl32)
+    target_link_libraries(MonolithEngine PUBLIC opengl32 comdlg32)
 else()
     target_link_libraries(MonolithEngine PUBLIC GL)
 endif()

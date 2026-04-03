@@ -1,5 +1,17 @@
 #include "editor/EditorLayer.h"
 
+// Windows headers must come before GLFW to avoid type redefinition conflicts
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -9,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -443,7 +456,7 @@ void EditorLayer::DrawObjectList() {
       ImGui::Text("%s", obj.id.c_str());
       if (!obj.assetId.empty()) {
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
-        ImGui::TextDisabled("\xe2\x86\xb3 %s", obj.assetId.c_str());  // UTF-8 ↳
+        ImGui::TextDisabled("> %s", obj.assetId.c_str());
       }
       ImGui::EndGroup();
     }
@@ -589,6 +602,49 @@ void EditorLayer::DrawAssetsPanel() {
 
   ImGui::Separator();
   if (ImGui::CollapsingHeader("+ New Asset")) {
+    // -- Import from file -------------------------------------------------------
+    if (ImGui::Button("Import .obj...")) {
+      std::string picked;
+#ifdef _WIN32
+      char filePath[MAX_PATH] = {};
+      OPENFILENAMEA ofn = {};
+      ofn.lStructSize   = sizeof(ofn);
+      ofn.lpstrFilter   = "OBJ Files\0*.obj\0All Files\0*.*\0";
+      ofn.lpstrFile     = filePath;
+      ofn.nMaxFile      = sizeof(filePath);
+      ofn.Flags         = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+      if (GetOpenFileNameA(&ofn))
+        picked = filePath;
+#endif
+      if (!picked.empty()) {
+        namespace fs = std::filesystem;
+        const fs::path src(picked);
+        const fs::path destDir("assets/models");
+        std::error_code ec;
+        fs::create_directories(destDir, ec);
+        const fs::path dest = destDir / src.filename();
+        fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
+        if (!ec) {
+          // Auto-fill draft fields from filename
+          const std::string meshTag = (destDir / src.filename()).generic_string();
+          const std::string assetId = src.stem().generic_string();
+          m_assetDraftMesh = meshTag;
+          if (m_assetDraftId.empty())
+            m_assetDraftId = assetId;
+          m_assetImportError.clear();
+        } else {
+          m_assetImportError = "Copy failed: " + ec.message();
+        }
+      }
+    }
+    if (!m_assetImportError.empty()) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
+    }
+
+    ImGui::Spacing();
+
+    // -- Manual fields ----------------------------------------------------------
     char idBuf[128] = {};
     std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
     if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
@@ -616,6 +672,7 @@ void EditorLayer::DrawAssetsPanel() {
       m_assetDraftId.clear();
       m_assetDraftMesh.clear();
       m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+      m_assetImportError.clear();
       m_document.dirty = true;
       TriggerReload();
     }
