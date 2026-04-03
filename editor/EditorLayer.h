@@ -102,10 +102,15 @@ class EditorLayer {
   void DrawObjectList();
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
+  void DrawHelpPopup();
+  void DrawQuickOpenPopup();
+  void DrawDeleteConfirmModals();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
+  void RequestDeleteSelectedObjects();
+  void RequestDeleteAsset(const std::string& assetId);
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;
@@ -117,10 +122,21 @@ class EditorLayer {
   std::string m_assetDraftId;
   std::string m_assetDraftMesh;
   std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+  std::string m_assetImportError;
   std::string m_selectedAssetId;
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;
   std::string m_objectSearchQuery;
+  bool m_helpOpen = false;
+  bool m_prevHelpToggle = false;
+  std::string m_helpSearchQuery;
+  bool m_quickOpenOpen = false;
+  bool m_prevQuickOpenToggle = false;
+  std::string m_quickOpenQuery;
+  bool m_confirmDeleteObjectsOpen = false;
+  bool m_confirmDeleteAssetOpen = false;
+  std::vector<int> m_pendingDeleteObjectIndices;
+  std::string m_pendingDeleteAssetId;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

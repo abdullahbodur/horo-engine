@@ -1,20 +1,36 @@
 #include "editor/EditorLayer.h"
 
+// Windows headers must come before GLFW to avoid type redefinition conflicts
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 
 #include "core/Logger.h"
+#include "editor/EditorSearch.h"
 #include "editor/Raycaster.h"
 #include "math/MathUtils.h"
 #include "editor/SceneSerializer.h"
@@ -74,6 +90,30 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
   if (m_active) {
     ImGuiIO& io = ImGui::GetIO();
 
+    const bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
+    const bool shiftHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+                           glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    const bool slashHeld = glfwGetKey(m_window, GLFW_KEY_SLASH) == GLFW_PRESS;
+    const bool f1Held = glfwGetKey(m_window, GLFW_KEY_F1) == GLFW_PRESS;
+    const bool currHelpToggle = f1Held || (slashHeld && shiftHeld);
+    if (currHelpToggle && !m_prevHelpToggle && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
+      m_helpOpen = !m_helpOpen;
+      if (!m_helpOpen)
+        m_helpSearchQuery.clear();
+    }
+    m_prevHelpToggle = currHelpToggle;
+
+    const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    if (currQuickOpenToggle && !m_prevQuickOpenToggle && !m_flyMode && !io.WantTextInput &&
+        !ImGui::IsAnyItemActive()) {
+      m_quickOpenOpen = true;
+      m_quickOpenQuery.clear();
+    }
+    m_prevQuickOpenToggle = currQuickOpenToggle;
+
     // Tab toggles fly mode
     bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
     if (currTab && !m_prevTab)
@@ -84,12 +124,6 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       UpdateFlyCamera(dt, cam);
     } else {
       // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
-      bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
-      bool shiftHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-                       glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
       if (currCopyRef && !m_prevCopyRef && !io.WantTextInput && !ImGui::IsAnyItemActive()) {
         const int idx = PrimaryIdx();
@@ -106,15 +140,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
       // Del key — delete all selected objects immediately
       bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
-      if (currDel && !m_prevDel && !m_selectedIndices.empty()) {
-        std::vector<int> sorted = m_selectedIndices;
-        std::sort(sorted.rbegin(), sorted.rend());
-        for (int i : sorted)
-          m_document.objects.erase(m_document.objects.begin() + i);
-        m_selectedIndices.clear();
-        m_document.dirty = true;
-        TriggerReload();
-      }
+      if (currDel && !m_prevDel && !m_selectedIndices.empty())
+        RequestDeleteSelectedObjects();
       m_prevDel = currDel;
     }
 
@@ -144,6 +171,9 @@ void EditorLayer::Render(const Camera& cam) {
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
+    DrawHelpPopup();
+    DrawQuickOpenPopup();
+    DrawDeleteConfirmModals();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
@@ -294,6 +324,10 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
   ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
   ImGui::SameLine();
+  ImGui::TextDisabled("Help: ? / F1");
+  ImGui::SameLine();
+  ImGui::TextDisabled("Quick Open: Ctrl/Cmd+P");
+  ImGui::SameLine();
 
   // Right-aligned controls
   const float rightW = 260.0f;
@@ -409,28 +443,43 @@ void EditorLayer::DrawObjectList() {
 
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
     auto& obj = m_document.objects[i];
-    const char* tag = (obj.type == SceneObjectType::Prop)    ? "P"
-                      : (obj.type == SceneObjectType::Light) ? "L"
-                                                             : "B";
+    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
+                           : (obj.type == SceneObjectType::Light) ? "light"
+                                                                  : "board";
 
-    std::string haystack = obj.id + " " + tag + " " + obj.assetId;
+    std::string haystack = obj.id + " " + typeName + " " + obj.assetId;
     std::string query = m_objectSearchQuery;
     std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (!query.empty() && haystack.find(query) == std::string::npos)
       continue;
 
-    char label[192];
-    if (!obj.assetId.empty())
-      std::snprintf(label, sizeof(label), "[%s] %s · %s##%d", tag, obj.id.c_str(), obj.assetId.c_str(), i);
-    else
-      std::snprintf(label, sizeof(label), "[%s] %s##%d", tag, obj.id.c_str(), i);
+    char selectableId[32];
+    std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
 
-    if (ImGui::Selectable(label, IsSelected(i))) {
+    // Reserve enough height for two lines (type+id on first, asset on second)
+    const float lineH = ImGui::GetTextLineHeight();
+    const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
+
+    if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
       if (ImGui::GetIO().KeyShift)
         ToggleSelect(i);
       else
         m_selectedIndices = {i};
+    }
+    ImGui::SameLine();
+    {
+      // Draw type tag dimmed, then object id in normal color
+      const ImVec2 pos = ImGui::GetCursorScreenPos();
+      ImGui::BeginGroup();
+      ImGui::TextDisabled("%s", typeName);
+      ImGui::SameLine(0.0f, 4.0f);
+      ImGui::Text("%s", obj.id.c_str());
+      if (!obj.assetId.empty()) {
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
+        ImGui::TextDisabled("> %s", obj.assetId.c_str());
+      }
+      ImGui::EndGroup();
     }
   }
 
@@ -449,6 +498,12 @@ void EditorLayer::DrawAssetsPanel() {
       "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
   ImGui::TextDisabled("Registry");
+  ImGui::SameLine();
+  ImGui::SetCursorPosX(W - 74.0f);
+  if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
+    m_assetSearchOpen = true;
+    m_assetSearchQuery.clear();
+  }
   ImGui::Separator();
 
   std::vector<std::string> assetIds;
@@ -457,82 +512,417 @@ void EditorLayer::DrawAssetsPanel() {
     assetIds.push_back(assetId);
   std::sort(assetIds.begin(), assetIds.end());
 
-  std::string assetToDelete;
+  if (m_assetSearchOpen) {
+    ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Asset Spotlight", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextDisabled("Search assets");
+      ImGui::SetNextItemWidth(420.0f);
+      char searchBuf[256] = {};
+      std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_assetSearchQuery.c_str());
+      if (ImGui::InputTextWithHint("##asset_search_input", "Type an asset id or mesh...", searchBuf, sizeof(searchBuf)))
+        m_assetSearchQuery = searchBuf;
+
+      ImGui::Separator();
+      bool picked = false;
+      for (const auto& assetId : assetIds) {
+        const auto assetIt = m_document.assets.find(assetId);
+        if (assetIt == m_document.assets.end())
+          continue;
+        const auto& asset = assetIt->second;
+
+        std::string haystack = assetId + " " + asset.mesh;
+        std::string query = m_assetSearchQuery;
+        std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (!query.empty() && haystack.find(query) == std::string::npos)
+          continue;
+
+        if (ImGui::Selectable(assetId.c_str(), m_selectedAssetId == assetId)) {
+          m_selectedAssetId = assetId;
+          picked = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+      }
+
+      if (picked || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        m_assetSearchOpen = false;
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    } else {
+      ImGui::OpenPopup("Asset Spotlight");
+    }
+  }
+
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
     if (assetIt == m_document.assets.end())
       continue;
     const auto& asset = assetIt->second;
 
+    std::string haystack = assetId + " " + asset.mesh;
+    std::string query = m_assetSearchQuery;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!query.empty() && haystack.find(query) == std::string::npos)
+      continue;
+
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
-    if (ImGui::Selectable((std::string("##select_asset_") + assetId).c_str(), isSelectedAsset, 0, ImVec2(14.0f, 14.0f)))
-      m_selectedAssetId = assetId;
-    ImGui::SameLine();
-    ImGui::Text("%s%s", assetId.c_str(), isSelectedAsset ? " [selected]" : "");
-    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
-    ImGui::TextDisabled("scale: %s", asset.renderScale.c_str());
 
-    if (ImGui::Button("Add Prop")) {
-      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
-      m_document.objects.push_back(std::move(obj));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
-    }
+    // Tint the row background when selected
+    if (isSelectedAsset)
+      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.45f, 0.70f, 0.55f));
+    if (ImGui::Selectable("##row", isSelectedAsset, ImGuiSelectableFlags_SpanAllColumns))
+      m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
+    if (isSelectedAsset)
+      ImGui::PopStyleColor();
+
     ImGui::SameLine();
-    if (ImGui::Button("Delete Asset"))
-      assetToDelete = assetId;
-    ImGui::Separator();
+    ImGui::Text("%s", assetId.c_str());
+
+    // [×] deselect button — only visible for the selected asset
+    if (isSelectedAsset) {
+      ImGui::SameLine();
+      ImGui::TextDisabled("[x]");
+      if (ImGui::IsItemClicked())
+        m_selectedAssetId.clear();
+
+      ImGui::TextDisabled("  mesh: %s", asset.mesh.c_str());
+      ImGui::TextDisabled("  scale: %s", asset.renderScale.c_str());
+
+      if (ImGui::Button("Add Prop")) {
+        SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
+        m_document.objects.push_back(std::move(obj));
+        m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+        m_document.dirty = true;
+        TriggerReload();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Delete Asset"))
+        RequestDeleteAsset(assetId);
+    }
+
+    ImGui::Spacing();
     ImGui::PopID();
   }
 
-  if (!assetToDelete.empty()) {
-    for (auto& obj : m_document.objects) {
-      if (obj.assetId == assetToDelete)
-        obj.assetId.clear();
+  ImGui::Separator();
+  if (ImGui::CollapsingHeader("+ New Asset")) {
+    // -- Import from file -------------------------------------------------------
+    if (ImGui::Button("Import .obj...")) {
+      std::string picked;
+#ifdef _WIN32
+      char filePath[MAX_PATH] = {};
+      OPENFILENAMEA ofn = {};
+      ofn.lStructSize   = sizeof(ofn);
+      ofn.lpstrFilter   = "OBJ Files\0*.obj\0All Files\0*.*\0";
+      ofn.lpstrFile     = filePath;
+      ofn.nMaxFile      = sizeof(filePath);
+      ofn.Flags         = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+      if (GetOpenFileNameA(&ofn))
+        picked = filePath;
+#endif
+      if (!picked.empty()) {
+        namespace fs = std::filesystem;
+        const fs::path src(picked);
+        const fs::path destDir("assets/models");
+        std::error_code ec;
+        fs::create_directories(destDir, ec);
+        const fs::path dest = destDir / src.filename();
+        fs::copy_file(src, dest, fs::copy_options::overwrite_existing, ec);
+        if (!ec) {
+          // Auto-fill draft fields from filename
+          const std::string meshTag = (destDir / src.filename()).generic_string();
+          const std::string assetId = src.stem().generic_string();
+          m_assetDraftMesh = meshTag;
+          if (m_assetDraftId.empty())
+            m_assetDraftId = assetId;
+          m_assetImportError.clear();
+        } else {
+          m_assetImportError = "Copy failed: " + ec.message();
+        }
+      }
     }
-    if (m_selectedAssetId == assetToDelete)
-      m_selectedAssetId.clear();
-    m_document.assets.erase(assetToDelete);
-    m_document.dirty = true;
-    TriggerReload();
+    if (!m_assetImportError.empty()) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
+    }
+
+    ImGui::Spacing();
+
+    // -- Manual fields ----------------------------------------------------------
+    char idBuf[128] = {};
+    std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
+    if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
+      m_assetDraftId = idBuf;
+
+    char meshBuf[256] = {};
+    std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
+    if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
+      m_assetDraftMesh = meshBuf;
+
+    char scaleBuf[128] = {};
+    std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
+    if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
+      m_assetDraftRenderScale = scaleBuf;
+
+    const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
+    if (!canCreate)
+      ImGui::BeginDisabled();
+    if (ImGui::Button("Create Asset")) {
+      AssetDef def;
+      def.mesh = m_assetDraftMesh;
+      def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
+      m_document.assets[m_assetDraftId] = std::move(def);
+      m_selectedAssetId = m_assetDraftId;
+      m_assetDraftId.clear();
+      m_assetDraftMesh.clear();
+      m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+      m_assetImportError.clear();
+      m_document.dirty = true;
+      TriggerReload();
+    }
+    if (!canCreate)
+      ImGui::EndDisabled();
   }
-
-  char idBuf[128] = {};
-  std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
-  if (ImGui::InputText("Asset ID", idBuf, sizeof(idBuf)))
-    m_assetDraftId = idBuf;
-
-  char meshBuf[256] = {};
-  std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
-  if (ImGui::InputText("Mesh", meshBuf, sizeof(meshBuf)))
-    m_assetDraftMesh = meshBuf;
-
-  char scaleBuf[128] = {};
-  std::snprintf(scaleBuf, sizeof(scaleBuf), "%s", m_assetDraftRenderScale.c_str());
-  if (ImGui::InputText("Render Scale", scaleBuf, sizeof(scaleBuf)))
-    m_assetDraftRenderScale = scaleBuf;
-
-  const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
-  if (!canCreate)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("Create Asset")) {
-    AssetDef def;
-    def.mesh = m_assetDraftMesh;
-    def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
-    m_document.assets[m_assetDraftId] = std::move(def);
-    m_selectedAssetId = m_assetDraftId;
-    m_assetDraftId.clear();
-    m_assetDraftMesh.clear();
-    m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
-    m_document.dirty = true;
-    TriggerReload();
-  }
-  if (!canCreate)
-    ImGui::EndDisabled();
 
   ImGui::End();
+}
+
+void EditorLayer::DrawHelpPopup() {
+  if (!m_helpOpen)
+    return;
+
+  constexpr std::array<ShortcutRow, 14> kRows = {{{"Editor", "Toggle editor mode", "F10"},
+                                                   {"Editor", "Toggle shortcuts help", "? or F1"},
+                                                   {"Editor", "Quick open", "Ctrl/Cmd + P"},
+                                                   {"Camera", "Toggle fly mode", "Tab"},
+                                                   {"Camera", "Move in fly mode", "W A S D"},
+                                                   {"Camera", "Look around in fly mode", "Mouse"},
+                                                   {"Selection", "Select object", "Left click"},
+                                                   {"Selection", "Multi-select", "Shift + Left click"},
+                                                   {"Selection", "Delete selected object(s)", "Delete"},
+                                                   {"Selection", "Duplicate selected object", "Toolbar: Duplicate"},
+                                                   {"Scene", "Load scene", "Toolbar: Load"},
+                                                   {"Scene", "Save scene", "Toolbar: Save"},
+                                                   {"Assets", "Add prop from selected asset", "Toolbar: + Prop from Asset"},
+                                                   {"Clipboard", "Copy selected object reference", "Ctrl/Cmd + Shift + C"}}};
+
+  ImGuiIO& io = ImGui::GetIO();
+  ImGui::SetNextWindowSize(ImVec2(620.0f, 420.0f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - 620.0f) * 0.5f, (io.DisplaySize.y - 420.0f) * 0.5f),
+                          ImGuiCond_FirstUseEver);
+
+  if (!ImGui::Begin("Help - Keyboard Shortcuts", &m_helpOpen, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::End();
+    return;
+  }
+
+  ImGui::TextDisabled("Search by category, command, or key");
+  char searchBuf[256] = {};
+  std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_helpSearchQuery.c_str());
+  if (ImGui::InputTextWithHint("##shortcut_search", "Find shortcut...", searchBuf, sizeof(searchBuf)))
+    m_helpSearchQuery = searchBuf;
+
+  ImGui::Separator();
+  ImGui::Columns(3, "shortcut_columns", false);
+  ImGui::SetColumnWidth(0, 130.0f);
+  ImGui::SetColumnWidth(1, 300.0f);
+  ImGui::TextUnformatted("Category");
+  ImGui::NextColumn();
+  ImGui::TextUnformatted("Command");
+  ImGui::NextColumn();
+  ImGui::TextUnformatted("Shortcut");
+  ImGui::NextColumn();
+  ImGui::Separator();
+
+  int shownCount = 0;
+  for (const auto& row : kRows) {
+    if (!MatchesShortcutQuery(row, m_helpSearchQuery))
+      continue;
+
+    ImGui::TextDisabled("%s", row.category);
+    ImGui::NextColumn();
+    ImGui::TextUnformatted(row.command);
+    ImGui::NextColumn();
+    ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "%s", row.keys);
+    ImGui::NextColumn();
+    ++shownCount;
+  }
+
+  ImGui::Columns(1);
+  if (shownCount == 0)
+    ImGui::TextDisabled("No shortcut matches '%s'", m_helpSearchQuery.c_str());
+
+  ImGui::Separator();
+  ImGui::TextDisabled("Tip: press ? or F1 to close this window quickly.");
+  ImGui::End();
+}
+
+void EditorLayer::DrawQuickOpenPopup() {
+  if (m_quickOpenOpen) {
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::IsPopupOpen("Quick Open"))
+      ImGui::OpenPopup("Quick Open");
+  }
+
+  if (!ImGui::BeginPopupModal("Quick Open", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Open object or asset");
+  ImGui::SetNextItemWidth(520.0f);
+  char queryBuf[256] = {};
+  std::snprintf(queryBuf, sizeof(queryBuf), "%s", m_quickOpenQuery.c_str());
+  if (ImGui::InputTextWithHint("##quick_open_input", "Type id, type, asset, or mesh...", queryBuf, sizeof(queryBuf)))
+    m_quickOpenQuery = queryBuf;
+
+  ImGui::Separator();
+
+  bool picked = false;
+  int shownCount = 0;
+
+  ImGui::TextDisabled("Objects");
+  for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+    const auto& obj = m_document.objects[i];
+    const char* typeName = (obj.type == SceneObjectType::Prop)    ? "prop"
+                           : (obj.type == SceneObjectType::Light) ? "light"
+                                                                   : "board";
+
+    if (!ObjectMatchesQuickOpenQuery(obj, m_quickOpenQuery))
+      continue;
+
+    const std::string label = "Object: " + obj.id + "##quick_open_obj_" + std::to_string(i);
+    if (ImGui::Selectable(label.c_str(), IsSelected(i))) {
+      m_selectedIndices = {i};
+      picked = true;
+    }
+    ImGui::SameLine();
+    if (obj.assetId.empty())
+      ImGui::TextDisabled("type: %s", typeName);
+    else
+      ImGui::TextDisabled("type: %s  |  asset: %s", typeName, obj.assetId.c_str());
+    ++shownCount;
+  }
+
+  ImGui::Spacing();
+  ImGui::TextDisabled("Assets");
+  for (const auto& [assetId, asset] : m_document.assets) {
+    if (!AssetMatchesQuickOpenQuery(assetId, asset, m_quickOpenQuery))
+      continue;
+
+    const std::string label = "Asset: " + assetId + "##quick_open_asset_" + assetId;
+    if (ImGui::Selectable(label.c_str(), m_selectedAssetId == assetId)) {
+      m_selectedAssetId = assetId;
+      picked = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+    ++shownCount;
+  }
+
+  if (shownCount == 0)
+    ImGui::TextDisabled("No match for '%s'", m_quickOpenQuery.c_str());
+
+  if (picked || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    m_quickOpenOpen = false;
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
+void EditorLayer::DrawDeleteConfirmModals() {
+  if (m_confirmDeleteObjectsOpen)
+    ImGui::OpenPopup("Confirm Delete Objects");
+
+  if (ImGui::BeginPopupModal("Confirm Delete Objects", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    int validCount = 0;
+    for (int idx : m_pendingDeleteObjectIndices)
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+        ++validCount;
+
+    if (validCount <= 0) {
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+      return;
+    }
+
+    ImGui::Text("Delete %d selected object(s)?", validCount);
+    ImGui::TextDisabled("This action cannot be undone.");
+    ImGui::Separator();
+
+    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+      std::vector<int> sorted = m_pendingDeleteObjectIndices;
+      std::sort(sorted.rbegin(), sorted.rend());
+      for (int idx : sorted) {
+        if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+          m_document.objects.erase(m_document.objects.begin() + idx);
+      }
+      m_selectedIndices.clear();
+      m_document.dirty = true;
+      TriggerReload();
+
+      m_confirmDeleteObjectsOpen = false;
+      m_pendingDeleteObjectIndices.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (m_confirmDeleteAssetOpen)
+    ImGui::OpenPopup("Confirm Delete Asset");
+
+  if (ImGui::BeginPopupModal("Confirm Delete Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (m_pendingDeleteAssetId.empty() ||
+        m_document.assets.find(m_pendingDeleteAssetId) == m_document.assets.end()) {
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+      return;
+    }
+
+    ImGui::Text("Delete asset '%s'?", m_pendingDeleteAssetId.c_str());
+    ImGui::TextDisabled("All object bindings to this asset will be cleared.");
+    ImGui::Separator();
+
+    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+      for (auto& obj : m_document.objects) {
+        if (obj.assetId == m_pendingDeleteAssetId)
+          obj.assetId.clear();
+      }
+      if (m_selectedAssetId == m_pendingDeleteAssetId)
+        m_selectedAssetId.clear();
+      m_document.assets.erase(m_pendingDeleteAssetId);
+      m_document.dirty = true;
+      TriggerReload();
+
+      m_confirmDeleteAssetOpen = false;
+      m_pendingDeleteAssetId.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
 }
 
 // ---- Properties panel --------------------------------------------------------
@@ -553,14 +943,7 @@ void EditorLayer::DrawPropertiesPanel() {
     ImGui::Text("%d objects selected", static_cast<int>(m_selectedIndices.size()));
     ImGui::Separator();
     if (ImGui::Button("Delete Selected")) {
-      // Erase in reverse index order so earlier indices stay valid
-      std::vector<int> sorted = m_selectedIndices;
-      std::sort(sorted.rbegin(), sorted.rend());
-      for (int i : sorted)
-        m_document.objects.erase(m_document.objects.begin() + i);
-      m_selectedIndices.clear();
-      m_document.dirty = true;
-      TriggerReload();
+      RequestDeleteSelectedObjects();
     }
     ImGui::End();
     return;
@@ -731,10 +1114,7 @@ void EditorLayer::DrawPropertiesPanel() {
 
   ImGui::Separator();
   if (ImGui::Button("Delete")) {
-    m_document.objects.erase(m_document.objects.begin() + primaryIdx);
-    m_selectedIndices.clear();
-    m_document.dirty = true;
-    TriggerReload();
+    RequestDeleteSelectedObjects();
   }
 
   ImGui::End();
@@ -862,6 +1242,24 @@ void EditorLayer::ToggleSelect(int i) {
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
+}
+
+void EditorLayer::RequestDeleteSelectedObjects() {
+  if (m_selectedIndices.empty())
+    return;
+
+  m_pendingDeleteObjectIndices = m_selectedIndices;
+  m_confirmDeleteObjectsOpen = true;
+}
+
+void EditorLayer::RequestDeleteAsset(const std::string& assetId) {
+  if (assetId.empty())
+    return;
+  if (m_document.assets.find(assetId) == m_document.assets.end())
+    return;
+
+  m_pendingDeleteAssetId = assetId;
+  m_confirmDeleteAssetOpen = true;
 }
 
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,

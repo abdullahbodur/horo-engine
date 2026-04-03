@@ -10,6 +10,7 @@
 #include <cctype>
 
 #include "editor/EditorSchema.h"
+#include "editor/EditorSearch.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
@@ -34,13 +35,6 @@ Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::Sce
     return clone;
 }
 
-bool ObjectMatchesQueryForTest(const Monolith::Editor::SceneObject& obj, const std::string& query) {
-    std::string haystack = obj.id + " " + obj.assetId;
-    std::string q = query;
-    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return q.empty() || haystack.find(q) != std::string::npos;
-}
 }
 using Catch::Approx;
 
@@ -456,12 +450,29 @@ TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[edit
 TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]") {
     SceneObject obj;
     obj.id = "prop_007";
+    obj.type = SceneObjectType::Prop;
     obj.assetId = "stone_obj";
 
-    REQUIRE(ObjectMatchesQueryForTest(obj, "prop"));
-    REQUIRE(ObjectMatchesQueryForTest(obj, "stone"));
-    REQUIRE(ObjectMatchesQueryForTest(obj, "STONE_OBJ"));
-    REQUIRE_FALSE(ObjectMatchesQueryForTest(obj, "torch"));
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "prop"));
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "stone"));
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "STONE_OBJ"));
+    REQUIRE_FALSE(ObjectMatchesQuickOpenQuery(obj, "torch"));
+}
+
+TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[editor]") {
+    ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
+    REQUIRE(MatchesShortcutQuery(row, "editor"));
+    REQUIRE(MatchesShortcutQuery(row, "quick"));
+    REQUIRE(MatchesShortcutQuery(row, "cmd"));
+    REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
+}
+
+TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor]") {
+    AssetDef asset;
+    asset.mesh = "assets/models/torch.obj";
+    REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "torch"));
+    REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "models"));
+    REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
 }
 
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
