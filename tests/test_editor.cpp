@@ -6,8 +6,14 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
+#include <algorithm>
+#include <cctype>
 
 #include "editor/EditorSchema.h"
+#include "editor/EditorAssetImport.h"
+#include "editor/EditorSearch.h"
+#include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
@@ -15,6 +21,24 @@
 
 using namespace Monolith;
 using namespace Monolith::Editor;
+
+namespace {
+Monolith::Editor::SceneObject MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument&, const std::string& assetId) {
+    Monolith::Editor::SceneObject obj;
+    obj.id = "generated";
+    obj.type = Monolith::Editor::SceneObjectType::Prop;
+    obj.assetId = assetId;
+    return obj;
+}
+
+Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::SceneDocument& doc, const Monolith::Editor::SceneObject& src) {
+    Monolith::Editor::SceneObject clone = src;
+    clone.id = "copy_" + std::to_string(doc.objects.size());
+    clone.props.erase("_eid");
+    return clone;
+}
+
+}
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
@@ -344,6 +368,224 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     REQUIRE(loaded.assets.at("stone_asset").mesh == "stone.obj");
     REQUIRE(loaded.assets.at("stone_asset").renderScale == "2.0000,2.0000,2.0000");
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
+}
+
+TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
+    SceneDocument doc;
+
+    AssetDef asset;
+    asset.mesh = "crate.obj";
+    asset.renderScale = "1.0000,1.5000,1.0000";
+    doc.assets["crate"] = asset;
+
+    SceneObject obj;
+    obj.id = "crate_instance";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    obj.props["mesh"] = "should_not_be_saved.obj";
+    obj.props["renderScale"] = "9,9,9";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("asset_backed_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+
+    std::ifstream in(path);
+    REQUIRE(in.is_open());
+    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    REQUIRE(saved.find("\"asset\": \"crate\"") != std::string::npos);
+    REQUIRE(saved.find("should_not_be_saved.obj") == std::string::npos);
+    REQUIRE(saved.find("\"props\"") == std::string::npos);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].assetId == "crate");
+}
+
+TEST_CASE("SceneSerializer: inline props survive when object has no asset reference", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject obj;
+    obj.id = "inline_prop_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.props["mesh"] = "barrel.obj";
+    obj.props["renderScale"] = "1.2500,1.2500,1.2500";
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("inline_props_scene.json");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].assetId.empty());
+    REQUIRE(loaded.objects[0].props.at("mesh") == "barrel.obj");
+    REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
+}
+
+TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]") {
+    SceneDocument doc;
+    SceneObject src;
+    src.id = "prop_001";
+    src.type = SceneObjectType::Prop;
+    src.assetId = "crate";
+    src.props["_eid"] = "42";
+    src.props["mesh"] = "crate.obj";
+    doc.objects.push_back(src);
+
+    SceneObject clone = DuplicateObjectForTest(doc, src);
+    REQUIRE(clone.id != src.id);
+    REQUIRE(clone.assetId == "crate");
+    REQUIRE(clone.props.count("_eid") == 0);
+    REQUIRE(clone.props.at("mesh") == "crate.obj");
+}
+
+TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[editor]") {
+    SceneDocument doc;
+    AssetDef asset;
+    asset.mesh = "torch.obj";
+    asset.renderScale = "0.5000,0.5000,0.5000";
+    doc.assets["torch"] = asset;
+
+    SceneObject created = MakeObjectFromAssetForTest(doc, "torch");
+    REQUIRE(created.type == SceneObjectType::Prop);
+    REQUIRE(created.assetId == "torch");
+}
+
+TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]") {
+    SceneObject obj;
+    obj.id = "prop_007";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "stone_obj";
+
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "prop"));
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "stone"));
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, "STONE_OBJ"));
+    REQUIRE_FALSE(ObjectMatchesQuickOpenQuery(obj, "torch"));
+}
+
+TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[editor]") {
+    ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
+    REQUIRE(MatchesShortcutQuery(row, "editor"));
+    REQUIRE(MatchesShortcutQuery(row, "quick"));
+    REQUIRE(MatchesShortcutQuery(row, "cmd"));
+    REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
+}
+
+TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Prop)) == "prop");
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Light)) == "light");
+    REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Panel)) == "board");
+    REQUIRE(std::string(ObjectTypeLabel(static_cast<SceneObjectType>(999))) == "unknown");
+}
+
+TEST_CASE("Editor helpers: generic search helpers handle empty query", "[editor]") {
+    ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
+    REQUIRE(MatchesShortcutQuery(row, ""));
+    REQUIRE(ContainsCaseInsensitive("Any Text", ""));
+    REQUIRE_FALSE(ContainsCaseInsensitive("Any Text", "missing"));
+
+    SceneObject obj;
+    obj.id = "crate_01";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    REQUIRE(ObjectMatchesQuickOpenQuery(obj, ""));
+
+    AssetDef asset;
+    asset.mesh = "assets/models/crate.obj";
+    REQUIRE(AssetMatchesQuickOpenQuery("crate_asset", asset, ""));
+}
+
+TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor]") {
+    AssetDef asset;
+    asset.mesh = "assets/models/torch.obj";
+    REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "torch"));
+    REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "models"));
+    REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
+}
+
+TEST_CASE("Editor helpers: filtered list state handles empty and no-match cases", "[editor]") {
+    REQUIRE(EvaluateFilteredListState(3, 1, "") == FilteredListState::None);
+    REQUIRE(EvaluateFilteredListState(0, 0, "") == FilteredListState::EmptyData);
+    REQUIRE(EvaluateFilteredListState(4, 0, "torch") == FilteredListState::NoMatches);
+    REQUIRE(EvaluateFilteredListState(4, 0, "") == FilteredListState::None);
+}
+
+TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]") {
+    const auto rows = GetEditorShortcuts();
+    REQUIRE_FALSE(rows.empty());
+
+    auto hasCommandWithKeys = [&](const char* command, const char* keys) {
+        return std::any_of(rows.begin(), rows.end(), [&](const ShortcutRow& row) {
+            return std::string(row.command) == command && std::string(row.keys) == keys;
+        });
+    };
+
+    REQUIRE(hasCommandWithKeys("Toggle editor mode", "F10"));
+    REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
+    REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
+}
+
+TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
+    const auto rows = GetEditorShortcuts();
+    std::unordered_set<std::string> commandSet;
+
+    for (const auto& row : rows) {
+        const auto [_, inserted] = commandSet.insert(row.command);
+        REQUIRE(inserted);
+    }
+}
+
+TEST_CASE("Editor asset import: validates obj extension case-insensitively", "[editor]") {
+    REQUIRE(IsObjFilePath("/tmp/mesh.obj"));
+    REQUIRE(IsObjFilePath("/tmp/MESH.OBJ"));
+    REQUIRE_FALSE(IsObjFilePath("/tmp/mesh.fbx"));
+    REQUIRE_FALSE(IsObjFilePath(""));
+}
+
+TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[editor]") {
+    const std::string path = "/Users/bodur/Downloads/torch_model.obj";
+    REQUIRE(AssetIdFromImportedPath(path) == "torch_model");
+    REQUIRE(MeshTagFromImportedPath(path) == "assets/models/torch_model.obj");
+
+    REQUIRE(AssetIdFromImportedPath("").empty());
+    REQUIRE(MeshTagFromImportedPath("").empty());
+}
+
+TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
+    REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, true, false));
+    REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
+}
+
+TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]") {
+    REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
+    REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]") {
+    REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
+    REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
+    REQUIRE(ShouldRequestDeleteSelection(true, false, true));
+    REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true));
+    REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
+}
+
+TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
+    EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
+    REQUIRE(status.selectionCount == 0);
+    REQUIRE(std::string(status.dirtyText) == "yes");
+    REQUIRE(std::string(status.flyText) == "off");
+    REQUIRE(std::string(status.reloadText) == "pending");
+
+    status = BuildEditorStatusText(EditorStatusSnapshot{3, false, true, false});
+    REQUIRE(status.selectionCount == 3);
+    REQUIRE(std::string(status.dirtyText) == "no");
+    REQUIRE(std::string(status.flyText) == "on");
+    REQUIRE(std::string(status.reloadText) == "idle");
 }
 
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {

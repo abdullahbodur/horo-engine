@@ -1,0 +1,42 @@
+#pragma once
+
+namespace Monolith {
+namespace Editor {
+
+bool ShouldToggleHelpPopup(bool currToggle,
+                           bool prevToggle,
+                           bool wantsTextInput,
+                           bool anyItemActive);
+
+bool ShouldOpenQuickOpen(bool currToggle,
+                         bool prevToggle,
+                         bool flyMode,
+                         bool wantsTextInput,
+                         bool anyItemActive);
+
+bool ShouldCopySelectionRef(bool currCopyRef,
+                            bool prevCopyRef,
+                            bool wantsTextInput,
+                            bool anyItemActive,
+                            bool hasPrimarySelection);
+
+bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete, bool hasSelection);
+
+struct EditorStatusSnapshot {
+  int selectionCount = 0;
+  bool dirty = false;
+  bool flyMode = false;
+  bool reloadPending = false;
+};
+
+struct EditorStatusText {
+  int selectionCount = 0;
+  const char* dirtyText = "no";
+  const char* flyText = "off";
+  const char* reloadText = "idle";
+};
+
+EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
+
+}  // namespace Editor
+}  // namespace Monolith

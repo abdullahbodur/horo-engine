@@ -32,7 +32,7 @@
       "name": "debug-msvc",
       "displayName": "Debug (MSVC)",
       "inherits": "base",
-      "generator": "Visual Studio 18 2026",
+      "generator": "Visual Studio 17 2022",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
