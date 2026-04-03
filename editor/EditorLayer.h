@@ -118,6 +118,8 @@ class EditorLayer {
   std::string m_assetDraftMesh;
   std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
   std::string m_selectedAssetId;
+  bool m_assetSearchOpen = false;
+  std::string m_assetSearchQuery;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

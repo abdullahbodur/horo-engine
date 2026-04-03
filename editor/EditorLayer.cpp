@@ -436,6 +436,14 @@ void EditorLayer::DrawAssetsPanel() {
       "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
   ImGui::TextDisabled("Registry");
+  ImGui::SameLine();
+  ImGui::SetCursorPosX(W - 34.0f);
+  if (ImGui::Button("##asset_search", ImVec2(24.0f, 0.0f))) {
+    m_assetSearchOpen = true;
+    m_assetSearchQuery.clear();
+  }
+  ImGui::SameLine();
+  ImGui::TextDisabled("/\\");
   ImGui::Separator();
 
   std::vector<std::string> assetIds;
@@ -445,11 +453,63 @@ void EditorLayer::DrawAssetsPanel() {
   std::sort(assetIds.begin(), assetIds.end());
 
   std::string assetToDelete;
+  if (m_assetSearchOpen) {
+    ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Asset Spotlight", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextDisabled("Search assets");
+      ImGui::SameLine();
+      ImGui::TextUnformatted("/\\");
+      ImGui::SetNextItemWidth(420.0f);
+      char searchBuf[256] = {};
+      std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_assetSearchQuery.c_str());
+      if (ImGui::InputTextWithHint("##asset_search_input", "Type an asset id or mesh...", searchBuf, sizeof(searchBuf)))
+        m_assetSearchQuery = searchBuf;
+
+      ImGui::Separator();
+      bool picked = false;
+      for (const auto& assetId : assetIds) {
+        const auto assetIt = m_document.assets.find(assetId);
+        if (assetIt == m_document.assets.end())
+          continue;
+        const auto& asset = assetIt->second;
+
+        std::string haystack = assetId + " " + asset.mesh;
+        std::string query = m_assetSearchQuery;
+        std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (!query.empty() && haystack.find(query) == std::string::npos)
+          continue;
+
+        if (ImGui::Selectable(assetId.c_str(), m_selectedAssetId == assetId)) {
+          m_selectedAssetId = assetId;
+          picked = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("mesh: %s", asset.mesh.c_str());
+      }
+
+      if (picked || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        m_assetSearchOpen = false;
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    } else {
+      ImGui::OpenPopup("Asset Spotlight");
+    }
+  }
+
   for (const auto& assetId : assetIds) {
     const auto assetIt = m_document.assets.find(assetId);
     if (assetIt == m_document.assets.end())
       continue;
     const auto& asset = assetIt->second;
+
+    std::string haystack = assetId + " " + asset.mesh;
+    std::string query = m_assetSearchQuery;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!query.empty() && haystack.find(query) == std::string::npos)
+      continue;
 
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
