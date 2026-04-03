@@ -68,6 +68,8 @@ class EditorLayer {
   bool m_prevMouseL = false;
   bool m_prevDel = false;
   bool m_prevCopyRef = false;
+  bool m_prevEsc = false;
+  bool m_closeRequested = false;
 
   // Fly camera
   bool m_flyMode = false;
@@ -84,6 +86,7 @@ class EditorLayer {
   void UpdateFlyCamera(float dt, Camera& cam);
 
   SceneDocument m_document;
+  SceneDocument m_lastSavedDocument;
   SceneDocument m_pendingDoc;
   EditorSchema m_schema;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
@@ -106,12 +109,15 @@ class EditorLayer {
   void DrawQuickOpenPopup();
   void DrawStatusBar();
   void DrawDeleteConfirmModals();
+  void DrawExitConfirmModal();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
+  bool SaveDocument(std::string* outError);
+  void DiscardUnsavedChanges();
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;
@@ -136,8 +142,10 @@ class EditorLayer {
   std::string m_quickOpenQuery;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
+  bool m_confirmExitOpen = false;
   std::vector<int> m_pendingDeleteObjectIndices;
   std::string m_pendingDeleteAssetId;
+  std::string m_exitConfirmError;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

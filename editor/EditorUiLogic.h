@@ -22,6 +22,12 @@ bool ShouldCopySelectionRef(bool currCopyRef,
 
 bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete, bool hasSelection);
 
+bool ShouldHandleEditorEscape(bool currEsc,
+                              bool prevEsc,
+                              bool wantsTextInput,
+                              bool anyItemActive,
+                              bool hasBlockingPopup);
+
 struct EditorStatusSnapshot {
   int selectionCount = 0;
   bool dirty = false;
@@ -35,6 +41,14 @@ struct EditorStatusText {
   const char* flyText = "off";
   const char* reloadText = "idle";
 };
+
+enum class EditorExitDecision {
+  ExitImmediately,
+  PromptUnsavedConfirm,
+};
+
+EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges);
+bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload);
 
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
 

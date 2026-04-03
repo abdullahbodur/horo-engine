@@ -32,6 +32,23 @@ bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete, bool hasSele
   return currDelete && !prevDelete && hasSelection;
 }
 
+bool ShouldHandleEditorEscape(bool currEsc,
+                              bool prevEsc,
+                              bool wantsTextInput,
+                              bool anyItemActive,
+                              bool hasBlockingPopup) {
+  return currEsc && !prevEsc && !wantsTextInput && !anyItemActive && !hasBlockingPopup;
+}
+
+EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges) {
+  return hasUnsavedChanges ? EditorExitDecision::PromptUnsavedConfirm
+                           : EditorExitDecision::ExitImmediately;
+}
+
+bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload) {
+  return closeRequested && !hasPendingReload;
+}
+
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot) {
   EditorStatusText out;
   out.selectionCount = std::max(0, snapshot.selectionCount);

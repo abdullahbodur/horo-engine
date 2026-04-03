@@ -110,6 +110,9 @@ void EditorLayer::Toggle() {
     m_flyMode = false;
     m_flyCamInitialized = false;
   }
+  m_closeRequested = false;
+  m_confirmExitOpen = false;
+  m_exitConfirmError.clear();
   glfwSetInputMode(m_window, GLFW_CURSOR, m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
   m_prevMouseL = false;
   m_selectedIndices.clear();
@@ -119,6 +122,7 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/dungeon.json";
   m_document = std::move(doc);
+  m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
 }
@@ -130,6 +134,11 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     m_clipboardToastTime = std::max(0.0f, m_clipboardToastTime - dt);
 
   if (m_active) {
+    if (ShouldFinalizeEditorClose(m_closeRequested, m_wantsReload)) {
+      Toggle();
+      return false;
+    }
+
     ImGuiIO& io = ImGui::GetIO();
 
     const bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
@@ -156,6 +165,22 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       m_quickOpenQuery.clear();
     }
     m_prevQuickOpenToggle = currQuickOpenToggle;
+
+    const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
+                                  m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
+                                  m_confirmExitOpen;
+    if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput, ImGui::IsAnyItemActive(),
+                                 hasBlockingPopup)) {
+      if (ResolveEditorExitDecision(m_document.dirty) ==
+          EditorExitDecision::PromptUnsavedConfirm) {
+        m_confirmExitOpen = true;
+        m_exitConfirmError.clear();
+      } else {
+        m_closeRequested = true;
+      }
+    }
+    m_prevEsc = currEsc;
 
     // Tab toggles fly mode
     bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
@@ -220,6 +245,7 @@ void EditorLayer::Render(const Camera& cam) {
     DrawHelpPopup();
     DrawQuickOpenPopup();
     DrawDeleteConfirmModals();
+    DrawExitConfirmModal();
     DrawSelectionHighlight();  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
@@ -396,22 +422,24 @@ void EditorLayer::DrawToolbar() {
     if (!canSave)
       ImGui::BeginDisabled();
     if (ImGui::Button("Save")) {
-      std::string path =
-          m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
-      m_document.filePath = path;
-      try {
-        SceneSerializer::SaveToFile(m_document, path);
-      } catch (...) {}
-      m_document.dirty = false;
-      TriggerReload();  // rebuild scene so changes are immediately visible
+      std::string saveError;
+      if (!SaveDocument(&saveError))
+        LOG_ERROR("EditorLayer: save failed: %s", saveError.c_str());
     }
     if (!canSave)
       ImGui::EndDisabled();
   }
   ImGui::SameLine();
 
-  if (ImGui::Button("Exit [F10]"))
-    Toggle();
+  if (ImGui::Button("Exit [F10]")) {
+    if (ResolveEditorExitDecision(m_document.dirty) ==
+        EditorExitDecision::PromptUnsavedConfirm) {
+      m_confirmExitOpen = true;
+      m_exitConfirmError.clear();
+    } else {
+      m_closeRequested = true;
+    }
+  }
 
   ImGui::End();
 }
@@ -1014,6 +1042,51 @@ void EditorLayer::DrawDeleteConfirmModals() {
   }
 }
 
+void EditorLayer::DrawExitConfirmModal() {
+  if (m_confirmExitOpen)
+    ImGui::OpenPopup("Unsaved Changes");
+
+  if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextUnformatted("You have unsaved changes.");
+  ImGui::TextDisabled("Are you sure you want to exit editor mode?");
+  ImGui::Separator();
+
+  if (!m_exitConfirmError.empty())
+    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_exitConfirmError.c_str());
+
+  if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+    m_confirmExitOpen = false;
+    m_exitConfirmError.clear();
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Discard & Exit", ImVec2(120.0f, 0.0f))) {
+    DiscardUnsavedChanges();
+    m_confirmExitOpen = false;
+    m_exitConfirmError.clear();
+    ImGui::CloseCurrentPopup();
+    m_closeRequested = true;
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Save & Exit", ImVec2(120.0f, 0.0f))) {
+    std::string saveError;
+    if (SaveDocument(&saveError)) {
+      m_confirmExitOpen = false;
+      m_exitConfirmError.clear();
+      ImGui::CloseCurrentPopup();
+      m_closeRequested = true;
+    } else {
+      m_exitConfirmError = saveError;
+    }
+  }
+
+  ImGui::EndPopup();
+}
+
 // ---- Properties panel --------------------------------------------------------
 
 void EditorLayer::DrawPropertiesPanel() {
@@ -1331,6 +1404,36 @@ void EditorLayer::ToggleSelect(int i) {
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
+}
+
+bool EditorLayer::SaveDocument(std::string* outError) {
+  if (outError)
+    outError->clear();
+
+  std::string path = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  m_document.filePath = path;
+
+  try {
+    SceneSerializer::SaveToFile(m_document, path);
+    m_document.dirty = false;
+    m_lastSavedDocument = m_document;
+    TriggerReload();  // rebuild scene so changes are immediately visible
+    return true;
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+}
+
+void EditorLayer::DiscardUnsavedChanges() {
+  if (!m_document.dirty)
+    return;
+
+  m_document = m_lastSavedDocument;
+  m_selectedIndices.clear();
+  m_selectedAssetId.clear();
+  TriggerReload();
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {
