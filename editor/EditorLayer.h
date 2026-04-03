@@ -117,6 +117,12 @@ class EditorLayer {
   std::string m_assetDraftId;
   std::string m_assetDraftMesh;
   std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+  std::string m_selectedAssetId;
+
+  static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
+                                         const std::string& assetId,
+                                         const EditorSchema& schema);
+  static SceneObject DuplicateObject(const SceneDocument& doc, const SceneObject& src);
 
   static std::string GenerateId(const SceneDocument& doc);
   void ApplySchemaDefaults(SceneObject& obj) const;
