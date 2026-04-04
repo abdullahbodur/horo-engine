@@ -50,7 +50,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
   SceneDocument doc;
   doc.filePath = path;
   doc.version = j.value("version", 1);
-  doc.sceneId = j.value("sceneId", "dungeon");
+  doc.sceneId = j.value("sceneId", "world");
 
   if (j.contains("settings") && j["settings"].is_object()) {
     for (auto& [k, v] : j["settings"].items()) {
@@ -139,7 +139,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
 void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& path) {
   json j;
   j["version"] = doc.version;
-  j["sceneId"] = doc.sceneId.empty() ? "dungeon" : doc.sceneId;
+  j["sceneId"] = doc.sceneId.empty() ? "world" : doc.sceneId;
 
   // ---- Scene settings (stable key order) ----
   json settings = json::object();

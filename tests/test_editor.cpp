@@ -113,6 +113,51 @@ TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {
     REQUIRE(ts->fields[0].options[3] == "pyramid");
 }
 
+TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [
+                    {"key": "mesh", "label": "Mesh", "type": "string", "default": "box"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_prop_mesh_legacy.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_prop_mesh_legacy.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Prop);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields.size() == 1);
+    REQUIRE(ts->fields[0].key == "mesh");
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Enum);
+    REQUIRE_FALSE(ts->fields[0].options.empty());
+}
+
+TEST_CASE("EditorSchema: ignores deprecated Prop isLight field", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "fields": [
+                    {"key": "mesh", "label": "Mesh", "type": "enum", "options": ["box"], "default": "box"},
+                    {"key": "isLight", "label": "Is Light", "type": "bool", "default": "false"}
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_prop_islight_deprecated.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_prop_islight_deprecated.json"));
+
+    const TypeSchema* ts = schema.GetSchema(SceneObjectType::Prop);
+    REQUIRE(ts != nullptr);
+    REQUIRE(ts->fields.size() == 1);
+    REQUIRE(ts->fields[0].key == "mesh");
+}
+
 TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]") {
     const std::string json = R"({
         "types": {

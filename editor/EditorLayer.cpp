@@ -1,4 +1,5 @@
 #include "editor/EditorLayer.h"
+#include "editor/TransformGizmo.h"
 
 // Windows headers must come before GLFW to avoid type redefinition conflicts
 #ifdef _WIN32
@@ -33,12 +34,14 @@
 #include <unordered_set>
 
 #include "core/Logger.h"
+#include "core/ProjectPath.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
+#include "math/Quaternion.h"
 #include "math/Transform.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
@@ -137,13 +140,24 @@ static void PropagateHierarchyTransformDelta(SceneDocument& doc,
                                              const Quaternion& oldParentRot,
                                              const Vec3& newParentPos,
                                              const Quaternion& newParentRot,
-                                             const std::function<void(const SceneObject&)>& transformCb) {
+                                             const std::function<void(const SceneObject&)>& transformCb,
+                                             const std::vector<int>& skipIndices = {}) {
   if (parentIdx < 0 || parentIdx >= static_cast<int>(doc.objects.size()))
     return;
 
   const Quaternion deltaRot = newParentRot * oldParentRot.Inverse();
   for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
     if (i == parentIdx || !IsDescendantOf(doc, i, parentIdx))
+      continue;
+    // Skip children that are themselves being directly manipulated (e.g. multi-select gizmo).
+    bool shouldSkip = false;
+    for (int sk : skipIndices) {
+      if (sk == i) {
+        shouldSkip = true;
+        break;
+      }
+    }
+    if (shouldSkip)
       continue;
 
     SceneObject& child = doc.objects[static_cast<size_t>(i)];
@@ -280,7 +294,10 @@ std::string PickTextureFilePath() {
 
 // Copy a picked texture into assets/models (same convention as OBJ import) and return
 // a project-relative path for the scene JSON / LevelLoader.
-static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError) {
+// subfolderHint: asset name (e.g. "enemy") → copies into assets/models/enemy/.
+// Empty hint falls back to flat assets/models/.
+static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError,
+                                               const std::string& subfolderHint = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -297,11 +314,13 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
     return {};
   }
 
-  const fs::path destDir("assets/models");
+  const fs::path destDir = subfolderHint.empty()
+                               ? ProjectPath::Root() / "assets/models"
+                               : ProjectPath::Root() / "assets/models" / subfolderHint;
   fs::create_directories(destDir, ec);
   if (ec) {
     if (outError)
-      *outError = "Cannot create assets/models: " + ec.message();
+      *outError = "Cannot create " + destDir.string() + ": " + ec.message();
     return {};
   }
 
@@ -312,7 +331,7 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
       *outError = "Copy failed: " + ec.message();
     return {};
   }
-  return dest.generic_string();
+  return fs::relative(dest, ProjectPath::Root()).generic_string();
 }
 
 // Copy the .mtl referenced by objSrcPath and all textures it references
@@ -373,9 +392,12 @@ static void CopyCompanionAssets(const std::string& objSrcPath, const std::string
   }
 }
 
-// Copy picked .obj into assets/models (and companion MTL/textures). Returns project-relative
-// mesh path (e.g. assets/models/foo.obj) or empty on failure.
-static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError) {
+// Copy picked .obj into assets/models/{folderHint or stem}/ (and companion MTL/textures).
+// folderHint: asset ID if already known (e.g. "signenemy-5") so OBJ lands in the same
+// folder as its texture. Falls back to OBJ filename stem when empty.
+// Returns project-relative mesh path (e.g. assets/models/signenemy-5/signenemy.obj).
+static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError,
+                                                 const std::string& folderHint = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -385,12 +407,13 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   const fs::path src(pickedPath);
-  const fs::path destDir("assets/models");
+  const std::string folderName = folderHint.empty() ? src.stem().string() : folderHint;
+  const fs::path destDir = ProjectPath::Root() / "assets/models" / folderName;
   std::error_code ec;
   fs::create_directories(destDir, ec);
   if (ec) {
     if (outError)
-      *outError = "Cannot create assets/models: " + ec.message();
+      *outError = "Cannot create " + destDir.string() + ": " + ec.message();
     return {};
   }
   const fs::path dest = destDir / src.filename();
@@ -401,7 +424,7 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   CopyCompanionAssets(src.string(), destDir.string());
-  return MeshTagFromImportedPath(pickedPath);
+  return (fs::path("assets/models") / folderName / src.filename()).generic_string();
 }
 
 }  // namespace
@@ -444,7 +467,7 @@ void EditorLayer::Toggle() {
 
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
-    doc.filePath = "assets/scenes/dungeon.json";
+    doc.filePath = "assets/scenes/world.json";
 
   for (auto& obj : doc.objects) {
     if (obj.type != SceneObjectType::Prop)
@@ -510,7 +533,7 @@ void EditorLayer::ProcessPendingPathDrops() {
 
     if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(path, &err);
+      const std::string rel = ImportTextureToAssetsModels(path, &err, m_assetDraftId);
       if (rel.empty()) {
         if (!err.empty())
           LOG_WARN("Texture drop: %s", err.c_str());
@@ -525,7 +548,7 @@ void EditorLayer::ProcessPendingPathDrops() {
       const auto it = m_document.assets.find(m_selectedAssetId);
       if (it != m_document.assets.end()) {
         std::string err;
-        const std::string rel = ImportTextureToAssetsModels(path, &err);
+        const std::string rel = ImportTextureToAssetsModels(path, &err, m_selectedAssetId);
         if (rel.empty()) {
           if (!err.empty())
             LOG_WARN("Texture drop: %s", err.c_str());
@@ -544,7 +567,7 @@ void EditorLayer::ProcessPendingPathDrops() {
     if (!IsObjFilePath(path))
       continue;
     std::string err;
-    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err);
+    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err, m_assetDraftId);
     if (meshTag.empty()) {
       if (!err.empty())
         LOG_WARN("Drop import: %s", err.c_str());
@@ -644,8 +667,12 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
-    if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput, ImGui::IsAnyItemActive(),
-                                 hasBlockingPopup)) {
+    // Escape: dismiss gizmo first; only then process editor-close logic.
+    if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
+        !hasBlockingPopup && m_gizmo.IsActive()) {
+      m_gizmo.Deactivate();
+    } else if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput,
+                                        ImGui::IsAnyItemActive(), hasBlockingPopup)) {
       if (ResolveEditorExitDecision(m_document.dirty) ==
           EditorExitDecision::PromptUnsavedConfirm) {
         m_confirmExitOpen = true;
@@ -664,6 +691,17 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
     if (m_flyMode) {
       UpdateFlyCamera(dt, cam);
+      // Keep gizmo anchored to object even while flying
+      if (m_gizmo.IsActive()) {
+        const int syncIdx = PrimaryIdx();
+        if (syncIdx >= 0 && syncIdx < static_cast<int>(m_document.objects.size())) {
+          const auto& syncObj = m_document.objects[syncIdx];
+          Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
+                                                      ToRadians(syncObj.yaw),
+                                                      ToRadians(syncObj.roll));
+          m_gizmo.SyncTarget(syncObj.position, syncRot, syncObj.scale);
+        }
+      }
     } else {
       // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
@@ -680,7 +718,196 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       }
       m_prevCopyRef = currCopyRef;
 
-      HandlePicking(cam, screenW, screenH);
+      // ---- Gizmo mode hotkeys (W/E/R) ----------------------------------------
+      if (!io.WantTextInput && !ImGui::IsAnyItemActive()) {
+        const int gizmoIdx = PrimaryIdx();
+        bool currW = glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS;
+        bool currE = glfwGetKey(m_window, GLFW_KEY_E) == GLFW_PRESS;
+        bool currR = glfwGetKey(m_window, GLFW_KEY_R) == GLFW_PRESS;
+
+        if (gizmoIdx >= 0 &&
+            gizmoIdx < static_cast<int>(m_document.objects.size())) {
+          const auto& gizmoObj = m_document.objects[gizmoIdx];
+          Quaternion  gizmoRot = Quaternion::FromEuler(ToRadians(gizmoObj.pitch),
+                                                       ToRadians(gizmoObj.yaw),
+                                                       ToRadians(gizmoObj.roll));
+          if (currW && !m_prevGizmoW)
+            m_gizmo.Activate(GizmoMode::Translate, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+          if (currE && !m_prevGizmoE)
+            m_gizmo.Activate(GizmoMode::Rotate, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+          if (currR && !m_prevGizmoR)
+            m_gizmo.Activate(GizmoMode::Scale, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+        }
+        m_prevGizmoW = currW;
+        m_prevGizmoE = currE;
+        m_prevGizmoR = currR;
+      }
+
+      // Sync gizmo to primary selected object each frame
+      if (m_gizmo.IsActive()) {
+        const int syncIdx = PrimaryIdx();
+        if (syncIdx < 0 ||
+            syncIdx >= static_cast<int>(m_document.objects.size())) {
+          m_gizmo.Deactivate();
+        } else {
+          const auto& syncObj = m_document.objects[syncIdx];
+          Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
+                                                      ToRadians(syncObj.yaw),
+                                                      ToRadians(syncObj.roll));
+          m_gizmo.SyncTarget(syncObj.position, syncRot, syncObj.scale);
+        }
+      }
+
+      // ---- Gizmo update (consumes mouse before picking) ----------------------
+      Vec3       dPos   = Vec3::Zero();
+      Quaternion dRot   = Quaternion::Identity();
+      Vec3       dScale = Vec3::One();
+      bool gizmoConsumed = false;
+      if (m_gizmo.IsActive()) {
+        gizmoConsumed = m_gizmo.Update(m_window, cam, screenW, screenH,
+                                       dPos, dRot, dScale);
+
+        // --- Surface snap (Ctrl) and Grid snap (Shift) ---
+        if (m_gizmo.GetMode() == GizmoMode::Translate) {
+          const bool ctrlHeld =
+              glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
+          const bool shiftHeldSnap =
+              glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+          GizmoAxis dragAxis = m_gizmo.GetDragAxis();
+          const int primIdx  = PrimaryIdx();
+
+          if (ctrlHeld && dragAxis != GizmoAxis::None &&
+              primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
+
+            const auto& selfObj    = m_document.objects[primIdx];
+            Vec3        selfCenter = selfObj.position;
+            Vec3        selfHalf   = selfObj.scale;
+            if (m_liveRegistry)
+              TryPropWorldAabb(*m_liveRegistry, selfObj, selfCenter, selfHalf);
+            Vec3 rawPos = selfCenter + dPos;
+
+            int axisIdx = (dragAxis == GizmoAxis::X) ? 0 :
+                          (dragAxis == GizmoAxis::Y) ? 1 : 2;
+
+            float bestDist   = std::numeric_limits<float>::max();
+            float bestOffset = 0.0f;
+            bool  didSnap    = false;
+
+            for (int oi = 0; oi < static_cast<int>(m_document.objects.size()); ++oi) {
+              if (IsSelected(oi)) continue;
+              const auto& other       = m_document.objects[oi];
+              Vec3        otherCenter = other.position;
+              Vec3        otherHalfV  = other.scale;
+              if (m_liveRegistry)
+                TryPropWorldAabb(*m_liveRegistry, other, otherCenter, otherHalfV);
+              float otherHalf = otherHalfV[axisIdx];
+              float selfHalf1 = selfHalf[axisIdx];
+
+              const float selfFaces[2]  = { rawPos[axisIdx] - selfHalf1,
+                                            rawPos[axisIdx] + selfHalf1 };
+              const float otherFaces[2] = { otherCenter[axisIdx] - otherHalf,
+                                            otherCenter[axisIdx] + otherHalf };
+
+              for (int sf = 0; sf < 2; ++sf) {
+                for (int of = 0; of < 2; ++of) {
+                  float gap = std::abs(selfFaces[sf] - otherFaces[of]);
+                  if (gap < bestDist) {
+                    bestDist   = gap;
+                    bestOffset = otherFaces[of] - selfFaces[sf];
+                    didSnap    = true;
+                  }
+                }
+              }
+            }
+
+            if (didSnap) {
+              Vec3 snappedCenter      = rawPos;
+              snappedCenter[axisIdx] += bestOffset;
+              Vec3 centerToOrigin     = selfObj.position - selfCenter;
+              dPos = snappedCenter + centerToOrigin - selfObj.position;
+
+              Vec3 axisDir   = m_gizmo.AxisDir(dragAxis);
+              Vec3 facePoint = selfObj.position + dPos;
+              DebugDraw::Line(facePoint - axisDir * 0.3f,
+                              facePoint + axisDir * 0.3f,
+                              {1.0f, 1.0f, 0.0f, 1.0f});
+            }
+          }
+
+          if (shiftHeldSnap && dPos.LengthSq() > 1e-12f &&
+              primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
+
+            constexpr float kGridSize = 0.5f;
+            const auto& selfObj = m_document.objects[primIdx];
+            Vec3         rawPos = selfObj.position + dPos;
+
+            rawPos.x = std::round(rawPos.x / kGridSize) * kGridSize;
+            rawPos.y = std::round(rawPos.y / kGridSize) * kGridSize;
+            rawPos.z = std::round(rawPos.z / kGridSize) * kGridSize;
+            dPos = rawPos - selfObj.position;
+          }
+        }
+
+        // Detect any non-trivial delta
+        float dRotXYZSq = dRot.x * dRot.x + dRot.y * dRot.y + dRot.z * dRot.z;
+        bool anyDelta = dPos.LengthSq() > 1e-10f
+                     || dRotXYZSq > 1e-8f
+                     || std::abs(dScale.x - 1.0f) > 1e-6f
+                     || std::abs(dScale.y - 1.0f) > 1e-6f
+                     || std::abs(dScale.z - 1.0f) > 1e-6f;
+        if (anyDelta) {
+          for (int si : m_selectedIndices) {
+            if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
+              continue;
+            auto& applyObj   = m_document.objects[si];
+
+            // Capture pre-delta state so we can propagate to children below.
+            const Vec3 oldObjPos = applyObj.position;
+            const Quaternion oldObjRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                                               ToRadians(applyObj.yaw),
+                                                               ToRadians(applyObj.roll));
+
+            applyObj.position = applyObj.position + dPos;
+            applyObj.scale.x *= dScale.x;
+            applyObj.scale.y *= dScale.y;
+            applyObj.scale.z *= dScale.z;
+            Quaternion nextRot = oldObjRot;
+            if (dRotXYZSq > 1e-8f) {
+              nextRot        = (dRot * oldObjRot).Normalized();
+              Vec3 euler     = nextRot.ToEuler();
+              applyObj.pitch = ToDegrees(euler.x);
+              applyObj.yaw   = ToDegrees(euler.y);
+              applyObj.roll  = ToDegrees(euler.z);
+            }
+            m_document.dirty = true;
+            if (m_transformCb)
+              m_transformCb(applyObj);
+
+            // Propagate the same delta to all hierarchy children of this object,
+            // skipping any children that are themselves directly selected (they
+            // already receive the delta above and must not be moved twice).
+            PropagateHierarchyTransformDelta(
+                m_document, si, oldObjPos, oldObjRot,
+                applyObj.position, nextRot, m_transformCb, m_selectedIndices);
+          }
+        }
+      }
+
+      if (gizmoConsumed) {
+        // Update m_prevMouseL so HandlePicking doesn't see a phantom click
+        // on the frame when the gizmo releases.
+        m_prevMouseL = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+      } else {
+        HandlePicking(cam, screenW, screenH);
+      }
 
       // Del key — delete all selected objects immediately
       bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
@@ -724,7 +951,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
       if (chosen.empty())
         break;
       std::string err;
-      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err);
+      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err, m_assetDraftId);
       if (!meshTag.empty()) {
         m_assetDraftMesh = meshTag;
         if (m_assetDraftId.empty())
@@ -737,7 +964,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
     }
     case DeferredFilePick::NewAssetAlbedo: {
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, m_assetDraftId);
       if (!rel.empty())
         m_assetDraftAlbedoMap = rel;
       else if (!err.empty())
@@ -749,7 +976,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
       if (id.empty() || m_document.assets.find(id) == m_document.assets.end())
         break;
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, id);
       if (!rel.empty()) {
         m_document.assets[id].albedoMap = rel;
         m_document.dirty = true;
@@ -760,7 +987,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
   }
 }
 
-void EditorLayer::Render(const Camera& cam) {
+void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ProcessDeferredFilePicks();
   if (!m_active) {
     m_albedoDraftDrop.Clear();
@@ -785,11 +1012,13 @@ void EditorLayer::Render(const Camera& cam) {
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     DrawSelectionHighlight();  // queues to DebugDraw
+    if (m_gizmo.IsActive())
+      m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
 
-  // Flush any queued debug primitives (selection box, etc.) before ImGui
+  // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
   DebugDraw::Flush(cam);
 
   ImGui::Render();
@@ -952,7 +1181,7 @@ void EditorLayer::DrawToolbar() {
 
   if (ImGui::Button("Load")) {
     std::string path =
-        m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+        m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
     try {
       m_document = SceneSerializer::LoadFromFile(path);
       m_selectedIndices.clear();
@@ -2425,11 +2654,21 @@ void EditorLayer::DrawPropertiesPanel() {
                                                            : comp.type;
     ImGui::PushID(ci);
     bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+    bool removeThisComponent = false;
+
+    if (ImGui::BeginPopupContextItem("comp_ctx")) {
+      if (ImGui::MenuItem("Remove Component"))
+        removeThisComponent = true;
+      ImGui::EndPopup();
+    }
 
     // Remove button on the same line, right-aligned
     float btnW = ImGui::CalcTextSize("x").x + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW);
     if (ImGui::SmallButton("x"))
+      removeThisComponent = true;
+
+    if (removeThisComponent)
       removeIdx = ci;
 
     if (open) {
@@ -2770,16 +3009,20 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   if (outError)
     outError->clear();
 
-  std::string path = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  std::string path = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
   m_document.filePath = path;
+
+  LOG_INFO("[Editor] Saving scene to: %s", path.c_str());
 
   try {
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
     m_lastSavedDocument = m_document;
+    LOG_INFO("[Editor] Scene saved OK");
     TriggerReload();  // rebuild scene so changes are immediately visible
     return true;
   } catch (const std::exception& e) {
+    LOG_ERROR("[Editor] Save failed: %s", e.what());
     if (outError)
       *outError = e.what();
     return false;
@@ -2917,7 +3160,7 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
   std::ostringstream ss;
   ss.setf(std::ios::fixed);
   ss.precision(4);
-  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
   ss << "EDITOR_REF"
      << " scene=\"" << scenePath << "\""
      << " id=" << obj.id

@@ -45,6 +45,7 @@ PFNGLBINDBUFFERPROC              glad_glBindBuffer              = NULL;
 PFNGLBUFFERDATAPROC              glad_glBufferData              = NULL;
 PFNGLBUFFERSUBDATAPROC           glad_glBufferSubData           = NULL;
 PFNGLVERTEXATTRIBPOINTERPROC     glad_glVertexAttribPointer     = NULL;
+PFNGLVERTEXATTRIBIPOINTERPROC    glad_glVertexAttribIPointer    = NULL;
 PFNGLENABLEVERTEXATTRIBARRAYPROC  glad_glEnableVertexAttribArray  = NULL;
 PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_glDisableVertexAttribArray = NULL;
 PFNGLCREATESHADERPROC            glad_glCreateShader            = NULL;
@@ -131,6 +132,7 @@ int gladLoadGLLoader(GLADloadproc load)
     LOAD(PFNGLBUFFERDATAPROC,              glBufferData)
     LOAD(PFNGLBUFFERSUBDATAPROC,           glBufferSubData)
     LOAD(PFNGLVERTEXATTRIBPOINTERPROC,     glVertexAttribPointer)
+    LOAD(PFNGLVERTEXATTRIBIPOINTERPROC,    glVertexAttribIPointer)
     LOAD(PFNGLENABLEVERTEXATTRIBARRAYPROC,  glEnableVertexAttribArray)
     LOAD(PFNGLDISABLEVERTEXATTRIBARRAYPROC, glDisableVertexAttribArray)
     LOAD(PFNGLCREATESHADERPROC,            glCreateShader)

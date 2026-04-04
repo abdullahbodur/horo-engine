@@ -309,6 +309,7 @@ typedef void      (APIENTRYP PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size
 typedef void      (APIENTRYP PFNGLBUFFERSUBDATAPROC)(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
 /* Vertex attribs */
 typedef void      (APIENTRYP PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+typedef void      (APIENTRYP PFNGLVERTEXATTRIBIPOINTERPROC)(GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer);
 typedef void      (APIENTRYP PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);
 typedef void      (APIENTRYP PFNGLDISABLEVERTEXATTRIBARRAYPROC)(GLuint index);
 /* Shaders */
@@ -385,6 +386,7 @@ GLAPI PFNGLBINDBUFFERPROC              glad_glBindBuffer;
 GLAPI PFNGLBUFFERDATAPROC              glad_glBufferData;
 GLAPI PFNGLBUFFERSUBDATAPROC           glad_glBufferSubData;
 GLAPI PFNGLVERTEXATTRIBPOINTERPROC     glad_glVertexAttribPointer;
+GLAPI PFNGLVERTEXATTRIBIPOINTERPROC    glad_glVertexAttribIPointer;
 GLAPI PFNGLENABLEVERTEXATTRIBARRAYPROC  glad_glEnableVertexAttribArray;
 GLAPI PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_glDisableVertexAttribArray;
 GLAPI PFNGLCREATESHADERPROC            glad_glCreateShader;
@@ -457,6 +459,7 @@ GLAPI PFNGLFRAMEBUFFERRENDERBUFFERPROC glad_glFramebufferRenderbuffer;
 #define glBufferData              glad_glBufferData
 #define glBufferSubData           glad_glBufferSubData
 #define glVertexAttribPointer     glad_glVertexAttribPointer
+#define glVertexAttribIPointer    glad_glVertexAttribIPointer
 #define glEnableVertexAttribArray  glad_glEnableVertexAttribArray
 #define glDisableVertexAttribArray glad_glDisableVertexAttribArray
 #define glCreateShader            glad_glCreateShader

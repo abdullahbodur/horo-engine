@@ -5,6 +5,7 @@
 
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
+#include "editor/TransformGizmo.h"
 #include "renderer/Camera.h"
 
 struct GLFWwindow;
@@ -17,13 +18,35 @@ namespace Editor {
 
 // In-game editor overlay.
 //
-// Usage (from CharacterApp):
-//   OnInit  → editor.Init(window)
-//   OnUpdate→ if F10 pressed: editor.Toggle()
-//              editor.OnUpdate(dt, cam, w, h)  — returns true if ImGui consumed input
-//   OnRender→ editor.Render(cam)               — call after game scene, before EndFrame
-//   OnShutdown → editor.Shutdown()
-//   Reload  → if editor.WantsSceneReload(): reload from editor.GetPendingDocument()
+// Typical usage (from a CharacterApp subclass):
+//
+//   // main():
+//   app.ParseArgs(argc, argv);   // recognises --editor flag
+//   app.Run();
+//
+//   // OnInit():
+//   editor.Init(window);
+//   editor.SetLiveRegistry(&scene.registry);
+//   editor.SetTransformCallback(...);
+//   // ...load scene...
+//   if (IsEditorModeRequested()) {
+//     editor.LoadDocument(doc);
+//     editor.SyncRuntimeEntityIds(registry);
+//     editor.Toggle();           // open immediately, no F10 needed
+//   }
+//
+//   // OnUpdate():
+//   if (F10 pressed)  editor.Toggle();   // runtime toggle
+//   editor.OnUpdate(dt, cam, w, h);      // returns true if ImGui consumed input
+//
+//   // OnRender():
+//   editor.Render(cam, w, h);   // call after game 3-D scene, before EndFrame
+//
+//   // OnShutdown():
+//   editor.Shutdown();
+//
+//   // Scene reload:
+//   if (editor.WantsSceneReload()) { reload from editor.GetPendingDocument(); }
 class EditorLayer {
  public:
   void Init(GLFWwindow* window);
@@ -38,9 +61,9 @@ class EditorLayer {
   // (caller should suppress game input in that case).
   bool OnUpdate(float dt, Camera& cam, int screenW, int screenH);
 
-  // Render ImGui panels and the selection highlight.
+  // Render ImGui panels, selection highlight, and transform gizmo.
   // Must be called after the game 3D render and before RenderContext::EndFrame.
-  void Render(const Camera& cam);
+  void Render(const Camera& cam, int screenW, int screenH);
 
   // Replace the current document with a live-scene snapshot (called on editor open).
   void LoadDocument(SceneDocument doc);
@@ -97,6 +120,9 @@ class EditorLayer {
   bool m_prevDel = false;
   bool m_prevCopyRef = false;
   bool m_prevEsc = false;
+  bool m_prevGizmoW = false;
+  bool m_prevGizmoE = false;
+  bool m_prevGizmoR = false;
   bool m_closeRequested = false;
 
   // Fly camera
@@ -112,6 +138,8 @@ class EditorLayer {
 
   void ToggleFlyMode(Camera& cam);
   void UpdateFlyCamera(float dt, Camera& cam);
+
+  TransformGizmo m_gizmo;
 
   SceneDocument m_document;
   SceneDocument m_lastSavedDocument;

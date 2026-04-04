@@ -47,6 +47,12 @@ void EditorSchema::LoadFromFile(const std::string& path) {
       field.label = fd.value("label", "");
       field.defaultValue = fd.value("default", "");
 
+      // Legacy cleanup:
+      // - Prop.isLight is deprecated (use Light object/component instead)
+      // - Prop.mesh should always be an enum picker in editor UI
+      if (typeName == "Prop" && field.key == "isLight")
+        continue;
+
       std::string wtype = fd.value("type", "string");
       if (wtype == "float") {
         field.widget = FieldDef::Widget::Float;
@@ -63,6 +69,15 @@ void EditorSchema::LoadFromFile(const std::string& path) {
         field.widget = FieldDef::Widget::Color3;
       } else {
         field.widget = FieldDef::Widget::String;
+      }
+
+      if (typeName == "Prop" && field.key == "mesh") {
+        field.widget = FieldDef::Widget::Enum;
+        if (field.options.empty()) {
+          field.options = {"box", "sphere", "cylinder", "pyramid", "plane", "quad"};
+        }
+        if (field.defaultValue.empty())
+          field.defaultValue = "box";
       }
 
       schema.fields.push_back(std::move(field));

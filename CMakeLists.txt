@@ -56,6 +56,7 @@ target_link_libraries(MonolithEngine
         stb
         imgui_lib
         nlohmann_json::nlohmann_json
+        tinygltf
 )
 
 if(APPLE)
