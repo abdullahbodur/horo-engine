@@ -192,6 +192,8 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     for (const auto& k : propKeys) {
       if (k == "_eid")
         continue;  // runtime handle, never persisted
+      if (!so.assetId.empty() && (k == "mesh" || k == "renderScale"))
+        continue;  // asset-backed objects resolve these from the asset registry
       props[k] = so.props.at(k);
     }
     if (!props.empty())
