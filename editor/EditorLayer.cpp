@@ -377,6 +377,30 @@ void EditorLayer::Toggle() {
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/dungeon.json";
+
+  for (auto& obj : doc.objects) {
+    if (obj.type != SceneObjectType::Prop)
+      continue;
+    const auto behIt = obj.props.find("behavior");
+    if (behIt == obj.props.end() || behIt->second.empty() || behIt->second == "none")
+      continue;
+
+    bool hasScript = false;
+    for (const auto& comp : obj.components) {
+      if (comp.type == "script") {
+        hasScript = true;
+        break;
+      }
+    }
+    if (!hasScript) {
+      ComponentDesc script;
+      script.type = "script";
+      script.props["behaviorTag"] = behIt->second;
+      obj.components.push_back(std::move(script));
+    }
+    obj.props.erase("behavior");
+  }
+
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
@@ -2131,10 +2155,32 @@ void EditorLayer::DrawPropertiesPanel() {
           }
         }
       } else if (comp.type == "script") {
-        char buf[256] = {};
-        std::snprintf(buf, sizeof(buf), "%s", comp.props["behaviorTag"].c_str());
-        if (ImGui::InputText("Behavior Tag", buf, sizeof(buf))) {
-          comp.props["behaviorTag"] = buf;
+        std::vector<std::string> options;
+        if (m_scriptBehaviorOptionsCb)
+          options = m_scriptBehaviorOptionsCb();
+        options.erase(std::remove_if(options.begin(), options.end(), [](const std::string& s) {
+                        return s.empty();
+                      }),
+                      options.end());
+        std::sort(options.begin(), options.end());
+        options.erase(std::unique(options.begin(), options.end()), options.end());
+
+        std::string current = comp.props["behaviorTag"];
+        if (!current.empty() && std::find(options.begin(), options.end(), current) == options.end())
+          options.push_back(current);
+
+        std::vector<const char*> labels;
+        labels.reserve(options.size() + 1);
+        labels.push_back("<none>");
+        int currentIdx = 0;
+        for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+          labels.push_back(options[static_cast<size_t>(i)].c_str());
+          if (options[static_cast<size_t>(i)] == current)
+            currentIdx = i + 1;
+        }
+
+        if (ImGui::Combo("Behavior", &currentIdx, labels.data(), static_cast<int>(labels.size()))) {
+          comp.props["behaviorTag"] = (currentIdx == 0) ? "" : options[static_cast<size_t>(currentIdx - 1)];
           m_document.dirty = true;
         }
       }

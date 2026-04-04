@@ -13,6 +13,7 @@ struct HUDStats {
   float posX, posY, posZ;
   float velY;
   bool onGround;
+  bool sceneCameraOn;
   float speed;
   float camYaw, camPitch;
   int collisionBlockCount;
