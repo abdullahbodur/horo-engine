@@ -320,7 +320,7 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
       *outError = "Copy failed: " + ec.message();
     return {};
   }
-  return dest.generic_string();
+  return fs::relative(dest, ProjectPath::Root()).generic_string();
 }
 
 // Copy the .mtl referenced by objSrcPath and all textures it references
@@ -381,9 +381,12 @@ static void CopyCompanionAssets(const std::string& objSrcPath, const std::string
   }
 }
 
-// Copy picked .obj into assets/models/{stem}/ (and companion MTL/textures). Returns
-// project-relative mesh path (e.g. assets/models/foo/foo.obj) or empty on failure.
-static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError) {
+// Copy picked .obj into assets/models/{folderHint or stem}/ (and companion MTL/textures).
+// folderHint: asset ID if already known (e.g. "signenemy-5") so OBJ lands in the same
+// folder as its texture. Falls back to OBJ filename stem when empty.
+// Returns project-relative mesh path (e.g. assets/models/signenemy-5/signenemy.obj).
+static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError,
+                                                 const std::string& folderHint = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -393,7 +396,8 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   const fs::path src(pickedPath);
-  const fs::path destDir = ProjectPath::Root() / "assets/models" / src.stem();
+  const std::string folderName = folderHint.empty() ? src.stem().string() : folderHint;
+  const fs::path destDir = ProjectPath::Root() / "assets/models" / folderName;
   std::error_code ec;
   fs::create_directories(destDir, ec);
   if (ec) {
@@ -409,7 +413,7 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   CopyCompanionAssets(src.string(), destDir.string());
-  return MeshTagFromImportedPath(pickedPath);
+  return (fs::path("assets/models") / folderName / src.filename()).generic_string();
 }
 
 }  // namespace
@@ -552,7 +556,7 @@ void EditorLayer::ProcessPendingPathDrops() {
     if (!IsObjFilePath(path))
       continue;
     std::string err;
-    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err);
+    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err, m_assetDraftId);
     if (meshTag.empty()) {
       if (!err.empty())
         LOG_WARN("Drop import: %s", err.c_str());
@@ -922,7 +926,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
       if (chosen.empty())
         break;
       std::string err;
-      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err);
+      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err, m_assetDraftId);
       if (!meshTag.empty()) {
         m_assetDraftMesh = meshTag;
         if (m_assetDraftId.empty())
