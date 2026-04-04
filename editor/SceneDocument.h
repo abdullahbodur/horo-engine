@@ -8,7 +8,17 @@
 namespace Monolith {
 namespace Editor {
 
-enum class SceneObjectType { Panel, Prop, Light };
+enum class SceneObjectType { Panel, Prop, Light, Camera };
+
+// A single component attached to a SceneObject (like Unity Inspector components).
+// Built-in types and their props:
+//   "light"      → intensity (float 0-10), color ("r,g,b"), radius (float)
+//   "rigidbody"  → mass (float), isKinematic ("true"/"false"), useGravity ("true"/"false")
+//   "script"     → behaviorTag (string)
+struct ComponentDesc {
+  std::string type;  // "light", "rigidbody", "script"
+  std::unordered_map<std::string, std::string> props;  // type-specific props
+};
 
 // Reusable mesh + scale definition.
 // Multiple scene objects can reference the same asset by id instead of
@@ -21,7 +31,7 @@ struct AssetDef {
 
 // One generic scene object: transform + optional asset reference + props bag.
 // If assetId is set, mesh and renderScale are resolved from SceneDocument::assets;
-// the per-object props only carry type-specific overrides (behavior, isLight, etc.).
+// the per-object props only carry type-specific overrides (behavior, etc.).
 // _eid is a runtime-only handle and is never written to disk.
 struct SceneObject {
   std::string id;
@@ -29,8 +39,10 @@ struct SceneObject {
   Vec3 position = Vec3::Zero();
   Vec3 scale = Vec3::One();  // world-space AABB half-extents
   float yaw = 0.0f;          // degrees around Y axis
+  float pitch = 0.0f;        // degrees around X axis; clamped ±89 for Camera objects
   std::string assetId;       // empty → use inline props
   std::unordered_map<std::string, std::string> props;
+  std::vector<ComponentDesc> components;  // attached components (light, rigidbody, script, …)
 };
 
 struct SceneDocument {

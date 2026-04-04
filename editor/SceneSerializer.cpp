@@ -17,6 +17,8 @@ static SceneObjectType TypeFromString(const std::string& s) {
     return SceneObjectType::Prop;
   if (s == "Light")
     return SceneObjectType::Light;
+  if (s == "camera")
+    return SceneObjectType::Camera;
   return SceneObjectType::Panel;
 }
 
@@ -26,6 +28,8 @@ static const char* TypeToString(SceneObjectType t) {
       return "Prop";
     case SceneObjectType::Light:
       return "Light";
+    case SceneObjectType::Camera:
+      return "camera";
     default:
       return "Panel";
   }
@@ -86,6 +90,31 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
     if (obj.contains("props") && obj["props"].is_object())
       for (auto& [k, v] : obj["props"].items())
         so.props[k] = v.get<std::string>();
+
+    // ---- Components ----
+    if (obj.contains("components") && obj["components"].is_array()) {
+      for (auto& comp : obj["components"]) {
+        ComponentDesc cd;
+        cd.type = comp.value("type", "");
+        if (comp.contains("props") && comp["props"].is_object())
+          for (auto& [k, v] : comp["props"].items())
+            cd.props[k] = v.get<std::string>();
+        if (!cd.type.empty())
+          so.components.push_back(std::move(cd));
+      }
+    }
+
+    // ---- Migration: isLight → light component ----
+    auto isLightIt = so.props.find("isLight");
+    if (isLightIt != so.props.end() && isLightIt->second == "true") {
+      ComponentDesc light;
+      light.type = "light";
+      light.props["intensity"] = "1";
+      light.props["color"] = "1,1,1";
+      light.props["radius"] = "5";
+      so.components.push_back(std::move(light));
+      so.props.erase(isLightIt);
+    }
 
     doc.objects.push_back(std::move(so));
   }
@@ -158,6 +187,26 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
         props[k] = so.props.at(k);
       }
       obj["props"] = props;
+    }
+
+    // ---- Components ----
+    if (!so.components.empty()) {
+      json comps = json::array();
+      for (const auto& cd : so.components) {
+        json c;
+        c["type"] = cd.type;
+        json cprops = json::object();
+        std::vector<std::string> cpropKeys;
+        cpropKeys.reserve(cd.props.size());
+        for (const auto& kv : cd.props)
+          cpropKeys.push_back(kv.first);
+        std::sort(cpropKeys.begin(), cpropKeys.end());
+        for (const auto& k : cpropKeys)
+          cprops[k] = cd.props.at(k);
+        c["props"] = cprops;
+        comps.push_back(std::move(c));
+      }
+      obj["components"] = std::move(comps);
     }
 
     j["objects"].push_back(obj);
