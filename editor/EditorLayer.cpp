@@ -1,4 +1,5 @@
 #include "editor/EditorLayer.h"
+#include "editor/TransformGizmo.h"
 
 // Windows headers must come before GLFW to avoid type redefinition conflicts
 #ifdef _WIN32
@@ -39,6 +40,7 @@
 #include "editor/Raycaster.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
+#include "math/Quaternion.h"
 #include "math/Transform.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
@@ -644,8 +646,12 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
-    if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput, ImGui::IsAnyItemActive(),
-                                 hasBlockingPopup)) {
+    // Escape: dismiss gizmo first; only then process editor-close logic.
+    if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
+        !hasBlockingPopup && m_gizmo.IsActive()) {
+      m_gizmo.Deactivate();
+    } else if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput,
+                                        ImGui::IsAnyItemActive(), hasBlockingPopup)) {
       if (ResolveEditorExitDecision(m_document.dirty) ==
           EditorExitDecision::PromptUnsavedConfirm) {
         m_confirmExitOpen = true;
@@ -680,7 +686,95 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       }
       m_prevCopyRef = currCopyRef;
 
-      HandlePicking(cam, screenW, screenH);
+      // ---- Gizmo mode hotkeys (W/E/R) ----------------------------------------
+      if (!io.WantTextInput && !ImGui::IsAnyItemActive()) {
+        const int gizmoIdx = PrimaryIdx();
+        bool currW = glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS;
+        bool currE = glfwGetKey(m_window, GLFW_KEY_E) == GLFW_PRESS;
+        bool currR = glfwGetKey(m_window, GLFW_KEY_R) == GLFW_PRESS;
+
+        if (gizmoIdx >= 0 &&
+            gizmoIdx < static_cast<int>(m_document.objects.size())) {
+          const auto& gizmoObj = m_document.objects[gizmoIdx];
+          Quaternion  gizmoRot = Quaternion::FromEuler(ToRadians(gizmoObj.pitch),
+                                                       ToRadians(gizmoObj.yaw),
+                                                       ToRadians(gizmoObj.roll));
+          if (currW && !m_prevGizmoW)
+            m_gizmo.Activate(GizmoMode::Translate, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+          if (currE && !m_prevGizmoE)
+            m_gizmo.Activate(GizmoMode::Rotate, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+          if (currR && !m_prevGizmoR)
+            m_gizmo.Activate(GizmoMode::Scale, gizmoObj.position, gizmoRot,
+                             gizmoObj.scale);
+        }
+        m_prevGizmoW = currW;
+        m_prevGizmoE = currE;
+        m_prevGizmoR = currR;
+      }
+
+      // Sync gizmo to primary selected object each frame
+      if (m_gizmo.IsActive()) {
+        const int syncIdx = PrimaryIdx();
+        if (syncIdx < 0 ||
+            syncIdx >= static_cast<int>(m_document.objects.size())) {
+          m_gizmo.Deactivate();
+        } else {
+          const auto& syncObj = m_document.objects[syncIdx];
+          Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
+                                                      ToRadians(syncObj.yaw),
+                                                      ToRadians(syncObj.roll));
+          m_gizmo.SyncTarget(syncObj.position, syncRot, syncObj.scale);
+        }
+      }
+
+      // ---- Gizmo update (consumes mouse before picking) ----------------------
+      Vec3       dPos   = Vec3::Zero();
+      Quaternion dRot   = Quaternion::Identity();
+      Vec3       dScale = Vec3::One();
+      bool gizmoConsumed = false;
+      if (m_gizmo.IsActive()) {
+        gizmoConsumed = m_gizmo.Update(m_window, cam, screenW, screenH,
+                                       dPos, dRot, dScale);
+        // Detect any non-trivial delta
+        float dRotXYZSq = dRot.x * dRot.x + dRot.y * dRot.y + dRot.z * dRot.z;
+        bool anyDelta = dPos.LengthSq() > 1e-10f
+                     || dRotXYZSq > 1e-8f
+                     || std::abs(dScale.x - 1.0f) > 1e-6f
+                     || std::abs(dScale.y - 1.0f) > 1e-6f
+                     || std::abs(dScale.z - 1.0f) > 1e-6f;
+        if (anyDelta) {
+          for (int si : m_selectedIndices) {
+            if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
+              continue;
+            auto& applyObj   = m_document.objects[si];
+            applyObj.position = applyObj.position + dPos;
+            applyObj.scale.x *= dScale.x;
+            applyObj.scale.y *= dScale.y;
+            applyObj.scale.z *= dScale.z;
+            Quaternion curRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                                      ToRadians(applyObj.yaw),
+                                                      ToRadians(applyObj.roll));
+            Quaternion nextRot = (dRot * curRot).Normalized();
+            Vec3       euler   = nextRot.ToEuler();
+            applyObj.pitch = ToDegrees(euler.x);
+            applyObj.yaw   = ToDegrees(euler.y);
+            applyObj.roll  = ToDegrees(euler.z);
+            m_document.dirty = true;
+            if (m_transformCb)
+              m_transformCb(applyObj);
+          }
+        }
+      }
+
+      if (gizmoConsumed) {
+        // Update m_prevMouseL so HandlePicking doesn't see a phantom click
+        // on the frame when the gizmo releases.
+        m_prevMouseL = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+      } else {
+        HandlePicking(cam, screenW, screenH);
+      }
 
       // Del key — delete all selected objects immediately
       bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
@@ -760,7 +854,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
   }
 }
 
-void EditorLayer::Render(const Camera& cam) {
+void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ProcessDeferredFilePicks();
   if (!m_active) {
     m_albedoDraftDrop.Clear();
@@ -785,11 +879,13 @@ void EditorLayer::Render(const Camera& cam) {
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     DrawSelectionHighlight();  // queues to DebugDraw
+    if (m_gizmo.IsActive())
+      m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
 
-  // Flush any queued debug primitives (selection box, etc.) before ImGui
+  // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
   DebugDraw::Flush(cam);
 
   ImGui::Render();

@@ -5,6 +5,7 @@
 
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
+#include "editor/TransformGizmo.h"
 #include "renderer/Camera.h"
 
 struct GLFWwindow;
@@ -38,9 +39,9 @@ class EditorLayer {
   // (caller should suppress game input in that case).
   bool OnUpdate(float dt, Camera& cam, int screenW, int screenH);
 
-  // Render ImGui panels and the selection highlight.
+  // Render ImGui panels, selection highlight, and transform gizmo.
   // Must be called after the game 3D render and before RenderContext::EndFrame.
-  void Render(const Camera& cam);
+  void Render(const Camera& cam, int screenW, int screenH);
 
   // Replace the current document with a live-scene snapshot (called on editor open).
   void LoadDocument(SceneDocument doc);
@@ -97,6 +98,9 @@ class EditorLayer {
   bool m_prevDel = false;
   bool m_prevCopyRef = false;
   bool m_prevEsc = false;
+  bool m_prevGizmoW = false;
+  bool m_prevGizmoE = false;
+  bool m_prevGizmoR = false;
   bool m_closeRequested = false;
 
   // Fly camera
@@ -112,6 +116,8 @@ class EditorLayer {
 
   void ToggleFlyMode(Camera& cam);
   void UpdateFlyCamera(float dt, Camera& cam);
+
+  TransformGizmo m_gizmo;
 
   SceneDocument m_document;
   SceneDocument m_lastSavedDocument;
