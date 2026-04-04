@@ -39,7 +39,6 @@
 #include "math/MathUtils.h"
 #include "math/Transform.h"
 #include "editor/SceneSerializer.h"
-#include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
@@ -96,50 +95,20 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   return true;
 }
 
-// ImGui screen space: origin top-left, y down. Matches glfwGetCursorPos with default viewport.
-static bool WorldPointToImGuiScreen(const Camera& cam,
-                                    const Vec3& world,
-                                    float sw,
-                                    float sh,
-                                    float* outSx,
-                                    float* outSy) {
-  Mat4 vp = cam.GetViewProjection();
-  Vec4 clip = vp * Vec4(world, 1.0f);
-  if (clip.w <= 1e-5f)
-    return false;
-  const float iw = 1.0f / clip.w;
-  const float ndcX = clip.x * iw;
-  const float ndcY = clip.y * iw;
-  *outSx = (ndcX * 0.5f + 0.5f) * sw;
-  *outSy = (1.0f - (ndcY * 0.5f + 0.5f)) * sh;
-  return true;
-}
-
-// Unit screen direction for a world-space axis from pivot (for view gizmo).
+// Screen direction of a world-space axis for the orientation corner gizmo.
+// Uses the view matrix directly — pivot-based perspective projection would introduce
+// distortion for off-centre or off-screen pivots and is incorrect for a corner widget.
 static void WorldAxisToScreenDir(const Camera& cam,
-                                 const Vec3& pivot,
                                  const Vec3& worldUnit,
-                                 float sw,
-                                 float sh,
                                  float* outDx,
-                                 float* outDy) {
-  float ax, ay, bx, by;
-  if (WorldPointToImGuiScreen(cam, pivot, sw, sh, &ax, &ay)) {
-    const Vec3 tip = pivot + worldUnit * 0.35f;
-    if (WorldPointToImGuiScreen(cam, tip, sw, sh, &bx, &by)) {
-      float dx = bx - ax, dy = by - ay;
-      const float len = std::sqrt(dx * dx + dy * dy);
-      if (len > 1e-3f) {
-        *outDx = dx / len;
-        *outDy = dy / len;
-        return;
-      }
-    }
-  }
+                                 float* outDy,
+                                 float* outViewZ = nullptr) {
   const Mat4 view = cam.GetView();
   const Vec3 e = view.TransformVector(worldUnit);
-  float dx = e.x;
-  float dy = -e.y;
+  if (outViewZ)
+    *outViewZ = e.z;
+  const float dx = e.x;
+  const float dy = -e.y;  // ImGui Y is down
   const float len = std::sqrt(dx * dx + dy * dy);
   if (len < 1e-4f) {
     *outDx = 1.f;
@@ -978,12 +947,6 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGui::TextUnformatted("View");
 
   const int idx = PrimaryIdx();
-  const Vec3 pivot = (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
-                         ? m_document.objects[static_cast<size_t>(idx)].position
-                         : Vec3::Zero();
-
-  const float sw = io.DisplaySize.x;
-  const float sh = io.DisplaySize.y;
 
   ImDrawList* dl = ImGui::GetWindowDrawList();
   const ImVec2 inner0 = ImGui::GetWindowContentRegionMin();
@@ -1008,71 +971,78 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
       {ViewSnap::Front, ViewSnap::Back, {0.0f, 0.0f, 1.0f}, IM_COL32(82, 148, 255, 255), "Z"},
   };
 
-  float vx = 0.f, vy = 0.f;
+  // Pre-compute screen directions and view-space depth once per frame.
+  // Shared by hover and draw loops — no redundant WorldAxisToScreenDir calls.
+  struct AxisCache {
+    float dx, dy;  // normalised screen direction of the +axis
+    float viewZ;   // view-space Z (positive = toward camera) for depth sort
+    int origIdx;
+  };
+  AxisCache cache[3];
+  for (int i = 0; i < 3; i++) {
+    float vz = 0.f;
+    WorldAxisToScreenDir(cam, kAxes[i].worldPlus, &cache[i].dx, &cache[i].dy, &vz);
+    cache[i].viewZ  = vz;
+    cache[i].origIdx = i;
+  }
+
   ViewSnap hoverSnap = ViewSnap::None;
 
   if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
     const ImVec2 mouse = io.MousePos;
-    float bestD = kHitPxSq * 4.f;
-    for (const AxisDraw& ad : kAxes) {
-      WorldAxisToScreenDir(cam, pivot, ad.worldPlus, sw, sh, &vx, &vy);
-      const float cx = center.x;
-      const float cy = center.y;
-      const float px1 = cx + vx * kShaftPx;
-      const float py1 = cy + vy * kShaftPx;
-      const float px2 = cx - vx * kShaftPx;
-      const float py2 = cy - vy * kShaftPx;
+    float bestD = kHitPxSq;  // was kHitPxSq * 4.f — that doubled the effective hit radius
+    const float cx = center.x, cy = center.y;
+    for (int i = 0; i < 3; i++) {
+      const AxisDraw& ad = kAxes[cache[i].origIdx];
+      const float px1 = cx + cache[i].dx * kShaftPx;
+      const float py1 = cy + cache[i].dy * kShaftPx;
+      const float px2 = cx - cache[i].dx * kShaftPx;
+      const float py2 = cy - cache[i].dy * kShaftPx;
       const float d1 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px1, py1);
       const float d2 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px2, py2);
-      if (d1 < bestD) {
-        bestD = d1;
-        hoverSnap = ad.posSnap;
-      }
-      if (d2 < bestD) {
-        bestD = d2;
-        hoverSnap = ad.negSnap;
-      }
+      if (d1 < bestD) { bestD = d1; hoverSnap = ad.posSnap; }
+      if (d2 < bestD) { bestD = d2; hoverSnap = ad.negSnap; }
     }
   }
 
-  for (const AxisDraw& ad : kAxes) {
-    WorldAxisToScreenDir(cam, pivot, ad.worldPlus, sw, sh, &vx, &vy);
-    const float cx = center.x;
-    const float cy = center.y;
-    const float px1 = cx + vx * kShaftPx;
-    const float py1 = cy + vy * kShaftPx;
-    const float px2 = cx - vx * kShaftPx;
-    const float py2 = cy - vy * kShaftPx;
+  // Sort ascending by view-space Z so background axes draw first (painter's algorithm).
+  std::sort(std::begin(cache), std::end(cache),
+            [](const AxisCache& a, const AxisCache& b) { return a.viewZ < b.viewZ; });
+
+  const float fs = ImGui::GetFontSize();
+  const float cx = center.x, cy = center.y;
+  for (int si = 0; si < 3; si++) {
+    const AxisCache& ac = cache[si];
+    const AxisDraw& ad = kAxes[ac.origIdx];
+    const float px1 = cx + ac.dx * kShaftPx;
+    const float py1 = cy + ac.dy * kShaftPx;
+    const float px2 = cx - ac.dx * kShaftPx;
+    const float py2 = cy - ac.dy * kShaftPx;
 
     const bool hlPos = (hoverSnap == ad.posSnap);
     const bool hlNeg = (hoverSnap == ad.negSnap);
     ImU32 cPos = ad.col;
     ImU32 cNeg = ad.col;
     switch (ad.posSnap) {
-      case ViewSnap::Right:
-        cNeg = IM_COL32(150, 48, 48, 255);
-        break;
-      case ViewSnap::Top:
-        cNeg = IM_COL32(58, 145, 64, 255);
-        break;
-      case ViewSnap::Front:
-        cNeg = IM_COL32(52, 100, 190, 255);
-        break;
-      default:
-        break;
+      case ViewSnap::Right: cNeg = IM_COL32(150, 48, 48, 255); break;
+      case ViewSnap::Top:   cNeg = IM_COL32(58, 145, 64, 255); break;
+      case ViewSnap::Front: cNeg = IM_COL32(52, 100, 190, 255); break;
+      default: break;
     }
-    if (hlPos)
-      cPos = IM_COL32(255, 255, 200, 255);
-    if (hlNeg)
-      cNeg = IM_COL32(255, 255, 200, 255);
+    if (hlPos) cPos = IM_COL32(255, 255, 200, 255);
+    if (hlNeg) cNeg = IM_COL32(255, 255, 200, 255);
 
     dl->AddLine(center, ImVec2(px1, py1), cPos, hlPos ? 4.0f : 3.0f);
     dl->AddLine(center, ImVec2(px2, py2), cNeg, hlNeg ? 4.0f : 2.5f);
     dl->AddCircleFilled(ImVec2(px1, py1), hlPos ? 5.0f : 4.0f, cPos, 10);
     dl->AddCircleFilled(ImVec2(px2, py2), hlNeg ? 4.5f : 3.5f, cNeg, 10);
 
-    const ImVec2 tOff(4.0f, -6.0f);
-    dl->AddText(ImVec2(px1 + tOff.x, py1 + tOff.y), cPos, ad.label);
+    // Offset label along the axis direction so it doesn't overlap the circle
+    // regardless of which way the axis is pointing on screen.
+    const float tDist = (hlPos ? 5.0f : 4.0f) + 3.0f;
+    dl->AddText(ImVec2(px1 + ac.dx * tDist - fs * 0.3f,
+                       py1 + ac.dy * tDist - fs * 0.5f),
+                cPos, ad.label);
   }
 
   if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) && ImGui::IsMouseClicked(0) &&
