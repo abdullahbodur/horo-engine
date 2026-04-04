@@ -40,6 +40,7 @@ struct SceneObject {
   Vec3 scale = Vec3::One();  // world-space AABB half-extents
   float yaw = 0.0f;          // degrees around Y axis
   float pitch = 0.0f;        // degrees around X axis; clamped ±89 for Camera objects
+  float roll = 0.0f;         // degrees around Z axis
   std::string assetId;       // empty → use inline props
   std::unordered_map<std::string, std::string> props;
   std::vector<ComponentDesc> components;  // attached components (light, rigidbody, script, …)
