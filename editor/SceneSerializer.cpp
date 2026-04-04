@@ -176,24 +176,26 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
       obj["roll"] = so.roll;
 
     if (!so.assetId.empty()) {
-      // Asset reference — mesh/renderScale live in the assets block
+      // Asset reference — mesh/renderScale live in the assets block.
       obj["asset"] = so.assetId;
-    } else {
-      // Inline props — skip runtime-only keys (e.g. _eid)
-      json props = json::object();
-      std::vector<std::string> propKeys;
-      propKeys.reserve(so.props.size());
-      for (const auto& kv : so.props)
-        propKeys.push_back(kv.first);
-      std::sort(propKeys.begin(), propKeys.end());
-
-      for (const auto& k : propKeys) {
-        if (k == "_eid")
-          continue;  // runtime handle, never persisted
-        props[k] = so.props.at(k);
-      }
-      obj["props"] = props;
     }
+
+    // Persist type-specific and hierarchy props for both asset-backed and inline objects.
+    // Runtime-only keys (e.g. _eid) are always skipped.
+    json props = json::object();
+    std::vector<std::string> propKeys;
+    propKeys.reserve(so.props.size());
+    for (const auto& kv : so.props)
+      propKeys.push_back(kv.first);
+    std::sort(propKeys.begin(), propKeys.end());
+
+    for (const auto& k : propKeys) {
+      if (k == "_eid")
+        continue;  // runtime handle, never persisted
+      props[k] = so.props.at(k);
+    }
+    if (!props.empty())
+      obj["props"] = std::move(props);
 
     // ---- Components ----
     if (!so.components.empty()) {

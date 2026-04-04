@@ -30,6 +30,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "core/Logger.h"
 #include "editor/EditorAssetImport.h"
@@ -1247,7 +1248,9 @@ void EditorLayer::DrawObjectList() {
       ++shownObjectCount;
 
       ImGui::PushID(idx);
-      ImGui::Indent(depth * 14.0f);
+      const float treeIndent = 14.0f;
+      if (depth > 0)
+        ImGui::Indent(treeIndent);
       const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
       ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
       if (!hasChildren)
@@ -1300,7 +1303,8 @@ void EditorLayer::DrawObjectList() {
         ImGui::TreePop();
       }
 
-      ImGui::Unindent(depth * 14.0f);
+      if (depth > 0)
+        ImGui::Unindent(treeIndent);
       ImGui::PopID();
     };
 
@@ -2743,19 +2747,33 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
 }
 
 std::string EditorLayer::GenerateId(const SceneDocument& doc) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "obj_%03d", static_cast<int>(doc.objects.size()));
-  return buf;
+  std::unordered_set<std::string> existingIds;
+  existingIds.reserve(doc.objects.size() * 2);
+  for (const auto& obj : doc.objects)
+    existingIds.insert(obj.id);
+
+  for (int i = 0; i < 1000000; ++i) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "obj_%03d", i);
+    if (existingIds.find(buf) == existingIds.end())
+      return buf;
+  }
+  return "obj_new";
 }
 
 std::string EditorLayer::GenerateCameraId(const SceneDocument& doc) {
-  int count = 0;
-  for (const auto& o : doc.objects)
-    if (o.type == SceneObjectType::Camera)
-      ++count;
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "cam_%03d", count);
-  return buf;
+  std::unordered_set<std::string> existingIds;
+  existingIds.reserve(doc.objects.size() * 2);
+  for (const auto& obj : doc.objects)
+    existingIds.insert(obj.id);
+
+  for (int i = 0; i < 1000000; ++i) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "cam_%03d", i);
+    if (existingIds.find(buf) == existingIds.end())
+      return buf;
+  }
+  return "cam_new";
 }
 
 // ---- Fly camera --------------------------------------------------------------
