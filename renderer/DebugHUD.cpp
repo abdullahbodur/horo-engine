@@ -1449,12 +1449,17 @@ void DebugHUD::Render() {
     y += LINE;
     {
       char buf[64];
-      std::snprintf(buf, sizeof(buf), "YAW  : %.1f", s_stats.camYaw);
-      DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
-      y += LINE;
-      std::snprintf(buf, sizeof(buf), "PITCH: %.1f", s_stats.camPitch);
-      DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
-      y += LINE;
+      if (!s_stats.sceneCameraOn) {
+        DrawText("CAMERA OFF", X0, y, 1.0f, 0.35f, 0.35f, SCALE);
+        y += LINE;
+      } else {
+        std::snprintf(buf, sizeof(buf), "YAW  : %.1f", s_stats.camYaw);
+        DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
+        y += LINE;
+        std::snprintf(buf, sizeof(buf), "PITCH: %.1f", s_stats.camPitch);
+        DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
+        y += LINE;
+      }
     }
     y += 4.0f;
 

@@ -377,6 +377,30 @@ void EditorLayer::Toggle() {
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/dungeon.json";
+
+  for (auto& obj : doc.objects) {
+    if (obj.type != SceneObjectType::Prop)
+      continue;
+    const auto behIt = obj.props.find("behavior");
+    if (behIt == obj.props.end() || behIt->second.empty() || behIt->second == "none")
+      continue;
+
+    bool hasScript = false;
+    for (const auto& comp : obj.components) {
+      if (comp.type == "script") {
+        hasScript = true;
+        break;
+      }
+    }
+    if (!hasScript) {
+      ComponentDesc script;
+      script.type = "script";
+      script.props["behaviorTag"] = behIt->second;
+      obj.components.push_back(std::move(script));
+    }
+    obj.props.erase("behavior");
+  }
+
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
@@ -1924,6 +1948,171 @@ void EditorLayer::DrawPropertiesPanel() {
         }
       }
     }
+  }
+
+  // ---- Components ----
+  ImGui::Separator();
+  ImGui::Text("Components");
+
+  int removeIdx = -1;
+  for (int ci = 0; ci < static_cast<int>(obj.components.size()); ++ci) {
+    ComponentDesc& comp = obj.components[ci];
+
+    // Collapsing header label + inline [x] button via ID stack trick
+    std::string headerLabel = (comp.type == "light")      ? "Light"
+                              : (comp.type == "rigidbody") ? "RigidBody"
+                              : (comp.type == "script")    ? "Script"
+                                                           : comp.type;
+    ImGui::PushID(ci);
+    bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+    // Remove button on the same line, right-aligned
+    float btnW = ImGui::CalcTextSize("x").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW);
+    if (ImGui::SmallButton("x"))
+      removeIdx = ci;
+
+    if (open) {
+      if (comp.type == "light") {
+        // Intensity
+        {
+          float v = comp.props.count("intensity") ? std::strtof(comp.props["intensity"].c_str(), nullptr) : 1.0f;
+          if (ImGui::SliderFloat("Intensity", &v, 0.0f, 10.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["intensity"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Color
+        {
+          float col[3] = {1.0f, 1.0f, 1.0f};
+          if (comp.props.count("color")) {
+            char tmp[64] = {};
+            std::snprintf(tmp, sizeof(tmp), "%s", comp.props["color"].c_str());
+            char* p = tmp;
+            char* end = nullptr;
+            col[0] = std::strtof(p, &end);
+            if (end && *end) p = end + 1;
+            col[1] = std::strtof(p, &end);
+            if (end && *end) p = end + 1;
+            col[2] = std::strtof(p, nullptr);
+          }
+          if (ImGui::ColorEdit3("Color", col)) {
+            char tmp[64];
+            std::snprintf(tmp, sizeof(tmp), "%.4f,%.4f,%.4f", col[0], col[1], col[2]);
+            comp.props["color"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Radius
+        {
+          float v = comp.props.count("radius") ? std::strtof(comp.props["radius"].c_str(), nullptr) : 5.0f;
+          if (ImGui::DragFloat("Radius", &v, 0.1f, 0.0f, 100.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["radius"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+      } else if (comp.type == "rigidbody") {
+        // Mass
+        {
+          float v = comp.props.count("mass") ? std::strtof(comp.props["mass"].c_str(), nullptr) : 1.0f;
+          if (ImGui::DragFloat("Mass", &v, 0.1f, 0.0f, 10000.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["mass"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Is Kinematic
+        {
+          bool b = comp.props.count("isKinematic") && comp.props["isKinematic"] == "true";
+          if (ImGui::Checkbox("Is Kinematic", &b)) {
+            comp.props["isKinematic"] = b ? "true" : "false";
+            m_document.dirty = true;
+          }
+        }
+        // Use Gravity
+        {
+          bool b = !comp.props.count("useGravity") || comp.props["useGravity"] == "true";
+          if (ImGui::Checkbox("Use Gravity", &b)) {
+            comp.props["useGravity"] = b ? "true" : "false";
+            m_document.dirty = true;
+          }
+        }
+      } else if (comp.type == "script") {
+        std::vector<std::string> options;
+        if (m_scriptBehaviorOptionsCb)
+          options = m_scriptBehaviorOptionsCb();
+        options.erase(std::remove_if(options.begin(), options.end(), [](const std::string& s) {
+                        return s.empty();
+                      }),
+                      options.end());
+        std::sort(options.begin(), options.end());
+        options.erase(std::unique(options.begin(), options.end()), options.end());
+
+        std::string current = comp.props["behaviorTag"];
+        if (!current.empty() && std::find(options.begin(), options.end(), current) == options.end())
+          options.push_back(current);
+
+        std::vector<const char*> labels;
+        labels.reserve(options.size() + 1);
+        labels.push_back("<none>");
+        int currentIdx = 0;
+        for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+          labels.push_back(options[static_cast<size_t>(i)].c_str());
+          if (options[static_cast<size_t>(i)] == current)
+            currentIdx = i + 1;
+        }
+
+        if (ImGui::Combo("Behavior", &currentIdx, labels.data(), static_cast<int>(labels.size()))) {
+          comp.props["behaviorTag"] = (currentIdx == 0) ? "" : options[static_cast<size_t>(currentIdx - 1)];
+          m_document.dirty = true;
+        }
+      }
+    }
+    ImGui::PopID();
+  }
+
+  if (removeIdx >= 0) {
+    obj.components.erase(obj.components.begin() + removeIdx);
+    m_document.dirty = true;
+  }
+
+  // ---- Add Component button ----
+  ImGui::Spacing();
+  if (ImGui::Button("+ Add Component")) {
+    ImGui::OpenPopup("##add_component_popup");
+  }
+  if (ImGui::BeginPopup("##add_component_popup")) {
+    if (ImGui::MenuItem("Light")) {
+      ComponentDesc cd;
+      cd.type = "light";
+      cd.props["intensity"] = "1.0000";
+      cd.props["color"] = "1.0000,1.0000,1.0000";
+      cd.props["radius"] = "5.0000";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    if (ImGui::MenuItem("RigidBody")) {
+      ComponentDesc cd;
+      cd.type = "rigidbody";
+      cd.props["mass"] = "1.0000";
+      cd.props["isKinematic"] = "false";
+      cd.props["useGravity"] = "true";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    if (ImGui::MenuItem("Script")) {
+      ComponentDesc cd;
+      cd.type = "script";
+      cd.props["behaviorTag"] = "";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    ImGui::EndPopup();
   }
 
   ImGui::Separator();

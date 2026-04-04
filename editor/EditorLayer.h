@@ -62,6 +62,10 @@ class EditorLayer {
     m_transformCb = std::move(cb);
   }
 
+  void SetScriptBehaviorOptionsProvider(std::function<std::vector<std::string>()> cb) {
+    m_scriptBehaviorOptionsCb = std::move(cb);
+  }
+
   bool IsActive() const { return m_active; }
   bool WantsSceneReload() const { return m_wantsReload; }
 
@@ -115,6 +119,7 @@ class EditorLayer {
   EditorSchema m_schema;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
   std::function<void(const SceneObject&)> m_transformCb;
+  std::function<std::vector<std::string>()> m_scriptBehaviorOptionsCb;
   Registry* m_liveRegistry = nullptr;
 
   // Helpers
