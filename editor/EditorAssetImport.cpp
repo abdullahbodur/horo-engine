@@ -31,8 +31,7 @@ std::string MeshTagFromImportedPath(const std::string& path) {
   if (path.empty())
     return {};
   const std::filesystem::path src(path);
-  const std::string stem = src.stem().string();
-  return (std::filesystem::path("assets/models") / stem / src.filename()).generic_string();
+  return (std::filesystem::path("assets/models") / src.filename()).generic_string();
 }
 
 std::string SuggestRenderScale(const std::string& meshTag, float targetHeight)

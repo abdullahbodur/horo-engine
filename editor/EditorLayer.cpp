@@ -777,7 +777,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
               glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
               glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
               glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
-          const bool shiftHeld =
+          const bool shiftHeldSnap =
               glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
               glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
 
@@ -842,7 +842,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
             }
           }
 
-          if (shiftHeld && dPos.LengthSq() > 1e-12f &&
+          if (shiftHeldSnap && dPos.LengthSq() > 1e-12f &&
               primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
 
             constexpr float kGridSize = 0.5f;
