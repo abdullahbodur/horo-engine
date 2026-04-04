@@ -48,7 +48,7 @@ struct SceneObject {
 
 struct SceneDocument {
   int version = 1;
-  std::string sceneId = "dungeon";
+  std::string sceneId = "world";
   std::string filePath;
   bool dirty = false;
   std::unordered_map<std::string, std::string> settings;  // scene-level settings (gravity, ambient, etc.)
