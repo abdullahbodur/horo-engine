@@ -773,8 +773,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
             int axisIdx = (dragAxis == GizmoAxis::X) ? 0 :
                           (dragAxis == GizmoAxis::Y) ? 1 : 2;
 
-            constexpr float kSnapThresh = 0.5f;
-            float bestDist   = kSnapThresh;
+            float bestDist   = std::numeric_limits<float>::max();
             float bestOffset = 0.0f;
             bool  didSnap    = false;
 
