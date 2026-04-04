@@ -41,6 +41,8 @@ const char* ObjectTypeLabel(SceneObjectType type) {
       return "light";
     case SceneObjectType::Panel:
       return "board";
+    case SceneObjectType::Camera:
+      return "[cam]";
     default:
       return "unknown";
   }

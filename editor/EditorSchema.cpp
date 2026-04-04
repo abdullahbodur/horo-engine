@@ -14,6 +14,8 @@ static const char* TypeName(SceneObjectType t) {
       return "Prop";
     case SceneObjectType::Light:
       return "Light";
+    case SceneObjectType::Camera:
+      return "Camera";
     default:
       return "Panel";
   }

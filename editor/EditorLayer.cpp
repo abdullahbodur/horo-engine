@@ -860,6 +860,21 @@ void EditorLayer::DrawToolbar() {
   addObj(SceneObjectType::Prop, "+ Prop");
   addObj(SceneObjectType::Light, "+ Light");
 
+  if (ImGui::Button("+ Camera")) {
+    SceneObject o;
+    o.id = GenerateCameraId(m_document);
+    o.type = SceneObjectType::Camera;
+    o.props["fov"] = "60";
+    o.props["nearClip"] = "0.1";
+    o.props["farClip"] = "500";
+    o.props["followTargetId"] = "";
+    m_document.objects.push_back(std::move(o));
+    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    m_document.dirty = true;
+    TriggerReload();
+  }
+  ImGui::SameLine();
+
   const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
                                 m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
   if (!hasSelectedAsset)
@@ -1981,11 +1996,108 @@ void EditorLayer::DrawPropertiesPanel() {
   ImGui::LabelText("ID", "%s", obj.id.c_str());
   const char* typeName = (obj.type == SceneObjectType::Prop)    ? "Prop"
                          : (obj.type == SceneObjectType::Light) ? "Light"
-                                                                : "Panel";
+                         : (obj.type == SceneObjectType::Camera) ? "Camera"
+                                                                 : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
   ImGui::Separator();
 
-  // ---- Transform ----
+  // ---- Camera-specific properties ----
+  if (obj.type == SceneObjectType::Camera) {
+    float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
+    if (ImGui::DragFloat3("Position", pos, 0.05f)) {
+      obj.position = {pos[0], pos[1], pos[2]};
+      m_document.dirty = true;
+      if (m_transformCb)
+        m_transformCb(obj);
+    }
+
+    if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+      m_document.dirty = true;
+      if (m_transformCb)
+        m_transformCb(obj);
+    }
+
+    float pitch = obj.pitch;
+    if (ImGui::DragFloat("Pitch", &pitch, 1.0f, -89.0f, 89.0f)) {
+      obj.pitch = std::max(-89.0f, std::min(89.0f, pitch));
+      m_document.dirty = true;
+      if (m_transformCb)
+        m_transformCb(obj);
+    }
+
+    ImGui::Separator();
+
+    // FOV
+    {
+      auto& fovStr = obj.props["fov"];
+      if (fovStr.empty()) fovStr = "60";
+      float fov = std::stof(fovStr);
+      if (ImGui::SliderFloat("FOV", &fov, 1.0f, 179.0f)) {
+        char tmp[32];
+        std::snprintf(tmp, sizeof(tmp), "%.4f", fov);
+        fovStr = tmp;
+        m_document.dirty = true;
+      }
+    }
+
+    // Near Clip
+    {
+      auto& nearStr = obj.props["nearClip"];
+      if (nearStr.empty()) nearStr = "0.1";
+      float v = std::stof(nearStr);
+      if (ImGui::DragFloat("Near Clip", &v, 0.01f, 0.001f, 100.0f)) {
+        char tmp[32];
+        std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+        nearStr = tmp;
+        m_document.dirty = true;
+      }
+    }
+
+    // Far Clip
+    {
+      auto& farStr = obj.props["farClip"];
+      if (farStr.empty()) farStr = "500";
+      float v = std::stof(farStr);
+      if (ImGui::DragFloat("Far Clip", &v, 1.0f, 1.0f, 100000.0f)) {
+        char tmp[32];
+        std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+        farStr = tmp;
+        m_document.dirty = true;
+      }
+    }
+
+    ImGui::Separator();
+
+    // Follow Target dropdown
+    {
+      auto& followId = obj.props["followTargetId"];
+      std::vector<const char*> targetItems;
+      targetItems.push_back("<none>");
+      int curTarget = 0;
+      int ti = 1;
+      for (const auto& other : m_document.objects) {
+        if (other.id == obj.id)
+          continue;
+        targetItems.push_back(other.id.c_str());
+        if (other.id == followId)
+          curTarget = ti;
+        ++ti;
+      }
+      if (ImGui::Combo("Follow Target", &curTarget, targetItems.data(),
+                       static_cast<int>(targetItems.size()))) {
+        followId = (curTarget == 0) ? "" : targetItems[static_cast<size_t>(curTarget)];
+        m_document.dirty = true;
+      }
+    }
+
+    ImGui::Separator();
+    if (ImGui::Button("Delete"))
+      RequestDeleteSelectedObjects();
+    ImGui::End();
+    return;
+  }
+
+  // ---- Transform (non-camera objects) ----
   float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
   if (ImGui::DragFloat3("Position", pos, 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
@@ -2148,7 +2260,8 @@ void EditorLayer::DrawPropertiesPanel() {
     bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
     // Remove button on the same line, right-aligned
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 4.0f);
+    float btnW = ImGui::CalcTextSize("x").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW);
     if (ImGui::SmallButton("x"))
       removeIdx = ci;
 
@@ -2156,7 +2269,7 @@ void EditorLayer::DrawPropertiesPanel() {
       if (comp.type == "light") {
         // Intensity
         {
-          float v = comp.props.count("intensity") ? std::stof(comp.props["intensity"]) : 1.0f;
+          float v = comp.props.count("intensity") ? std::strtof(comp.props["intensity"].c_str(), nullptr) : 1.0f;
           if (ImGui::SliderFloat("Intensity", &v, 0.0f, 10.0f)) {
             char tmp[32];
             std::snprintf(tmp, sizeof(tmp), "%.4f", v);
@@ -2187,7 +2300,7 @@ void EditorLayer::DrawPropertiesPanel() {
         }
         // Radius
         {
-          float v = comp.props.count("radius") ? std::stof(comp.props["radius"]) : 5.0f;
+          float v = comp.props.count("radius") ? std::strtof(comp.props["radius"].c_str(), nullptr) : 5.0f;
           if (ImGui::DragFloat("Radius", &v, 0.1f, 0.0f, 100.0f)) {
             char tmp[32];
             std::snprintf(tmp, sizeof(tmp), "%.4f", v);
@@ -2198,7 +2311,7 @@ void EditorLayer::DrawPropertiesPanel() {
       } else if (comp.type == "rigidbody") {
         // Mass
         {
-          float v = comp.props.count("mass") ? std::stof(comp.props["mass"]) : 1.0f;
+          float v = comp.props.count("mass") ? std::strtof(comp.props["mass"].c_str(), nullptr) : 1.0f;
           if (ImGui::DragFloat("Mass", &v, 0.1f, 0.0f, 10000.0f)) {
             char tmp[32];
             std::snprintf(tmp, sizeof(tmp), "%.4f", v);
@@ -2505,6 +2618,8 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
         return "Prop";
       case SceneObjectType::Light:
         return "Light";
+      case SceneObjectType::Camera:
+        return "Camera";
     }
     return "Unknown";
   };
@@ -2541,6 +2656,16 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
 std::string EditorLayer::GenerateId(const SceneDocument& doc) {
   char buf[32];
   std::snprintf(buf, sizeof(buf), "obj_%03d", static_cast<int>(doc.objects.size()));
+  return buf;
+}
+
+std::string EditorLayer::GenerateCameraId(const SceneDocument& doc) {
+  int count = 0;
+  for (const auto& o : doc.objects)
+    if (o.type == SceneObjectType::Camera)
+      ++count;
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "cam_%03d", count);
   return buf;
 }
 
