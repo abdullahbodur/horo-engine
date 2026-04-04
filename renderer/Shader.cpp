@@ -136,4 +136,11 @@ void Shader::SetMat4(const std::string& name, const Mat4& m) const {
   glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, m.Data());
 }
 
+void Shader::SetMat4Array(const std::string& name, int count, const float* data) const {
+  int loc = GetUniformLocation(name + "[0]");
+  if (loc == -1)
+    return;
+  glUniformMatrix4fv(loc, count, GL_FALSE, data);
+}
+
 }  // namespace Monolith

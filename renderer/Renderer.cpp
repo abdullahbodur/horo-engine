@@ -6,6 +6,7 @@
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
+#include "renderer/SkinnedMesh.h"
 
 namespace Monolith {
 
@@ -47,6 +48,43 @@ void Renderer::Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& mater
     int count = static_cast<int>(s_lights.size());
     material.shader->SetInt("u_lightCount", count);
     for (int i = 0; i < count; ++i) {
+      std::string b = "u_lights[" + std::to_string(i) + "].";
+      material.shader->SetInt(b + "type", static_cast<int>(s_lights[i].type));
+      material.shader->SetVec3(b + "position", s_lights[i].position);
+      material.shader->SetVec3(b + "direction", s_lights[i].direction);
+      material.shader->SetVec3(b + "color", s_lights[i].color * s_lights[i].intensity);
+      material.shader->SetFloat(b + "radius", s_lights[i].radius);
+    }
+    s_lastLightProgram = progID;
+  }
+
+  mesh.Draw();
+  ++s_drawCalls;
+}
+
+void Renderer::SubmitSkinned(const SkinnedMesh& mesh,
+                              const Mat4& modelMatrix,
+                              Material& material,
+                              const std::vector<Mat4>& boneMatrices) {
+  material.Apply();
+  if (!material.shader)
+    return;
+
+  material.shader->SetMat4("u_model", modelMatrix);
+  material.shader->SetMat4("u_view", s_view);
+  material.shader->SetMat4("u_projection", s_projection);
+  material.shader->SetVec3("u_cameraPos", s_cameraPos);
+
+  // Upload bone palette — capped at 64 to match the shader's u_boneMatrices array size.
+  int count = std::min(static_cast<int>(boneMatrices.size()), 64);
+  if (count > 0)
+    material.shader->SetMat4Array("u_boneMatrices", count, boneMatrices[0].Data());
+
+  unsigned int progID = material.shader->GetProgramID();
+  if (progID != s_lastLightProgram) {
+    int lightCount = static_cast<int>(s_lights.size());
+    material.shader->SetInt("u_lightCount", lightCount);
+    for (int i = 0; i < lightCount; ++i) {
       std::string b = "u_lights[" + std::to_string(i) + "].";
       material.shader->SetInt(b + "type", static_cast<int>(s_lights[i].type));
       material.shader->SetVec3(b + "position", s_lights[i].position);

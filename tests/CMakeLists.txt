@@ -164,3 +164,9 @@ add_executable(test_gizmo test_gizmo.cpp)
 target_link_libraries(test_gizmo PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_gizmo)
 add_test(NAME test_gizmo COMMAND $<TARGET_FILE:test_gizmo>)
+
+# ---- test_animation ----
+add_executable(test_animation test_animation.cpp)
+target_link_libraries(test_animation PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_animation)
+add_test(NAME test_animation COMMAND $<TARGET_FILE:test_animation>)

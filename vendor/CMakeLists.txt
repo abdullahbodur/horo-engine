@@ -74,3 +74,31 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
     set(JSON_Install    OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(nlohmann_json)
 endif()
+
+# ---- tinygltf (header-only glTF 2.0 / GLB loader) ----
+if(NOT TARGET tinygltf)
+    FetchContent_Declare(
+        tinygltf
+        GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+        GIT_TAG        v2.9.3
+        GIT_SHALLOW    TRUE
+    )
+    set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
+    set(TINYGLTF_INSTALL              OFF CACHE BOOL "" FORCE)
+    set(TINYGLTF_HEADER_ONLY          ON  CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(tinygltf)
+
+    # tinygltf's CMakeLists creates an INTERFACE target named tinygltf.
+    # Tell it to reuse our already-fetched nlohmann/json and stb_image
+    # so there are no duplicate symbol issues.
+    target_compile_definitions(tinygltf INTERFACE
+        TINYGLTF_NO_INCLUDE_JSON
+        TINYGLTF_NO_STB_IMAGE
+        TINYGLTF_NO_STB_IMAGE_WRITE
+    )
+    target_link_libraries(tinygltf INTERFACE nlohmann_json::nlohmann_json stb)
+    # Suppress vendor warnings
+    target_compile_options(tinygltf INTERFACE
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+    )
+endif()

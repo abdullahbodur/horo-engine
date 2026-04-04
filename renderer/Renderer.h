@@ -10,6 +10,7 @@ namespace Monolith {
 class Mesh;
 class Shader;
 class Material;
+class SkinnedMesh;
 
 class Renderer {
  public:
@@ -21,6 +22,12 @@ class Renderer {
 
   // Submit a mesh for rendering with a given model matrix and material
   static void Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& material);
+
+  // Submit a skinned mesh — uploads boneMatrices to u_boneMatrices[0..N] via SetMat4Array.
+  static void SubmitSkinned(const SkinnedMesh& mesh,
+                             const Mat4& modelMatrix,
+                             Material& material,
+                             const std::vector<Mat4>& boneMatrices);
 
   // Submit a mesh in wireframe mode using a plain color
   static void SubmitWireframe(const Mesh& mesh,

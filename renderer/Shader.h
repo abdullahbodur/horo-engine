@@ -40,6 +40,10 @@ class Shader {
   void SetMat3(const std::string& name, const Mat3& m) const;
   void SetMat4(const std::string& name, const Mat4& m) const;
 
+  // Upload an array of count matrices to uniform `name[0]` through `name[count-1]`.
+  // Uses glUniformMatrix4fv for a single GL call (efficient for bone palettes).
+  void SetMat4Array(const std::string& name, int count, const float* data) const;
+
  private:
   unsigned int m_program = 0;
   mutable std::unordered_map<std::string, int> m_uniformCache;
