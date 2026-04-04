@@ -35,10 +35,10 @@
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/Raycaster.h"
+#include "math/Mat4.h"
 #include "math/MathUtils.h"
 #include "math/Transform.h"
 #include "editor/SceneSerializer.h"
-#include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
@@ -93,6 +93,43 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(), wt, outCenter,
                         outHalf);
   return true;
+}
+
+// Screen direction of a world-space axis for the orientation corner gizmo.
+// Uses the view matrix directly — pivot-based perspective projection would introduce
+// distortion for off-centre or off-screen pivots and is incorrect for a corner widget.
+static void WorldAxisToScreenDir(const Camera& cam,
+                                 const Vec3& worldUnit,
+                                 float* outDx,
+                                 float* outDy,
+                                 float* outViewZ = nullptr) {
+  const Mat4 view = cam.GetView();
+  const Vec3 e = view.TransformVector(worldUnit);
+  if (outViewZ)
+    *outViewZ = e.z;
+  const float dx = e.x;
+  const float dy = -e.y;  // ImGui Y is down
+  const float len = std::sqrt(dx * dx + dy * dy);
+  if (len < 1e-4f) {
+    *outDx = 1.f;
+    *outDy = 0.f;
+    return;
+  }
+  *outDx = dx / len;
+  *outDy = dy / len;
+}
+
+static float DistSqPointSegment2D(float px, float py, float ax, float ay, float bx, float by) {
+  const float abx = bx - ax, aby = by - ay;
+  const float apx = px - ax, apy = py - ay;
+  const float abLen2 = abx * abx + aby * aby;
+  if (abLen2 < 1e-8f)
+    return apx * apx + apy * apy;
+  float t = (apx * abx + apy * aby) / abLen2;
+  t = std::clamp(t, 0.f, 1.f);
+  const float cx = ax + t * abx, cy = ay + t * aby;
+  const float dx = px - cx, dy = py - cy;
+  return dx * dx + dy * dy;
 }
 
 #if defined(__APPLE__)
@@ -636,6 +673,7 @@ void EditorLayer::Render(const Camera& cam) {
   if (!m_active) {
     m_albedoDraftDrop.Clear();
     m_albedoSelDrop.Clear();
+    m_viewGizmoPickRect.Clear();
   }
   ProcessPendingPathDrops();
 
@@ -645,7 +683,7 @@ void EditorLayer::Render(const Camera& cam) {
 
   if (m_active) {
     DrawToolbar();
-    DrawViewGimbal();
+    DrawViewGimbal(cam);
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
@@ -897,53 +935,137 @@ void EditorLayer::DrawStatusBar() {
   ImGui::End();
 }
 
-void EditorLayer::DrawViewGimbal() {
+void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
-  const float panelW = 280.0f;
-  const float size = 150.0f;
-  const float x = io.DisplaySize.x - panelW - size - 10.0f;
-  const float y = 42.0f;
+  constexpr float kPanelW = 280.0f;
+  constexpr float kWinW = 128.0f;
+  constexpr float kWinH = 138.0f;
+  const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
+  const float wy = 42.0f;
 
-  ImGui::SetNextWindowPos(ImVec2(x, y));
-  ImGui::SetNextWindowSize(ImVec2(size, size));
-  ImGui::SetNextWindowBgAlpha(0.75f);
+  ImGui::SetNextWindowPos(ImVec2(wx, wy));
+  ImGui::SetNextWindowSize(ImVec2(kWinW, kWinH));
+  ImGui::SetNextWindowBgAlpha(0.78f);
   ImGui::Begin("##view_gimbal",
                nullptr,
                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+  const ImVec2 wpos = ImGui::GetWindowPos();
+  const ImVec2 wsize = ImGui::GetWindowSize();
+  m_viewGizmoPickRect.valid = true;
+  m_viewGizmoPickRect.minX = wpos.x;
+  m_viewGizmoPickRect.minY = wpos.y;
+  m_viewGizmoPickRect.maxX = wpos.x + wsize.x;
+  m_viewGizmoPickRect.maxY = wpos.y + wsize.y;
+
   ImGui::TextUnformatted("View");
 
   const int idx = PrimaryIdx();
-  const bool hasSelection = (idx >= 0 && idx < static_cast<int>(m_document.objects.size()));
-  if (!hasSelection)
-    ImGui::BeginDisabled();
 
-  auto snapBtn = [&](const char* label, ViewSnap snap, float w = 40.0f) {
-    if (ImGui::Button(label, ImVec2(w, 22.0f)))
-      m_pendingViewSnap = snap;
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  const ImVec2 inner0 = ImGui::GetWindowContentRegionMin();
+  const ImVec2 inner1 = ImGui::GetWindowContentRegionMax();
+  const ImVec2 center = ImVec2(wpos.x + inner0.x + (inner1.x - inner0.x) * 0.5f,
+                               wpos.y + inner0.y + (inner1.y - inner0.y) * 0.5f + 6.0f);
+
+  constexpr float kShaftPx = 36.0f;
+  constexpr float kHitPx = 12.0f;
+  constexpr float kHitPxSq = kHitPx * kHitPx;
+
+  struct AxisDraw {
+    ViewSnap posSnap;
+    ViewSnap negSnap;
+    Vec3 worldPlus;
+    ImU32 col;
+    const char* label;
+  };
+  static const AxisDraw kAxes[] = {
+      {ViewSnap::Right, ViewSnap::Left, {1.0f, 0.0f, 0.0f}, IM_COL32(220, 72, 72, 255), "X"},
+      {ViewSnap::Top, ViewSnap::Bottom, {0.0f, 1.0f, 0.0f}, IM_COL32(88, 200, 96, 255), "Y"},
+      {ViewSnap::Front, ViewSnap::Back, {0.0f, 0.0f, 1.0f}, IM_COL32(82, 148, 255, 255), "Z"},
   };
 
-  ImGui::Dummy(ImVec2(0, 2));
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Top", ViewSnap::Top);
-
-  snapBtn("Left", ViewSnap::Left);
-  ImGui::SameLine();
-  snapBtn("Front", ViewSnap::Front);
-  ImGui::SameLine();
-  snapBtn("Right", ViewSnap::Right);
-
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Back", ViewSnap::Back);
-
-  ImGui::SetCursorPosX(55.0f);
-  snapBtn("Bottom", ViewSnap::Bottom);
-
-  if (!hasSelection) {
-    ImGui::EndDisabled();
-    ImGui::TextDisabled("Select object");
+  // Pre-compute screen directions and view-space depth once per frame.
+  // Shared by hover and draw loops — no redundant WorldAxisToScreenDir calls.
+  struct AxisCache {
+    float dx, dy;  // normalised screen direction of the +axis
+    float viewZ;   // view-space Z (positive = toward camera) for depth sort
+    int origIdx;
+  };
+  AxisCache cache[3];
+  for (int i = 0; i < 3; i++) {
+    float vz = 0.f;
+    WorldAxisToScreenDir(cam, kAxes[i].worldPlus, &cache[i].dx, &cache[i].dy, &vz);
+    cache[i].viewZ  = vz;
+    cache[i].origIdx = i;
   }
+
+  ViewSnap hoverSnap = ViewSnap::None;
+
+  if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
+    const ImVec2 mouse = io.MousePos;
+    float bestD = kHitPxSq;  // was kHitPxSq * 4.f — that doubled the effective hit radius
+    const float cx = center.x, cy = center.y;
+    for (int i = 0; i < 3; i++) {
+      const AxisDraw& ad = kAxes[cache[i].origIdx];
+      const float px1 = cx + cache[i].dx * kShaftPx;
+      const float py1 = cy + cache[i].dy * kShaftPx;
+      const float px2 = cx - cache[i].dx * kShaftPx;
+      const float py2 = cy - cache[i].dy * kShaftPx;
+      const float d1 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px1, py1);
+      const float d2 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px2, py2);
+      if (d1 < bestD) { bestD = d1; hoverSnap = ad.posSnap; }
+      if (d2 < bestD) { bestD = d2; hoverSnap = ad.negSnap; }
+    }
+  }
+
+  // Sort ascending by view-space Z so background axes draw first (painter's algorithm).
+  std::sort(std::begin(cache), std::end(cache),
+            [](const AxisCache& a, const AxisCache& b) { return a.viewZ < b.viewZ; });
+
+  const float fs = ImGui::GetFontSize();
+  const float cx = center.x, cy = center.y;
+  for (int si = 0; si < 3; si++) {
+    const AxisCache& ac = cache[si];
+    const AxisDraw& ad = kAxes[ac.origIdx];
+    const float px1 = cx + ac.dx * kShaftPx;
+    const float py1 = cy + ac.dy * kShaftPx;
+    const float px2 = cx - ac.dx * kShaftPx;
+    const float py2 = cy - ac.dy * kShaftPx;
+
+    const bool hlPos = (hoverSnap == ad.posSnap);
+    const bool hlNeg = (hoverSnap == ad.negSnap);
+    ImU32 cPos = ad.col;
+    ImU32 cNeg = ad.col;
+    switch (ad.posSnap) {
+      case ViewSnap::Right: cNeg = IM_COL32(150, 48, 48, 255); break;
+      case ViewSnap::Top:   cNeg = IM_COL32(58, 145, 64, 255); break;
+      case ViewSnap::Front: cNeg = IM_COL32(52, 100, 190, 255); break;
+      default: break;
+    }
+    if (hlPos) cPos = IM_COL32(255, 255, 200, 255);
+    if (hlNeg) cNeg = IM_COL32(255, 255, 200, 255);
+
+    dl->AddLine(center, ImVec2(px1, py1), cPos, hlPos ? 4.0f : 3.0f);
+    dl->AddLine(center, ImVec2(px2, py2), cNeg, hlNeg ? 4.0f : 2.5f);
+    dl->AddCircleFilled(ImVec2(px1, py1), hlPos ? 5.0f : 4.0f, cPos, 10);
+    dl->AddCircleFilled(ImVec2(px2, py2), hlNeg ? 4.5f : 3.5f, cNeg, 10);
+
+    // Offset label along the axis direction so it doesn't overlap the circle
+    // regardless of which way the axis is pointing on screen.
+    const float tDist = (hlPos ? 5.0f : 4.0f) + 3.0f;
+    dl->AddText(ImVec2(px1 + ac.dx * tDist - fs * 0.3f,
+                       py1 + ac.dy * tDist - fs * 0.5f),
+                cPos, ad.label);
+  }
+
+  if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) && ImGui::IsMouseClicked(0) &&
+      hoverSnap != ViewSnap::None)
+    m_pendingViewSnap = hoverSnap;
+
+  if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+    ImGui::TextDisabled("Pivot: origin");
 
   ImGui::End();
 }
@@ -2076,6 +2198,9 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
 
   double mx, my;
   glfwGetCursorPos(m_window, &mx, &my);
+  if (m_viewGizmoPickRect.valid &&
+      m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
+    return;
 
   Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my), screenW, screenH, cam);
 
@@ -2135,39 +2260,40 @@ void EditorLayer::ApplyPendingViewSnap(Camera& cam) {
   if (m_pendingViewSnap == ViewSnap::None)
     return;
 
+  Vec3 pivot = Vec3::Zero();
+  float extent = 1.0f;
   const int idx = PrimaryIdx();
-  if (idx < 0 || idx >= static_cast<int>(m_document.objects.size())) {
-    m_pendingViewSnap = ViewSnap::None;
-    return;
+  if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
+    const SceneObject& obj = m_document.objects[idx];
+    pivot = obj.position;
+    extent = std::max(obj.scale.x, std::max(obj.scale.y, obj.scale.z));
   }
 
-  const SceneObject& obj = m_document.objects[idx];
-  const float extent = std::max(obj.scale.x, std::max(obj.scale.y, obj.scale.z));
   const float distance = std::max(2.0f, extent * 3.0f + 1.0f);
 
-  cam.target = obj.position;
+  cam.target = pivot;
   cam.up = {0.0f, 1.0f, 0.0f};
 
   switch (m_pendingViewSnap) {
     case ViewSnap::Top:
-      cam.position = obj.position + Vec3{0.0f, distance, 0.0f};
+      cam.position = pivot + Vec3{0.0f, distance, 0.0f};
       cam.up = {0.0f, 0.0f, -1.0f};
       break;
     case ViewSnap::Bottom:
-      cam.position = obj.position + Vec3{0.0f, -distance, 0.0f};
+      cam.position = pivot + Vec3{0.0f, -distance, 0.0f};
       cam.up = {0.0f, 0.0f, 1.0f};
       break;
     case ViewSnap::Left:
-      cam.position = obj.position + Vec3{-distance, 0.0f, 0.0f};
+      cam.position = pivot + Vec3{-distance, 0.0f, 0.0f};
       break;
     case ViewSnap::Right:
-      cam.position = obj.position + Vec3{distance, 0.0f, 0.0f};
+      cam.position = pivot + Vec3{distance, 0.0f, 0.0f};
       break;
     case ViewSnap::Front:
-      cam.position = obj.position + Vec3{0.0f, 0.0f, distance};
+      cam.position = pivot + Vec3{0.0f, 0.0f, distance};
       break;
     case ViewSnap::Back:
-      cam.position = obj.position + Vec3{0.0f, 0.0f, -distance};
+      cam.position = pivot + Vec3{0.0f, 0.0f, -distance};
       break;
     case ViewSnap::None:
       break;

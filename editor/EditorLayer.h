@@ -124,7 +124,7 @@ class EditorLayer {
   void TriggerReload();      // snapshot document → pending and set wantsReload
 
   void DrawToolbar();
-  void DrawViewGimbal();
+  void DrawViewGimbal(const Camera& cam);
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
   void DrawObjectList();
@@ -180,6 +180,9 @@ class EditorLayer {
   };
   ScreenRectDropZone m_albedoDraftDrop;
   ScreenRectDropZone m_albedoSelDrop;
+
+  // Last-frame screen rect for view axis gizmo (skip scene picking when cursor is here).
+  ScreenRectDropZone m_viewGizmoPickRect;
 
   std::string m_selectedAssetId;
   bool m_assetSearchOpen = false;
