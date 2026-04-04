@@ -28,6 +28,8 @@ bool ShouldHandleEditorEscape(bool currEsc,
                               bool anyItemActive,
                               bool hasBlockingPopup);
 
+bool CanEditSingleSelection(int selectionCount, int primaryIndex, int objectCount);
+
 struct EditorStatusSnapshot {
   int selectionCount = 0;
   bool dirty = false;

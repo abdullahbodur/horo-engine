@@ -40,6 +40,10 @@ bool ShouldHandleEditorEscape(bool currEsc,
   return currEsc && !prevEsc && !wantsTextInput && !anyItemActive && !hasBlockingPopup;
 }
 
+bool CanEditSingleSelection(int selectionCount, int primaryIndex, int objectCount) {
+  return selectionCount == 1 && primaryIndex >= 0 && primaryIndex < objectCount;
+}
+
 EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges) {
   return hasUnsavedChanges ? EditorExitDecision::PromptUnsavedConfirm
                            : EditorExitDecision::ExitImmediately;

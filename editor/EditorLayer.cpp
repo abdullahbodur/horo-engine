@@ -865,93 +865,79 @@ void EditorLayer::DrawToolbar() {
   ImGui::Separator();
   ImGui::SameLine();
 
-  auto addObj = [&](SceneObjectType type, const char* label) {
-    if (ImGui::Button(label)) {
-      SceneObject o;
-      o.id = GenerateId(m_document);
-      o.type = type;
-      ApplySchemaDefaults(o);
-      m_document.objects.push_back(std::move(o));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
-    }
-    ImGui::SameLine();
-  };
-
-  addObj(SceneObjectType::Panel, "+ Panel");
-  addObj(SceneObjectType::Prop, "+ Prop");
-  addObj(SceneObjectType::Light, "+ Light");
-
-  if (ImGui::Button("+ Camera")) {
-    SceneObject o;
-    o.id = GenerateCameraId(m_document);
-    o.type = SceneObjectType::Camera;
-    o.props["fov"] = "60";
-    o.props["nearClip"] = "0.1";
-    o.props["farClip"] = "500";
-    o.props["followTargetId"] = "";
-    m_document.objects.push_back(std::move(o));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
-  }
-  ImGui::SameLine();
-
   const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
                                 m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
-  if (!hasSelectedAsset)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("+ Prop from Asset")) {
-    SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
-    m_document.objects.push_back(std::move(obj));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
-  }
-  if (!hasSelectedAsset)
-    ImGui::EndDisabled();
-  ImGui::SameLine();
-
   const int primaryIdx = PrimaryIdx();
-  const bool canDuplicate = primaryIdx >= 0 && primaryIdx < static_cast<int>(m_document.objects.size());
-  if (!canDuplicate)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("Duplicate")) {
-    SceneObject clone = DuplicateObject(m_document, m_document.objects[primaryIdx]);
-    clone.position.x += 1.0f;
-    clone.position.z += 1.0f;
-    m_document.objects.push_back(std::move(clone));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
+  const bool hasSingleSelection = CanEditSingleSelection(
+      static_cast<int>(m_selectedIndices.size()),
+      primaryIdx,
+      static_cast<int>(m_document.objects.size()));
+
+  if (ImGui::BeginMenu("Add")) {
+    if (ImGui::MenuItem("Panel"))
+      AddObject(SceneObjectType::Panel);
+    if (ImGui::MenuItem("Prop"))
+      AddObject(SceneObjectType::Prop);
+    if (ImGui::MenuItem("Light"))
+      AddObject(SceneObjectType::Light);
+    if (ImGui::MenuItem("Camera"))
+      AddObject(SceneObjectType::Camera);
+
+    ImGui::Separator();
+    if (!hasSelectedAsset)
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Prop from Selected Asset"))
+      AddObjectFromSelectedAsset();
+    if (!hasSelectedAsset)
+      ImGui::EndDisabled();
+    ImGui::EndMenu();
   }
-  if (!canDuplicate)
+  ImGui::SameLine();
+
+  if (!hasSingleSelection)
+    ImGui::BeginDisabled();
+  if (ImGui::BeginMenu("Edit")) {
+    if (ImGui::MenuItem("Rename..."))
+      OpenRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Duplicate"))
+      DuplicatePrimarySelection();
+    if (ImGui::MenuItem("Delete"))
+      RequestDeleteSelectedObjects();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C")) {
+      const int idx = PrimaryIdx();
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
+        const std::string ref = BuildSelectionRefCode(m_document.objects[static_cast<size_t>(idx)], idx);
+        ImGui::SetClipboardText(ref.c_str());
+        m_clipboardToastLabel = "Reference copied";
+        m_clipboardToastTime = 1.5f;
+      }
+    }
+    ImGui::EndMenu();
+  }
+  if (!hasSingleSelection)
     ImGui::EndDisabled();
   ImGui::SameLine();
 
-  // Fly camera toggle — green when active, Tab also toggles
-  const bool flyActiveNow = m_flyMode;  // capture before button may flip it
-  if (flyActiveNow)
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.65f, 0.15f, 1.0f));
-  if (ImGui::Button(flyActiveNow ? "Fly [ON]" : "Fly")) {
-    m_flyMode = !m_flyMode;
-    m_flyCamInitialized = false;
-    m_prevCursorInit = false;
-    glfwSetInputMode(m_window, GLFW_CURSOR,
-                     m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+  if (ImGui::BeginMenu("View")) {
+    const bool flyBefore = m_flyMode;
+    if (ImGui::MenuItem("Fly Mode", "Tab", m_flyMode)) {
+      m_flyMode = !m_flyMode;
+      m_flyCamInitialized = false;
+      m_prevCursorInit = false;
+      glfwSetInputMode(m_window, GLFW_CURSOR,
+                       m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+    if (flyBefore || m_flyMode)
+      ImGui::TextDisabled("WASD + mouse");
+    if (ImGui::MenuItem("Help", "? / F1"))
+      m_helpOpen = true;
+    if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
+      m_quickOpenOpen = true;
+    ImGui::EndMenu();
   }
-  if (flyActiveNow) {
-    ImGui::PopStyleColor();  // always balanced with the push above
-    ImGui::SameLine();
-    ImGui::TextDisabled("WASD + mouse  |  Tab to exit");
-  }
   ImGui::SameLine();
-  ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Help: ? / F1");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Quick Open: Ctrl/Cmd+P");
+  ImGui::TextDisabled("Copy Ref: Ctrl/Cmd+Shift+C");
   ImGui::SameLine();
 
   // Right-aligned controls
@@ -1225,21 +1211,26 @@ void EditorLayer::DrawObjectList() {
       }
 
       if (ImGui::BeginPopupContextItem("obj_ctx")) {
-        if (ImGui::MenuItem("Rename...")) {
-          m_renameObjectIndex = i;
-          m_renameObjectDraft = obj.id;
-          m_renameObjectError.clear();
-          m_renameObjectOpen = true;
+        if (ImGui::BeginMenu("Add")) {
+          if (ImGui::MenuItem("Panel"))
+            AddObject(SceneObjectType::Panel, obj.id);
+          if (ImGui::MenuItem("Prop"))
+            AddObject(SceneObjectType::Prop, obj.id);
+          if (ImGui::MenuItem("Light"))
+            AddObject(SceneObjectType::Light, obj.id);
+          if (ImGui::MenuItem("Camera"))
+            AddObject(SceneObjectType::Camera, obj.id);
+          ImGui::EndMenu();
         }
 
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename..."))
+          OpenRenameObjectModal(i);
+
         if (ImGui::MenuItem("Duplicate")) {
-          SceneObject clone = DuplicateObject(m_document, obj);
-          clone.position.x += 1.0f;
-          clone.position.z += 1.0f;
-          m_document.objects.push_back(std::move(clone));
-          m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-          m_document.dirty = true;
-          TriggerReload();
+          m_selectedIndices = {i};
+          DuplicatePrimarySelection();
         }
 
         if (ImGui::MenuItem("Delete")) {
@@ -1323,21 +1314,26 @@ void EditorLayer::DrawObjectList() {
       }
 
       if (ImGui::BeginPopupContextItem("obj_ctx")) {
-        if (ImGui::MenuItem("Rename...")) {
-          m_renameObjectIndex = idx;
-          m_renameObjectDraft = obj.id;
-          m_renameObjectError.clear();
-          m_renameObjectOpen = true;
+        if (ImGui::BeginMenu("Add")) {
+          if (ImGui::MenuItem("Panel"))
+            AddObject(SceneObjectType::Panel, obj.id);
+          if (ImGui::MenuItem("Prop"))
+            AddObject(SceneObjectType::Prop, obj.id);
+          if (ImGui::MenuItem("Light"))
+            AddObject(SceneObjectType::Light, obj.id);
+          if (ImGui::MenuItem("Camera"))
+            AddObject(SceneObjectType::Camera, obj.id);
+          ImGui::EndMenu();
         }
 
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename..."))
+          OpenRenameObjectModal(idx);
+
         if (ImGui::MenuItem("Duplicate")) {
-          SceneObject clone = DuplicateObject(m_document, obj);
-          clone.position.x += 1.0f;
-          clone.position.z += 1.0f;
-          m_document.objects.push_back(std::move(clone));
-          m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-          m_document.dirty = true;
-          TriggerReload();
+          m_selectedIndices = {idx};
+          DuplicatePrimarySelection();
         }
 
         if (ImGui::MenuItem("Delete")) {
@@ -1381,6 +1377,22 @@ void EditorLayer::DrawObjectList() {
       if (ImGui::Button("Clear Object Search"))
         m_objectSearchQuery.clear();
     }
+  }
+
+  if (ImGui::BeginPopupContextWindow("obj_ctx_empty",
+                                     ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+    if (ImGui::BeginMenu("Add")) {
+      if (ImGui::MenuItem("Panel"))
+        AddObject(SceneObjectType::Panel);
+      if (ImGui::MenuItem("Prop"))
+        AddObject(SceneObjectType::Prop);
+      if (ImGui::MenuItem("Light"))
+        AddObject(SceneObjectType::Light);
+      if (ImGui::MenuItem("Camera"))
+        AddObject(SceneObjectType::Camera);
+      ImGui::EndMenu();
+    }
+    ImGui::EndPopup();
   }
 
   if (m_renameObjectOpen) {
@@ -2794,6 +2806,62 @@ void EditorLayer::RequestDeleteAsset(const std::string& assetId) {
 
   m_pendingDeleteAssetId = assetId;
   m_confirmDeleteAssetOpen = true;
+}
+
+void EditorLayer::OpenRenameObjectModal(int index) {
+  if (index < 0 || index >= static_cast<int>(m_document.objects.size()))
+    return;
+  m_renameObjectIndex = index;
+  m_renameObjectDraft = m_document.objects[static_cast<size_t>(index)].id;
+  m_renameObjectError.clear();
+  m_renameObjectOpen = true;
+}
+
+void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
+  SceneObject obj;
+  obj.id = (type == SceneObjectType::Camera) ? GenerateCameraId(m_document) : GenerateId(m_document);
+  obj.type = type;
+  ApplySchemaDefaults(obj);
+  if (type == SceneObjectType::Camera) {
+    obj.props["fov"] = "60";
+    obj.props["nearClip"] = "0.1";
+    obj.props["farClip"] = "500";
+    obj.props["followTargetId"] = "";
+  }
+  if (!parentId.empty())
+    obj.props["parentId"] = parentId;
+
+  m_document.objects.push_back(std::move(obj));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+void EditorLayer::AddObjectFromSelectedAsset(const std::string& parentId) {
+  const auto it = m_document.assets.find(m_selectedAssetId);
+  if (m_selectedAssetId.empty() || it == m_document.assets.end())
+    return;
+
+  SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
+  if (!parentId.empty())
+    obj.props["parentId"] = parentId;
+  m_document.objects.push_back(std::move(obj));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+void EditorLayer::DuplicatePrimarySelection() {
+  const int primaryIdx = PrimaryIdx();
+  if (primaryIdx < 0 || primaryIdx >= static_cast<int>(m_document.objects.size()))
+    return;
+  SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(primaryIdx)]);
+  clone.position.x += 1.0f;
+  clone.position.z += 1.0f;
+  m_document.objects.push_back(std::move(clone));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
 }
 
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,

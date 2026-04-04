@@ -146,6 +146,10 @@ class EditorLayer {
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
+  void OpenRenameObjectModal(int index);
+  void AddObject(SceneObjectType type, const std::string& parentId = {});
+  void AddObjectFromSelectedAsset(const std::string& parentId = {});
+  void DuplicatePrimarySelection();
   bool SaveDocument(std::string* outError);
   void DiscardUnsavedChanges();
 
