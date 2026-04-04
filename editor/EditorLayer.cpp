@@ -116,20 +116,23 @@ static bool WorldPointToImGuiScreen(const Camera& cam,
 }
 
 // Unit screen direction for a world-space axis from pivot (for view gizmo).
+// axisSlot 0=X,1=Y,2=Z — used when the axis projects to a degenerate 2D direction
+// (into/out of screen) so we never assign every bad axis the same fallback.
 static void WorldAxisToScreenDir(const Camera& cam,
                                  const Vec3& pivot,
                                  const Vec3& worldUnit,
+                                 int axisSlot,
                                  float sw,
                                  float sh,
                                  float* outDx,
                                  float* outDy) {
   float ax, ay, bx, by;
   if (WorldPointToImGuiScreen(cam, pivot, sw, sh, &ax, &ay)) {
-    const Vec3 tip = pivot + worldUnit * 0.35f;
+    const Vec3 tip = pivot + worldUnit * 0.45f;
     if (WorldPointToImGuiScreen(cam, tip, sw, sh, &bx, &by)) {
       float dx = bx - ax, dy = by - ay;
       const float len = std::sqrt(dx * dx + dy * dy);
-      if (len > 1e-3f) {
+      if (len > 2e-3f) {
         *outDx = dx / len;
         *outDy = dy / len;
         return;
@@ -140,14 +143,49 @@ static void WorldAxisToScreenDir(const Camera& cam,
   const Vec3 e = view.TransformVector(worldUnit);
   float dx = e.x;
   float dy = -e.y;
-  const float len = std::sqrt(dx * dx + dy * dy);
-  if (len < 1e-4f) {
-    *outDx = 1.f;
-    *outDy = 0.f;
+  float len = std::sqrt(dx * dx + dy * dy);
+  if (len < 0.12f) {
+    // ~120° separation in widget when axis is end-on to the camera
+    static constexpr float kDeg = 0.01745329252f;
+    const float base = -50.f * kDeg + static_cast<float>(axisSlot) * 120.f * kDeg;
+    *outDx = std::cos(base);
+    *outDy = std::sin(base);
     return;
   }
   *outDx = dx / len;
   *outDy = dy / len;
+}
+
+// Fixed 120° tripod in ImGui space (+y down), rotated so no arm is axis-aligned: avoids looking
+// like a flat "+" (X/Z seemingly collinear) on small widgets when one arm was pure vertical.
+// Base arms at 90°/210°/330° (math CCW, y-up), then rotated +15° CCW → screen (x,y).
+static constexpr float kViewGizmoTripod[3][2] = {
+    {0.258819f, -0.9659258f},
+    {0.7071068f, 0.7071068f},
+    {-0.9659258f, 0.258819f},
+};
+
+// slotToAxis[slot] = world axis index 0=X,1=Y,2=Z shown on that tripod arm.
+static void PickViewGizmoAxisPermutation(const float refDir[3][2], int slotToAxis[3]) {
+  static constexpr int kPerms[6][3] = {
+      {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+  };
+  float bestScore = -1.f;
+  int bestIdx = 0;
+  for (int p = 0; p < 6; ++p) {
+    float s = 0.f;
+    for (int slot = 0; slot < 3; ++slot) {
+      const int ax = kPerms[p][slot];
+      s += std::fabs(refDir[ax][0] * kViewGizmoTripod[slot][0] +
+                     refDir[ax][1] * kViewGizmoTripod[slot][1]);
+    }
+    if (s > bestScore) {
+      bestScore = s;
+      bestIdx = p;
+    }
+  }
+  for (int slot = 0; slot < 3; ++slot)
+    slotToAxis[slot] = kPerms[bestIdx][slot];
 }
 
 static float DistSqPointSegment2D(float px, float py, float ax, float ay, float bx, float by) {
@@ -1008,41 +1046,81 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
       {ViewSnap::Front, ViewSnap::Back, {0.0f, 0.0f, 1.0f}, IM_COL32(82, 148, 255, 255), "Z"},
   };
 
+  float refDir[3][2];
+  for (int a = 0; a < 3; ++a)
+    WorldAxisToScreenDir(cam, pivot, kAxes[a].worldPlus, a, sw, sh, &refDir[a][0], &refDir[a][1]);
+
+  int slotToAxis[3];
+  PickViewGizmoAxisPermutation(refDir, slotToAxis);
+
+  bool posAtPlusTripod[3];
+  for (int slot = 0; slot < 3; ++slot) {
+    const int ax = slotToAxis[slot];
+    const float d = refDir[ax][0] * kViewGizmoTripod[slot][0] + refDir[ax][1] * kViewGizmoTripod[slot][1];
+    posAtPlusTripod[slot] = (d >= 0.f);
+  }
+
+  Vec3 toCam = cam.position - pivot;
+  const float toCamLen = toCam.Length();
+  if (toCamLen > 1e-4f)
+    toCam = toCam * (1.0f / toCamLen);
+  else
+    toCam = Vec3{0.0f, 0.0f, 1.0f};
+
+  int drawOrder[3] = {0, 1, 2};
+  std::sort(drawOrder, drawOrder + 3, [&](int sa, int sb) {
+    return Vec3::Dot(toCam, kAxes[slotToAxis[sa]].worldPlus) <
+           Vec3::Dot(toCam, kAxes[slotToAxis[sb]].worldPlus);
+  });
+
   float vx = 0.f, vy = 0.f;
   ViewSnap hoverSnap = ViewSnap::None;
 
   if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
     const ImVec2 mouse = io.MousePos;
     float bestD = kHitPxSq * 4.f;
-    for (const AxisDraw& ad : kAxes) {
-      WorldAxisToScreenDir(cam, pivot, ad.worldPlus, sw, sh, &vx, &vy);
-      const float cx = center.x;
-      const float cy = center.y;
+    const float cx = center.x;
+    const float cy = center.y;
+    for (int slot = 0; slot < 3; ++slot) {
+      const int a = slotToAxis[slot];
+      const AxisDraw& ad = kAxes[a];
+      vx = kViewGizmoTripod[slot][0];
+      vy = kViewGizmoTripod[slot][1];
       const float px1 = cx + vx * kShaftPx;
       const float py1 = cy + vy * kShaftPx;
       const float px2 = cx - vx * kShaftPx;
       const float py2 = cy - vy * kShaftPx;
+      const bool pp = posAtPlusTripod[slot];
       const float d1 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px1, py1);
       const float d2 = DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px2, py2);
       if (d1 < bestD) {
         bestD = d1;
-        hoverSnap = ad.posSnap;
+        hoverSnap = pp ? ad.posSnap : ad.negSnap;
       }
       if (d2 < bestD) {
         bestD = d2;
-        hoverSnap = ad.negSnap;
+        hoverSnap = pp ? ad.negSnap : ad.posSnap;
       }
     }
   }
 
-  for (const AxisDraw& ad : kAxes) {
-    WorldAxisToScreenDir(cam, pivot, ad.worldPlus, sw, sh, &vx, &vy);
+  for (int k = 0; k < 3; ++k) {
+    const int slot = drawOrder[k];
+    const int a = slotToAxis[slot];
+    const AxisDraw& ad = kAxes[a];
+    vx = kViewGizmoTripod[slot][0];
+    vy = kViewGizmoTripod[slot][1];
     const float cx = center.x;
     const float cy = center.y;
     const float px1 = cx + vx * kShaftPx;
     const float py1 = cy + vy * kShaftPx;
     const float px2 = cx - vx * kShaftPx;
     const float py2 = cy - vy * kShaftPx;
+    const bool pp = posAtPlusTripod[slot];
+    const float ppx = pp ? px1 : px2;
+    const float ppy = pp ? py1 : py2;
+    const float pnx = pp ? px2 : px1;
+    const float pny = pp ? py2 : py1;
 
     const bool hlPos = (hoverSnap == ad.posSnap);
     const bool hlNeg = (hoverSnap == ad.negSnap);
@@ -1066,13 +1144,26 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
     if (hlNeg)
       cNeg = IM_COL32(255, 255, 200, 255);
 
-    dl->AddLine(center, ImVec2(px1, py1), cPos, hlPos ? 4.0f : 3.0f);
-    dl->AddLine(center, ImVec2(px2, py2), cNeg, hlNeg ? 4.0f : 2.5f);
-    dl->AddCircleFilled(ImVec2(px1, py1), hlPos ? 5.0f : 4.0f, cPos, 10);
-    dl->AddCircleFilled(ImVec2(px2, py2), hlNeg ? 4.5f : 3.5f, cNeg, 10);
+    const float toward = Vec3::Dot(toCam, ad.worldPlus);
+    const float alphaPos = toward >= 0.f ? 1.0f : 0.55f;
+    const float alphaNeg = toward <= 0.f ? 1.0f : 0.55f;
+    auto fade = [](ImU32 c, float alpha) -> ImU32 {
+      const int fa = static_cast<int>(std::round(255.f * std::clamp(alpha, 0.15f, 1.f)));
+      return (c & 0x00FFFFFF) | (static_cast<ImU32>(fa) << 24);
+    };
 
-    const ImVec2 tOff(4.0f, -6.0f);
-    dl->AddText(ImVec2(px1 + tOff.x, py1 + tOff.y), cPos, ad.label);
+    dl->AddLine(center, ImVec2(ppx, ppy), fade(cPos, alphaPos), hlPos ? 4.0f : 3.0f);
+    dl->AddLine(center, ImVec2(pnx, pny), fade(cNeg, alphaNeg), hlNeg ? 4.0f : 2.5f);
+    dl->AddCircleFilled(ImVec2(ppx, ppy), hlPos ? 5.0f : 4.0f, fade(cPos, alphaPos), 10);
+    dl->AddCircleFilled(ImVec2(pnx, pny), hlNeg ? 4.5f : 3.5f, fade(cNeg, alphaNeg), 10);
+
+    const float tdx = ppx - cx;
+    const float tdy = ppy - cy;
+    const float tlen = std::sqrt(tdx * tdx + tdy * tdy);
+    const float inv = tlen > 1e-4f ? 1.f / tlen : 1.f;
+    const ImVec2 perp(-tdy * inv, tdx * inv);
+    const ImVec2 tOff = ImVec2(perp.x * 5.0f + 3.0f, perp.y * 5.0f - 5.0f);
+    dl->AddText(ImVec2(ppx + tOff.x, ppy + tOff.y), fade(cPos, alphaPos), ad.label);
   }
 
   if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) && ImGui::IsMouseClicked(0) &&
@@ -1103,12 +1194,15 @@ void EditorLayer::DrawObjectList() {
 
   char searchBuf[256] = {};
   std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_objectSearchQuery.c_str());
+  ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
   if (ImGui::InputTextWithHint("##object_search", "Search objects...", searchBuf, sizeof(searchBuf)))
     m_objectSearchQuery = searchBuf;
+  ImGui::PopItemFlag();
   ImGui::Separator();
 
   int shownObjectCount = 0;
   for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+    ImGui::PushID(i);
     auto& obj = m_document.objects[i];
     if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
       continue;
@@ -1141,7 +1235,35 @@ void EditorLayer::DrawObjectList() {
       }
       ImGui::EndGroup();
     }
+
+    if (ImGui::BeginPopupContextItem("obj_ctx")) {
+      if (ImGui::MenuItem("Rename...")) {
+        m_renameObjectIndex = i;
+        m_renameObjectDraft = obj.id;
+        m_renameObjectError.clear();
+        m_renameObjectOpen = true;
+      }
+
+      if (ImGui::MenuItem("Duplicate")) {
+        SceneObject clone = DuplicateObject(m_document, obj);
+        clone.position.x += 1.0f;
+        clone.position.z += 1.0f;
+        m_document.objects.push_back(std::move(clone));
+        m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+        m_document.dirty = true;
+        TriggerReload();
+      }
+
+      if (ImGui::MenuItem("Delete")) {
+        m_selectedIndices = {i};
+        RequestDeleteSelectedObjects();
+      }
+
+      ImGui::EndPopup();
+    }
+
     ++shownObjectCount;
+    ImGui::PopID();
   }
 
   const FilteredListState objectState =
@@ -1156,6 +1278,64 @@ void EditorLayer::DrawObjectList() {
       if (ImGui::Button("Clear Object Search"))
         m_objectSearchQuery.clear();
     }
+  }
+
+  if (m_renameObjectOpen) {
+    ImGui::OpenPopup("Rename Object");
+    m_renameObjectOpen = false;
+  }
+  if (ImGui::BeginPopupModal("Rename Object", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    char nameBuf[256] = {};
+    std::snprintf(nameBuf, sizeof(nameBuf), "%s", m_renameObjectDraft.c_str());
+    if (ImGui::InputText("New ID", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+      m_renameObjectDraft = nameBuf;
+    } else if (std::strncmp(nameBuf, m_renameObjectDraft.c_str(), sizeof(nameBuf)) != 0) {
+      m_renameObjectDraft = nameBuf;
+    }
+
+    if (!m_renameObjectError.empty())
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", m_renameObjectError.c_str());
+
+    bool applyRequested = false;
+    if (ImGui::Button("Apply"))
+      applyRequested = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      m_renameObjectError.clear();
+      m_renameObjectIndex = -1;
+      ImGui::CloseCurrentPopup();
+    }
+
+    if (applyRequested) {
+      if (m_renameObjectIndex < 0 || m_renameObjectIndex >= static_cast<int>(m_document.objects.size())) {
+        m_renameObjectError = "Selected object is no longer valid.";
+      } else if (m_renameObjectDraft.empty()) {
+        m_renameObjectError = "ID cannot be empty.";
+      } else {
+        int existingIdx = -1;
+        for (int j = 0; j < static_cast<int>(m_document.objects.size()); ++j) {
+          if (m_document.objects[static_cast<size_t>(j)].id == m_renameObjectDraft) {
+            existingIdx = j;
+            break;
+          }
+        }
+
+        if (existingIdx >= 0 && existingIdx != m_renameObjectIndex) {
+          m_renameObjectError = "ID already exists.";
+        } else {
+          SceneObject& target = m_document.objects[static_cast<size_t>(m_renameObjectIndex)];
+          if (target.id != m_renameObjectDraft) {
+            target.id = m_renameObjectDraft;
+            m_document.dirty = true;
+          }
+          m_renameObjectError.clear();
+          m_renameObjectIndex = -1;
+          ImGui::CloseCurrentPopup();
+        }
+      }
+    }
+
+    ImGui::EndPopup();
   }
 
   ImGui::End();

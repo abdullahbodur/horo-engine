@@ -200,6 +200,10 @@ class EditorLayer {
   std::vector<int> m_pendingDeleteObjectIndices;
   std::string m_pendingDeleteAssetId;
   std::string m_exitConfirmError;
+  bool m_renameObjectOpen = false;
+  int m_renameObjectIndex = -1;
+  std::string m_renameObjectDraft;
+  std::string m_renameObjectError;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,
