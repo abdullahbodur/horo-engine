@@ -34,6 +34,7 @@
 #include <unordered_set>
 
 #include "core/Logger.h"
+#include "core/ProjectPath.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
@@ -282,7 +283,10 @@ std::string PickTextureFilePath() {
 
 // Copy a picked texture into assets/models (same convention as OBJ import) and return
 // a project-relative path for the scene JSON / LevelLoader.
-static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError) {
+// subfolderHint: asset name (e.g. "enemy") → copies into assets/models/enemy/.
+// Empty hint falls back to flat assets/models/.
+static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError,
+                                               const std::string& subfolderHint = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -299,11 +303,13 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
     return {};
   }
 
-  const fs::path destDir("assets/models");
+  const fs::path destDir = subfolderHint.empty()
+                               ? ProjectPath::Root() / "assets/models"
+                               : ProjectPath::Root() / "assets/models" / subfolderHint;
   fs::create_directories(destDir, ec);
   if (ec) {
     if (outError)
-      *outError = "Cannot create assets/models: " + ec.message();
+      *outError = "Cannot create " + destDir.string() + ": " + ec.message();
     return {};
   }
 
@@ -375,8 +381,8 @@ static void CopyCompanionAssets(const std::string& objSrcPath, const std::string
   }
 }
 
-// Copy picked .obj into assets/models (and companion MTL/textures). Returns project-relative
-// mesh path (e.g. assets/models/foo.obj) or empty on failure.
+// Copy picked .obj into assets/models/{stem}/ (and companion MTL/textures). Returns
+// project-relative mesh path (e.g. assets/models/foo/foo.obj) or empty on failure.
 static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
@@ -387,12 +393,12 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   const fs::path src(pickedPath);
-  const fs::path destDir("assets/models");
+  const fs::path destDir = ProjectPath::Root() / "assets/models" / src.stem();
   std::error_code ec;
   fs::create_directories(destDir, ec);
   if (ec) {
     if (outError)
-      *outError = "Cannot create assets/models: " + ec.message();
+      *outError = "Cannot create " + destDir.string() + ": " + ec.message();
     return {};
   }
   const fs::path dest = destDir / src.filename();
@@ -512,7 +518,7 @@ void EditorLayer::ProcessPendingPathDrops() {
 
     if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(path, &err);
+      const std::string rel = ImportTextureToAssetsModels(path, &err, m_assetDraftId);
       if (rel.empty()) {
         if (!err.empty())
           LOG_WARN("Texture drop: %s", err.c_str());
@@ -527,7 +533,7 @@ void EditorLayer::ProcessPendingPathDrops() {
       const auto it = m_document.assets.find(m_selectedAssetId);
       if (it != m_document.assets.end()) {
         std::string err;
-        const std::string rel = ImportTextureToAssetsModels(path, &err);
+        const std::string rel = ImportTextureToAssetsModels(path, &err, m_selectedAssetId);
         if (rel.empty()) {
           if (!err.empty())
             LOG_WARN("Texture drop: %s", err.c_str());
@@ -929,7 +935,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
     }
     case DeferredFilePick::NewAssetAlbedo: {
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, m_assetDraftId);
       if (!rel.empty())
         m_assetDraftAlbedoMap = rel;
       else if (!err.empty())
@@ -941,7 +947,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
       if (id.empty() || m_document.assets.find(id) == m_document.assets.end())
         break;
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, id);
       if (!rel.empty()) {
         m_document.assets[id].albedoMap = rel;
         m_document.dirty = true;
