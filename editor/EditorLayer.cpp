@@ -873,7 +873,9 @@ void EditorLayer::DrawToolbar() {
       primaryIdx,
       static_cast<int>(m_document.objects.size()));
 
-  if (ImGui::BeginMenu("Add")) {
+  if (ImGui::Button("Add"))
+    ImGui::OpenPopup("##toolbar_add_popup");
+  if (ImGui::BeginPopup("##toolbar_add_popup")) {
     if (ImGui::MenuItem("Panel"))
       AddObject(SceneObjectType::Panel);
     if (ImGui::MenuItem("Prop"))
@@ -890,13 +892,15 @@ void EditorLayer::DrawToolbar() {
       AddObjectFromSelectedAsset();
     if (!hasSelectedAsset)
       ImGui::EndDisabled();
-    ImGui::EndMenu();
+    ImGui::EndPopup();
   }
   ImGui::SameLine();
 
   if (!hasSingleSelection)
     ImGui::BeginDisabled();
-  if (ImGui::BeginMenu("Edit")) {
+  if (ImGui::Button("Edit"))
+    ImGui::OpenPopup("##toolbar_edit_popup");
+  if (ImGui::BeginPopup("##toolbar_edit_popup")) {
     if (ImGui::MenuItem("Rename..."))
       OpenRenameObjectModal(primaryIdx);
     if (ImGui::MenuItem("Duplicate"))
@@ -913,13 +917,15 @@ void EditorLayer::DrawToolbar() {
         m_clipboardToastTime = 1.5f;
       }
     }
-    ImGui::EndMenu();
+    ImGui::EndPopup();
   }
   if (!hasSingleSelection)
     ImGui::EndDisabled();
   ImGui::SameLine();
 
-  if (ImGui::BeginMenu("View")) {
+  if (ImGui::Button("View"))
+    ImGui::OpenPopup("##toolbar_view_popup");
+  if (ImGui::BeginPopup("##toolbar_view_popup")) {
     const bool flyBefore = m_flyMode;
     if (ImGui::MenuItem("Fly Mode", "Tab", m_flyMode)) {
       m_flyMode = !m_flyMode;
@@ -934,7 +940,7 @@ void EditorLayer::DrawToolbar() {
       m_helpOpen = true;
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
-    ImGui::EndMenu();
+    ImGui::EndPopup();
   }
   ImGui::SameLine();
   ImGui::TextDisabled("Copy Ref: Ctrl/Cmd+Shift+C");

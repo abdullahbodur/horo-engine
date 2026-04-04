@@ -643,6 +643,16 @@ TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[edito
     REQUIRE(std::string(status.reloadText) == "idle");
 }
 
+TEST_CASE("Editor UI logic: edit menu enables only for single valid selection", "[editor]") {
+    REQUIRE(CanEditSingleSelection(1, 0, 1));
+    REQUIRE(CanEditSingleSelection(1, 2, 5));
+
+    REQUIRE_FALSE(CanEditSingleSelection(0, -1, 5));
+    REQUIRE_FALSE(CanEditSingleSelection(2, 1, 5));
+    REQUIRE_FALSE(CanEditSingleSelection(1, -1, 5));
+    REQUIRE_FALSE(CanEditSingleSelection(1, 5, 5));
+}
+
 TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
     SceneDocument doc;
     SceneObject obj;
