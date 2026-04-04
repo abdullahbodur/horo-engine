@@ -11,6 +11,9 @@ struct AppSpec {
   int width = 1280;
   int height = 720;
   bool vsync = true;
+  // Repo-relative path to the main scene file (e.g. "assets/scenes/world.json").
+  // Resolved to an absolute path via ProjectPath at construction time.
+  std::string defaultSceneFile;
 };
 
 class Application {
@@ -34,6 +37,10 @@ class Application {
 
   Window& GetWindow() { return *m_window; }
 
+  // Absolute path to the default scene file set in AppSpec.
+  // Empty if none was provided.
+  const std::string& GetDefaultSceneFilePath() const { return m_defaultSceneFilePath; }
+
  protected:
   // Subclasses override these
   virtual void OnInit() {}
@@ -46,6 +53,7 @@ class Application {
   std::unique_ptr<Window> m_window;
   bool m_running = true;
   bool m_editorModeRequested = false;
+  std::string m_defaultSceneFilePath;
 };
 
 }  // namespace Monolith

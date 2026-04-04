@@ -446,7 +446,7 @@ void EditorLayer::Toggle() {
 
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
-    doc.filePath = "assets/scenes/dungeon.json";
+    doc.filePath = "assets/scenes/world.json";
 
   for (auto& obj : doc.objects) {
     if (obj.type != SceneObjectType::Prop)
@@ -1146,7 +1146,7 @@ void EditorLayer::DrawToolbar() {
 
   if (ImGui::Button("Load")) {
     std::string path =
-        m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+        m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
     try {
       m_document = SceneSerializer::LoadFromFile(path);
       m_selectedIndices.clear();
@@ -2974,7 +2974,7 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   if (outError)
     outError->clear();
 
-  std::string path = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  std::string path = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
   m_document.filePath = path;
 
   LOG_INFO("[Editor] Saving scene to: %s", path.c_str());
@@ -3125,7 +3125,7 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
   std::ostringstream ss;
   ss.setf(std::ios::fixed);
   ss.precision(4);
-  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
+  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
   ss << "EDITOR_REF"
      << " scene=\"" << scenePath << "\""
      << " id=" << obj.id
