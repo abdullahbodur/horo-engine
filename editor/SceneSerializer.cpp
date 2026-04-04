@@ -81,6 +81,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
     so.type = TypeFromString(obj.value("type", "Panel"));
     so.yaw = obj.value("yaw", 0.0f);
     so.pitch = obj.value("pitch", 0.0f);
+    so.roll = obj.value("roll", 0.0f);
     so.assetId = obj.value("asset", "");
 
     auto pos = obj.value("position", json::array({0.f, 0.f, 0.f}));
@@ -171,6 +172,8 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     obj["yaw"] = so.yaw;
     if (so.pitch != 0.0f || so.type == SceneObjectType::Camera)
       obj["pitch"] = so.pitch;
+    if (so.roll != 0.0f)
+      obj["roll"] = so.roll;
 
     if (!so.assetId.empty()) {
       // Asset reference — mesh/renderScale live in the assets block

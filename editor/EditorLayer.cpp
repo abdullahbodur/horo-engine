@@ -1904,7 +1904,12 @@ void EditorLayer::DrawPropertiesPanel() {
       m_transformCb(obj);
   }
 
-  if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+  // ---- Rotation (Euler angles: Pitch / Yaw / Roll) ----
+  float rot[3] = {obj.pitch, obj.yaw, obj.roll};
+  if (ImGui::DragFloat3("Rotation (P/Y/R)", rot, 1.0f, -360.0f, 360.0f)) {
+    obj.pitch = rot[0];
+    obj.yaw = rot[1];
+    obj.roll = rot[2];
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
