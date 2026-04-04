@@ -81,6 +81,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
     so.type = TypeFromString(obj.value("type", "Panel"));
     so.yaw = obj.value("yaw", 0.0f);
     so.pitch = obj.value("pitch", 0.0f);
+    so.roll = obj.value("roll", 0.0f);
     so.assetId = obj.value("asset", "");
 
     auto pos = obj.value("position", json::array({0.f, 0.f, 0.f}));
@@ -105,15 +106,27 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
       }
     }
 
-    // ---- Migration: isLight → light component ----
+    // ---- Legacy compatibility: isLight prop → optional light component ----
+    // Accept old scene files at load time, but never persist isLight again.
     auto isLightIt = so.props.find("isLight");
-    if (isLightIt != so.props.end() && isLightIt->second == "true") {
-      ComponentDesc light;
-      light.type = "light";
-      light.props["intensity"] = "1";
-      light.props["color"] = "1,1,1";
-      light.props["radius"] = "5";
-      so.components.push_back(std::move(light));
+    if (isLightIt != so.props.end()) {
+      const bool wantsLight = (isLightIt->second == "true" || isLightIt->second == "1");
+      bool hasLightComponent = false;
+      for (const auto& c : so.components) {
+        if (c.type == "light") {
+          hasLightComponent = true;
+          break;
+        }
+      }
+
+      if (wantsLight && !hasLightComponent) {
+        ComponentDesc light;
+        light.type = "light";
+        light.props["intensity"] = "1";
+        light.props["color"] = "1,1,1";
+        light.props["radius"] = "5";
+        so.components.push_back(std::move(light));
+      }
       so.props.erase(isLightIt);
     }
 
@@ -171,26 +184,32 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     obj["yaw"] = so.yaw;
     if (so.pitch != 0.0f || so.type == SceneObjectType::Camera)
       obj["pitch"] = so.pitch;
+    if (so.roll != 0.0f)
+      obj["roll"] = so.roll;
 
     if (!so.assetId.empty()) {
-      // Asset reference — mesh/renderScale live in the assets block
+      // Asset reference — mesh/renderScale live in the assets block.
       obj["asset"] = so.assetId;
-    } else {
-      // Inline props — skip runtime-only keys (e.g. _eid)
-      json props = json::object();
-      std::vector<std::string> propKeys;
-      propKeys.reserve(so.props.size());
-      for (const auto& kv : so.props)
-        propKeys.push_back(kv.first);
-      std::sort(propKeys.begin(), propKeys.end());
-
-      for (const auto& k : propKeys) {
-        if (k == "_eid")
-          continue;  // runtime handle, never persisted
-        props[k] = so.props.at(k);
-      }
-      obj["props"] = props;
     }
+
+    // Persist type-specific and hierarchy props for both asset-backed and inline objects.
+    // Runtime-only keys (e.g. _eid) are always skipped.
+    json props = json::object();
+    std::vector<std::string> propKeys;
+    propKeys.reserve(so.props.size());
+    for (const auto& kv : so.props)
+      propKeys.push_back(kv.first);
+    std::sort(propKeys.begin(), propKeys.end());
+
+    for (const auto& k : propKeys) {
+      if (k == "_eid")
+        continue;  // runtime handle, never persisted
+      if (!so.assetId.empty() && (k == "mesh" || k == "renderScale"))
+        continue;  // asset-backed objects resolve these from the asset registry
+      props[k] = so.props.at(k);
+    }
+    if (!props.empty())
+      obj["props"] = std::move(props);
 
     // ---- Components ----
     if (!so.components.empty()) {

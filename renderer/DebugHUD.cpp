@@ -1380,11 +1380,12 @@ void DebugHUD::Update(float dt, const HUDStats& stats) {
 void DebugHUD::Render() {
   if (!s_initialized)
     return;
+  const bool forceNoCameraOverlay = s_stats.showNoCameraOverlay;
 #ifndef NDEBUG
-  if (!s_visible && !s_labelsVisible && !s_settingsOpen)
+  if (!s_visible && !s_labelsVisible && !s_settingsOpen && !forceNoCameraOverlay)
     return;
 #else
-  if (!s_visible)
+  if (!s_visible && !forceNoCameraOverlay)
     return;
 #endif
 
@@ -1449,12 +1450,17 @@ void DebugHUD::Render() {
     y += LINE;
     {
       char buf[64];
-      std::snprintf(buf, sizeof(buf), "YAW  : %.1f", s_stats.camYaw);
-      DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
-      y += LINE;
-      std::snprintf(buf, sizeof(buf), "PITCH: %.1f", s_stats.camPitch);
-      DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
-      y += LINE;
+      if (!s_stats.sceneCameraOn) {
+        DrawText("CAMERA OFF", X0, y, 1.0f, 0.35f, 0.35f, SCALE);
+        y += LINE;
+      } else {
+        std::snprintf(buf, sizeof(buf), "YAW  : %.1f", s_stats.camYaw);
+        DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
+        y += LINE;
+        std::snprintf(buf, sizeof(buf), "PITCH: %.1f", s_stats.camPitch);
+        DrawText(buf, X0, y, 1.0f, 1.0f, 1.0f, SCALE);
+        y += LINE;
+      }
     }
     y += 4.0f;
 
@@ -1486,6 +1492,13 @@ void DebugHUD::Render() {
 #endif
       DrawText(buf, X0, y, 0.6f, 0.6f, 0.6f, SCALE);
     }
+  }
+
+  if (forceNoCameraOverlay) {
+    constexpr float SCALE = 3.0f;
+    const float x = static_cast<float>(s_screenW) * 0.5f - 108.0f;
+    const float y = static_cast<float>(s_screenH) * 0.5f - 10.0f;
+    DrawText("NO CAMERA", x, y, 1.0f, 0.25f, 0.25f, SCALE);
   }
 
 #ifndef NDEBUG

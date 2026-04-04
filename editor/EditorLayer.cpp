@@ -29,6 +29,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "core/Logger.h"
 #include "editor/EditorAssetImport.h"
@@ -93,6 +95,72 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(), wt, outCenter,
                         outHalf);
   return true;
+}
+
+static const std::string kEmptyParentId;
+
+static const std::string& GetParentId(const SceneObject& obj) {
+  const auto it = obj.props.find("parentId");
+  return (it != obj.props.end()) ? it->second : kEmptyParentId;
+}
+
+static int FindObjectIndexById(const SceneDocument& doc, const std::string& id) {
+  if (id.empty())
+    return -1;
+  for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+    if (doc.objects[static_cast<size_t>(i)].id == id)
+      return i;
+  }
+  return -1;
+}
+
+static bool IsDescendantOf(const SceneDocument& doc, int nodeIdx, int ancestorIdx) {
+  if (nodeIdx < 0 || ancestorIdx < 0 || nodeIdx >= static_cast<int>(doc.objects.size()) ||
+      ancestorIdx >= static_cast<int>(doc.objects.size()))
+    return false;
+
+  int cur = nodeIdx;
+  for (int guard = 0; guard < static_cast<int>(doc.objects.size()); ++guard) {
+    const int p = FindObjectIndexById(doc, GetParentId(doc.objects[static_cast<size_t>(cur)]));
+    if (p < 0)
+      return false;
+    if (p == ancestorIdx)
+      return true;
+    cur = p;
+  }
+  return false;
+}
+
+static void PropagateHierarchyTransformDelta(SceneDocument& doc,
+                                             int parentIdx,
+                                             const Vec3& oldParentPos,
+                                             const Quaternion& oldParentRot,
+                                             const Vec3& newParentPos,
+                                             const Quaternion& newParentRot,
+                                             const std::function<void(const SceneObject&)>& transformCb) {
+  if (parentIdx < 0 || parentIdx >= static_cast<int>(doc.objects.size()))
+    return;
+
+  const Quaternion deltaRot = newParentRot * oldParentRot.Inverse();
+  for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+    if (i == parentIdx || !IsDescendantOf(doc, i, parentIdx))
+      continue;
+
+    SceneObject& child = doc.objects[static_cast<size_t>(i)];
+    const Vec3 oldRel = child.position - oldParentPos;
+    child.position = newParentPos + deltaRot * oldRel;
+
+    const Quaternion childRot =
+        Quaternion::FromEuler(ToRadians(child.pitch), ToRadians(child.yaw), ToRadians(child.roll));
+    const Quaternion rotatedChild = deltaRot * childRot;
+    const Vec3 e = rotatedChild.ToEuler();
+    child.pitch = ToDegrees(e.x);
+    child.yaw = ToDegrees(e.y);
+    child.roll = ToDegrees(e.z);
+
+    if (transformCb)
+      transformCb(child);
+  }
 }
 
 // Screen direction of a world-space axis for the orientation corner gizmo.
@@ -377,6 +445,30 @@ void EditorLayer::Toggle() {
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/dungeon.json";
+
+  for (auto& obj : doc.objects) {
+    if (obj.type != SceneObjectType::Prop)
+      continue;
+    const auto behIt = obj.props.find("behavior");
+    if (behIt == obj.props.end() || behIt->second.empty() || behIt->second == "none")
+      continue;
+
+    bool hasScript = false;
+    for (const auto& comp : obj.components) {
+      if (comp.type == "script") {
+        hasScript = true;
+        break;
+      }
+    }
+    if (!hasScript) {
+      ComponentDesc script;
+      script.type = "script";
+      script.props["behaviorTag"] = behIt->second;
+      obj.components.push_back(std::move(script));
+    }
+    obj.props.erase("behavior");
+  }
+
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
@@ -773,93 +865,85 @@ void EditorLayer::DrawToolbar() {
   ImGui::Separator();
   ImGui::SameLine();
 
-  auto addObj = [&](SceneObjectType type, const char* label) {
-    if (ImGui::Button(label)) {
-      SceneObject o;
-      o.id = GenerateId(m_document);
-      o.type = type;
-      ApplySchemaDefaults(o);
-      m_document.objects.push_back(std::move(o));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
-    }
-    ImGui::SameLine();
-  };
-
-  addObj(SceneObjectType::Panel, "+ Panel");
-  addObj(SceneObjectType::Prop, "+ Prop");
-  addObj(SceneObjectType::Light, "+ Light");
-
-  if (ImGui::Button("+ Camera")) {
-    SceneObject o;
-    o.id = GenerateCameraId(m_document);
-    o.type = SceneObjectType::Camera;
-    o.props["fov"] = "60";
-    o.props["nearClip"] = "0.1";
-    o.props["farClip"] = "500";
-    o.props["followTargetId"] = "";
-    m_document.objects.push_back(std::move(o));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
-  }
-  ImGui::SameLine();
-
   const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
                                 m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
-  if (!hasSelectedAsset)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("+ Prop from Asset")) {
-    SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
-    m_document.objects.push_back(std::move(obj));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
-  }
-  if (!hasSelectedAsset)
-    ImGui::EndDisabled();
-  ImGui::SameLine();
-
   const int primaryIdx = PrimaryIdx();
-  const bool canDuplicate = primaryIdx >= 0 && primaryIdx < static_cast<int>(m_document.objects.size());
-  if (!canDuplicate)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("Duplicate")) {
-    SceneObject clone = DuplicateObject(m_document, m_document.objects[primaryIdx]);
-    clone.position.x += 1.0f;
-    clone.position.z += 1.0f;
-    m_document.objects.push_back(std::move(clone));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_document.dirty = true;
-    TriggerReload();
+  const bool hasSingleSelection = CanEditSingleSelection(
+      static_cast<int>(m_selectedIndices.size()),
+      primaryIdx,
+      static_cast<int>(m_document.objects.size()));
+
+  if (ImGui::Button("Add"))
+    ImGui::OpenPopup("##toolbar_add_popup");
+  if (ImGui::BeginPopup("##toolbar_add_popup")) {
+    if (ImGui::MenuItem("Panel"))
+      AddObject(SceneObjectType::Panel);
+    if (ImGui::MenuItem("Prop"))
+      AddObject(SceneObjectType::Prop);
+    if (ImGui::MenuItem("Light"))
+      AddObject(SceneObjectType::Light);
+    if (ImGui::MenuItem("Camera"))
+      AddObject(SceneObjectType::Camera);
+
+    ImGui::Separator();
+    if (!hasSelectedAsset)
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Prop from Selected Asset"))
+      AddObjectFromSelectedAsset();
+    if (!hasSelectedAsset)
+      ImGui::EndDisabled();
+    ImGui::EndPopup();
   }
-  if (!canDuplicate)
+  ImGui::SameLine();
+
+  if (!hasSingleSelection)
+    ImGui::BeginDisabled();
+  if (ImGui::Button("Edit"))
+    ImGui::OpenPopup("##toolbar_edit_popup");
+  if (ImGui::BeginPopup("##toolbar_edit_popup")) {
+    if (ImGui::MenuItem("Rename..."))
+      OpenRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Duplicate"))
+      DuplicatePrimarySelection();
+    if (ImGui::MenuItem("Delete"))
+      RequestDeleteSelectedObjects();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C")) {
+      const int idx = PrimaryIdx();
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
+        const std::string ref = BuildSelectionRefCode(m_document.objects[static_cast<size_t>(idx)], idx);
+        ImGui::SetClipboardText(ref.c_str());
+        m_clipboardToastLabel = "Reference copied";
+        m_clipboardToastTime = 1.5f;
+      }
+    }
+    ImGui::EndPopup();
+  }
+  if (!hasSingleSelection)
     ImGui::EndDisabled();
   ImGui::SameLine();
 
-  // Fly camera toggle — green when active, Tab also toggles
-  const bool flyActiveNow = m_flyMode;  // capture before button may flip it
-  if (flyActiveNow)
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.65f, 0.15f, 1.0f));
-  if (ImGui::Button(flyActiveNow ? "Fly [ON]" : "Fly")) {
-    m_flyMode = !m_flyMode;
-    m_flyCamInitialized = false;
-    m_prevCursorInit = false;
-    glfwSetInputMode(m_window, GLFW_CURSOR,
-                     m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+  if (ImGui::Button("View"))
+    ImGui::OpenPopup("##toolbar_view_popup");
+  if (ImGui::BeginPopup("##toolbar_view_popup")) {
+    const bool flyBefore = m_flyMode;
+    if (ImGui::MenuItem("Fly Mode", "Tab", m_flyMode)) {
+      m_flyMode = !m_flyMode;
+      m_flyCamInitialized = false;
+      m_prevCursorInit = false;
+      glfwSetInputMode(m_window, GLFW_CURSOR,
+                       m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+    if (flyBefore || m_flyMode)
+      ImGui::TextDisabled("WASD + mouse");
+    if (ImGui::MenuItem("Help", "? / F1"))
+      m_helpOpen = true;
+    if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
+      m_quickOpenOpen = true;
+    ImGui::EndPopup();
   }
-  if (flyActiveNow) {
-    ImGui::PopStyleColor();  // always balanced with the push above
-    ImGui::SameLine();
-    ImGui::TextDisabled("WASD + mouse  |  Tab to exit");
-  }
   ImGui::SameLine();
-  ImGui::TextDisabled("Ctrl/Cmd+Shift+C copy ref");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Help: ? / F1");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Quick Open: Ctrl/Cmd+P");
+  ImGui::TextDisabled("Copy Ref: Ctrl/Cmd+Shift+C");
   ImGui::SameLine();
 
   // Right-aligned controls
@@ -1088,45 +1172,203 @@ void EditorLayer::DrawObjectList() {
 
   char searchBuf[256] = {};
   std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_objectSearchQuery.c_str());
+  ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
   if (ImGui::InputTextWithHint("##object_search", "Search objects...", searchBuf, sizeof(searchBuf)))
     m_objectSearchQuery = searchBuf;
+  ImGui::PopItemFlag();
   ImGui::Separator();
 
   int shownObjectCount = 0;
-  for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
-    auto& obj = m_document.objects[i];
-    if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
-      continue;
-    const char* typeName = ObjectTypeLabel(obj.type);
-
-    char selectableId[32];
-    std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
-
-    // Reserve enough height for two lines (type+id on first, asset on second)
-    const float lineH = ImGui::GetTextLineHeight();
-    const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
-
-    if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
-      if (ImGui::GetIO().KeyShift)
-        ToggleSelect(i);
-      else
-        m_selectedIndices = {i};
-    }
-    ImGui::SameLine();
-    {
-      // Draw type tag dimmed, then object id in normal color
-      const ImVec2 pos = ImGui::GetCursorScreenPos();
-      ImGui::BeginGroup();
-      ImGui::TextDisabled("%s", typeName);
-      ImGui::SameLine(0.0f, 4.0f);
-      ImGui::Text("%s", obj.id.c_str());
-      if (!obj.assetId.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
-        ImGui::TextDisabled("> %s", obj.assetId.c_str());
+  if (!m_objectSearchQuery.empty()) {
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      ImGui::PushID(i);
+      auto& obj = m_document.objects[i];
+      if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
+      {
+        ImGui::PopID();
+        continue;
       }
-      ImGui::EndGroup();
+      const char* typeName = ObjectTypeLabel(obj.type);
+
+      char selectableId[32];
+      std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
+
+      const float lineH = ImGui::GetTextLineHeight();
+      const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
+
+      if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
+        if (ImGui::GetIO().KeyShift)
+          ToggleSelect(i);
+        else
+          m_selectedIndices = {i};
+      }
+      ImGui::SameLine();
+      {
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::BeginGroup();
+        ImGui::TextDisabled("%s", typeName);
+        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::Text("%s", obj.id.c_str());
+        if (!obj.assetId.empty()) {
+          ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
+          ImGui::TextDisabled("> %s", obj.assetId.c_str());
+        }
+        ImGui::EndGroup();
+      }
+
+      if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        if (ImGui::BeginMenu("Add")) {
+          if (ImGui::MenuItem("Panel"))
+            AddObject(SceneObjectType::Panel, obj.id);
+          if (ImGui::MenuItem("Prop"))
+            AddObject(SceneObjectType::Prop, obj.id);
+          if (ImGui::MenuItem("Light"))
+            AddObject(SceneObjectType::Light, obj.id);
+          if (ImGui::MenuItem("Camera"))
+            AddObject(SceneObjectType::Camera, obj.id);
+          ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename..."))
+          OpenRenameObjectModal(i);
+
+        if (ImGui::MenuItem("Duplicate")) {
+          m_selectedIndices = {i};
+          DuplicatePrimarySelection();
+        }
+
+        if (ImGui::MenuItem("Delete")) {
+          m_selectedIndices = {i};
+          RequestDeleteSelectedObjects();
+        }
+
+        ImGui::EndPopup();
+      }
+
+      ++shownObjectCount;
+      ImGui::PopID();
     }
-    ++shownObjectCount;
+  } else {
+    std::unordered_map<std::string, int> idToIndex;
+    idToIndex.reserve(m_document.objects.size());
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i)
+      idToIndex[m_document.objects[static_cast<size_t>(i)].id] = i;
+
+    std::vector<std::vector<int>> children(m_document.objects.size());
+    std::vector<int> roots;
+    roots.reserve(m_document.objects.size());
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      const SceneObject& obj = m_document.objects[static_cast<size_t>(i)];
+      int p = -1;
+      const auto pIt = idToIndex.find(GetParentId(obj));
+      if (pIt != idToIndex.end())
+        p = pIt->second;
+      if (p >= 0 && p != i)
+        children[static_cast<size_t>(p)].push_back(i);
+      else
+        roots.push_back(i);
+    }
+
+    std::function<void(int, int)> drawNode;
+    drawNode = [this, &drawNode, &children, &shownObjectCount](int idx, int depth) {
+      if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+        return;
+      SceneObject& obj = m_document.objects[static_cast<size_t>(idx)];
+      ++shownObjectCount;
+
+      ImGui::PushID(idx);
+      const float treeIndent = 14.0f;
+      if (depth > 0)
+        ImGui::Indent(treeIndent);
+      const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
+      ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+      if (!hasChildren)
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+      if (IsSelected(idx))
+        flags |= ImGuiTreeNodeFlags_Selected;
+
+      const char* typeName = ObjectTypeLabel(obj.type);
+      std::string label = std::string(typeName) + " " + obj.id;
+      const bool open = ImGui::TreeNodeEx("##obj_tree", flags, "%s", label.c_str());
+      if (ImGui::IsItemClicked()) {
+        if (ImGui::GetIO().KeyShift)
+          ToggleSelect(idx);
+        else
+          m_selectedIndices = {idx};
+      }
+
+      if (ImGui::BeginDragDropSource()) {
+        ImGui::SetDragDropPayload("SCENE_OBJECT_INDEX", &idx, sizeof(int));
+        ImGui::TextUnformatted(obj.id.c_str());
+        ImGui::EndDragDropSource();
+      }
+      if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
+          if (payload->DataSize == sizeof(int)) {
+            const int src = *static_cast<const int*>(payload->Data);
+            const bool valid = src >= 0 && src < static_cast<int>(m_document.objects.size()) &&
+                               src != idx && !IsDescendantOf(m_document, idx, src);
+            if (valid) {
+              m_document.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
+              m_document.dirty = true;
+            }
+          }
+        }
+        ImGui::EndDragDropTarget();
+      }
+
+      if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        if (ImGui::BeginMenu("Add")) {
+          if (ImGui::MenuItem("Panel"))
+            AddObject(SceneObjectType::Panel, obj.id);
+          if (ImGui::MenuItem("Prop"))
+            AddObject(SceneObjectType::Prop, obj.id);
+          if (ImGui::MenuItem("Light"))
+            AddObject(SceneObjectType::Light, obj.id);
+          if (ImGui::MenuItem("Camera"))
+            AddObject(SceneObjectType::Camera, obj.id);
+          ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename..."))
+          OpenRenameObjectModal(idx);
+
+        if (ImGui::MenuItem("Duplicate")) {
+          m_selectedIndices = {idx};
+          DuplicatePrimarySelection();
+        }
+
+        if (ImGui::MenuItem("Delete")) {
+          m_selectedIndices = {idx};
+          RequestDeleteSelectedObjects();
+        }
+
+        ImGui::Separator();
+        const bool hasParent = !GetParentId(obj).empty();
+        if (ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
+          obj.props.erase("parentId");
+          m_document.dirty = true;
+        }
+        ImGui::EndPopup();
+      }
+
+      if (open && hasChildren) {
+        for (int childIdx : children[static_cast<size_t>(idx)])
+          drawNode(childIdx, depth + 1);
+        ImGui::TreePop();
+      }
+
+      if (depth > 0)
+        ImGui::Unindent(treeIndent);
+      ImGui::PopID();
+    };
+
+    for (int rootIdx : roots)
+      drawNode(rootIdx, 0);
   }
 
   const FilteredListState objectState =
@@ -1141,6 +1383,83 @@ void EditorLayer::DrawObjectList() {
       if (ImGui::Button("Clear Object Search"))
         m_objectSearchQuery.clear();
     }
+  }
+
+  if (ImGui::BeginPopupContextWindow("obj_ctx_empty",
+                                     ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+    if (ImGui::BeginMenu("Add")) {
+      if (ImGui::MenuItem("Panel"))
+        AddObject(SceneObjectType::Panel);
+      if (ImGui::MenuItem("Prop"))
+        AddObject(SceneObjectType::Prop);
+      if (ImGui::MenuItem("Light"))
+        AddObject(SceneObjectType::Light);
+      if (ImGui::MenuItem("Camera"))
+        AddObject(SceneObjectType::Camera);
+      ImGui::EndMenu();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (m_renameObjectOpen) {
+    ImGui::OpenPopup("Rename Object");
+    m_renameObjectOpen = false;
+  }
+  if (ImGui::BeginPopupModal("Rename Object", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    char nameBuf[256] = {};
+    std::snprintf(nameBuf, sizeof(nameBuf), "%s", m_renameObjectDraft.c_str());
+    if (ImGui::InputText("New ID", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+      m_renameObjectDraft = nameBuf;
+    } else if (std::strncmp(nameBuf, m_renameObjectDraft.c_str(), sizeof(nameBuf)) != 0) {
+      m_renameObjectDraft = nameBuf;
+    }
+
+    if (!m_renameObjectError.empty())
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", m_renameObjectError.c_str());
+
+    bool applyRequested = false;
+    if (ImGui::Button("Apply"))
+      applyRequested = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      m_renameObjectError.clear();
+      m_renameObjectIndex = -1;
+      ImGui::CloseCurrentPopup();
+    }
+
+    if (applyRequested) {
+      if (m_renameObjectIndex < 0 || m_renameObjectIndex >= static_cast<int>(m_document.objects.size())) {
+        m_renameObjectError = "Selected object is no longer valid.";
+      } else if (m_renameObjectDraft.empty()) {
+        m_renameObjectError = "ID cannot be empty.";
+      } else {
+        const int existingIdx = FindObjectIndexById(m_document, m_renameObjectDraft);
+        if (existingIdx >= 0 && existingIdx != m_renameObjectIndex) {
+          m_renameObjectError = "ID already exists.";
+        } else {
+          SceneObject& target = m_document.objects[static_cast<size_t>(m_renameObjectIndex)];
+          const std::string oldId = target.id;
+          const std::string newId = m_renameObjectDraft;
+          if (oldId != newId) {
+            target.id = newId;
+            for (auto& other : m_document.objects) {
+              auto p = other.props.find("parentId");
+              if (p != other.props.end() && p->second == oldId)
+                p->second = newId;
+              auto f = other.props.find("followTargetId");
+              if (f != other.props.end() && f->second == oldId)
+                f->second = newId;
+            }
+            m_document.dirty = true;
+          }
+          m_renameObjectError.clear();
+          m_renameObjectIndex = -1;
+          ImGui::CloseCurrentPopup();
+        }
+      }
+    }
+
+    ImGui::EndPopup();
   }
 
   ImGui::End();
@@ -1789,19 +2108,50 @@ void EditorLayer::DrawPropertiesPanel() {
                          : (obj.type == SceneObjectType::Camera) ? "Camera"
                                                                  : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
+
+  {
+    std::string currentParent = GetParentId(obj);
+    std::vector<std::string> parentIds;
+    std::vector<const char*> parentItems;
+    parentItems.push_back("<root>");
+    int currentIdx = 0;
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      if (i == primaryIdx || IsDescendantOf(m_document, i, primaryIdx))
+        continue;
+      const std::string& id = m_document.objects[static_cast<size_t>(i)].id;
+      parentIds.push_back(id);
+      parentItems.push_back(parentIds.back().c_str());
+      if (id == currentParent)
+        currentIdx = static_cast<int>(parentItems.size()) - 1;
+    }
+    if (ImGui::Combo("Parent", &currentIdx, parentItems.data(), static_cast<int>(parentItems.size()))) {
+      if (currentIdx == 0)
+        obj.props.erase("parentId");
+      else
+        obj.props["parentId"] = parentIds[static_cast<size_t>(currentIdx - 1)];
+      m_document.dirty = true;
+    }
+  }
   ImGui::Separator();
 
   // ---- Camera-specific properties ----
   if (obj.type == SceneObjectType::Camera) {
+    const Vec3 oldPos = obj.position;
+    const Quaternion oldRot =
+        Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+    bool changedTransform = false;
+
     float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
     if (ImGui::DragFloat3("Position", pos, 0.05f)) {
       obj.position = {pos[0], pos[1], pos[2]};
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
     }
 
     if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
@@ -1810,9 +2160,17 @@ void EditorLayer::DrawPropertiesPanel() {
     float pitch = obj.pitch;
     if (ImGui::DragFloat("Pitch", &pitch, 1.0f, -89.0f, 89.0f)) {
       obj.pitch = std::max(-89.0f, std::min(89.0f, pitch));
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
+    }
+
+    if (changedTransform) {
+      const Quaternion newRot =
+          Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+      PropagateHierarchyTransformDelta(
+          m_document, primaryIdx, oldPos, oldRot, obj.position, newRot, m_transformCb);
     }
 
     ImGui::Separator();
@@ -1888,9 +2246,15 @@ void EditorLayer::DrawPropertiesPanel() {
   }
 
   // ---- Transform (non-camera objects) ----
+  const Vec3 oldPos = obj.position;
+  const Quaternion oldRot =
+      Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+  bool changedTransform = false;
+
   float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
   if (ImGui::DragFloat3("Position", pos, 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
+    changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
@@ -1904,10 +2268,23 @@ void EditorLayer::DrawPropertiesPanel() {
       m_transformCb(obj);
   }
 
-  if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+  // ---- Rotation (Euler angles: Pitch / Yaw / Roll) ----
+  float rot[3] = {obj.pitch, obj.yaw, obj.roll};
+  if (ImGui::DragFloat3("Rotation (P/Y/R)", rot, 1.0f, -360.0f, 360.0f)) {
+    obj.pitch = rot[0];
+    obj.yaw = rot[1];
+    obj.roll = rot[2];
+    changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
+  }
+
+  if (changedTransform) {
+    const Quaternion newRot =
+        Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+    PropagateHierarchyTransformDelta(
+        m_document, primaryIdx, oldPos, oldRot, obj.position, newRot, m_transformCb);
   }
 
   ImGui::Separator();
@@ -2126,10 +2503,32 @@ void EditorLayer::DrawPropertiesPanel() {
           }
         }
       } else if (comp.type == "script") {
-        char buf[256] = {};
-        std::snprintf(buf, sizeof(buf), "%s", comp.props["behaviorTag"].c_str());
-        if (ImGui::InputText("Behavior Tag", buf, sizeof(buf))) {
-          comp.props["behaviorTag"] = buf;
+        std::vector<std::string> options;
+        if (m_scriptBehaviorOptionsCb)
+          options = m_scriptBehaviorOptionsCb();
+        options.erase(std::remove_if(options.begin(), options.end(), [](const std::string& s) {
+                        return s.empty();
+                      }),
+                      options.end());
+        std::sort(options.begin(), options.end());
+        options.erase(std::unique(options.begin(), options.end()), options.end());
+
+        std::string current = comp.props["behaviorTag"];
+        if (!current.empty() && std::find(options.begin(), options.end(), current) == options.end())
+          options.push_back(current);
+
+        std::vector<const char*> labels;
+        labels.reserve(options.size() + 1);
+        labels.push_back("<none>");
+        int currentIdx = 0;
+        for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+          labels.push_back(options[static_cast<size_t>(i)].c_str());
+          if (options[static_cast<size_t>(i)] == current)
+            currentIdx = i + 1;
+        }
+
+        if (ImGui::Combo("Behavior", &currentIdx, labels.data(), static_cast<int>(labels.size()))) {
+          comp.props["behaviorTag"] = (currentIdx == 0) ? "" : options[static_cast<size_t>(currentIdx - 1)];
           m_document.dirty = true;
         }
       }
@@ -2243,6 +2642,46 @@ void EditorLayer::DrawSelectionHighlight() {
     if (i < 0 || i >= n)
       continue;
     const auto& obj = m_document.objects[i];
+
+    if (obj.type == SceneObjectType::Camera) {
+      const Vec4 color = {0.2f, 0.7f, 1.0f, 1.0f};
+      const float yawRad = ToRadians(obj.yaw);
+      const float pitchRad = ToRadians(std::max(-89.0f, std::min(89.0f, obj.pitch)));
+      const Vec3 forward = {-std::sin(yawRad) * std::cos(pitchRad),
+                            std::sin(pitchRad),
+                            -std::cos(yawRad) * std::cos(pitchRad)};
+
+      Vec3 right = Vec3::Cross(forward, Vec3::Up());
+      if (right.LengthSq() < 1e-5f)
+        right = {1.0f, 0.0f, 0.0f};
+      else
+        right = right.Normalized();
+      Vec3 up = Vec3::Cross(right, forward).Normalized();
+
+      const Vec3 tip = obj.position;
+      const Vec3 baseCenter = tip + forward * 0.55f;
+      const float baseHalfW = 0.24f;
+      const float baseHalfH = 0.16f;
+
+      const Vec3 b0 = baseCenter + right * baseHalfW + up * baseHalfH;
+      const Vec3 b1 = baseCenter - right * baseHalfW + up * baseHalfH;
+      const Vec3 b2 = baseCenter - right * baseHalfW - up * baseHalfH;
+      const Vec3 b3 = baseCenter + right * baseHalfW - up * baseHalfH;
+
+      DebugDraw::Line(tip, b0, color);
+      DebugDraw::Line(tip, b1, color);
+      DebugDraw::Line(tip, b2, color);
+      DebugDraw::Line(tip, b3, color);
+      DebugDraw::Line(b0, b1, color);
+      DebugDraw::Line(b1, b2, color);
+      DebugDraw::Line(b2, b3, color);
+      DebugDraw::Line(b3, b0, color);
+
+      const Vec3 dirTip = tip + forward * 0.78f;
+      DebugDraw::Line(tip, dirTip, {1.0f, 0.55f, 0.1f, 1.0f});
+      continue;
+    }
+
     Vec3 center = obj.position;
     Vec3 half = obj.scale;
     if (!m_liveRegistry || !TryPropWorldAabb(*m_liveRegistry, obj, center, half))
@@ -2375,6 +2814,62 @@ void EditorLayer::RequestDeleteAsset(const std::string& assetId) {
   m_confirmDeleteAssetOpen = true;
 }
 
+void EditorLayer::OpenRenameObjectModal(int index) {
+  if (index < 0 || index >= static_cast<int>(m_document.objects.size()))
+    return;
+  m_renameObjectIndex = index;
+  m_renameObjectDraft = m_document.objects[static_cast<size_t>(index)].id;
+  m_renameObjectError.clear();
+  m_renameObjectOpen = true;
+}
+
+void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
+  SceneObject obj;
+  obj.id = (type == SceneObjectType::Camera) ? GenerateCameraId(m_document) : GenerateId(m_document);
+  obj.type = type;
+  ApplySchemaDefaults(obj);
+  if (type == SceneObjectType::Camera) {
+    obj.props["fov"] = "60";
+    obj.props["nearClip"] = "0.1";
+    obj.props["farClip"] = "500";
+    obj.props["followTargetId"] = "";
+  }
+  if (!parentId.empty())
+    obj.props["parentId"] = parentId;
+
+  m_document.objects.push_back(std::move(obj));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+void EditorLayer::AddObjectFromSelectedAsset(const std::string& parentId) {
+  const auto it = m_document.assets.find(m_selectedAssetId);
+  if (m_selectedAssetId.empty() || it == m_document.assets.end())
+    return;
+
+  SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
+  if (!parentId.empty())
+    obj.props["parentId"] = parentId;
+  m_document.objects.push_back(std::move(obj));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+void EditorLayer::DuplicatePrimarySelection() {
+  const int primaryIdx = PrimaryIdx();
+  if (primaryIdx < 0 || primaryIdx >= static_cast<int>(m_document.objects.size()))
+    return;
+  SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(primaryIdx)]);
+  clone.position.x += 1.0f;
+  clone.position.z += 1.0f;
+  m_document.objects.push_back(std::move(clone));
+  m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,
                                              const std::string& assetId,
                                              const EditorSchema& schema) {
@@ -2444,19 +2939,33 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
 }
 
 std::string EditorLayer::GenerateId(const SceneDocument& doc) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "obj_%03d", static_cast<int>(doc.objects.size()));
-  return buf;
+  std::unordered_set<std::string> existingIds;
+  existingIds.reserve(doc.objects.size() * 2);
+  for (const auto& obj : doc.objects)
+    existingIds.insert(obj.id);
+
+  for (int i = 0; i < 1000000; ++i) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "obj_%03d", i);
+    if (existingIds.find(buf) == existingIds.end())
+      return buf;
+  }
+  return "obj_new";
 }
 
 std::string EditorLayer::GenerateCameraId(const SceneDocument& doc) {
-  int count = 0;
-  for (const auto& o : doc.objects)
-    if (o.type == SceneObjectType::Camera)
-      ++count;
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "cam_%03d", count);
-  return buf;
+  std::unordered_set<std::string> existingIds;
+  existingIds.reserve(doc.objects.size() * 2);
+  for (const auto& obj : doc.objects)
+    existingIds.insert(obj.id);
+
+  for (int i = 0; i < 1000000; ++i) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "cam_%03d", i);
+    if (existingIds.find(buf) == existingIds.end())
+      return buf;
+  }
+  return "cam_new";
 }
 
 // ---- Fly camera --------------------------------------------------------------
