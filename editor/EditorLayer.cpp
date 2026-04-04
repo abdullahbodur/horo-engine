@@ -2425,11 +2425,21 @@ void EditorLayer::DrawPropertiesPanel() {
                                                            : comp.type;
     ImGui::PushID(ci);
     bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+    bool removeThisComponent = false;
+
+    if (ImGui::BeginPopupContextItem("comp_ctx")) {
+      if (ImGui::MenuItem("Remove Component"))
+        removeThisComponent = true;
+      ImGui::EndPopup();
+    }
 
     // Remove button on the same line, right-aligned
     float btnW = ImGui::CalcTextSize("x").x + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW);
     if (ImGui::SmallButton("x"))
+      removeThisComponent = true;
+
+    if (removeThisComponent)
       removeIdx = ci;
 
     if (open) {
