@@ -78,12 +78,18 @@ TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]"
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: loads Prop schema with string field", "[editor][schema]") {
+TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
                 "fields": [
-                    {"key": "mesh", "label": "Mesh", "type": "string", "default": "box.obj"}
+                    {
+                      "key": "mesh",
+                      "label": "Mesh",
+                      "type": "enum",
+                      "options": ["box", "sphere", "cylinder", "pyramid"],
+                      "default": "box"
+                    }
                 ]
             }
         }
@@ -98,8 +104,13 @@ TEST_CASE("EditorSchema: loads Prop schema with string field", "[editor][schema]
     REQUIRE(ts->fields.size() == 1);
     REQUIRE(ts->fields[0].key == "mesh");
     REQUIRE(ts->fields[0].label == "Mesh");
-    REQUIRE(ts->fields[0].widget == FieldDef::Widget::String);
-    REQUIRE(ts->fields[0].defaultValue == "box.obj");
+    REQUIRE(ts->fields[0].widget == FieldDef::Widget::Enum);
+    REQUIRE(ts->fields[0].defaultValue == "box");
+    REQUIRE(ts->fields[0].options.size() == 4);
+    REQUIRE(ts->fields[0].options[0] == "box");
+    REQUIRE(ts->fields[0].options[1] == "sphere");
+    REQUIRE(ts->fields[0].options[2] == "cylinder");
+    REQUIRE(ts->fields[0].options[3] == "pyramid");
 }
 
 TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]") {
@@ -669,6 +680,61 @@ TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer
     REQUIRE(loaded.objects.size() == 1);
     REQUIRE(loaded.objects[0].props.count("_eid") == 0);
     REQUIRE(loaded.objects[0].props.count("visible") == 1);
+}
+
+TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component", "[editor][serializer]") {
+    const std::string path = TmpPath("legacy_islight_true.json");
+    const std::string json = R"({
+      "version": 1,
+      "sceneId": "legacy",
+      "objects": [
+        {
+          "id": "prop_legacy",
+          "type": "Prop",
+          "position": [0,0,0],
+          "scale": [1,1,1],
+          "yaw": 0,
+          "props": {"isLight": "true"}
+        }
+      ]
+    })";
+    WriteFile(path, json);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].props.count("isLight") == 0);
+    REQUIRE(loaded.objects[0].components.size() == 1);
+    REQUIRE(loaded.objects[0].components[0].type == "light");
+}
+
+TEST_CASE("SceneSerializer: legacy isLight=false is tolerated but not persisted", "[editor][serializer]") {
+    const std::string path = TmpPath("legacy_islight_false.json");
+    const std::string json = R"({
+      "version": 1,
+      "sceneId": "legacy",
+      "objects": [
+        {
+          "id": "prop_legacy",
+          "type": "Prop",
+          "position": [0,0,0],
+          "scale": [1,1,1],
+          "yaw": 0,
+          "props": {"isLight": "false"}
+        }
+      ]
+    })";
+    WriteFile(path, json);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].props.count("isLight") == 0);
+    REQUIRE(loaded.objects[0].components.empty());
+
+    const std::string savedPath = TmpPath("legacy_islight_false_saved.json");
+    SceneSerializer::SaveToFile(loaded, savedPath);
+    SceneDocument roundTrip = SceneSerializer::LoadFromFile(savedPath);
+    REQUIRE(roundTrip.objects.size() == 1);
+    REQUIRE(roundTrip.objects[0].props.count("isLight") == 0);
 }
 
 TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]") {

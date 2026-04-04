@@ -106,15 +106,27 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
       }
     }
 
-    // ---- Migration: isLight → light component ----
+    // ---- Legacy compatibility: isLight prop → optional light component ----
+    // Accept old scene files at load time, but never persist isLight again.
     auto isLightIt = so.props.find("isLight");
-    if (isLightIt != so.props.end() && isLightIt->second == "true") {
-      ComponentDesc light;
-      light.type = "light";
-      light.props["intensity"] = "1";
-      light.props["color"] = "1,1,1";
-      light.props["radius"] = "5";
-      so.components.push_back(std::move(light));
+    if (isLightIt != so.props.end()) {
+      const bool wantsLight = (isLightIt->second == "true" || isLightIt->second == "1");
+      bool hasLightComponent = false;
+      for (const auto& c : so.components) {
+        if (c.type == "light") {
+          hasLightComponent = true;
+          break;
+        }
+      }
+
+      if (wantsLight && !hasLightComponent) {
+        ComponentDesc light;
+        light.type = "light";
+        light.props["intensity"] = "1";
+        light.props["color"] = "1,1,1";
+        light.props["radius"] = "5";
+        so.components.push_back(std::move(light));
+      }
       so.props.erase(isLightIt);
     }
 
