@@ -766,9 +766,12 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
           if (ctrlHeld && dragAxis != GizmoAxis::None &&
               primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
 
-            const auto& selfObj   = m_document.objects[primIdx];
-            Vec3         rawPos   = selfObj.position + dPos;
-            Vec3         selfHalf = selfObj.scale;
+            const auto& selfObj    = m_document.objects[primIdx];
+            Vec3        selfCenter = selfObj.position;
+            Vec3        selfHalf   = selfObj.scale;
+            if (m_liveRegistry)
+              TryPropWorldAabb(*m_liveRegistry, selfObj, selfCenter, selfHalf);
+            Vec3 rawPos = selfCenter + dPos;
 
             int axisIdx = (dragAxis == GizmoAxis::X) ? 0 :
                           (dragAxis == GizmoAxis::Y) ? 1 : 2;
@@ -779,14 +782,18 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
             for (int oi = 0; oi < static_cast<int>(m_document.objects.size()); ++oi) {
               if (IsSelected(oi)) continue;
-              const auto& other      = m_document.objects[oi];
-              float        otherHalf = other.scale[axisIdx];
-              float        selfHalf1 = selfHalf[axisIdx];
+              const auto& other       = m_document.objects[oi];
+              Vec3        otherCenter = other.position;
+              Vec3        otherHalfV  = other.scale;
+              if (m_liveRegistry)
+                TryPropWorldAabb(*m_liveRegistry, other, otherCenter, otherHalfV);
+              float otherHalf = otherHalfV[axisIdx];
+              float selfHalf1 = selfHalf[axisIdx];
 
               const float selfFaces[2]  = { rawPos[axisIdx] - selfHalf1,
                                             rawPos[axisIdx] + selfHalf1 };
-              const float otherFaces[2] = { other.position[axisIdx] - otherHalf,
-                                            other.position[axisIdx] + otherHalf };
+              const float otherFaces[2] = { otherCenter[axisIdx] - otherHalf,
+                                            otherCenter[axisIdx] + otherHalf };
 
               for (int sf = 0; sf < 2; ++sf) {
                 for (int of = 0; of < 2; ++of) {
@@ -801,9 +808,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
             }
 
             if (didSnap) {
-              Vec3 snappedPos        = rawPos;
-              snappedPos[axisIdx]   += bestOffset;
-              dPos                   = snappedPos - selfObj.position;
+              Vec3 snappedCenter      = rawPos;
+              snappedCenter[axisIdx] += bestOffset;
+              Vec3 centerToOrigin     = selfObj.position - selfCenter;
+              dPos = snappedCenter + centerToOrigin - selfObj.position;
 
               Vec3 axisDir   = m_gizmo.AxisDir(dragAxis);
               Vec3 facePoint = selfObj.position + dPos;
