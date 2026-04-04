@@ -207,6 +207,7 @@ class EditorLayer {
   static SceneObject DuplicateObject(const SceneDocument& doc, const SceneObject& src);
 
   static std::string GenerateId(const SceneDocument& doc);
+  static std::string GenerateCameraId(const SceneDocument& doc);
   void ApplySchemaDefaults(SceneObject& obj) const;
 };
 
