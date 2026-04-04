@@ -140,13 +140,24 @@ static void PropagateHierarchyTransformDelta(SceneDocument& doc,
                                              const Quaternion& oldParentRot,
                                              const Vec3& newParentPos,
                                              const Quaternion& newParentRot,
-                                             const std::function<void(const SceneObject&)>& transformCb) {
+                                             const std::function<void(const SceneObject&)>& transformCb,
+                                             const std::vector<int>& skipIndices = {}) {
   if (parentIdx < 0 || parentIdx >= static_cast<int>(doc.objects.size()))
     return;
 
   const Quaternion deltaRot = newParentRot * oldParentRot.Inverse();
   for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
     if (i == parentIdx || !IsDescendantOf(doc, i, parentIdx))
+      continue;
+    // Skip children that are themselves being directly manipulated (e.g. multi-select gizmo).
+    bool shouldSkip = false;
+    for (int sk : skipIndices) {
+      if (sk == i) {
+        shouldSkip = true;
+        break;
+      }
+    }
+    if (shouldSkip)
       continue;
 
     SceneObject& child = doc.objects[static_cast<size_t>(i)];
@@ -857,21 +868,35 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
             if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
               continue;
             auto& applyObj   = m_document.objects[si];
+
+            // Capture pre-delta state so we can propagate to children below.
+            const Vec3 oldObjPos = applyObj.position;
+            const Quaternion oldObjRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                                               ToRadians(applyObj.yaw),
+                                                               ToRadians(applyObj.roll));
+
             applyObj.position = applyObj.position + dPos;
             applyObj.scale.x *= dScale.x;
             applyObj.scale.y *= dScale.y;
             applyObj.scale.z *= dScale.z;
-            Quaternion curRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
-                                                      ToRadians(applyObj.yaw),
-                                                      ToRadians(applyObj.roll));
-            Quaternion nextRot = (dRot * curRot).Normalized();
-            Vec3       euler   = nextRot.ToEuler();
-            applyObj.pitch = ToDegrees(euler.x);
-            applyObj.yaw   = ToDegrees(euler.y);
-            applyObj.roll  = ToDegrees(euler.z);
+            Quaternion nextRot = oldObjRot;
+            if (dRotXYZSq > 1e-8f) {
+              nextRot        = (dRot * oldObjRot).Normalized();
+              Vec3 euler     = nextRot.ToEuler();
+              applyObj.pitch = ToDegrees(euler.x);
+              applyObj.yaw   = ToDegrees(euler.y);
+              applyObj.roll  = ToDegrees(euler.z);
+            }
             m_document.dirty = true;
             if (m_transformCb)
               m_transformCb(applyObj);
+
+            // Propagate the same delta to all hierarchy children of this object,
+            // skipping any children that are themselves directly selected (they
+            // already receive the delta above and must not be moved twice).
+            PropagateHierarchyTransformDelta(
+                m_document, si, oldObjPos, oldObjRot,
+                applyObj.position, nextRot, m_transformCb, m_selectedIndices);
           }
         }
       }
