@@ -1799,6 +1799,148 @@ void EditorLayer::DrawPropertiesPanel() {
     }
   }
 
+  // ---- Components ----
+  ImGui::Separator();
+  ImGui::Text("Components");
+
+  int removeIdx = -1;
+  for (int ci = 0; ci < static_cast<int>(obj.components.size()); ++ci) {
+    ComponentDesc& comp = obj.components[ci];
+
+    // Collapsing header label + inline [x] button via ID stack trick
+    std::string headerLabel = (comp.type == "light")      ? "Light"
+                              : (comp.type == "rigidbody") ? "RigidBody"
+                              : (comp.type == "script")    ? "Script"
+                                                           : comp.type;
+    ImGui::PushID(ci);
+    bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+    // Remove button on the same line, right-aligned
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 4.0f);
+    if (ImGui::SmallButton("x"))
+      removeIdx = ci;
+
+    if (open) {
+      if (comp.type == "light") {
+        // Intensity
+        {
+          float v = comp.props.count("intensity") ? std::stof(comp.props["intensity"]) : 1.0f;
+          if (ImGui::SliderFloat("Intensity", &v, 0.0f, 10.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["intensity"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Color
+        {
+          float col[3] = {1.0f, 1.0f, 1.0f};
+          if (comp.props.count("color")) {
+            char tmp[64] = {};
+            std::snprintf(tmp, sizeof(tmp), "%s", comp.props["color"].c_str());
+            char* p = tmp;
+            char* end = nullptr;
+            col[0] = std::strtof(p, &end);
+            if (end && *end) p = end + 1;
+            col[1] = std::strtof(p, &end);
+            if (end && *end) p = end + 1;
+            col[2] = std::strtof(p, nullptr);
+          }
+          if (ImGui::ColorEdit3("Color", col)) {
+            char tmp[64];
+            std::snprintf(tmp, sizeof(tmp), "%.4f,%.4f,%.4f", col[0], col[1], col[2]);
+            comp.props["color"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Radius
+        {
+          float v = comp.props.count("radius") ? std::stof(comp.props["radius"]) : 5.0f;
+          if (ImGui::DragFloat("Radius", &v, 0.1f, 0.0f, 100.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["radius"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+      } else if (comp.type == "rigidbody") {
+        // Mass
+        {
+          float v = comp.props.count("mass") ? std::stof(comp.props["mass"]) : 1.0f;
+          if (ImGui::DragFloat("Mass", &v, 0.1f, 0.0f, 10000.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", v);
+            comp.props["mass"] = tmp;
+            m_document.dirty = true;
+          }
+        }
+        // Is Kinematic
+        {
+          bool b = comp.props.count("isKinematic") && comp.props["isKinematic"] == "true";
+          if (ImGui::Checkbox("Is Kinematic", &b)) {
+            comp.props["isKinematic"] = b ? "true" : "false";
+            m_document.dirty = true;
+          }
+        }
+        // Use Gravity
+        {
+          bool b = !comp.props.count("useGravity") || comp.props["useGravity"] == "true";
+          if (ImGui::Checkbox("Use Gravity", &b)) {
+            comp.props["useGravity"] = b ? "true" : "false";
+            m_document.dirty = true;
+          }
+        }
+      } else if (comp.type == "script") {
+        char buf[256] = {};
+        std::snprintf(buf, sizeof(buf), "%s", comp.props["behaviorTag"].c_str());
+        if (ImGui::InputText("Behavior Tag", buf, sizeof(buf))) {
+          comp.props["behaviorTag"] = buf;
+          m_document.dirty = true;
+        }
+      }
+    }
+    ImGui::PopID();
+  }
+
+  if (removeIdx >= 0) {
+    obj.components.erase(obj.components.begin() + removeIdx);
+    m_document.dirty = true;
+  }
+
+  // ---- Add Component button ----
+  ImGui::Spacing();
+  if (ImGui::Button("+ Add Component")) {
+    ImGui::OpenPopup("##add_component_popup");
+  }
+  if (ImGui::BeginPopup("##add_component_popup")) {
+    if (ImGui::MenuItem("Light")) {
+      ComponentDesc cd;
+      cd.type = "light";
+      cd.props["intensity"] = "1.0000";
+      cd.props["color"] = "1.0000,1.0000,1.0000";
+      cd.props["radius"] = "5.0000";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    if (ImGui::MenuItem("RigidBody")) {
+      ComponentDesc cd;
+      cd.type = "rigidbody";
+      cd.props["mass"] = "1.0000";
+      cd.props["isKinematic"] = "false";
+      cd.props["useGravity"] = "true";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    if (ImGui::MenuItem("Script")) {
+      ComponentDesc cd;
+      cd.type = "script";
+      cd.props["behaviorTag"] = "";
+      obj.components.push_back(std::move(cd));
+      m_document.dirty = true;
+    }
+    ImGui::EndPopup();
+  }
+
   ImGui::Separator();
   if (ImGui::Button("Delete")) {
     RequestDeleteSelectedObjects();
