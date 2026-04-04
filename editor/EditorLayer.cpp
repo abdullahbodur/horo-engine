@@ -670,6 +670,17 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
 
     if (m_flyMode) {
       UpdateFlyCamera(dt, cam);
+      // Keep gizmo anchored to object even while flying
+      if (m_gizmo.IsActive()) {
+        const int syncIdx = PrimaryIdx();
+        if (syncIdx >= 0 && syncIdx < static_cast<int>(m_document.objects.size())) {
+          const auto& syncObj = m_document.objects[syncIdx];
+          Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
+                                                      ToRadians(syncObj.yaw),
+                                                      ToRadians(syncObj.roll));
+          m_gizmo.SyncTarget(syncObj.position, syncRot, syncObj.scale);
+        }
+      }
     } else {
       // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
       bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
@@ -737,6 +748,86 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       if (m_gizmo.IsActive()) {
         gizmoConsumed = m_gizmo.Update(m_window, cam, screenW, screenH,
                                        dPos, dRot, dScale);
+
+        // --- Surface snap (Ctrl) and Grid snap (Shift) ---
+        if (m_gizmo.GetMode() == GizmoMode::Translate) {
+          const bool ctrlHeld =
+              glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
+          const bool shiftHeld =
+              glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+              glfwGetKey(m_window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+          GizmoAxis dragAxis = m_gizmo.GetDragAxis();
+          const int primIdx  = PrimaryIdx();
+
+          if (ctrlHeld && dragAxis != GizmoAxis::None &&
+              primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
+
+            const auto& selfObj   = m_document.objects[primIdx];
+            Vec3         rawPos   = selfObj.position + dPos;
+            Vec3         selfHalf = selfObj.scale;
+
+            int axisIdx = (dragAxis == GizmoAxis::X) ? 0 :
+                          (dragAxis == GizmoAxis::Y) ? 1 : 2;
+
+            constexpr float kSnapThresh = 0.5f;
+            float bestDist   = kSnapThresh;
+            float bestOffset = 0.0f;
+            bool  didSnap    = false;
+
+            for (int oi = 0; oi < static_cast<int>(m_document.objects.size()); ++oi) {
+              if (IsSelected(oi)) continue;
+              const auto& other      = m_document.objects[oi];
+              float        otherHalf = other.scale[axisIdx];
+              float        selfHalf1 = selfHalf[axisIdx];
+
+              const float selfFaces[2]  = { rawPos[axisIdx] - selfHalf1,
+                                            rawPos[axisIdx] + selfHalf1 };
+              const float otherFaces[2] = { other.position[axisIdx] - otherHalf,
+                                            other.position[axisIdx] + otherHalf };
+
+              for (int sf = 0; sf < 2; ++sf) {
+                for (int of = 0; of < 2; ++of) {
+                  float gap = std::abs(selfFaces[sf] - otherFaces[of]);
+                  if (gap < bestDist) {
+                    bestDist   = gap;
+                    bestOffset = otherFaces[of] - selfFaces[sf];
+                    didSnap    = true;
+                  }
+                }
+              }
+            }
+
+            if (didSnap) {
+              Vec3 snappedPos        = rawPos;
+              snappedPos[axisIdx]   += bestOffset;
+              dPos                   = snappedPos - selfObj.position;
+
+              Vec3 axisDir   = m_gizmo.AxisDir(dragAxis);
+              Vec3 facePoint = selfObj.position + dPos;
+              DebugDraw::Line(facePoint - axisDir * 0.3f,
+                              facePoint + axisDir * 0.3f,
+                              {1.0f, 1.0f, 0.0f, 1.0f});
+            }
+          }
+
+          if (shiftHeld && dPos.LengthSq() > 1e-12f &&
+              primIdx >= 0 && primIdx < static_cast<int>(m_document.objects.size())) {
+
+            constexpr float kGridSize = 0.5f;
+            const auto& selfObj = m_document.objects[primIdx];
+            Vec3         rawPos = selfObj.position + dPos;
+
+            rawPos.x = std::round(rawPos.x / kGridSize) * kGridSize;
+            rawPos.y = std::round(rawPos.y / kGridSize) * kGridSize;
+            rawPos.z = std::round(rawPos.z / kGridSize) * kGridSize;
+            dPos = rawPos - selfObj.position;
+          }
+        }
+
         // Detect any non-trivial delta
         float dRotXYZSq = dRot.x * dRot.x + dRot.y * dRot.y + dRot.z * dRot.z;
         bool anyDelta = dPos.LengthSq() > 1e-10f

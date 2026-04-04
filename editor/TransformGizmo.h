@@ -22,6 +22,7 @@ class TransformGizmo {
 
   bool IsActive() const { return m_mode != GizmoMode::None; }
   GizmoMode GetMode() const { return m_mode; }
+  GizmoAxis GetDragAxis() const { return m_dragging; }
 
   // Returns true when gizmo consumed the mouse (caller should suppress scene picking).
   // outDeltaPos/Rot/Scale: incremental delta for this frame (identity/zero if nothing dragged).
@@ -33,7 +34,7 @@ class TransformGizmo {
 
   // ---- Math helpers (public for testability) ----------------------------------
 
-  // World-space handle length (constant screen size). Distance * 0.15.
+  // World-space handle length (FOV-aware, screen-constant). screenFrac * 2 * dist * tan(fovY/2).
   float HandleSize(const Camera& cam) const;
 
   // World-space direction for each axis (world-aligned, not local).

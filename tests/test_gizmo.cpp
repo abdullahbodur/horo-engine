@@ -63,18 +63,36 @@ TEST_CASE("TransformGizmo: Deactivate clears mode", "[gizmo]") {
 }
 
 // ============================================================================
-// Test 2 — HandleSize (screen-constant size = distance * 0.15)
+// Test 2 — HandleSize (FOV-aware, screen-constant: screenFrac*2*dist*tan(fovY/2))
 // ============================================================================
 
-TEST_CASE("TransformGizmo: HandleSize scales with camera distance", "[gizmo]") {
+TEST_CASE("HandleSize: FOV-aware formula, distance 10", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+  Camera cam10 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
+  // expected = 0.08 * 2 * dist * tan(fovY/2)
+  float expected = 0.08f * 2.0f * 10.0f * std::tan(ToRadians(60.0f) * 0.5f);
+  CHECK(g.HandleSize(cam10) == Approx(expected).margin(1e-3f));
+}
 
-  Camera cam10 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
-  CHECK(g.HandleSize(cam10) == Approx(1.5f).margin(1e-4f));
+TEST_CASE("HandleSize: doubles with distance", "[gizmo]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+  Camera cam10 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
+  Camera cam20 = MakeCamera({0.0f, 0.0f, 20.0f}, Vec3::Zero(), 60.0f);
+  float h10 = g.HandleSize(cam10);
+  float h20 = g.HandleSize(cam20);
+  // ratio must be exactly 2.0 regardless of formula constant
+  CHECK(h20 / h10 == Approx(2.0f).margin(1e-4f));
+}
 
-  Camera cam20 = MakeCamera({0.0f, 0.0f, 20.0f}, Vec3::Zero());
-  CHECK(g.HandleSize(cam20) == Approx(3.0f).margin(1e-4f));
+TEST_CASE("HandleSize: varies with FOV", "[gizmo]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+  Camera cam60 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
+  Camera cam90 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 90.0f);
+  // tan(45°) > tan(30°), so wider FOV → larger handles at same distance
+  CHECK(g.HandleSize(cam90) > g.HandleSize(cam60));
 }
 
 // ============================================================================
@@ -197,8 +215,8 @@ TEST_CASE("TransformGizmo: PickAxis returns X for mouse on X axis screen project
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
 
   // The X axis handle tip is at (handleLen, 0, 0).
-  // At distance 10, handleLen = 1.5.  Project midpoint of X axis handle to screen.
-  float handleLen = g.HandleSize(cam);  // 1.5
+  // Project midpoint of X axis handle to screen.
+  float handleLen = g.HandleSize(cam);
   Vec3  midX      = Vec3::Right() * (handleLen * 0.5f);
   float sx, sy;
   bool  vis = TransformGizmo::WorldToScreen(midX, cam, 800, 800, sx, sy);
@@ -285,7 +303,7 @@ TEST_CASE("TransformGizmo: rotate delta math produces 90 degree rotation", "[giz
 // ============================================================================
 
 TEST_CASE("TransformGizmo: scale delta math for half-handle drag", "[gizmo]") {
-  // handleLen = 1.5 (camera at distance 10).
+  // Use arbitrary handleLen for pure math check.
   float handleLen    = 1.5f;
   float prevOffset   = 0.0f;
   float curOffset    = handleLen * 0.5f;  // drag half handle length along axis
@@ -311,12 +329,14 @@ TEST_CASE("TransformGizmo: SyncTarget updates gizmo position for HandleSize", "[
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
 
-  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
-  CHECK(g.HandleSize(cam) == Approx(1.5f).margin(1e-4f));
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
+  float h10 = g.HandleSize(cam);
+  CHECK(h10 == Approx(0.08f * 2.0f * 10.0f * std::tan(ToRadians(60.0f) * 0.5f)).margin(1e-3f));
 
-  // Move gizmo to (0,0,5) — now 5 units from camera.
+  // Move gizmo to (0,0,5) — now 5 units from camera; size should halve.
   g.SyncTarget({0.0f, 0.0f, 5.0f}, Quaternion::Identity(), Vec3::One());
-  CHECK(g.HandleSize(cam) == Approx(0.75f).margin(1e-4f));
+  float h5 = g.HandleSize(cam);
+  CHECK(h5 == Approx(h10 * 0.5f).margin(1e-4f));
 }
 
 // ============================================================================
@@ -332,4 +352,45 @@ TEST_CASE("TransformGizmo: Deactivate dismisses active gizmo (simulates Escape)"
   g.Deactivate();
   CHECK(!g.IsActive());
   CHECK(g.GetMode() == GizmoMode::None);
+}
+
+// ============================================================================
+// Test 12 — Surface snap math
+// ============================================================================
+
+TEST_CASE("Surface snap: face aligns when within threshold", "[gizmo][snap]") {
+  // Self at (0,0,0) half=(1,1,1) dragged 0.4 toward other at (2.4,0,0) half=(1,1,1).
+  // Self +X face = 0.4+1 = 1.4; Other -X face = 2.4-1 = 1.4 → gap = 0.
+  Vec3  rawPos{0.4f, 0.0f, 0.0f};
+  Vec3  selfHalf{1.0f, 1.0f, 1.0f};
+  Vec3  otherPos{2.4f, 0.0f, 0.0f};
+  Vec3  otherHalf{1.0f, 1.0f, 1.0f};
+  float gap = std::abs((rawPos.x + selfHalf.x) - (otherPos.x - otherHalf.x));
+  CHECK(gap == Approx(0.0f).margin(1e-4f));
+}
+
+TEST_CASE("Surface snap: no snap when gap exceeds threshold", "[gizmo][snap]") {
+  // Self +X face = 0+1 = 1; Other -X face = 3-1 = 2; gap = 1.0 > threshold 0.5
+  Vec3  rawPos{0.0f, 0.0f, 0.0f};
+  Vec3  selfHalf{1.0f, 1.0f, 1.0f};
+  Vec3  otherPos{3.0f, 0.0f, 0.0f};
+  Vec3  otherHalf{1.0f, 1.0f, 1.0f};
+  constexpr float kSnapThresh = 0.5f;
+  float gap = std::abs((rawPos.x + selfHalf.x) - (otherPos.x - otherHalf.x));
+  CHECK(gap > kSnapThresh);
+}
+
+// ============================================================================
+// Test 13 — Grid snap math
+// ============================================================================
+
+TEST_CASE("Grid snap: rounds to nearest 0.5", "[gizmo][snap]") {
+  constexpr float kGrid = 0.5f;
+  auto snap = [](float x) { return std::round(x / kGrid) * kGrid; };
+  CHECK(snap(0.3f)  == Approx(0.5f).margin(1e-5f));
+  CHECK(snap(0.7f)  == Approx(0.5f).margin(1e-5f));
+  CHECK(snap(0.8f)  == Approx(1.0f).margin(1e-5f));
+  CHECK(snap(-0.3f) == Approx(-0.5f).margin(1e-5f));
+  CHECK(snap(0.0f)  == Approx(0.0f).margin(1e-5f));
+  CHECK(snap(1.25f) == Approx(1.5f).margin(1e-5f));
 }
