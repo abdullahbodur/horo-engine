@@ -29,6 +29,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 #include "core/Logger.h"
 #include "editor/EditorAssetImport.h"
@@ -93,6 +94,72 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(), wt, outCenter,
                         outHalf);
   return true;
+}
+
+static const std::string kEmptyParentId;
+
+static const std::string& GetParentId(const SceneObject& obj) {
+  const auto it = obj.props.find("parentId");
+  return (it != obj.props.end()) ? it->second : kEmptyParentId;
+}
+
+static int FindObjectIndexById(const SceneDocument& doc, const std::string& id) {
+  if (id.empty())
+    return -1;
+  for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+    if (doc.objects[static_cast<size_t>(i)].id == id)
+      return i;
+  }
+  return -1;
+}
+
+static bool IsDescendantOf(const SceneDocument& doc, int nodeIdx, int ancestorIdx) {
+  if (nodeIdx < 0 || ancestorIdx < 0 || nodeIdx >= static_cast<int>(doc.objects.size()) ||
+      ancestorIdx >= static_cast<int>(doc.objects.size()))
+    return false;
+
+  int cur = nodeIdx;
+  for (int guard = 0; guard < static_cast<int>(doc.objects.size()); ++guard) {
+    const int p = FindObjectIndexById(doc, GetParentId(doc.objects[static_cast<size_t>(cur)]));
+    if (p < 0)
+      return false;
+    if (p == ancestorIdx)
+      return true;
+    cur = p;
+  }
+  return false;
+}
+
+static void PropagateHierarchyTransformDelta(SceneDocument& doc,
+                                             int parentIdx,
+                                             const Vec3& oldParentPos,
+                                             const Quaternion& oldParentRot,
+                                             const Vec3& newParentPos,
+                                             const Quaternion& newParentRot,
+                                             const std::function<void(const SceneObject&)>& transformCb) {
+  if (parentIdx < 0 || parentIdx >= static_cast<int>(doc.objects.size()))
+    return;
+
+  const Quaternion deltaRot = newParentRot * oldParentRot.Inverse();
+  for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+    if (i == parentIdx || !IsDescendantOf(doc, i, parentIdx))
+      continue;
+
+    SceneObject& child = doc.objects[static_cast<size_t>(i)];
+    const Vec3 oldRel = child.position - oldParentPos;
+    child.position = newParentPos + deltaRot * oldRel;
+
+    const Quaternion childRot =
+        Quaternion::FromEuler(ToRadians(child.pitch), ToRadians(child.yaw), ToRadians(child.roll));
+    const Quaternion rotatedChild = deltaRot * childRot;
+    const Vec3 e = rotatedChild.ToEuler();
+    child.pitch = ToDegrees(e.x);
+    child.yaw = ToDegrees(e.y);
+    child.roll = ToDegrees(e.z);
+
+    if (transformCb)
+      transformCb(child);
+  }
 }
 
 // Screen direction of a world-space axis for the orientation corner gizmo.
@@ -1117,40 +1184,128 @@ void EditorLayer::DrawObjectList() {
   ImGui::Separator();
 
   int shownObjectCount = 0;
-  for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
-    auto& obj = m_document.objects[i];
-    if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
-      continue;
-    const char* typeName = ObjectTypeLabel(obj.type);
+  if (!m_objectSearchQuery.empty()) {
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      auto& obj = m_document.objects[i];
+      if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
+        continue;
+      const char* typeName = ObjectTypeLabel(obj.type);
 
-    char selectableId[32];
-    std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
+      char selectableId[32];
+      std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
 
-    // Reserve enough height for two lines (type+id on first, asset on second)
-    const float lineH = ImGui::GetTextLineHeight();
-    const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
+      const float lineH = ImGui::GetTextLineHeight();
+      const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
 
-    if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
-      if (ImGui::GetIO().KeyShift)
-        ToggleSelect(i);
-      else
-        m_selectedIndices = {i};
-    }
-    ImGui::SameLine();
-    {
-      // Draw type tag dimmed, then object id in normal color
-      const ImVec2 pos = ImGui::GetCursorScreenPos();
-      ImGui::BeginGroup();
-      ImGui::TextDisabled("%s", typeName);
-      ImGui::SameLine(0.0f, 4.0f);
-      ImGui::Text("%s", obj.id.c_str());
-      if (!obj.assetId.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
-        ImGui::TextDisabled("> %s", obj.assetId.c_str());
+      if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
+        if (ImGui::GetIO().KeyShift)
+          ToggleSelect(i);
+        else
+          m_selectedIndices = {i};
       }
-      ImGui::EndGroup();
+      ImGui::SameLine();
+      {
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::BeginGroup();
+        ImGui::TextDisabled("%s", typeName);
+        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::Text("%s", obj.id.c_str());
+        if (!obj.assetId.empty()) {
+          ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
+          ImGui::TextDisabled("> %s", obj.assetId.c_str());
+        }
+        ImGui::EndGroup();
+      }
+      ++shownObjectCount;
     }
-    ++shownObjectCount;
+  } else {
+    std::unordered_map<std::string, int> idToIndex;
+    idToIndex.reserve(m_document.objects.size());
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i)
+      idToIndex[m_document.objects[static_cast<size_t>(i)].id] = i;
+
+    std::vector<std::vector<int>> children(m_document.objects.size());
+    std::vector<int> roots;
+    roots.reserve(m_document.objects.size());
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      const SceneObject& obj = m_document.objects[static_cast<size_t>(i)];
+      int p = -1;
+      const auto pIt = idToIndex.find(GetParentId(obj));
+      if (pIt != idToIndex.end())
+        p = pIt->second;
+      if (p >= 0 && p != i)
+        children[static_cast<size_t>(p)].push_back(i);
+      else
+        roots.push_back(i);
+    }
+
+    std::function<void(int, int)> drawNode;
+    drawNode = [this, &drawNode, &children, &shownObjectCount](int idx, int depth) {
+      if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+        return;
+      SceneObject& obj = m_document.objects[static_cast<size_t>(idx)];
+      ++shownObjectCount;
+
+      ImGui::PushID(idx);
+      ImGui::Indent(depth * 14.0f);
+      const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
+      ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+      if (!hasChildren)
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+      if (IsSelected(idx))
+        flags |= ImGuiTreeNodeFlags_Selected;
+
+      const char* typeName = ObjectTypeLabel(obj.type);
+      std::string label = std::string(typeName) + " " + obj.id;
+      const bool open = ImGui::TreeNodeEx("##obj_tree", flags, "%s", label.c_str());
+      if (ImGui::IsItemClicked()) {
+        if (ImGui::GetIO().KeyShift)
+          ToggleSelect(idx);
+        else
+          m_selectedIndices = {idx};
+      }
+
+      if (ImGui::BeginDragDropSource()) {
+        ImGui::SetDragDropPayload("SCENE_OBJECT_INDEX", &idx, sizeof(int));
+        ImGui::TextUnformatted(obj.id.c_str());
+        ImGui::EndDragDropSource();
+      }
+      if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
+          if (payload->DataSize == sizeof(int)) {
+            const int src = *static_cast<const int*>(payload->Data);
+            const bool valid = src >= 0 && src < static_cast<int>(m_document.objects.size()) &&
+                               src != idx && !IsDescendantOf(m_document, idx, src);
+            if (valid) {
+              m_document.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
+              m_document.dirty = true;
+            }
+          }
+        }
+        ImGui::EndDragDropTarget();
+      }
+
+      if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        const bool hasParent = !GetParentId(obj).empty();
+        if (ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
+          obj.props.erase("parentId");
+          m_document.dirty = true;
+        }
+        ImGui::EndPopup();
+      }
+
+      if (open && hasChildren) {
+        for (int childIdx : children[static_cast<size_t>(idx)])
+          drawNode(childIdx, depth + 1);
+        ImGui::TreePop();
+      }
+
+      ImGui::Unindent(depth * 14.0f);
+      ImGui::PopID();
+    };
+
+    for (int rootIdx : roots)
+      drawNode(rootIdx, 0);
   }
 
   const FilteredListState objectState =
@@ -1813,19 +1968,50 @@ void EditorLayer::DrawPropertiesPanel() {
                          : (obj.type == SceneObjectType::Camera) ? "Camera"
                                                                  : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
+
+  {
+    std::string currentParent = GetParentId(obj);
+    std::vector<std::string> parentIds;
+    std::vector<const char*> parentItems;
+    parentItems.push_back("<root>");
+    int currentIdx = 0;
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      if (i == primaryIdx || IsDescendantOf(m_document, i, primaryIdx))
+        continue;
+      const std::string& id = m_document.objects[static_cast<size_t>(i)].id;
+      parentIds.push_back(id);
+      parentItems.push_back(parentIds.back().c_str());
+      if (id == currentParent)
+        currentIdx = static_cast<int>(parentItems.size()) - 1;
+    }
+    if (ImGui::Combo("Parent", &currentIdx, parentItems.data(), static_cast<int>(parentItems.size()))) {
+      if (currentIdx == 0)
+        obj.props.erase("parentId");
+      else
+        obj.props["parentId"] = parentIds[static_cast<size_t>(currentIdx - 1)];
+      m_document.dirty = true;
+    }
+  }
   ImGui::Separator();
 
   // ---- Camera-specific properties ----
   if (obj.type == SceneObjectType::Camera) {
+    const Vec3 oldPos = obj.position;
+    const Quaternion oldRot =
+        Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+    bool changedTransform = false;
+
     float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
     if (ImGui::DragFloat3("Position", pos, 0.05f)) {
       obj.position = {pos[0], pos[1], pos[2]};
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
     }
 
     if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
@@ -1834,9 +2020,17 @@ void EditorLayer::DrawPropertiesPanel() {
     float pitch = obj.pitch;
     if (ImGui::DragFloat("Pitch", &pitch, 1.0f, -89.0f, 89.0f)) {
       obj.pitch = std::max(-89.0f, std::min(89.0f, pitch));
+      changedTransform = true;
       m_document.dirty = true;
       if (m_transformCb)
         m_transformCb(obj);
+    }
+
+    if (changedTransform) {
+      const Quaternion newRot =
+          Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+      PropagateHierarchyTransformDelta(
+          m_document, primaryIdx, oldPos, oldRot, obj.position, newRot, m_transformCb);
     }
 
     ImGui::Separator();
@@ -1912,9 +2106,15 @@ void EditorLayer::DrawPropertiesPanel() {
   }
 
   // ---- Transform (non-camera objects) ----
+  const Vec3 oldPos = obj.position;
+  const Quaternion oldRot =
+      Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+  bool changedTransform = false;
+
   float pos[3] = {obj.position.x, obj.position.y, obj.position.z};
   if (ImGui::DragFloat3("Position", pos, 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
+    changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
@@ -1934,9 +2134,17 @@ void EditorLayer::DrawPropertiesPanel() {
     obj.pitch = rot[0];
     obj.yaw = rot[1];
     obj.roll = rot[2];
+    changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
       m_transformCb(obj);
+  }
+
+  if (changedTransform) {
+    const Quaternion newRot =
+        Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+    PropagateHierarchyTransformDelta(
+        m_document, primaryIdx, oldPos, oldRot, obj.position, newRot, m_transformCb);
   }
 
   ImGui::Separator();
@@ -2294,6 +2502,46 @@ void EditorLayer::DrawSelectionHighlight() {
     if (i < 0 || i >= n)
       continue;
     const auto& obj = m_document.objects[i];
+
+    if (obj.type == SceneObjectType::Camera) {
+      const Vec4 color = {0.2f, 0.7f, 1.0f, 1.0f};
+      const float yawRad = ToRadians(obj.yaw);
+      const float pitchRad = ToRadians(std::max(-89.0f, std::min(89.0f, obj.pitch)));
+      const Vec3 forward = {-std::sin(yawRad) * std::cos(pitchRad),
+                            std::sin(pitchRad),
+                            -std::cos(yawRad) * std::cos(pitchRad)};
+
+      Vec3 right = Vec3::Cross(forward, Vec3::Up());
+      if (right.LengthSq() < 1e-5f)
+        right = {1.0f, 0.0f, 0.0f};
+      else
+        right = right.Normalized();
+      Vec3 up = Vec3::Cross(right, forward).Normalized();
+
+      const Vec3 tip = obj.position;
+      const Vec3 baseCenter = tip + forward * 0.55f;
+      const float baseHalfW = 0.24f;
+      const float baseHalfH = 0.16f;
+
+      const Vec3 b0 = baseCenter + right * baseHalfW + up * baseHalfH;
+      const Vec3 b1 = baseCenter - right * baseHalfW + up * baseHalfH;
+      const Vec3 b2 = baseCenter - right * baseHalfW - up * baseHalfH;
+      const Vec3 b3 = baseCenter + right * baseHalfW - up * baseHalfH;
+
+      DebugDraw::Line(tip, b0, color);
+      DebugDraw::Line(tip, b1, color);
+      DebugDraw::Line(tip, b2, color);
+      DebugDraw::Line(tip, b3, color);
+      DebugDraw::Line(b0, b1, color);
+      DebugDraw::Line(b1, b2, color);
+      DebugDraw::Line(b2, b3, color);
+      DebugDraw::Line(b3, b0, color);
+
+      const Vec3 dirTip = tip + forward * 0.78f;
+      DebugDraw::Line(tip, dirTip, {1.0f, 0.55f, 0.1f, 1.0f});
+      continue;
+    }
+
     Vec3 center = obj.position;
     Vec3 half = obj.scale;
     if (!m_liveRegistry || !TryPropWorldAabb(*m_liveRegistry, obj, center, half))
