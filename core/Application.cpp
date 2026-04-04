@@ -2,6 +2,8 @@
 
 #include <glad/glad.h>
 
+#include <string_view>
+
 #include "core/Logger.h"
 #include "core/Time.h"
 #include "input/Input.h"
@@ -22,6 +24,13 @@ Application::Application(const AppSpec& spec) {
 }
 
 Application::~Application() = default;
+
+void Application::ParseArgs(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i] && std::string_view(argv[i]) == "--editor")
+      m_editorModeRequested = true;
+  }
+}
 
 void Application::Run() {
   OnInit();
