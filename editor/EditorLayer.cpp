@@ -2977,13 +2977,17 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   std::string path = m_document.filePath.empty() ? "assets/scenes/dungeon.json" : m_document.filePath;
   m_document.filePath = path;
 
+  LOG_INFO("[Editor] Saving scene to: %s", path.c_str());
+
   try {
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
     m_lastSavedDocument = m_document;
+    LOG_INFO("[Editor] Scene saved OK");
     TriggerReload();  // rebuild scene so changes are immediately visible
     return true;
   } catch (const std::exception& e) {
+    LOG_ERROR("[Editor] Save failed: %s", e.what());
     if (outError)
       *outError = e.what();
     return false;
