@@ -1180,16 +1180,22 @@ void EditorLayer::DrawObjectList() {
 
   char searchBuf[256] = {};
   std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_objectSearchQuery.c_str());
+  ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
   if (ImGui::InputTextWithHint("##object_search", "Search objects...", searchBuf, sizeof(searchBuf)))
     m_objectSearchQuery = searchBuf;
+  ImGui::PopItemFlag();
   ImGui::Separator();
 
   int shownObjectCount = 0;
   if (!m_objectSearchQuery.empty()) {
     for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      ImGui::PushID(i);
       auto& obj = m_document.objects[i];
       if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
+      {
+        ImGui::PopID();
         continue;
+      }
       const char* typeName = ObjectTypeLabel(obj.type);
 
       char selectableId[32];
@@ -1217,7 +1223,35 @@ void EditorLayer::DrawObjectList() {
         }
         ImGui::EndGroup();
       }
+
+      if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        if (ImGui::MenuItem("Rename...")) {
+          m_renameObjectIndex = i;
+          m_renameObjectDraft = obj.id;
+          m_renameObjectError.clear();
+          m_renameObjectOpen = true;
+        }
+
+        if (ImGui::MenuItem("Duplicate")) {
+          SceneObject clone = DuplicateObject(m_document, obj);
+          clone.position.x += 1.0f;
+          clone.position.z += 1.0f;
+          m_document.objects.push_back(std::move(clone));
+          m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+          m_document.dirty = true;
+          TriggerReload();
+        }
+
+        if (ImGui::MenuItem("Delete")) {
+          m_selectedIndices = {i};
+          RequestDeleteSelectedObjects();
+        }
+
+        ImGui::EndPopup();
+      }
+
       ++shownObjectCount;
+      ImGui::PopID();
     }
   } else {
     std::unordered_map<std::string, int> idToIndex;
@@ -1289,6 +1323,29 @@ void EditorLayer::DrawObjectList() {
       }
 
       if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        if (ImGui::MenuItem("Rename...")) {
+          m_renameObjectIndex = idx;
+          m_renameObjectDraft = obj.id;
+          m_renameObjectError.clear();
+          m_renameObjectOpen = true;
+        }
+
+        if (ImGui::MenuItem("Duplicate")) {
+          SceneObject clone = DuplicateObject(m_document, obj);
+          clone.position.x += 1.0f;
+          clone.position.z += 1.0f;
+          m_document.objects.push_back(std::move(clone));
+          m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+          m_document.dirty = true;
+          TriggerReload();
+        }
+
+        if (ImGui::MenuItem("Delete")) {
+          m_selectedIndices = {idx};
+          RequestDeleteSelectedObjects();
+        }
+
+        ImGui::Separator();
         const bool hasParent = !GetParentId(obj).empty();
         if (ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
           obj.props.erase("parentId");
@@ -1324,6 +1381,67 @@ void EditorLayer::DrawObjectList() {
       if (ImGui::Button("Clear Object Search"))
         m_objectSearchQuery.clear();
     }
+  }
+
+  if (m_renameObjectOpen) {
+    ImGui::OpenPopup("Rename Object");
+    m_renameObjectOpen = false;
+  }
+  if (ImGui::BeginPopupModal("Rename Object", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    char nameBuf[256] = {};
+    std::snprintf(nameBuf, sizeof(nameBuf), "%s", m_renameObjectDraft.c_str());
+    if (ImGui::InputText("New ID", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+      m_renameObjectDraft = nameBuf;
+    } else if (std::strncmp(nameBuf, m_renameObjectDraft.c_str(), sizeof(nameBuf)) != 0) {
+      m_renameObjectDraft = nameBuf;
+    }
+
+    if (!m_renameObjectError.empty())
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", m_renameObjectError.c_str());
+
+    bool applyRequested = false;
+    if (ImGui::Button("Apply"))
+      applyRequested = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      m_renameObjectError.clear();
+      m_renameObjectIndex = -1;
+      ImGui::CloseCurrentPopup();
+    }
+
+    if (applyRequested) {
+      if (m_renameObjectIndex < 0 || m_renameObjectIndex >= static_cast<int>(m_document.objects.size())) {
+        m_renameObjectError = "Selected object is no longer valid.";
+      } else if (m_renameObjectDraft.empty()) {
+        m_renameObjectError = "ID cannot be empty.";
+      } else {
+        const int existingIdx = FindObjectIndexById(m_document, m_renameObjectDraft);
+        if (existingIdx >= 0 && existingIdx != m_renameObjectIndex) {
+          m_renameObjectError = "ID already exists.";
+        } else {
+          SceneObject& target = m_document.objects[static_cast<size_t>(m_renameObjectIndex)];
+          const std::string oldId = target.id;
+          const std::string newId = m_renameObjectDraft;
+          if (oldId != newId) {
+            target.id = newId;
+            for (auto& other : m_document.objects) {
+              auto p = other.props.find("parentId");
+              if (p != other.props.end() && p->second == oldId)
+                p->second = newId;
+              auto f = other.props.find("followTargetId");
+              if (f != other.props.end() && f->second == oldId)
+                f->second = newId;
+            }
+            m_document.dirty = true;
+          }
+          m_renameObjectError.clear();
+          m_renameObjectIndex = -1;
+          ImGui::CloseCurrentPopup();
+        }
+      }
+    }
+
+    ImGui::EndPopup();
   }
 
   ImGui::End();
