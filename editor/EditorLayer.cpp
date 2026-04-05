@@ -255,6 +255,28 @@ std::string PickObjFilePath() {
 #endif
 }
 
+std::string PickGlbFilePath() {
+#ifdef _WIN32
+  char filePath[MAX_PATH] = {};
+  OPENFILENAMEA ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = "GLB/glTF Files\0*.glb;*.gltf\0All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameA(&ofn))
+    return filePath;
+  return {};
+#elif defined(__APPLE__)
+  return ReadPathFromOsascript(
+      "/usr/bin/osascript -e 'try' "
+      "-e 'POSIX path of (choose file with prompt \"Select GLB/glTF file\")' "
+      "-e 'on error' -e 'return \"\"' -e 'end try' 2>/dev/null");
+#else
+  return {};
+#endif
+}
+
 static bool IsTextureFilePath(const std::string& path) {
   if (path.empty())
     return false;
@@ -580,9 +602,40 @@ void EditorLayer::ProcessPendingPathDrops() {
     if (m_assetDraftId.empty())
       m_assetDraftId = AssetIdFromImportedPath(path);
     m_assetDraftRenderScale = SuggestRenderScale(meshTag);
+    m_assetDraftType = "static";
+    m_assetDraftClips.clear();
+    m_assetDraftClipComboIdx = 0;
     m_assetImportError.clear();
     m_openNewAssetHeader = true;
     m_clipboardToastLabel = "OBJ dropped — draft ready";
+    m_clipboardToastTime = 2.2f;
+    m_pendingPathDropPaths.clear();
+    return;
+  }
+
+  for (const std::string& path : m_pendingPathDropPaths) {
+    if (!IsGlbFilePath(path))
+      continue;
+    std::string meshTag;
+    std::string err;
+    if (!ImportGlbFileIntoAssetsModels(path, &meshTag, &err)) {
+      if (!err.empty())
+        LOG_WARN("Drop import (GLB): %s", err.c_str());
+      m_assetImportError = err.empty() ? "GLB drop import failed." : err;
+      m_openNewAssetHeader = true;
+      m_pendingPathDropPaths.clear();
+      return;
+    }
+    m_assetDraftMesh = meshTag;
+    if (m_assetDraftId.empty())
+      m_assetDraftId = AssetIdFromImportedPath(path);
+    m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+    m_assetDraftType = "skinned";
+    m_assetDraftClips = ExtractClipNames(meshTag);
+    m_assetDraftClipComboIdx = 0;
+    m_assetImportError.clear();
+    m_openNewAssetHeader = true;
+    m_clipboardToastLabel = "GLB dropped — draft ready";
     m_clipboardToastTime = 2.2f;
     m_pendingPathDropPaths.clear();
     return;
@@ -957,6 +1010,29 @@ void EditorLayer::ProcessDeferredFilePicks() {
         if (m_assetDraftId.empty())
           m_assetDraftId = AssetIdFromImportedPath(chosen);
         m_assetDraftRenderScale = SuggestRenderScale(meshTag);
+        m_assetDraftType = "static";
+        m_assetDraftClips.clear();
+        m_assetDraftClipComboIdx = 0;
+        m_assetImportError.clear();
+      } else if (!err.empty())
+        m_assetImportError = err;
+      break;
+    }
+    case DeferredFilePick::ImportGlbBulk: {
+      m_assetImportError.clear();
+      const std::string chosen = PickGlbFilePath();
+      if (chosen.empty())
+        break;
+      std::string meshTag;
+      std::string err;
+      if (ImportGlbFileIntoAssetsModels(chosen, &meshTag, &err)) {
+        m_assetDraftMesh = meshTag;
+        if (m_assetDraftId.empty())
+          m_assetDraftId = AssetIdFromImportedPath(chosen);
+        m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
+        m_assetDraftType = "skinned";
+        m_assetDraftClips = ExtractClipNames(meshTag);
+        m_assetDraftClipComboIdx = 0;
         m_assetImportError.clear();
       } else if (!err.empty())
         m_assetImportError = err;
@@ -1939,15 +2015,27 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::SetNextItemOpen(true, ImGuiCond_Always);
   if (ImGui::CollapsingHeader("+ New Asset")) {
     // -- Import from file -------------------------------------------------------
-    if (ImGui::Button("Import .obj...", ImVec2(blockW, 0.0f))) {
-      m_assetImportError.clear();
-
+    const float halfBtnW = std::max(80.0f, (blockW - ImGui::GetStyle().ItemSpacing.x) * 0.5f);
 #if !defined(_WIN32) && !defined(__APPLE__)
-      m_assetImportError = "Import dialog is not supported on this platform yet.";
+    ImGui::BeginDisabled();
+    ImGui::Button("Import .obj...", ImVec2(halfBtnW, 0.0f));
+    ImGui::SameLine();
+    ImGui::Button("Import .glb...", ImVec2(halfBtnW, 0.0f));
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+      ImGui::SetTooltip("Import dialog is not supported on this platform yet.");
+    m_assetImportError.clear();
 #else
+    if (ImGui::Button("Import .obj...", ImVec2(halfBtnW, 0.0f))) {
+      m_assetImportError.clear();
       m_deferredFilePick = DeferredFilePick::ImportObjBulk;
-#endif
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Import .glb...", ImVec2(halfBtnW, 0.0f))) {
+      m_assetImportError.clear();
+      m_deferredFilePick = DeferredFilePick::ImportGlbBulk;
+    }
+#endif
     if (!m_assetImportError.empty()) {
       ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + blockW);
       ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
@@ -2003,6 +2091,22 @@ void EditorLayer::DrawAssetsPanel() {
       ImGui::SetTooltip("Texture file dialog is not available on this platform.");
 #endif
 
+    // -- Asset type + animation clip preview (for skinned GLB assets) -----------
+    if (!m_assetDraftType.empty()) {
+      ImGui::TextDisabled("Asset type");
+      ImGui::TextUnformatted(m_assetDraftType.c_str());
+    }
+    if (m_assetDraftType == "skinned" && !m_assetDraftClips.empty()) {
+      ImGui::TextDisabled("Animation clips (%d)", static_cast<int>(m_assetDraftClips.size()));
+      std::string clipItems;
+      for (const auto& c : m_assetDraftClips) {
+        clipItems += c;
+        clipItems += '\0';
+      }
+      clipItems += '\0';
+      ImGui::Combo("##draft_clips_preview", &m_assetDraftClipComboIdx, clipItems.c_str());
+    }
+
     const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
     if (!canCreate)
       ImGui::BeginDisabled();
@@ -2011,12 +2115,17 @@ void EditorLayer::DrawAssetsPanel() {
       def.mesh = m_assetDraftMesh;
       def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
       def.albedoMap = m_assetDraftAlbedoMap;
+      def.assetType = m_assetDraftType;
+      def.animClips = m_assetDraftClips;
       m_document.assets[m_assetDraftId] = std::move(def);
       m_selectedAssetId = m_assetDraftId;
       m_assetDraftId.clear();
       m_assetDraftMesh.clear();
       m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
       m_assetDraftAlbedoMap.clear();
+      m_assetDraftType.clear();
+      m_assetDraftClips.clear();
+      m_assetDraftClipComboIdx = 0;
       m_assetImportError.clear();
       m_document.dirty = true;
       TriggerReload();
@@ -2545,6 +2654,63 @@ void EditorLayer::DrawPropertiesPanel() {
     if (assetIt != m_document.assets.end()) {
       ImGui::TextDisabled("mesh: %s", assetIt->second.mesh.c_str());
       ImGui::TextDisabled("renderScale: %s", assetIt->second.renderScale.c_str());
+
+      // ---- Animation controls for skinned assets ----
+      const AssetDef& asset = assetIt->second;
+      if (asset.assetType == "skinned" && !asset.animClips.empty()) {
+        ImGui::Separator();
+        ImGui::Text("Animation");
+
+        // Clip selector
+        {
+          const std::string& currentClip = obj.props.count("animClip") ? obj.props.at("animClip") : "";
+          std::vector<const char*> clipItems;
+          clipItems.reserve(asset.animClips.size() + 1);
+          clipItems.push_back("<none>");
+          int currentClipIdx = 0;
+          for (int ci = 0; ci < static_cast<int>(asset.animClips.size()); ++ci) {
+            clipItems.push_back(asset.animClips[static_cast<size_t>(ci)].c_str());
+            if (asset.animClips[static_cast<size_t>(ci)] == currentClip)
+              currentClipIdx = ci + 1;
+          }
+          if (ImGui::Combo("Clip##anim_clip", &currentClipIdx, clipItems.data(),
+                           static_cast<int>(clipItems.size()))) {
+            if (currentClipIdx == 0)
+              obj.props.erase("animClip");
+            else
+              obj.props["animClip"] = asset.animClips[static_cast<size_t>(currentClipIdx - 1)];
+            m_document.dirty = true;
+          }
+        }
+
+        // Speed slider
+        {
+          auto& speedStr = obj.props["animSpeed"];
+          if (speedStr.empty())
+            speedStr = "1.0";
+          float speed = std::strtof(speedStr.c_str(), nullptr);
+          if (speed <= 0.0f)
+            speed = 1.0f;
+          if (ImGui::SliderFloat("Speed##anim_speed", &speed, 0.1f, 3.0f)) {
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "%.4f", speed);
+            speedStr = tmp;
+            m_document.dirty = true;
+          }
+        }
+
+        // Loop checkbox
+        {
+          auto& loopStr = obj.props["animLoop"];
+          if (loopStr.empty())
+            loopStr = "true";
+          bool loop = (loopStr == "true" || loopStr == "1");
+          if (ImGui::Checkbox("Loop##anim_loop", &loop)) {
+            loopStr = loop ? "true" : "false";
+            m_document.dirty = true;
+          }
+        }
+      }
     } else {
       ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Missing asset: %s", obj.assetId.c_str());
     }
@@ -2840,7 +3006,13 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
       m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
     return;
 
-  Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my), screenW, screenH, cam);
+  // glfwGetCursorPos returns logical (screen-space) coordinates, but screenW/screenH
+  // come from the framebuffer-size callback which gives physical pixels on HiDPI/Retina
+  // displays. Use the logical window size for NDC computation so the ray matches the
+  // screen position the user actually clicked.
+  int winW = screenW, winH = screenH;
+  glfwGetWindowSize(m_window, &winW, &winH);
+  Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my), winW, winH, cam);
 
   float bestT = std::numeric_limits<float>::max();
   int bestIdx = -1;

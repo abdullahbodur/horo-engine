@@ -163,11 +163,15 @@ bool TransformGizmo::Update(GLFWwindow* window, const Camera& cam, int screenW, 
   bool released   = !currMouseL && m_prevMouseL;
   m_prevMouseL    = currMouseL;
 
-  Ray ray = ScreenToRay(mx, my, screenW, screenH, cam);
+  // glfwGetCursorPos returns logical (screen-space) coords; use window size (not framebuffer
+  // size) for NDC so picking is correct on HiDPI/Retina displays.
+  int winW = screenW, winH = screenH;
+  glfwGetWindowSize(window, &winW, &winH);
+  Ray ray = ScreenToRay(mx, my, winW, winH, cam);
 
   if (m_dragging == GizmoAxis::None) {
     // Update hover and detect drag start
-    m_hovered = PickAxis(mx, my, cam, screenW, screenH);
+    m_hovered = PickAxis(mx, my, cam, winW, winH);
 
     if (clicked && m_hovered != GizmoAxis::None) {
       m_dragging      = m_hovered;
