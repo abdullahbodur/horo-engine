@@ -6,6 +6,13 @@ struct GLFWwindow;
 
 namespace Monolith {
 
+enum class CursorMode
+{
+    Normal,
+    Hidden,
+    Disabled,
+};
+
 struct WindowSpec {
   std::string title = "Monolith";
   int width = 1280;
@@ -38,6 +45,8 @@ class Window {
   void SetResizeCallback(ResizeCallback cb) { m_resizeCb = std::move(cb); }
   void SetCloseCallback(CloseCallback cb) { m_closeCb = std::move(cb); }
   void SetFileDropCallback(FileDropCallback cb) { m_fileDropCb = std::move(cb); }
+
+  void SetCursorMode(CursorMode mode);
 
  private:
   GLFWwindow* m_window = nullptr;
