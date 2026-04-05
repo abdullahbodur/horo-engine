@@ -13,6 +13,7 @@
 #include <commdlg.h>
 #endif
 
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -52,7 +53,11 @@
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/GltfLoader.h"
+#include "renderer/Mesh.h"
 #include "renderer/ObjLoader.h"
+#include "renderer/RenderContext.h"
+#include "renderer/Shader.h"
+#include "renderer/SkinnedMesh.h"
 #include "renderer/Texture.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
@@ -296,6 +301,274 @@ static std::filesystem::path ResolveProjectRelativeOrAbsolutePath(const std::str
   return ProjectPath::Root() / p;
 }
 
+static std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
+  namespace fs = std::filesystem;
+  const fs::path root = ProjectPath::Root();
+  const std::array<fs::path, 3> candidates = {
+      root / "engine" / "renderer" / "shaders" / fileName,
+      root / "horo-engine" / "renderer" / "shaders" / fileName,
+      root / "renderer" / "shaders" / fileName,
+  };
+
+  for (const auto& candidate : candidates) {
+    std::error_code ec;
+    if (fs::is_regular_file(candidate, ec) && !ec)
+      return candidate;
+  }
+
+  return candidates.front();
+}
+
+// ===== 3D Asset Thumbnail Rendering Infrastructure =====
+// Framebuffer object for offscreen mesh rendering (shared across all asset previews).
+struct AssetThumbnailRenderer {
+  unsigned int fbo = 0;
+  unsigned int colorTexture = 0;
+  unsigned int depthRenderBuffer = 0;
+  int width = 128;
+  int height = 128;
+  Shader shader;  // Basic lighting shader for thumbnail
+
+  // Cache: assetKey -> currently rendered mesh/texture ID
+  struct CachedMesh {
+    std::shared_ptr<Mesh> mesh;
+    std::shared_ptr<SkinnedMesh> skinnedMesh;
+    std::shared_ptr<Skeleton> skeleton;
+    bool isSkinned = false;
+  };
+  std::unordered_map<std::string, CachedMesh> meshCache;
+  std::unordered_set<std::string> noPreviewKeys;
+
+  static AssetThumbnailRenderer& Instance() {
+    static AssetThumbnailRenderer instance;
+    return instance;
+  }
+
+  bool Init() {
+    if (fbo != 0)
+      return IsValid();
+
+    // Create FBO
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // Create color texture
+    glGenTextures(1, &colorTexture);
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+
+    // Create depth renderbuffer
+    glGenRenderbuffers(1, &depthRenderBuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRenderBuffer);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRenderBuffer);
+
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+      LOG_ERROR("AssetThumbnailRenderer: FBO incomplete, status=%d", (int)status);
+      Cleanup();
+      return false;
+    }
+
+    // Load simple lighting shader
+    try {
+      const std::filesystem::path vertPath = ResolvePreviewShaderPath("basic.vert");
+      const std::filesystem::path fragPath = ResolvePreviewShaderPath("basic.frag");
+      shader = Shader::FromFiles(vertPath.generic_string(), fragPath.generic_string());
+    } catch (const std::exception& e) {
+      LOG_ERROR("Failed to load preview shader: %s", e.what());
+      Cleanup();
+      return false;
+    }
+
+    return IsValid();
+  }
+
+  bool IsValid() const {
+    return fbo != 0 && colorTexture != 0 && depthRenderBuffer != 0 && shader.IsValid();
+  }
+
+  void Cleanup() {
+    meshCache.clear();
+    noPreviewKeys.clear();
+    if (colorTexture != 0) {
+      glDeleteTextures(1, &colorTexture);
+      colorTexture = 0;
+    }
+    if (depthRenderBuffer != 0) {
+      glDeleteRenderbuffers(1, &depthRenderBuffer);
+      depthRenderBuffer = 0;
+    }
+    if (fbo != 0) {
+      glDeleteFramebuffers(1, &fbo);
+      fbo = 0;
+    }
+  }
+
+  ~AssetThumbnailRenderer() { Cleanup(); }
+};
+
+// Try to load a static mesh (OBJ) or skinned mesh (GLTF/GLB) from the given path.
+// Returns cache entry or nullptr on failure.
+static AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(const std::string& meshPath) {
+  if (meshPath.empty())
+    return nullptr;
+
+  const std::filesystem::path path = ResolveProjectRelativeOrAbsolutePath(meshPath);
+  const std::string ext = ToLowerAscii(path.extension().string());
+
+  auto& renderer = AssetThumbnailRenderer::Instance();
+  const std::string cacheKey = path.generic_string();
+
+  // Check no-preview cache
+  if (renderer.noPreviewKeys.find(cacheKey) != renderer.noPreviewKeys.end()) {
+    LOG_INFO("[Thumbnail] Mesh in no-preview cache: %s", cacheKey.c_str());
+    return nullptr;
+  }
+
+  // Check mesh cache
+  auto it = renderer.meshCache.find(cacheKey);
+  if (it != renderer.meshCache.end()) {
+    LOG_INFO("[Thumbnail] Mesh cache HIT: %s", cacheKey.c_str());
+    return &it->second;
+  }
+
+  LOG_INFO("[Thumbnail] Loading mesh: %s", cacheKey.c_str());
+
+  AssetThumbnailRenderer::CachedMesh entry;
+
+  try {
+    if (ext == ".obj") {
+      LOG_INFO("[Thumbnail] Loading OBJ: %s", path.generic_string().c_str());
+      entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
+      entry.isSkinned = false;
+      LOG_INFO("[Thumbnail] OBJ loaded successfully");
+    } else if (ext == ".gltf" || ext == ".glb") {
+      GltfLoadResult result = GltfLoader::Load(path.generic_string());
+      if (result.mesh) {
+        entry.skinnedMesh = result.mesh;
+        entry.skeleton = result.skeleton;
+        entry.isSkinned = true;
+      } else {
+        LOG_WARN("[Thumbnail] GLTF load failed (no mesh): %s", cacheKey.c_str());
+        renderer.noPreviewKeys.insert(cacheKey);
+        return nullptr;
+      }
+    } else {
+      LOG_WARN("[Thumbnail] Unsupported mesh format: %s", ext.c_str());
+      renderer.noPreviewKeys.insert(cacheKey);
+      return nullptr;
+    }
+  } catch (const std::exception& e) {
+    LOG_WARN("[Thumbnail] Failed to load mesh for preview: %s (error: %s)", cacheKey.c_str(), e.what());
+    renderer.noPreviewKeys.insert(cacheKey);
+    return nullptr;
+  }
+
+  it = renderer.meshCache.emplace(cacheKey, std::move(entry)).first;
+  LOG_INFO("[Thumbnail] Mesh cached: %s", cacheKey.c_str());
+  return &it->second;
+}
+
+// Fit camera to mesh AABB with a comfortable margin. Returns view and projection matrices.
+static void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh,
+                            Mat4& outView, Mat4& outProj) {
+  Vec3 aabbCenter;
+  Vec3 aabbHalf;
+
+  if (mesh.isSkinned && mesh.skinnedMesh) {
+    aabbCenter = mesh.skinnedMesh->GetLocalAabbCenter();
+    aabbHalf = mesh.skinnedMesh->GetHalfExtents();
+  } else if (!mesh.isSkinned && mesh.mesh) {
+    aabbCenter = mesh.mesh->GetLocalAabbCenter();
+    aabbHalf = mesh.mesh->GetHalfExtents();
+  } else {
+    // Fallback: identity view/proj
+    outView = Mat4::Identity();
+    outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 100.0f);
+    return;
+  }
+
+  // Compute distance to fit AABB on screen (with 1.3x margin for breathing room)
+  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z});
+  const float fov = 45.0f * 3.14159f / 180.f;
+  const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
+
+  // Position camera above and to the side of the object (fixed viewpoint for consistency)
+  const Vec3 camPos = aabbCenter + Vec3(distance * 0.6f, distance * 0.8f, distance * 0.6f);
+  outView = Mat4::LookAt(camPos, aabbCenter, Vec3(0, 1, 0));
+  outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
+}
+
+// Render a mesh to the thumbnail framebuffer and return the texture ID.
+static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
+                                          const std::string& /*assetId*/) {
+  auto& renderer = AssetThumbnailRenderer::Instance();
+  if (!renderer.IsValid())
+    return 0;
+
+  // Save GL state (viewport)
+  GLint prevViewport[4] = {0, 0, 1, 1};
+  glGetIntegerv(GL_VIEWPORT, prevViewport);
+
+  // Bind FBO and set viewport
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer.fbo);
+  glViewport(0, 0, renderer.width, renderer.height);
+
+  // Clear and setup rendering
+  glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+
+  // Setup camera matrices
+  Mat4 view, proj;
+  FitCameraToMesh(mesh, view, proj);
+
+  // Render mesh with basic shader
+  renderer.shader.Bind();
+  renderer.shader.SetMat4("u_model", Mat4::Identity());
+  renderer.shader.SetMat4("u_view", view);
+  renderer.shader.SetMat4("u_projection", proj);
+  renderer.shader.SetVec3("u_cameraPos", view.Inverse().GetTranslation());
+  renderer.shader.SetVec4("u_color", Vec4(0.8f, 0.8f, 0.8f, 1.0f));
+  renderer.shader.SetInt("u_hasTexture", 0);
+  renderer.shader.SetInt("u_lightCount", 1);
+
+  // Single key light from the camera direction
+  struct LightData {
+    int type;
+    Vec3 position;
+    Vec3 direction;
+    Vec3 color;
+    float radius;
+  } light = {0, Vec3(0), Vec3(-1, -1, -1).Normalized(), Vec3(1, 1, 1) * 2.0f, 100.0f};
+  renderer.shader.SetInt("u_lights[0].type", light.type);
+  renderer.shader.SetVec3("u_lights[0].direction", light.direction);
+  renderer.shader.SetVec3("u_lights[0].color", light.color);
+
+  // Draw mesh
+  if (mesh.isSkinned && mesh.skinnedMesh) {
+    mesh.skinnedMesh->Draw();
+  } else if (!mesh.isSkinned && mesh.mesh) {
+    mesh.mesh->Draw();
+  }
+
+  // Restore GL state (viewport only; keep FBO bound for now since editor will handle it)
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+
+  return renderer.colorTexture;
+}
+
 static bool TryGetAssetPreviewTextureId(const std::string& assetId,
                                         const AssetDef& asset,
                                         unsigned int* outTextureId) {
@@ -328,6 +601,21 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
     return it->second.GetNativeId();
   };
 
+  // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
+  if (!asset.mesh.empty()) {
+    auto& thumbnailRenderer = AssetThumbnailRenderer::Instance();
+    if (thumbnailRenderer.Init()) {
+      if (auto* meshEntry = TryLoadAssetMesh(asset.mesh)) {
+        const unsigned int texId = RenderMeshToThumbnail(*meshEntry, assetId);
+        if (texId != 0) {
+          *outTextureId = texId;
+          return true;
+        }
+      }
+    }
+  }
+
+  // Priority 2: Fallback to texture-based thumbnails
   if (!asset.albedoMap.empty()) {
     const std::filesystem::path albedo = ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
     const unsigned int texId = loadTextureByPath(albedo);
@@ -549,6 +837,12 @@ void EditorLayer::Init(GLFWwindow* window) {
   ImGui_ImplOpenGL3_Init("#version 410");
 
   m_schema.LoadFromFile("assets/editor_schema.json");
+
+  // Clear thumbnail caches to allow fresh asset preview generation
+  auto& renderer = AssetThumbnailRenderer::Instance();
+  renderer.noPreviewKeys.clear();
+  renderer.meshCache.clear();
+  LOG_INFO("[Editor] Asset thumbnail caches cleared on Init");
 }
 
 void EditorLayer::Shutdown() {

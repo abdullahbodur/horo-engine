@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(vswhere -all -format json)",
-      "Read(//c/Program Files/Microsoft Visual Studio/**)",
-      "Bash(winget search:*)"
-    ]
-  }
-}
