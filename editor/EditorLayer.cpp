@@ -325,8 +325,8 @@ struct AssetThumbnailRenderer {
   unsigned int fbo = 0;
   unsigned int colorTexture = 0;
   unsigned int depthRenderBuffer = 0;
-  int width = 128;
-  int height = 128;
+  int width = 512;
+  int height = 512;
   Shader shader;  // Basic lighting shader for thumbnail
 
   // Cache: assetKey -> currently rendered mesh/texture ID
@@ -338,6 +338,9 @@ struct AssetThumbnailRenderer {
   };
   std::unordered_map<std::string, CachedMesh> meshCache;
   std::unordered_set<std::string> noPreviewKeys;
+  // Per-mesh rendered texture cache: each mesh gets its own texture so all
+  // thumbnails don't overwrite each other by sharing a single FBO attachment.
+  std::unordered_map<std::string, unsigned int> renderedTextureCache;
 
   static AssetThumbnailRenderer& Instance() {
     static AssetThumbnailRenderer instance;
@@ -398,6 +401,11 @@ struct AssetThumbnailRenderer {
   void Cleanup() {
     meshCache.clear();
     noPreviewKeys.clear();
+    for (auto& [key, texId] : renderedTextureCache) {
+      if (texId != 0)
+        glDeleteTextures(1, &texId);
+    }
+    renderedTextureCache.clear();
     if (colorTexture != 0) {
       glDeleteTextures(1, &colorTexture);
       colorTexture = 0;
@@ -429,27 +437,21 @@ static AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(const std::string& m
 
   // Check no-preview cache
   if (renderer.noPreviewKeys.find(cacheKey) != renderer.noPreviewKeys.end()) {
-    LOG_INFO("[Thumbnail] Mesh in no-preview cache: %s", cacheKey.c_str());
     return nullptr;
   }
 
   // Check mesh cache
   auto it = renderer.meshCache.find(cacheKey);
   if (it != renderer.meshCache.end()) {
-    LOG_INFO("[Thumbnail] Mesh cache HIT: %s", cacheKey.c_str());
     return &it->second;
   }
-
-  LOG_INFO("[Thumbnail] Loading mesh: %s", cacheKey.c_str());
 
   AssetThumbnailRenderer::CachedMesh entry;
 
   try {
     if (ext == ".obj") {
-      LOG_INFO("[Thumbnail] Loading OBJ: %s", path.generic_string().c_str());
       entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
       entry.isSkinned = false;
-      LOG_INFO("[Thumbnail] OBJ loaded successfully");
     } else if (ext == ".gltf" || ext == ".glb") {
       GltfLoadResult result = GltfLoader::Load(path.generic_string());
       if (result.mesh) {
@@ -473,7 +475,6 @@ static AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(const std::string& m
   }
 
   it = renderer.meshCache.emplace(cacheKey, std::move(entry)).first;
-  LOG_INFO("[Thumbnail] Mesh cached: %s", cacheKey.c_str());
   return &it->second;
 }
 
@@ -501,16 +502,23 @@ static void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh,
   const float fov = 45.0f * 3.14159f / 180.f;
   const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
 
-  // Position camera above and to the side of the object (fixed viewpoint for consistency)
-  const Vec3 camPos = aabbCenter + Vec3(distance * 0.6f, distance * 0.8f, distance * 0.6f);
+  // Position camera at ~22° elevation for a clear side-on view of the object
+  const Vec3 camPos = aabbCenter + Vec3(distance * 0.9f, distance * 0.4f, distance * 0.9f);
   outView = Mat4::LookAt(camPos, aabbCenter, Vec3(0, 1, 0));
   outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
 }
 
-// Render a mesh to the thumbnail framebuffer and return the texture ID.
+// Render a mesh to the thumbnail framebuffer and return a per-mesh cached texture ID.
+// meshKey must be the resolved mesh path (same key used in meshCache).
 static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
-                                          const std::string& /*assetId*/) {
+                                          const std::string& meshKey) {
   auto& renderer = AssetThumbnailRenderer::Instance();
+
+  // Return existing per-mesh texture if already rendered this session.
+  auto cacheIt = renderer.renderedTextureCache.find(meshKey);
+  if (cacheIt != renderer.renderedTextureCache.end())
+    return cacheIt->second;
+
   if (!renderer.IsValid())
     return 0;
 
@@ -541,19 +549,17 @@ static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMe
   renderer.shader.SetVec3("u_cameraPos", view.Inverse().GetTranslation());
   renderer.shader.SetVec4("u_color", Vec4(0.8f, 0.8f, 0.8f, 1.0f));
   renderer.shader.SetInt("u_hasTexture", 0);
-  renderer.shader.SetInt("u_lightCount", 1);
+  renderer.shader.SetInt("u_lightCount", 2);
 
-  // Single key light from the camera direction
-  struct LightData {
-    int type;
-    Vec3 position;
-    Vec3 direction;
-    Vec3 color;
-    float radius;
-  } light = {0, Vec3(0), Vec3(-1, -1, -1).Normalized(), Vec3(1, 1, 1) * 2.0f, 100.0f};
-  renderer.shader.SetInt("u_lights[0].type", light.type);
-  renderer.shader.SetVec3("u_lights[0].direction", light.direction);
-  renderer.shader.SetVec3("u_lights[0].color", light.color);
+  // Key light: upper-left, warm white
+  renderer.shader.SetInt("u_lights[0].type", 0);
+  renderer.shader.SetVec3("u_lights[0].direction", Vec3(-1.0f, -1.5f, -0.5f).Normalized());
+  renderer.shader.SetVec3("u_lights[0].color", Vec3(1.2f, 1.2f, 1.1f));
+
+  // Fill light: lower-right, cool blue at lower intensity for depth contrast
+  renderer.shader.SetInt("u_lights[1].type", 0);
+  renderer.shader.SetVec3("u_lights[1].direction", Vec3(1.0f, 0.5f, 1.0f).Normalized());
+  renderer.shader.SetVec3("u_lights[1].color", Vec3(0.3f, 0.35f, 0.5f));
 
   // Draw mesh
   if (mesh.isSkinned && mesh.skinnedMesh) {
@@ -562,19 +568,37 @@ static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMe
     mesh.mesh->Draw();
   }
 
-  // Restore GL state (viewport only; keep FBO bound for now since editor will handle it)
+  // Copy FBO contents into a new per-mesh texture so each asset keeps its own image.
+  unsigned int destTex = 0;
+  glGenTextures(1, &destTex);
+  glBindTexture(GL_TEXTURE_2D, destTex);
+  // glReadPixels only runs once per mesh (then cached); CPU cost is acceptable.
+  std::vector<unsigned char> pixels(static_cast<size_t>(renderer.width * renderer.height * 3));
+  glReadPixels(0, 0, renderer.width, renderer.height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, renderer.width, renderer.height, 0, GL_RGB, GL_UNSIGNED_BYTE,
+               pixels.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  renderer.renderedTextureCache[meshKey] = destTex;
+
+  // Restore GL state
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 
-  return renderer.colorTexture;
+  return destTex;
 }
 
 static bool TryGetAssetPreviewTextureId(const std::string& assetId,
                                         const AssetDef& asset,
-                                        unsigned int* outTextureId) {
+                                        unsigned int* outTextureId,
+                                        bool* outNeedsYFlip = nullptr) {
   if (!outTextureId)
     return false;
   *outTextureId = 0;
+  if (outNeedsYFlip)
+    *outNeedsYFlip = false;
 
   static std::unordered_map<std::string, Texture> s_textureByPath;
   static std::unordered_map<std::string, std::shared_ptr<Texture>> s_gltfTextureByMesh;
@@ -606,9 +630,15 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
     auto& thumbnailRenderer = AssetThumbnailRenderer::Instance();
     if (thumbnailRenderer.Init()) {
       if (auto* meshEntry = TryLoadAssetMesh(asset.mesh)) {
-        const unsigned int texId = RenderMeshToThumbnail(*meshEntry, assetId);
+        const std::string meshKey =
+            ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
+        const unsigned int texId = RenderMeshToThumbnail(*meshEntry, meshKey);
         if (texId != 0) {
           *outTextureId = texId;
+          // OpenGL FBO textures have origin at bottom-left; ImGui expects top-left.
+          // Caller must flip Y UVs when displaying this texture.
+          if (outNeedsYFlip)
+            *outNeedsYFlip = true;
           return true;
         }
       }
@@ -2728,10 +2758,12 @@ void EditorLayer::DrawAssetsPanel() {
 
   const float spacing = 8.0f;
   const float minTileW = 130.0f;
-  const float tileH = 104.0f;
   const float availW = std::max(40.0f, ImGui::GetContentRegionAvail().x);
   const int columns = std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
   const float tileW = (availW - spacing * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+  const float thumbPad = 8.0f;
+  const float thumbSize = tileW - thumbPad * 2.0f;  // square preview area
+  const float tileH = thumbSize + thumbPad * 2.0f + 22.0f;  // thumb + pads + label row
 
   int shownAssetCount = 0;
   for (const auto& assetId : assetIds) {
@@ -2779,21 +2811,19 @@ void EditorLayer::DrawAssetsPanel() {
 
     const ImVec2 tileMin = ImGui::GetWindowPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float thumbPad = 8.0f;
-    const float thumbW = tileW - thumbPad * 2.0f;
-    const float thumbH = 58.0f;
     const ImVec2 thumbMin(tileMin.x + thumbPad, tileMin.y + thumbPad);
-    const ImVec2 thumbMax(thumbMin.x + thumbW, thumbMin.y + thumbH);
+    const ImVec2 thumbMax(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
 
     dl->AddRectFilled(thumbMin, thumbMax, ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f)),
                       6.0f);
     dl->AddRect(thumbMin, thumbMax, ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)), 6.0f);
 
     unsigned int previewTexId = 0;
-    if (TryGetAssetPreviewTextureId(assetId, asset, &previewTexId) && previewTexId != 0) {
-      dl->AddImage(ToImTextureId(previewTexId),
-                   thumbMin, thumbMax,
-                   ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+    bool previewNeedsYFlip = false;
+    if (TryGetAssetPreviewTextureId(assetId, asset, &previewTexId, &previewNeedsYFlip) && previewTexId != 0) {
+      const ImVec2 uv0 = previewNeedsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+      const ImVec2 uv1 = previewNeedsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+      dl->AddImage(ToImTextureId(previewTexId), thumbMin, thumbMax, uv0, uv1);
     } else {
       const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.67f, 0.74f, 0.84f, 0.95f));
       const ImU32 meshCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
