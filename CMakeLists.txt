@@ -73,6 +73,13 @@ if(WIN32)
     target_compile_definitions(MonolithEngine PUBLIC NOMINMAX)
 endif()
 
+# Optional gcov/llvm-cov instrumentation (GCC/Clang only).
+option(MONOLITH_ENGINE_COVERAGE "Add coverage flags to MonolithEngine (for reports after ctest)" OFF)
+if(MONOLITH_ENGINE_COVERAGE AND NOT MSVC)
+    target_compile_options(MonolithEngine PUBLIC --coverage -O0 -g)
+    target_link_options(MonolithEngine PUBLIC --coverage)
+endif()
+
 # Copy GLSL shaders to bin/shaders alongside the executable
 add_custom_command(TARGET MonolithEngine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

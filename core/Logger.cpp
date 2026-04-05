@@ -1,7 +1,9 @@
 #include "core/Logger.h"
+#include "core/LogBuffer.h"
 
 #include <cstdarg>
 #include <cstdio>
+#include <string>
 
 namespace Monolith {
 
@@ -38,6 +40,8 @@ void Log(LogLevel level, const char* file, int line, const char* fmt, ...) {
     std::fprintf(stderr, "%s%s (%s:%d)\n", prefix, msg, slash, line);
   else
     std::printf("%s%s\n", prefix, msg);
+
+  LogBuffer::Instance().Push(level, slash, line, std::string(msg));
 }
 
 }  // namespace Monolith

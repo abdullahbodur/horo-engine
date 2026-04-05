@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------------------------------------------------------------
+  # Build + Test — Linux (GCC, Ninja)
+  # ----------------------------------------------------------------
+  test-linux:
+    name: Test · Linux / GCC
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+  # ----------------------------------------------------------------
+  # Build + Test — Windows (MSVC, Visual Studio 17 2022)
+  # ----------------------------------------------------------------
+  test-windows:
+    name: Test · Windows / MSVC
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Configure
+        run: cmake --preset debug-msvc
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build build/debug-msvc --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
+
+  # ----------------------------------------------------------------
+  # Build + Test — macOS (Clang, Ninja)
+  # ----------------------------------------------------------------
+  test-macos:
+    name: Test · macOS / Clang
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+  # ----------------------------------------------------------------
+  # Coverage — Linux (GCC --coverage + lcov + genhtml)
+  # Runs after all three test jobs pass; uploads HTML report as artifact
+  # ----------------------------------------------------------------
+  coverage:
+    name: Coverage · Linux / GCC
+    runs-on: ubuntu-24.04
+    needs: [test-linux, test-windows, test-macos]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build lcov \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure (coverage instrumentation)
+        run: cmake --preset coverage
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build build/coverage --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build/coverage --output-on-failure
+
+      - name: Collect coverage data
+        run: |
+          geninfo build/coverage \
+            --output-filename build/coverage/raw.info \
+            --ignore-errors mismatch,source \
+            --branch-coverage
+
+      - name: Filter out third-party and test code
+        run: |
+          lcov \
+            --remove build/coverage/raw.info \
+              '*/vendor/*' \
+              '*/_deps/*' \
+              '*/tests/*' \
+              '/usr/*' \
+              '*/catch2/*' \
+              'catch2/*' \
+              '*/Catch2/*' \
+            --output-file build/coverage/filtered.info \
+            --ignore-errors mismatch,unused \
+            --branch-coverage
+
+      - name: Generate HTML report
+        run: |
+          genhtml build/coverage/filtered.info \
+            --output-directory build/coverage/html \
+            --branch-coverage \
+            --ignore-errors mismatch,source \
+            --synthesize-missing \
+            --title "MonolithEngine — ${{ github.ref_name }} @ ${{ github.sha }}"
+
+      - name: Print summary
+        run: |
+          echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          lcov --summary build/coverage/filtered.info >> $GITHUB_STEP_SUMMARY 2>&1
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Print per-file coverage table
+        run: |
+          echo "### Per-File Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          lcov --list build/coverage/filtered.info 2>&1 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: build/coverage/html
+          retention-days: 30

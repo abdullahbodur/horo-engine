@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 
+#include "core/EngineLaunchArgs.h"
 #include "core/Window.h"
 
 namespace Monolith {
@@ -11,7 +12,7 @@ struct AppSpec {
   int width = 1280;
   int height = 720;
   bool vsync = true;
-  // Repo-relative path to the main scene file (e.g. "assets/scenes/world.json").
+  // Repo-relative path to the main scene file (e.g. "assets/scenes/scene.json").
   // Resolved to an absolute path via ProjectPath at construction time.
   std::string defaultSceneFile;
 };
@@ -24,14 +25,17 @@ class Application {
   Application(const Application&) = delete;
   Application& operator=(const Application&) = delete;
 
-  // Parse standard engine CLI flags from main()'s argv.
-  // Call this before Run().  Recognised flags:
-  //   --editor   Open the editor overlay on startup instead of game mode.
+  // Parse standard engine CLI flags from main()'s argv. Call before Run().
+  //   --editor   Force editor on startup
+  //   --play     Force game-only startup (no editor)
+  //   (no flag)  Release (NDEBUG): game; Debug: editor
   void ParseArgs(int argc, char** argv);
 
-  // Returns true if --editor was passed via ParseArgs().
-  // Query this in OnInit() to decide whether to open the editor at launch.
-  bool IsEditorModeRequested() const { return m_editorModeRequested; }
+  // True when the app should open the editor on startup (after ParseArgs).
+  bool ShouldStartWithEditor() const;
+
+  // Deprecated alias for ShouldStartWithEditor().
+  bool IsEditorModeRequested() const { return ShouldStartWithEditor(); }
 
   void Run();
 
@@ -52,7 +56,7 @@ class Application {
  private:
   std::unique_ptr<Window> m_window;
   bool m_running = true;
-  bool m_editorModeRequested = false;
+  EditorStartupCli m_editorStartupCli = EditorStartupCli::Default;
   std::string m_defaultSceneFilePath;
 };
 

@@ -611,7 +611,7 @@ TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]"
         });
     };
 
-    REQUIRE(hasCommandWithKeys("Toggle editor mode", "F10"));
+    REQUIRE(hasCommandWithKeys("Run or stop game in viewport", "Toolbar: Play / Stop"));
     REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
     REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
 }

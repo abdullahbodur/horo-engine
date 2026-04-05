@@ -22,6 +22,7 @@ class Texture {
   bool IsValid() const { return m_id != 0; }
   int GetWidth() const { return m_width; }
   int GetHeight() const { return m_height; }
+  unsigned int GetNativeId() const { return m_id; }
 
  private:
   unsigned int m_id = 0;
