@@ -56,6 +56,7 @@
 #include "renderer/Mesh.h"
 #include "renderer/ObjLoader.h"
 #include "renderer/RenderContext.h"
+#include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
 #include "renderer/Texture.h"
@@ -868,6 +869,15 @@ void EditorLayer::Init(GLFWwindow* window) {
 
   m_schema.LoadFromFile("assets/editor_schema.json");
 
+  // Load wireframe shader
+  try {
+    const std::filesystem::path wv = ResolvePreviewShaderPath("wire.vert");
+    const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
+    m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
+  } catch (const std::exception& e) {
+    LOG_WARN("[Editor] Failed to load wireframe shader: %s", e.what());
+  }
+
   // Clear thumbnail caches to allow fresh asset preview generation
   auto& renderer = AssetThumbnailRenderer::Instance();
   renderer.noPreviewKeys.clear();
@@ -1478,12 +1488,17 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
     }
+    DrawViewportDropTarget(cam, screenW, screenH);
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
 
   // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
   DebugDraw::Flush(cam);
+
+  // Wireframe overlay: drawn after DebugDraw flush so it sits on top of the scene
+  if (m_active && !m_playMode)
+    DrawWireframeOverlay(cam);
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -2050,6 +2065,28 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
   const float wy = 42.0f;
 
+  // Wireframe toggle button — sits just to the left of the gimbal window
+  constexpr float kBtnSize = 28.0f;
+  const float btnX = wx - kBtnSize - 6.0f;
+  const float btnY = wy + (kWinH - kBtnSize) * 0.5f;
+  ImGui::SetNextWindowPos(ImVec2(btnX, btnY));
+  ImGui::SetNextWindowSize(ImVec2(kBtnSize, kBtnSize));
+  ImGui::SetNextWindowBgAlpha(0.0f);
+  ImGui::Begin("##wire_btn", nullptr,
+               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
+  if (m_wireframeMode)
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
+  else
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
+  if (ImGui::Button("[W]", ImVec2(kBtnSize, kBtnSize)))
+    m_wireframeMode = !m_wireframeMode;
+  ImGui::PopStyleColor();
+  if (ImGui::IsItemHovered())
+    ImGui::SetTooltip("Toggle Wireframe");
+  ImGui::End();
+
   ImGui::SetNextWindowPos(ImVec2(wx, wy));
   ImGui::SetNextWindowSize(ImVec2(kWinW, kWinH));
   ImGui::SetNextWindowBgAlpha(0.78f);
@@ -2397,10 +2434,20 @@ void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
       const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
 
       if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
-        if (ImGui::GetIO().KeyShift)
+        auto& selIo = ImGui::GetIO();
+        if (selIo.KeyShift && m_lastClickedHierarchyIdx >= 0) {
+          const int lo = std::min(m_lastClickedHierarchyIdx, i);
+          const int hi = std::max(m_lastClickedHierarchyIdx, i);
+          m_selectedIndices.clear();
+          for (int ri = lo; ri <= hi; ++ri)
+            m_selectedIndices.push_back(ri);
+        } else if (selIo.KeyCtrl || selIo.KeySuper) {
           ToggleSelect(i);
-        else
+          m_lastClickedHierarchyIdx = i;
+        } else {
           m_selectedIndices = {i};
+          m_lastClickedHierarchyIdx = i;
+        }
       }
       ImGui::SameLine();
       {
@@ -2496,10 +2543,20 @@ void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
       const bool open = ImGui::TreeNodeEx("##obj_tree", flags, "%s", nodeLabel.c_str());
 
       if (isPrimary && ImGui::IsItemClicked()) {
-        if (ImGui::GetIO().KeyShift)
+        auto& treeIo = ImGui::GetIO();
+        if (treeIo.KeyShift && m_lastClickedHierarchyIdx >= 0) {
+          const int lo = std::min(m_lastClickedHierarchyIdx, idx);
+          const int hi = std::max(m_lastClickedHierarchyIdx, idx);
+          m_selectedIndices.clear();
+          for (int ri = lo; ri <= hi; ++ri)
+            m_selectedIndices.push_back(ri);
+        } else if (treeIo.KeyCtrl || treeIo.KeySuper) {
           ToggleSelect(idx);
-        else
+          m_lastClickedHierarchyIdx = idx;
+        } else {
           m_selectedIndices = {idx};
+          m_lastClickedHierarchyIdx = idx;
+        }
       }
 
       if (isPrimary) {
@@ -2794,6 +2851,14 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::InvisibleButton("##asset_tile_select", ImVec2(tileW - 2.0f, tileH - 2.0f));
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
       m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
+    }
+
+    // Drag source: allows dropping onto the 3D viewport to create a prop
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+      ImGui::SetDragDropPayload("ASSET_ID", assetId.c_str(),
+                                assetId.size() + 1);
+      ImGui::Text("+ %s", assetId.c_str());
+      ImGui::EndDragDropSource();
     }
 
     if (ImGui::BeginPopupContextItem("##asset_tile_ctx")) {
@@ -4330,6 +4395,88 @@ void EditorLayer::ApplySchemaDefaults(SceneObject& obj) const {
   for (const auto& fd : schema->fields)
     if (obj.props.find(fd.key) == obj.props.end())
       obj.props[fd.key] = fd.defaultValue;
+}
+
+// ---- Wireframe overlay -------------------------------------------------------
+
+void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
+  if (!m_wireframeMode || !m_wireframeShader.IsValid())
+    return;
+
+  Renderer::BeginScene(cam);
+  for (const auto& obj : m_document.objects) {
+    if (obj.type != SceneObjectType::Prop)
+      continue;
+
+    // Resolve mesh path from assetId or inline "mesh" prop
+    std::string meshPath;
+    if (!obj.assetId.empty()) {
+      const auto assetIt = m_document.assets.find(obj.assetId);
+      if (assetIt == m_document.assets.end())
+        continue;
+      meshPath = assetIt->second.mesh;
+    } else {
+      const auto propIt = obj.props.find("mesh");
+      if (propIt == obj.props.end())
+        continue;
+      meshPath = propIt->second;
+    }
+    if (meshPath.empty())
+      continue;
+
+    // Reuse the thumbnail mesh cache (already loaded for previews)
+    auto* meshEntry = TryLoadAssetMesh(meshPath);
+    if (!meshEntry || !meshEntry->mesh)
+      continue;
+
+    // Build model matrix: T * Ry(yaw)
+    const float yawRad = obj.yaw * (3.14159265f / 180.0f);
+    const Mat4 model =
+        Mat4::Translate(obj.position) * Mat4::RotateY(yawRad);
+
+    Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
+  }
+}
+
+// ---- Viewport drag-drop target -----------------------------------------------
+
+void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
+  ImGuiIO& io = ImGui::GetIO();
+  ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+  ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+  ImGui::SetNextWindowBgAlpha(0.0f);
+  ImGui::Begin("##viewport_drop", nullptr,
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                   ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav |
+                   ImGuiWindowFlags_NoSavedSettings);
+
+  if (ImGui::BeginDragDropTarget()) {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+      const std::string assetId(static_cast<const char*>(payload->Data));
+      const ImVec2 mp = io.MousePos;
+
+      // Ray-cast to y=0 floor plane
+      Ray ray = ScreenToRay(mp.x, mp.y, screenW, screenH, cam);
+      Vec3 hitPos = cam.position;
+      hitPos.y = 0.0f;
+      if (std::abs(ray.direction.y) > 1e-5f) {
+        const float t = -ray.origin.y / ray.direction.y;
+        if (t > 0.0f)
+          hitPos = {ray.origin.x + ray.direction.x * t, 0.0f,
+                    ray.origin.z + ray.direction.z * t};
+      }
+
+      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
+      obj.position = hitPos;
+      m_document.objects.push_back(std::move(obj));
+      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+      m_document.dirty = true;
+      TriggerReload();
+    }
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::End();
 }
 
 }  // namespace Editor

@@ -11,6 +11,7 @@
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
 #include "renderer/Camera.h"
+#include "renderer/Shader.h"
 
 struct GLFWwindow;
 
@@ -192,6 +193,8 @@ class EditorLayer {
   void DrawExitConfirmModal();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
+  void DrawWireframeOverlay(const Camera& cam);
+  void DrawViewportDropTarget(const Camera& cam, int screenW, int screenH);
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
@@ -277,6 +280,13 @@ class EditorLayer {
   std::filesystem::path m_projectBrowserCwd;
   bool m_projectBrowserCwdValid = false;
   std::unordered_set<std::string> m_projectExtraBlocklist;
+
+  // Wireframe overlay
+  bool m_wireframeMode = false;
+  Shader m_wireframeShader;
+
+  // Hierarchy range-select anchor
+  int m_lastClickedHierarchyIdx = -1;
 
   bool m_consoleShowInfo = true;
   bool m_consoleShowWarn = true;

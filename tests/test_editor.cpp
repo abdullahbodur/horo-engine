@@ -986,3 +986,128 @@ TEST_CASE("ScreenToRay: origin is at/near camera position", "[editor][raycaster]
     Vec3 diff = ray.origin - cam.position;
     REQUIRE(diff.Length() < 1.0f);
 }
+
+// ===========================================================================
+// Hierarchy selection helpers (testable without ImGui)
+// ===========================================================================
+
+// Mirror of the selection logic in EditorLayer::DrawObjectsTree.
+static void ApplyHierarchyClick(std::vector<int>& sel, int& lastIdx,
+                                 int clicked, bool shift, bool ctrl) {
+    if (shift && lastIdx >= 0) {
+        const int lo = std::min(lastIdx, clicked);
+        const int hi = std::max(lastIdx, clicked);
+        sel.clear();
+        for (int i = lo; i <= hi; ++i)
+            sel.push_back(i);
+    } else if (ctrl) {
+        auto it = std::find(sel.begin(), sel.end(), clicked);
+        if (it != sel.end())
+            sel.erase(it);
+        else
+            sel.push_back(clicked);
+        lastIdx = clicked;
+    } else {
+        sel = {clicked};
+        lastIdx = clicked;
+    }
+}
+
+TEST_CASE("Hierarchy plain click replaces selection", "[editor][hierarchy]") {
+    std::vector<int> sel;
+    int last = -1;
+
+    ApplyHierarchyClick(sel, last, 3, false, false);
+    REQUIRE(sel.size() == 1);
+    REQUIRE(sel[0] == 3);
+    REQUIRE(last == 3);
+
+    ApplyHierarchyClick(sel, last, 7, false, false);
+    REQUIRE(sel.size() == 1);
+    REQUIRE(sel[0] == 7);
+    REQUIRE(last == 7);
+}
+
+TEST_CASE("Hierarchy range select fills contiguous range", "[editor][hierarchy]") {
+    std::vector<int> sel;
+    int last = -1;
+
+    // First plain click anchors at 2
+    ApplyHierarchyClick(sel, last, 2, false, false);
+    REQUIRE(last == 2);
+
+    // Shift-click at 5 → [2,3,4,5]
+    ApplyHierarchyClick(sel, last, 5, true, false);
+    REQUIRE(sel.size() == 4);
+    REQUIRE(sel[0] == 2);
+    REQUIRE(sel[3] == 5);
+
+    // Shift-click backwards at 0 → [0,1,2]  (anchor stays at 2)
+    ApplyHierarchyClick(sel, last, 0, true, false);
+    REQUIRE(sel.size() == 3);
+    REQUIRE(sel[0] == 0);
+    REQUIRE(sel[2] == 2);
+}
+
+TEST_CASE("Hierarchy shift-click with no prior anchor falls back to single select", "[editor][hierarchy]") {
+    std::vector<int> sel;
+    int last = -1;
+
+    // Shift before any click: last == -1, range guard doesn't fire.
+    // Falls through to else branch → behaves as a single select.
+    ApplyHierarchyClick(sel, last, 4, true, false);
+    REQUIRE(sel.size() == 1);
+    REQUIRE(sel[0] == 4);
+    REQUIRE(last == 4);
+}
+
+TEST_CASE("Hierarchy ctrl-click toggles individual items", "[editor][hierarchy]") {
+    std::vector<int> sel;
+    int last = -1;
+
+    ApplyHierarchyClick(sel, last, 1, false, false);
+    ApplyHierarchyClick(sel, last, 3, false, true);  // ctrl-add 3
+    ApplyHierarchyClick(sel, last, 5, false, true);  // ctrl-add 5
+    REQUIRE(sel.size() == 3);
+
+    ApplyHierarchyClick(sel, last, 3, false, true);  // ctrl-remove 3
+    REQUIRE(sel.size() == 2);
+    REQUIRE(std::find(sel.begin(), sel.end(), 3) == sel.end());
+}
+
+// ===========================================================================
+// Drag-drop ray-floor intersection math
+// ===========================================================================
+
+TEST_CASE("Drop ray hits y=0 plane correctly", "[editor][dragdrop]") {
+    // Ray from above looking straight down
+    Ray r;
+    r.origin    = {0.0f, 5.0f, 0.0f};
+    r.direction = {0.0f, -1.0f, 0.0f};
+
+    const float t = -r.origin.y / r.direction.y;  // = 5
+    const Vec3 hit = {r.origin.x + r.direction.x * t,
+                      r.origin.y + r.direction.y * t,
+                      r.origin.z + r.direction.z * t};
+
+    REQUIRE(hit.y == Approx(0.0f));
+    REQUIRE(hit.x == Approx(0.0f));
+    REQUIRE(hit.z == Approx(0.0f));
+}
+
+TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]") {
+    // Ray from (3, 4, 1) pointing down-forward
+    Ray r;
+    r.origin    = {3.0f, 4.0f, 1.0f};
+    // Direction: slightly forward (+z) and mostly down
+    const float len = std::sqrt(1.0f + 16.0f);
+    r.direction = {0.0f, -4.0f / len, 1.0f / len};
+
+    const float t = -r.origin.y / r.direction.y;
+    const Vec3 hit = {r.origin.x + r.direction.x * t,
+                      r.origin.y + r.direction.y * t,
+                      r.origin.z + r.direction.z * t};
+
+    REQUIRE(hit.y == Approx(0.0f).margin(1e-4f));
+    REQUIRE(hit.x == Approx(3.0f).margin(1e-4f));  // no x-component in direction
+}
