@@ -67,6 +67,18 @@ float Window::GetAspect() const {
   return m_height > 0 ? static_cast<float>(m_width) / m_height : 1.0f;
 }
 
+void Window::SetCursorMode(CursorMode mode)
+{
+  int glfwMode;
+  switch (mode)
+  {
+    case CursorMode::Hidden:   glfwMode = GLFW_CURSOR_HIDDEN;   break;
+    case CursorMode::Disabled: glfwMode = GLFW_CURSOR_DISABLED; break;
+    default:                   glfwMode = GLFW_CURSOR_NORMAL;   break;
+  }
+  glfwSetInputMode(m_window, GLFW_CURSOR, glfwMode);
+}
+
 void Window::FramebufferSizeCallback(GLFWwindow* win, int w, int h) {
   auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
   self->m_width = w;
