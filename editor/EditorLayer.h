@@ -113,6 +113,11 @@ class EditorLayer {
   // The document queued for reload.  Valid only while WantsSceneReload() == true.
   const SceneDocument& GetPendingDocument() const { return m_pendingDoc; }
   void AcknowledgeReload() { m_wantsReload = false; }
+  const SceneDocument& GetDocument() const { return m_document; }
+  const std::string& GetSelectedAssetId() const { return m_selectedAssetId; }
+  std::vector<std::string> GetSelectedObjectIds() const;
+  Mcp::McpCommandResult ExecuteMcpCommand(const std::string& toolName,
+                                         const nlohmann::json& arguments);
 
  private:
   enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
@@ -210,10 +215,12 @@ class EditorLayer {
   void DuplicatePrimarySelection();
   void ProcessMcpCommands();
   void PublishMcpSnapshot();
-  Mcp::McpCommandResult ExecuteMcpCommand(const std::string& toolName,
-                                         const nlohmann::json& arguments);
   bool SaveDocument(std::string* outError);
   void DiscardUnsavedChanges();
+  void SetSelectedObjectIds(const std::vector<std::string>& ids);
+  bool ReloadDocumentFromDisk(std::string* outError,
+                              const std::vector<std::string>* preferredSelectionIds = nullptr,
+                              const std::string* preferredAssetId = nullptr);
 
   // Multi-scene helpers
   void AddNewScene();

@@ -395,6 +395,73 @@ static bool TryResolveObjectMeshPath(const SceneDocument& doc,
   return true;
 }
 
+bool IsObjectReferencePropKey(const std::string& key) {
+  return key == "parentId" || key == "followTargetId";
+}
+
+std::unordered_set<std::string> CollectReservedObjectIds(const SceneDocument& doc) {
+  std::unordered_set<std::string> reservedIds;
+  reservedIds.reserve(doc.objects.size() * 2);
+  for (const SceneObject& obj : doc.objects) {
+    if (!obj.id.empty())
+      reservedIds.insert(obj.id);
+    for (const auto& entry : obj.props) {
+      if (IsObjectReferencePropKey(entry.first) && !entry.second.empty())
+        reservedIds.insert(entry.second);
+    }
+  }
+  return reservedIds;
+}
+
+bool IsReservedObjectId(const SceneDocument& doc,
+                        const std::string& id,
+                        const std::string* ignoreConcreteObjectId = nullptr) {
+  if (id.empty())
+    return false;
+  for (const SceneObject& obj : doc.objects) {
+    if (!obj.id.empty() && (!ignoreConcreteObjectId || obj.id != *ignoreConcreteObjectId) && obj.id == id)
+      return true;
+    for (const auto& entry : obj.props) {
+      if (!IsObjectReferencePropKey(entry.first) || entry.second.empty())
+        continue;
+      if (ignoreConcreteObjectId && entry.second == *ignoreConcreteObjectId)
+        continue;
+      if (entry.second == id)
+        return true;
+    }
+  }
+  return false;
+}
+
+void RewriteObjectIdReferences(SceneDocument* doc, const std::string& oldId, const std::string& newId) {
+  if (!doc || oldId.empty() || oldId == newId)
+    return;
+  for (SceneObject& object : doc->objects) {
+    for (auto& entry : object.props) {
+      if (IsObjectReferencePropKey(entry.first) && entry.second == oldId)
+        entry.second = newId;
+    }
+  }
+}
+
+void LogDanglingObjectReferences(const SceneDocument& doc, const std::string& sourceLabel) {
+  std::unordered_set<std::string> objectIds;
+  objectIds.reserve(doc.objects.size() * 2);
+  for (const SceneObject& object : doc.objects) {
+    if (!object.id.empty())
+      objectIds.insert(object.id);
+  }
+  for (const SceneObject& object : doc.objects) {
+    for (const auto& entry : object.props) {
+      if (!IsObjectReferencePropKey(entry.first) || entry.second.empty())
+        continue;
+      if (objectIds.find(entry.second) == objectIds.end())
+        LOG_WARN("[Editor] Dangling object reference in %s: %s.%s -> %s",
+                 sourceLabel.c_str(), object.id.c_str(), entry.first.c_str(), entry.second.c_str());
+    }
+  }
+}
+
 static Mat4 BuildObjectModelMatrix(const SceneDocument& doc, const SceneObject& obj) {
   Vec3 assetRenderScale = Vec3::One();
   std::string ignoredMeshPath;
@@ -1080,6 +1147,7 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   }
 
   SyncAssetScaleMetadata(&doc);
+  LogDanglingObjectReferences(doc, doc.filePath);
 
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
@@ -4488,6 +4556,58 @@ void EditorLayer::TriggerReload() {
   m_wantsReload = true;
 }
 
+std::vector<std::string> EditorLayer::GetSelectedObjectIds() const {
+  std::vector<std::string> ids;
+  ids.reserve(m_selectedIndices.size());
+  for (int idx : m_selectedIndices) {
+    if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+      ids.push_back(m_document.objects[static_cast<size_t>(idx)].id);
+  }
+  return ids;
+}
+
+void EditorLayer::SetSelectedObjectIds(const std::vector<std::string>& ids) {
+  m_selectedIndices.clear();
+  std::unordered_set<std::string> seen;
+  seen.reserve(ids.size());
+  for (const std::string& id : ids) {
+    if (id.empty() || !seen.insert(id).second)
+      continue;
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      if (m_document.objects[static_cast<size_t>(i)].id == id) {
+        m_selectedIndices.push_back(i);
+        break;
+      }
+    }
+  }
+}
+
+bool EditorLayer::ReloadDocumentFromDisk(std::string* outError,
+                                         const std::vector<std::string>* preferredSelectionIds,
+                                         const std::string* preferredAssetId) {
+  if (outError)
+    outError->clear();
+
+  const std::string path = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
+  try {
+    SceneDocument reloaded = SceneSerializer::LoadFromFile(path);
+    reloaded.dirty = false;
+    LoadDocument(std::move(reloaded));
+    m_document.filePath = path;
+    m_lastSavedDocument = m_document;
+    if (preferredSelectionIds)
+      SetSelectedObjectIds(*preferredSelectionIds);
+    if (preferredAssetId && m_document.assets.find(*preferredAssetId) != m_document.assets.end())
+      m_selectedAssetId = *preferredAssetId;
+    TriggerReload();
+    return true;
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+}
+
 void EditorLayer::ProcessMcpCommands() {
   m_mcpController.DrainCommands([this](const std::string& toolName, const nlohmann::json& arguments) {
     return ExecuteMcpCommand(toolName, arguments);
@@ -4652,7 +4772,9 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
         m_selectedIndices.push_back(idx);
     }
     m_selectedAssetId.clear();
-    return Mcp::McpCommandResult{true, json{{"selectedObjectIds", ids}}, std::string()};
+    return Mcp::McpCommandResult{true,
+                                 json{{"selectedObjectIds", GetSelectedObjectIds()}},
+                                 std::string()};
   }
 
   if (toolName == "editor.clear_selection") {
@@ -4672,7 +4794,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     object.id = arguments.value("id", std::string());
     if (object.id.empty())
       object.id = type == SceneObjectType::Camera ? GenerateCameraId(m_document) : GenerateId(m_document);
-    if (findIndexById(object.id) >= 0)
+    if (IsReservedObjectId(m_document, object.id))
       return Mcp::McpCommandResult{false, json::object(), "Object id already exists."};
 
     if (arguments.contains("position") && !parseVec3(arguments["position"], &object.position))
@@ -4688,8 +4810,11 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     if (arguments.contains("components") && !parseComponents(arguments["components"], &object.components))
       return Mcp::McpCommandResult{false, json::object(), "components must be an array of objects."};
     const std::string parentId = arguments.value("parentId", std::string());
-    if (!parentId.empty())
+    if (!parentId.empty()) {
+      if (findIndexById(parentId) < 0)
+        return Mcp::McpCommandResult{false, json::object(), "Parent object not found."};
       object.props["parentId"] = parentId;
+    }
 
     m_document.objects.push_back(std::move(object));
     m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
@@ -4710,7 +4835,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     object.id = arguments.value("id", std::string());
     if (object.id.empty())
       object.id = GenerateId(m_document);
-    if (findIndexById(object.id) >= 0)
+    if (IsReservedObjectId(m_document, object.id))
       return Mcp::McpCommandResult{false, json::object(), "Object id already exists."};
     if (arguments.contains("position") && !parseVec3(arguments["position"], &object.position))
       return Mcp::McpCommandResult{false, json::object(), "position must be [x,y,z]."};
@@ -4718,8 +4843,11 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     object.pitch = arguments.value("pitch", object.pitch);
     object.roll = arguments.value("roll", object.roll);
     const std::string parentId = arguments.value("parentId", std::string());
-    if (!parentId.empty())
+    if (!parentId.empty()) {
+      if (findIndexById(parentId) < 0)
+        return Mcp::McpCommandResult{false, json::object(), "Parent object not found."};
       object.props["parentId"] = parentId;
+    }
 
     m_document.objects.push_back(std::move(object));
     m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
@@ -4776,17 +4904,13 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
       return Mcp::McpCommandResult{false, json::object(), "Object not found."};
     if (newId.empty())
       return Mcp::McpCommandResult{false, json::object(), "newId is required."};
-    if (id != newId && findIndexById(newId) >= 0)
+    if (id != newId && IsReservedObjectId(m_document, newId, &id))
       return Mcp::McpCommandResult{false, json::object(), "Object id already exists."};
 
     SceneObject& object = m_document.objects[static_cast<size_t>(idx)];
     const std::string oldId = object.id;
     object.id = newId;
-    for (SceneObject& other : m_document.objects) {
-      auto parentIt = other.props.find("parentId");
-      if (parentIt != other.props.end() && parentIt->second == oldId)
-        parentIt->second = newId;
-    }
+    RewriteObjectIdReferences(&m_document, oldId, newId);
     m_document.dirty = true;
     TriggerReload();
     return Mcp::McpCommandResult{true,
@@ -4951,8 +5075,16 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.reload_scene") {
-    TriggerReload();
-    return Mcp::McpCommandResult{true, json{{"reloadPending", true}}, std::string()};
+    const std::vector<std::string> previousSelectionIds = GetSelectedObjectIds();
+    const std::string previousAssetId = m_selectedAssetId;
+    std::string reloadError;
+    if (!ReloadDocumentFromDisk(&reloadError, &previousSelectionIds, &previousAssetId))
+      return Mcp::McpCommandResult{false, json::object(), reloadError};
+    return Mcp::McpCommandResult{true,
+                                 json{{"reloadPending", true},
+                                      {"filePath", m_document.filePath},
+                                      {"dirty", m_document.dirty}},
+                                 std::string()};
   }
 
   return Mcp::McpCommandResult{false, json::object(), "Unsupported MCP command."};
@@ -5139,10 +5271,7 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
 }
 
 std::string EditorLayer::GenerateId(const SceneDocument& doc) {
-  std::unordered_set<std::string> existingIds;
-  existingIds.reserve(doc.objects.size() * 2);
-  for (const auto& obj : doc.objects)
-    existingIds.insert(obj.id);
+  const std::unordered_set<std::string> existingIds = CollectReservedObjectIds(doc);
 
   for (int i = 0; i < 1000000; ++i) {
     char buf[32];
@@ -5154,10 +5283,7 @@ std::string EditorLayer::GenerateId(const SceneDocument& doc) {
 }
 
 std::string EditorLayer::GenerateCameraId(const SceneDocument& doc) {
-  std::unordered_set<std::string> existingIds;
-  existingIds.reserve(doc.objects.size() * 2);
-  for (const auto& obj : doc.objects)
-    existingIds.insert(obj.id);
+  const std::unordered_set<std::string> existingIds = CollectReservedObjectIds(doc);
 
   for (int i = 0; i < 1000000; ++i) {
     char buf[32];

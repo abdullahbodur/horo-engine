@@ -14,6 +14,13 @@ namespace {
 
 const std::vector<McpCatalogEntry>& GetToolCatalog();
 
+json MakeVec3Schema() {
+  return json{{"type", "array"},
+              {"minItems", 3},
+              {"maxItems", 3},
+              {"items", {{"type", "number"}}}};
+}
+
 std::string ToLowerAscii(std::string value) {
   for (char& c : value)
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -209,8 +216,8 @@ json BuildToolList() {
                                            {"id", {{"type", "string"}}},
                                            {"assetId", {{"type", "string"}}},
                                            {"parentId", {{"type", "string"}}},
-                                           {"position", {{"type", "array"}}},
-                                           {"scale", {{"type", "array"}}},
+                                           {"position", MakeVec3Schema()},
+                                           {"scale", MakeVec3Schema()},
                                            {"yaw", {{"type", "number"}}},
                                            {"pitch", {{"type", "number"}}},
                                            {"roll", {{"type", "number"}}},
@@ -221,7 +228,7 @@ json BuildToolList() {
       tool["inputSchema"]["properties"] = {{"assetId", {{"type", "string"}}},
                                            {"parentId", {{"type", "string"}}},
                                            {"id", {{"type", "string"}}},
-                                           {"position", {{"type", "array"}}},
+                                           {"position", MakeVec3Schema()},
                                            {"yaw", {{"type", "number"}}},
                                            {"pitch", {{"type", "number"}}},
                                            {"roll", {{"type", "number"}}}};
@@ -229,8 +236,8 @@ json BuildToolList() {
       tool["inputSchema"]["required"] = json::array({"id"});
       tool["inputSchema"]["properties"] = {{"id", {{"type", "string"}}},
                                            {"assetId", {{"type", "string"}}},
-                                           {"position", {{"type", "array"}}},
-                                           {"scale", {{"type", "array"}}},
+                                           {"position", MakeVec3Schema()},
+                                           {"scale", MakeVec3Schema()},
                                            {"yaw", {{"type", "number"}}},
                                            {"pitch", {{"type", "number"}}},
                                            {"roll", {{"type", "number"}}},
