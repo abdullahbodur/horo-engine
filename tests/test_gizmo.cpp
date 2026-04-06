@@ -237,6 +237,20 @@ TEST_CASE("TransformGizmo: PickAxis returns None when mouse is far from all axes
   CHECK(picked == GizmoAxis::None);
 }
 
+TEST_CASE("TransformGizmo: PickAxis ignores clicks near gizmo origin", "[gizmo]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+
+  float sx = 0.0f;
+  float sy = 0.0f;
+  REQUIRE(TransformGizmo::WorldToScreen(Vec3::Zero(), cam, 800, 800, sx, sy));
+
+  GizmoAxis picked = g.PickAxis(sx, sy, cam, 800, 800);
+  CHECK(picked == GizmoAxis::None);
+}
+
 // ============================================================================
 // Test 7 — RayHitPlane + axis projection: translate delta math
 // ============================================================================

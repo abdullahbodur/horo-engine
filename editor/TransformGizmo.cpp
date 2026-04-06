@@ -111,6 +111,7 @@ GizmoAxis TransformGizmo::PickAxis(float mx, float my, const Camera& cam, int sc
                                     int screenH) const {
   const float handleLen        = HandleSize(cam);
   constexpr float kHitRadiusSq = 12.0f * 12.0f;  // 12-pixel threshold
+  constexpr float kAxisStartT  = 0.22f;          // avoid accidental picks at the gizmo origin
 
   float     bestDist = kHitRadiusSq;
   GizmoAxis bestAxis = GizmoAxis::None;
@@ -130,6 +131,12 @@ GizmoAxis TransformGizmo::PickAxis(float mx, float my, const Camera& cam, int sc
     float t      = 0.0f;
     if (abLen2 > 1e-8f)
       t = std::clamp((apx * abx + apy * aby) / abLen2, 0.0f, 1.0f);
+
+    // Do not let clicks near the gizmo origin select an arbitrary axis.
+    // This keeps object-center clicks from instantly becoming Y-axis drags.
+    if (t < kAxisStartT)
+      continue;
+
     float cx    = ox + t * abx, cy = oy + t * aby;
     float dx    = mx - cx, dy = my - cy;
     float distSq = dx * dx + dy * dy;

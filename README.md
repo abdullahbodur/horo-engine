@@ -309,7 +309,7 @@ horo-engine/
 ├── renderer/
 │   ├── shaders/        GLSL vertex/fragment shaders
 │   └── ...             Mesh, Shader, Camera, Light, Texture, Material
-├── scene/          ECS Registry, Scene, ComponentPool, Systems, SceneProjectModel, RuntimeSceneDefinition, SceneRuntimeCoordinator
+├── scene/          ECS Registry, Scene, ComponentPool, Systems, SceneProjectModel, RuntimeSceneDefinition, SceneRuntimeCoordinator, SceneReferenceRuntime
 ├── input/          Input, KeyCodes, MouseCodes
 ├── editor/         EditorLayer, SceneSerializer, SceneDocument, SceneProjectBridge, SceneRuntimeBridge, SceneRuntimeCoordinatorBridge
 ├── docs/           Feature and integration guides

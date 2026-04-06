@@ -99,6 +99,12 @@ target_link_libraries(test_scene_runtime_coordinator PRIVATE MonolithEngine Catc
 monolith_set_test_output_dir(test_scene_runtime_coordinator)
 add_test(NAME test_scene_runtime_coordinator COMMAND $<TARGET_FILE:test_scene_runtime_coordinator>)
 
+# ---- test_scene_reference_loading ----
+add_executable(test_scene_reference_loading test_scene_reference_loading.cpp)
+target_link_libraries(test_scene_reference_loading PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_scene_reference_loading)
+add_test(NAME test_scene_reference_loading COMMAND $<TARGET_FILE:test_scene_reference_loading>)
+
 # ---- test_scene_lifecycle ----
 add_executable(test_scene_lifecycle test_scene_lifecycle.cpp)
 target_link_libraries(test_scene_lifecycle PRIVATE MonolithEngine Catch2::Catch2WithMain)
