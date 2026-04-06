@@ -12,9 +12,24 @@ using json = nlohmann::json;
 
 namespace {
 
+const std::vector<McpCatalogEntry>& GetToolCatalog();
+
 std::string ToLowerAscii(std::string value) {
   for (char& c : value)
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return value;
+}
+
+std::string SanitizeToolName(std::string value) {
+  std::replace(value.begin(), value.end(), '.', '_');
+  return value;
+}
+
+std::string CanonicalizeToolName(const std::string& value) {
+  for (const McpCatalogEntry& entry : GetToolCatalog()) {
+    if (value == entry.name || value == SanitizeToolName(entry.name))
+      return entry.name;
+  }
   return value;
 }
 
@@ -145,7 +160,11 @@ bool IsKnownResourceUri(const std::string& uri) {
 json BuildToolList() {
   json tools = json::array();
   for (const McpCatalogEntry& entry : GetToolCatalog()) {
-    json tool = {{"name", entry.name}, {"description", entry.description}, {"inputSchema", {{"type", "object"}}}};
+    json tool = {
+        {"name", SanitizeToolName(entry.name)},
+        {"description", entry.description},
+        {"inputSchema", {{"type", "object"}}},
+    };
     if (entry.name == "editor.search") {
       tool["inputSchema"]["properties"] = {{"query", {{"type", "string"}}},
                                            {"limit", {{"type", "integer"}, {"minimum", 1}, {"maximum", 25}}},
@@ -404,7 +423,8 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
   }
 
   if (method == "tools/call") {
-    const std::string name = params.value("name", std::string());
+    const std::string requestedName = params.value("name", std::string());
+    const std::string name = CanonicalizeToolName(requestedName);
     const json arguments = params.value("arguments", json::object());
     activity.requestPreview = TruncatePreview(arguments.dump());
     if (name == "editor.search") {
