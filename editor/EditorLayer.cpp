@@ -360,6 +360,74 @@ bool ParseSceneObjectType(const std::string& raw, SceneObjectType* outType) {
   return false;
 }
 
+static Vec3 MultiplyComponents(const Vec3& a, const Vec3& b) {
+  return {a.x * b.x, a.y * b.y, a.z * b.z};
+}
+
+static bool TryResolveObjectMeshPath(const SceneDocument& doc,
+                                     const SceneObject& obj,
+                                     std::string* outMeshPath,
+                                     Vec3* outAssetRenderScale) {
+  if (outMeshPath)
+    outMeshPath->clear();
+  if (outAssetRenderScale)
+    *outAssetRenderScale = Vec3::One();
+
+  if (!obj.assetId.empty()) {
+    const auto assetIt = doc.assets.find(obj.assetId);
+    if (assetIt == doc.assets.end())
+      return false;
+    if (outMeshPath)
+      *outMeshPath = assetIt->second.mesh;
+    if (outAssetRenderScale) {
+      Vec3 parsedScale = Vec3::One();
+      if (TryParseVec3Csv(assetIt->second.renderScale, &parsedScale))
+        *outAssetRenderScale = parsedScale;
+    }
+    return !assetIt->second.mesh.empty();
+  }
+
+  const auto propIt = obj.props.find("mesh");
+  if (propIt == obj.props.end() || propIt->second.empty())
+    return false;
+  if (outMeshPath)
+    *outMeshPath = propIt->second;
+  return true;
+}
+
+static Mat4 BuildObjectModelMatrix(const SceneDocument& doc, const SceneObject& obj) {
+  Vec3 assetRenderScale = Vec3::One();
+  std::string ignoredMeshPath;
+  TryResolveObjectMeshPath(doc, obj, &ignoredMeshPath, &assetRenderScale);
+
+  const Quaternion rotation =
+      Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+  const Vec3 totalScale = MultiplyComponents(obj.scale, assetRenderScale);
+  return Mat4::Translate(obj.position) * Mat4::Rotate(rotation) * Mat4::Scale(totalScale);
+}
+
+static void SyncAssetScaleMetadata(SceneDocument* doc) {
+  if (!doc)
+    return;
+
+  for (SceneObject& obj : doc->objects) {
+    if (obj.assetId.empty()) {
+      obj.props.erase("_assetRenderScale");
+      continue;
+    }
+
+    const auto assetIt = doc->assets.find(obj.assetId);
+    if (assetIt == doc->assets.end()) {
+      obj.props.erase("_assetRenderScale");
+      continue;
+    }
+
+    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty()
+                                         ? "1.0000,1.0000,1.0000"
+                                         : assetIt->second.renderScale;
+  }
+}
+
 // ===== 3D Asset Thumbnail Rendering Infrastructure =====
 // Framebuffer object for offscreen mesh rendering (shared across all asset previews).
 struct AssetThumbnailRenderer {
@@ -1011,6 +1079,8 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
     obj.props.erase("behavior");
   }
 
+  SyncAssetScaleMetadata(&doc);
+
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
@@ -1522,14 +1592,13 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ImGui::NewFrame();
 
   if (m_active) {
-    // Viewport drop target drawn FIRST so all panels sit on top of it (higher z-order)
-    if (!m_playMode)
-      DrawViewportDropTarget(cam, screenW, screenH);
     DrawToolbar();
     if (!m_playMode)
       DrawViewGimbal(cam);
     DrawObjectList();
     DrawAssetsPanel();
+    if (!m_playMode)
+      DrawViewportDropTarget(cam, screenW, screenH);
     DrawPropertiesPanel();
     DrawBottomDock();
     DrawStatusBar();
@@ -1636,7 +1705,9 @@ void EditorLayer::DrawToolbar() {
       primaryIdx,
       static_cast<int>(m_document.objects.size()));
 
-  if (ImGui::BeginMenu("File")) {
+  if (ImGui::Button("File"))
+    ImGui::OpenPopup("##toolbar_file_popup");
+  if (ImGui::BeginPopup("##toolbar_file_popup")) {
     if (ImGui::MenuItem("New Scene"))
       AddNewScene();
     if (ImGui::MenuItem("Open Scene..."))
@@ -1647,7 +1718,7 @@ void EditorLayer::DrawToolbar() {
       m_mcpSettingsDraft = m_mcpController.GetSettings();
       m_mcpSettingsError.clear();
     }
-    ImGui::EndMenu();
+    ImGui::EndPopup();
   }
   ImGui::SameLine();
 
@@ -2379,17 +2450,21 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
   const float wy = 42.0f;
 
-  // Wireframe toggle button — sits just to the left of the gimbal window
+  // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
   constexpr float kBtnSize = 28.0f;
-  const float btnX = wx - kBtnSize - 6.0f;
-  const float btnY = wy + (kWinH - kBtnSize) * 0.5f;
+  constexpr float kBtnFrameSize = 36.0f;
+  constexpr float kBtnGap = 10.0f;
+  const float btnX = wx - kBtnFrameSize - kBtnGap;
+  const float btnY = wy;
   ImGui::SetNextWindowPos(ImVec2(btnX, btnY));
-  ImGui::SetNextWindowSize(ImVec2(kBtnSize, kBtnSize));
+  ImGui::SetNextWindowSize(ImVec2(kBtnFrameSize, kBtnFrameSize));
   ImGui::SetNextWindowBgAlpha(0.0f);
   ImGui::Begin("##wire_btn", nullptr,
                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus |
                    ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
+  const float btnPad = (kBtnFrameSize - kBtnSize) * 0.5f;
+  ImGui::SetCursorPos(ImVec2(btnPad, btnPad));
   if (m_wireframeMode)
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
   else
@@ -3671,6 +3746,7 @@ void EditorLayer::DrawPropertiesPanel() {
         std::snprintf(scaleEditBuf, sizeof(scaleEditBuf), "%s", assetIt->second.renderScale.c_str());
         if (ImGui::InputText("Render Scale", scaleEditBuf, sizeof(scaleEditBuf))) {
           assetIt->second.renderScale = scaleEditBuf;
+          SyncAssetScaleMetadata(&m_document);
           m_document.dirty = true;
           TriggerReload();
         }
@@ -3942,6 +4018,7 @@ void EditorLayer::DrawPropertiesPanel() {
       obj.assetId.clear();
     else
       obj.assetId = assetItems[static_cast<size_t>(currentAssetIndex)];
+    SyncAssetScaleMetadata(&m_document);
     m_document.dirty = true;
     TriggerReload();
   }
@@ -4996,6 +5073,10 @@ SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,
   obj.id = GenerateId(doc);
   obj.type = SceneObjectType::Prop;
   obj.assetId = assetId;
+  const auto assetIt = doc.assets.find(assetId);
+  if (assetIt != doc.assets.end())
+    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty() ? "1.0000,1.0000,1.0000"
+                                                                         : assetIt->second.renderScale;
 
   const TypeSchema* typeSchema = schema.GetSchema(obj.type);
   if (typeSchema) {
@@ -5187,29 +5268,12 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 
-  // Clear the solid scene so only wireframe edges are visible
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
-
   Renderer::BeginScene(cam);
+  glDisable(GL_DEPTH_TEST);
+  glLineWidth(1.5f);
   for (const auto& obj : m_document.objects) {
-    if (obj.type != SceneObjectType::Prop)
-      continue;
-
-    // Resolve mesh path from assetId or inline "mesh" prop
     std::string meshPath;
-    if (!obj.assetId.empty()) {
-      const auto assetIt = m_document.assets.find(obj.assetId);
-      if (assetIt == m_document.assets.end())
-        continue;
-      meshPath = assetIt->second.mesh;
-    } else {
-      const auto propIt = obj.props.find("mesh");
-      if (propIt == obj.props.end())
-        continue;
-      meshPath = propIt->second;
-    }
-    if (meshPath.empty())
+    if (!TryResolveObjectMeshPath(m_document, obj, &meshPath, nullptr))
       continue;
 
     // Reuse the thumbnail mesh cache (already loaded for previews)
@@ -5217,13 +5281,11 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
     if (!meshEntry || !meshEntry->mesh)
       continue;
 
-    // Build model matrix: T * Ry(yaw)
-    const float yawRad = obj.yaw * (3.14159265f / 180.0f);
-    const Mat4 model =
-        Mat4::Translate(obj.position) * Mat4::RotateY(yawRad);
-
+    const Mat4 model = BuildObjectModelMatrix(m_document, obj);
     Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
   }
+  glLineWidth(1.0f);
+  glEnable(GL_DEPTH_TEST);
 }
 
 // ---- Viewport drag-drop target -----------------------------------------------
@@ -5236,8 +5298,12 @@ void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int scr
     return;
 
   ImGuiIO& io = ImGui::GetIO();
-  ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-  ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+  const EditorViewportRect viewportRect =
+      BuildEditorViewportRect(io.DisplaySize.x, io.DisplaySize.y, kEditorToolbarH, kEditorStatusH,
+                              kBottomDockH, kLeftDockW, 280.0f);
+  ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
+  ImGui::SetNextWindowSize(
+      ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
   ImGui::SetNextWindowBgAlpha(0.0f);
   // No NoInputs — drop target must be hoverable to accept the payload
   ImGui::Begin("##viewport_drop", nullptr,
@@ -5247,17 +5313,27 @@ void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int scr
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
       const std::string assetId(static_cast<const char*>(payload->Data));
-      const ImVec2 mp = io.MousePos;
+      if (m_document.assets.find(assetId) == m_document.assets.end()) {
+        LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
+      }
 
-      // Ray-cast to y=0 floor plane
+      const ImVec2 mp = io.MousePos;
+      if (!viewportRect.Contains(mp.x, mp.y)) {
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
+      }
+
       Ray ray = ScreenToRay(mp.x, mp.y, screenW, screenH, cam);
-      Vec3 hitPos = cam.position;
-      hitPos.y = 0.0f;
-      if (std::abs(ray.direction.y) > 1e-5f) {
-        const float t = -ray.origin.y / ray.direction.y;
-        if (t > 0.0f)
-          hitPos = {ray.origin.x + ray.direction.x * t, 0.0f,
-                    ray.origin.z + ray.direction.z * t};
+      Vec3 hitPos = Vec3::Zero();
+      if (!TryIntersectGroundPlane(ray, &hitPos)) {
+        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit ground plane");
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
       }
 
       SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);

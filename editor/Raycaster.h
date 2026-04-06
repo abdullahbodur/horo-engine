@@ -17,6 +17,7 @@ Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH, const Came
 // center: box centre world-space; half: box half-extents.
 // Returns distance along ray to the nearest hit (>= 0), or -1 on miss.
 float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half);
+bool TryIntersectGroundPlane(const Ray& ray, Vec3* outHitPoint);
 
 }  // namespace Editor
 }  // namespace Monolith

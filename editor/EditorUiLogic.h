@@ -1,7 +1,22 @@
 #pragma once
 
+#include <string>
+
+#include "math/Vec3.h"
+
 namespace Monolith {
 namespace Editor {
+
+struct EditorViewportRect {
+  float minX = 0.0f;
+  float minY = 0.0f;
+  float maxX = 0.0f;
+  float maxY = 0.0f;
+
+  bool Contains(float x, float y) const {
+    return x >= minX && x <= maxX && y >= minY && y <= maxY;
+  }
+};
 
 bool ShouldToggleHelpPopup(bool currToggle,
                            bool prevToggle,
@@ -53,6 +68,14 @@ EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges);
 bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload);
 
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
+EditorViewportRect BuildEditorViewportRect(float displayWidth,
+                                           float displayHeight,
+                                           float toolbarHeight,
+                                           float statusHeight,
+                                           float bottomDockHeight,
+                                           float leftDockWidth,
+                                           float rightPanelWidth);
+bool TryParseVec3Csv(const std::string& text, Vec3* outValue);
 
 }  // namespace Editor
 }  // namespace Monolith

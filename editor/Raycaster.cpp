@@ -61,5 +61,23 @@ float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half) {
   return tMin;
 }
 
+bool TryIntersectGroundPlane(const Ray& ray, Vec3* outHitPoint) {
+  if (!outHitPoint)
+    return false;
+
+  constexpr float kEps = 1e-5f;
+  if (std::abs(ray.direction.y) <= kEps)
+    return false;
+
+  const float t = -ray.origin.y / ray.direction.y;
+  if (t <= 0.0f)
+    return false;
+
+  *outHitPoint = {ray.origin.x + ray.direction.x * t,
+                  0.0f,
+                  ray.origin.z + ray.direction.z * t};
+  return true;
+}
+
 }  // namespace Editor
 }  // namespace Monolith
