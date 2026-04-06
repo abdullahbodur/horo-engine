@@ -66,6 +66,23 @@ void EnsureSocketsReady() {
 #endif
 }
 
+std::filesystem::path NormalizePathForComparison(const std::filesystem::path& path) {
+  if (path.empty())
+    return path;
+  std::error_code ec;
+  const std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+  if (!ec)
+    return normalized;
+  ec.clear();
+  const std::filesystem::path parent = path.parent_path();
+  if (!parent.empty()) {
+    const std::filesystem::path normalizedParent = std::filesystem::weakly_canonical(parent, ec);
+    if (!ec)
+      return (normalizedParent / path.filename()).lexically_normal();
+  }
+  return path.lexically_normal();
+}
+
 struct EnvGuard {
   std::filesystem::path tempHome;
   std::string oldHome;
@@ -689,8 +706,8 @@ TEST_CASE("Editor MCP delete_asset reports managed file deletion details", "[mcp
   REQUIRE(removeAsset.data["deletedAssetId"] == "stone");
   REQUIRE(removeAsset.data["clearedObjectReferences"] == 1);
   REQUIRE(removeAsset.data["deletedManagedFiles"].get<bool>());
-  REQUIRE(removeAsset.data["deletedAssetDirectory"] ==
-          (projectRoot / "assets" / "models" / "stone").generic_string());
+  REQUIRE(NormalizePathForComparison(removeAsset.data["deletedAssetDirectory"].get<std::string>()) ==
+          NormalizePathForComparison(projectRoot / "assets" / "models" / "stone"));
   REQUIRE(editor.GetDocument().assets.find("stone") == editor.GetDocument().assets.end());
   REQUIRE(editor.GetDocument().objects[0].assetId.empty());
   REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "stone"));
