@@ -12,6 +12,7 @@
 
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
+#include "editor/AssetMetadata.h"
 #include "editor/EditorSchema.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
@@ -439,6 +440,8 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     AssetDef asset;
     asset.mesh = "stone.obj";
     asset.renderScale = "2.0000,2.0000,2.0000";
+    asset.guid = "guid_stone";
+    asset.displayName = "Stone Asset";
     doc.assets["stone_asset"] = asset;
 
     SceneObject obj;
@@ -455,7 +458,59 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") 
     REQUIRE(loaded.assets.count("stone_asset") == 1);
     REQUIRE(loaded.assets.at("stone_asset").mesh == "stone.obj");
     REQUIRE(loaded.assets.at("stone_asset").renderScale == "2.0000,2.0000,2.0000");
+    REQUIRE(loaded.assets.at("stone_asset").guid == "guid_stone");
+    REQUIRE(loaded.assets.at("stone_asset").displayName == "Stone Asset");
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
+}
+
+TEST_CASE("SceneSerializer: legacy asset entries gain guid and display name on load",
+          "[editor][serializer]") {
+    const std::string path = TmpPath("legacy_asset_identity_scene.json");
+    const std::string json = R"({
+      "version": 1,
+      "sceneId": "legacy",
+      "assets": {
+        "crate": {
+          "mesh": "assets/models/crate/crate.obj",
+          "renderScale": "1.0000,1.0000,1.0000"
+        }
+      },
+      "objects": []
+    })";
+    WriteFile(path, json);
+
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+    REQUIRE(loaded.assets.count("crate") == 1);
+    REQUIRE_FALSE(loaded.assets.at("crate").guid.empty());
+    REQUIRE(loaded.assets.at("crate").displayName == "crate");
+}
+
+TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
+          "[editor][asset-metadata]") {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_metadata_case";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate_guid/crate.obj",
+                                   "1.0000,1.0000,1.0000",
+                                   "assets/models/crate_guid/crate.png",
+                                   "crate_guid",
+                                   "Crate"};
+
+    std::string error;
+    REQUIRE(EnsureAssetMetadataForDocument(&doc, &error));
+    REQUIRE(error.empty());
+
+    AssetMetadata metadata;
+    REQUIRE(LoadAssetMetadata("crate_guid", &metadata, &error));
+    REQUIRE(metadata.assetId == "crate");
+    REQUIRE(metadata.assetGuid == "crate_guid");
+    REQUIRE(metadata.displayName == "Crate");
+    REQUIRE(metadata.producedFiles.size() == 2);
 }
 
 TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {

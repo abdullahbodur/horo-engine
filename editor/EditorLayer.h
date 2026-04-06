@@ -257,6 +257,8 @@ class EditorLayer {
   std::string m_clipboardToastLabel;
 
   std::string m_assetDraftId;
+  std::string m_assetDraftGuid;
+  std::string m_assetDraftDisplayName;
   std::string m_assetDraftMesh;
   std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
   std::string m_assetDraftAlbedoMap;

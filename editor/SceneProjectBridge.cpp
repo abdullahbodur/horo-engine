@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <initializer_list>
 
+#include "editor/AssetIdentity.h"
+
 namespace Monolith {
 namespace Editor {
 namespace {
@@ -128,12 +130,15 @@ SceneProjectModel BuildSceneProjectModel(const SceneDocument& doc) {
   std::sort(assetIds.begin(), assetIds.end());
 
   for (const auto& assetId : assetIds) {
-    const auto& asset = doc.assets.at(assetId);
+    AssetDef asset = doc.assets.at(assetId);
+    EnsureAssetIdentity(assetId, &asset);
     SceneAssetDefinition typedAsset;
     typedAsset.id = assetId;
     typedAsset.mesh = asset.mesh;
     typedAsset.renderScale = ParseVec3Csv(asset.renderScale, Vec3::One());
     typedAsset.albedoMap = asset.albedoMap;
+    typedAsset.guid = asset.guid;
+    typedAsset.displayName = MakeAssetDisplayName(assetId, asset);
     model.scene.assets.push_back(std::move(typedAsset));
   }
 
@@ -272,7 +277,8 @@ SceneDocument BuildSceneDocument(const SceneProjectModel& model) {
   doc.settings["spawnPoint"] = FormatVec3Csv(model.scene.settings.spawnPoint);
 
   for (const auto& asset : model.scene.assets) {
-    doc.assets[asset.id] = AssetDef{asset.mesh, FormatVec3Csv(asset.renderScale), asset.albedoMap};
+    doc.assets[asset.id] =
+        AssetDef{asset.mesh, FormatVec3Csv(asset.renderScale), asset.albedoMap, asset.guid, asset.displayName};
   }
 
   doc.objects.reserve(model.scene.nodes.size());

@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "editor/AssetIdentity.h"
+
 using json = nlohmann::json;
 
 namespace Monolith {
@@ -70,6 +72,9 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
       ad.mesh = def.value("mesh", "");
       ad.renderScale = def.value("renderScale", "1.0000,1.0000,1.0000");
       ad.albedoMap = def.value("albedoMap", "");
+      ad.guid = def.value("guid", "");
+      ad.displayName = def.value("displayName", "");
+      EnsureAssetIdentity(id, &ad);
       doc.assets[id] = std::move(ad);
     }
   }
@@ -139,35 +144,40 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
 }
 
 void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& path) {
+  SceneDocument docToSave = doc;
+  EnsureAssetIdentity(&docToSave);
+
   json j;
-  j["version"] = doc.version;
-  j["sceneId"]   = doc.sceneId.empty()   ? "scene" : doc.sceneId;
-  j["sceneName"] = doc.sceneName.empty() ? "Scene" : doc.sceneName;
+  j["version"] = docToSave.version;
+  j["sceneId"]   = docToSave.sceneId.empty()   ? "scene" : docToSave.sceneId;
+  j["sceneName"] = docToSave.sceneName.empty() ? "Scene" : docToSave.sceneName;
 
   // ---- Scene settings (stable key order) ----
   json settings = json::object();
   {
     std::vector<std::string> keys;
-    keys.reserve(doc.settings.size());
-    for (const auto& kv : doc.settings)
+    keys.reserve(docToSave.settings.size());
+    for (const auto& kv : docToSave.settings)
       keys.push_back(kv.first);
     std::sort(keys.begin(), keys.end());
     for (const auto& k : keys)
-      settings[k] = doc.settings.at(k);
+      settings[k] = docToSave.settings.at(k);
   }
   j["settings"] = settings;
 
   // ---- Asset registry ----
   json assets = json::object();
   std::vector<std::string> assetIds;
-  assetIds.reserve(doc.assets.size());
-  for (const auto& kv : doc.assets)
+  assetIds.reserve(docToSave.assets.size());
+  for (const auto& kv : docToSave.assets)
     assetIds.push_back(kv.first);
   std::sort(assetIds.begin(), assetIds.end());
 
   for (const auto& id : assetIds) {
-    const auto& def = doc.assets.at(id);
+    const auto& def = docToSave.assets.at(id);
     json d;
+    d["guid"] = def.guid;
+    d["displayName"] = def.displayName;
     d["mesh"] = def.mesh;
     d["renderScale"] = def.renderScale;
     if (!def.albedoMap.empty())
@@ -178,7 +188,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
 
   // ---- Objects ----
   j["objects"] = json::array();
-  for (auto& so : doc.objects) {
+  for (auto& so : docToSave.objects) {
     json obj;
     obj["id"] = so.id;
     obj["type"] = TypeToString(so.type);

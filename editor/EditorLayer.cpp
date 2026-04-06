@@ -40,6 +40,8 @@
 #include "core/LogBuffer.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
+#include "editor/AssetIdentity.h"
+#include "editor/AssetMetadata.h"
 #include "editor/ProjectEntryFilter.h"
 #include "editor/EditorDebugTrace.h"
 #include "editor/EditorAssetImport.h"
@@ -937,8 +939,9 @@ std::string PickTextureFilePath() {
 // a project-relative path for the scene JSON / LevelLoader.
 // subfolderHint: asset name (e.g. "enemy") → copies into assets/models/enemy/.
 // Empty hint falls back to flat assets/models/.
-static std::string ImportTextureToAssetsModels(const std::string& pickedPath, std::string* outError,
-                                               const std::string& subfolderHint = {}) {
+static std::string ImportTextureToAssetsModels(const std::string& pickedPath,
+                                               std::string* outError,
+                                               const std::string& assetGuid = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -955,9 +958,8 @@ static std::string ImportTextureToAssetsModels(const std::string& pickedPath, st
     return {};
   }
 
-  const fs::path destDir = subfolderHint.empty()
-                               ? ProjectPath::Root() / "assets/models"
-                               : ProjectPath::Root() / "assets/models" / subfolderHint;
+  const fs::path destDir = assetGuid.empty() ? ProjectPath::Root() / "assets/models"
+                                             : GetManagedAssetDirectory(assetGuid);
   fs::create_directories(destDir, ec);
   if (ec) {
     if (outError)
@@ -1037,8 +1039,9 @@ static void CopyCompanionAssets(const std::string& objSrcPath, const std::string
 // folderHint: asset ID if already known (e.g. "signenemy-5") so OBJ lands in the same
 // folder as its texture. Falls back to OBJ filename stem when empty.
 // Returns project-relative mesh path (e.g. assets/models/signenemy-5/signenemy.obj).
-static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, std::string* outError,
-                                                 const std::string& folderHint = {}) {
+static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath,
+                                                 std::string* outError,
+                                                 const std::string& assetGuid = {}) {
   namespace fs = std::filesystem;
   if (pickedPath.empty())
     return {};
@@ -1048,8 +1051,9 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
     return {};
   }
   const fs::path src(pickedPath);
-  const std::string folderName = folderHint.empty() ? src.stem().string() : folderHint;
-  const fs::path destDir = ProjectPath::Root() / "assets/models" / folderName;
+  const std::string folderName = assetGuid.empty() ? src.stem().string() : assetGuid;
+  const fs::path destDir = assetGuid.empty() ? ProjectPath::Root() / "assets/models" / folderName
+                                             : GetManagedAssetDirectory(assetGuid);
   std::error_code ec;
   fs::create_directories(destDir, ec);
   if (ec) {
@@ -1108,6 +1112,12 @@ static std::filesystem::path ResolveProjectAssetPath(const std::string& rawPath)
 
 static std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef& asset) {
   namespace fs = std::filesystem;
+  if (!asset.guid.empty()) {
+    const fs::path guidDirectory = GetManagedAssetDirectory(asset.guid);
+    std::error_code ec;
+    if (fs::exists(guidDirectory, ec) && !ec)
+      return guidDirectory;
+  }
   if (asset.mesh.empty())
     return {};
 
@@ -1238,6 +1248,8 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/scene.json";
 
+  EnsureAssetIdentity(&doc);
+
   for (auto& obj : doc.objects) {
     if (obj.type != SceneObjectType::Prop)
       continue;
@@ -1304,14 +1316,18 @@ void EditorLayer::ProcessPendingPathDrops() {
       continue;
 
     if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
+      if (m_assetDraftGuid.empty())
+        m_assetDraftGuid = GenerateAssetGuid();
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(path, &err, m_assetDraftId);
+      const std::string rel = ImportTextureToAssetsModels(path, &err, m_assetDraftGuid);
       if (rel.empty()) {
         if (!err.empty())
           LOG_WARN("Texture drop: %s", err.c_str());
         continue;
       }
       m_assetDraftAlbedoMap = rel;
+      if (m_assetDraftDisplayName.empty())
+        m_assetDraftDisplayName = m_assetDraftId.empty() ? AssetIdFromImportedPath(path) : m_assetDraftId;
       showAlbedoTextureToast();
       m_pendingPathDropPaths.clear();
       return;
@@ -1320,7 +1336,7 @@ void EditorLayer::ProcessPendingPathDrops() {
       const auto it = m_document.assets.find(m_selectedAssetId);
       if (it != m_document.assets.end()) {
         std::string err;
-        const std::string rel = ImportTextureToAssetsModels(path, &err, m_selectedAssetId);
+        const std::string rel = ImportTextureToAssetsModels(path, &err, it->second.guid);
         if (rel.empty()) {
           if (!err.empty())
             LOG_WARN("Texture drop: %s", err.c_str());
@@ -1338,8 +1354,10 @@ void EditorLayer::ProcessPendingPathDrops() {
   for (const std::string& path : m_pendingPathDropPaths) {
     if (!IsObjFilePath(path))
       continue;
+    if (m_assetDraftGuid.empty())
+      m_assetDraftGuid = GenerateAssetGuid();
     std::string err;
-    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err, m_assetDraftId);
+    const std::string meshTag = ImportObjFileIntoAssetsModels(path, &err, m_assetDraftGuid);
     if (meshTag.empty()) {
       if (!err.empty())
         LOG_WARN("Drop import: %s", err.c_str());
@@ -1351,6 +1369,8 @@ void EditorLayer::ProcessPendingPathDrops() {
     m_assetDraftMesh = meshTag;
     if (m_assetDraftId.empty())
       m_assetDraftId = AssetIdFromImportedPath(path);
+    if (m_assetDraftDisplayName.empty())
+      m_assetDraftDisplayName = m_assetDraftId;
     m_assetDraftRenderScale = SuggestRenderScale(meshTag);
     m_assetImportError.clear();
     m_openNewAssetHeader = true;
@@ -1723,12 +1743,16 @@ void EditorLayer::ProcessDeferredFilePicks() {
       const std::string chosen = PickObjFilePath();
       if (chosen.empty())
         break;
+      if (m_assetDraftGuid.empty())
+        m_assetDraftGuid = GenerateAssetGuid();
       std::string err;
-      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err, m_assetDraftId);
+      const std::string meshTag = ImportObjFileIntoAssetsModels(chosen, &err, m_assetDraftGuid);
       if (!meshTag.empty()) {
         m_assetDraftMesh = meshTag;
         if (m_assetDraftId.empty())
           m_assetDraftId = AssetIdFromImportedPath(chosen);
+        if (m_assetDraftDisplayName.empty())
+          m_assetDraftDisplayName = m_assetDraftId;
         m_assetDraftRenderScale = SuggestRenderScale(meshTag);
         m_assetImportError.clear();
       } else if (!err.empty())
@@ -1736,8 +1760,10 @@ void EditorLayer::ProcessDeferredFilePicks() {
       break;
     }
     case DeferredFilePick::NewAssetAlbedo: {
+      if (m_assetDraftGuid.empty())
+        m_assetDraftGuid = GenerateAssetGuid();
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, m_assetDraftId);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, m_assetDraftGuid);
       if (!rel.empty())
         m_assetDraftAlbedoMap = rel;
       else if (!err.empty())
@@ -1749,7 +1775,7 @@ void EditorLayer::ProcessDeferredFilePicks() {
       if (id.empty() || m_document.assets.find(id) == m_document.assets.end())
         break;
       std::string err;
-      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, id);
+      const std::string rel = ImportTextureToAssetsModels(PickTextureFilePath(), &err, m_document.assets[id].guid);
       if (!rel.empty()) {
         m_document.assets[id].albedoMap = rel;
         m_document.dirty = true;
@@ -3566,8 +3592,22 @@ void EditorLayer::DrawAssetsPanel() {
     char idBuf[128] = {};
     std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
     ImGui::TextDisabled("Asset ID");
-    if (ImGui::InputText("##draft_id", idBuf, sizeof(idBuf)))
+    if (ImGui::InputText("##draft_id", idBuf, sizeof(idBuf))) {
       m_assetDraftId = idBuf;
+      if (m_assetDraftDisplayName.empty())
+        m_assetDraftDisplayName = m_assetDraftId;
+    }
+
+    char displayNameBuf[128] = {};
+    std::snprintf(displayNameBuf, sizeof(displayNameBuf), "%s", m_assetDraftDisplayName.c_str());
+    ImGui::TextDisabled("Display name");
+    if (ImGui::InputText("##draft_display_name", displayNameBuf, sizeof(displayNameBuf)))
+      m_assetDraftDisplayName = displayNameBuf;
+
+    if (!m_assetDraftGuid.empty()) {
+      ImGui::TextDisabled("GUID");
+      ImGui::TextWrapped("%s", m_assetDraftGuid.c_str());
+    }
 
     char meshBuf[256] = {};
     std::snprintf(meshBuf, sizeof(meshBuf), "%s", m_assetDraftMesh.c_str());
@@ -3619,9 +3659,13 @@ void EditorLayer::DrawAssetsPanel() {
       def.mesh = m_assetDraftMesh;
       def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
       def.albedoMap = m_assetDraftAlbedoMap;
+      def.guid = m_assetDraftGuid.empty() ? GenerateAssetGuid() : m_assetDraftGuid;
+      def.displayName = m_assetDraftDisplayName.empty() ? m_assetDraftId : m_assetDraftDisplayName;
       m_document.assets[m_assetDraftId] = std::move(def);
       m_selectedAssetId = m_assetDraftId;
       m_assetDraftId.clear();
+      m_assetDraftGuid.clear();
+      m_assetDraftDisplayName.clear();
       m_assetDraftMesh.clear();
       m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
       m_assetDraftAlbedoMap.clear();
@@ -3636,6 +3680,8 @@ void EditorLayer::DrawAssetsPanel() {
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(150.0f, 0.0f))) {
       m_assetImportError.clear();
+      m_assetDraftGuid.clear();
+      m_assetDraftDisplayName.clear();
       ImGui::CloseCurrentPopup();
     }
 
@@ -3956,6 +4002,10 @@ void EditorLayer::DrawPropertiesPanel() {
       } else {
         ImGui::TextDisabled("Asset");
         ImGui::TextUnformatted(m_selectedAssetId.c_str());
+        ImGui::TextDisabled("Display name");
+        ImGui::TextUnformatted(assetIt->second.displayName.c_str());
+        ImGui::TextDisabled("GUID");
+        ImGui::TextWrapped("%s", assetIt->second.guid.c_str());
 
         if (ImGui::Button("Deselect Asset", ImVec2(-1.0f, 0.0f))) {
           m_selectedAssetId.clear();
@@ -3971,6 +4021,13 @@ void EditorLayer::DrawPropertiesPanel() {
         std::snprintf(meshEditBuf, sizeof(meshEditBuf), "%s", assetIt->second.mesh.c_str());
         if (ImGui::InputText("Mesh", meshEditBuf, sizeof(meshEditBuf))) {
           assetIt->second.mesh = meshEditBuf;
+          m_document.dirty = true;
+        }
+
+        char displayEditBuf[256] = {};
+        std::snprintf(displayEditBuf, sizeof(displayEditBuf), "%s", assetIt->second.displayName.c_str());
+        if (ImGui::InputText("Display Name", displayEditBuf, sizeof(displayEditBuf))) {
+          assetIt->second.displayName = displayEditBuf;
           m_document.dirty = true;
         }
 
@@ -4926,6 +4983,8 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
         ++referenceCount;
     }
     return json{{"id", assetId},
+                {"guid", asset.guid},
+                {"displayName", asset.displayName},
                 {"mesh", asset.mesh},
                 {"renderScale", asset.renderScale},
                 {"albedoMap", asset.albedoMap},
@@ -5194,6 +5253,10 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     if (arguments.contains("albedoMap"))
       it->second.albedoMap =
           arguments["albedoMap"].is_null() ? std::string() : arguments["albedoMap"].get<std::string>();
+    if (arguments.contains("displayName"))
+      it->second.displayName =
+          arguments["displayName"].is_null() ? std::string() : arguments["displayName"].get<std::string>();
+    EnsureAssetIdentity(assetId, &it->second);
     m_document.dirty = true;
     TriggerReload();
     return Mcp::McpCommandResult{true,
@@ -5266,10 +5329,15 @@ bool EditorLayer::SaveDocument(std::string* outError) {
 
   std::string path = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
   m_document.filePath = path;
+  EnsureAssetIdentity(&m_document);
 
   LOG_INFO("[Editor] Saving scene to: %s", path.c_str());
 
   try {
+    if (!EnsureAssetMetadataForDocument(&m_document, outError)) {
+      LOG_ERROR("[Editor] Asset metadata save failed: %s", outError ? outError->c_str() : "");
+      return false;
+    }
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
     m_lastSavedDocument = m_document;
