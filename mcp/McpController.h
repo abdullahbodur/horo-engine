@@ -21,9 +21,18 @@ namespace Mcp {
 
 struct McpActivityEntry {
   std::string timeText;
+  std::string timestampText;
+  std::string requestId;
+  std::string transportMethod;
+  std::string mcpMethod;
   std::string target;
+  std::string operation;
   bool ok = true;
-  std::string detail;
+  int httpStatus = 200;
+  double durationMs = 0.0;
+  std::string requestPreview;
+  std::string responsePreview;
+  std::string error;
 };
 
 struct McpStatusSnapshot {
@@ -32,11 +41,19 @@ struct McpStatusSnapshot {
   bool running = false;
   std::string endpointUrl;
   int activeConnections = 0;
+  int activeRequests = 0;
   uint64_t totalRequests = 0;
+  uint64_t successCount = 0;
+  uint64_t failureCount = 0;
   size_t toolCount = 0;
   size_t resourceCount = 0;
+  std::string lastRequestTime;
+  std::string topTool;
+  std::string topResource;
   std::string lastError;
   std::vector<McpActivityEntry> recentActivity;
+  std::vector<McpCatalogEntry> toolCatalog;
+  std::vector<McpCatalogEntry> resourceCatalog;
 };
 
 class McpController {
@@ -60,6 +77,8 @@ class McpController {
   McpStatusSnapshot GetStatusSnapshot() const;
   std::string BuildClaudeConfigSnippet() const;
   std::string BuildCodexConfigSnippet() const;
+  std::string BuildVsCodeConfigSnippet() const;
+  void ClearActivityLog();
 
  private:
   struct QueuedCommand {
@@ -72,7 +91,7 @@ class McpController {
   void StartServer(std::string* outError);
   void StopServer();
   McpCommandResult InvokeCommand(const std::string& toolName, const nlohmann::json& arguments);
-  void PushActivity(const std::string& target, bool ok, const std::string& detail);
+  void PushActivity(const McpActivityRecord& activity);
   std::string EndpointUrl() const;
 
   McpSettingsDocument m_settingsDocument;

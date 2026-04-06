@@ -15,9 +15,9 @@ The editor owns lifecycle integration. When `MCP enabled` is turned on in `File 
 
 - `McpSettings.*`: settings path resolution and JSON persistence
 - `McpSnapshot.*`: compact editor snapshot models and summary/search builders
-- `McpProtocol.*`: MCP request handling, resources, tools, auth checks
+- `McpProtocol.*`: MCP request handling, resources, tools, telemetry
 - `McpServer.*`: minimal HTTP transport for localhost MCP traffic
-- `McpController.*`: runtime coordination, status tracking, command queue, editor bridge
+- `McpController.*`: runtime coordination, status tracking, request history, command queue, editor bridge
 
 ## Runtime model
 
@@ -28,29 +28,64 @@ The editor owns lifecycle integration. When `MCP enabled` is turned on in `File 
 5. Write requests become queued commands.
 6. `EditorLayer::OnUpdate()` drains that queue on the main thread and applies the mutation safely.
 
-## Default MCP surface
+## MCP surface
 
 Resources:
 
 - `scene.summary`
 - `scene.selection`
 - `scene.assets`
+- `scene.hierarchy`
+- `scene.objects`
+- `scene.scene_status`
+- `assets.selection`
+- `assets.catalog`
 - `console.recent`
+- `console.summary`
 
 Tools:
 
 - `editor.search`
 - `editor.get_object`
+- `editor.list_objects`
+- `editor.get_objects`
+- `editor.get_object_children`
+- `editor.get_object_parent`
+- `editor.count_objects`
 - `editor.select`
+- `editor.clear_selection`
 - `editor.create_object`
+- `editor.create_object_from_asset`
 - `editor.update_object`
 - `editor.transform`
+- `editor.rename_object`
+- `editor.reparent_object`
 - `editor.duplicate`
 - `editor.delete`
+- `editor.list_assets`
+- `editor.get_asset`
+- `editor.search_assets`
+- `editor.count_assets`
+- `editor.select_asset`
+- `editor.update_asset`
+- `editor.delete_asset`
+- `editor.scene_status`
+- `editor.get_scene_file`
+- `editor.new_scene`
 - `editor.save_scene`
 - `editor.reload_scene`
+- `editor.search_console`
 
 The design is intentionally summary-first to keep token usage low.
+
+## MCP tab
+
+The bottom `MCP` tab is also the built-in debugger for the server:
+
+- Status strip for endpoint, request totals, success/failure counts, active requests, top tool/resource, and last request time
+- `Codex`, `Claude`, and `VS Code` cards with copy-ready config snippets and the expected config file locations
+- Live request history with timestamps, duration, method/tool name, request preview, response preview, HTTP status, and errors
+- Capability catalog listing the current built-in tools and resources
 
 ## Settings
 

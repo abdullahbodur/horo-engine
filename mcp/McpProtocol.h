@@ -33,10 +33,30 @@ struct McpCommandResult {
   std::string error;
 };
 
+struct McpCatalogEntry {
+  std::string name;
+  std::string target;
+  std::string description;
+};
+
+struct McpActivityRecord {
+  std::string requestId;
+  std::string transportMethod;
+  std::string mcpMethod;
+  std::string target;
+  std::string operation;
+  bool ok = false;
+  int httpStatus = 200;
+  double durationMs = 0.0;
+  std::string requestPreview;
+  std::string responsePreview;
+  std::string error;
+};
+
 struct McpProtocolContext {
   std::function<std::shared_ptr<const McpEditorSnapshot>()> snapshotProvider;
   std::function<McpCommandResult(const std::string&, const nlohmann::json&)> commandInvoker;
-  std::function<void(const std::string&, bool, const std::string&)> activitySink;
+  std::function<void(const McpActivityRecord&)> activitySink;
 };
 
 class McpProtocol {
@@ -44,8 +64,10 @@ class McpProtocol {
   explicit McpProtocol(McpProtocolContext context);
 
   McpHttpResponse HandleHttp(const McpHttpRequest& request) const;
-  size_t ToolCount() const { return 10; }
-  size_t ResourceCount() const { return 4; }
+  size_t ToolCount() const;
+  size_t ResourceCount() const;
+  const std::vector<McpCatalogEntry>& ToolCatalog() const;
+  const std::vector<McpCatalogEntry>& ResourceCatalog() const;
 
  private:
   McpProtocolContext m_context;

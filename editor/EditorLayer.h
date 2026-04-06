@@ -273,6 +273,7 @@ class EditorLayer {
   bool m_settingsOpen = false;
   Mcp::McpSettings m_mcpSettingsDraft;
   std::string m_mcpSettingsError;
+  int m_mcpSelectedActivityIndex = 0;
   bool m_quickOpenOpen = false;
   bool m_prevQuickOpenToggle = false;
   std::string m_quickOpenQuery;

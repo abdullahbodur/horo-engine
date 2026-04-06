@@ -235,16 +235,17 @@ TEST_CASE("McpSnapshot compacts summary and console resources", "[mcp][snapshot]
 
 TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
+  std::vector<McpActivityRecord> activity;
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
       [](const std::string&, const json&) { return McpCommandResult{}; },
-      {},
+      [&activity](const McpActivityRecord& entry) { activity.push_back(entry); },
   });
 
   const McpHttpResponse tools = protocol.HandleHttp(
       McpHttpRequest{"POST", "/mcp", {}, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"});
   REQUIRE(tools.statusCode == 200);
-  REQUIRE(json::parse(tools.body)["result"]["tools"].size() == 10);
+  REQUIRE(json::parse(tools.body)["result"]["tools"].size() == 30);
 
   const McpHttpResponse object = protocol.HandleHttp(
       McpHttpRequest{"POST", "/mcp", {},
@@ -256,6 +257,10 @@ TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol
       McpHttpRequest{"POST", "/mcp", {},
                      R"({"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"scene://summary"}})"});
   REQUIRE(resource.statusCode == 200);
+  REQUIRE(activity.size() >= 3);
+  REQUIRE(activity.back().operation == "resource");
+  REQUIRE(activity.back().target == "scene://summary");
+  REQUIRE(activity.back().ok);
 }
 
 TEST_CASE("McpController localhost server serves reads and queued writes", "[mcp][integration]") {
