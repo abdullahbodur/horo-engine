@@ -309,9 +309,9 @@ horo-engine/
 ├── renderer/
 │   ├── shaders/        GLSL vertex/fragment shaders
 │   └── ...             Mesh, Shader, Camera, Light, Texture, Material
-├── scene/          ECS Registry, Scene, ComponentPool, Systems
+├── scene/          ECS Registry, Scene, ComponentPool, Systems, SceneProjectModel
 ├── input/          Input, KeyCodes, MouseCodes
-├── editor/         EditorLayer, SceneSerializer, SceneDocument
+├── editor/         EditorLayer, SceneSerializer, SceneDocument, SceneProjectBridge
 ├── docs/           Feature and integration guides
 ├── vendor/         GLFW, GLAD, GLM, ImGui, stb_image, nlohmann/json
 └── tests/          24 unit test executables (Catch2)

@@ -81,6 +81,12 @@ target_link_libraries(test_scene PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_scene)
 add_test(NAME test_scene COMMAND $<TARGET_FILE:test_scene>)
 
+# ---- test_scene_project_model ----
+add_executable(test_scene_project_model test_scene_project_model.cpp)
+target_link_libraries(test_scene_project_model PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_scene_project_model)
+add_test(NAME test_scene_project_model COMMAND $<TARGET_FILE:test_scene_project_model>)
+
 # ---- test_camera ----
 add_executable(test_camera test_camera.cpp)
 target_link_libraries(test_camera PRIVATE MonolithEngine Catch2::Catch2WithMain)

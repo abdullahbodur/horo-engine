@@ -32,6 +32,7 @@
 
 - Component schema defaults are sourced from `assets/editor_schema.json`.
 - Scene files are JSON (`.horo` workflow through `SceneSerializer`).
+- `SceneProjectBridge` converts editor-facing `SceneDocument` data into the engine-owned typed `SceneProjectModel`.
 - User MCP settings are stored in `~/.horo/settings.json`.
 
 ## Notes
