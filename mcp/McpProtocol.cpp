@@ -12,6 +12,8 @@ using json = nlohmann::json;
 
 namespace {
 
+const std::vector<McpCatalogEntry>& GetToolCatalog();
+
 std::string ToLowerAscii(std::string value) {
   for (char& c : value)
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
