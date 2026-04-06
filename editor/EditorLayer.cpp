@@ -1471,6 +1471,9 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ImGui::NewFrame();
 
   if (m_active) {
+    // Viewport drop target drawn FIRST so all panels sit on top of it (higher z-order)
+    if (!m_playMode)
+      DrawViewportDropTarget(cam, screenW, screenH);
     DrawToolbar();
     if (!m_playMode)
       DrawViewGimbal(cam);
@@ -1488,17 +1491,17 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
     }
-    DrawViewportDropTarget(cam, screenW, screenH);
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
 
-  // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
-  DebugDraw::Flush(cam);
-
-  // Wireframe overlay: drawn after DebugDraw flush so it sits on top of the scene
+  // Wireframe pass: clears solid scene and draws edges; must happen before
+  // DebugDraw::Flush so selection highlight/gizmo render on top.
   if (m_active && !m_playMode)
     DrawWireframeOverlay(cam);
+
+  // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
+  DebugDraw::Flush(cam);
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -4403,6 +4406,10 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 
+  // Clear the solid scene so only wireframe edges are visible
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
   Renderer::BeginScene(cam);
   for (const auto& obj : m_document.objects) {
     if (obj.type != SceneObjectType::Prop)
@@ -4441,14 +4448,20 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
 // ---- Viewport drag-drop target -----------------------------------------------
 
 void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
+  // Only show when an ASSET_ID drag-drop is actively in progress.
+  // This prevents the full-screen window from intercepting normal mouse clicks.
+  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
+  if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
+    return;
+
   ImGuiIO& io = ImGui::GetIO();
   ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
   ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(screenH)));
   ImGui::SetNextWindowBgAlpha(0.0f);
+  // No NoInputs — drop target must be hoverable to accept the payload
   ImGui::Begin("##viewport_drop", nullptr,
-               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                   ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav |
-                   ImGuiWindowFlags_NoSavedSettings);
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
 
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
