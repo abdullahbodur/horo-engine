@@ -1093,6 +1093,12 @@ TEST_CASE("Drop ray hits y=0 plane correctly", "[editor][dragdrop]") {
     REQUIRE(hit.y == Approx(0.0f));
     REQUIRE(hit.x == Approx(0.0f));
     REQUIRE(hit.z == Approx(0.0f));
+
+    Vec3 helperHit = Vec3::Zero();
+    REQUIRE(TryIntersectGroundPlane(r, &helperHit));
+    REQUIRE(helperHit.y == Approx(0.0f));
+    REQUIRE(helperHit.x == Approx(0.0f));
+    REQUIRE(helperHit.z == Approx(0.0f));
 }
 
 TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]") {
@@ -1110,4 +1116,36 @@ TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]") {
 
     REQUIRE(hit.y == Approx(0.0f).margin(1e-4f));
     REQUIRE(hit.x == Approx(3.0f).margin(1e-4f));  // no x-component in direction
+}
+
+TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]") {
+    Ray r;
+    r.origin = {2.0f, 3.0f, 4.0f};
+    r.direction = {1.0f, 0.0f, 0.0f};
+
+    Vec3 hit = Vec3::Zero();
+    REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
+}
+
+TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
+    const EditorViewportRect rect =
+        BuildEditorViewportRect(1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
+
+    REQUIRE(rect.minX == Approx(308.0f));
+    REQUIRE(rect.minY == Approx(36.0f));
+    REQUIRE(rect.maxX == Approx(1320.0f));
+    REQUIRE(rect.maxY == Approx(676.0f));
+    REQUIRE(rect.Contains(600.0f, 200.0f));
+    REQUIRE_FALSE(rect.Contains(150.0f, 200.0f));
+    REQUIRE_FALSE(rect.Contains(1500.0f, 200.0f));
+    REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
+}
+
+TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {
+    Vec3 parsed = Vec3::Zero();
+    REQUIRE(TryParseVec3Csv("1.5000, 2.0000,0.7500", &parsed));
+    REQUIRE(parsed.x == Approx(1.5f));
+    REQUIRE(parsed.y == Approx(2.0f));
+    REQUIRE(parsed.z == Approx(0.75f));
+    REQUIRE_FALSE(TryParseVec3Csv("1.0,2.0", &parsed));
 }
