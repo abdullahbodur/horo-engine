@@ -12,6 +12,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include "editor/EditorLayer.h"
+#include "editor/SceneSerializer.h"
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -29,6 +32,7 @@
 
 using json = nlohmann::json;
 using namespace Monolith::Mcp;
+using namespace Monolith::Editor;
 
 namespace {
 
@@ -207,6 +211,92 @@ McpEditorSnapshot MakeSnapshot() {
   return snapshot;
 }
 
+McpEditorSnapshot MakeSnapshotFromDocument(const SceneDocument& doc,
+                                          const std::vector<std::string>& selectedObjectIds,
+                                          const std::string& selectedAssetId = {}) {
+  McpEditorSnapshot snapshot;
+  snapshot.editorActive = true;
+  snapshot.sceneId = doc.sceneId;
+  snapshot.sceneName = doc.sceneName;
+  snapshot.sceneFilePath = doc.filePath;
+  snapshot.dirty = doc.dirty;
+  snapshot.selectedObjectIds = selectedObjectIds;
+  snapshot.selectedAssetId = selectedAssetId;
+  for (const SceneObject& object : doc.objects) {
+    McpObjectSnapshot entry;
+    entry.id = object.id;
+    switch (object.type) {
+      case SceneObjectType::Panel:
+        entry.type = "Panel";
+        break;
+      case SceneObjectType::Prop:
+        entry.type = "Prop";
+        break;
+      case SceneObjectType::Light:
+        entry.type = "Light";
+        break;
+      case SceneObjectType::Camera:
+        entry.type = "Camera";
+        break;
+    }
+    entry.position = object.position;
+    entry.scale = object.scale;
+    entry.yaw = object.yaw;
+    entry.pitch = object.pitch;
+    entry.roll = object.roll;
+    entry.assetId = object.assetId;
+    entry.props = object.props;
+    snapshot.objects.push_back(std::move(entry));
+  }
+  for (const auto& assetEntry : doc.assets)
+    snapshot.assets.push_back({assetEntry.first, assetEntry.second.mesh, assetEntry.second.renderScale,
+                               assetEntry.second.albedoMap});
+  return snapshot;
+}
+
+SceneDocument MakeEditorSceneDocument(const std::filesystem::path& filePath) {
+  SceneDocument doc;
+  doc.sceneId = "scene";
+  doc.sceneName = "Scene";
+  doc.filePath = filePath.string();
+  doc.dirty = false;
+  doc.assets["stone"] = AssetDef{"assets/models/stone/stone.obj", "1.0000,1.0000,1.0000", ""};
+
+  SceneObject panel;
+  panel.id = "panel_000";
+  panel.type = SceneObjectType::Panel;
+  doc.objects.push_back(panel);
+
+  SceneObject camera;
+  camera.id = "cam_000";
+  camera.type = SceneObjectType::Camera;
+  camera.props["followTargetId"] = "";
+  camera.props["parentId"] = "obj_000";
+  doc.objects.push_back(camera);
+
+  return doc;
+}
+
+SceneObject* FindSceneObject(SceneDocument* doc, const std::string& id) {
+  if (!doc)
+    return nullptr;
+  for (SceneObject& object : doc->objects) {
+    if (object.id == id)
+      return &object;
+  }
+  return nullptr;
+}
+
+const SceneObject* FindSceneObject(const SceneDocument* doc, const std::string& id) {
+  if (!doc)
+    return nullptr;
+  for (const SceneObject& object : doc->objects) {
+    if (object.id == id)
+      return &object;
+  }
+  return nullptr;
+}
+
 json ParseBody(const McpHttpResponse& response) {
   return json::parse(response.body);
 }
@@ -379,6 +469,16 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   const json toolList = ProtocolRequest(protocol, "tools/list", json::object(), 3);
   REQUIRE(toolList["result"]["tools"].size() == 31);
   REQUIRE(toolList["result"]["tools"][0]["name"] == "editor_search");
+  const json* createObjectTool = nullptr;
+  for (const json& tool : toolList["result"]["tools"]) {
+    if (tool.value("name", std::string()) == "editor_create_object") {
+      createObjectTool = &tool;
+      break;
+    }
+  }
+  REQUIRE(createObjectTool != nullptr);
+  REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["items"]["type"] == "number");
+  REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["minItems"] == 3);
 
   const json resourceList = ProtocolRequest(protocol, "resources/list", json::object(), 4);
   REQUIRE(resourceList["result"]["resources"].size() == 10);
@@ -451,6 +551,93 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   REQUIRE(activity.size() >= 20);
   REQUIRE(activity.back().target == "editor.search_console");
   REQUIRE(activity.back().ok);
+}
+
+TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk", "[mcp][editor]") {
+  EnvGuard env("horo_editor_mcp_consistency");
+  const std::filesystem::path scenePath =
+      std::filesystem::temp_directory_path() / "horo_editor_mcp_consistency" / "world.json";
+  std::filesystem::create_directories(scenePath.parent_path());
+
+  const SceneDocument initialDoc = MakeEditorSceneDocument(scenePath);
+  SceneSerializer::SaveToFile(initialDoc, scenePath.string());
+
+  EditorLayer editor;
+  editor.LoadDocument(initialDoc);
+
+  const McpCommandResult stringVecFail = editor.ExecuteMcpCommand(
+      "editor.create_object",
+      json{{"id", "codex_probe_panel"},
+           {"type", "Panel"},
+           {"position", json::array({"12", "1", "12"})},
+           {"scale", json::array({"1", "1", "1"})},
+           {"props", json{{"material", "default"}}}});
+  REQUIRE_FALSE(stringVecFail.ok);
+  REQUIRE(stringVecFail.error == "position must be [x,y,z].");
+
+  const McpCommandResult createPanel = editor.ExecuteMcpCommand(
+      "editor.create_object",
+      json{{"id", "codex_probe_panel"},
+           {"type", "Panel"},
+           {"position", json::array({12, 1, 12})},
+           {"scale", json::array({1, 1, 1})},
+           {"props", json{{"material", "default"}}}});
+  REQUIRE(createPanel.ok);
+
+  const McpCommandResult createProp = editor.ExecuteMcpCommand(
+      "editor.create_object_from_asset",
+      json{{"id", "codex_probe_prop"}, {"assetId", "stone"}, {"position", json::array({13, 1, 13})}});
+  REQUIRE(createProp.ok);
+
+  const McpCommandResult reparent =
+      editor.ExecuteMcpCommand("editor.reparent_object",
+                               json{{"id", "codex_probe_prop"}, {"parentId", "codex_probe_panel"}});
+  REQUIRE(reparent.ok);
+
+  const McpCommandResult duplicate =
+      editor.ExecuteMcpCommand("editor.duplicate", json{{"id", "codex_probe_prop"}, {"count", 1}});
+  REQUIRE(duplicate.ok);
+  REQUIRE(duplicate.data["duplicates"].size() == 1);
+  REQUIRE(duplicate.data["duplicates"][0]["id"] != "obj_000");
+
+  const std::string duplicateId = duplicate.data["duplicates"][0]["id"].get<std::string>();
+
+  const McpCommandResult renameReserved =
+      editor.ExecuteMcpCommand("editor.rename_object", json{{"id", duplicateId}, {"newId", "obj_000"}});
+  REQUIRE_FALSE(renameReserved.ok);
+  REQUIRE(renameReserved.error == "Object id already exists.");
+
+  const McpCommandResult renameOk = editor.ExecuteMcpCommand(
+      "editor.rename_object", json{{"id", duplicateId}, {"newId", "codex_probe_dup"}});
+  REQUIRE(renameOk.ok);
+
+  const SceneDocument& afterRenameDoc = editor.GetDocument();
+  const SceneObject* camera = FindSceneObject(&afterRenameDoc, "cam_000");
+  REQUIRE(camera != nullptr);
+  REQUIRE(camera->props.at("parentId") == "obj_000");
+
+  const McpCommandResult select = editor.ExecuteMcpCommand(
+      "editor.select", json{{"ids", json::array({"codex_probe_panel", "codex_probe_prop"})}});
+  REQUIRE(select.ok);
+  REQUIRE(select.data["selectedObjectIds"].size() == 2);
+
+  const McpEditorSnapshot selectedSnapshot =
+      MakeSnapshotFromDocument(editor.GetDocument(), editor.GetSelectedObjectIds(), editor.GetSelectedAssetId());
+  const json selectedOnly = BuildObjectListJson(selectedSnapshot, 16, "", "", true);
+  REQUIRE(selectedOnly["matchedObjects"] == 2);
+
+  const McpCommandResult reload = editor.ExecuteMcpCommand("editor.reload_scene", json::object());
+  REQUIRE(reload.ok);
+  const SceneDocument& reloadedDoc = editor.GetDocument();
+  REQUIRE_FALSE(reloadedDoc.dirty);
+  REQUIRE(reloadedDoc.objects.size() == initialDoc.objects.size());
+  REQUIRE(FindSceneObject(&reloadedDoc, "codex_probe_panel") == nullptr);
+  REQUIRE(FindSceneObject(&reloadedDoc, "codex_probe_prop") == nullptr);
+  REQUIRE(FindSceneObject(&reloadedDoc, "codex_probe_dup") == nullptr);
+
+  camera = FindSceneObject(&reloadedDoc, "cam_000");
+  REQUIRE(camera != nullptr);
+  REQUIRE(camera->props.at("parentId") == "obj_000");
 }
 
 TEST_CASE("McpProtocol dispatches every write tool and serializes success and failure", "[mcp][protocol]") {
