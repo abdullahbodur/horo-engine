@@ -13,20 +13,6 @@ namespace Monolith
     namespace
     {
 
-      std::string GetHeaderValue(const std::unordered_map<std::string, std::string> &headers,
-                                 const std::string &key)
-      {
-        auto it = headers.find(key);
-        if (it != headers.end())
-          return it->second;
-
-        std::string lowered = key;
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        it = headers.find(lowered);
-        return it != headers.end() ? it->second : std::string();
-      }
-
       McpHttpResponse MakeJsonResponse(int statusCode,
                                        const std::string &statusText,
                                        const json &body)
@@ -51,13 +37,6 @@ namespace Monolith
             {"id", id},
             {"error", {{"code", code}, {"message", message}}},
         };
-      }
-
-      bool IsAuthorized(const McpHttpRequest &request, const std::string &token)
-      {
-        if (token.empty())
-          return true;
-        return GetHeaderValue(request.headers, "authorization") == ("Bearer " + token);
       }
 
       json BuildToolList()
@@ -255,11 +234,6 @@ namespace Monolith
         return MakeJsonResponse(200, "OK", json{{"name", "horo-engine"}, {"transport", "http"}});
       if (request.method != "POST")
         return MakeJsonResponse(405, "Method Not Allowed", json{{"error", "Use POST /mcp."}});
-
-      const std::string token = m_context.tokenProvider ? m_context.tokenProvider() : std::string();
-      if (!IsAuthorized(request, token))
-        return MakeJsonResponse(401, "Unauthorized",
-                                json{{"error", "Missing or invalid bearer token."}});
 
       json payload = json::object();
       try

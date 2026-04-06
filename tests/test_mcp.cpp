@@ -106,7 +106,7 @@ struct HttpResponse {
   std::string body;
 };
 
-HttpResponse SendHttpPost(int port, const std::string& body, const std::string& token) {
+HttpResponse SendHttpPost(int port, const std::string& body) {
   EnsureSocketsReady();
 
   SocketHandle socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -120,8 +120,6 @@ HttpResponse SendHttpPost(int port, const std::string& body, const std::string& 
 
   std::string request =
       "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n";
-  if (!token.empty())
-    request += "Authorization: Bearer " + token + "\r\n";
   request += "Content-Length: " + std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
   REQUIRE(send(socketHandle, request.data(), static_cast<int>(request.size()), 0) > 0);
 
@@ -184,7 +182,6 @@ TEST_CASE("McpSettings preserves unknown keys and uses home settings path", "[mc
       "mcp": {
         "enabled": true,
         "port": 40123,
-        "authToken": "token-a",
         "custom": "keep-me"
       }
     })";
@@ -236,33 +233,27 @@ TEST_CASE("McpSnapshot compacts summary and console resources", "[mcp][snapshot]
   REQUIRE_FALSE(search["objects"].empty());
 }
 
-TEST_CASE("McpProtocol enforces auth and serves resources/tools", "[mcp][protocol]") {
+TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
       [](const std::string&, const json&) { return McpCommandResult{}; },
       {},
-      []() { return std::string("secret"); },
   });
 
-  const McpHttpResponse unauthorized = protocol.HandleHttp(
-      McpHttpRequest{"POST", "/mcp", {}, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"});
-  REQUIRE(unauthorized.statusCode == 401);
-
   const McpHttpResponse tools = protocol.HandleHttp(
-      McpHttpRequest{"POST", "/mcp", {{"authorization", "Bearer secret"}},
-                     R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"});
+      McpHttpRequest{"POST", "/mcp", {}, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"});
   REQUIRE(tools.statusCode == 200);
   REQUIRE(json::parse(tools.body)["result"]["tools"].size() == 10);
 
   const McpHttpResponse object = protocol.HandleHttp(
-      McpHttpRequest{"POST", "/mcp", {{"authorization", "Bearer secret"}},
+      McpHttpRequest{"POST", "/mcp", {},
                      R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"editor.get_object","arguments":{"id":"obj_001"}}})"});
   REQUIRE(object.statusCode == 200);
   REQUIRE(json::parse(object.body)["result"]["structuredContent"]["id"] == "obj_001");
 
   const McpHttpResponse resource = protocol.HandleHttp(
-      McpHttpRequest{"POST", "/mcp", {{"authorization", "Bearer secret"}},
+      McpHttpRequest{"POST", "/mcp", {},
                      R"({"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"scene://summary"}})"});
   REQUIRE(resource.statusCode == 200);
 }
@@ -278,22 +269,19 @@ TEST_CASE("McpController localhost server serves reads and queued writes", "[mcp
   settings.autoStart = true;
   settings.host = kDefaultMcpHost;
   settings.port = 39881;
-  settings.authToken = "token-xyz";
 
   std::string err;
   REQUIRE(controller.ApplySettings(settings, &err));
   controller.SetEditorActive(true);
 
-  const HttpResponse ping = SendHttpPost(
-      settings.port, R"({"jsonrpc":"2.0","id":1,"method":"ping"})", settings.authToken);
+  const HttpResponse ping = SendHttpPost(settings.port, R"({"jsonrpc":"2.0","id":1,"method":"ping"})");
   REQUIRE(ping.statusCode == 200);
 
   std::string selectedId;
   auto future = std::async(std::launch::async, [&]() {
     return SendHttpPost(
         settings.port,
-        R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"editor.select","arguments":{"id":"obj_001"}}})",
-        settings.authToken);
+        R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"editor.select","arguments":{"id":"obj_001"}}})");
   });
 
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -309,10 +297,6 @@ TEST_CASE("McpController localhost server serves reads and queued writes", "[mcp
   REQUIRE(selectedId == "obj_001");
   REQUIRE(json::parse(selectResponse.body)["result"]["structuredContent"]["selectedObjectIds"][0] ==
           "obj_001");
-
-  const HttpResponse unauthorized = SendHttpPost(
-      settings.port, R"({"jsonrpc":"2.0","id":3,"method":"ping"})", "");
-  REQUIRE(unauthorized.statusCode == 401);
 
   controller.SetEditorActive(false);
 }

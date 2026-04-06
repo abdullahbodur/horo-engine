@@ -37,7 +37,6 @@ struct McpProtocolContext {
   std::function<std::shared_ptr<const McpEditorSnapshot>()> snapshotProvider;
   std::function<McpCommandResult(const std::string&, const nlohmann::json&)> commandInvoker;
   std::function<void(const std::string&, bool, const std::string&)> activitySink;
-  std::function<std::string()> tokenProvider;
 };
 
 class McpProtocol {

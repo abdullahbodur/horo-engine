@@ -2207,23 +2207,6 @@ void EditorLayer::DrawSettingsModal() {
   ImGui::Text("Host: %s", Mcp::kDefaultMcpHost);
   m_mcpSettingsDraft.host = Mcp::kDefaultMcpHost;
 
-  std::string maskedToken = m_mcpSettingsDraft.authToken.empty()
-                                ? "(not generated yet)"
-                                : m_mcpSettingsDraft.authToken.substr(0, 8) + "..." +
-                                      m_mcpSettingsDraft.authToken.substr(
-                                          m_mcpSettingsDraft.authToken.size() > 8
-                                              ? m_mcpSettingsDraft.authToken.size() - 8
-                                              : 0);
-  ImGui::Text("Token: %s", maskedToken.c_str());
-  if (ImGui::Button("Copy Token") && !m_mcpSettingsDraft.authToken.empty()) {
-    glfwSetClipboardString(m_window, m_mcpSettingsDraft.authToken.c_str());
-    m_clipboardToastLabel = "MCP token copied";
-    m_clipboardToastTime = 1.5f;
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Regenerate Token"))
-    m_mcpSettingsDraft.authToken = Mcp::GenerateMcpAuthToken();
-
   const std::string endpoint =
       "http://" + m_mcpSettingsDraft.host + ":" + std::to_string(m_mcpSettingsDraft.port) + "/mcp";
   ImGui::TextWrapped("Endpoint: %s", endpoint.c_str());

@@ -17,7 +17,6 @@ struct McpSettings {
   std::string transport = kDefaultMcpTransport;
   std::string host = kDefaultMcpHost;
   int port = kDefaultMcpPort;
-  std::string authToken;
   bool autoStart = true;
 };
 
@@ -33,7 +32,6 @@ McpSettings DefaultMcpSettings();
 std::filesystem::path ResolveMcpHomeDirectory();
 std::filesystem::path ResolveMcpSettingsDirectory();
 std::filesystem::path ResolveMcpSettingsPath();
-std::string GenerateMcpAuthToken(size_t bytes = 24);
 McpSettingsDocument LoadMcpSettings();
 bool SaveMcpSettings(McpSettingsDocument* doc, std::string* outError);
 

@@ -37,11 +37,6 @@ void McpController::Initialize() {
     return;
 
   m_settingsDocument = LoadMcpSettings();
-  if (m_settingsDocument.settings.enabled && m_settingsDocument.settings.authToken.empty()) {
-    m_settingsDocument.settings.authToken = GenerateMcpAuthToken();
-    std::string ignoredError;
-    SaveMcpSettings(&m_settingsDocument, &ignoredError);
-  }
 
   m_protocol = std::make_unique<McpProtocol>(McpProtocolContext{
       [this]() {
@@ -54,7 +49,6 @@ void McpController::Initialize() {
       [this](const std::string& target, bool ok, const std::string& detail) {
         PushActivity(target, ok, detail);
       },
-      [this]() { return m_settingsDocument.settings.authToken; },
   });
 
   std::scoped_lock lock(m_statusMutex);
@@ -79,9 +73,6 @@ bool McpController::ApplySettings(McpSettings settings, std::string* outError) {
     outError->clear();
   if (!m_initialized)
     Initialize();
-
-  if (settings.enabled && settings.authToken.empty())
-    settings.authToken = GenerateMcpAuthToken();
 
   m_settingsDocument.settings = std::move(settings);
   if (!SaveMcpSettings(&m_settingsDocument, outError)) {
@@ -151,12 +142,7 @@ std::string McpController::BuildClaudeConfigSnippet() const {
          "      \"type\": \"http\",\n"
          "      \"url\": \"" +
          EndpointUrl() +
-         "\",\n"
-         "      \"headers\": {\n"
-         "        \"Authorization\": \"Bearer " +
-         m_settingsDocument.settings.authToken +
          "\"\n"
-         "      }\n"
          "    }\n"
          "  }\n"
          "}";
@@ -165,11 +151,7 @@ std::string McpController::BuildClaudeConfigSnippet() const {
 std::string McpController::BuildCodexConfigSnippet() const {
   return "[mcp_servers.horo_engine]\n"
          "url = \"" +
-         EndpointUrl() +
-         "\"\n\n"
-         "[mcp_servers.horo_engine.http_headers]\n"
-         "Authorization = \"Bearer " +
-         m_settingsDocument.settings.authToken + "\"\n";
+         EndpointUrl() + "\"\n";
 }
 
 void McpController::RefreshServerState(std::string* outError) {

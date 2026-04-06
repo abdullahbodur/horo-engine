@@ -7,7 +7,6 @@ Horo Engine includes a built-in HTTP MCP server for the editor.
 - Endpoint: `http://127.0.0.1:39281/mcp`
 - Transport: HTTP only
 - Bind address: loopback only
-- Auth: `Authorization: Bearer <token>`
 - Startup: when the editor is open and `MCP enabled` is checked in `File -> Settings...`
 
 User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPROFILE%\\.horo\\settings.json` on Windows.
@@ -19,7 +18,6 @@ User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPRO
     "transport": "http",
     "host": "127.0.0.1",
     "port": 39281,
-    "authToken": "your-generated-token",
     "autoStart": true
   }
 }
@@ -27,7 +25,7 @@ User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPRO
 
 ## Editor Surface
 
-- `File -> Settings...` manages enablement, port, token regeneration, and restart behavior.
+- `File -> Settings...` manages enablement, port, and restart behavior.
 - The bottom `MCP` tab shows runtime status, request counts, recent activity, and copy-ready config snippets.
 - The server automatically stops when the editor closes.
 
@@ -67,10 +65,7 @@ Example config:
   "mcpServers": {
     "horo-engine": {
       "type": "http",
-      "url": "http://127.0.0.1:39281/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN"
-      }
+      "url": "http://127.0.0.1:39281/mcp"
     }
   }
 }
@@ -89,12 +84,60 @@ Example config:
 ```toml
 [mcp_servers.horo_engine]
 url = "http://127.0.0.1:39281/mcp"
-
-[mcp_servers.horo_engine.http_headers]
-Authorization = "Bearer YOUR_TOKEN"
 ```
 
 Use either `~/.codex/config.toml` or a trusted project-scoped `.codex/config.toml`.
+
+## VS Code
+
+Official docs:
+
+- https://code.visualstudio.com/docs/copilot/customization/mcp-servers
+- https://code.visualstudio.com/docs/copilot/reference/mcp-configuration
+
+VS Code supports MCP natively and stores server definitions in `mcp.json`.
+
+### Workspace setup
+
+Create `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "horoEngine": {
+      "type": "http",
+      "url": "http://127.0.0.1:39281/mcp"
+    }
+  }
+}
+```
+
+### User setup
+
+1. Open the Command Palette.
+2. Run `MCP: Open User Configuration`.
+3. Add the same server entry to the user `mcp.json`.
+4. Save and restart the server if prompted.
+
+### Guided setup
+
+1. Run `MCP: Add Server`.
+2. Choose `Workspace` or `Global`.
+3. Choose `HTTP`.
+4. Enter `http://127.0.0.1:39281/mcp`.
+5. Trust and start the server.
+
+### CLI setup
+
+```bash
+code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.0.0.1:39281/mcp\"}"
+```
+
+### Notes
+
+- Workspace MCP config lives in `.vscode/mcp.json`
+- User MCP config lives in profile-scoped `mcp.json`
+- If Horo's port changes, update the VS Code MCP config and restart the server
 
 ## Token-minimal usage guidance
 

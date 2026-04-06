@@ -3,7 +3,6 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
-#include <random>
 #include <system_error>
 
 namespace Monolith {
@@ -85,20 +84,6 @@ fs::path ResolveMcpSettingsPath() {
   return ResolveMcpSettingsDirectory() / "settings.json";
 }
 
-std::string GenerateMcpAuthToken(size_t bytes) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::random_device rd;
-  std::uniform_int_distribution<int> dist(0, 255);
-  std::string token;
-  token.reserve(bytes * 2);
-  for (size_t i = 0; i < bytes; ++i) {
-    const int value = dist(rd);
-    token.push_back(kHex[(value >> 4) & 0xF]);
-    token.push_back(kHex[value & 0xF]);
-  }
-  return token;
-}
-
 McpSettingsDocument LoadMcpSettings() {
   McpSettingsDocument out;
   out.settings = DefaultMcpSettings();
@@ -133,7 +118,6 @@ McpSettingsDocument LoadMcpSettings() {
   out.settings.transport = NormalizeTransport(mcpJson.value("transport", out.settings.transport));
   out.settings.host = SanitizeHost(mcpJson.value("host", out.settings.host));
   out.settings.port = SanitizePort(mcpJson.value("port", out.settings.port));
-  out.settings.authToken = mcpJson.value("authToken", std::string());
   out.settings.autoStart = mcpJson.value("autoStart", out.settings.autoStart);
   return out;
 }
@@ -160,8 +144,8 @@ bool SaveMcpSettings(McpSettingsDocument* doc, std::string* outError) {
   mcpJson["transport"] = doc->settings.transport;
   mcpJson["host"] = doc->settings.host;
   mcpJson["port"] = doc->settings.port;
-  mcpJson["authToken"] = doc->settings.authToken;
   mcpJson["autoStart"] = doc->settings.autoStart;
+  mcpJson.erase("authToken");
   root["mcp"] = std::move(mcpJson);
 
   const fs::path dir = ResolveMcpSettingsDirectory();
