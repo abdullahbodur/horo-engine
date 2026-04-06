@@ -31,6 +31,8 @@ struct AssetMetadata {
   std::unordered_map<std::string, std::string> settings;
   std::vector<std::string> producedFiles;
   std::vector<AssetDependencyRecord> dependencies;
+  bool lastImportSucceeded = true;
+  std::string lastImportReason;
 };
 
 std::filesystem::path GetManagedAssetDirectory(const AssetDef& asset);

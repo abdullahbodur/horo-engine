@@ -3896,10 +3896,46 @@ void EditorLayer::DrawPropertiesPanel() {
         ImGui::TextDisabled("GUID");
         ImGui::TextWrapped("%s", assetIt->second.guid.c_str());
 
+        AssetMetadata assetMetadata;
+        std::string metadataError;
+        const bool hasAssetMetadata = LoadAssetMetadata(assetIt->second.guid, &assetMetadata, &metadataError);
+        if (hasAssetMetadata) {
+          if (!assetMetadata.importerId.empty()) {
+            ImGui::TextDisabled("Importer");
+            ImGui::TextWrapped("%s", assetMetadata.importerId.c_str());
+          }
+          if (!assetMetadata.sourcePath.empty()) {
+            ImGui::TextDisabled("Source");
+            ImGui::TextWrapped("%s", assetMetadata.sourcePath.c_str());
+          }
+          if (!assetMetadata.lastImportReason.empty()) {
+            ImGui::TextDisabled("Last rebuild reason");
+            ImGui::TextWrapped("%s", assetMetadata.lastImportReason.c_str());
+          }
+        }
+
         if (ImGui::Button("Deselect Asset", ImVec2(-1.0f, 0.0f))) {
           m_selectedAssetId.clear();
           ImGui::End();
           return;
+        }
+
+        if (hasAssetMetadata) {
+          if (ImGui::Button("Reimport Asset", ImVec2(-1.0f, 0.0f))) {
+            const AssetReimportResult reimportResult =
+                m_assetImportService.ReimportAssetWithDependents(&m_document,
+                                                                 assetIt->second.guid,
+                                                                 "Manual reimport from editor");
+            if (reimportResult.ok) {
+              m_document.dirty = true;
+              m_assetImportError.clear();
+              TriggerReload();
+            } else {
+              m_assetImportError = reimportResult.error;
+            }
+          }
+          if (!m_assetImportError.empty())
+            ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
         }
 
         ImGui::Spacing();

@@ -108,6 +108,8 @@ bool LoadAssetMetadata(const std::string& assetGuid,
   metadata.displayName = j.value("displayName", std::string());
   metadata.importerId = j.value("importerId", std::string());
   metadata.sourcePath = j.value("sourcePath", std::string());
+  metadata.lastImportSucceeded = j.value("lastImportSucceeded", true);
+  metadata.lastImportReason = j.value("lastImportReason", std::string());
 
   if (j.contains("settings") && j["settings"].is_object()) {
     for (const auto& item : j["settings"].items()) {
@@ -169,6 +171,9 @@ bool SaveAssetMetadata(const AssetMetadata& metadata, std::string* outError) {
     j["importerId"] = metadata.importerId;
   if (!metadata.sourcePath.empty())
     j["sourcePath"] = metadata.sourcePath;
+  j["lastImportSucceeded"] = metadata.lastImportSucceeded;
+  if (!metadata.lastImportReason.empty())
+    j["lastImportReason"] = metadata.lastImportReason;
 
   json settings = json::object();
   std::vector<std::string> settingKeys;
