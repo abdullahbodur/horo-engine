@@ -378,6 +378,7 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
 
   const json toolList = ProtocolRequest(protocol, "tools/list", json::object(), 3);
   REQUIRE(toolList["result"]["tools"].size() == 31);
+  REQUIRE(toolList["result"]["tools"][0]["name"] == "editor_search");
 
   const json resourceList = ProtocolRequest(protocol, "resources/list", json::object(), 4);
   REQUIRE(resourceList["result"]["resources"].size() == 10);
@@ -397,51 +398,54 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   const json getObject = CallTool(protocol, "editor.get_object", json{{"id", "obj_root"}}, 100);
   REQUIRE(getObject["result"]["structuredContent"]["id"] == "obj_root");
 
-  const json getObjectEdges = CallTool(protocol, "editor.get_object_edges", json{{"id", "obj_root"}}, 101);
+  const json getObjectSanitized = CallTool(protocol, "editor_get_object", json{{"id", "obj_root"}}, 101);
+  REQUIRE(getObjectSanitized["result"]["structuredContent"]["id"] == "obj_root");
+
+  const json getObjectEdges = CallTool(protocol, "editor.get_object_edges", json{{"id", "obj_root"}}, 102);
   REQUIRE(getObjectEdges["result"]["structuredContent"]["worldCorners"].size() == 8);
 
   const json listObjects =
-      CallTool(protocol, "editor.list_objects", json{{"type", "Prop"}, {"query", "obj"}, {"selectedOnly", false}}, 102);
+      CallTool(protocol, "editor.list_objects", json{{"type", "Prop"}, {"query", "obj"}, {"selectedOnly", false}}, 103);
   REQUIRE(listObjects["result"]["structuredContent"]["matchedObjects"] == 2);
 
   const json getObjects =
-      CallTool(protocol, "editor.get_objects", json{{"ids", json::array({"obj_root", "obj_child", "missing"})}}, 103);
+      CallTool(protocol, "editor.get_objects", json{{"ids", json::array({"obj_root", "obj_child", "missing"})}}, 104);
   REQUIRE(getObjects["result"]["structuredContent"]["objects"].size() == 2);
 
-  const json getChildren = CallTool(protocol, "editor.get_object_children", json{{"id", "obj_root"}}, 104);
+  const json getChildren = CallTool(protocol, "editor.get_object_children", json{{"id", "obj_root"}}, 105);
   REQUIRE(getChildren["result"]["structuredContent"]["childCount"] == 2);
 
-  const json getParent = CallTool(protocol, "editor.get_object_parent", json{{"id", "obj_child"}}, 105);
+  const json getParent = CallTool(protocol, "editor.get_object_parent", json{{"id", "obj_child"}}, 106);
   REQUIRE(getParent["result"]["structuredContent"]["parentId"] == "obj_root");
   REQUIRE(getParent["result"]["structuredContent"]["parent"]["id"] == "obj_root");
 
-  const json countObjects = CallTool(protocol, "editor.count_objects", json{{"type", "Prop"}, {"query", "obj"}}, 106);
+  const json countObjects = CallTool(protocol, "editor.count_objects", json{{"type", "Prop"}, {"query", "obj"}}, 107);
   REQUIRE(countObjects["result"]["structuredContent"]["count"] == 2);
 
-  const json search = CallTool(protocol, "editor.search", json{{"query", "hero"}, {"limit", 5}, {"scope", "all"}}, 107);
+  const json search = CallTool(protocol, "editor_search", json{{"query", "hero"}, {"limit", 5}, {"scope", "all"}}, 108);
   REQUIRE(search["result"]["structuredContent"]["assets"].size() == 1);
 
-  const json listAssets = CallTool(protocol, "editor.list_assets", json{{"query", ".obj"}, {"limit", 5}}, 108);
+  const json listAssets = CallTool(protocol, "editor.list_assets", json{{"query", ".obj"}, {"limit", 5}}, 109);
   REQUIRE(listAssets["result"]["structuredContent"]["matchedAssets"] == 2);
 
-  const json getAsset = CallTool(protocol, "editor.get_asset", json{{"id", "crate"}}, 109);
+  const json getAsset = CallTool(protocol, "editor.get_asset", json{{"id", "crate"}}, 110);
   REQUIRE(getAsset["result"]["structuredContent"]["id"] == "crate");
   REQUIRE(getAsset["result"]["structuredContent"]["objectReferenceCount"] == 1);
 
-  const json searchAssets = CallTool(protocol, "editor.search_assets", json{{"query", "hero"}, {"limit", 5}}, 110);
+  const json searchAssets = CallTool(protocol, "editor.search_assets", json{{"query", "hero"}, {"limit", 5}}, 111);
   REQUIRE(searchAssets["result"]["structuredContent"]["matchedAssets"] == 1);
 
-  const json countAssets = CallTool(protocol, "editor.count_assets", json{{"query", ".png"}}, 111);
+  const json countAssets = CallTool(protocol, "editor.count_assets", json{{"query", ".png"}}, 112);
   REQUIRE(countAssets["result"]["structuredContent"]["count"] == 2);
 
-  const json sceneStatus = CallTool(protocol, "editor.scene_status", json::object(), 112);
+  const json sceneStatus = CallTool(protocol, "editor.scene_status", json::object(), 113);
   REQUIRE(sceneStatus["result"]["structuredContent"]["sceneId"] == "scene_main");
 
-  const json sceneFile = CallTool(protocol, "editor.get_scene_file", json::object(), 113);
+  const json sceneFile = CallTool(protocol, "editor.get_scene_file", json::object(), 114);
   REQUIRE(sceneFile["result"]["structuredContent"]["filePath"] == "assets/scenes/main_scene.json");
   REQUIRE(sceneFile["result"]["structuredContent"]["dirty"].get<bool>());
 
-  const json searchConsole = CallTool(protocol, "editor.search_console", json{{"query", "exploded"}, {"limit", 5}}, 114);
+  const json searchConsole = CallTool(protocol, "editor.search_console", json{{"query", "exploded"}, {"limit", 5}}, 115);
   REQUIRE(searchConsole["result"]["structuredContent"]["matchedLines"] == 1);
 
   REQUIRE(activity.size() >= 20);

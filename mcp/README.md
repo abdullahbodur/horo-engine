@@ -78,6 +78,9 @@ Tools:
 
 The design is intentionally summary-first to keep token usage low.
 
+For client compatibility, `tools/list` exposes these tool ids with underscores instead of dots
+(for example `editor_search`). The server continues to accept the dotted aliases as well.
+
 ## MCP tab
 
 The bottom `MCP` tab is also the built-in debugger for the server:
