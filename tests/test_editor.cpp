@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "core/ProjectPath.h"
+#include "editor/EditorLayer.h"
 #include "editor/EditorSchema.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
@@ -53,6 +55,19 @@ static void WriteFile(const std::string& path, const std::string& content) {
     std::ofstream f(path);
     f << content;
 }
+
+struct ProjectPathGuard {
+    std::filesystem::path previousRoot;
+
+    explicit ProjectPathGuard(const std::filesystem::path& nextRoot)
+        : previousRoot(Monolith::ProjectPath::Root()) {
+        Monolith::ProjectPath::Init(nextRoot);
+    }
+
+    ~ProjectPathGuard() {
+        Monolith::ProjectPath::Init(previousRoot);
+    }
+};
 
 // ===========================================================================
 // EditorSchema
@@ -642,6 +657,103 @@ TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[edit
     REQUIRE(MeshTagFromImportedPath("").empty());
 }
 
+TEST_CASE("Editor MCP delete_asset removes managed imported asset folders", "[editor][mcp][filesystem]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_delete_asset_managed";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "models" / "crate");
+    WriteFile((projectRoot / "assets" / "models" / "crate" / "crate.obj").string(), "o crate\n");
+    WriteFile((projectRoot / "assets" / "models" / "crate" / "crate.png").string(), "png");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate/crate.obj", "1,1,1", "assets/models/crate/crate.png"};
+    SceneObject obj;
+    obj.id = "prop_1";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "crate"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["deletedManagedFiles"].get<bool>());
+    REQUIRE(result.data["clearedObjectReferences"] == 1);
+    REQUIRE(result.data["deletedAssetDirectory"] ==
+            (projectRoot / "assets" / "models" / "crate").generic_string());
+    REQUIRE(editor.GetDocument().assets.find("crate") == editor.GetDocument().assets.end());
+    REQUIRE(editor.GetDocument().objects[0].assetId.empty());
+    REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "crate"));
+}
+
+TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only registry entry",
+          "[editor][mcp][filesystem]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_delete_asset_manual";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "models");
+    WriteFile((projectRoot / "assets" / "models" / "crate.obj").string(), "o crate\n");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1,1,1", ""};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "crate"}});
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(result.data["deletedManagedFiles"].get<bool>());
+    REQUIRE_FALSE(result.data.contains("deletedAssetDirectory"));
+    REQUIRE(editor.GetDocument().assets.empty());
+    REQUIRE(fs::exists(projectRoot / "assets" / "models" / "crate.obj"));
+}
+
+TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "[editor][mcp][assets]") {
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate/crate.obj", "1.0000,2.0000,3.0000", ""};
+
+    SceneObject parent;
+    parent.id = "parent_panel";
+    parent.type = SceneObjectType::Panel;
+    doc.objects.push_back(parent);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto childResult = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{{"assetId", "crate"}, {"parentId", "parent_panel"}, {"id", "child_prop"}});
+    REQUIRE(childResult.ok);
+    REQUIRE(childResult.data["created"]["id"] == "child_prop");
+    REQUIRE(childResult.data["created"]["parentId"] == "parent_panel");
+
+    const auto rootResult = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{{"assetId", "crate"},
+                       {"id", "root_prop"},
+                       {"position", nlohmann::json::array({4.0f, 5.0f, 6.0f})}});
+    REQUIRE(rootResult.ok);
+    REQUIRE(rootResult.data["created"]["id"] == "root_prop");
+    REQUIRE_FALSE(rootResult.data["created"].contains("parentId"));
+    REQUIRE(rootResult.data["created"]["position"][0].get<float>() == Approx(4.0f));
+    REQUIRE(rootResult.data["created"]["position"][1].get<float>() == Approx(5.0f));
+    REQUIRE(rootResult.data["created"]["position"][2].get<float>() == Approx(6.0f));
+
+    const SceneDocument& updated = editor.GetDocument();
+    REQUIRE(updated.objects.size() == 3);
+    REQUIRE(updated.objects[1].props.at("parentId") == "parent_panel");
+    REQUIRE(updated.objects[2].position.x == Approx(4.0f));
+    REQUIRE(updated.objects[2].position.y == Approx(5.0f));
+    REQUIRE(updated.objects[2].position.z == Approx(6.0f));
+}
+
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
     REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
@@ -1125,6 +1237,38 @@ TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]")
 
     Vec3 hit = Vec3::Zero();
     REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
+}
+
+TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdrop]") {
+    Ray ray;
+    ray.origin = {0.0f, 5.0f, 0.0f};
+    ray.direction = {0.0f, -1.0f, 0.0f};
+
+    RayAabbHit hit;
+    REQUIRE(RayVsAABBHit(ray, Vec3::Zero(), {1.0f, 1.0f, 1.0f}, &hit));
+    REQUIRE(hit.distance == Approx(4.0f));
+    REQUIRE(hit.point.x == Approx(0.0f));
+    REQUIRE(hit.point.y == Approx(1.0f));
+    REQUIRE(hit.point.z == Approx(0.0f));
+    REQUIRE(hit.normal.x == Approx(0.0f));
+    REQUIRE(hit.normal.y == Approx(1.0f));
+    REQUIRE(hit.normal.z == Approx(0.0f));
+}
+
+TEST_CASE("RayVsAABBHit reports side-face hit point and normal", "[editor][dragdrop]") {
+    Ray ray;
+    ray.origin = {-5.0f, 0.25f, 0.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f};
+
+    RayAabbHit hit;
+    REQUIRE(RayVsAABBHit(ray, Vec3::Zero(), {1.0f, 2.0f, 1.0f}, &hit));
+    REQUIRE(hit.distance == Approx(4.0f));
+    REQUIRE(hit.point.x == Approx(-1.0f));
+    REQUIRE(hit.point.y == Approx(0.25f));
+    REQUIRE(hit.point.z == Approx(0.0f));
+    REQUIRE(hit.normal.x == Approx(-1.0f));
+    REQUIRE(hit.normal.y == Approx(0.0f));
+    REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
 TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {

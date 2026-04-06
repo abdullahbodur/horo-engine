@@ -42,6 +42,7 @@ class SceneReferenceRuntime {
   SceneRuntimeOperationResult LoadDocument(const Editor::SceneDocument& document);
   SceneRuntimeOperationResult ReloadDocument(const Editor::SceneDocument& document);
   SceneRuntimeOperationResult Unload();
+  bool UpdateLiveLight(const Editor::SceneObject& object, std::string* error = nullptr);
 
   void SetBehaviorFactory(BehaviorFactory factory) { m_behaviorFactory = std::move(factory); }
   void SetPropEntityCreatedCallback(PropEntityCreatedCallback callback) {
@@ -60,6 +61,8 @@ class SceneReferenceRuntime {
   Scene* m_scene = nullptr;
   SceneRuntimeCoordinator m_coordinator;
   std::vector<Light> m_lights;
+  std::vector<std::string> m_lightObjectIds;
+  std::vector<std::string> m_pendingLightObjectIds;
   std::optional<RuntimeSceneCamera> m_sceneCamera;
   std::vector<SceneReferencePanel> m_panels;
   SceneReferenceStats m_stats;

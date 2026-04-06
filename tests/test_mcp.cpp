@@ -12,6 +12,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
 #include "editor/SceneSerializer.h"
 
@@ -104,6 +105,18 @@ struct EnvGuard {
       setenv("HOME", oldHome.c_str(), 1);
 #endif
     std::filesystem::remove_all(tempHome);
+  }
+};
+
+struct ProjectRootGuard {
+  std::filesystem::path previousRoot;
+
+  explicit ProjectRootGuard(const std::filesystem::path& nextRoot) : previousRoot(Monolith::ProjectPath::Root()) {
+    Monolith::ProjectPath::Init(nextRoot);
+  }
+
+  ~ProjectRootGuard() {
+    Monolith::ProjectPath::Init(previousRoot);
   }
 };
 
@@ -638,6 +651,49 @@ TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk", "[mc
   camera = FindSceneObject(&reloadedDoc, "cam_000");
   REQUIRE(camera != nullptr);
   REQUIRE(camera->props.at("parentId") == "obj_000");
+}
+
+TEST_CASE("Editor MCP delete_asset reports managed file deletion details", "[mcp][editor]") {
+  namespace fs = std::filesystem;
+
+  EnvGuard env("horo_editor_mcp_delete_asset");
+  const fs::path projectRoot = env.tempHome / "project";
+  fs::create_directories(projectRoot / "assets" / "models" / "stone");
+  {
+    std::ofstream mesh(projectRoot / "assets" / "models" / "stone" / "stone.obj");
+    mesh << "o stone\n";
+  }
+  {
+    std::ofstream albedo(projectRoot / "assets" / "models" / "stone" / "stone.png");
+    albedo << "png";
+  }
+  ProjectRootGuard projectRootGuard(projectRoot);
+
+  const fs::path scenePath = projectRoot / "assets" / "scenes" / "world.json";
+  fs::create_directories(scenePath.parent_path());
+
+  SceneDocument doc;
+  doc.filePath = scenePath.string();
+  doc.assets["stone"] = AssetDef{"assets/models/stone/stone.obj", "1,1,1", "assets/models/stone/stone.png"};
+  SceneObject object;
+  object.id = "prop_stone";
+  object.type = SceneObjectType::Prop;
+  object.assetId = "stone";
+  doc.objects.push_back(object);
+
+  EditorLayer editor;
+  editor.LoadDocument(doc);
+
+  const McpCommandResult removeAsset = editor.ExecuteMcpCommand("editor.delete_asset", json{{"id", "stone"}});
+  REQUIRE(removeAsset.ok);
+  REQUIRE(removeAsset.data["deletedAssetId"] == "stone");
+  REQUIRE(removeAsset.data["clearedObjectReferences"] == 1);
+  REQUIRE(removeAsset.data["deletedManagedFiles"].get<bool>());
+  REQUIRE(removeAsset.data["deletedAssetDirectory"] ==
+          (projectRoot / "assets" / "models" / "stone").generic_string());
+  REQUIRE(editor.GetDocument().assets.find("stone") == editor.GetDocument().assets.end());
+  REQUIRE(editor.GetDocument().objects[0].assetId.empty());
+  REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "stone"));
 }
 
 TEST_CASE("McpProtocol dispatches every write tool and serializes success and failure", "[mcp][protocol]") {

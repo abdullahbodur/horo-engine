@@ -208,3 +208,49 @@ TEST_CASE("SceneReferenceRuntime keeps active scene on build failure and does no
   REQUIRE(runtime.GetCoordinator().GetCurrentDefinition() != nullptr);
   REQUIRE(runtime.GetCoordinator().GetCurrentDefinition()->rooms[0].id == "scene_valid");
 }
+
+TEST_CASE("SceneReferenceRuntime updates live light position and props without reload",
+          "[scene][reference-runtime]") {
+  Scene scene;
+  SceneReferenceRuntime runtime(&scene);
+
+  SceneDocument document;
+  document.sceneId = "scene_live_light";
+  SceneObject light;
+  light.id = "light_live";
+  light.type = SceneObjectType::Light;
+  light.position = {1.0f, 2.0f, 3.0f};
+  light.yaw = 15.0f;
+  light.pitch = -10.0f;
+  light.props["intensity"] = "1.5000";
+  light.props["color"] = "1.0000,0.8000,0.6000";
+  light.props["radius"] = "8.0000";
+  document.objects.push_back(light);
+
+  const SceneRuntimeOperationResult load = runtime.LoadDocument(document);
+  REQUIRE(load.ok);
+  REQUIRE(runtime.GetLights().size() == 1);
+  REQUIRE(runtime.GetLights()[0].position.x == Approx(1.0f));
+  REQUIRE(runtime.GetLights()[0].intensity == Approx(1.5f));
+  REQUIRE(runtime.GetLights()[0].radius == Approx(8.0f));
+
+  SceneObject liveUpdate = light;
+  liveUpdate.position = {4.0f, 5.0f, 6.0f};
+  liveUpdate.props["intensity"] = "2.7500";
+  liveUpdate.props["color"] = "0.2000,0.4000,1.0000";
+  liveUpdate.props["radius"] = "12.5000";
+
+  std::string error;
+  REQUIRE(runtime.UpdateLiveLight(liveUpdate, &error));
+  REQUIRE(error.empty());
+  REQUIRE(runtime.GetCoordinator().IsActive());
+  REQUIRE(runtime.GetLights().size() == 1);
+  REQUIRE(runtime.GetLights()[0].position.x == Approx(4.0f));
+  REQUIRE(runtime.GetLights()[0].position.y == Approx(5.0f));
+  REQUIRE(runtime.GetLights()[0].position.z == Approx(6.0f));
+  REQUIRE(runtime.GetLights()[0].intensity == Approx(2.75f));
+  REQUIRE(runtime.GetLights()[0].radius == Approx(12.5f));
+  REQUIRE(runtime.GetLights()[0].color.x == Approx(0.2f));
+  REQUIRE(runtime.GetLights()[0].color.y == Approx(0.4f));
+  REQUIRE(runtime.GetLights()[0].color.z == Approx(1.0f));
+}

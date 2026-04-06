@@ -118,6 +118,46 @@ bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Ve
   return true;
 }
 
+Vec3 ResolveObjectPlacementHalfExtents(const SceneObject& obj) {
+  Vec3 assetRenderScale = Vec3::One();
+  const auto assetScaleIt = obj.props.find("_assetRenderScale");
+  if (assetScaleIt != obj.props.end())
+    TryParseVec3Csv(assetScaleIt->second, &assetRenderScale);
+
+  return {std::max(std::abs(obj.scale.x * assetRenderScale.x), 0.01f),
+          std::max(std::abs(obj.scale.y * assetRenderScale.y), 0.01f),
+          std::max(std::abs(obj.scale.z * assetRenderScale.z), 0.01f)};
+}
+
+float ProjectHalfExtentOntoNormal(const Vec3& halfExtents, const Vec3& normal) {
+  return std::abs(normal.x) * halfExtents.x + std::abs(normal.y) * halfExtents.y +
+         std::abs(normal.z) * halfExtents.z;
+}
+
+bool TryGetPlacementSurfaceBounds(Registry* liveRegistry,
+                                  const SceneObject& obj,
+                                  Vec3* outCenter,
+                                  Vec3* outHalf) {
+  if (!outCenter || !outHalf)
+    return false;
+  if (obj.type != SceneObjectType::Panel && obj.type != SceneObjectType::Prop)
+    return false;
+
+  Vec3 center = obj.position;
+  Vec3 half = {std::max(std::abs(obj.scale.x), 0.25f),
+               std::max(std::abs(obj.scale.y), 0.25f),
+               std::max(std::abs(obj.scale.z), 0.25f)};
+  if (liveRegistry && TryPropWorldAabb(*liveRegistry, obj, center, half)) {
+    half.x = std::max(std::abs(half.x), 0.25f);
+    half.y = std::max(std::abs(half.y), 0.25f);
+    half.z = std::max(std::abs(half.z), 0.25f);
+  }
+
+  *outCenter = center;
+  *outHalf = half;
+  return true;
+}
+
 static const std::string kEmptyParentId;
 
 static const std::string& GetParentId(const SceneObject& obj) {
@@ -305,8 +345,9 @@ static std::filesystem::path ResolveProjectRelativeOrAbsolutePath(const std::str
 static std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
   namespace fs = std::filesystem;
   const fs::path root = ProjectPath::Root();
-  const std::array<fs::path, 3> candidates = {
+  const std::array<fs::path, 4> candidates = {
       root / "engine" / "renderer" / "shaders" / fileName,
+      root.parent_path() / "horo-engine" / "renderer" / "shaders" / fileName,
       root / "horo-engine" / "renderer" / "shaders" / fileName,
       root / "renderer" / "shaders" / fileName,
   };
@@ -1027,6 +1068,80 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
   return (fs::path("assets/models") / folderName / src.filename()).generic_string();
 }
 
+static bool IsPathWithinDirectory(const std::filesystem::path& path,
+                                  const std::filesystem::path& directory) {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  const fs::path normPath = fs::weakly_canonical(path, ec);
+  if (ec)
+    return false;
+  ec.clear();
+  const fs::path normDir = fs::weakly_canonical(directory, ec);
+  if (ec)
+    return false;
+
+  auto dirIt = normDir.begin();
+  auto pathIt = normPath.begin();
+  for (; dirIt != normDir.end() && pathIt != normPath.end(); ++dirIt, ++pathIt) {
+    if (*dirIt != *pathIt)
+      return false;
+  }
+  return dirIt == normDir.end();
+}
+
+static std::filesystem::path ResolveProjectAssetPath(const std::string& rawPath) {
+  namespace fs = std::filesystem;
+  if (rawPath.empty())
+    return {};
+
+  const fs::path path(rawPath);
+  if (path.is_absolute())
+    return {};
+
+  std::error_code ec;
+  const fs::path root = fs::weakly_canonical(ProjectPath::Root(), ec);
+  if (ec)
+    return {};
+
+  return fs::weakly_canonical(root / path, ec);
+}
+
+static std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef& asset) {
+  namespace fs = std::filesystem;
+  if (asset.mesh.empty())
+    return {};
+
+  const fs::path meshPath = ResolveProjectAssetPath(asset.mesh);
+  if (meshPath.empty())
+    return {};
+
+  std::error_code ec;
+  const fs::path modelsRoot = fs::weakly_canonical(ProjectPath::Root() / "assets" / "models", ec);
+  if (ec || !IsPathWithinDirectory(meshPath, modelsRoot))
+    return {};
+
+  const fs::path relativeMesh = fs::relative(meshPath, modelsRoot, ec);
+  if (ec || relativeMesh.empty())
+    return {};
+
+  auto relIt = relativeMesh.begin();
+  if (relIt == relativeMesh.end())
+    return {};
+  const fs::path folder = *relIt;
+  ++relIt;
+  if (relIt == relativeMesh.end() || folder.empty() || folder == "." || folder == "..")
+    return {};
+
+  const fs::path managedDir = modelsRoot / folder;
+  if (!asset.albedoMap.empty()) {
+    const fs::path albedoPath = ResolveProjectAssetPath(asset.albedoMap);
+    if (albedoPath.empty() || !IsPathWithinDirectory(albedoPath, managedDir))
+      return {};
+  }
+
+  return managedDir;
+}
+
 }  // namespace
 
 // ---- Lifecycle ---------------------------------------------------------------
@@ -1377,32 +1492,31 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       m_prevCopyRef = currCopyRef;
 
       // ---- Gizmo mode hotkeys (W/E/R) ----------------------------------------
+      const bool currW = glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS;
+      const bool currE = glfwGetKey(m_window, GLFW_KEY_E) == GLFW_PRESS;
+      const bool currR = glfwGetKey(m_window, GLFW_KEY_R) == GLFW_PRESS;
       if (!io.WantTextInput && !ImGui::IsAnyItemActive()) {
         const int gizmoIdx = PrimaryIdx();
-        bool currW = glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS;
-        bool currE = glfwGetKey(m_window, GLFW_KEY_E) == GLFW_PRESS;
-        bool currR = glfwGetKey(m_window, GLFW_KEY_R) == GLFW_PRESS;
-
         if (gizmoIdx >= 0 &&
-            gizmoIdx < static_cast<int>(m_document.objects.size())) {
+            gizmoIdx < static_cast<int>(m_document.objects.size()) &&
+            m_gizmo.GetDragAxis() == GizmoAxis::None) {
           const auto& gizmoObj = m_document.objects[gizmoIdx];
           Quaternion  gizmoRot = Quaternion::FromEuler(ToRadians(gizmoObj.pitch),
                                                        ToRadians(gizmoObj.yaw),
                                                        ToRadians(gizmoObj.roll));
-          if (currW && !m_prevGizmoW)
-            m_gizmo.Activate(GizmoMode::Translate, gizmoObj.position, gizmoRot,
-                             gizmoObj.scale);
-          if (currE && !m_prevGizmoE)
-            m_gizmo.Activate(GizmoMode::Rotate, gizmoObj.position, gizmoRot,
-                             gizmoObj.scale);
-          if (currR && !m_prevGizmoR)
-            m_gizmo.Activate(GizmoMode::Scale, gizmoObj.position, gizmoRot,
-                             gizmoObj.scale);
+
+          if (currW && (!m_prevGizmoW || m_gizmo.GetMode() != GizmoMode::Translate)) {
+            m_gizmo.Activate(GizmoMode::Translate, gizmoObj.position, gizmoRot, gizmoObj.scale);
+          } else if (currE && (!m_prevGizmoE || m_gizmo.GetMode() != GizmoMode::Rotate)) {
+            m_gizmo.Activate(GizmoMode::Rotate, gizmoObj.position, gizmoRot, gizmoObj.scale);
+          } else if (currR && (!m_prevGizmoR || m_gizmo.GetMode() != GizmoMode::Scale)) {
+            m_gizmo.Activate(GizmoMode::Scale, gizmoObj.position, gizmoRot, gizmoObj.scale);
+          }
         }
-        m_prevGizmoW = currW;
-        m_prevGizmoE = currE;
-        m_prevGizmoR = currR;
       }
+      m_prevGizmoW = currW;
+      m_prevGizmoE = currE;
+      m_prevGizmoR = currR;
 
       // Sync gizmo to primary selected object each frame
       if (m_gizmo.IsActive()) {
@@ -2856,6 +2970,12 @@ void EditorLayer::DrawSceneHeader(SceneDocument& doc, bool isPrimary, int additi
         }
       }
     }
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+      const std::string assetId(static_cast<const char*>(payload->Data));
+      std::string createError;
+      if (!CreateObjectFromAsset(assetId, std::string(), nullptr, nullptr, nullptr, &createError))
+        LOG_WARN("[Editor] Hierarchy root asset drop failed: %s", createError.c_str());
+    }
     ImGui::EndDragDropTarget();
   }
 
@@ -2918,6 +3038,16 @@ void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
           ImGui::TextDisabled("  > %s", obj.assetId.c_str());
         }
         ImGui::EndGroup();
+      }
+
+      if (isPrimary && ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+          const std::string assetId(static_cast<const char*>(payload->Data));
+          std::string createError;
+          if (!CreateObjectFromAsset(assetId, obj.id, nullptr, nullptr, nullptr, &createError))
+            LOG_WARN("[Editor] Hierarchy child asset drop failed: %s", createError.c_str());
+        }
+        ImGui::EndDragDropTarget();
       }
 
       if (ImGui::BeginPopupContextItem("obj_ctx")) {
@@ -3034,6 +3164,12 @@ void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
               }
             }
           }
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+            const std::string assetId(static_cast<const char*>(payload->Data));
+            std::string createError;
+            if (!CreateObjectFromAsset(assetId, obj.id, nullptr, nullptr, nullptr, &createError))
+              LOG_WARN("[Editor] Hierarchy child asset drop failed: %s", createError.c_str());
+          }
           ImGui::EndDragDropTarget();
         }
 
@@ -3086,6 +3222,21 @@ void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
       ImGui::TextDisabled("No objects in scene");
       if (isPrimary)
         ImGui::TextDisabled("Tip: right-click or use Assets panel.");
+    }
+
+    if (isPrimary) {
+      const ImVec2 avail = ImGui::GetContentRegionAvail();
+      ImGui::InvisibleButton("##hierarchy_root_asset_drop",
+                             ImVec2(std::max(avail.x, 1.0f), 24.0f));
+      if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+          const std::string assetId(static_cast<const char*>(payload->Data));
+          std::string createError;
+          if (!CreateObjectFromAsset(assetId, std::string(), nullptr, nullptr, nullptr, &createError))
+            LOG_WARN("[Editor] Hierarchy root asset drop failed: %s", createError.c_str());
+        }
+        ImGui::EndDragDropTarget();
+      }
     }
 
     // Runtime entities: ECS entities that have no corresponding editor object (primary only)
@@ -3677,36 +3828,49 @@ void EditorLayer::DrawDeleteConfirmModals() {
         m_document.assets.find(m_pendingDeleteAssetId) == m_document.assets.end()) {
       m_confirmDeleteAssetOpen = false;
       m_pendingDeleteAssetId.clear();
+      m_pendingDeleteAssetError.clear();
       ImGui::CloseCurrentPopup();
       ImGui::EndPopup();
       return;
     }
 
+    const std::filesystem::path managedDirectory =
+        GetManagedImportedAssetDirectory(m_document.assets.at(m_pendingDeleteAssetId));
+
     ImGui::Text("Delete asset '%s'?", m_pendingDeleteAssetId.c_str());
     ImGui::TextDisabled("All object bindings to this asset will be cleared.");
+    if (!managedDirectory.empty()) {
+      ImGui::TextDisabled("Imported project files will also be removed:");
+      ImGui::TextWrapped("%s", managedDirectory.generic_string().c_str());
+    } else {
+      ImGui::TextDisabled("No managed imported asset folder was detected; only the asset record will be removed.");
+    }
+    if (!m_pendingDeleteAssetError.empty()) {
+      ImGui::Spacing();
+      ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 360.0f);
+      ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_pendingDeleteAssetError.c_str());
+      ImGui::PopTextWrapPos();
+    }
     ImGui::Separator();
 
     if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
       m_confirmDeleteAssetOpen = false;
       m_pendingDeleteAssetId.clear();
+      m_pendingDeleteAssetError.clear();
       ImGui::CloseCurrentPopup();
     }
 
     ImGui::SameLine();
     if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
-      for (auto& obj : m_document.objects) {
-        if (obj.assetId == m_pendingDeleteAssetId)
-          obj.assetId.clear();
+      const AssetDeleteResult deleteResult = DeleteAssetDefinition(m_pendingDeleteAssetId);
+      if (!deleteResult.ok) {
+        m_pendingDeleteAssetError = deleteResult.error;
+      } else {
+        m_confirmDeleteAssetOpen = false;
+        m_pendingDeleteAssetId.clear();
+        m_pendingDeleteAssetError.clear();
+        ImGui::CloseCurrentPopup();
       }
-      if (m_selectedAssetId == m_pendingDeleteAssetId)
-        m_selectedAssetId.clear();
-      m_document.assets.erase(m_pendingDeleteAssetId);
-      m_document.dirty = true;
-      TriggerReload();
-
-      m_confirmDeleteAssetOpen = false;
-      m_pendingDeleteAssetId.clear();
-      ImGui::CloseCurrentPopup();
     }
 
     ImGui::EndPopup();
@@ -4119,6 +4283,8 @@ void EditorLayer::DrawPropertiesPanel() {
           if (ImGui::InputText(fd.label.c_str(), buf, sizeof(buf))) {
             val = buf;
             m_document.dirty = true;
+            if (obj.type == SceneObjectType::Light && m_transformCb)
+              m_transformCb(obj);
           }
           break;
         }
@@ -4129,6 +4295,8 @@ void EditorLayer::DrawPropertiesPanel() {
             std::snprintf(tmp, sizeof(tmp), "%.4f", f);
             val = tmp;
             m_document.dirty = true;
+            if (obj.type == SceneObjectType::Light && m_transformCb)
+              m_transformCb(obj);
           }
           break;
         }
@@ -4137,6 +4305,8 @@ void EditorLayer::DrawPropertiesPanel() {
           if (ImGui::Checkbox(fd.label.c_str(), &b)) {
             val = b ? "true" : "false";
             m_document.dirty = true;
+            if (obj.type == SceneObjectType::Light && m_transformCb)
+              m_transformCb(obj);
           }
           break;
         }
@@ -4159,6 +4329,8 @@ void EditorLayer::DrawPropertiesPanel() {
           if (ImGui::Combo(fd.label.c_str(), &cur, items.c_str())) {
             val = fd.options[static_cast<size_t>(cur)];
             m_document.dirty = true;
+            if (obj.type == SceneObjectType::Light && m_transformCb)
+              m_transformCb(obj);
           }
           break;
         }
@@ -4183,6 +4355,8 @@ void EditorLayer::DrawPropertiesPanel() {
             std::snprintf(tmp, sizeof(tmp), "%.4f,%.4f,%.4f", col[0], col[1], col[2]);
             val = tmp;
             m_document.dirty = true;
+            if (obj.type == SceneObjectType::Light && m_transformCb)
+              m_transformCb(obj);
           }
           break;
         }
@@ -4739,6 +4913,9 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     out["pitch"] = object.pitch;
     out["roll"] = object.roll;
     out["assetId"] = object.assetId;
+    const auto parentIt = object.props.find("parentId");
+    if (parentIt != object.props.end() && !parentIt->second.empty())
+      out["parentId"] = parentIt->second;
     return out;
   };
 
@@ -4827,35 +5004,35 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
 
   if (toolName == "editor.create_object_from_asset") {
     const std::string assetId = arguments.value("assetId", std::string());
-    const auto assetIt = m_document.assets.find(assetId);
-    if (assetId.empty() || assetIt == m_document.assets.end())
-      return Mcp::McpCommandResult{false, json::object(), "Asset not found."};
-
-    SceneObject object = MakeObjectFromAsset(m_document, assetId, m_schema);
-    object.id = arguments.value("id", std::string());
-    if (object.id.empty())
-      object.id = GenerateId(m_document);
-    if (IsReservedObjectId(m_document, object.id))
-      return Mcp::McpCommandResult{false, json::object(), "Object id already exists."};
-    if (arguments.contains("position") && !parseVec3(arguments["position"], &object.position))
+    Vec3 position = Vec3::Zero();
+    const Vec3* positionPtr = nullptr;
+    if (arguments.contains("position") && !parseVec3(arguments["position"], &position))
       return Mcp::McpCommandResult{false, json::object(), "position must be [x,y,z]."};
+    if (arguments.contains("position"))
+      positionPtr = &position;
+
+    const std::string requestedId = arguments.value("id", std::string());
+    const std::string parentId = arguments.value("parentId", std::string());
+    SceneObject createdObject;
+    std::string createError;
+    if (!CreateObjectFromAsset(assetId,
+                               parentId,
+                               positionPtr,
+                               requestedId.empty() ? nullptr : &requestedId,
+                               &createdObject,
+                               &createError)) {
+      return Mcp::McpCommandResult{false, json::object(), createError};
+    }
+    SceneObject& object = m_document.objects.back();
     object.yaw = arguments.value("yaw", object.yaw);
     object.pitch = arguments.value("pitch", object.pitch);
     object.roll = arguments.value("roll", object.roll);
-    const std::string parentId = arguments.value("parentId", std::string());
-    if (!parentId.empty()) {
-      if (findIndexById(parentId) < 0)
-        return Mcp::McpCommandResult{false, json::object(), "Parent object not found."};
-      object.props["parentId"] = parentId;
-    }
-
-    m_document.objects.push_back(std::move(object));
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-    m_selectedAssetId = assetId;
-    m_document.dirty = true;
+    if (m_transformCb)
+      m_transformCb(object);
     TriggerReload();
+
     return Mcp::McpCommandResult{true,
-                                 json{{"created", summarizeObject(m_document.objects.back())}},
+                                 json{{"created", summarizeObject(object)}},
                                  std::string()};
   }
 
@@ -5026,24 +5203,17 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
 
   if (toolName == "editor.delete_asset") {
     const std::string assetId = arguments.value("id", std::string());
-    auto it = m_document.assets.find(assetId);
-    if (it == m_document.assets.end())
-      return Mcp::McpCommandResult{false, json::object(), "Asset not found."};
-    int clearedReferences = 0;
-    for (SceneObject& object : m_document.objects) {
-      if (object.assetId == assetId) {
-        object.assetId.clear();
-        ++clearedReferences;
-      }
-    }
-    if (m_selectedAssetId == assetId)
-      m_selectedAssetId.clear();
-    m_document.assets.erase(it);
-    m_document.dirty = true;
-    TriggerReload();
+    const AssetDeleteResult deleteResult = DeleteAssetDefinition(assetId);
+    if (!deleteResult.ok)
+      return Mcp::McpCommandResult{false, json::object(), deleteResult.error};
+
+    json payload{{"deletedAssetId", assetId},
+                 {"clearedObjectReferences", deleteResult.clearedReferences},
+                 {"deletedManagedFiles", deleteResult.deletedManagedFiles}};
+    if (!deleteResult.deletedAssetDirectory.empty())
+      payload["deletedAssetDirectory"] = deleteResult.deletedAssetDirectory;
     return Mcp::McpCommandResult{true,
-                                 json{{"deletedAssetId", assetId},
-                                      {"clearedObjectReferences", clearedReferences}},
+                                 std::move(payload),
                                  std::string()};
   }
 
@@ -5114,6 +5284,45 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   }
 }
 
+EditorLayer::AssetDeleteResult EditorLayer::DeleteAssetDefinition(const std::string& assetId) {
+  AssetDeleteResult result;
+  auto it = m_document.assets.find(assetId);
+  if (it == m_document.assets.end()) {
+    result.error = "Asset not found.";
+    return result;
+  }
+
+  const std::filesystem::path managedDirectory = GetManagedImportedAssetDirectory(it->second);
+  if (!managedDirectory.empty()) {
+    std::error_code ec;
+    const bool existedBeforeDelete = std::filesystem::exists(managedDirectory, ec) && !ec;
+    ec.clear();
+    std::filesystem::remove_all(managedDirectory, ec);
+    if (ec) {
+      result.error = "Failed to delete imported asset files: " + ec.message();
+      return result;
+    }
+    result.deletedManagedFiles = existedBeforeDelete;
+    result.deletedAssetDirectory = managedDirectory.generic_string();
+  }
+
+  for (SceneObject& object : m_document.objects) {
+    if (object.assetId == assetId) {
+      object.assetId.clear();
+      ++result.clearedReferences;
+    }
+  }
+  if (m_selectedAssetId == assetId)
+    m_selectedAssetId.clear();
+
+  m_document.assets.erase(it);
+  m_document.dirty = true;
+  TriggerReload();
+
+  result.ok = true;
+  return result;
+}
+
 void EditorLayer::DiscardUnsavedChanges() {
   if (!m_document.dirty)
     return;
@@ -5139,6 +5348,7 @@ void EditorLayer::RequestDeleteAsset(const std::string& assetId) {
     return;
 
   m_pendingDeleteAssetId = assetId;
+  m_pendingDeleteAssetError.clear();
   m_confirmDeleteAssetOpen = true;
 }
 
@@ -5172,17 +5382,100 @@ void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
 }
 
 void EditorLayer::AddObjectFromSelectedAsset(const std::string& parentId) {
-  const auto it = m_document.assets.find(m_selectedAssetId);
-  if (m_selectedAssetId.empty() || it == m_document.assets.end())
-    return;
+  CreateObjectFromAsset(m_selectedAssetId, parentId);
+}
 
-  SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
+bool EditorLayer::CreateObjectFromAsset(const std::string& assetId,
+                                        const std::string& parentId,
+                                        const Vec3* worldPosition,
+                                        const std::string* preferredId,
+                                        SceneObject* outCreated,
+                                        std::string* outError) {
+  if (outError)
+    outError->clear();
+
+  if (assetId.empty() || m_document.assets.find(assetId) == m_document.assets.end()) {
+    if (outError)
+      *outError = "Asset not found.";
+    return false;
+  }
+  if (!parentId.empty() && FindObjectIndexById(m_document, parentId) < 0) {
+    if (outError)
+      *outError = "Parent object not found.";
+    return false;
+  }
+
+  SceneObject object = MakeObjectFromAsset(m_document, assetId, m_schema);
+  if (preferredId && !preferredId->empty()) {
+    if (IsReservedObjectId(m_document, *preferredId)) {
+      if (outError)
+        *outError = "Object id already exists.";
+      return false;
+    }
+    object.id = *preferredId;
+  }
   if (!parentId.empty())
-    obj.props["parentId"] = parentId;
-  m_document.objects.push_back(std::move(obj));
+    object.props["parentId"] = parentId;
+  if (worldPosition)
+    object.position = *worldPosition;
+
+  m_document.objects.push_back(object);
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_selectedAssetId = assetId;
   m_document.dirty = true;
   TriggerReload();
+
+  if (outCreated)
+    *outCreated = m_document.objects.back();
+  return true;
+}
+
+bool EditorLayer::TryBuildViewportDropPosition(const Camera& cam,
+                                               int screenW,
+                                               int screenH,
+                                               const std::string& assetId,
+                                               Vec3* outPosition) const {
+  if (!outPosition)
+    return false;
+
+  double mx = 0.0;
+  double my = 0.0;
+  glfwGetCursorPos(m_window, &mx, &my);
+  const Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my), screenW, screenH, cam);
+
+  const SceneObject droppedObject = MakeObjectFromAsset(m_document, assetId, m_schema);
+  const Vec3 droppedHalf = ResolveObjectPlacementHalfExtents(droppedObject);
+
+  RayAabbHit bestHit;
+  bool hasSurfaceHit = false;
+  for (const SceneObject& object : m_document.objects) {
+    Vec3 center = Vec3::Zero();
+    Vec3 half = Vec3::Zero();
+    if (!TryGetPlacementSurfaceBounds(m_liveRegistry, object, &center, &half))
+      continue;
+
+    RayAabbHit hit;
+    if (!RayVsAABBHit(ray, center, half, &hit))
+      continue;
+    if (!hasSurfaceHit || hit.distance < bestHit.distance) {
+      bestHit = hit;
+      hasSurfaceHit = true;
+    }
+  }
+
+  if (hasSurfaceHit) {
+    *outPosition =
+        bestHit.point + bestHit.normal * ProjectHalfExtentOntoNormal(droppedHalf, bestHit.normal);
+    return true;
+  }
+
+  Vec3 groundHit = Vec3::Zero();
+  if (!TryIntersectGroundPlane(ray, &groundHit))
+    return false;
+
+  *outPosition =
+      groundHit + Vec3::Up() * ProjectHalfExtentOntoNormal(droppedHalf, Vec3::Up());
+  return true;
 }
 
 void EditorLayer::DuplicatePrimarySelection() {
@@ -5453,21 +5746,17 @@ void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int scr
         return;
       }
 
-      Ray ray = ScreenToRay(mp.x, mp.y, screenW, screenH, cam);
-      Vec3 hitPos = Vec3::Zero();
-      if (!TryIntersectGroundPlane(ray, &hitPos)) {
-        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit ground plane");
+      Vec3 dropPos = Vec3::Zero();
+      if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
+        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
         ImGui::EndDragDropTarget();
         ImGui::End();
         return;
       }
 
-      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
-      obj.position = hitPos;
-      m_document.objects.push_back(std::move(obj));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      m_document.dirty = true;
-      TriggerReload();
+      std::string createError;
+      if (!CreateObjectFromAsset(assetId, std::string(), &dropPos, nullptr, nullptr, &createError))
+        LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
     }
     ImGui::EndDragDropTarget();
   }

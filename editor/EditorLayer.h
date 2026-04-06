@@ -212,6 +212,17 @@ class EditorLayer {
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
+  bool CreateObjectFromAsset(const std::string& assetId,
+                             const std::string& parentId = {},
+                             const Vec3* worldPosition = nullptr,
+                             const std::string* preferredId = nullptr,
+                             SceneObject* outCreated = nullptr,
+                             std::string* outError = nullptr);
+  bool TryBuildViewportDropPosition(const Camera& cam,
+                                    int screenW,
+                                    int screenH,
+                                    const std::string& assetId,
+                                    Vec3* outPosition) const;
   void DuplicatePrimarySelection();
   void ProcessMcpCommands();
   void PublishMcpSnapshot();
@@ -221,6 +232,14 @@ class EditorLayer {
   bool ReloadDocumentFromDisk(std::string* outError,
                               const std::vector<std::string>* preferredSelectionIds = nullptr,
                               const std::string* preferredAssetId = nullptr);
+  struct AssetDeleteResult {
+    bool ok = false;
+    int clearedReferences = 0;
+    bool deletedManagedFiles = false;
+    std::string deletedAssetDirectory;
+    std::string error;
+  };
+  AssetDeleteResult DeleteAssetDefinition(const std::string& assetId);
 
   // Multi-scene helpers
   void AddNewScene();
@@ -289,6 +308,7 @@ class EditorLayer {
   bool m_confirmExitOpen = false;
   std::vector<int> m_pendingDeleteObjectIndices;
   std::string m_pendingDeleteAssetId;
+  std::string m_pendingDeleteAssetError;
   std::string m_exitConfirmError;
   bool m_renameObjectOpen = false;
   int m_renameObjectIndex = -1;
