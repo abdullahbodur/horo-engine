@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -145,6 +146,10 @@ HttpResponse SendHttpPost(int port, const std::string& body) {
   return response;
 }
 
+bool NearlyEqualJsonFloat(const json& value, float expected, float eps = 0.001f) {
+  return std::fabs(value.get<float>() - expected) <= eps;
+}
+
 McpEditorSnapshot MakeSnapshot() {
   McpEditorSnapshot snapshot;
   snapshot.editorActive = true;
@@ -233,6 +238,36 @@ TEST_CASE("McpSnapshot compacts summary and console resources", "[mcp][snapshot]
   REQUIRE_FALSE(search["objects"].empty());
 }
 
+TEST_CASE("McpSnapshot builds world-space edges for rotated objects", "[mcp][snapshot]") {
+  McpObjectSnapshot object;
+  object.id = "box";
+  object.type = "Prop";
+  object.position = Monolith::Vec3(10.0f, 2.0f, 3.0f);
+  object.scale = Monolith::Vec3(4.0f, 2.0f, 6.0f);
+  object.yaw = 90.0f;
+
+  const json edges = BuildObjectEdgesJson(object);
+  REQUIRE(edges["id"] == "box");
+  REQUIRE(edges["basis"] == "object_transform_box");
+  REQUIRE(edges["worldCorners"].size() == 8);
+  REQUIRE(edges["worldEdges"].size() == 12);
+  REQUIRE(NearlyEqualJsonFloat(edges["center"][0], 10.0f));
+  REQUIRE(NearlyEqualJsonFloat(edges["center"][1], 2.0f));
+  REQUIRE(NearlyEqualJsonFloat(edges["center"][2], 3.0f));
+  REQUIRE(NearlyEqualJsonFloat(edges["halfExtents"][0], 2.0f));
+  REQUIRE(NearlyEqualJsonFloat(edges["halfExtents"][1], 1.0f));
+  REQUIRE(NearlyEqualJsonFloat(edges["halfExtents"][2], 3.0f));
+
+  const json& firstCorner = edges["worldCorners"][0];
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[0], 11.0f));
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[1], 0.0f));
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[2], 0.0f));
+
+  const json& firstEdge = edges["worldEdges"][0];
+  REQUIRE(firstEdge["from"] == firstCorner);
+  REQUIRE(firstEdge["to"].size() == 3);
+}
+
 TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<McpActivityRecord> activity;
@@ -245,7 +280,7 @@ TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol
   const McpHttpResponse tools = protocol.HandleHttp(
       McpHttpRequest{"POST", "/mcp", {}, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})"});
   REQUIRE(tools.statusCode == 200);
-  REQUIRE(json::parse(tools.body)["result"]["tools"].size() == 30);
+  REQUIRE(json::parse(tools.body)["result"]["tools"].size() == 31);
 
   const McpHttpResponse object = protocol.HandleHttp(
       McpHttpRequest{"POST", "/mcp", {},
@@ -257,9 +292,19 @@ TEST_CASE("McpProtocol serves resources and tools without auth", "[mcp][protocol
       McpHttpRequest{"POST", "/mcp", {},
                      R"({"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"scene://summary"}})"});
   REQUIRE(resource.statusCode == 200);
+
+  const McpHttpResponse edges = protocol.HandleHttp(
+      McpHttpRequest{"POST", "/mcp", {},
+                     R"({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"editor.get_object_edges","arguments":{"id":"obj_001"}}})"});
+  REQUIRE(edges.statusCode == 200);
+  const json edgesBody = json::parse(edges.body);
+  REQUIRE(edgesBody["result"]["structuredContent"]["id"] == "obj_001");
+  REQUIRE(edgesBody["result"]["structuredContent"]["worldCorners"].size() == 8);
+  REQUIRE(edgesBody["result"]["structuredContent"]["worldEdges"].size() == 12);
+
   REQUIRE(activity.size() >= 3);
-  REQUIRE(activity.back().operation == "resource");
-  REQUIRE(activity.back().target == "scene://summary");
+  REQUIRE(activity.back().operation == "tool");
+  REQUIRE(activity.back().target == "editor.get_object_edges");
   REQUIRE(activity.back().ok);
 }
 

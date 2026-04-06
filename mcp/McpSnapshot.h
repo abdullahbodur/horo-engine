@@ -78,6 +78,7 @@ nlohmann::json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                                    bool selectedOnly = false);
 nlohmann::json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit = 32);
 nlohmann::json BuildObjectJson(const McpObjectSnapshot& object);
+nlohmann::json BuildObjectEdgesJson(const McpObjectSnapshot& object);
 nlohmann::json BuildAssetJson(const McpAssetSnapshot& asset);
 nlohmann::json SearchSnapshot(const McpEditorSnapshot& snapshot,
                               const std::string& query,

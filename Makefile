@@ -4,20 +4,25 @@
 # On Windows (MSVC):  uses debug-msvc / release-msvc presets automatically
 # On macOS / Linux:   uses debug / release presets (Ninja)
 
+CMAKE_E := cmake -E
+MKDIR_P := $(CMAKE_E) make_directory
+RM_RF   := $(CMAKE_E) rm -rf
+
 ifeq ($(OS),Windows_NT)
+    WIN_CURDIR  := $(subst /,\,$(CURDIR))
     PRESET_DBG  ?= debug-msvc
     PRESET_REL  ?= release-msvc
-    TESTS_BIN   := $(CURDIR)/build/$(PRESET_DBG)/bin/Debug
+    TESTS_BIN   := $(CURDIR)/build/$(PRESET_DBG)/bin/tests
     SENTINEL_DBG := build/$(PRESET_DBG)/MonolithEngine.sln
     SENTINEL_REL := build/$(PRESET_REL)/MonolithEngine.sln
-    BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug
-    BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release
+    BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
+    BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
 
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
     OPENCOV     := "C:/Program Files/OpenCppCoverage/OpenCppCoverage.exe"
     COV_DIR     := $(CURDIR)/build/coverage
-    COV_FLAGS   := --sources .
+    COV_FLAGS   := --sources "$(WIN_CURDIR)"
     COV_REPORT  := $(COV_DIR)/html/index.html
 else
     PRESET_DBG  ?= debug
@@ -36,7 +41,11 @@ else
 endif
 
 # Source files to format: all tracked .cpp/.h (excluding vendor/)
-FORMAT_SOURCES := $(shell git ls-files '*.cpp' '*.h' | grep -v '^vendor/')
+ifeq ($(OS),Windows_NT)
+    FORMAT_SOURCES := $(shell git ls-files "*.cpp" "*.h" | findstr /V /R "^vendor/")
+else
+    FORMAT_SOURCES := $(shell git ls-files '*.cpp' '*.h' | grep -v '^vendor/')
+endif
 
 # Prefer VS-bundled clang-format on Windows; fall back to PATH
 CLANG_FORMAT_VS := C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang-format.exe
@@ -90,31 +99,31 @@ ifeq ($(OS),Windows_NT)
 ## Generate HTML coverage report using OpenCppCoverage (Windows/MSVC)
 ## Requires: winget install OpenCppCoverage.OpenCppCoverage
 coverage: build
-	@mkdir -p $(COV_DIR)
+	@$(MKDIR_P) "$(COV_DIR)"
 	@echo "[coverage] collecting test_math ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --export_type binary:$(COV_DIR)/cov0.cov \
-	    -- $(TESTS_BIN)/test_math.exe
+	    --export_type binary:"$(COV_DIR)/cov0.cov" \
+	    -- "$(TESTS_BIN)/test_math.exe"
 	@echo "[coverage] collecting test_math_extended ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage $(COV_DIR)/cov0.cov \
-	    --export_type binary:$(COV_DIR)/cov1.cov \
-	    -- $(TESTS_BIN)/test_math_extended.exe
+	    --input_coverage "$(COV_DIR)/cov0.cov" \
+	    --export_type binary:"$(COV_DIR)/cov1.cov" \
+	    -- "$(TESTS_BIN)/test_math_extended.exe"
 	@echo "[coverage] collecting test_physics ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage $(COV_DIR)/cov1.cov \
-	    --export_type binary:$(COV_DIR)/cov2.cov \
-	    -- $(TESTS_BIN)/test_physics.exe
+	    --input_coverage "$(COV_DIR)/cov1.cov" \
+	    --export_type binary:"$(COV_DIR)/cov2.cov" \
+	    -- "$(TESTS_BIN)/test_physics.exe"
 	@echo "[coverage] collecting test_physics_extended ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage $(COV_DIR)/cov2.cov \
-	    --export_type binary:$(COV_DIR)/cov3.cov \
-	    -- $(TESTS_BIN)/test_physics_extended.exe
+	    --input_coverage "$(COV_DIR)/cov2.cov" \
+	    --export_type binary:"$(COV_DIR)/cov3.cov" \
+	    -- "$(TESTS_BIN)/test_physics_extended.exe"
 	@echo "[coverage] collecting test_ecs + generating HTML report ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage $(COV_DIR)/cov3.cov \
-	    --export_type html:$(COV_DIR)/html \
-	    -- $(TESTS_BIN)/test_ecs.exe
+	    --input_coverage "$(COV_DIR)/cov3.cov" \
+	    --export_type html:"$(COV_DIR)/html" \
+	    -- "$(TESTS_BIN)/test_ecs.exe"
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
@@ -127,18 +136,18 @@ $(SENTINEL_COV):
 
 coverage: $(SENTINEL_COV)
 	cmake --build build/$(PRESET_COV)
-	@mkdir -p $(COV_DIR)
+	@$(MKDIR_P) "$(COV_DIR)"
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure
 	lcov --capture \
 	     --directory build/$(PRESET_COV) \
-	     --output-file $(COV_DIR)/raw.info \
+	     --output-file "$(COV_DIR)/raw.info" \
 	     --rc lcov_branch_coverage=1
-	lcov --remove $(COV_DIR)/raw.info \
+	lcov --remove "$(COV_DIR)/raw.info" \
 	     '*/vendor/*' '*/_deps/*' '*/tests/*' \
-	     --output-file $(COV_DIR)/filtered.info \
+	     --output-file "$(COV_DIR)/filtered.info" \
 	     --rc lcov_branch_coverage=1
-	genhtml $(COV_DIR)/filtered.info \
-	        --output-directory $(COV_DIR)/html \
+	genhtml "$(COV_DIR)/filtered.info" \
+	        --output-directory "$(COV_DIR)/html" \
 	        --branch-coverage \
 	        --title "MonolithEngine Coverage"
 	@echo ""
@@ -148,11 +157,11 @@ endif
 
 ## Wipe debug build directory
 clean:
-	rm -rf build/$(PRESET_DBG)
+	$(RM_RF) "build/$(PRESET_DBG)"
 
 ## Wipe all build directories (including coverage)
 clean-all:
-	rm -rf build/
+	$(RM_RF) build
 
 ## Print available targets
 help:

@@ -4,6 +4,10 @@
 #include <cctype>
 #include <unordered_map>
 
+#include "math/MathUtils.h"
+#include "math/Quaternion.h"
+#include "math/Transform.h"
+
 namespace Monolith {
 namespace Mcp {
 
@@ -35,6 +39,13 @@ size_t ClampLimit(size_t requested, size_t fallback, size_t maximum) {
 
 json Vec3ToJson(const Vec3& value) {
   return json::array({value.x, value.y, value.z});
+}
+
+Transform BuildObjectTransform(const McpObjectSnapshot& object) {
+  return Transform(object.position,
+                   Quaternion::FromEuler(ToRadians(object.pitch), ToRadians(object.yaw),
+                                         ToRadians(object.roll)),
+                   object.scale);
 }
 
 std::string GetParentId(const McpObjectSnapshot& object) {
@@ -408,6 +419,52 @@ json BuildObjectJson(const McpObjectSnapshot& object) {
   if (!parentId.empty())
     out["parentId"] = parentId;
   return out;
+}
+
+json BuildObjectEdgesJson(const McpObjectSnapshot& object) {
+  static const Vec3 kLocalCorners[8] = {
+      Vec3(-0.5f, -0.5f, -0.5f), Vec3(0.5f, -0.5f, -0.5f),  Vec3(0.5f, 0.5f, -0.5f),
+      Vec3(-0.5f, 0.5f, -0.5f),  Vec3(-0.5f, -0.5f, 0.5f),  Vec3(0.5f, -0.5f, 0.5f),
+      Vec3(0.5f, 0.5f, 0.5f),    Vec3(-0.5f, 0.5f, 0.5f),
+  };
+  static const int kEdgeIndices[12][2] = {
+      {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+      {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},
+  };
+
+  const Transform worldFromLocal = BuildObjectTransform(object);
+  const Vec3 halfExtents(std::abs(object.scale.x) * 0.5f, std::abs(object.scale.y) * 0.5f,
+                         std::abs(object.scale.z) * 0.5f);
+
+  json worldCorners = json::array();
+  Vec3 corners[8];
+  for (int i = 0; i < 8; ++i) {
+    corners[i] = worldFromLocal.TransformPoint(kLocalCorners[i]);
+    worldCorners.push_back(Vec3ToJson(corners[i]));
+  }
+
+  json worldEdges = json::array();
+  for (const auto& edge : kEdgeIndices) {
+    worldEdges.push_back(json{
+        {"from", Vec3ToJson(corners[edge[0]])},
+        {"to", Vec3ToJson(corners[edge[1]])},
+    });
+  }
+
+  return json{
+      {"id", object.id},
+      {"type", object.type},
+      {"basis", "object_transform_box"},
+      {"position", Vec3ToJson(object.position)},
+      {"scale", Vec3ToJson(object.scale)},
+      {"yaw", object.yaw},
+      {"pitch", object.pitch},
+      {"roll", object.roll},
+      {"center", Vec3ToJson(object.position)},
+      {"halfExtents", Vec3ToJson(halfExtents)},
+      {"worldCorners", std::move(worldCorners)},
+      {"worldEdges", std::move(worldEdges)},
+  };
 }
 
 json BuildAssetJson(const McpAssetSnapshot& asset) {

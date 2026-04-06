@@ -55,6 +55,8 @@ const std::vector<McpCatalogEntry>& GetToolCatalog() {
   static const std::vector<McpCatalogEntry> catalog = {
       {"editor.search", "tool", "Search compact scene objects and assets."},
       {"editor.get_object", "tool", "Fetch one object by id with full MCP detail."},
+      {"editor.get_object_edges", "tool",
+       "Return one object's world-space corners and edge segments."},
       {"editor.list_objects", "tool", "List object summaries with optional filters and limits."},
       {"editor.get_objects", "tool", "Fetch multiple objects by id."},
       {"editor.get_object_children", "tool", "List direct children of one object."},
@@ -148,7 +150,8 @@ json BuildToolList() {
       tool["inputSchema"]["properties"] = {{"query", {{"type", "string"}}},
                                            {"limit", {{"type", "integer"}, {"minimum", 1}, {"maximum", 25}}},
                                            {"scope", {{"type", "string"}, {"enum", json::array({"all", "objects", "assets"})}}}};
-    } else if (entry.name == "editor.get_object" || entry.name == "editor.get_asset" ||
+    } else if (entry.name == "editor.get_object" || entry.name == "editor.get_object_edges" ||
+               entry.name == "editor.get_asset" ||
                entry.name == "editor.get_object_children" || entry.name == "editor.get_object_parent" ||
                entry.name == "editor.rename_object" || entry.name == "editor.reparent_object" ||
                entry.name == "editor.select_asset" || entry.name == "editor.update_asset" ||
@@ -420,6 +423,17 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
         return MakeJsonResponse(200, "OK", result);
       }
       const json result = MakeSuccess(id, BuildTextToolResult(BuildObjectJson(*object)));
+      finish("tool", name, method, id, true, 200, std::string(), &result, {});
+      return MakeJsonResponse(200, "OK", result);
+    }
+    if (name == "editor.get_object_edges") {
+      const McpObjectSnapshot* object = FindObjectById(*snapshot, arguments.value("id", std::string()));
+      if (!object) {
+        const json result = MakeError(id, -32602, "Object not found.");
+        finish("tool", name, method, id, false, 200, "Object not found.", &result, {});
+        return MakeJsonResponse(200, "OK", result);
+      }
+      const json result = MakeSuccess(id, BuildTextToolResult(BuildObjectEdgesJson(*object)));
       finish("tool", name, method, id, true, 200, std::string(), &result, {});
       return MakeJsonResponse(200, "OK", result);
     }
