@@ -32,33 +32,76 @@ Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH, const Came
   return r;
 }
 
-float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half) {
+bool RayVsAABBHit(const Ray& ray, const Vec3& center, const Vec3& half, RayAabbHit* outHit) {
   constexpr float kEps = 1e-6f;
   float tMin = 0.0f;
   float tMax = std::numeric_limits<float>::max();
+  Vec3 enterNormal = Vec3::Zero();
+  Vec3 exitNormal = Vec3::Zero();
 
   for (int i = 0; i < 3; ++i) {
-    float minB = center[i] - half[i];
-    float maxB = center[i] + half[i];
-    float d = ray.direction[i];
-    float o = ray.origin[i];
+    const float minB = center[i] - half[i];
+    const float maxB = center[i] + half[i];
+    const float d = ray.direction[i];
+    const float o = ray.origin[i];
 
     if (std::abs(d) < kEps) {
       if (o < minB || o > maxB)
-        return -1.0f;
-    } else {
-      float t1 = (minB - o) / d;
-      float t2 = (maxB - o) / d;
-      if (t1 > t2)
-        std::swap(t1, t2);
-      tMin = std::max(tMin, t1);
-      tMax = std::min(tMax, t2);
-      if (tMin > tMax)
-        return -1.0f;
+        return false;
+      continue;
     }
+
+    float t1 = (minB - o) / d;
+    float t2 = (maxB - o) / d;
+    Vec3 axisEnter = Vec3::Zero();
+    Vec3 axisExit = Vec3::Zero();
+    axisEnter[i] = -1.0f;
+    axisExit[i] = 1.0f;
+
+    if (t1 > t2) {
+      std::swap(t1, t2);
+      std::swap(axisEnter, axisExit);
+    }
+
+    if (t1 > tMin) {
+      tMin = t1;
+      enterNormal = axisEnter;
+    }
+    if (t2 < tMax) {
+      tMax = t2;
+      exitNormal = axisExit;
+    }
+    if (tMin > tMax)
+      return false;
   }
 
-  return tMin;
+  float hitDistance = tMin;
+  Vec3 hitNormal = enterNormal;
+  if (hitDistance <= kEps) {
+    hitDistance = tMax;
+    hitNormal = exitNormal;
+  }
+  if (hitDistance <= kEps)
+    return false;
+
+  if (outHit) {
+    outHit->distance = hitDistance;
+    outHit->point = ray.origin + ray.direction * hitDistance;
+    outHit->normal = hitNormal;
+  }
+  return true;
+}
+
+float RayVsAABB(const Ray& ray, const Vec3& center, const Vec3& half) {
+  constexpr float kEps = 1e-6f;
+  const bool originInside = std::abs(ray.origin.x - center.x) <= half.x + kEps &&
+                            std::abs(ray.origin.y - center.y) <= half.y + kEps &&
+                            std::abs(ray.origin.z - center.z) <= half.z + kEps;
+  if (originInside)
+    return 0.0f;
+
+  RayAabbHit hit;
+  return RayVsAABBHit(ray, center, half, &hit) ? hit.distance : -1.0f;
 }
 
 bool TryIntersectGroundPlane(const Ray& ray, Vec3* outHitPoint) {
