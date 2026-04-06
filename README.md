@@ -213,6 +213,22 @@ registry.Destroy(e);
 for (Entity e : registry.GetEntities<TransformComponent>()) { ... }
 ```
 
+---
+
+## Architecture Docs
+
+The engine architecture guidance lives under [docs/architecture](./docs/architecture/README.md).
+
+That doc set defines:
+- module boundaries and allowed dependencies
+- ownership and shutdown rules
+- the preferred error/result model
+- threading and safe mutation guidance
+
+Reviewer rule:
+- new headers are internal by default
+- every new public type should clearly identify its owning module
+
 ### Physics
 
 ```cpp
