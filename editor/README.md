@@ -34,6 +34,7 @@
 - Scene files are JSON (`.horo` workflow through `SceneSerializer`).
 - `SceneProjectBridge` converts editor-facing `SceneDocument` data into the engine-owned typed `SceneProjectModel`.
 - `SceneRuntimeBridge` exposes the canonical authoring path from `SceneDocument` to engine-owned `RuntimeSceneDefinition`.
+- `SceneRuntimeCoordinatorBridge` wires `SceneDocument` into the lifecycle-managed runtime coordinator path.
 - User MCP settings are stored in `~/.horo/settings.json`.
 
 ## Notes
