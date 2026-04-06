@@ -320,6 +320,46 @@ static std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
   return candidates.front();
 }
 
+const char* SceneObjectTypeToString(SceneObjectType type) {
+  switch (type) {
+    case SceneObjectType::Panel:
+      return "Panel";
+    case SceneObjectType::Prop:
+      return "Prop";
+    case SceneObjectType::Light:
+      return "Light";
+    case SceneObjectType::Camera:
+      return "Camera";
+  }
+  return "Panel";
+}
+
+bool ParseSceneObjectType(const std::string& raw, SceneObjectType* outType) {
+  if (!outType)
+    return false;
+  std::string value = raw;
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (value == "panel") {
+    *outType = SceneObjectType::Panel;
+    return true;
+  }
+  if (value == "prop") {
+    *outType = SceneObjectType::Prop;
+    return true;
+  }
+  if (value == "light") {
+    *outType = SceneObjectType::Light;
+    return true;
+  }
+  if (value == "camera") {
+    *outType = SceneObjectType::Camera;
+    return true;
+  }
+  return false;
+}
+
 // ===== 3D Asset Thumbnail Rendering Infrastructure =====
 // Framebuffer object for offscreen mesh rendering (shared across all asset previews).
 struct AssetThumbnailRenderer {
@@ -858,6 +898,10 @@ static std::string ImportObjFileIntoAssetsModels(const std::string& pickedPath, 
 
 void EditorLayer::Init(GLFWwindow* window) {
   m_window = window;
+  m_mcpController.Initialize();
+  m_mcpSettingsDraft = m_mcpController.GetSettings();
+  if (m_mcpController.SettingsDocument().parseError)
+    LOG_WARN("[MCP] Settings load fallback: %s", m_mcpController.SettingsDocument().error.c_str());
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -886,6 +930,7 @@ void EditorLayer::Init(GLFWwindow* window) {
 }
 
 void EditorLayer::Shutdown() {
+  m_mcpController.Shutdown();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
@@ -905,6 +950,7 @@ void EditorLayer::Toggle() {
   glfwSetInputMode(m_window, GLFW_CURSOR, m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
   m_prevMouseL = false;
   m_selectedIndices.clear();
+  m_mcpController.SetEditorActive(m_active);
 }
 
 void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
@@ -1104,13 +1150,17 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     m_clipboardToastTime = std::max(0.0f, m_clipboardToastTime - dt);
 
   if (m_active) {
+    ProcessMcpCommands();
+
     if (ShouldFinalizeEditorClose(m_closeRequested, m_wantsReload)) {
       Toggle();
       return false;
     }
 
-    if (m_playMode)
+    if (m_playMode) {
+      PublishMcpSnapshot();
       return false;
+    }
 
     EditorTrace("OnUpdate frame=%u fly=%d", static_cast<unsigned>(ImGui::GetFrameCount()),
                 m_flyMode ? 1 : 0);
@@ -1387,6 +1437,7 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
 
     ApplyPendingViewSnap(cam);
+    PublishMcpSnapshot();
   }
 
   ImGuiIO& io = ImGui::GetIO();
@@ -1484,6 +1535,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     DrawStatusBar();
     DrawHelpPopup();
     DrawQuickOpenPopup();
+    DrawSettingsModal();
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     if (!m_playMode) {
@@ -1589,6 +1641,12 @@ void EditorLayer::DrawToolbar() {
       AddNewScene();
     if (ImGui::MenuItem("Open Scene..."))
       OpenAdditionalSceneFile();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Settings...")) {
+      m_settingsOpen = true;
+      m_mcpSettingsDraft = m_mcpController.GetSettings();
+      m_mcpSettingsError.clear();
+    }
     ImGui::EndMenu();
   }
   ImGui::SameLine();
@@ -2054,10 +2112,149 @@ void EditorLayer::DrawBottomDock() {
       ImGui::EndChild();
       ImGui::EndTabItem();
     }
+    if (ImGui::BeginTabItem("MCP")) {
+      DrawMcpTab();
+      ImGui::EndTabItem();
+    }
     ImGui::EndTabBar();
   }
 
   ImGui::End();
+}
+
+void EditorLayer::DrawMcpTab() {
+  const Mcp::McpStatusSnapshot status = m_mcpController.GetStatusSnapshot();
+
+  ImGui::Text("Status: %s", status.running ? "Running" : "Stopped");
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::Text("Enabled: %s", status.enabled ? "Yes" : "No");
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::Text("Endpoint: %s", status.endpointUrl.c_str());
+
+  ImGui::Text("Requests: %llu", static_cast<unsigned long long>(status.totalRequests));
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::Text("Active: %d", status.activeConnections);
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::Text("Tools: %d", static_cast<int>(status.toolCount));
+  ImGui::SameLine();
+  ImGui::TextDisabled("|");
+  ImGui::SameLine();
+  ImGui::Text("Resources: %d", static_cast<int>(status.resourceCount));
+
+  if (!status.lastError.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+    ImGui::TextWrapped("%s", status.lastError.c_str());
+    ImGui::PopStyleColor();
+  }
+
+  if (ImGui::Button("Open Settings")) {
+    m_settingsOpen = true;
+    m_mcpSettingsDraft = m_mcpController.GetSettings();
+    m_mcpSettingsError.clear();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Copy Claude Config")) {
+    const std::string snippet = m_mcpController.BuildClaudeConfigSnippet();
+    glfwSetClipboardString(m_window, snippet.c_str());
+    m_clipboardToastLabel = "Claude MCP config copied";
+    m_clipboardToastTime = 1.5f;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Copy Codex Config")) {
+    const std::string snippet = m_mcpController.BuildCodexConfigSnippet();
+    glfwSetClipboardString(m_window, snippet.c_str());
+    m_clipboardToastLabel = "Codex MCP config copied";
+    m_clipboardToastTime = 1.5f;
+  }
+
+  ImGui::Separator();
+  ImGui::TextDisabled("Recent MCP activity");
+  ImGui::BeginChild("##mcp_activity", ImVec2(0, 0), true);
+  for (const Mcp::McpActivityEntry& entry : status.recentActivity) {
+    ImVec4 color = entry.ok ? ImVec4(0.75f, 0.95f, 0.75f, 1.0f) : ImVec4(1.0f, 0.55f, 0.5f, 1.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    ImGui::Text("[%s] %s", entry.timeText.c_str(), entry.target.c_str());
+    ImGui::PopStyleColor();
+    if (!entry.detail.empty())
+      ImGui::TextWrapped("  %s", entry.detail.c_str());
+  }
+  ImGui::EndChild();
+}
+
+void EditorLayer::DrawSettingsModal() {
+  if (m_settingsOpen)
+    ImGui::OpenPopup("Editor Settings");
+
+  if (!ImGui::BeginPopupModal("Editor Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Built-in MCP");
+  ImGui::Checkbox("Enable built-in MCP", &m_mcpSettingsDraft.enabled);
+  ImGui::Checkbox("Auto-start when editor opens", &m_mcpSettingsDraft.autoStart);
+
+  int port = m_mcpSettingsDraft.port;
+  if (ImGui::InputInt("Port", &port))
+    m_mcpSettingsDraft.port = std::max(1, std::min(65535, port));
+
+  ImGui::Text("Host: %s", Mcp::kDefaultMcpHost);
+  m_mcpSettingsDraft.host = Mcp::kDefaultMcpHost;
+
+  std::string maskedToken = m_mcpSettingsDraft.authToken.empty()
+                                ? "(not generated yet)"
+                                : m_mcpSettingsDraft.authToken.substr(0, 8) + "..." +
+                                      m_mcpSettingsDraft.authToken.substr(
+                                          m_mcpSettingsDraft.authToken.size() > 8
+                                              ? m_mcpSettingsDraft.authToken.size() - 8
+                                              : 0);
+  ImGui::Text("Token: %s", maskedToken.c_str());
+  if (ImGui::Button("Copy Token") && !m_mcpSettingsDraft.authToken.empty()) {
+    glfwSetClipboardString(m_window, m_mcpSettingsDraft.authToken.c_str());
+    m_clipboardToastLabel = "MCP token copied";
+    m_clipboardToastTime = 1.5f;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Regenerate Token"))
+    m_mcpSettingsDraft.authToken = Mcp::GenerateMcpAuthToken();
+
+  const std::string endpoint =
+      "http://" + m_mcpSettingsDraft.host + ":" + std::to_string(m_mcpSettingsDraft.port) + "/mcp";
+  ImGui::TextWrapped("Endpoint: %s", endpoint.c_str());
+
+  if (!m_mcpSettingsError.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+    ImGui::TextWrapped("%s", m_mcpSettingsError.c_str());
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::Separator();
+  if (ImGui::Button("Apply", ImVec2(120.0f, 0.0f))) {
+    std::string err;
+    if (m_mcpController.ApplySettings(m_mcpSettingsDraft, &err)) {
+      m_mcpSettingsDraft = m_mcpController.GetSettings();
+      m_mcpSettingsError.clear();
+      m_settingsOpen = false;
+      ImGui::CloseCurrentPopup();
+    } else {
+      m_mcpSettingsError = err;
+    }
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+    m_settingsOpen = false;
+    m_mcpSettingsDraft = m_mcpController.GetSettings();
+    m_mcpSettingsError.clear();
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
 }
 
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
@@ -4098,6 +4295,303 @@ void EditorLayer::ToggleSelect(int i) {
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
+}
+
+void EditorLayer::ProcessMcpCommands() {
+  m_mcpController.DrainCommands([this](const std::string& toolName, const nlohmann::json& arguments) {
+    return ExecuteMcpCommand(toolName, arguments);
+  });
+}
+
+void EditorLayer::PublishMcpSnapshot() {
+  Mcp::McpEditorSnapshot snapshot;
+  snapshot.editorActive = m_active;
+  snapshot.playMode = m_playMode;
+  snapshot.dirty = m_document.dirty;
+  snapshot.reloadPending = m_wantsReload;
+  snapshot.sceneId = m_document.sceneId;
+  snapshot.sceneName = m_document.sceneName;
+  snapshot.sceneFilePath = m_document.filePath;
+  snapshot.selectedAssetId = m_selectedAssetId;
+
+  for (int idx : m_selectedIndices) {
+    if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+      snapshot.selectedObjectIds.push_back(m_document.objects[static_cast<size_t>(idx)].id);
+  }
+
+  snapshot.objects.reserve(m_document.objects.size());
+  for (const SceneObject& object : m_document.objects) {
+    Mcp::McpObjectSnapshot entry;
+    entry.id = object.id;
+    entry.type = SceneObjectTypeToString(object.type);
+    entry.position = object.position;
+    entry.scale = object.scale;
+    entry.yaw = object.yaw;
+    entry.pitch = object.pitch;
+    entry.roll = object.roll;
+    entry.assetId = object.assetId;
+    entry.props = object.props;
+    for (const ComponentDesc& component : object.components) {
+      Mcp::McpComponentSnapshot componentEntry;
+      componentEntry.type = component.type;
+      componentEntry.props = component.props;
+      entry.components.push_back(std::move(componentEntry));
+    }
+    snapshot.objects.push_back(std::move(entry));
+  }
+
+  std::vector<std::string> assetIds;
+  assetIds.reserve(m_document.assets.size());
+  for (const auto& entry : m_document.assets)
+    assetIds.push_back(entry.first);
+  std::sort(assetIds.begin(), assetIds.end());
+  for (const std::string& assetId : assetIds) {
+    const AssetDef& asset = m_document.assets.at(assetId);
+    snapshot.assets.push_back(Mcp::McpAssetSnapshot{assetId, asset.mesh, asset.renderScale,
+                                                    asset.albedoMap});
+  }
+
+  std::vector<LogLine> lines;
+  LogBuffer::Instance().CopyLinesTo(&lines);
+  const size_t start = lines.size() > 50 ? lines.size() - 50 : 0;
+  for (size_t i = start; i < lines.size(); ++i) {
+    char timeBuf[32];
+    FormatLogTime(lines[i], timeBuf, sizeof(timeBuf));
+    snapshot.consoleEntries.push_back(Mcp::McpConsoleEntry{
+        timeBuf,
+        lines[i].level == LogLevel::Info ? "INFO" : lines[i].level == LogLevel::Warn ? "WARN" : "ERR",
+        lines[i].message,
+    });
+  }
+
+  m_mcpController.PublishSnapshot(snapshot);
+}
+
+Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName,
+                                                     const nlohmann::json& arguments) {
+  using json = nlohmann::json;
+
+  auto parseVec3 = [](const json& value, Vec3* out) -> bool {
+    if (!out || !value.is_array() || value.size() != 3)
+      return false;
+    if (!value[0].is_number() || !value[1].is_number() || !value[2].is_number())
+      return false;
+    out->x = value[0].get<float>();
+    out->y = value[1].get<float>();
+    out->z = value[2].get<float>();
+    return true;
+  };
+
+  auto parseProps = [](const json& value) {
+    std::unordered_map<std::string, std::string> props;
+    if (!value.is_object())
+      return props;
+    for (auto it = value.begin(); it != value.end(); ++it) {
+      props[it.key()] = it.value().is_string() ? it.value().get<std::string>() : it.value().dump();
+    }
+    return props;
+  };
+
+  auto parseComponents = [&](const json& value, std::vector<ComponentDesc>* out) -> bool {
+    if (!out)
+      return false;
+    if (!value.is_array())
+      return false;
+    std::vector<ComponentDesc> components;
+    for (const json& item : value) {
+      if (!item.is_object() || !item.contains("type") || !item["type"].is_string())
+        return false;
+      ComponentDesc component;
+      component.type = item["type"].get<std::string>();
+      component.props = parseProps(item.value("props", json::object()));
+      components.push_back(std::move(component));
+    }
+    *out = std::move(components);
+    return true;
+  };
+
+  auto findIndexById = [&](const std::string& id) -> int {
+    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
+      if (m_document.objects[static_cast<size_t>(i)].id == id)
+        return i;
+    }
+    return -1;
+  };
+
+  auto summarizeObject = [&](const SceneObject& object) {
+    json out = json::object();
+    out["id"] = object.id;
+    out["type"] = SceneObjectTypeToString(object.type);
+    out["position"] = json::array({object.position.x, object.position.y, object.position.z});
+    out["scale"] = json::array({object.scale.x, object.scale.y, object.scale.z});
+    out["yaw"] = object.yaw;
+    out["pitch"] = object.pitch;
+    out["roll"] = object.roll;
+    out["assetId"] = object.assetId;
+    return out;
+  };
+
+  if (toolName == "editor.select") {
+    std::vector<std::string> ids;
+    if (arguments.contains("id") && arguments["id"].is_string())
+      ids.push_back(arguments["id"].get<std::string>());
+    if (arguments.contains("ids") && arguments["ids"].is_array()) {
+      for (const json& item : arguments["ids"]) {
+        if (item.is_string())
+          ids.push_back(item.get<std::string>());
+      }
+    }
+    m_selectedIndices.clear();
+    for (const std::string& id : ids) {
+      const int idx = findIndexById(id);
+      if (idx >= 0)
+        m_selectedIndices.push_back(idx);
+    }
+    return Mcp::McpCommandResult{true, json{{"selectedObjectIds", ids}}, std::string()};
+  }
+
+  if (toolName == "editor.create_object") {
+    SceneObjectType type = SceneObjectType::Panel;
+    if (!ParseSceneObjectType(arguments.value("type", std::string()), &type))
+      return Mcp::McpCommandResult{false, json::object(), "Invalid object type."};
+
+    SceneObject object;
+    object.type = type;
+    ApplySchemaDefaults(object);
+    object.id = arguments.value("id", std::string());
+    if (object.id.empty())
+      object.id = type == SceneObjectType::Camera ? GenerateCameraId(m_document) : GenerateId(m_document);
+    if (findIndexById(object.id) >= 0)
+      return Mcp::McpCommandResult{false, json::object(), "Object id already exists."};
+
+    if (arguments.contains("position") && !parseVec3(arguments["position"], &object.position))
+      return Mcp::McpCommandResult{false, json::object(), "position must be [x,y,z]."};
+    if (arguments.contains("scale") && !parseVec3(arguments["scale"], &object.scale))
+      return Mcp::McpCommandResult{false, json::object(), "scale must be [x,y,z]."};
+    object.yaw = arguments.value("yaw", object.yaw);
+    object.pitch = arguments.value("pitch", object.pitch);
+    object.roll = arguments.value("roll", object.roll);
+    object.assetId = arguments.value("assetId", std::string());
+    if (arguments.contains("props"))
+      object.props = parseProps(arguments["props"]);
+    if (arguments.contains("components") && !parseComponents(arguments["components"], &object.components))
+      return Mcp::McpCommandResult{false, json::object(), "components must be an array of objects."};
+    const std::string parentId = arguments.value("parentId", std::string());
+    if (!parentId.empty())
+      object.props["parentId"] = parentId;
+
+    m_document.objects.push_back(std::move(object));
+    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    m_document.dirty = true;
+    TriggerReload();
+    return Mcp::McpCommandResult{true,
+                                 json{{"created", summarizeObject(m_document.objects.back())}},
+                                 std::string()};
+  }
+
+  if (toolName == "editor.update_object" || toolName == "editor.transform") {
+    const std::string id = arguments.value("id", std::string());
+    const int idx = findIndexById(id);
+    if (idx < 0)
+      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
+
+    SceneObject& object = m_document.objects[static_cast<size_t>(idx)];
+    if (arguments.contains("position") && !parseVec3(arguments["position"], &object.position))
+      return Mcp::McpCommandResult{false, json::object(), "position must be [x,y,z]."};
+    if (arguments.contains("scale") && !parseVec3(arguments["scale"], &object.scale))
+      return Mcp::McpCommandResult{false, json::object(), "scale must be [x,y,z]."};
+    if (arguments.contains("yaw"))
+      object.yaw = arguments["yaw"].get<float>();
+    if (arguments.contains("pitch"))
+      object.pitch = arguments["pitch"].get<float>();
+    if (arguments.contains("roll"))
+      object.roll = arguments["roll"].get<float>();
+    if (toolName == "editor.update_object") {
+      if (arguments.contains("assetId"))
+        object.assetId = arguments["assetId"].is_null() ? std::string() : arguments["assetId"].get<std::string>();
+      if (arguments.contains("props")) {
+        const auto props = parseProps(arguments["props"]);
+        for (const auto& entry : props)
+          object.props[entry.first] = entry.second;
+      }
+      if (arguments.contains("components") &&
+          !parseComponents(arguments["components"], &object.components)) {
+        return Mcp::McpCommandResult{false, json::object(), "components must be an array of objects."};
+      }
+    }
+    m_document.dirty = true;
+    if (m_transformCb)
+      m_transformCb(object);
+    TriggerReload();
+    return Mcp::McpCommandResult{true, json{{"updated", summarizeObject(object)}}, std::string()};
+  }
+
+  if (toolName == "editor.duplicate") {
+    const std::string id = arguments.value("id", std::string());
+    const int idx = findIndexById(id);
+    if (idx < 0)
+      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
+    const int count = std::max(1, std::min(8, arguments.value("count", 1)));
+    json created = json::array();
+    for (int i = 0; i < count; ++i) {
+      SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
+      clone.position.x += static_cast<float>(i + 1);
+      clone.position.z += static_cast<float>(i + 1);
+      m_document.objects.push_back(std::move(clone));
+      created.push_back(summarizeObject(m_document.objects.back()));
+    }
+    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    m_document.dirty = true;
+    TriggerReload();
+    return Mcp::McpCommandResult{true, json{{"duplicates", std::move(created)}}, std::string()};
+  }
+
+  if (toolName == "editor.delete") {
+    std::vector<int> indices;
+    if (arguments.contains("id") && arguments["id"].is_string()) {
+      const int idx = findIndexById(arguments["id"].get<std::string>());
+      if (idx >= 0)
+        indices.push_back(idx);
+    }
+    if (arguments.contains("ids") && arguments["ids"].is_array()) {
+      for (const json& item : arguments["ids"]) {
+        if (!item.is_string())
+          continue;
+        const int idx = findIndexById(item.get<std::string>());
+        if (idx >= 0)
+          indices.push_back(idx);
+      }
+    }
+    if (indices.empty())
+      return Mcp::McpCommandResult{false, json::object(), "No matching objects to delete."};
+
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    std::sort(indices.rbegin(), indices.rend());
+    for (int idx : indices)
+      m_document.objects.erase(m_document.objects.begin() + idx);
+    m_selectedIndices.clear();
+    m_document.dirty = true;
+    TriggerReload();
+    return Mcp::McpCommandResult{true,
+                                 json{{"deletedCount", static_cast<int>(indices.size())}},
+                                 std::string()};
+  }
+
+  if (toolName == "editor.save_scene") {
+    std::string saveError;
+    if (!SaveDocument(&saveError))
+      return Mcp::McpCommandResult{false, json::object(), saveError};
+    return Mcp::McpCommandResult{true, json{{"saved", true}, {"filePath", m_document.filePath}},
+                                 std::string()};
+  }
+
+  if (toolName == "editor.reload_scene") {
+    TriggerReload();
+    return Mcp::McpCommandResult{true, json{{"reloadPending", true}}, std::string()};
+  }
+
+  return Mcp::McpCommandResult{false, json::object(), "Unsupported MCP command."};
 }
 
 bool EditorLayer::SaveDocument(std::string* outError) {

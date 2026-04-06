@@ -176,3 +176,9 @@ add_executable(test_plan_editor_features test_plan_editor_features.cpp)
 target_link_libraries(test_plan_editor_features PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_plan_editor_features)
 add_test(NAME test_plan_editor_features COMMAND $<TARGET_FILE:test_plan_editor_features>)
+
+# ---- test_mcp ----
+add_executable(test_mcp test_mcp.cpp)
+target_link_libraries(test_mcp PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_mcp)
+add_test(NAME test_mcp COMMAND $<TARGET_FILE:test_mcp>)
