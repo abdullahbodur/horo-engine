@@ -1,9 +1,12 @@
 #pragma once
+#include <memory>
+#include <stdexcept>
+
 /*
  * STARTER TEMPLATE GUIDE
  *
- * This demonstrates how to create a minimal Monolith-based game from scratch.
- * Follow this pattern to scaffold new projects quickly.
+ * This demonstrates the engine-owned scene loading path from authoring JSON
+ * into a plain Monolith scene runtime.
  *
  * FILE STRUCTURE:
  *   my-game/
@@ -19,12 +22,13 @@
  */
 
 #include "core/Application.h"
-#include "game/GameScene.h"
+#include "editor/SceneSerializer.h"
+#include "scene/SceneReferenceRuntime.h"
 #include "scene/Scene.h"
 
 namespace MyGame {
 
-// STEP 1: Create a minimal app class
+// STEP 1: Create a minimal app class.
 class MyGameApp : public Monolith::Application {
  public:
   MyGameApp() : Application(AppSpec{
@@ -32,67 +36,63 @@ class MyGameApp : public Monolith::Application {
   }) {}
 
  protected:
-  // STEP 2: Setup (called once at startup)
+  // STEP 2: Setup (called once at startup).
   void OnInit() override {
-    // Initialize core rendering and physics
     Monolith::RenderContext::Init();
     Monolith::DebugDraw::Init();
+    m_referenceRuntime = std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);
 
-    // Initialize game-specific systems
-    m_gameScene.Init(m_scene, m_camera);
-
-    // Load initial level from JSON or code
-    if (!GetDefaultSceneFilePath().empty()) {
+    if (!GetDefaultSceneFilePath().empty())
       LoadSceneFromFile(GetDefaultSceneFilePath());
-    } else {
-      LoadDefaultLevel();
-    }
   }
 
-  // STEP 3: Game loop (called every frame)
+  // STEP 3: Game loop (called every frame).
   void OnUpdate(float dt) override {
-    // Update camera, input, player movement, etc.
     UpdateCamera(dt);
-    UpdatePlayer(dt);
   }
 
-  // STEP 4: Physics simulation (fixed 120Hz timestep)
+  // STEP 4: Physics simulation (fixed timestep).
   void OnFixedUpdate(float dt) override {
     m_scene.UpdateSystems(dt);
   }
 
-  // STEP 5: Rendering (variable framerate)
+  // STEP 5: Rendering (variable framerate).
   void OnRender(float alpha) override {
     Monolith::RenderContext::BeginFrame();
-    m_gameScene.Render(m_camera, alpha);
+    m_scene.RenderSystems(alpha);
     Monolith::RenderContext::EndFrame();
   }
 
   void OnShutdown() override {
-    // Cleanup
+    if (m_referenceRuntime)
+      m_referenceRuntime->Unload();
   }
 
  private:
   Monolith::Scene m_scene;
-  Monolith::GameScene m_gameScene;
+  std::unique_ptr<Monolith::SceneReferenceRuntime> m_referenceRuntime;
   Monolith::Camera m_camera;
 
   void LoadSceneFromFile(const std::string& path) {
-    // Load level from JSON: SceneSerializer → EditorAdapter → LevelDef
-    // See monolith/game/EditorAdapter.h for conversion pipeline
-  }
-
-  void LoadDefaultLevel() {
-    // Or create level programmatically
-    // See monolith/game/levels/Dungeon.cpp for example
+    const Monolith::Editor::SceneDocument doc = Monolith::Editor::SceneSerializer::LoadFromFile(path);
+    const Monolith::SceneRuntimeOperationResult result = m_referenceRuntime->LoadDocument(doc);
+    if (!result.ok) {
+      throw std::runtime_error("Failed to load scene: " + result.error);
+    }
   }
 
   void UpdateCamera(float dt) {
-    // Implement camera follow/control here
-  }
+    (void)dt;
+    const auto& coordinator = m_referenceRuntime->GetCoordinator();
+    if (!coordinator.IsActive())
+      return;
 
-  void UpdatePlayer(float dt) {
-    // Handle input and player entity updates
+    if (const auto& sceneCamera = m_referenceRuntime->GetSceneCamera(); sceneCamera.has_value()) {
+      m_camera.position = sceneCamera->position;
+      m_camera.yaw = sceneCamera->yaw;
+      m_camera.pitch = sceneCamera->pitch;
+      m_camera.fov = sceneCamera->fovY;
+    }
   }
 };
 
@@ -135,14 +135,16 @@ class MyGameApp : public Monolith::Application {
  */
 
 /*
- * STEP 8: Level Definition (assets/scenes/level.json or code)
+ * STEP 8: Runtime control
  *
- * If using code (see levels/Dungeon.cpp pattern):
- *   LevelDef level = MakeDungeonLevel();
- *   m_gameScene.LoadLevel(level, m_scene);
+ * The engine-owned path is:
+ *   SceneSerializer::LoadFromFile(...)
+ *   -> SceneReferenceRuntime::LoadDocument(...)
  *
- * If using JSON (see assets/scenes/world.json):
- *   auto doc = SceneSerializer::LoadFromFile("assets/scenes/level.json");
- *   auto levelDef = EditorAdapter::ToLevelDef(doc, schema);
- *   m_gameScene.LoadLevel(levelDef, m_scene);
+ * For hot reload:
+ *   auto updated = SceneSerializer::LoadFromFile(path);
+ *   auto reloadResult = m_referenceRuntime->ReloadDocument(updated);
+ *
+ * Lifecycle state is available from:
+ *   m_referenceRuntime->GetCoordinator().GetLifecycle()
  */

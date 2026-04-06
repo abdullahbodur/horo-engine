@@ -16,6 +16,10 @@ static bool IsProjectRoot(const fs::path& dir) {
 }
 
 void ProjectPath::Init(const fs::path& exeDir) {
+  if (exeDir.empty()) {
+    s_root.clear();
+    return;
+  }
   fs::path cur = fs::absolute(exeDir);
   while (!cur.empty()) {
     if (IsProjectRoot(cur))                { s_root = cur; return; }
