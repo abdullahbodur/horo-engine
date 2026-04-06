@@ -13,6 +13,8 @@
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
 #include "editor/AssetMetadata.h"
+#include "editor/AssetImportService.h"
+#include "editor/AssetImporterRegistry.h"
 #include "editor/EditorSchema.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
@@ -511,6 +513,57 @@ TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
     REQUIRE(metadata.assetGuid == "crate_guid");
     REQUIRE(metadata.displayName == "Crate");
     REQUIRE(metadata.producedFiles.size() == 2);
+}
+
+TEST_CASE("AssetImporterRegistry: built-in importers resolve by extension and id",
+          "[editor][asset-import]") {
+    AssetImporterRegistry registry;
+    const AssetImporter* objImporter = registry.FindByExtension("mesh.OBJ");
+    REQUIRE(objImporter != nullptr);
+    REQUIRE(std::string(objImporter->ImporterId()) == "builtin.obj_mesh");
+
+    const AssetImporter* pngImporter = registry.FindByExtension("albedo.png");
+    const AssetImporter* jpgImporter = registry.FindByExtension("albedo.jpg");
+    REQUIRE(pngImporter != nullptr);
+    REQUIRE(jpgImporter != nullptr);
+    REQUIRE(std::string(pngImporter->ImporterId()) == "builtin.texture_copy");
+    REQUIRE(std::string(jpgImporter->ImporterId()) == "builtin.texture_copy");
+
+    REQUIRE(registry.FindById("builtin.obj_mesh") != nullptr);
+    REQUIRE(registry.FindById("builtin.texture_copy") != nullptr);
+}
+
+TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
+          "[editor][asset-import]") {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_import_obj";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    const std::filesystem::path sourceObj = root / "crate.obj";
+    WriteFile(sourceObj.string(),
+              "v 0 0 0\n"
+              "v 0 1 0\n"
+              "v 1 0 0\n"
+              "f 1 2 3\n");
+
+    AssetImportService service;
+    AssetImportResult result = service.ImportAssetFromSource(
+        sourceObj.string(), "crate", "guid_crate", "Crate", {{"preset", "default"}});
+
+    REQUIRE(result.ok);
+    REQUIRE(result.asset.guid == "guid_crate");
+    REQUIRE(result.asset.displayName == "Crate");
+    REQUIRE(result.asset.mesh.find("assets/models/guid_crate/") != std::string::npos);
+
+    AssetMetadata metadata;
+    std::string error;
+    REQUIRE(LoadAssetMetadata("guid_crate", &metadata, &error));
+    REQUIRE(metadata.importerId == "builtin.obj_mesh");
+    REQUIRE(metadata.sourcePath == sourceObj.string());
+    REQUIRE(metadata.settings.at("preset") == "default");
 }
 
 TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {

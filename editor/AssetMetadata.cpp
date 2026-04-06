@@ -223,7 +223,23 @@ bool EnsureAssetMetadataForDocument(SceneDocument* doc, std::string* outError) {
 
   EnsureAssetIdentity(doc);
   for (auto& entry : doc->assets) {
-    AssetMetadata metadata = BuildAssetMetadata(entry.first, entry.second);
+    AssetMetadata metadata;
+    std::string metadataError;
+    if (!LoadAssetMetadata(entry.second.guid, &metadata, &metadataError))
+      metadata = BuildAssetMetadata(entry.first, entry.second);
+    metadata.assetId = entry.first;
+    metadata.assetGuid = entry.second.guid;
+    metadata.displayName = entry.second.displayName;
+    metadata.producedFiles = CollectProducedFiles(entry.second);
+    metadata.dependencies.erase(
+        std::remove_if(metadata.dependencies.begin(),
+                       metadata.dependencies.end(),
+                       [](const AssetDependencyRecord& dep) {
+                         return dep.kind == AssetDependencyKind::ProducedOutput;
+                       }),
+        metadata.dependencies.end());
+    for (const std::string& path : metadata.producedFiles)
+      metadata.dependencies.push_back({AssetDependencyKind::ProducedOutput, path});
     if (!SaveAssetMetadata(metadata, outError))
       return false;
   }

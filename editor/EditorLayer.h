@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/LogBuffer.h"
+#include "editor/AssetImportService.h"
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
@@ -170,6 +171,7 @@ class EditorLayer {
   // The primary editable scene is always m_document.
   std::vector<SceneDocument> m_additionalScenes;
   EditorSchema m_schema;
+  AssetImportService m_assetImportService;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
   std::function<void(const SceneObject&)> m_transformCb;
   std::function<std::vector<std::string>()> m_scriptBehaviorOptionsCb;
