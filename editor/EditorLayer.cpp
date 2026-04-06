@@ -5729,6 +5729,10 @@ void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int scr
                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
                    ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
 
+  const ImVec2 dropTargetSize(viewportRect.maxX - viewportRect.minX,
+                              viewportRect.maxY - viewportRect.minY);
+  ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
+
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
       const std::string assetId(static_cast<const char*>(payload->Data));
