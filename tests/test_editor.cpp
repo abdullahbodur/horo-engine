@@ -565,6 +565,20 @@ TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
     REQUIRE(metadata.importerId == "builtin.obj_mesh");
     REQUIRE(metadata.sourcePath == sourceObj.string());
     REQUIRE(metadata.settings.at("preset") == "default");
+    REQUIRE(metadata.diagnostics.empty());
+}
+
+TEST_CASE("AssetImportService: unsupported source yields structured diagnostics",
+          "[editor][asset-import][diagnostics]") {
+    AssetImportService service;
+    AssetImportResult result =
+        service.ImportAssetFromSource("C:/tmp/unsupported.txt", "broken", "guid_broken", "Broken");
+
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.diagnostics.size() == 1);
+    REQUIRE(result.diagnostics[0].severity == AssetDiagnosticSeverity::Error);
+    REQUIRE(result.diagnostics[0].code == "asset.importer.not_found");
+    REQUIRE(result.diagnostics[0].assetGuid == "guid_broken");
 }
 
 TEST_CASE("AssetImportService: reimport propagation follows deterministic topological order",
@@ -662,6 +676,12 @@ TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable
         service.ReimportAssetWithDependents(&doc, "guid_a", "Cycle validation");
     REQUIRE_FALSE(reimportResult.ok);
     REQUIRE(ContainsCaseInsensitive(reimportResult.error, "cycle"));
+
+    AssetMetadata aReloaded;
+    REQUIRE(LoadAssetMetadata("guid_a", &aReloaded, &error));
+    REQUIRE_FALSE(aReloaded.lastImportSucceeded);
+    REQUIRE(aReloaded.diagnostics.size() == 1);
+    REQUIRE(aReloaded.diagnostics[0].code == "asset.reimport.dependency_cycle");
 }
 
 TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {

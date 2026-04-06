@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "core/Logger.h"
 #include "editor/AssetIdentity.h"
 
 namespace Monolith {
@@ -48,19 +49,84 @@ bool LoadOrBuildMetadata(const std::string& assetId,
   return true;
 }
 
+AssetImportDiagnostic MakeDiagnostic(AssetDiagnosticSeverity severity,
+                                     std::string code,
+                                     std::string message,
+                                     const std::string& assetGuid,
+                                     const std::string& sourcePath,
+                                     const std::string& importerId) {
+  AssetImportDiagnostic diagnostic;
+  diagnostic.severity = severity;
+  diagnostic.code = std::move(code);
+  diagnostic.message = std::move(message);
+  diagnostic.assetGuid = assetGuid;
+  diagnostic.sourcePath = sourcePath;
+  diagnostic.importerId = importerId;
+  return diagnostic;
+}
+
+void LogDiagnostics(const std::vector<AssetImportDiagnostic>& diagnostics) {
+  for (const AssetImportDiagnostic& diagnostic : diagnostics) {
+    const char* importer = diagnostic.importerId.empty() ? "<unknown>" : diagnostic.importerId.c_str();
+    const char* source = diagnostic.sourcePath.empty() ? "<none>" : diagnostic.sourcePath.c_str();
+    if (diagnostic.severity == AssetDiagnosticSeverity::Info) {
+      LOG_INFO("[AssetImport][%s][%s] %s (%s)",
+               importer,
+               diagnostic.code.c_str(),
+               diagnostic.message.c_str(),
+               source);
+    } else if (diagnostic.severity == AssetDiagnosticSeverity::Warning) {
+      LOG_WARN("[AssetImport][%s][%s] %s (%s)",
+               importer,
+               diagnostic.code.c_str(),
+               diagnostic.message.c_str(),
+               source);
+    } else {
+      LOG_ERROR("[AssetImport][%s][%s] %s (%s)",
+                importer,
+                diagnostic.code.c_str(),
+                diagnostic.message.c_str(),
+                source);
+    }
+  }
+}
+
+void SaveFailureMetadata(AssetMetadata* metadata,
+                         const std::string& reason,
+                         std::vector<AssetImportDiagnostic> diagnostics) {
+  if (!metadata)
+    return;
+  metadata->lastImportSucceeded = false;
+  metadata->lastImportReason = reason;
+  metadata->diagnostics = std::move(diagnostics);
+  SaveAssetMetadata(*metadata, nullptr);
+}
+
 }  // namespace
 
 AssetImportResult AssetImportService::RunImporter(const AssetImporter& importer,
                                                   const AssetImportRequest& request) const {
   AssetImportResult result = importer.Import(request);
-  if (!result.ok)
+  if (!result.ok) {
+    if (result.diagnostics.empty()) {
+      result.diagnostics.push_back(MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                                  "asset.import.failed",
+                                                  result.error.empty() ? "Import failed." : result.error,
+                                                  request.assetGuid,
+                                                  request.sourcePath,
+                                                  importer.ImporterId()));
+    }
+    result.metadata.diagnostics = result.diagnostics;
+    LogDiagnostics(result.diagnostics);
     return result;
+  }
 
   EnsureAssetIdentity(request.assetId, &result.asset);
   result.metadata.assetId = request.assetId;
   result.metadata.assetGuid = request.assetGuid;
   result.metadata.displayName = result.asset.displayName;
   result.metadata.lastImportSucceeded = true;
+  result.metadata.diagnostics = result.diagnostics;
   return result;
 }
 
@@ -74,6 +140,13 @@ AssetImportResult AssetImportService::ImportAssetFromSource(
   const AssetImporter* importer = m_registry.FindByExtension(sourcePath);
   if (!importer) {
     result.error = "No importer registered for this file type.";
+    result.diagnostics.push_back(MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                                "asset.importer.not_found",
+                                                result.error,
+                                                assetGuid,
+                                                sourcePath,
+                                                {}));
+    LogDiagnostics(result.diagnostics);
     return result;
   }
 
@@ -82,8 +155,16 @@ AssetImportResult AssetImportService::ImportAssetFromSource(
   if (!result.ok)
     return result;
 
-  if (!SaveAssetMetadata(result.metadata, &result.error))
+  if (!SaveAssetMetadata(result.metadata, &result.error)) {
     result.ok = false;
+    result.diagnostics.push_back(MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                                "asset.metadata.save_failed",
+                                                result.error,
+                                                assetGuid,
+                                                sourcePath,
+                                                importer->ImporterId()));
+    LogDiagnostics(result.diagnostics);
+  }
   return result;
 }
 
@@ -116,6 +197,7 @@ bool AssetImportService::ImportTextureForAsset(const std::string& sourcePath,
   if (!result.ok) {
     if (outError)
       *outError = result.error;
+    SaveFailureMetadata(&existingMetadata, "Texture override import failed.", result.diagnostics);
     return false;
   }
 
@@ -126,6 +208,8 @@ bool AssetImportService::ImportTextureForAsset(const std::string& sourcePath,
   existingMetadata.settings = result.metadata.settings;
   existingMetadata.producedFiles = result.metadata.producedFiles;
   existingMetadata.lastImportSucceeded = true;
+  existingMetadata.lastImportReason = "Texture override imported.";
+  existingMetadata.diagnostics = result.diagnostics;
   RemoveDependenciesOfKind(&existingMetadata, AssetDependencyKind::ProducedOutput);
   AppendUniqueDependency(&existingMetadata, AssetDependencyKind::Source, sourcePath);
   for (const std::string& produced : result.metadata.producedFiles)
@@ -158,6 +242,7 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
   AssetReimportResult result;
   if (!doc) {
     result.error = "Scene document is required.";
+    result.records.push_back({{}, {}, reason, false, result.error});
     return result;
   }
 
@@ -172,6 +257,7 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
 
   if (assetIdByGuid.count(rootAssetGuid) == 0) {
     result.error = "Asset metadata not found for reimport.";
+    result.records.push_back({{}, rootAssetGuid, reason, false, result.error});
     return result;
   }
 
@@ -239,6 +325,24 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
 
   if (result.order.size() != impacted.size()) {
     result.error = "Asset dependency cycle detected during reimport propagation.";
+    AssetMetadata rootMetadata;
+    if (LoadAssetMetadata(rootAssetGuid, &rootMetadata, nullptr)) {
+      SaveFailureMetadata(&rootMetadata,
+                          reason,
+                          {MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                          "asset.reimport.dependency_cycle",
+                                          result.error,
+                                          rootAssetGuid,
+                                          rootMetadata.sourcePath,
+                                          rootMetadata.importerId)});
+    }
+    LogDiagnostics({MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                   "asset.reimport.dependency_cycle",
+                                   result.error,
+                                   rootAssetGuid,
+                                   {},
+                                   {})});
+    result.records.push_back({assetIdByGuid[rootAssetGuid], rootAssetGuid, reason, false, result.error});
     return result;
   }
 
@@ -255,10 +359,22 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
 
     AssetMetadata metadata;
     LoadOrBuildMetadata(assetIt->first, assetIt->second, &metadata);
+    const std::string recordReason =
+        (guid == rootAssetGuid) ? reason : "Dependency changed: " + dependencyReason[guid];
+
     if (metadata.importerId.empty() || metadata.sourcePath.empty()) {
-      result.records.push_back(
-          {assetIt->first, guid, reason, false, "Asset has no importer metadata or source path."});
-      result.error = "Asset has no importer metadata or source path.";
+      const std::string error = "Asset has no importer metadata or source path.";
+      SaveFailureMetadata(&metadata,
+                          recordReason,
+                          {MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                          "asset.reimport.metadata_missing",
+                                          error,
+                                          guid,
+                                          metadata.sourcePath,
+                                          metadata.importerId)});
+      LogDiagnostics(metadata.diagnostics);
+      result.records.push_back({assetIt->first, guid, recordReason, false, error});
+      result.error = error;
       return result;
     }
 
@@ -266,15 +382,21 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
     if (!importer)
       importer = m_registry.FindByExtension(metadata.sourcePath);
     if (!importer) {
-      result.records.push_back({assetIt->first, guid, reason, false, "Registered importer not found."});
-      result.error = "Registered importer not found.";
+      const std::string error = "Registered importer not found.";
+      SaveFailureMetadata(&metadata,
+                          recordReason,
+                          {MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                                          "asset.reimport.importer_missing",
+                                          error,
+                                          guid,
+                                          metadata.sourcePath,
+                                          metadata.importerId)});
+      LogDiagnostics(metadata.diagnostics);
+      result.records.push_back({assetIt->first, guid, recordReason, false, error});
+      result.error = error;
       return result;
     }
 
-    const std::string recordReason =
-        (guid == rootAssetGuid)
-            ? reason
-            : "Dependency changed: " + dependencyReason[guid];
     AssetImportRequest request{assetIt->first,
                                assetIt->second.guid,
                                assetIt->second.displayName,
@@ -282,9 +404,7 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
                                metadata.settings};
     AssetImportResult importResult = RunImporter(*importer, request);
     if (!importResult.ok) {
-      metadata.lastImportSucceeded = false;
-      metadata.lastImportReason = recordReason;
-      SaveAssetMetadata(metadata, nullptr);
+      SaveFailureMetadata(&metadata, recordReason, importResult.diagnostics);
       result.records.push_back({assetIt->first, guid, recordReason, false, importResult.error});
       result.error = importResult.error;
       return result;
@@ -304,6 +424,9 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
           importResult.metadata.producedFiles.insert(importResult.metadata.producedFiles.end(),
                                                      textureResult.metadata.producedFiles.begin(),
                                                      textureResult.metadata.producedFiles.end());
+          importResult.diagnostics.insert(importResult.diagnostics.end(),
+                                          textureResult.diagnostics.begin(),
+                                          textureResult.diagnostics.end());
         }
       }
     }
@@ -318,6 +441,7 @@ AssetReimportResult AssetImportService::ReimportAssetWithDependents(SceneDocumen
     updatedMetadata.producedFiles = importResult.metadata.producedFiles;
     updatedMetadata.lastImportSucceeded = true;
     updatedMetadata.lastImportReason = recordReason;
+    updatedMetadata.diagnostics = importResult.diagnostics;
     RemoveDependenciesOfKind(&updatedMetadata, AssetDependencyKind::ProducedOutput);
     RemoveDependenciesOfKind(&updatedMetadata, AssetDependencyKind::Source);
     AppendUniqueDependency(&updatedMetadata, AssetDependencyKind::Source, metadata.sourcePath);
