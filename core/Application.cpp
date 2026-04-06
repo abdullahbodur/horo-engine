@@ -79,10 +79,16 @@ Application::Application(const AppSpec& spec) {
 Application::~Application() = default;
 
 void Application::ParseArgs(int argc, char** argv) {
-  for (int i = 1; i < argc; ++i) {
-    if (argv[i] && std::string_view(argv[i]) == "--editor")
-      m_editorModeRequested = true;
-  }
+  m_editorStartupCli = ParseEditorStartupCli(argc, argv);
+}
+
+bool Application::ShouldStartWithEditor() const {
+#ifdef NDEBUG
+  constexpr bool kReleaseDefaults = true;
+#else
+  constexpr bool kReleaseDefaults = false;
+#endif
+  return Monolith::ShouldStartWithEditor(m_editorStartupCli, kReleaseDefaults);
 }
 
 void Application::Run() {

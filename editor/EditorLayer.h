@@ -1,12 +1,17 @@
 #pragma once
+#include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
+#include "core/LogBuffer.h"
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
 #include "renderer/Camera.h"
+#include "renderer/Shader.h"
 
 struct GLFWwindow;
 
@@ -21,23 +26,24 @@ namespace Editor {
 // Typical usage (from a CharacterApp subclass):
 //
 //   // main():
-//   app.ParseArgs(argc, argv);   // recognises --editor flag
+//   app.ParseArgs(argc, argv);   // --editor / --play / Debug default
 //   app.Run();
 //
 //   // OnInit():
 //   editor.Init(window);
+//   editor.SetProjectBrowserRoot(gameProjectRoot);  // optional file tree root
 //   editor.SetLiveRegistry(&scene.registry);
 //   editor.SetTransformCallback(...);
 //   // ...load scene...
-//   if (IsEditorModeRequested()) {
+//   if (ShouldStartWithEditor()) {
 //     editor.LoadDocument(doc);
 //     editor.SyncRuntimeEntityIds(registry);
-//     editor.Toggle();           // open immediately, no F10 needed
+//     editor.Toggle();
 //   }
 //
 //   // OnUpdate():
-//   if (F10 pressed)  editor.Toggle();   // runtime toggle
-//   editor.OnUpdate(dt, cam, w, h);      // returns true if ImGui consumed input
+//   editor.OnUpdate(dt, cam, w, h);
+//   // When editor active: if (!editor.IsPlayMode()) suppress game; else run game + chrome
 //
 //   // OnRender():
 //   editor.Render(cam, w, h);   // call after game 3-D scene, before EndFrame
@@ -89,7 +95,13 @@ class EditorLayer {
     m_scriptBehaviorOptionsCb = std::move(cb);
   }
 
+  // Absolute or empty (disables Project tab tree).
+  void SetProjectBrowserRoot(std::filesystem::path root);
+  void SetProjectBrowserExtraBlocklist(std::unordered_set<std::string> names);
+
   bool IsActive() const { return m_active; }
+  // Play-in-editor: game sim runs in viewport; chrome (hierarchy, dock) stays.
+  bool IsPlayMode() const { return m_playMode; }
   bool WantsSceneReload() const { return m_wantsReload; }
 
   // Development overlay shown regardless of editor active state.
@@ -115,6 +127,7 @@ class EditorLayer {
 
   GLFWwindow* m_window = nullptr;
   bool m_active = false;
+  bool m_playMode = false;
   bool m_wantsReload = false;
   bool m_prevMouseL = false;
   bool m_prevDel = false;
@@ -144,6 +157,10 @@ class EditorLayer {
   SceneDocument m_document;
   SceneDocument m_lastSavedDocument;
   SceneDocument m_pendingDoc;
+
+  // Additional scenes shown in the hierarchy panel (secondary; not actively edited).
+  // The primary editable scene is always m_document.
+  std::vector<SceneDocument> m_additionalScenes;
   EditorSchema m_schema;
   std::vector<int> m_selectedIndices;  // all selected; last = primary for properties
   std::function<void(const SceneObject&)> m_transformCb;
@@ -166,10 +183,18 @@ class EditorLayer {
   void DrawHelpPopup();
   void DrawQuickOpenPopup();
   void DrawStatusBar();
+  void DrawBottomDock();
+  void DrawProjectTreeRecursive(const std::filesystem::path& absPath,
+                                const std::filesystem::path& displayRoot);
+  void InvalidateProjectBrowserCache();
+  const std::vector<std::pair<std::filesystem::path, bool>>* GetProjectDirListing(
+      const std::filesystem::path& absPath);
   void DrawDeleteConfirmModals();
   void DrawExitConfirmModal();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
+  void DrawWireframeOverlay(const Camera& cam);
+  void DrawViewportDropTarget(const Camera& cam, int screenW, int screenH);
   void ApplyPendingViewSnap(Camera& cam);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
@@ -180,6 +205,14 @@ class EditorLayer {
   void DuplicatePrimarySelection();
   bool SaveDocument(std::string* outError);
   void DiscardUnsavedChanges();
+
+  // Multi-scene helpers
+  void AddNewScene();
+  void OpenAdditionalSceneFile();
+  void CloseAdditionalScene(int index);
+  bool SaveAdditionalScene(int index, std::string* outError);
+  void DrawSceneHeader(SceneDocument& doc, bool isPrimary, int additionalIndex);
+  void DrawObjectsTree(SceneDocument& doc, bool isPrimary);
 
   bool m_hotReloadOverlayActive = false;
   float m_hotReloadOverlayProgress = 0.0f;
@@ -241,6 +274,32 @@ class EditorLayer {
   int m_renameObjectIndex = -1;
   std::string m_renameObjectDraft;
   std::string m_renameObjectError;
+
+  std::filesystem::path m_projectBrowserRoot;
+  bool m_projectBrowserRootValid = false;
+  std::filesystem::path m_projectBrowserCwd;
+  bool m_projectBrowserCwdValid = false;
+  std::unordered_set<std::string> m_projectExtraBlocklist;
+
+  // Wireframe overlay
+  bool m_wireframeMode = false;
+  Shader m_wireframeShader;
+
+  // Hierarchy range-select anchor
+  int m_lastClickedHierarchyIdx = -1;
+
+  bool m_consoleShowInfo = true;
+  bool m_consoleShowWarn = true;
+  bool m_consoleShowError = true;
+
+  struct ProjectDirCache {
+    std::vector<std::pair<std::filesystem::path, bool>> entries;
+    uint32_t cachedAtFrame = 0;
+  };
+  std::unordered_map<std::string, ProjectDirCache> m_projectDirCache;
+  std::vector<LogLine> m_consoleLinesCache;
+  std::vector<int> m_consoleVisibleScratch;
+  uint64_t m_consoleLogRevision = UINT64_MAX;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

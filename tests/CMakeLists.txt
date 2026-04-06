@@ -170,3 +170,9 @@ add_executable(test_animation test_animation.cpp)
 target_link_libraries(test_animation PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_animation)
 add_test(NAME test_animation COMMAND $<TARGET_FILE:test_animation>)
+
+# ---- test_plan_editor_features (CLI, LogBuffer, Project filter) ----
+add_executable(test_plan_editor_features test_plan_editor_features.cpp)
+target_link_libraries(test_plan_editor_features PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_plan_editor_features)
+add_test(NAME test_plan_editor_features COMMAND $<TARGET_FILE:test_plan_editor_features>)

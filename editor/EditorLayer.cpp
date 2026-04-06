@@ -13,6 +13,7 @@
 #include <commdlg.h>
 #endif
 
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -22,19 +23,25 @@
 #include <array>
 #include <cmath>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <ctime>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
+#include "core/LogBuffer.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
+#include "editor/ProjectEntryFilter.h"
+#include "editor/EditorDebugTrace.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
@@ -45,6 +52,14 @@
 #include "math/Transform.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
+#include "renderer/GltfLoader.h"
+#include "renderer/Mesh.h"
+#include "renderer/ObjLoader.h"
+#include "renderer/RenderContext.h"
+#include "renderer/Renderer.h"
+#include "renderer/Shader.h"
+#include "renderer/SkinnedMesh.h"
+#include "renderer/Texture.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
 #include "scene/components/MeshComponent.h"
@@ -60,7 +75,10 @@ namespace {
 // or the status strip.
 constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
+constexpr float kBottomDockH = 200.0f;
 constexpr float kLeftDockW = 308.0f;
+// Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
+constexpr uint32_t kProjectListingCacheFrames = 48;
 
 // Split Objects (top) vs Assets (bottom) within [toolbar .. status]. Small gap so they
 // never z-fight at the seam.
@@ -70,7 +88,7 @@ static void ComputeLeftColumnLayout(const ImGuiIO& io,
                                     float* outAssetsTop,
                                     float* outAssetsH) {
   const float workTop = kEditorToolbarH;
-  const float workBottom = io.DisplaySize.y - kEditorStatusH;
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
   const float workH = std::max(0.0f, workBottom - workTop);
   constexpr float kMidGap = 4.0f;
   const float mid = workTop + workH * 0.52f;
@@ -267,6 +285,481 @@ static bool IsTextureFilePath(const std::string& path) {
          ext == ".webp" || ext == ".hdr";
 }
 
+static std::string ToLowerAscii(std::string s) {
+  std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return s;
+}
+
+static std::filesystem::path ResolveProjectRelativeOrAbsolutePath(const std::string& rawPath) {
+  if (rawPath.empty())
+    return {};
+  namespace fs = std::filesystem;
+  fs::path p(rawPath);
+  if (p.is_absolute())
+    return p;
+  return ProjectPath::Root() / p;
+}
+
+static std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
+  namespace fs = std::filesystem;
+  const fs::path root = ProjectPath::Root();
+  const std::array<fs::path, 3> candidates = {
+      root / "engine" / "renderer" / "shaders" / fileName,
+      root / "horo-engine" / "renderer" / "shaders" / fileName,
+      root / "renderer" / "shaders" / fileName,
+  };
+
+  for (const auto& candidate : candidates) {
+    std::error_code ec;
+    if (fs::is_regular_file(candidate, ec) && !ec)
+      return candidate;
+  }
+
+  return candidates.front();
+}
+
+static Vec3 MultiplyComponents(const Vec3& a, const Vec3& b) {
+  return {a.x * b.x, a.y * b.y, a.z * b.z};
+}
+
+static bool TryResolveObjectMeshPath(const SceneDocument& doc,
+                                     const SceneObject& obj,
+                                     std::string* outMeshPath,
+                                     Vec3* outAssetRenderScale) {
+  if (outMeshPath)
+    outMeshPath->clear();
+  if (outAssetRenderScale)
+    *outAssetRenderScale = Vec3::One();
+
+  if (!obj.assetId.empty()) {
+    const auto assetIt = doc.assets.find(obj.assetId);
+    if (assetIt == doc.assets.end())
+      return false;
+    if (outMeshPath)
+      *outMeshPath = assetIt->second.mesh;
+    if (outAssetRenderScale) {
+      Vec3 parsedScale = Vec3::One();
+      if (TryParseVec3Csv(assetIt->second.renderScale, &parsedScale))
+        *outAssetRenderScale = parsedScale;
+    }
+    return !assetIt->second.mesh.empty();
+  }
+
+  const auto propIt = obj.props.find("mesh");
+  if (propIt == obj.props.end() || propIt->second.empty())
+    return false;
+  if (outMeshPath)
+    *outMeshPath = propIt->second;
+  return true;
+}
+
+static Mat4 BuildObjectModelMatrix(const SceneDocument& doc, const SceneObject& obj) {
+  Vec3 assetRenderScale = Vec3::One();
+  std::string ignoredMeshPath;
+  TryResolveObjectMeshPath(doc, obj, &ignoredMeshPath, &assetRenderScale);
+
+  const Quaternion rotation =
+      Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
+  const Vec3 totalScale = MultiplyComponents(obj.scale, assetRenderScale);
+  return Mat4::Translate(obj.position) * Mat4::Rotate(rotation) * Mat4::Scale(totalScale);
+}
+
+static void SyncAssetScaleMetadata(SceneDocument* doc) {
+  if (!doc)
+    return;
+
+  for (SceneObject& obj : doc->objects) {
+    if (obj.assetId.empty()) {
+      obj.props.erase("_assetRenderScale");
+      continue;
+    }
+
+    const auto assetIt = doc->assets.find(obj.assetId);
+    if (assetIt == doc->assets.end()) {
+      obj.props.erase("_assetRenderScale");
+      continue;
+    }
+
+    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty()
+                                         ? "1.0000,1.0000,1.0000"
+                                         : assetIt->second.renderScale;
+  }
+}
+
+// ===== 3D Asset Thumbnail Rendering Infrastructure =====
+// Framebuffer object for offscreen mesh rendering (shared across all asset previews).
+struct AssetThumbnailRenderer {
+  unsigned int fbo = 0;
+  unsigned int colorTexture = 0;
+  unsigned int depthRenderBuffer = 0;
+  int width = 512;
+  int height = 512;
+  Shader shader;  // Basic lighting shader for thumbnail
+
+  // Cache: assetKey -> currently rendered mesh/texture ID
+  struct CachedMesh {
+    std::shared_ptr<Mesh> mesh;
+    std::shared_ptr<SkinnedMesh> skinnedMesh;
+    std::shared_ptr<Skeleton> skeleton;
+    bool isSkinned = false;
+  };
+  std::unordered_map<std::string, CachedMesh> meshCache;
+  std::unordered_set<std::string> noPreviewKeys;
+  // Per-mesh rendered texture cache: each mesh gets its own texture so all
+  // thumbnails don't overwrite each other by sharing a single FBO attachment.
+  std::unordered_map<std::string, unsigned int> renderedTextureCache;
+
+  static AssetThumbnailRenderer& Instance() {
+    static AssetThumbnailRenderer instance;
+    return instance;
+  }
+
+  bool Init() {
+    if (fbo != 0)
+      return IsValid();
+
+    // Create FBO
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // Create color texture
+    glGenTextures(1, &colorTexture);
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+
+    // Create depth renderbuffer
+    glGenRenderbuffers(1, &depthRenderBuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRenderBuffer);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRenderBuffer);
+
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+      LOG_ERROR("AssetThumbnailRenderer: FBO incomplete, status=%d", (int)status);
+      Cleanup();
+      return false;
+    }
+
+    // Load simple lighting shader
+    try {
+      const std::filesystem::path vertPath = ResolvePreviewShaderPath("basic.vert");
+      const std::filesystem::path fragPath = ResolvePreviewShaderPath("basic.frag");
+      shader = Shader::FromFiles(vertPath.generic_string(), fragPath.generic_string());
+    } catch (const std::exception& e) {
+      LOG_ERROR("Failed to load preview shader: %s", e.what());
+      Cleanup();
+      return false;
+    }
+
+    return IsValid();
+  }
+
+  bool IsValid() const {
+    return fbo != 0 && colorTexture != 0 && depthRenderBuffer != 0 && shader.IsValid();
+  }
+
+  void Cleanup() {
+    meshCache.clear();
+    noPreviewKeys.clear();
+    for (auto& [key, texId] : renderedTextureCache) {
+      if (texId != 0)
+        glDeleteTextures(1, &texId);
+    }
+    renderedTextureCache.clear();
+    if (colorTexture != 0) {
+      glDeleteTextures(1, &colorTexture);
+      colorTexture = 0;
+    }
+    if (depthRenderBuffer != 0) {
+      glDeleteRenderbuffers(1, &depthRenderBuffer);
+      depthRenderBuffer = 0;
+    }
+    if (fbo != 0) {
+      glDeleteFramebuffers(1, &fbo);
+      fbo = 0;
+    }
+  }
+
+  ~AssetThumbnailRenderer() { Cleanup(); }
+};
+
+// Try to load a static mesh (OBJ) or skinned mesh (GLTF/GLB) from the given path.
+// Returns cache entry or nullptr on failure.
+static AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(const std::string& meshPath) {
+  if (meshPath.empty())
+    return nullptr;
+
+  const std::filesystem::path path = ResolveProjectRelativeOrAbsolutePath(meshPath);
+  const std::string ext = ToLowerAscii(path.extension().string());
+
+  auto& renderer = AssetThumbnailRenderer::Instance();
+  const std::string cacheKey = path.generic_string();
+
+  // Check no-preview cache
+  if (renderer.noPreviewKeys.find(cacheKey) != renderer.noPreviewKeys.end()) {
+    return nullptr;
+  }
+
+  // Check mesh cache
+  auto it = renderer.meshCache.find(cacheKey);
+  if (it != renderer.meshCache.end()) {
+    return &it->second;
+  }
+
+  AssetThumbnailRenderer::CachedMesh entry;
+
+  try {
+    if (ext == ".obj") {
+      entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
+      entry.isSkinned = false;
+    } else if (ext == ".gltf" || ext == ".glb") {
+      GltfLoadResult result = GltfLoader::Load(path.generic_string());
+      if (result.mesh) {
+        entry.skinnedMesh = result.mesh;
+        entry.skeleton = result.skeleton;
+        entry.isSkinned = true;
+      } else {
+        LOG_WARN("[Thumbnail] GLTF load failed (no mesh): %s", cacheKey.c_str());
+        renderer.noPreviewKeys.insert(cacheKey);
+        return nullptr;
+      }
+    } else {
+      LOG_WARN("[Thumbnail] Unsupported mesh format: %s", ext.c_str());
+      renderer.noPreviewKeys.insert(cacheKey);
+      return nullptr;
+    }
+  } catch (const std::exception& e) {
+    LOG_WARN("[Thumbnail] Failed to load mesh for preview: %s (error: %s)", cacheKey.c_str(), e.what());
+    renderer.noPreviewKeys.insert(cacheKey);
+    return nullptr;
+  }
+
+  it = renderer.meshCache.emplace(cacheKey, std::move(entry)).first;
+  return &it->second;
+}
+
+// Fit camera to mesh AABB with a comfortable margin. Returns view and projection matrices.
+static void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh,
+                            Mat4& outView, Mat4& outProj) {
+  Vec3 aabbCenter;
+  Vec3 aabbHalf;
+
+  if (mesh.isSkinned && mesh.skinnedMesh) {
+    aabbCenter = mesh.skinnedMesh->GetLocalAabbCenter();
+    aabbHalf = mesh.skinnedMesh->GetHalfExtents();
+  } else if (!mesh.isSkinned && mesh.mesh) {
+    aabbCenter = mesh.mesh->GetLocalAabbCenter();
+    aabbHalf = mesh.mesh->GetHalfExtents();
+  } else {
+    // Fallback: identity view/proj
+    outView = Mat4::Identity();
+    outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 100.0f);
+    return;
+  }
+
+  // Compute distance to fit AABB on screen (with 1.3x margin for breathing room)
+  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z});
+  const float fov = 45.0f * 3.14159f / 180.f;
+  const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
+
+  // Position camera at ~22° elevation for a clear side-on view of the object
+  const Vec3 camPos = aabbCenter + Vec3(distance * 0.9f, distance * 0.4f, distance * 0.9f);
+  outView = Mat4::LookAt(camPos, aabbCenter, Vec3(0, 1, 0));
+  outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
+}
+
+// Render a mesh to the thumbnail framebuffer and return a per-mesh cached texture ID.
+// meshKey must be the resolved mesh path (same key used in meshCache).
+static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
+                                          const std::string& meshKey) {
+  auto& renderer = AssetThumbnailRenderer::Instance();
+
+  // Return existing per-mesh texture if already rendered this session.
+  auto cacheIt = renderer.renderedTextureCache.find(meshKey);
+  if (cacheIt != renderer.renderedTextureCache.end())
+    return cacheIt->second;
+
+  if (!renderer.IsValid())
+    return 0;
+
+  // Save GL state (viewport)
+  GLint prevViewport[4] = {0, 0, 1, 1};
+  glGetIntegerv(GL_VIEWPORT, prevViewport);
+
+  // Bind FBO and set viewport
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer.fbo);
+  glViewport(0, 0, renderer.width, renderer.height);
+
+  // Clear and setup rendering
+  glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+
+  // Setup camera matrices
+  Mat4 view, proj;
+  FitCameraToMesh(mesh, view, proj);
+
+  // Render mesh with basic shader
+  renderer.shader.Bind();
+  renderer.shader.SetMat4("u_model", Mat4::Identity());
+  renderer.shader.SetMat4("u_view", view);
+  renderer.shader.SetMat4("u_projection", proj);
+  renderer.shader.SetVec3("u_cameraPos", view.Inverse().GetTranslation());
+  renderer.shader.SetVec4("u_color", Vec4(0.8f, 0.8f, 0.8f, 1.0f));
+  renderer.shader.SetInt("u_hasTexture", 0);
+  renderer.shader.SetInt("u_lightCount", 2);
+
+  // Key light: upper-left, warm white
+  renderer.shader.SetInt("u_lights[0].type", 0);
+  renderer.shader.SetVec3("u_lights[0].direction", Vec3(-1.0f, -1.5f, -0.5f).Normalized());
+  renderer.shader.SetVec3("u_lights[0].color", Vec3(1.2f, 1.2f, 1.1f));
+
+  // Fill light: lower-right, cool blue at lower intensity for depth contrast
+  renderer.shader.SetInt("u_lights[1].type", 0);
+  renderer.shader.SetVec3("u_lights[1].direction", Vec3(1.0f, 0.5f, 1.0f).Normalized());
+  renderer.shader.SetVec3("u_lights[1].color", Vec3(0.3f, 0.35f, 0.5f));
+
+  // Draw mesh
+  if (mesh.isSkinned && mesh.skinnedMesh) {
+    mesh.skinnedMesh->Draw();
+  } else if (!mesh.isSkinned && mesh.mesh) {
+    mesh.mesh->Draw();
+  }
+
+  // Copy FBO contents into a new per-mesh texture so each asset keeps its own image.
+  unsigned int destTex = 0;
+  glGenTextures(1, &destTex);
+  glBindTexture(GL_TEXTURE_2D, destTex);
+  // glReadPixels only runs once per mesh (then cached); CPU cost is acceptable.
+  std::vector<unsigned char> pixels(static_cast<size_t>(renderer.width * renderer.height * 3));
+  glReadPixels(0, 0, renderer.width, renderer.height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, renderer.width, renderer.height, 0, GL_RGB, GL_UNSIGNED_BYTE,
+               pixels.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  renderer.renderedTextureCache[meshKey] = destTex;
+
+  // Restore GL state
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+
+  return destTex;
+}
+
+static bool TryGetAssetPreviewTextureId(const std::string& assetId,
+                                        const AssetDef& asset,
+                                        unsigned int* outTextureId,
+                                        bool* outNeedsYFlip = nullptr) {
+  if (!outTextureId)
+    return false;
+  *outTextureId = 0;
+  if (outNeedsYFlip)
+    *outNeedsYFlip = false;
+
+  static std::unordered_map<std::string, Texture> s_textureByPath;
+  static std::unordered_map<std::string, std::shared_ptr<Texture>> s_gltfTextureByMesh;
+  static std::unordered_set<std::string> s_noPreviewCache;
+
+  const std::string key = assetId + "|" + asset.mesh + "|" + asset.albedoMap;
+  if (s_noPreviewCache.find(key) != s_noPreviewCache.end())
+    return false;
+
+  auto loadTextureByPath = [&](const std::filesystem::path& path) -> unsigned int {
+    if (path.empty())
+      return 0;
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || ec)
+      return 0;
+    const std::string abs = path.generic_string();
+    auto it = s_textureByPath.find(abs);
+    if (it == s_textureByPath.end()) {
+      Texture tex = Texture::FromFile(abs, false);
+      it = s_textureByPath.emplace(abs, std::move(tex)).first;
+    }
+    if (!it->second.IsValid())
+      return 0;
+    return it->second.GetNativeId();
+  };
+
+  // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
+  if (!asset.mesh.empty()) {
+    auto& thumbnailRenderer = AssetThumbnailRenderer::Instance();
+    if (thumbnailRenderer.Init()) {
+      if (auto* meshEntry = TryLoadAssetMesh(asset.mesh)) {
+        const std::string meshKey =
+            ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
+        const unsigned int texId = RenderMeshToThumbnail(*meshEntry, meshKey);
+        if (texId != 0) {
+          *outTextureId = texId;
+          // OpenGL FBO textures have origin at bottom-left; ImGui expects top-left.
+          // Caller must flip Y UVs when displaying this texture.
+          if (outNeedsYFlip)
+            *outNeedsYFlip = true;
+          return true;
+        }
+      }
+    }
+  }
+
+  // Priority 2: Fallback to texture-based thumbnails
+  if (!asset.albedoMap.empty()) {
+    const std::filesystem::path albedo = ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
+    const unsigned int texId = loadTextureByPath(albedo);
+    if (texId != 0) {
+      *outTextureId = texId;
+      return true;
+    }
+  }
+
+  const std::filesystem::path meshPath = ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+  if (!meshPath.empty()) {
+    const std::string ext = ToLowerAscii(meshPath.extension().string());
+
+    if (ext == ".obj") {
+      const std::string diffusePath = ObjLoader::FindDiffuseTexture(meshPath.generic_string());
+      const unsigned int texId = loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
+      if (texId != 0) {
+        *outTextureId = texId;
+        return true;
+      }
+    }
+
+    if (ext == ".gltf" || ext == ".glb") {
+      const std::string absMesh = meshPath.generic_string();
+      auto it = s_gltfTextureByMesh.find(absMesh);
+      if (it == s_gltfTextureByMesh.end()) {
+        GltfLoadResult result = GltfLoader::Load(absMesh);
+        if (result.albedoTexture && result.albedoTexture->IsValid())
+          it = s_gltfTextureByMesh.emplace(absMesh, std::move(result.albedoTexture)).first;
+      }
+      if (it != s_gltfTextureByMesh.end() && it->second && it->second->IsValid()) {
+        *outTextureId = it->second->GetNativeId();
+        return true;
+      }
+    }
+  }
+
+  s_noPreviewCache.insert(key);
+  return false;
+}
+
+static ImTextureID ToImTextureId(unsigned int textureId) {
+  return (ImTextureID)(intptr_t)textureId;
+}
+
 std::string PickTextureFilePath() {
 #ifdef _WIN32
   char filePath[MAX_PATH] = {};
@@ -443,6 +936,21 @@ void EditorLayer::Init(GLFWwindow* window) {
   ImGui_ImplOpenGL3_Init("#version 410");
 
   m_schema.LoadFromFile("assets/editor_schema.json");
+
+  // Load wireframe shader
+  try {
+    const std::filesystem::path wv = ResolvePreviewShaderPath("wire.vert");
+    const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
+    m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
+  } catch (const std::exception& e) {
+    LOG_WARN("[Editor] Failed to load wireframe shader: %s", e.what());
+  }
+
+  // Clear thumbnail caches to allow fresh asset preview generation
+  auto& renderer = AssetThumbnailRenderer::Instance();
+  renderer.noPreviewKeys.clear();
+  renderer.meshCache.clear();
+  LOG_INFO("[Editor] Asset thumbnail caches cleared on Init");
 }
 
 void EditorLayer::Shutdown() {
@@ -453,6 +961,8 @@ void EditorLayer::Shutdown() {
 
 void EditorLayer::Toggle() {
   m_active = !m_active;
+  if (!m_active)
+    m_playMode = false;
   if (m_flyMode) {
     m_flyMode = false;
     m_flyCamInitialized = false;
@@ -465,9 +975,40 @@ void EditorLayer::Toggle() {
   m_selectedIndices.clear();
 }
 
+void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
+  InvalidateProjectBrowserCache();
+  m_projectBrowserRoot.clear();
+  m_projectBrowserRootValid = false;
+  m_projectBrowserCwd.clear();
+  m_projectBrowserCwdValid = false;
+  if (root.empty())
+    return;
+  std::error_code ec;
+  std::filesystem::path canon = std::filesystem::weakly_canonical(root, ec);
+  if (ec)
+    canon = std::move(root);
+  if (!std::filesystem::is_directory(canon, ec) || ec) {
+    m_projectBrowserRoot = canon;
+    return;
+  }
+  m_projectBrowserRoot = std::move(canon);
+  m_projectBrowserRootValid = true;
+  m_projectBrowserCwd = m_projectBrowserRoot;
+  m_projectBrowserCwdValid = true;
+}
+
+void EditorLayer::SetProjectBrowserExtraBlocklist(std::unordered_set<std::string> names) {
+  m_projectExtraBlocklist = std::move(names);
+  InvalidateProjectBrowserCache();
+}
+
+void EditorLayer::InvalidateProjectBrowserCache() {
+  m_projectDirCache.clear();
+}
+
 void EditorLayer::LoadDocument(SceneDocument doc) {
   if (doc.filePath.empty())
-    doc.filePath = "assets/scenes/world.json";
+    doc.filePath = "assets/scenes/scene.json";
 
   for (auto& obj : doc.objects) {
     if (obj.type != SceneObjectType::Prop)
@@ -491,6 +1032,8 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
     }
     obj.props.erase("behavior");
   }
+
+  SyncAssetScaleMetadata(&doc);
 
   m_document = std::move(doc);
   m_lastSavedDocument = m_document;
@@ -636,6 +1179,12 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
       return false;
     }
 
+    if (m_playMode)
+      return false;
+
+    EditorTrace("OnUpdate frame=%u fly=%d", static_cast<unsigned>(ImGui::GetFrameCount()),
+                m_flyMode ? 1 : 0);
+
     ImGuiIO& io = ImGui::GetIO();
 
     const bool accelHeld = glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
@@ -667,19 +1216,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
-    // Escape: dismiss gizmo first; only then process editor-close logic.
+    // Escape: dismiss gizmo only (no editor quit on Escape; use File / window close).
     if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
         !hasBlockingPopup && m_gizmo.IsActive()) {
       m_gizmo.Deactivate();
-    } else if (ShouldHandleEditorEscape(currEsc, m_prevEsc, io.WantTextInput,
-                                        ImGui::IsAnyItemActive(), hasBlockingPopup)) {
-      if (ResolveEditorExitDecision(m_document.dirty) ==
-          EditorExitDecision::PromptUnsavedConfirm) {
-        m_confirmExitOpen = true;
-        m_exitConfirmError.clear();
-      } else {
-        m_closeRequested = true;
-      }
     }
     m_prevEsc = currEsc;
 
@@ -1002,21 +1542,32 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
 
   if (m_active) {
     DrawToolbar();
-    DrawViewGimbal(cam);
+    if (!m_playMode)
+      DrawViewGimbal(cam);
     DrawObjectList();
     DrawAssetsPanel();
+    if (!m_playMode)
+      DrawViewportDropTarget(cam, screenW, screenH);
     DrawPropertiesPanel();
+    DrawBottomDock();
     DrawStatusBar();
     DrawHelpPopup();
     DrawQuickOpenPopup();
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
-    DrawSelectionHighlight();  // queues to DebugDraw
-    if (m_gizmo.IsActive())
-      m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
+    if (!m_playMode) {
+      DrawSelectionHighlight();  // queues to DebugDraw
+      if (m_gizmo.IsActive())
+        m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
+    }
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
+
+  // Wireframe pass: clears solid scene and draws edges; must happen before
+  // DebugDraw::Flush so selection highlight/gizmo render on top.
+  if (m_active && !m_playMode)
+    DrawWireframeOverlay(cam);
 
   // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
   DebugDraw::Flush(cam);
@@ -1102,6 +1653,17 @@ void EditorLayer::DrawToolbar() {
       primaryIdx,
       static_cast<int>(m_document.objects.size()));
 
+  if (ImGui::Button("File"))
+    ImGui::OpenPopup("##toolbar_file_popup");
+  if (ImGui::BeginPopup("##toolbar_file_popup")) {
+    if (ImGui::MenuItem("New Scene"))
+      AddNewScene();
+    if (ImGui::MenuItem("Open Scene..."))
+      OpenAdditionalSceneFile();
+    ImGui::EndPopup();
+  }
+  ImGui::SameLine();
+
   if (ImGui::Button("Add"))
     ImGui::OpenPopup("##toolbar_add_popup");
   if (ImGui::BeginPopup("##toolbar_add_popup")) {
@@ -1174,14 +1736,33 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
   ImGui::TextDisabled("Copy Ref: Ctrl/Cmd+Shift+C");
   ImGui::SameLine();
+  ImGui::Separator();
+  ImGui::SameLine();
+  if (!m_playMode) {
+    if (ImGui::Button("Play")) {
+      m_playMode = true;
+      if (m_flyMode) {
+        m_flyMode = false;
+        m_flyCamInitialized = false;
+        m_prevCursorInit = false;
+      }
+      glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+  } else {
+    if (ImGui::Button("Stop")) {
+      m_playMode = false;
+      glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+  }
+  ImGui::SameLine();
 
   // Right-aligned controls
-  const float rightW = 260.0f;
+  const float rightW = 300.0f;
   ImGui::SetCursorPosX(io.DisplaySize.x - rightW);
 
   if (ImGui::Button("Load")) {
     std::string path =
-        m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
+        m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
     try {
       m_document = SceneSerializer::LoadFromFile(path);
       m_selectedIndices.clear();
@@ -1205,7 +1786,7 @@ void EditorLayer::DrawToolbar() {
   }
   ImGui::SameLine();
 
-  if (ImGui::Button("Exit [F10]")) {
+  if (ImGui::Button("Close editor")) {
     if (ResolveEditorExitDecision(m_document.dirty) ==
         EditorExitDecision::PromptUnsavedConfirm) {
       m_confirmExitOpen = true;
@@ -1248,6 +1829,308 @@ void EditorLayer::DrawStatusBar() {
   ImGui::End();
 }
 
+const std::vector<std::pair<std::filesystem::path, bool>>* EditorLayer::GetProjectDirListing(
+    const std::filesystem::path& absPath) {
+  namespace fs = std::filesystem;
+  std::error_code existsEc;
+  if (!fs::is_directory(absPath, existsEc) || existsEc)
+    return nullptr;
+
+  const std::string key = absPath.generic_string();
+  const uint32_t frame = static_cast<uint32_t>(ImGui::GetFrameCount());
+  auto it = m_projectDirCache.find(key);
+  if (it != m_projectDirCache.end()) {
+    const uint32_t age = frame - it->second.cachedAtFrame;
+    if (age < kProjectListingCacheFrames)
+      return &it->second.entries;
+  }
+
+  std::vector<std::pair<fs::path, bool>> sorted;
+  std::error_code ec;
+  for (fs::directory_iterator dit(absPath, fs::directory_options::skip_permission_denied, ec), end;
+       !ec && dit != end;
+       dit.increment(ec)) {
+    const fs::directory_entry ent = *dit;
+    const std::string name = ent.path().filename().string();
+    if (Editor::IsHiddenDotEntry(name))
+      continue;
+    std::error_code typEc;
+    const bool isDir = ent.is_directory(typEc);
+    if (isDir && !typEc && Editor::IsBlockedProjectDirName(name, &m_projectExtraBlocklist))
+      continue;
+    sorted.emplace_back(ent.path(), isDir && !typEc);
+  }
+  std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+    if (a.second != b.second)
+      return a.second > b.second;
+    return a.first.filename() < b.first.filename();
+  });
+
+  ProjectDirCache slot;
+  slot.cachedAtFrame = frame;
+  slot.entries = std::move(sorted);
+  m_projectDirCache[key] = std::move(slot);
+  return &m_projectDirCache.at(key).entries;
+}
+
+void EditorLayer::DrawProjectTreeRecursive(const std::filesystem::path& absPath,
+                                           const std::filesystem::path& /*displayRoot*/) {
+  namespace fs = std::filesystem;
+  const auto* listing = GetProjectDirListing(absPath);
+  if (!listing)
+    return;
+
+  for (const auto& ent : *listing) {
+    const fs::path& p = ent.first;
+    const bool isDir = ent.second;
+    const std::string name = p.filename().string();
+    if (isDir) {
+      if (ImGui::TreeNodeEx(name.c_str(), 0)) {
+        DrawProjectTreeRecursive(p, absPath);
+        ImGui::TreePop();
+      }
+    } else {
+      ImGui::BulletText("%s", name.c_str());
+    }
+  }
+}
+
+static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
+  using clock = std::chrono::system_clock;
+  const std::time_t t = clock::to_time_t(entry.time);
+  std::tm tmBuf{};
+#ifdef _WIN32
+  localtime_s(&tmBuf, &t);
+#else
+  localtime_r(&t, &tmBuf);
+#endif
+  std::strftime(buf, bufSize, "%H:%M:%S", &tmBuf);
+}
+
+void EditorLayer::DrawBottomDock() {
+  ImGuiIO& io = ImGui::GetIO();
+  const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop));
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kBottomDockH));
+  ImGui::SetNextWindowBgAlpha(0.88f);
+  ImGui::Begin("##editor_bottom_dock",
+               nullptr,
+               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+  if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
+    if (ImGui::BeginTabItem("Project")) {
+      if (m_projectBrowserRootValid &&
+          std::filesystem::is_directory(m_projectBrowserRoot)) {
+        if (!m_projectBrowserCwdValid ||
+            !std::filesystem::is_directory(m_projectBrowserCwd) ||
+            m_projectBrowserCwd.empty()) {
+          m_projectBrowserCwd = m_projectBrowserRoot;
+          m_projectBrowserCwdValid = true;
+        }
+
+        ImGui::BeginChild("##project_tiles", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+
+        bool cwdChanged = false;
+        std::filesystem::path nextCwd = m_projectBrowserCwd;
+        const std::string rootLabel = m_projectBrowserRoot.filename().string().empty()
+                                          ? m_projectBrowserRoot.generic_string()
+                                          : m_projectBrowserRoot.filename().string();
+        if (ImGui::SmallButton(rootLabel.c_str())) {
+          nextCwd = m_projectBrowserRoot;
+          cwdChanged = true;
+        }
+
+        std::error_code relEc;
+        const std::filesystem::path relPath =
+            std::filesystem::relative(m_projectBrowserCwd, m_projectBrowserRoot, relEc);
+        if (!relEc && !relPath.empty() && relPath != ".") {
+          std::filesystem::path crumb = m_projectBrowserRoot;
+          for (const auto& part : relPath) {
+            ImGui::SameLine();
+            ImGui::TextUnformatted(">");
+            ImGui::SameLine();
+            crumb /= part;
+            const std::string partLabel = part.string();
+            if (ImGui::SmallButton(partLabel.c_str())) {
+              nextCwd = crumb;
+              cwdChanged = true;
+            }
+          }
+        }
+
+        ImGui::Separator();
+
+        const auto* listing = GetProjectDirListing(m_projectBrowserCwd);
+        if (!listing) {
+          ImGui::TextDisabled("Cannot read '%s'", m_projectBrowserCwd.generic_string().c_str());
+        } else {
+          const float spacing = 10.0f;
+          const float minTileW = 120.0f;
+          const float tileH = 104.0f;
+          const float iconW = 64.0f;
+          const float iconH = 42.0f;
+          const float availW = std::max(0.0f, ImGui::GetContentRegionAvail().x);
+          const int columns = std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
+          const float tileW = std::max(minTileW,
+                                       (availW - spacing * static_cast<float>(columns - 1)) /
+                                           static_cast<float>(columns));
+
+          int itemIndex = 0;
+          for (const auto& ent : *listing) {
+            const std::filesystem::path& p = ent.first;
+            const bool isDir = ent.second;
+            const std::string name = p.filename().string();
+
+            ImGui::PushID(p.generic_string().c_str());
+            ImGui::InvisibleButton("##project_item_btn", ImVec2(tileW, tileH));
+            if (ImGui::IsItemClicked()) {
+              if (isDir) {
+                nextCwd = p;
+                cwdChanged = true;
+              }
+            }
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+              ImGui::SetTooltip("%s", p.generic_string().c_str());
+
+            const ImVec2 rMin = ImGui::GetItemRectMin();
+            const ImVec2 rMax = ImGui::GetItemRectMax();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const bool hovered = ImGui::IsItemHovered();
+            const ImU32 hoverBg = ImGui::ColorConvertFloat4ToU32(ImVec4(0.22f, 0.30f, 0.42f, 0.28f));
+            if (hovered) {
+              dl->AddRectFilled(ImVec2(rMin.x + 2.0f, rMin.y + 2.0f), ImVec2(rMax.x - 2.0f, rMax.y - 2.0f),
+                                hoverBg, 8.0f);
+            }
+
+            const float iconX = rMin.x + (tileW - iconW) * 0.5f;
+            const float iconY = rMin.y + 10.0f;
+            if (isDir) {
+              const ImU32 tabCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.30f, 0.68f, 0.92f, 1.0f));
+              const ImU32 bodyCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 0.60f, 0.86f, 1.0f));
+              const ImU32 edgeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.18f, 0.45f, 0.66f, 1.0f));
+              dl->AddRectFilled(ImVec2(iconX + 5.0f, iconY), ImVec2(iconX + iconW * 0.56f, iconY + 10.0f), tabCol,
+                                4.0f, ImDrawFlags_RoundCornersTop);
+              dl->AddRectFilled(ImVec2(iconX, iconY + 7.0f), ImVec2(iconX + iconW, iconY + iconH), bodyCol, 6.0f);
+              dl->AddRect(ImVec2(iconX, iconY + 7.0f), ImVec2(iconX + iconW, iconY + iconH), edgeCol, 6.0f);
+            } else {
+              const ImU32 pageCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.86f, 0.90f, 0.96f, 1.0f));
+              const ImU32 foldCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.74f, 0.80f, 0.90f, 1.0f));
+              const ImU32 edgeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.58f, 0.65f, 0.76f, 1.0f));
+              const ImVec2 p0(iconX + 8.0f, iconY);
+              const ImVec2 p1(iconX + iconW - 8.0f, iconY + iconH);
+              dl->AddRectFilled(p0, p1, pageCol, 4.0f);
+              dl->AddRect(p0, p1, edgeCol, 4.0f);
+              dl->AddTriangleFilled(ImVec2(p1.x - 14.0f, p0.y), ImVec2(p1.x, p0.y), ImVec2(p1.x, p0.y + 14.0f),
+                                    foldCol);
+            }
+
+            std::string label = name;
+            const float maxLabelW = tileW - 10.0f;
+            if (ImGui::CalcTextSize(label.c_str()).x > maxLabelW) {
+              while (!label.empty() && ImGui::CalcTextSize((label + "...").c_str()).x > maxLabelW)
+                label.pop_back();
+              label += "...";
+            }
+
+            const ImVec2 labelSz = ImGui::CalcTextSize(label.c_str());
+            const float labelX = rMin.x + std::max(4.0f, (tileW - labelSz.x) * 0.5f);
+            const float labelY = iconY + iconH + 10.0f;
+            dl->AddText(ImVec2(labelX, labelY), ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
+
+            ImGui::PopID();
+
+            ++itemIndex;
+            if ((itemIndex % columns) != 0)
+              ImGui::SameLine(0.0f, spacing);
+          }
+        }
+
+        if (cwdChanged) {
+          m_projectBrowserCwd = std::move(nextCwd);
+          m_projectBrowserCwdValid = true;
+        }
+
+        ImGui::EndChild();
+      } else {
+        ImGui::TextDisabled("Set project root (host app) to browse files.");
+      }
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Console")) {
+      int nInfo = 0;
+      int nWarn = 0;
+      int nErr = 0;
+      LogBuffer::Instance().GetCounts(&nInfo, &nWarn, &nErr);
+      if (ImGui::SmallButton("Clear"))
+        LogBuffer::Instance().Clear();
+      ImGui::SameLine();
+      ImGui::Checkbox("Info", &m_consoleShowInfo);
+      ImGui::SameLine();
+      ImGui::Checkbox("Warn", &m_consoleShowWarn);
+      ImGui::SameLine();
+      ImGui::Checkbox("Error", &m_consoleShowError);
+      ImGui::SameLine();
+      ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
+
+      ImGui::Separator();
+      ImGui::BeginChild("##console_scroll", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+      LogBuffer& logBuf = LogBuffer::Instance();
+      const uint64_t rev = logBuf.Revision();
+      if (rev != m_consoleLogRevision) {
+        logBuf.CopyLinesTo(&m_consoleLinesCache);
+        m_consoleLogRevision = rev;
+      }
+
+      m_consoleVisibleScratch.clear();
+      for (int i = 0; i < static_cast<int>(m_consoleLinesCache.size()); ++i) {
+        const LogLine& entry = m_consoleLinesCache[static_cast<size_t>(i)];
+        if (entry.level == LogLevel::Info && !m_consoleShowInfo)
+          continue;
+        if (entry.level == LogLevel::Warn && !m_consoleShowWarn)
+          continue;
+        if (entry.level == LogLevel::Error && !m_consoleShowError)
+          continue;
+        m_consoleVisibleScratch.push_back(i);
+      }
+
+      // No ImGuiListClipper here: wrapped ImGui::Text rows have variable height and can confuse
+      // the clipper (hang or broken scroll). LogBuffer caps lines (~1k); a linear pass is fine.
+      EditorTrace("Console draw visible=%d cached=%zu rev=%llu",
+                  static_cast<int>(m_consoleVisibleScratch.size()), m_consoleLinesCache.size(),
+                  static_cast<unsigned long long>(rev));
+
+      for (int row = 0; row < static_cast<int>(m_consoleVisibleScratch.size()); ++row) {
+        const LogLine& entry =
+            m_consoleLinesCache[static_cast<size_t>(m_consoleVisibleScratch[static_cast<size_t>(row)])];
+        char timeBuf[32];
+        FormatLogTime(entry, timeBuf, sizeof(timeBuf));
+        const char* levelStr =
+            entry.level == LogLevel::Info ? "INFO" : entry.level == LogLevel::Warn ? "WARN" : "ERR";
+        ImVec4 color(0.85f, 0.9f, 1.0f, 1.0f);
+        if (entry.level == LogLevel::Warn)
+          color = ImVec4(1.0f, 0.85f, 0.4f, 1.0f);
+        else if (entry.level == LogLevel::Error)
+          color = ImVec4(1.0f, 0.45f, 0.4f, 1.0f);
+
+        char lineBuf[1024];
+        std::snprintf(lineBuf, sizeof(lineBuf), "[%s] %s (%s:%d) %s", timeBuf, levelStr,
+                      entry.file.c_str(), entry.line, entry.message.c_str());
+
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        ImGui::TextUnformatted(lineBuf);
+        ImGui::PopStyleColor();
+      }
+      ImGui::EndChild();
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
+  }
+
+  ImGui::End();
+}
+
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
   constexpr float kPanelW = 280.0f;
@@ -1255,6 +2138,32 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   constexpr float kWinH = 138.0f;
   const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
   const float wy = 42.0f;
+
+  // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
+  constexpr float kBtnSize = 28.0f;
+  constexpr float kBtnFrameSize = 36.0f;
+  constexpr float kBtnGap = 10.0f;
+  const float btnX = wx - kBtnFrameSize - kBtnGap;
+  const float btnY = wy;
+  ImGui::SetNextWindowPos(ImVec2(btnX, btnY));
+  ImGui::SetNextWindowSize(ImVec2(kBtnFrameSize, kBtnFrameSize));
+  ImGui::SetNextWindowBgAlpha(0.0f);
+  ImGui::Begin("##wire_btn", nullptr,
+               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
+  const float btnPad = (kBtnFrameSize - kBtnSize) * 0.5f;
+  ImGui::SetCursorPos(ImVec2(btnPad, btnPad));
+  if (m_wireframeMode)
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
+  else
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
+  if (ImGui::Button("[W]", ImVec2(kBtnSize, kBtnSize)))
+    m_wireframeMode = !m_wireframeMode;
+  ImGui::PopStyleColor();
+  if (ImGui::IsItemHovered())
+    ImGui::SetTooltip("Toggle Wireframe");
+  ImGui::End();
 
   ImGui::SetNextWindowPos(ImVec2(wx, wy));
   ImGui::SetNextWindowSize(ImVec2(kWinW, kWinH));
@@ -1383,7 +2292,17 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGui::End();
 }
 
-// ---- Object list panel -------------------------------------------------------
+// ---- Hierarchy panel ---------------------------------------------------------
+
+// Short icon prefix shown before each object in the hierarchy tree.
+static const char* ObjectTypeIcon(SceneObjectType type) {
+  switch (type) {
+    case SceneObjectType::Prop:   return "[>]";
+    case SceneObjectType::Light:  return "[*]";
+    case SceneObjectType::Camera: return "[C]";
+    default:                      return "[=]";  // Panel / board
+  }
+}
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
@@ -1397,8 +2316,9 @@ void EditorLayer::DrawObjectList() {
   ImGui::SetNextWindowSize(ImVec2(kLeftDockW, objH));
   ImGui::SetNextWindowBgAlpha(0.85f);
   ImGui::Begin(
-      "Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+      "Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+  // Search bar (applies to primary scene)
   char searchBuf[256] = {};
   std::snprintf(searchBuf, sizeof(searchBuf), "%s", m_objectSearchQuery.c_str());
   ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
@@ -1407,213 +2327,10 @@ void EditorLayer::DrawObjectList() {
   ImGui::PopItemFlag();
   ImGui::Separator();
 
-  int shownObjectCount = 0;
-  if (!m_objectSearchQuery.empty()) {
-    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
-      ImGui::PushID(i);
-      auto& obj = m_document.objects[i];
-      if (!ObjectMatchesQuickOpenQuery(obj, m_objectSearchQuery))
-      {
-        ImGui::PopID();
-        continue;
-      }
-      const char* typeName = ObjectTypeLabel(obj.type);
+  // Primary scene
+  DrawSceneHeader(m_document, true, -1);
 
-      char selectableId[32];
-      std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
-
-      const float lineH = ImGui::GetTextLineHeight();
-      const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
-
-      if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
-        if (ImGui::GetIO().KeyShift)
-          ToggleSelect(i);
-        else
-          m_selectedIndices = {i};
-      }
-      ImGui::SameLine();
-      {
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImGui::BeginGroup();
-        ImGui::TextDisabled("%s", typeName);
-        ImGui::SameLine(0.0f, 4.0f);
-        ImGui::Text("%s", obj.id.c_str());
-        if (!obj.assetId.empty()) {
-          ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
-          ImGui::TextDisabled("> %s", obj.assetId.c_str());
-        }
-        ImGui::EndGroup();
-      }
-
-      if (ImGui::BeginPopupContextItem("obj_ctx")) {
-        if (ImGui::BeginMenu("Add")) {
-          if (ImGui::MenuItem("Panel"))
-            AddObject(SceneObjectType::Panel, obj.id);
-          if (ImGui::MenuItem("Prop"))
-            AddObject(SceneObjectType::Prop, obj.id);
-          if (ImGui::MenuItem("Light"))
-            AddObject(SceneObjectType::Light, obj.id);
-          if (ImGui::MenuItem("Camera"))
-            AddObject(SceneObjectType::Camera, obj.id);
-          ImGui::EndMenu();
-        }
-
-        ImGui::Separator();
-
-        if (ImGui::MenuItem("Rename..."))
-          OpenRenameObjectModal(i);
-
-        if (ImGui::MenuItem("Duplicate")) {
-          m_selectedIndices = {i};
-          DuplicatePrimarySelection();
-        }
-
-        if (ImGui::MenuItem("Delete")) {
-          m_selectedIndices = {i};
-          RequestDeleteSelectedObjects();
-        }
-
-        ImGui::EndPopup();
-      }
-
-      ++shownObjectCount;
-      ImGui::PopID();
-    }
-  } else {
-    std::unordered_map<std::string, int> idToIndex;
-    idToIndex.reserve(m_document.objects.size());
-    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i)
-      idToIndex[m_document.objects[static_cast<size_t>(i)].id] = i;
-
-    std::vector<std::vector<int>> children(m_document.objects.size());
-    std::vector<int> roots;
-    roots.reserve(m_document.objects.size());
-    for (int i = 0; i < static_cast<int>(m_document.objects.size()); ++i) {
-      const SceneObject& obj = m_document.objects[static_cast<size_t>(i)];
-      int p = -1;
-      const auto pIt = idToIndex.find(GetParentId(obj));
-      if (pIt != idToIndex.end())
-        p = pIt->second;
-      if (p >= 0 && p != i)
-        children[static_cast<size_t>(p)].push_back(i);
-      else
-        roots.push_back(i);
-    }
-
-    std::function<void(int, int)> drawNode;
-    drawNode = [this, &drawNode, &children, &shownObjectCount](int idx, int depth) {
-      if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
-        return;
-      SceneObject& obj = m_document.objects[static_cast<size_t>(idx)];
-      ++shownObjectCount;
-
-      ImGui::PushID(idx);
-      const float treeIndent = 14.0f;
-      if (depth > 0)
-        ImGui::Indent(treeIndent);
-      const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
-      ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-      if (!hasChildren)
-        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-      if (IsSelected(idx))
-        flags |= ImGuiTreeNodeFlags_Selected;
-
-      const char* typeName = ObjectTypeLabel(obj.type);
-      std::string label = std::string(typeName) + " " + obj.id;
-      const bool open = ImGui::TreeNodeEx("##obj_tree", flags, "%s", label.c_str());
-      if (ImGui::IsItemClicked()) {
-        if (ImGui::GetIO().KeyShift)
-          ToggleSelect(idx);
-        else
-          m_selectedIndices = {idx};
-      }
-
-      if (ImGui::BeginDragDropSource()) {
-        ImGui::SetDragDropPayload("SCENE_OBJECT_INDEX", &idx, sizeof(int));
-        ImGui::TextUnformatted(obj.id.c_str());
-        ImGui::EndDragDropSource();
-      }
-      if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
-          if (payload->DataSize == sizeof(int)) {
-            const int src = *static_cast<const int*>(payload->Data);
-            const bool valid = src >= 0 && src < static_cast<int>(m_document.objects.size()) &&
-                               src != idx && !IsDescendantOf(m_document, idx, src);
-            if (valid) {
-              m_document.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
-              m_document.dirty = true;
-            }
-          }
-        }
-        ImGui::EndDragDropTarget();
-      }
-
-      if (ImGui::BeginPopupContextItem("obj_ctx")) {
-        if (ImGui::BeginMenu("Add")) {
-          if (ImGui::MenuItem("Panel"))
-            AddObject(SceneObjectType::Panel, obj.id);
-          if (ImGui::MenuItem("Prop"))
-            AddObject(SceneObjectType::Prop, obj.id);
-          if (ImGui::MenuItem("Light"))
-            AddObject(SceneObjectType::Light, obj.id);
-          if (ImGui::MenuItem("Camera"))
-            AddObject(SceneObjectType::Camera, obj.id);
-          ImGui::EndMenu();
-        }
-
-        ImGui::Separator();
-
-        if (ImGui::MenuItem("Rename..."))
-          OpenRenameObjectModal(idx);
-
-        if (ImGui::MenuItem("Duplicate")) {
-          m_selectedIndices = {idx};
-          DuplicatePrimarySelection();
-        }
-
-        if (ImGui::MenuItem("Delete")) {
-          m_selectedIndices = {idx};
-          RequestDeleteSelectedObjects();
-        }
-
-        ImGui::Separator();
-        const bool hasParent = !GetParentId(obj).empty();
-        if (ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
-          obj.props.erase("parentId");
-          m_document.dirty = true;
-        }
-        ImGui::EndPopup();
-      }
-
-      if (open && hasChildren) {
-        for (int childIdx : children[static_cast<size_t>(idx)])
-          drawNode(childIdx, depth + 1);
-        ImGui::TreePop();
-      }
-
-      if (depth > 0)
-        ImGui::Unindent(treeIndent);
-      ImGui::PopID();
-    };
-
-    for (int rootIdx : roots)
-      drawNode(rootIdx, 0);
-  }
-
-  const FilteredListState objectState =
-      EvaluateFilteredListState(m_document.objects.size(), shownObjectCount, m_objectSearchQuery);
-  if (objectState != FilteredListState::None) {
-    ImGui::Spacing();
-    if (objectState == FilteredListState::EmptyData) {
-      ImGui::TextDisabled("No objects in scene");
-      ImGui::TextDisabled("Tip: add from '+ Prop from Asset' or create one from Assets panel.");
-    } else if (objectState == FilteredListState::NoMatches) {
-      ImGui::TextDisabled("No objects match '%s'", m_objectSearchQuery.c_str());
-      if (ImGui::Button("Clear Object Search"))
-        m_objectSearchQuery.clear();
-    }
-  }
-
+  // Right-click empty space → add object to primary scene
   if (ImGui::BeginPopupContextWindow("obj_ctx_empty",
                                      ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
     if (ImGui::BeginMenu("Add")) {
@@ -1694,6 +2411,406 @@ void EditorLayer::DrawObjectList() {
   ImGui::End();
 }
 
+// Renders a Unity-style collapsible scene header, then the objects tree under it.
+void EditorLayer::DrawSceneHeader(SceneDocument& doc, bool isPrimary, int additionalIndex) {
+  // Build label: sceneName + dirty indicator for primary scene
+  std::string label = doc.sceneName.empty() ? "Scene" : doc.sceneName;
+  if (isPrimary && doc.dirty)
+    label += " *";
+
+  // Tint the primary scene header slightly to distinguish it
+  if (isPrimary)
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.33f, 0.52f, 1.0f));
+
+  ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+  char nodeId[32];
+  std::snprintf(nodeId, sizeof(nodeId), isPrimary ? "##scene_primary" : "##scene_%d", additionalIndex);
+  const bool open = ImGui::TreeNodeEx(
+      nodeId,
+      ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
+          ImGuiTreeNodeFlags_DefaultOpen,
+      "%s", label.c_str());
+
+  if (isPrimary)
+    ImGui::PopStyleColor();
+
+  // Scene header context menu
+  char ctxId[40];
+  std::snprintf(ctxId, sizeof(ctxId), isPrimary ? "scene_hdr_ctx_p" : "scene_hdr_ctx_%d",
+                additionalIndex);
+  if (ImGui::BeginPopupContextItem(ctxId)) {
+    if (isPrimary) {
+      if (ImGui::BeginMenu("Add")) {
+        if (ImGui::MenuItem("Panel"))
+          AddObject(SceneObjectType::Panel);
+        if (ImGui::MenuItem("Prop"))
+          AddObject(SceneObjectType::Prop);
+        if (ImGui::MenuItem("Light"))
+          AddObject(SceneObjectType::Light);
+        if (ImGui::MenuItem("Camera"))
+          AddObject(SceneObjectType::Camera);
+        ImGui::EndMenu();
+      }
+      ImGui::Separator();
+      std::string saveErr;
+      if (ImGui::MenuItem("Save Scene"))
+        SaveDocument(&saveErr);
+    } else {
+      std::string saveErr;
+      if (ImGui::MenuItem("Save Scene"))
+        SaveAdditionalScene(additionalIndex, &saveErr);
+      ImGui::Separator();
+      if (ImGui::MenuItem("Close Scene"))
+        CloseAdditionalScene(additionalIndex);
+    }
+    ImGui::EndPopup();
+  }
+
+  // Drop onto scene header → unparent the dragged object (make it a root)
+  if (isPrimary && ImGui::BeginDragDropTarget()) {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
+      if (payload->DataSize == sizeof(int)) {
+        const int src = *static_cast<const int*>(payload->Data);
+        if (src >= 0 && src < static_cast<int>(doc.objects.size())) {
+          doc.objects[static_cast<size_t>(src)].props.erase("parentId");
+          doc.dirty = true;
+        }
+      }
+    }
+    ImGui::EndDragDropTarget();
+  }
+
+  if (open) {
+    DrawObjectsTree(doc, isPrimary);
+    ImGui::TreePop();
+  }
+}
+
+// Renders the tree of objects inside a scene, plus runtime entities for the primary scene.
+void EditorLayer::DrawObjectsTree(SceneDocument& doc, bool isPrimary) {
+  // Search filter applies only to the primary scene
+  const std::string& query = isPrimary ? m_objectSearchQuery : "";
+
+  int shownObjectCount = 0;
+
+  if (!query.empty()) {
+    // Flat filtered list (search mode, primary scene only)
+    for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+      ImGui::PushID(i);
+      auto& obj = doc.objects[static_cast<size_t>(i)];
+      if (!ObjectMatchesQuickOpenQuery(obj, query)) {
+        ImGui::PopID();
+        continue;
+      }
+      const char* icon = ObjectTypeIcon(obj.type);
+      const char* typeName = ObjectTypeLabel(obj.type);
+
+      char selectableId[32];
+      std::snprintf(selectableId, sizeof(selectableId), "##obj_%d", i);
+
+      const float lineH = ImGui::GetTextLineHeight();
+      const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
+
+      if (ImGui::Selectable(selectableId, IsSelected(i), 0, ImVec2(0, rowH))) {
+        auto& selIo = ImGui::GetIO();
+        if (selIo.KeyShift && m_lastClickedHierarchyIdx >= 0) {
+          const int lo = std::min(m_lastClickedHierarchyIdx, i);
+          const int hi = std::max(m_lastClickedHierarchyIdx, i);
+          m_selectedIndices.clear();
+          for (int ri = lo; ri <= hi; ++ri)
+            m_selectedIndices.push_back(ri);
+        } else if (selIo.KeyCtrl || selIo.KeySuper) {
+          ToggleSelect(i);
+          m_lastClickedHierarchyIdx = i;
+        } else {
+          m_selectedIndices = {i};
+          m_lastClickedHierarchyIdx = i;
+        }
+      }
+      ImGui::SameLine();
+      {
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::BeginGroup();
+        ImGui::TextDisabled("%s %s", icon, typeName);
+        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::Text("%s", obj.id.c_str());
+        if (!obj.assetId.empty()) {
+          ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
+          ImGui::TextDisabled("  > %s", obj.assetId.c_str());
+        }
+        ImGui::EndGroup();
+      }
+
+      if (ImGui::BeginPopupContextItem("obj_ctx")) {
+        if (ImGui::BeginMenu("Add")) {
+          if (ImGui::MenuItem("Panel"))
+            AddObject(SceneObjectType::Panel, obj.id);
+          if (ImGui::MenuItem("Prop"))
+            AddObject(SceneObjectType::Prop, obj.id);
+          if (ImGui::MenuItem("Light"))
+            AddObject(SceneObjectType::Light, obj.id);
+          if (ImGui::MenuItem("Camera"))
+            AddObject(SceneObjectType::Camera, obj.id);
+          ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Rename..."))
+          OpenRenameObjectModal(i);
+        if (ImGui::MenuItem("Duplicate")) {
+          m_selectedIndices = {i};
+          DuplicatePrimarySelection();
+        }
+        if (ImGui::MenuItem("Delete")) {
+          m_selectedIndices = {i};
+          RequestDeleteSelectedObjects();
+        }
+        ImGui::EndPopup();
+      }
+
+      ++shownObjectCount;
+      ImGui::PopID();
+    }
+
+    if (shownObjectCount == 0 && !doc.objects.empty()) {
+      ImGui::TextDisabled("No objects match '%s'", query.c_str());
+      if (ImGui::Button("Clear Search"))
+        m_objectSearchQuery.clear();
+    }
+  } else {
+    // Tree view
+    std::unordered_map<std::string, int> idToIndex;
+    idToIndex.reserve(doc.objects.size());
+    for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i)
+      idToIndex[doc.objects[static_cast<size_t>(i)].id] = i;
+
+    std::vector<std::vector<int>> children(doc.objects.size());
+    std::vector<int> roots;
+    roots.reserve(doc.objects.size());
+    for (int i = 0; i < static_cast<int>(doc.objects.size()); ++i) {
+      const SceneObject& obj = doc.objects[static_cast<size_t>(i)];
+      int p = -1;
+      const auto pIt = idToIndex.find(GetParentId(obj));
+      if (pIt != idToIndex.end())
+        p = pIt->second;
+      if (p >= 0 && p != i)
+        children[static_cast<size_t>(p)].push_back(i);
+      else
+        roots.push_back(i);
+    }
+
+    std::function<void(int)> drawNode;
+    drawNode = [&](int idx) {
+      if (idx < 0 || idx >= static_cast<int>(doc.objects.size()))
+        return;
+      SceneObject& obj = doc.objects[static_cast<size_t>(idx)];
+      ++shownObjectCount;
+
+      ImGui::PushID(idx);
+      const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
+      ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+      if (!hasChildren)
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+      if (isPrimary && IsSelected(idx))
+        flags |= ImGuiTreeNodeFlags_Selected;
+
+      const char* icon = ObjectTypeIcon(obj.type);
+      std::string nodeLabel = std::string(icon) + " " + obj.id;
+      if (!obj.assetId.empty())
+        nodeLabel += "  [" + obj.assetId + "]";
+
+      const bool open = ImGui::TreeNodeEx("##obj_tree", flags, "%s", nodeLabel.c_str());
+
+      if (isPrimary && ImGui::IsItemClicked()) {
+        auto& treeIo = ImGui::GetIO();
+        if (treeIo.KeyShift && m_lastClickedHierarchyIdx >= 0) {
+          const int lo = std::min(m_lastClickedHierarchyIdx, idx);
+          const int hi = std::max(m_lastClickedHierarchyIdx, idx);
+          m_selectedIndices.clear();
+          for (int ri = lo; ri <= hi; ++ri)
+            m_selectedIndices.push_back(ri);
+        } else if (treeIo.KeyCtrl || treeIo.KeySuper) {
+          ToggleSelect(idx);
+          m_lastClickedHierarchyIdx = idx;
+        } else {
+          m_selectedIndices = {idx};
+          m_lastClickedHierarchyIdx = idx;
+        }
+      }
+
+      if (isPrimary) {
+        if (ImGui::BeginDragDropSource()) {
+          ImGui::SetDragDropPayload("SCENE_OBJECT_INDEX", &idx, sizeof(int));
+          ImGui::TextUnformatted(obj.id.c_str());
+          ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
+            if (payload->DataSize == sizeof(int)) {
+              const int src = *static_cast<const int*>(payload->Data);
+              const bool valid = src >= 0 && src < static_cast<int>(doc.objects.size()) &&
+                                 src != idx && !IsDescendantOf(doc, idx, src);
+              if (valid) {
+                doc.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
+                doc.dirty = true;
+              }
+            }
+          }
+          ImGui::EndDragDropTarget();
+        }
+
+        if (ImGui::BeginPopupContextItem("obj_ctx")) {
+          if (ImGui::BeginMenu("Add")) {
+            if (ImGui::MenuItem("Panel"))
+              AddObject(SceneObjectType::Panel, obj.id);
+            if (ImGui::MenuItem("Prop"))
+              AddObject(SceneObjectType::Prop, obj.id);
+            if (ImGui::MenuItem("Light"))
+              AddObject(SceneObjectType::Light, obj.id);
+            if (ImGui::MenuItem("Camera"))
+              AddObject(SceneObjectType::Camera, obj.id);
+            ImGui::EndMenu();
+          }
+          ImGui::Separator();
+          if (ImGui::MenuItem("Rename..."))
+            OpenRenameObjectModal(idx);
+          if (ImGui::MenuItem("Duplicate")) {
+            m_selectedIndices = {idx};
+            DuplicatePrimarySelection();
+          }
+          if (ImGui::MenuItem("Delete")) {
+            m_selectedIndices = {idx};
+            RequestDeleteSelectedObjects();
+          }
+          ImGui::Separator();
+          const bool hasParent = !GetParentId(obj).empty();
+          if (ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
+            obj.props.erase("parentId");
+            doc.dirty = true;
+          }
+          ImGui::EndPopup();
+        }
+      }
+
+      if (open && hasChildren) {
+        for (int childIdx : children[static_cast<size_t>(idx)])
+          drawNode(childIdx);
+        ImGui::TreePop();
+      }
+
+      ImGui::PopID();
+    };
+
+    for (int rootIdx : roots)
+      drawNode(rootIdx);
+
+    if (doc.objects.empty()) {
+      ImGui::TextDisabled("No objects in scene");
+      if (isPrimary)
+        ImGui::TextDisabled("Tip: right-click or use Assets panel.");
+    }
+
+    // Runtime entities: ECS entities that have no corresponding editor object (primary only)
+    if (isPrimary && m_liveRegistry) {
+      std::unordered_set<Entity> docEntities;
+      for (const auto& obj : doc.objects) {
+        const auto it = obj.props.find("_eid");
+        if (it != obj.props.end()) {
+          try {
+            docEntities.insert(static_cast<Entity>(std::stoul(it->second)));
+          } catch (...) {}
+        }
+      }
+
+      std::vector<Entity> runtimeEntities;
+      for (Entity e : m_liveRegistry->GetEntities<TransformComponent>()) {
+        if (docEntities.find(e) == docEntities.end())
+          runtimeEntities.push_back(e);
+      }
+
+      if (!runtimeEntities.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+        if (ImGui::TreeNodeEx("##runtime_entities",
+                              ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth,
+                              "[rt] Runtime (%zu)", runtimeEntities.size())) {
+          for (Entity e : runtimeEntities) {
+            ImGui::PushID(static_cast<int>(e));
+            ImGui::TreeNodeEx(
+                "##rt_ent",
+                ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                    ImGuiTreeNodeFlags_SpanAvailWidth,
+                "[>] Entity %u", static_cast<unsigned>(e));
+            ImGui::PopID();
+          }
+          ImGui::TreePop();
+        }
+        ImGui::PopStyleColor();
+      }
+    }
+  }
+}
+
+// ---- Multi-scene helpers -----------------------------------------------------
+
+void EditorLayer::AddNewScene() {
+  SceneDocument newDoc;
+  newDoc.sceneId = "scene";
+  newDoc.sceneName = "Scene";
+  newDoc.dirty = true;
+  m_document = std::move(newDoc);
+  m_selectedIndices.clear();
+  m_selectedAssetId.clear();
+}
+
+void EditorLayer::OpenAdditionalSceneFile() {
+#ifdef _WIN32
+  char filePath[MAX_PATH] = {};
+  OPENFILENAMEA ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.hwndOwner = nullptr;
+  ofn.lpstrFilter = "Scene Files\0*.horo;*.json\0All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = MAX_PATH;
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+  if (GetOpenFileNameA(&ofn)) {
+    try {
+      SceneDocument doc = SceneSerializer::LoadFromFile(filePath);
+      m_document = std::move(doc);
+      m_lastSavedDocument = m_document;
+      m_selectedIndices.clear();
+      m_selectedAssetId.clear();
+    } catch (const std::exception& e) {
+      LOG_ERROR("EditorLayer: failed to open scene '{}': {}", filePath, e.what());
+    }
+  }
+#endif
+}
+
+void EditorLayer::CloseAdditionalScene(int index) {
+  if (index < 0 || index >= static_cast<int>(m_additionalScenes.size()))
+    return;
+  m_additionalScenes.erase(m_additionalScenes.begin() + index);
+}
+
+bool EditorLayer::SaveAdditionalScene(int index, std::string* outError) {
+  if (index < 0 || index >= static_cast<int>(m_additionalScenes.size()))
+    return false;
+  SceneDocument& doc = m_additionalScenes[static_cast<size_t>(index)];
+  if (doc.filePath.empty()) {
+    if (outError)
+      *outError = "No file path — use Save As.";
+    return false;
+  }
+  try {
+    SceneSerializer::SaveToFile(doc, doc.filePath);
+    doc.dirty = false;
+    return true;
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+}
+
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
   float objTop = 0.0f;
@@ -1711,7 +2828,10 @@ void EditorLayer::DrawAssetsPanel() {
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
 
-  ImGui::TextDisabled("Registry");
+  ImGui::TextDisabled("Assets");
+  ImGui::SameLine();
+  if (ImGui::Button("+", ImVec2(28.0f, 0.0f)))
+    m_openNewAssetHeader = true;
   ImGui::SameLine();
   ImGui::SetCursorPosX(kLeftDockW - 74.0f);
   if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
@@ -1719,10 +2839,6 @@ void EditorLayer::DrawAssetsPanel() {
     m_assetSearchQuery.clear();
   }
   ImGui::Separator();
-
-  const float belowHeader = ImGui::GetContentRegionAvail().y;
-  const float footerMinH = std::clamp(belowHeader * 0.36f, 150.0f, 280.0f);
-  const float listH = std::max(48.0f, belowHeader - footerMinH);
 
   std::vector<std::string> assetIds;
   assetIds.reserve(m_document.assets.size());
@@ -1769,11 +2885,20 @@ void EditorLayer::DrawAssetsPanel() {
     }
   }
 
-  bool openNewAssetSection = m_openNewAssetHeader;
+  bool openNewAssetModal = m_openNewAssetHeader;
   if (m_openNewAssetHeader)
     m_openNewAssetHeader = false;
 
-  ImGui::BeginChild("##asset_registry_scroll", ImVec2(0, listH), true);
+  ImGui::BeginChild("##asset_grid", ImVec2(0, 0), false);
+
+  const float spacing = 8.0f;
+  const float minTileW = 130.0f;
+  const float availW = std::max(40.0f, ImGui::GetContentRegionAvail().x);
+  const int columns = std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
+  const float tileW = (availW - spacing * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+  const float thumbPad = 8.0f;
+  const float thumbSize = tileW - thumbPad * 2.0f;  // square preview area
+  const float tileH = thumbSize + thumbPad * 2.0f + 22.0f;  // thumb + pads + label row
 
   int shownAssetCount = 0;
   for (const auto& assetId : assetIds) {
@@ -1787,118 +2912,83 @@ void EditorLayer::DrawAssetsPanel() {
 
     ++shownAssetCount;
 
+    const int visibleIndex = shownAssetCount - 1;
+    const int col = visibleIndex % columns;
+    if (col > 0)
+      ImGui::SameLine(0.0f, spacing);
+
     ImGui::PushID(assetId.c_str());
     const bool isSelectedAsset = (m_selectedAssetId == assetId);
-
-    // Tint the row background when selected
     if (isSelectedAsset)
-      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.45f, 0.70f, 0.55f));
-    if (ImGui::Selectable("##row", isSelectedAsset, ImGuiSelectableFlags_SpanAllColumns))
-      m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14f, 0.24f, 0.34f, 0.70f));
+    ImGui::BeginChild("##asset_tile", ImVec2(tileW, tileH), ImGuiChildFlags_Borders,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (isSelectedAsset)
       ImGui::PopStyleColor();
 
-    ImGui::SameLine();
-    ImGui::Text("%s", assetId.c_str());
+    ImGui::InvisibleButton("##asset_tile_select", ImVec2(tileW - 2.0f, tileH - 2.0f));
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+      m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
+    }
 
-    // Expanded inspector — vertical stack below the list row (no label-on-right cramming)
-    if (isSelectedAsset) {
-      ImGui::SameLine();
-      ImGui::TextDisabled("[x]");
-      if (ImGui::IsItemClicked())
-        m_selectedAssetId.clear();
+    // Drag source: allows dropping onto the 3D viewport to create a prop
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+      ImGui::SetDragDropPayload("ASSET_ID", assetId.c_str(),
+                                assetId.size() + 1);
+      ImGui::Text("+ %s", assetId.c_str());
+      ImGui::EndDragDropSource();
+    }
 
-      ImGui::Spacing();
-      ImGui::Separator();
-      ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 8.0f));
-      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.10f, 0.12f, 0.16f, 0.95f));
-      ImGui::BeginChild("##asset_detail", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders,
-                        ImGuiWindowFlags_NoScrollbar);
-
-      const float innerW = ImGui::GetContentRegionAvail().x;
-      ImGui::PushItemWidth(innerW);
-
-      ImGui::TextDisabled("Asset");
-      ImGui::TextUnformatted(assetId.c_str());
-      if (ImGui::Button("Deselect##sel_asset_close", ImVec2(innerW, 0.0f)))
-        m_selectedAssetId.clear();
-
-      ImGui::Spacing();
-      ImGui::Separator();
-      ImGui::Spacing();
-
-      ImGui::TextDisabled("Mesh path");
-      char meshEditBuf[512] = {};
-      std::snprintf(meshEditBuf, sizeof(meshEditBuf), "%s", assetIt->second.mesh.c_str());
-      if (ImGui::InputText("##sel_mesh", meshEditBuf, sizeof(meshEditBuf))) {
-        m_document.assets[assetId].mesh = meshEditBuf;
-        m_document.dirty = true;
-      }
-
-      ImGui::TextDisabled("Render scale (x, y, z)");
-      char scaleEditBuf[128] = {};
-      std::snprintf(scaleEditBuf, sizeof(scaleEditBuf), "%s", assetIt->second.renderScale.c_str());
-      if (ImGui::InputText("##sel_scale", scaleEditBuf, sizeof(scaleEditBuf))) {
-        m_document.assets[assetId].renderScale = scaleEditBuf;
-        m_document.dirty = true;
-        TriggerReload();
-      }
-
-      ImGui::TextDisabled("Albedo map (optional)");
-      const ImVec2 selAlbLabelMin = ImGui::GetItemRectMin();
-      const ImVec2 selAlbLabelMax = ImGui::GetItemRectMax();
-      char albBuf[512] = {};
-      std::snprintf(albBuf, sizeof(albBuf), "%s", assetIt->second.albedoMap.c_str());
-      if (ImGui::InputText("##sel_alb", albBuf, sizeof(albBuf))) {
-        m_document.assets[assetId].albedoMap = albBuf;
-        m_document.dirty = true;
-      }
-      {
-        const ImVec2 fMin = ImGui::GetItemRectMin();
-        const ImVec2 fMax = ImGui::GetItemRectMax();
-        m_albedoSelDrop.valid = true;
-        m_albedoSelDrop.minX = std::min(selAlbLabelMin.x, fMin.x);
-        m_albedoSelDrop.minY = selAlbLabelMin.y;
-        m_albedoSelDrop.maxX = std::max(selAlbLabelMax.x, fMax.x);
-        m_albedoSelDrop.maxY = fMax.y;
-      }
-#if defined(_WIN32) || defined(__APPLE__)
-      if (ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(innerW, 0.0f))) {
-        m_deferredFilePick = DeferredFilePick::SelectedAssetAlbedo;
-      }
-#else
-      ImGui::BeginDisabled();
-      ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(innerW, 0.0f));
-      ImGui::EndDisabled();
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Texture file dialog is not available on this platform.");
-#endif
-
-      ImGui::Spacing();
-      const float gap = ImGui::GetStyle().ItemSpacing.x;
-      const float btnW = std::max(60.0f, (innerW - gap) * 0.5f);
-      if (ImGui::Button("Add Prop##sel_add", ImVec2(btnW, 0.0f))) {
+    if (ImGui::BeginPopupContextItem("##asset_tile_ctx")) {
+      if (ImGui::MenuItem("Add Prop")) {
         SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
         m_document.objects.push_back(std::move(obj));
         m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
         m_document.dirty = true;
         TriggerReload();
       }
-      ImGui::SameLine(0.0f, gap);
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.18f, 0.18f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.22f, 0.22f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-      if (ImGui::Button("Delete Asset##sel_del", ImVec2(btnW, 0.0f)))
+      if (ImGui::MenuItem("Delete Asset"))
         RequestDeleteAsset(assetId);
-      ImGui::PopStyleColor(3);
-
-      ImGui::PopItemWidth();
-      ImGui::EndChild();
-      ImGui::PopStyleColor();
-      ImGui::PopStyleVar();
+      ImGui::EndPopup();
     }
 
-    ImGui::Spacing();
+    const ImVec2 tileMin = ImGui::GetWindowPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 thumbMin(tileMin.x + thumbPad, tileMin.y + thumbPad);
+    const ImVec2 thumbMax(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
+
+    dl->AddRectFilled(thumbMin, thumbMax, ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f)),
+                      6.0f);
+    dl->AddRect(thumbMin, thumbMax, ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)), 6.0f);
+
+    unsigned int previewTexId = 0;
+    bool previewNeedsYFlip = false;
+    if (TryGetAssetPreviewTextureId(assetId, asset, &previewTexId, &previewNeedsYFlip) && previewTexId != 0) {
+      const ImVec2 uv0 = previewNeedsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+      const ImVec2 uv1 = previewNeedsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+      dl->AddImage(ToImTextureId(previewTexId), thumbMin, thumbMax, uv0, uv1);
+    } else {
+      const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.67f, 0.74f, 0.84f, 0.95f));
+      const ImU32 meshCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
+      const std::string ext = asset.mesh.empty() ? std::string("mesh") :
+                              ToLowerAscii(std::filesystem::path(asset.mesh).extension().string());
+      dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 10.0f), labelCol, "No preview texture");
+      dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 30.0f), meshCol, ext.c_str());
+    }
+
+    std::string nameLabel = assetId;
+    const float maxLabelW = tileW - 14.0f;
+    if (ImGui::CalcTextSize(nameLabel.c_str()).x > maxLabelW) {
+      while (!nameLabel.empty() && ImGui::CalcTextSize((nameLabel + "...").c_str()).x > maxLabelW)
+        nameLabel.pop_back();
+      nameLabel += "...";
+    }
+    const ImVec2 nameSz = ImGui::CalcTextSize(nameLabel.c_str());
+    const float nameX = tileMin.x + std::max(7.0f, (tileW - nameSz.x) * 0.5f);
+    const float nameY = thumbMax.y + 6.0f;
+    dl->AddText(ImVec2(nameX, nameY), ImGui::GetColorU32(ImGuiCol_Text), nameLabel.c_str());
+
+    ImGui::EndChild();
     ImGui::PopID();
   }
 
@@ -1910,7 +3000,7 @@ void EditorLayer::DrawAssetsPanel() {
       ImGui::TextDisabled("Asset registry is empty");
       ImGui::TextDisabled("Create your first asset to enable fast prop placement.");
       if (ImGui::Button("Create First Asset"))
-        openNewAssetSection = true;
+        openNewAssetModal = true;
     } else if (assetState == FilteredListState::NoMatches) {
       ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
       if (ImGui::Button("Clear Asset Search"))
@@ -1920,28 +3010,15 @@ void EditorLayer::DrawAssetsPanel() {
 
   ImGui::EndChild();
 
-  ImGui::Separator();
+  if (openNewAssetModal)
+    ImGui::OpenPopup("Create Asset");
+  ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+  if (ImGui::BeginPopupModal("Create Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const float blockW = 470.0f;
+    ImGui::PushItemWidth(blockW);
 
-  const float footerH = ImGui::GetContentRegionAvail().y;
-  ImGui::BeginChild("##new_asset_footer", ImVec2(0, footerH), true);
-
-  const float footerInnerW = ImGui::GetContentRegionAvail().x;
-  // Use almost full footer width so labels + fields are not clipped (was capped ~228px).
-  const float blockW = std::max(160.0f, footerInnerW - 12.0f);
-  const float padX = std::max(0.0f, (footerInnerW - blockW) * 0.5f);
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  ImGui::Dummy(ImVec2(padX, 0.0f));
-  ImGui::SameLine(0.0f, 0.0f);
-  ImGui::BeginGroup();
-  ImGui::PushItemWidth(blockW);
-
-  if (openNewAssetSection)
-    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-  if (ImGui::CollapsingHeader("+ New Asset")) {
-    // -- Import from file -------------------------------------------------------
     if (ImGui::Button("Import .obj...", ImVec2(blockW, 0.0f))) {
       m_assetImportError.clear();
-
 #if !defined(_WIN32) && !defined(__APPLE__)
       m_assetImportError = "Import dialog is not supported on this platform yet.";
 #else
@@ -1956,7 +3033,6 @@ void EditorLayer::DrawAssetsPanel() {
 
     ImGui::Spacing();
 
-    // -- Manual fields (label above field: avoids clipped right-side labels in narrow panel)
     char idBuf[128] = {};
     std::snprintf(idBuf, sizeof(idBuf), "%s", m_assetDraftId.c_str());
     ImGui::TextDisabled("Asset ID");
@@ -1991,10 +3067,10 @@ void EditorLayer::DrawAssetsPanel() {
       m_albedoDraftDrop.maxX = std::max(draftAlbLabelMax.x, fMax.x);
       m_albedoDraftDrop.maxY = fMax.y;
     }
+
 #if defined(_WIN32) || defined(__APPLE__)
-    if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f))) {
+    if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f)))
       m_deferredFilePick = DeferredFilePick::NewAssetAlbedo;
-    }
 #else
     ImGui::BeginDisabled();
     ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f));
@@ -2003,10 +3079,12 @@ void EditorLayer::DrawAssetsPanel() {
       ImGui::SetTooltip("Texture file dialog is not available on this platform.");
 #endif
 
+    ImGui::Spacing();
+
     const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
     if (!canCreate)
       ImGui::BeginDisabled();
-    if (ImGui::Button("Create Asset", ImVec2(blockW, 0.0f))) {
+    if (ImGui::Button("Create Asset", ImVec2(150.0f, 0.0f))) {
       AssetDef def;
       def.mesh = m_assetDraftMesh;
       def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000" : m_assetDraftRenderScale;
@@ -2020,15 +3098,20 @@ void EditorLayer::DrawAssetsPanel() {
       m_assetImportError.clear();
       m_document.dirty = true;
       TriggerReload();
+      ImGui::CloseCurrentPopup();
     }
     if (!canCreate)
       ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(150.0f, 0.0f))) {
+      m_assetImportError.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndPopup();
   }
-
-  ImGui::PopItemWidth();
-  ImGui::EndGroup();
-
-  ImGui::EndChild();
 
   ImGui::End();
 }
@@ -2302,7 +3385,7 @@ void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
   const float W = 280.0f;
   const float workTop = kEditorToolbarH;
-  const float workBottom = io.DisplaySize.y - kEditorStatusH;
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
 
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, workTop));
   ImGui::SetNextWindowSize(ImVec2(W, workBottom - workTop));
@@ -2323,7 +3406,95 @@ void EditorLayer::DrawPropertiesPanel() {
 
   int primaryIdx = PrimaryIdx();
   if (primaryIdx < 0 || primaryIdx >= static_cast<int>(m_document.objects.size())) {
+    if (!m_selectedAssetId.empty()) {
+      auto assetIt = m_document.assets.find(m_selectedAssetId);
+      if (assetIt == m_document.assets.end()) {
+        m_selectedAssetId.clear();
+      } else {
+        ImGui::TextDisabled("Asset");
+        ImGui::TextUnformatted(m_selectedAssetId.c_str());
+
+        if (ImGui::Button("Deselect Asset", ImVec2(-1.0f, 0.0f))) {
+          m_selectedAssetId.clear();
+          ImGui::End();
+          return;
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        char meshEditBuf[512] = {};
+        std::snprintf(meshEditBuf, sizeof(meshEditBuf), "%s", assetIt->second.mesh.c_str());
+        if (ImGui::InputText("Mesh", meshEditBuf, sizeof(meshEditBuf))) {
+          assetIt->second.mesh = meshEditBuf;
+          m_document.dirty = true;
+        }
+
+        char scaleEditBuf[128] = {};
+        std::snprintf(scaleEditBuf, sizeof(scaleEditBuf), "%s", assetIt->second.renderScale.c_str());
+        if (ImGui::InputText("Render Scale", scaleEditBuf, sizeof(scaleEditBuf))) {
+          assetIt->second.renderScale = scaleEditBuf;
+          SyncAssetScaleMetadata(&m_document);
+          m_document.dirty = true;
+          TriggerReload();
+        }
+
+        ImGui::TextDisabled("Albedo map (optional)");
+        const ImVec2 selAlbLabelMin = ImGui::GetItemRectMin();
+        const ImVec2 selAlbLabelMax = ImGui::GetItemRectMax();
+        char albBuf[512] = {};
+        std::snprintf(albBuf, sizeof(albBuf), "%s", assetIt->second.albedoMap.c_str());
+        if (ImGui::InputText("##sel_alb", albBuf, sizeof(albBuf))) {
+          assetIt->second.albedoMap = albBuf;
+          m_document.dirty = true;
+        }
+        {
+          const ImVec2 fMin = ImGui::GetItemRectMin();
+          const ImVec2 fMax = ImGui::GetItemRectMax();
+          m_albedoSelDrop.valid = true;
+          m_albedoSelDrop.minX = std::min(selAlbLabelMin.x, fMin.x);
+          m_albedoSelDrop.minY = selAlbLabelMin.y;
+          m_albedoSelDrop.maxX = std::max(selAlbLabelMax.x, fMax.x);
+          m_albedoSelDrop.maxY = fMax.y;
+        }
+
+#if defined(_WIN32) || defined(__APPLE__)
+        if (ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(-1.0f, 0.0f)))
+          m_deferredFilePick = DeferredFilePick::SelectedAssetAlbedo;
+#else
+        ImGui::BeginDisabled();
+        ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(-1.0f, 0.0f));
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+          ImGui::SetTooltip("Texture file dialog is not available on this platform.");
+#endif
+
+        const float gap = ImGui::GetStyle().ItemSpacing.x;
+        const float fullW = ImGui::GetContentRegionAvail().x;
+        const float btnW = std::max(90.0f, (fullW - gap) * 0.5f);
+        if (ImGui::Button("Add Prop##sel_add", ImVec2(btnW, 0.0f))) {
+          SceneObject obj = MakeObjectFromAsset(m_document, m_selectedAssetId, m_schema);
+          m_document.objects.push_back(std::move(obj));
+          m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+          m_document.dirty = true;
+          TriggerReload();
+        }
+        ImGui::SameLine(0.0f, gap);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.18f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.22f, 0.22f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+        if (ImGui::Button("Delete Asset##sel_del", ImVec2(btnW, 0.0f)))
+          RequestDeleteAsset(m_selectedAssetId);
+        ImGui::PopStyleColor(3);
+
+        ImGui::End();
+        return;
+      }
+    }
+
     ImGui::TextDisabled("No selection");
+    ImGui::TextDisabled("Pick an object or asset to edit properties.");
     ImGui::End();
     return;
   }
@@ -2536,6 +3707,7 @@ void EditorLayer::DrawPropertiesPanel() {
       obj.assetId.clear();
     else
       obj.assetId = assetItems[static_cast<size_t>(currentAssetIndex)];
+    SyncAssetScaleMetadata(&m_document);
     m_document.dirty = true;
     TriggerReload();
   }
@@ -3009,7 +4181,7 @@ bool EditorLayer::SaveDocument(std::string* outError) {
   if (outError)
     outError->clear();
 
-  std::string path = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
+  std::string path = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
   m_document.filePath = path;
 
   LOG_INFO("[Editor] Saving scene to: %s", path.c_str());
@@ -3120,6 +4292,10 @@ SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,
   obj.id = GenerateId(doc);
   obj.type = SceneObjectType::Prop;
   obj.assetId = assetId;
+  const auto assetIt = doc.assets.find(assetId);
+  if (assetIt != doc.assets.end())
+    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty() ? "1.0000,1.0000,1.0000"
+                                                                         : assetIt->second.renderScale;
 
   const TypeSchema* typeSchema = schema.GetSchema(obj.type);
   if (typeSchema) {
@@ -3160,7 +4336,7 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject& obj, int idx) 
   std::ostringstream ss;
   ss.setf(std::ios::fixed);
   ss.precision(4);
-  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/world.json" : m_document.filePath;
+  const std::string scenePath = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
   ss << "EDITOR_REF"
      << " scene=\"" << scenePath << "\""
      << " id=" << obj.id
@@ -3303,6 +4479,93 @@ void EditorLayer::ApplySchemaDefaults(SceneObject& obj) const {
   for (const auto& fd : schema->fields)
     if (obj.props.find(fd.key) == obj.props.end())
       obj.props[fd.key] = fd.defaultValue;
+}
+
+// ---- Wireframe overlay -------------------------------------------------------
+
+void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
+  if (!m_wireframeMode || !m_wireframeShader.IsValid())
+    return;
+
+  Renderer::BeginScene(cam);
+  glDisable(GL_DEPTH_TEST);
+  glLineWidth(1.5f);
+  for (const auto& obj : m_document.objects) {
+    std::string meshPath;
+    if (!TryResolveObjectMeshPath(m_document, obj, &meshPath, nullptr))
+      continue;
+
+    // Reuse the thumbnail mesh cache (already loaded for previews)
+    auto* meshEntry = TryLoadAssetMesh(meshPath);
+    if (!meshEntry || !meshEntry->mesh)
+      continue;
+
+    const Mat4 model = BuildObjectModelMatrix(m_document, obj);
+    Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
+  }
+  glLineWidth(1.0f);
+  glEnable(GL_DEPTH_TEST);
+}
+
+// ---- Viewport drag-drop target -----------------------------------------------
+
+void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
+  // Only show when an ASSET_ID drag-drop is actively in progress.
+  // This prevents the full-screen window from intercepting normal mouse clicks.
+  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
+  if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
+    return;
+
+  ImGuiIO& io = ImGui::GetIO();
+  const EditorViewportRect viewportRect =
+      BuildEditorViewportRect(io.DisplaySize.x, io.DisplaySize.y, kEditorToolbarH, kEditorStatusH,
+                              kBottomDockH, kLeftDockW, 280.0f);
+  ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
+  ImGui::SetNextWindowSize(
+      ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
+  ImGui::SetNextWindowBgAlpha(0.0f);
+  // No NoInputs — drop target must be hoverable to accept the payload
+  ImGui::Begin("##viewport_drop", nullptr,
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
+
+  if (ImGui::BeginDragDropTarget()) {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+      const std::string assetId(static_cast<const char*>(payload->Data));
+      if (m_document.assets.find(assetId) == m_document.assets.end()) {
+        LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
+      }
+
+      const ImVec2 mp = io.MousePos;
+      if (!viewportRect.Contains(mp.x, mp.y)) {
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
+      }
+
+      Ray ray = ScreenToRay(mp.x, mp.y, screenW, screenH, cam);
+      Vec3 hitPos = Vec3::Zero();
+      if (!TryIntersectGroundPlane(ray, &hitPos)) {
+        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit ground plane");
+        ImGui::EndDragDropTarget();
+        ImGui::End();
+        return;
+      }
+
+      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
+      obj.position = hitPos;
+      m_document.objects.push_back(std::move(obj));
+      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+      m_document.dirty = true;
+      TriggerReload();
+    }
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::End();
 }
 
 }  // namespace Editor

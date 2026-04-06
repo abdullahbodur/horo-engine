@@ -48,7 +48,8 @@ struct SceneObject {
 
 struct SceneDocument {
   int version = 1;
-  std::string sceneId = "world";
+  std::string sceneId = "scene";
+  std::string sceneName = "Scene";  // display name shown in the hierarchy header
   std::string filePath;
   bool dirty = false;
   std::unordered_map<std::string, std::string> settings;  // scene-level settings (gravity, ambient, etc.)

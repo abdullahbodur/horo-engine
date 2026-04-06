@@ -9,7 +9,7 @@ namespace Editor {
 
 namespace {
 
-constexpr std::array<ShortcutRow, 14> kEditorShortcuts = {{{"Editor", "Toggle editor mode", "F10"},
+constexpr std::array<ShortcutRow, 14> kEditorShortcuts = {{{"Editor", "Run or stop game in viewport", "Toolbar: Play / Stop"},
                                                             {"Editor", "Toggle shortcuts help", "? or F1"},
                                                             {"Editor", "Quick open", "Ctrl/Cmd + P"},
                                                             {"Camera", "Toggle fly mode", "Tab"},
