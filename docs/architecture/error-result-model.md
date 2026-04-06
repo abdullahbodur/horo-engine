@@ -1,7 +1,5 @@
 # Error and Result Model
 
-This document is the baseline failure-handling contract for issue `#36`.
-
 ## Goals
 
 - Make failures predictable for humans, tests, and AI clients.

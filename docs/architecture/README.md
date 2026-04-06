@@ -1,13 +1,6 @@
 # Architecture
 
-This directory is the source of truth for epic `#33` and its child tasks:
-
-- `#34` Define module boundaries and public APIs
-- `#35` Standardize resource ownership and lifecycle rules
-- `#36` Introduce a consistent error and result model
-- `#37` Document threading assumptions and safe mutation points
-
-These documents are intentionally docs-first. They describe the current `main` branch architecture, call out temporary exceptions, and set the review rules for future changes.
+This directory documents the current engine architecture, calls out temporary exceptions, and sets the review rules for future changes.
 
 ## Documents
 

@@ -1,7 +1,5 @@
 # Ownership and Lifecycle Rules
 
-This document is the baseline lifecycle contract for issue `#35`.
-
 ## Ownership Model
 
 Use these terms consistently:

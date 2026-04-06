@@ -217,7 +217,7 @@ for (Entity e : registry.GetEntities<TransformComponent>()) { ... }
 
 ## Architecture Docs
 
-The docs-first architecture hardening work for epic `#33` lives under [docs/architecture](./docs/architecture/README.md).
+The engine architecture guidance lives under [docs/architecture](./docs/architecture/README.md).
 
 That doc set defines:
 - module boundaries and allowed dependencies

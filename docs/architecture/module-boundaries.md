@@ -1,7 +1,5 @@
 # Module Boundaries and Public APIs
 
-This document is the baseline architecture contract for issue `#34`.
-
 ## Current Reality on `main`
 
 - The repo is organized into module-shaped directories: `core`, `math`, `scene`, `renderer`, `physics`, `input`, `editor`, and `mcp`.

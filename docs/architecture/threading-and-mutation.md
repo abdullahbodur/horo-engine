@@ -1,7 +1,5 @@
 # Threading and Safe Mutation Points
 
-This document is the baseline execution-safety contract for issue `#37`.
-
 ## Goals
 
 - make main-thread-only work explicit
