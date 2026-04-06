@@ -3,8 +3,10 @@
 
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 
 #include "core/Logger.h"
+#include "core/ProjectPath.h"
 #include "math/MathUtils.h"
 
 using namespace Monolith;
@@ -60,6 +62,11 @@ TEST_CASE("Logger: empty string message is handled", "[logger]") {
 
 TEST_CASE("Logger: mixed formatted arguments are handled", "[logger]") {
     REQUIRE_NOTHROW(LOG_WARN("value=%d ratio=%.2f tag=%s", 42, 0.5f, "maze"));
+}
+
+TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
+    ProjectPath::Init(std::filesystem::path{});
+    REQUIRE(ProjectPath::Root().empty());
 }
 
 // ===========================================================================
