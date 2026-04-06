@@ -63,6 +63,7 @@ That's it. No package manager, no prebuilt binaries.
 - Keyboard shortcuts with searchable help popup (F1)
 - Quick-open search (Ctrl+P)
 - Status bar, confirmation modals for destructive operations
+- Built-in MCP server with Claude/Codex integration snippets
 - Undo/redo foundation
 
 ### Input System
@@ -94,7 +95,7 @@ git clone https://github.com/abdullahbodur/horo-engine
 cd horo-engine
 
 make          # debug build
-make test     # run all 23 unit tests
+make test     # run all 24 unit tests
 make release  # optimized build
 make coverage # HTML coverage report (requires lcov)
 ```
@@ -282,6 +283,7 @@ Quaternion r = Quaternion::Slerp(q1, q2, t);
 ```
 horo-engine/
 ├── core/           Application, Window, Time, Logger, Screenshot
+├── mcp/            Built-in MCP settings, protocol, HTTP transport, controller
 ├── math/           Vec2/3/4, Mat3/4, Quaternion, Transform
 ├── physics/
 │   ├── broadphase/     Collision pair generation
@@ -294,9 +296,18 @@ horo-engine/
 ├── scene/          ECS Registry, Scene, ComponentPool, Systems
 ├── input/          Input, KeyCodes, MouseCodes
 ├── editor/         EditorLayer, SceneSerializer, SceneDocument
+├── docs/           Feature and integration guides
 ├── vendor/         GLFW, GLAD, GLM, ImGui, stb_image, nlohmann/json
-└── tests/          23 unit test executables (Catch2)
+└── tests/          24 unit test executables (Catch2)
 ```
+
+## Built-in MCP
+
+Horo Engine now ships with a built-in MCP server for the editor. Enable it from `File -> Settings...` in the editor and the server will auto-start on `http://127.0.0.1:39281/mcp` whenever the editor is open.
+
+User settings live in `~/.horo/settings.json` (Windows: `%USERPROFILE%\\.horo\\settings.json`). The MCP tab in the editor shows runtime status, recent requests, and copy-ready Claude/Codex configuration snippets.
+
+Integration details and token-minimal usage guidance live in [docs/mcp.md](/c:/Users/abdul/projects/fun/game/horo-engine/docs/mcp.md).
 
 ---
 
@@ -318,7 +329,7 @@ All dependencies are managed automatically by CMake (FetchContent or vendored):
 
 ## Testing
 
-23 test executables covering all major subsystems:
+24 test executables covering all major subsystems:
 
 ```bash
 make test

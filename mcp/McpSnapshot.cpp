@@ -1,0 +1,546 @@
+#include "mcp/McpSnapshot.h"
+
+#include <algorithm>
+#include <cctype>
+#include <unordered_map>
+
+#include "math/MathUtils.h"
+#include "math/Quaternion.h"
+#include "math/Transform.h"
+
+namespace Monolith {
+namespace Mcp {
+
+using json = nlohmann::json;
+
+namespace {
+
+constexpr size_t kMaxSummaryObjects = 64;
+constexpr size_t kMaxSummaryAssets = 64;
+constexpr size_t kMaxSummaryConsoleLines = 100;
+
+std::string ToLowerAscii(std::string value) {
+  for (char& c : value)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return value;
+}
+
+bool ContainsCaseInsensitive(const std::string& haystack, const std::string& needle) {
+  if (needle.empty())
+    return true;
+  return ToLowerAscii(haystack).find(ToLowerAscii(needle)) != std::string::npos;
+}
+
+size_t ClampLimit(size_t requested, size_t fallback, size_t maximum) {
+  if (requested == 0)
+    return fallback;
+  return std::max<size_t>(1, std::min(requested, maximum));
+}
+
+json Vec3ToJson(const Vec3& value) {
+  return json::array({value.x, value.y, value.z});
+}
+
+Transform BuildObjectTransform(const McpObjectSnapshot& object) {
+  return Transform(object.position,
+                   Quaternion::FromEuler(ToRadians(object.pitch), ToRadians(object.yaw),
+                                         ToRadians(object.roll)),
+                   object.scale);
+}
+
+std::string GetParentId(const McpObjectSnapshot& object) {
+  const auto it = object.props.find("parentId");
+  if (it == object.props.end())
+    return {};
+  return it->second;
+}
+
+json BuildObjectSummaryJson(const McpObjectSnapshot& object) {
+  json out = json::object();
+  out["id"] = object.id;
+  out["type"] = object.type;
+  out["position"] = Vec3ToJson(object.position);
+  out["scale"] = Vec3ToJson(object.scale);
+  out["yaw"] = object.yaw;
+  out["pitch"] = object.pitch;
+  out["roll"] = object.roll;
+  if (!object.assetId.empty())
+    out["assetId"] = object.assetId;
+  const std::string parentId = GetParentId(object);
+  if (!parentId.empty())
+    out["parentId"] = parentId;
+
+  std::vector<std::string> componentTypes;
+  for (const McpComponentSnapshot& component : object.components)
+    componentTypes.push_back(component.type);
+  std::sort(componentTypes.begin(), componentTypes.end());
+  if (!componentTypes.empty())
+    out["components"] = componentTypes;
+
+  std::vector<std::string> propKeys;
+  for (const auto& entry : object.props) {
+    if (entry.first != "parentId")
+      propKeys.push_back(entry.first);
+  }
+  std::sort(propKeys.begin(), propKeys.end());
+  if (propKeys.size() > 8)
+    propKeys.resize(8);
+  if (!propKeys.empty())
+    out["propKeys"] = propKeys;
+
+  return out;
+}
+
+json BuildAssetSummaryJson(const McpAssetSnapshot& asset, size_t objectReferenceCount = 0) {
+  json out = json{
+      {"id", asset.id},
+      {"mesh", asset.mesh},
+      {"renderScale", asset.renderScale},
+      {"albedoMap", asset.albedoMap},
+  };
+  if (objectReferenceCount > 0)
+    out["objectReferenceCount"] = objectReferenceCount;
+  return out;
+}
+
+json BuildConsoleEntryJson(const McpConsoleEntry& entry) {
+  return json{
+      {"time", entry.timeText},
+      {"level", entry.level},
+      {"message", entry.message},
+  };
+}
+
+bool ObjectMatchesQuery(const McpObjectSnapshot& object, const std::string& query) {
+  if (ContainsCaseInsensitive(object.id, query) || ContainsCaseInsensitive(object.type, query) ||
+      ContainsCaseInsensitive(object.assetId, query) || ContainsCaseInsensitive(GetParentId(object), query)) {
+    return true;
+  }
+  for (const auto& entry : object.props) {
+    if (ContainsCaseInsensitive(entry.first, query) || ContainsCaseInsensitive(entry.second, query))
+      return true;
+  }
+  for (const McpComponentSnapshot& component : object.components) {
+    if (ContainsCaseInsensitive(component.type, query))
+      return true;
+    for (const auto& entry : component.props) {
+      if (ContainsCaseInsensitive(entry.first, query) || ContainsCaseInsensitive(entry.second, query))
+        return true;
+    }
+  }
+  return false;
+}
+
+bool AssetMatchesQuery(const McpAssetSnapshot& asset, const std::string& query) {
+  return ContainsCaseInsensitive(asset.id, query) || ContainsCaseInsensitive(asset.mesh, query) ||
+         ContainsCaseInsensitive(asset.renderScale, query) ||
+         ContainsCaseInsensitive(asset.albedoMap, query);
+}
+
+bool ConsoleMatchesQuery(const McpConsoleEntry& entry, const std::string& query) {
+  return ContainsCaseInsensitive(entry.timeText, query) || ContainsCaseInsensitive(entry.level, query) ||
+         ContainsCaseInsensitive(entry.message, query);
+}
+
+size_t CountAssetReferences(const McpEditorSnapshot& snapshot, const std::string& assetId) {
+  size_t count = 0;
+  for (const McpObjectSnapshot& object : snapshot.objects) {
+    if (object.assetId == assetId)
+      ++count;
+  }
+  return count;
+}
+
+}  // namespace
+
+std::shared_ptr<const McpEditorSnapshot> CloneSnapshot(const McpEditorSnapshot& snapshot) {
+  return std::make_shared<const McpEditorSnapshot>(snapshot);
+}
+
+const McpObjectSnapshot* FindObjectById(const McpEditorSnapshot& snapshot, const std::string& id) {
+  for (const McpObjectSnapshot& object : snapshot.objects) {
+    if (object.id == id)
+      return &object;
+  }
+  return nullptr;
+}
+
+const McpAssetSnapshot* FindAssetById(const McpEditorSnapshot& snapshot, const std::string& id) {
+  for (const McpAssetSnapshot& asset : snapshot.assets) {
+    if (asset.id == id)
+      return &asset;
+  }
+  return nullptr;
+}
+
+json BuildSceneSummaryJson(const McpEditorSnapshot& snapshot, size_t objectLimit) {
+  json out = BuildSceneStatusJson(snapshot);
+  json objects = json::array();
+  const size_t count = std::min(ClampLimit(objectLimit, 12, kMaxSummaryObjects), snapshot.objects.size());
+  for (size_t i = 0; i < count; ++i)
+    objects.push_back(BuildObjectSummaryJson(snapshot.objects[i]));
+  out["objects"] = std::move(objects);
+  out["moreObjects"] = snapshot.objects.size() > count ? snapshot.objects.size() - count : 0;
+  return out;
+}
+
+json BuildSceneStatusJson(const McpEditorSnapshot& snapshot) {
+  return json{
+      {"sceneId", snapshot.sceneId},
+      {"sceneName", snapshot.sceneName},
+      {"filePath", snapshot.sceneFilePath},
+      {"editorActive", snapshot.editorActive},
+      {"playMode", snapshot.playMode},
+      {"dirty", snapshot.dirty},
+      {"reloadPending", snapshot.reloadPending},
+      {"objectCount", snapshot.objects.size()},
+      {"assetCount", snapshot.assets.size()},
+      {"selectedObjectIds", snapshot.selectedObjectIds},
+      {"selectedAssetId", snapshot.selectedAssetId},
+  };
+}
+
+json BuildSelectionJson(const McpEditorSnapshot& snapshot) {
+  json out = json::object();
+  out["selectedObjectIds"] = snapshot.selectedObjectIds;
+  out["selectedAssetId"] = snapshot.selectedAssetId;
+  json objects = json::array();
+  for (const std::string& id : snapshot.selectedObjectIds) {
+    const McpObjectSnapshot* object = FindObjectById(snapshot, id);
+    if (object)
+      objects.push_back(BuildObjectSummaryJson(*object));
+  }
+  out["objects"] = std::move(objects);
+  if (const McpAssetSnapshot* asset = FindAssetById(snapshot, snapshot.selectedAssetId))
+    out["asset"] = BuildAssetSummaryJson(*asset, CountAssetReferences(snapshot, asset->id));
+  return out;
+}
+
+json BuildAssetsJson(const McpEditorSnapshot& snapshot, size_t assetLimit) {
+  json out = json::object();
+  out["assetCount"] = snapshot.assets.size();
+
+  json assets = json::array();
+  const size_t count = std::min(ClampLimit(assetLimit, 12, kMaxSummaryAssets), snapshot.assets.size());
+  for (size_t i = 0; i < count; ++i) {
+    const McpAssetSnapshot& asset = snapshot.assets[i];
+    assets.push_back(BuildAssetSummaryJson(asset, CountAssetReferences(snapshot, asset.id)));
+  }
+  out["assets"] = std::move(assets);
+  out["moreAssets"] = snapshot.assets.size() > count ? snapshot.assets.size() - count : 0;
+  return out;
+}
+
+json BuildAssetsSelectionJson(const McpEditorSnapshot& snapshot) {
+  json out = json{
+      {"selectedAssetId", snapshot.selectedAssetId},
+      {"hasSelection", !snapshot.selectedAssetId.empty()},
+  };
+  if (const McpAssetSnapshot* asset = FindAssetById(snapshot, snapshot.selectedAssetId))
+    out["asset"] = BuildAssetSummaryJson(*asset, CountAssetReferences(snapshot, asset->id));
+  return out;
+}
+
+json BuildAssetsCatalogJson(const McpEditorSnapshot& snapshot,
+                            size_t assetLimit,
+                            const std::string& query) {
+  const size_t safeLimit = ClampLimit(assetLimit, 12, kMaxSummaryAssets);
+  json assets = json::array();
+  size_t totalMatches = 0;
+  for (const McpAssetSnapshot& asset : snapshot.assets) {
+    if (!AssetMatchesQuery(asset, query))
+      continue;
+    ++totalMatches;
+    if (assets.size() >= safeLimit)
+      continue;
+    assets.push_back(BuildAssetSummaryJson(asset, CountAssetReferences(snapshot, asset.id)));
+  }
+  const size_t shownAssets = assets.size();
+  return json{
+      {"query", query},
+      {"assetCount", snapshot.assets.size()},
+      {"matchedAssets", totalMatches},
+      {"assets", std::move(assets)},
+      {"moreAssets", totalMatches > shownAssets ? totalMatches - shownAssets : 0},
+  };
+}
+
+json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit) {
+  json out = json::object();
+  out["lineCount"] = snapshot.consoleEntries.size();
+
+  json lines = json::array();
+  const size_t count =
+      std::min(ClampLimit(lineLimit, 20, kMaxSummaryConsoleLines), snapshot.consoleEntries.size());
+  for (size_t i = 0; i < count; ++i) {
+    const McpConsoleEntry& entry = snapshot.consoleEntries[snapshot.consoleEntries.size() - count + i];
+    lines.push_back(BuildConsoleEntryJson(entry));
+  }
+  out["lines"] = std::move(lines);
+  out["truncated"] = snapshot.consoleEntries.size() > count;
+  return out;
+}
+
+json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit) {
+  size_t infoCount = 0;
+  size_t warnCount = 0;
+  size_t errorCount = 0;
+  for (const McpConsoleEntry& entry : snapshot.consoleEntries) {
+    const std::string level = ToLowerAscii(entry.level);
+    if (level == "info")
+      ++infoCount;
+    else if (level == "warn" || level == "warning")
+      ++warnCount;
+    else if (level == "error")
+      ++errorCount;
+  }
+
+  json out = json{
+      {"lineCount", snapshot.consoleEntries.size()},
+      {"infoCount", infoCount},
+      {"warnCount", warnCount},
+      {"errorCount", errorCount},
+  };
+  out["recent"] = BuildConsoleJson(snapshot, lineLimit)["lines"];
+  return out;
+}
+
+json BuildObjectListJson(const McpEditorSnapshot& snapshot,
+                         size_t objectLimit,
+                         const std::string& typeFilter,
+                         const std::string& query,
+                         bool selectedOnly) {
+  const size_t safeLimit = ClampLimit(objectLimit, 12, kMaxSummaryObjects);
+  const std::string normalizedType = ToLowerAscii(typeFilter);
+  json objects = json::array();
+  size_t totalMatches = 0;
+
+  for (const McpObjectSnapshot& object : snapshot.objects) {
+    if (!normalizedType.empty() && ToLowerAscii(object.type) != normalizedType)
+      continue;
+    if (selectedOnly &&
+        std::find(snapshot.selectedObjectIds.begin(), snapshot.selectedObjectIds.end(), object.id) ==
+            snapshot.selectedObjectIds.end()) {
+      continue;
+    }
+    if (!ObjectMatchesQuery(object, query))
+      continue;
+
+    ++totalMatches;
+    if (objects.size() >= safeLimit)
+      continue;
+    objects.push_back(BuildObjectSummaryJson(object));
+  }
+  const size_t shownObjects = objects.size();
+
+  return json{
+      {"query", query},
+      {"type", typeFilter},
+      {"selectedOnly", selectedOnly},
+      {"matchedObjects", totalMatches},
+      {"objects", std::move(objects)},
+      {"moreObjects", totalMatches > shownObjects ? totalMatches - shownObjects : 0},
+  };
+}
+
+json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit) {
+  const size_t safeLimit = ClampLimit(objectLimit, 32, kMaxSummaryObjects);
+  std::unordered_map<std::string, std::vector<const McpObjectSnapshot*>> children;
+  std::vector<const McpObjectSnapshot*> roots;
+  roots.reserve(snapshot.objects.size());
+
+  for (const McpObjectSnapshot& object : snapshot.objects) {
+    const std::string parentId = GetParentId(object);
+    if (parentId.empty() || !FindObjectById(snapshot, parentId))
+      roots.push_back(&object);
+    else
+      children[parentId].push_back(&object);
+  }
+
+  json entries = json::array();
+  std::function<void(const McpObjectSnapshot*, int)> visit = [&](const McpObjectSnapshot* object, int depth) {
+    if (!object || entries.size() >= safeLimit)
+      return;
+    json item = BuildObjectSummaryJson(*object);
+    item["depth"] = depth;
+    item["childCount"] = children[object->id].size();
+    entries.push_back(std::move(item));
+    for (const McpObjectSnapshot* child : children[object->id]) {
+      if (entries.size() >= safeLimit)
+        break;
+      visit(child, depth + 1);
+    }
+  };
+
+  for (const McpObjectSnapshot* root : roots) {
+    if (entries.size() >= safeLimit)
+      break;
+    visit(root, 0);
+  }
+  const size_t shownEntries = entries.size();
+
+  return json{
+      {"objectCount", snapshot.objects.size()},
+      {"roots", roots.size()},
+      {"entries", std::move(entries)},
+      {"moreObjects", snapshot.objects.size() > shownEntries ? snapshot.objects.size() - shownEntries : 0},
+  };
+}
+
+json BuildObjectJson(const McpObjectSnapshot& object) {
+  json props = json::object();
+  for (const auto& entry : object.props)
+    props[entry.first] = entry.second;
+
+  json components = json::array();
+  for (const McpComponentSnapshot& component : object.components) {
+    json componentProps = json::object();
+    for (const auto& entry : component.props)
+      componentProps[entry.first] = entry.second;
+    components.push_back(json{
+        {"type", component.type},
+        {"props", std::move(componentProps)},
+    });
+  }
+
+  json out = json{
+      {"id", object.id},
+      {"type", object.type},
+      {"position", Vec3ToJson(object.position)},
+      {"scale", Vec3ToJson(object.scale)},
+      {"yaw", object.yaw},
+      {"pitch", object.pitch},
+      {"roll", object.roll},
+      {"assetId", object.assetId},
+      {"props", std::move(props)},
+      {"components", std::move(components)},
+  };
+  const std::string parentId = GetParentId(object);
+  if (!parentId.empty())
+    out["parentId"] = parentId;
+  return out;
+}
+
+json BuildObjectEdgesJson(const McpObjectSnapshot& object) {
+  static const Vec3 kLocalCorners[8] = {
+      Vec3(-0.5f, -0.5f, -0.5f), Vec3(0.5f, -0.5f, -0.5f),  Vec3(0.5f, 0.5f, -0.5f),
+      Vec3(-0.5f, 0.5f, -0.5f),  Vec3(-0.5f, -0.5f, 0.5f),  Vec3(0.5f, -0.5f, 0.5f),
+      Vec3(0.5f, 0.5f, 0.5f),    Vec3(-0.5f, 0.5f, 0.5f),
+  };
+  static const int kEdgeIndices[12][2] = {
+      {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+      {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},
+  };
+
+  const Transform worldFromLocal = BuildObjectTransform(object);
+  const Vec3 halfExtents(std::abs(object.scale.x) * 0.5f, std::abs(object.scale.y) * 0.5f,
+                         std::abs(object.scale.z) * 0.5f);
+
+  json worldCorners = json::array();
+  Vec3 corners[8];
+  for (int i = 0; i < 8; ++i) {
+    corners[i] = worldFromLocal.TransformPoint(kLocalCorners[i]);
+    worldCorners.push_back(Vec3ToJson(corners[i]));
+  }
+
+  json worldEdges = json::array();
+  for (const auto& edge : kEdgeIndices) {
+    worldEdges.push_back(json{
+        {"from", Vec3ToJson(corners[edge[0]])},
+        {"to", Vec3ToJson(corners[edge[1]])},
+    });
+  }
+
+  return json{
+      {"id", object.id},
+      {"type", object.type},
+      {"basis", "object_transform_box"},
+      {"position", Vec3ToJson(object.position)},
+      {"scale", Vec3ToJson(object.scale)},
+      {"yaw", object.yaw},
+      {"pitch", object.pitch},
+      {"roll", object.roll},
+      {"center", Vec3ToJson(object.position)},
+      {"halfExtents", Vec3ToJson(halfExtents)},
+      {"worldCorners", std::move(worldCorners)},
+      {"worldEdges", std::move(worldEdges)},
+  };
+}
+
+json BuildAssetJson(const McpAssetSnapshot& asset) {
+  return json{
+      {"id", asset.id},
+      {"mesh", asset.mesh},
+      {"renderScale", asset.renderScale},
+      {"albedoMap", asset.albedoMap},
+  };
+}
+
+json SearchSnapshot(const McpEditorSnapshot& snapshot,
+                    const std::string& query,
+                    size_t limit,
+                    const std::string& scope) {
+  const size_t safeLimit = ClampLimit(limit, 8, 25);
+  const std::string normalizedScope = ToLowerAscii(scope.empty() ? "all" : scope);
+
+  json objects = json::array();
+  if (normalizedScope == "all" || normalizedScope == "objects") {
+    for (const McpObjectSnapshot& object : snapshot.objects) {
+      if (!ObjectMatchesQuery(object, query))
+        continue;
+      objects.push_back(BuildObjectSummaryJson(object));
+      if (objects.size() >= safeLimit)
+        break;
+    }
+  }
+
+  json assets = json::array();
+  if (normalizedScope == "all" || normalizedScope == "assets") {
+    for (const McpAssetSnapshot& asset : snapshot.assets) {
+      if (!AssetMatchesQuery(asset, query))
+        continue;
+      assets.push_back(BuildAssetSummaryJson(asset, CountAssetReferences(snapshot, asset.id)));
+      if (assets.size() >= safeLimit)
+        break;
+    }
+  }
+
+  return json{
+      {"query", query},
+      {"scope", normalizedScope},
+      {"objects", std::move(objects)},
+      {"assets", std::move(assets)},
+  };
+}
+
+json SearchAssetsSnapshot(const McpEditorSnapshot& snapshot,
+                          const std::string& query,
+                          size_t limit) {
+  return BuildAssetsCatalogJson(snapshot, ClampLimit(limit, 8, 25), query);
+}
+
+json SearchConsoleSnapshot(const McpEditorSnapshot& snapshot,
+                           const std::string& query,
+                           size_t limit) {
+  const size_t safeLimit = ClampLimit(limit, 8, 25);
+  json lines = json::array();
+  size_t totalMatches = 0;
+  for (auto it = snapshot.consoleEntries.rbegin(); it != snapshot.consoleEntries.rend(); ++it) {
+    if (!ConsoleMatchesQuery(*it, query))
+      continue;
+    ++totalMatches;
+    if (lines.size() >= safeLimit)
+      continue;
+    lines.push_back(BuildConsoleEntryJson(*it));
+  }
+  const size_t shownLines = lines.size();
+  return json{
+      {"query", query},
+      {"matchedLines", totalMatches},
+      {"lines", std::move(lines)},
+      {"moreLines", totalMatches > shownLines ? totalMatches - shownLines : 0},
+  };
+}
+
+}  // namespace Mcp
+}  // namespace Monolith

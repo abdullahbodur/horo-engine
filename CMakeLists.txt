@@ -31,6 +31,7 @@ add_subdirectory(vendor)
 file(GLOB_RECURSE ENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
@@ -62,7 +63,7 @@ target_link_libraries(MonolithEngine
 if(APPLE)
     target_link_libraries(MonolithEngine PUBLIC "-framework OpenGL")
 elseif(WIN32)
-    target_link_libraries(MonolithEngine PUBLIC opengl32 comdlg32)
+    target_link_libraries(MonolithEngine PUBLIC opengl32 comdlg32 ws2_32)
 else()
     target_link_libraries(MonolithEngine PUBLIC GL)
 endif()

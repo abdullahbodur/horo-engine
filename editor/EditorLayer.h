@@ -6,10 +6,13 @@
 #include <unordered_set>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "core/LogBuffer.h"
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
+#include "mcp/McpController.h"
 #include "renderer/Camera.h"
 #include "renderer/Shader.h"
 
@@ -184,6 +187,7 @@ class EditorLayer {
   void DrawQuickOpenPopup();
   void DrawStatusBar();
   void DrawBottomDock();
+  void DrawMcpTab();
   void DrawProjectTreeRecursive(const std::filesystem::path& absPath,
                                 const std::filesystem::path& displayRoot);
   void InvalidateProjectBrowserCache();
@@ -191,6 +195,7 @@ class EditorLayer {
       const std::filesystem::path& absPath);
   void DrawDeleteConfirmModals();
   void DrawExitConfirmModal();
+  void DrawSettingsModal();
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void DrawWireframeOverlay(const Camera& cam);
@@ -203,6 +208,10 @@ class EditorLayer {
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
   void DuplicatePrimarySelection();
+  void ProcessMcpCommands();
+  void PublishMcpSnapshot();
+  Mcp::McpCommandResult ExecuteMcpCommand(const std::string& toolName,
+                                         const nlohmann::json& arguments);
   bool SaveDocument(std::string* outError);
   void DiscardUnsavedChanges();
 
@@ -261,6 +270,10 @@ class EditorLayer {
   bool m_helpOpen = false;
   bool m_prevHelpToggle = false;
   std::string m_helpSearchQuery;
+  bool m_settingsOpen = false;
+  Mcp::McpSettings m_mcpSettingsDraft;
+  std::string m_mcpSettingsError;
+  int m_mcpSelectedActivityIndex = 0;
   bool m_quickOpenOpen = false;
   bool m_prevQuickOpenToggle = false;
   std::string m_quickOpenQuery;
@@ -300,6 +313,7 @@ class EditorLayer {
   std::vector<LogLine> m_consoleLinesCache;
   std::vector<int> m_consoleVisibleScratch;
   uint64_t m_consoleLogRevision = UINT64_MAX;
+  Mcp::McpController m_mcpController;
 
   static SceneObject MakeObjectFromAsset(const SceneDocument& doc,
                                          const std::string& assetId,

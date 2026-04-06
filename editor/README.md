@@ -14,6 +14,7 @@
   - quick-open search (`EditorSearch`)
   - transform gizmo manipulator (`TransformGizmo`)
   - UI logic/state machine (`EditorUiLogic`)
+  - built-in MCP bridge and editor settings surface
 
 ## User-Facing Features
 
@@ -25,11 +26,13 @@
 - Quick-open (`Ctrl/Cmd+P`) for objects/assets
 - Asset panel import workflow
 - Viewport picking and transform manipulation
+- Built-in MCP lifecycle, status tab, and settings modal
 
 ## Data Contracts
 
 - Component schema defaults are sourced from `assets/editor_schema.json`.
 - Scene files are JSON (`.horo` workflow through `SceneSerializer`).
+- User MCP settings are stored in `~/.horo/settings.json`.
 
 ## Notes
 
