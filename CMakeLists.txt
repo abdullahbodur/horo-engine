@@ -30,6 +30,7 @@ add_subdirectory(vendor)
 # ---- MonolithEngine static library ----
 file(GLOB_RECURSE ENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
