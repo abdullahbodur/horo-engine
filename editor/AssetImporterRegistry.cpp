@@ -118,6 +118,21 @@ AssetMetadata BuildImportedMetadata(const AssetImportRequest& request,
   return metadata;
 }
 
+AssetImportDiagnostic MakeDiagnostic(AssetDiagnosticSeverity severity,
+                                     std::string code,
+                                     std::string message,
+                                     const AssetImportRequest& request,
+                                     std::string importerId) {
+  AssetImportDiagnostic diagnostic;
+  diagnostic.severity = severity;
+  diagnostic.code = std::move(code);
+  diagnostic.message = std::move(message);
+  diagnostic.assetGuid = request.assetGuid;
+  diagnostic.sourcePath = request.sourcePath;
+  diagnostic.importerId = std::move(importerId);
+  return diagnostic;
+}
+
 class ObjAssetImporter final : public AssetImporter {
  public:
   const char* ImporterId() const override { return "builtin.obj_mesh"; }
@@ -132,6 +147,12 @@ class ObjAssetImporter final : public AssetImporter {
     AssetImportResult result;
     if (!IsObjFilePath(request.sourcePath)) {
       result.error = "Selected file is not .obj";
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.obj.unsupported_type",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -139,6 +160,12 @@ class ObjAssetImporter final : public AssetImporter {
     std::error_code ec;
     if (!fs::is_regular_file(sourcePath, ec) || ec) {
       result.error = "OBJ source path is not a file.";
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.obj.source_missing",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -146,6 +173,12 @@ class ObjAssetImporter final : public AssetImporter {
     fs::create_directories(destDir, ec);
     if (ec) {
       result.error = "Cannot create " + destDir.string() + ": " + ec.message();
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.obj.create_directory_failed",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -153,6 +186,12 @@ class ObjAssetImporter final : public AssetImporter {
     fs::copy_file(sourcePath, destObj, fs::copy_options::overwrite_existing, ec);
     if (ec) {
       result.error = "Copy failed: " + ec.message();
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.obj.copy_failed",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -177,6 +216,7 @@ class ObjAssetImporter final : public AssetImporter {
     result.ok = true;
     result.asset = asset;
     result.metadata = BuildImportedMetadata(request, asset, ImporterId(), std::move(producedFiles));
+    result.metadata.diagnostics = result.diagnostics;
     return result;
   }
 };
@@ -195,6 +235,12 @@ class TextureCopyImporter final : public AssetImporter {
     AssetImportResult result;
     if (!IsTexturePath(request.sourcePath)) {
       result.error = "Unsupported image type (use png, jpg, bmp, tga, webp, …).";
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.texture.unsupported_type",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -202,6 +248,12 @@ class TextureCopyImporter final : public AssetImporter {
     std::error_code ec;
     if (!fs::is_regular_file(sourcePath, ec) || ec) {
       result.error = "Texture source path is not a file.";
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.texture.source_missing",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -209,6 +261,12 @@ class TextureCopyImporter final : public AssetImporter {
     fs::create_directories(destDir, ec);
     if (ec) {
       result.error = "Cannot create " + destDir.string() + ": " + ec.message();
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.texture.create_directory_failed",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -216,6 +274,12 @@ class TextureCopyImporter final : public AssetImporter {
     fs::copy_file(sourcePath, destTexture, fs::copy_options::overwrite_existing, ec);
     if (ec) {
       result.error = "Copy failed: " + ec.message();
+      result.diagnostics.push_back(
+          MakeDiagnostic(AssetDiagnosticSeverity::Error,
+                         "asset.texture.copy_failed",
+                         result.error,
+                         request,
+                         ImporterId()));
       return result;
     }
 
@@ -228,6 +292,7 @@ class TextureCopyImporter final : public AssetImporter {
     result.asset = asset;
     result.metadata = BuildImportedMetadata(
         request, asset, ImporterId(), {asset.albedoMap});
+    result.metadata.diagnostics = result.diagnostics;
     return result;
   }
 };

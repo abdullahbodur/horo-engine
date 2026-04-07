@@ -15,6 +15,26 @@ namespace Editor {
 
 namespace {
 
+std::string DiagnosticSeverityToString(AssetDiagnosticSeverity severity) {
+  switch (severity) {
+    case AssetDiagnosticSeverity::Info:
+      return "info";
+    case AssetDiagnosticSeverity::Warning:
+      return "warning";
+    case AssetDiagnosticSeverity::Error:
+      return "error";
+  }
+  return "error";
+}
+
+AssetDiagnosticSeverity DiagnosticSeverityFromString(const std::string& text) {
+  if (text == "info")
+    return AssetDiagnosticSeverity::Info;
+  if (text == "warning")
+    return AssetDiagnosticSeverity::Warning;
+  return AssetDiagnosticSeverity::Error;
+}
+
 std::string DependencyKindToString(AssetDependencyKind kind) {
   switch (kind) {
     case AssetDependencyKind::Source:
@@ -139,6 +159,21 @@ bool LoadAssetMetadata(const std::string& assetGuid,
     }
   }
 
+  if (j.contains("diagnostics") && j["diagnostics"].is_array()) {
+    for (const json& item : j["diagnostics"]) {
+      if (!item.is_object())
+        continue;
+      AssetImportDiagnostic diagnostic;
+      diagnostic.severity = DiagnosticSeverityFromString(item.value("severity", std::string("error")));
+      diagnostic.code = item.value("code", std::string());
+      diagnostic.message = item.value("message", std::string());
+      diagnostic.assetGuid = item.value("assetGuid", std::string());
+      diagnostic.sourcePath = item.value("sourcePath", std::string());
+      diagnostic.importerId = item.value("importerId", std::string());
+      metadata.diagnostics.push_back(std::move(diagnostic));
+    }
+  }
+
   *outMetadata = std::move(metadata);
   return true;
 }
@@ -193,6 +228,16 @@ bool SaveAssetMetadata(const AssetMetadata& metadata, std::string* outError) {
   for (const AssetDependencyRecord& dep : metadata.dependencies) {
     j["dependencies"].push_back(
         json{{"kind", DependencyKindToString(dep.kind)}, {"value", dep.value}});
+  }
+
+  j["diagnostics"] = json::array();
+  for (const AssetImportDiagnostic& diagnostic : metadata.diagnostics) {
+    j["diagnostics"].push_back(json{{"severity", DiagnosticSeverityToString(diagnostic.severity)},
+                                    {"code", diagnostic.code},
+                                    {"message", diagnostic.message},
+                                    {"assetGuid", diagnostic.assetGuid},
+                                    {"sourcePath", diagnostic.sourcePath},
+                                    {"importerId", diagnostic.importerId}});
   }
 
   std::ofstream stream(metadataPath);

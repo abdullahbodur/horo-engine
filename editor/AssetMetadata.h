@@ -16,6 +16,21 @@ enum class AssetDependencyKind {
   DownstreamAsset,
 };
 
+enum class AssetDiagnosticSeverity {
+  Info,
+  Warning,
+  Error,
+};
+
+struct AssetImportDiagnostic {
+  AssetDiagnosticSeverity severity = AssetDiagnosticSeverity::Error;
+  std::string code;
+  std::string message;
+  std::string assetGuid;
+  std::string sourcePath;
+  std::string importerId;
+};
+
 struct AssetDependencyRecord {
   AssetDependencyKind kind = AssetDependencyKind::Source;
   std::string value;
@@ -33,6 +48,7 @@ struct AssetMetadata {
   std::vector<AssetDependencyRecord> dependencies;
   bool lastImportSucceeded = true;
   std::string lastImportReason;
+  std::vector<AssetImportDiagnostic> diagnostics;
 };
 
 std::filesystem::path GetManagedAssetDirectory(const AssetDef& asset);
