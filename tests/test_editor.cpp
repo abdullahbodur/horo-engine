@@ -1058,6 +1058,98 @@ TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "
     REQUIRE(updated.objects[2].position.z == Approx(6.0f));
 }
 
+TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor][mcp][selection]") {
+    SceneDocument doc;
+
+    SceneObject first;
+    first.id = "panel_a";
+    first.type = SceneObjectType::Panel;
+    first.position = {1.0f, 0.0f, 2.0f};
+    doc.objects.push_back(first);
+
+    SceneObject second;
+    second.id = "prop_b";
+    second.type = SceneObjectType::Prop;
+    second.position = {3.0f, 0.0f, 4.0f};
+    doc.objects.push_back(second);
+
+    SceneObject third;
+    third.id = "light_c";
+    third.type = SceneObjectType::Light;
+    third.position = {5.0f, 1.0f, 6.0f};
+    doc.objects.push_back(third);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"light_c", "panel_a", "panel_a"})}, {"count", 4}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].is_array());
+    REQUIRE(result.data["duplicates"].size() == 2);
+
+    const SceneDocument& updated = editor.GetDocument();
+    REQUIRE(updated.objects.size() == 5);
+    REQUIRE(updated.dirty);
+
+    const SceneObject& panelClone = updated.objects[3];
+    REQUIRE(panelClone.id != "panel_a");
+    REQUIRE(panelClone.type == SceneObjectType::Panel);
+    REQUIRE(panelClone.position.x == Approx(2.0f));
+    REQUIRE(panelClone.position.y == Approx(0.0f));
+    REQUIRE(panelClone.position.z == Approx(3.0f));
+
+    const SceneObject& lightClone = updated.objects[4];
+    REQUIRE(lightClone.id != "light_c");
+    REQUIRE(lightClone.type == SceneObjectType::Light);
+    REQUIRE(lightClone.position.x == Approx(6.0f));
+    REQUIRE(lightClone.position.y == Approx(1.0f));
+    REQUIRE(lightClone.position.z == Approx(7.0f));
+
+    const std::vector<std::string> selectedIds = editor.GetSelectedObjectIds();
+    REQUIRE(selectedIds.size() == 2);
+    REQUIRE(selectedIds[0] == panelClone.id);
+    REQUIRE(selectedIds[1] == lightClone.id);
+}
+
+TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[editor][mcp][selection]") {
+    SceneDocument doc;
+
+    SceneObject source;
+    source.id = "camera_main";
+    source.type = SceneObjectType::Camera;
+    source.position = {10.0f, 2.0f, -4.0f};
+    doc.objects.push_back(source);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"id", "camera_main"}, {"count", 3}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].size() == 3);
+
+    const SceneDocument& updated = editor.GetDocument();
+    REQUIRE(updated.objects.size() == 4);
+
+    for (size_t i = 1; i < updated.objects.size(); ++i) {
+        const SceneObject& clone = updated.objects[i];
+        const float expectedOffset = static_cast<float>(i);
+        REQUIRE(clone.id != "camera_main");
+        REQUIRE(clone.position.x == Approx(10.0f + expectedOffset));
+        REQUIRE(clone.position.y == Approx(2.0f));
+        REQUIRE(clone.position.z == Approx(-4.0f + expectedOffset));
+    }
+
+    const std::vector<std::string> selectedIds = editor.GetSelectedObjectIds();
+    REQUIRE(selectedIds.size() == 3);
+    REQUIRE(selectedIds[0] == updated.objects[1].id);
+    REQUIRE(selectedIds[1] == updated.objects[2].id);
+    REQUIRE(selectedIds[2] == updated.objects[3].id);
+}
+
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
     REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
