@@ -20,6 +20,7 @@
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
@@ -87,6 +88,57 @@ struct ProjectPathGuard {
 
     ~ProjectPathGuard() {
         Monolith::ProjectPath::Init(previousRoot);
+    }
+};
+
+struct HomeDirGuard {
+    std::string previousUserProfile;
+    std::string previousHomeDrive;
+    std::string previousHomePath;
+    std::string previousHome;
+
+    static std::string ReadEnv(const char* name) {
+        if (!name || !*name)
+            return {};
+#ifdef _WIN32
+        char* value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || !value)
+            return {};
+        std::string out(value);
+        free(value);
+        return out;
+#else
+        const char* value = std::getenv(name);
+        return value ? std::string(value) : std::string();
+#endif
+    }
+
+    explicit HomeDirGuard(const std::filesystem::path& nextHome)
+        : previousUserProfile(ReadEnv("USERPROFILE")),
+          previousHomeDrive(ReadEnv("HOMEDRIVE")),
+          previousHomePath(ReadEnv("HOMEPATH")),
+          previousHome(ReadEnv("HOME")) {
+#ifdef _WIN32
+        _putenv_s("USERPROFILE", nextHome.string().c_str());
+        _putenv_s("HOMEDRIVE", "");
+        _putenv_s("HOMEPATH", "");
+#else
+        setenv("HOME", nextHome.string().c_str(), 1);
+#endif
+    }
+
+    ~HomeDirGuard() {
+#ifdef _WIN32
+        _putenv_s("USERPROFILE", previousUserProfile.c_str());
+        _putenv_s("HOMEDRIVE", previousHomeDrive.c_str());
+        _putenv_s("HOMEPATH", previousHomePath.c_str());
+#else
+        if (previousHome.empty())
+            unsetenv("HOME");
+        else
+            setenv("HOME", previousHome.c_str(), 1);
+#endif
     }
 };
 
@@ -1526,6 +1578,66 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(150.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(1500.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
+}
+
+TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_missing";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome);
+    HomeDirGuard homeGuard(tempHome);
+
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE_FALSE(loaded.loadedFromDisk);
+    REQUIRE_FALSE(loaded.parseError);
+    REQUIRE(loaded.state.consoleShowInfo);
+    REQUIRE(loaded.state.consoleShowWarn);
+    REQUIRE(loaded.state.consoleShowError);
+    REQUIRE(loaded.state.projectBrowserCwd.empty());
+    REQUIRE(ResolveEditorLayoutPath() == tempHome / ".horo" / "editor_layout.ini");
+    REQUIRE(ResolveEditorWorkspacePath() == tempHome / ".horo" / "editor_workspace.json");
+}
+
+TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_invalid";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome / ".horo");
+    HomeDirGuard homeGuard(tempHome);
+
+    WriteFile((tempHome / ".horo" / "editor_workspace.json").string(), "{ invalid json");
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE(loaded.loadedFromDisk);
+    REQUIRE(loaded.parseError);
+    REQUIRE_FALSE(loaded.error.empty());
+    REQUIRE(loaded.state.consoleShowInfo);
+}
+
+TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_roundtrip";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome);
+    HomeDirGuard homeGuard(tempHome);
+
+    EditorWorkspaceDocument doc;
+    doc.state.consoleShowInfo = false;
+    doc.state.consoleShowWarn = true;
+    doc.state.consoleShowError = false;
+    doc.state.projectBrowserCwd = "C:/project/assets";
+
+    std::string saveError;
+    REQUIRE(SaveEditorWorkspaceDocument(&doc, &saveError));
+    REQUIRE(saveError.empty());
+    REQUIRE(fs::exists(tempHome / ".horo" / "editor_workspace.json"));
+
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE(loaded.loadedFromDisk);
+    REQUIRE_FALSE(loaded.parseError);
+    REQUIRE_FALSE(loaded.state.consoleShowInfo);
+    REQUIRE(loaded.state.consoleShowWarn);
+    REQUIRE_FALSE(loaded.state.consoleShowError);
+    REQUIRE(loaded.state.projectBrowserCwd == "C:/project/assets");
 }
 
 TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {

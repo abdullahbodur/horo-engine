@@ -6,11 +6,14 @@
 #include <unordered_set>
 #include <vector>
 
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 #include "core/LogBuffer.h"
 #include "editor/AssetImportService.h"
 #include "editor/EditorSchema.h"
+#include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
 #include "mcp/McpController.h"
@@ -184,6 +187,8 @@ class EditorLayer {
   void TriggerReload();      // snapshot document → pending and set wantsReload
 
   void DrawToolbar();
+  void DrawDockspace();
+  void DrawViewportPanel();
   void DrawViewGimbal(const Camera& cam);
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
@@ -208,6 +213,10 @@ class EditorLayer {
   void DrawWireframeOverlay(const Camera& cam);
   void DrawViewportDropTarget(const Camera& cam, int screenW, int screenH);
   void ApplyPendingViewSnap(Camera& cam);
+  void LoadWorkspaceState();
+  void SaveWorkspaceStateIfNeeded(bool force);
+  void MarkWorkspaceStateDirty();
+  void RefreshViewportPanelRect();
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
@@ -323,7 +332,14 @@ class EditorLayer {
   bool m_projectBrowserRootValid = false;
   std::filesystem::path m_projectBrowserCwd;
   bool m_projectBrowserCwdValid = false;
+  std::filesystem::path m_savedProjectBrowserCwd;
   std::unordered_set<std::string> m_projectExtraBlocklist;
+  EditorWorkspaceDocument m_workspaceDocument;
+  bool m_workspaceStateDirty = false;
+  std::string m_imguiIniPath;
+  bool m_hasPersistedDockLayout = false;
+  bool m_resetDockLayoutRequested = false;
+  EditorViewportRect m_viewportPanelRect;
 
   // Wireframe overlay
   bool m_wireframeMode = false;

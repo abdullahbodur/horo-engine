@@ -47,6 +47,7 @@
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
@@ -79,26 +80,14 @@ constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
 constexpr float kBottomDockH = 200.0f;
 constexpr float kLeftDockW = 308.0f;
+constexpr float kRightDockW = 280.0f;
+constexpr char kEditorHierarchyWindow[] = "Hierarchy";
+constexpr char kEditorAssetsWindow[] = "Assets";
+constexpr char kEditorWorkspaceWindow[] = "Workspace";
+constexpr char kEditorPropertiesWindow[] = "Properties";
+constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
-
-// Split Objects (top) vs Assets (bottom) within [toolbar .. status]. Small gap so they
-// never z-fight at the seam.
-static void ComputeLeftColumnLayout(const ImGuiIO& io,
-                                    float* outObjectsTop,
-                                    float* outObjectsH,
-                                    float* outAssetsTop,
-                                    float* outAssetsH) {
-  const float workTop = kEditorToolbarH;
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  const float workH = std::max(0.0f, workBottom - workTop);
-  constexpr float kMidGap = 4.0f;
-  const float mid = workTop + workH * 0.52f;
-  *outObjectsTop = workTop;
-  *outObjectsH = std::max(48.0f, mid - workTop - kMidGap * 0.5f);
-  *outAssetsTop = mid + kMidGap * 0.5f;
-  *outAssetsH = std::max(64.0f, workBottom - *outAssetsTop);
-}
 
 // World-space selection / picking bounds for a prop when ECS has a valid _eid.
 bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Vec3& outHalf) {
@@ -1033,7 +1022,19 @@ void EditorLayer::Init(GLFWwindow* window) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGui::StyleColorsDark();
-  ImGui::GetIO().IniFilename = nullptr;  // don't write imgui.ini
+  ImGuiIO& io = ImGui::GetIO();
+  m_imguiIniPath = ResolveEditorLayoutPath().string();
+  std::error_code settingsEc;
+  std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(), settingsEc);
+  if (settingsEc) {
+    LOG_WARN("[Editor] Failed to ensure editor settings directory: %s", settingsEc.message().c_str());
+    m_imguiIniPath.clear();
+    io.IniFilename = nullptr;
+  } else {
+    m_hasPersistedDockLayout = std::filesystem::exists(ResolveEditorLayoutPath());
+    io.IniFilename = m_imguiIniPath.c_str();
+  }
+  LoadWorkspaceState();
 
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 410");
@@ -1057,6 +1058,9 @@ void EditorLayer::Init(GLFWwindow* window) {
 }
 
 void EditorLayer::Shutdown() {
+  SaveWorkspaceStateIfNeeded(true);
+  if (!m_imguiIniPath.empty())
+    ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
   m_mcpController.Shutdown();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -1098,6 +1102,18 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   }
   m_projectBrowserRoot = std::move(canon);
   m_projectBrowserRootValid = true;
+  if (!m_savedProjectBrowserCwd.empty()) {
+    std::filesystem::path preferred = m_savedProjectBrowserCwd;
+    if (preferred.is_relative())
+      preferred = m_projectBrowserRoot / preferred;
+    preferred = std::filesystem::weakly_canonical(preferred, ec);
+    if (!ec && std::filesystem::is_directory(preferred) &&
+        preferred.native().rfind(m_projectBrowserRoot.native(), 0) == 0) {
+      m_projectBrowserCwd = std::move(preferred);
+      m_projectBrowserCwdValid = true;
+      return;
+    }
+  }
   m_projectBrowserCwd = m_projectBrowserRoot;
   m_projectBrowserCwdValid = true;
 }
@@ -1109,6 +1125,47 @@ void EditorLayer::SetProjectBrowserExtraBlocklist(std::unordered_set<std::string
 
 void EditorLayer::InvalidateProjectBrowserCache() {
   m_projectDirCache.clear();
+}
+
+void EditorLayer::LoadWorkspaceState() {
+  m_workspaceDocument = LoadEditorWorkspaceDocument();
+  if (m_workspaceDocument.parseError) {
+    LOG_WARN("[Editor] Workspace settings load fallback: %s", m_workspaceDocument.error.c_str());
+  }
+
+  m_consoleShowInfo = m_workspaceDocument.state.consoleShowInfo;
+  m_consoleShowWarn = m_workspaceDocument.state.consoleShowWarn;
+  m_consoleShowError = m_workspaceDocument.state.consoleShowError;
+  if (!m_workspaceDocument.state.projectBrowserCwd.empty())
+    m_savedProjectBrowserCwd = std::filesystem::path(m_workspaceDocument.state.projectBrowserCwd);
+  m_workspaceStateDirty = false;
+}
+
+void EditorLayer::SaveWorkspaceStateIfNeeded(bool force) {
+  if (!force && !m_workspaceStateDirty)
+    return;
+
+  m_workspaceDocument.state.consoleShowInfo = m_consoleShowInfo;
+  m_workspaceDocument.state.consoleShowWarn = m_consoleShowWarn;
+  m_workspaceDocument.state.consoleShowError = m_consoleShowError;
+  if (m_projectBrowserCwdValid && !m_projectBrowserCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = m_projectBrowserCwd.generic_string();
+  } else if (!m_savedProjectBrowserCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = m_savedProjectBrowserCwd.generic_string();
+  } else {
+    m_workspaceDocument.state.projectBrowserCwd.clear();
+  }
+
+  std::string saveError;
+  if (!SaveEditorWorkspaceDocument(&m_workspaceDocument, &saveError)) {
+    LOG_WARN("[Editor] Failed to save workspace settings: %s", saveError.c_str());
+    return;
+  }
+  m_workspaceStateDirty = false;
+}
+
+void EditorLayer::MarkWorkspaceStateDirty() {
+  m_workspaceStateDirty = true;
 }
 
 void EditorLayer::LoadDocument(SceneDocument doc) {
@@ -1676,6 +1733,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     m_albedoDraftDrop.Clear();
     m_albedoSelDrop.Clear();
     m_viewGizmoPickRect.Clear();
+    m_viewportPanelRect = {};
   }
   ProcessPendingPathDrops();
 
@@ -1685,12 +1743,10 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
 
   if (m_active) {
     DrawToolbar();
-    if (!m_playMode)
-      DrawViewGimbal(cam);
+    DrawDockspace();
+    DrawViewportPanel();
     DrawObjectList();
     DrawAssetsPanel();
-    if (!m_playMode)
-      DrawViewportDropTarget(cam, screenW, screenH);
     DrawPropertiesPanel();
     DrawBottomDock();
     DrawStatusBar();
@@ -1700,6 +1756,8 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     if (!m_playMode) {
+      DrawViewGimbal(cam);
+      DrawViewportDropTarget(cam, screenW, screenH);
       DrawSelectionHighlight();  // queues to DebugDraw
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
@@ -1707,6 +1765,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
+  SaveWorkspaceStateIfNeeded(false);
 
   // Wireframe pass: clears solid scene and draws edges; must happen before
   // DebugDraw::Flush so selection highlight/gizmo render on top.
@@ -1718,6 +1777,66 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void EditorLayer::DrawDockspace() {
+  if (!m_resetDockLayoutRequested)
+    return;
+
+  ImGui::LoadIniSettingsFromMemory("", 0);
+  if (!m_imguiIniPath.empty()) {
+    std::error_code ec;
+    std::filesystem::remove(ResolveEditorLayoutPath(), ec);
+    ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
+  }
+  m_hasPersistedDockLayout = false;
+  m_resetDockLayoutRequested = false;
+}
+
+void EditorLayer::RefreshViewportPanelRect() {
+  const ImVec2 winPos = ImGui::GetWindowPos();
+  const ImVec2 innerMin = ImGui::GetWindowContentRegionMin();
+  const ImVec2 innerMax = ImGui::GetWindowContentRegionMax();
+  m_viewportPanelRect.minX = winPos.x + innerMin.x;
+  m_viewportPanelRect.minY = winPos.y + innerMin.y;
+  m_viewportPanelRect.maxX = winPos.x + innerMax.x;
+  m_viewportPanelRect.maxY = winPos.y + innerMax.y;
+}
+
+void EditorLayer::DrawViewportPanel() {
+  ImGuiIO& io = ImGui::GetIO();
+  const EditorViewportRect defaultRect =
+      BuildEditorViewportRect(io.DisplaySize.x,
+                              io.DisplaySize.y,
+                              kEditorToolbarH,
+                              kEditorStatusH,
+                              kBottomDockH,
+                              kLeftDockW,
+                              kRightDockW);
+  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(defaultRect.maxX - defaultRect.minX,
+                                  defaultRect.maxY - defaultRect.minY),
+                           ImGuiCond_FirstUseEver);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+  ImGui::SetNextWindowBgAlpha(0.06f);
+  m_viewportPanelRect = {};
+  if (ImGui::Begin(kEditorViewportWindow,
+                   nullptr,
+                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+    RefreshViewportPanelRect();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRect(ImVec2(m_viewportPanelRect.minX, m_viewportPanelRect.minY),
+                      ImVec2(m_viewportPanelRect.maxX, m_viewportPanelRect.maxY),
+                      IM_COL32(112, 138, 176, 160),
+                      0.0f,
+                      0,
+                      1.0f);
+    drawList->AddText(ImVec2(m_viewportPanelRect.minX + 12.0f, m_viewportPanelRect.minY + 12.0f),
+                      IM_COL32(214, 222, 236, 200),
+                      m_playMode ? "Viewport (Play)" : "Viewport");
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
 }
 
 void EditorLayer::DrawClipboardToast() {
@@ -1804,6 +1923,8 @@ void EditorLayer::DrawToolbar() {
       AddNewScene();
     if (ImGui::MenuItem("Open Scene..."))
       OpenAdditionalSceneFile();
+    if (ImGui::MenuItem("Reset Layout"))
+      m_resetDockLayoutRequested = true;
     ImGui::Separator();
     if (ImGui::MenuItem("Settings...")) {
       m_settingsOpen = true;
@@ -1881,6 +2002,8 @@ void EditorLayer::DrawToolbar() {
       m_helpOpen = true;
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
+    if (ImGui::MenuItem("Reset Layout"))
+      m_resetDockLayoutRequested = true;
     ImGui::EndPopup();
   }
   ImGui::SameLine();
@@ -2060,13 +2183,9 @@ static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
 void EditorLayer::DrawBottomDock() {
   ImGuiIO& io = ImGui::GetIO();
   const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop));
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kBottomDockH));
-  ImGui::SetNextWindowBgAlpha(0.88f);
-  ImGui::Begin("##editor_bottom_dock",
-               nullptr,
-               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(900.0f, kBottomDockH), ImGuiCond_FirstUseEver);
+  ImGui::Begin(kEditorWorkspaceWindow);
 
   if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Project")) {
@@ -2200,6 +2319,8 @@ void EditorLayer::DrawBottomDock() {
         if (cwdChanged) {
           m_projectBrowserCwd = std::move(nextCwd);
           m_projectBrowserCwdValid = true;
+          m_savedProjectBrowserCwd = m_projectBrowserCwd;
+          MarkWorkspaceStateDirty();
         }
 
         ImGui::EndChild();
@@ -2216,11 +2337,14 @@ void EditorLayer::DrawBottomDock() {
       if (ImGui::SmallButton("Clear"))
         LogBuffer::Instance().Clear();
       ImGui::SameLine();
-      ImGui::Checkbox("Info", &m_consoleShowInfo);
+      if (ImGui::Checkbox("Info", &m_consoleShowInfo))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
-      ImGui::Checkbox("Warn", &m_consoleShowWarn);
+      if (ImGui::Checkbox("Warn", &m_consoleShowWarn))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
-      ImGui::Checkbox("Error", &m_consoleShowError);
+      if (ImGui::Checkbox("Error", &m_consoleShowError))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
       ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
 
@@ -2536,11 +2660,15 @@ void EditorLayer::DrawSettingsModal() {
 
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
-  constexpr float kPanelW = 280.0f;
   constexpr float kWinW = 128.0f;
   constexpr float kWinH = 138.0f;
-  const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
-  const float wy = 42.0f;
+  const float viewportRight = m_viewportPanelRect.maxX > m_viewportPanelRect.minX
+                                  ? m_viewportPanelRect.maxX
+                                  : io.DisplaySize.x - kRightDockW;
+  const float viewportTop =
+      m_viewportPanelRect.maxY > m_viewportPanelRect.minY ? m_viewportPanelRect.minY : kEditorToolbarH;
+  const float wx = viewportRight - kWinW - 10.0f;
+  const float wy = viewportTop + 10.0f;
 
   // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
   constexpr float kBtnSize = 28.0f;
@@ -2709,17 +2837,11 @@ static const char* ObjectTypeIcon(SceneObjectType type) {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  float objTop = 0.0f;
-  float objH = 0.0f;
-  float asTop = 0.0f;
-  float asH = 0.0f;
-  ComputeLeftColumnLayout(io, &objTop, &objH, &asTop, &asH);
-
-  ImGui::SetNextWindowPos(ImVec2(0.0f, objTop));
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, objH));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f)),
+                           ImGuiCond_FirstUseEver);
+  ImGui::Begin(kEditorHierarchyWindow);
 
   // Search bar (applies to primary scene)
   char searchBuf[256] = {};
@@ -3253,17 +3375,11 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string* outError) {
 
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  float objTop = 0.0f;
-  float objH = 0.0f;
-  float assetsTop = 0.0f;
-  float assetsH = 0.0f;
-  ComputeLeftColumnLayout(io, &objTop, &objH, &assetsTop, &assetsH);
-
-  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop));
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, assetsH));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
+  const float assetsTop = kEditorToolbarH + std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f) + 4.0f;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_FirstUseEver);
+  ImGui::Begin(kEditorAssetsWindow);
 
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
@@ -3273,7 +3389,7 @@ void EditorLayer::DrawAssetsPanel() {
   if (ImGui::Button("+", ImVec2(28.0f, 0.0f)))
     m_openNewAssetHeader = true;
   ImGui::SameLine();
-  ImGui::SetCursorPosX(kLeftDockW - 74.0f);
+  ImGui::SetCursorPosX(std::max(0.0f, ImGui::GetWindowContentRegionMax().x - 74.0f));
   if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
     m_assetSearchOpen = true;
     m_assetSearchQuery.clear();
@@ -3870,15 +3986,11 @@ void EditorLayer::DrawExitConfirmModal() {
 
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 280.0f;
-  const float workTop = kEditorToolbarH;
   const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, workTop));
-  ImGui::SetNextWindowSize(ImVec2(W, workBottom - workTop));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Properties", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - kRightDockW, kEditorToolbarH), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(kRightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
+                           ImGuiCond_FirstUseEver);
+  ImGui::Begin(kEditorPropertiesWindow);
 
   // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
@@ -4567,11 +4679,14 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
 
   if (!clicked)
     return;
-  if (ImGui::GetIO().WantCaptureMouse)
-    return;
 
   double mx, my;
   glfwGetCursorPos(m_window, &mx, &my);
+  if (!m_viewportPanelRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+    return;
+  if (ImGui::GetIO().WantCaptureMouse &&
+      !m_viewportPanelRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+    return;
   if (m_viewGizmoPickRect.valid &&
       m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
     return;
@@ -5737,11 +5852,12 @@ void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int scr
   const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
   if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
     return;
+  if (m_viewportPanelRect.maxX <= m_viewportPanelRect.minX ||
+      m_viewportPanelRect.maxY <= m_viewportPanelRect.minY)
+    return;
 
   ImGuiIO& io = ImGui::GetIO();
-  const EditorViewportRect viewportRect =
-      BuildEditorViewportRect(io.DisplaySize.x, io.DisplaySize.y, kEditorToolbarH, kEditorStatusH,
-                              kBottomDockH, kLeftDockW, 280.0f);
+  const EditorViewportRect& viewportRect = m_viewportPanelRect;
   ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
   ImGui::SetNextWindowSize(
       ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
