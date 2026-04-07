@@ -6,6 +6,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
@@ -564,6 +565,123 @@ TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
     REQUIRE(metadata.importerId == "builtin.obj_mesh");
     REQUIRE(metadata.sourcePath == sourceObj.string());
     REQUIRE(metadata.settings.at("preset") == "default");
+    REQUIRE(metadata.diagnostics.empty());
+}
+
+TEST_CASE("AssetImportService: unsupported source yields structured diagnostics",
+          "[editor][asset-import][diagnostics]") {
+    AssetImportService service;
+    AssetImportResult result =
+        service.ImportAssetFromSource("C:/tmp/unsupported.txt", "broken", "guid_broken", "Broken");
+
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.diagnostics.size() == 1);
+    REQUIRE(result.diagnostics[0].severity == AssetDiagnosticSeverity::Error);
+    REQUIRE(result.diagnostics[0].code == "asset.importer.not_found");
+    REQUIRE(result.diagnostics[0].assetGuid == "guid_broken");
+}
+
+TEST_CASE("AssetImportService: reimport propagation follows deterministic topological order",
+          "[editor][asset-import][reimport]") {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_reimport_graph";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    auto writeObj = [](const std::filesystem::path& path, float xOffset) {
+        WriteFile(path.string(),
+                  "v " + std::to_string(xOffset) + " 0 0\n"
+                  "v " + std::to_string(xOffset) + " 1 0\n"
+                  "v " + std::to_string(xOffset + 1.0f) + " 0 0\n"
+                  "f 1 2 3\n");
+    };
+
+    writeObj(root / "root.obj", 0.0f);
+    writeObj(root / "alpha.obj", 2.0f);
+    writeObj(root / "beta.obj", 4.0f);
+    writeObj(root / "gamma.obj", 6.0f);
+
+    AssetImportService service;
+    SceneDocument doc;
+    for (const auto& spec : std::vector<std::tuple<std::string, std::string, std::string>>{
+             {"root", "guid_root", "root.obj"},
+             {"alpha", "guid_alpha", "alpha.obj"},
+             {"beta", "guid_beta", "beta.obj"},
+             {"gamma", "guid_gamma", "gamma.obj"},
+         }) {
+        AssetImportResult result = service.ImportAssetFromSource(
+            (root / std::get<2>(spec)).string(), std::get<0>(spec), std::get<1>(spec), std::get<0>(spec));
+        REQUIRE(result.ok);
+        doc.assets[std::get<0>(spec)] = result.asset;
+    }
+
+    auto addDependency = [](const std::string& guid, const std::string& dependsOnGuid) {
+        AssetMetadata metadata;
+        std::string error;
+        REQUIRE(LoadAssetMetadata(guid, &metadata, &error));
+        metadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, dependsOnGuid});
+        REQUIRE(SaveAssetMetadata(metadata, &error));
+    };
+
+    addDependency("guid_alpha", "guid_root");
+    addDependency("guid_beta", "guid_root");
+    addDependency("guid_gamma", "guid_beta");
+
+    AssetReimportResult reimportResult =
+        service.ReimportAssetWithDependents(&doc, "guid_root", "Source changed on root");
+    REQUIRE(reimportResult.ok);
+    REQUIRE(reimportResult.order ==
+            std::vector<std::string>{"guid_root", "guid_alpha", "guid_beta", "guid_gamma"});
+
+    AssetMetadata gammaMetadata;
+    std::string error;
+    REQUIRE(LoadAssetMetadata("guid_gamma", &gammaMetadata, &error));
+    REQUIRE(gammaMetadata.lastImportReason == "Dependency changed: guid_beta");
+}
+
+TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable error",
+          "[editor][asset-import][reimport]") {
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_reimport_cycle";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    WriteFile((root / "a.obj").string(), "v 0 0 0\nv 0 1 0\nv 1 0 0\nf 1 2 3\n");
+    WriteFile((root / "b.obj").string(), "v 0 0 0\nv 0 1 0\nv 1 0 0\nf 1 2 3\n");
+
+    AssetImportService service;
+    SceneDocument doc;
+    AssetImportResult a = service.ImportAssetFromSource((root / "a.obj").string(), "a", "guid_a", "A");
+    AssetImportResult b = service.ImportAssetFromSource((root / "b.obj").string(), "b", "guid_b", "B");
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    doc.assets["a"] = a.asset;
+    doc.assets["b"] = b.asset;
+
+    AssetMetadata aMetadata;
+    AssetMetadata bMetadata;
+    std::string error;
+    REQUIRE(LoadAssetMetadata("guid_a", &aMetadata, &error));
+    REQUIRE(LoadAssetMetadata("guid_b", &bMetadata, &error));
+    aMetadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, "guid_b"});
+    bMetadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, "guid_a"});
+    REQUIRE(SaveAssetMetadata(aMetadata, &error));
+    REQUIRE(SaveAssetMetadata(bMetadata, &error));
+
+    AssetReimportResult reimportResult =
+        service.ReimportAssetWithDependents(&doc, "guid_a", "Cycle validation");
+    REQUIRE_FALSE(reimportResult.ok);
+    REQUIRE(ContainsCaseInsensitive(reimportResult.error, "cycle"));
+
+    AssetMetadata aReloaded;
+    REQUIRE(LoadAssetMetadata("guid_a", &aReloaded, &error));
+    REQUIRE_FALSE(aReloaded.lastImportSucceeded);
+    REQUIRE(aReloaded.diagnostics.size() == 1);
+    REQUIRE(aReloaded.diagnostics[0].code == "asset.reimport.dependency_cycle");
 }
 
 TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {

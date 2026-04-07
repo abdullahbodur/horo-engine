@@ -23,6 +23,7 @@ struct AssetImportResult {
   AssetDef asset;
   AssetMetadata metadata;
   std::string error;
+  std::vector<AssetImportDiagnostic> diagnostics;
 };
 
 class AssetImporter {

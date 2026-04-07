@@ -15,6 +15,26 @@ namespace Editor {
 
 namespace {
 
+std::string DiagnosticSeverityToString(AssetDiagnosticSeverity severity) {
+  switch (severity) {
+    case AssetDiagnosticSeverity::Info:
+      return "info";
+    case AssetDiagnosticSeverity::Warning:
+      return "warning";
+    case AssetDiagnosticSeverity::Error:
+      return "error";
+  }
+  return "error";
+}
+
+AssetDiagnosticSeverity DiagnosticSeverityFromString(const std::string& text) {
+  if (text == "info")
+    return AssetDiagnosticSeverity::Info;
+  if (text == "warning")
+    return AssetDiagnosticSeverity::Warning;
+  return AssetDiagnosticSeverity::Error;
+}
+
 std::string DependencyKindToString(AssetDependencyKind kind) {
   switch (kind) {
     case AssetDependencyKind::Source:
@@ -108,6 +128,8 @@ bool LoadAssetMetadata(const std::string& assetGuid,
   metadata.displayName = j.value("displayName", std::string());
   metadata.importerId = j.value("importerId", std::string());
   metadata.sourcePath = j.value("sourcePath", std::string());
+  metadata.lastImportSucceeded = j.value("lastImportSucceeded", true);
+  metadata.lastImportReason = j.value("lastImportReason", std::string());
 
   if (j.contains("settings") && j["settings"].is_object()) {
     for (const auto& item : j["settings"].items()) {
@@ -134,6 +156,21 @@ bool LoadAssetMetadata(const std::string& assetGuid,
       dep.value = item.value("value", std::string());
       if (!dep.value.empty())
         metadata.dependencies.push_back(std::move(dep));
+    }
+  }
+
+  if (j.contains("diagnostics") && j["diagnostics"].is_array()) {
+    for (const json& item : j["diagnostics"]) {
+      if (!item.is_object())
+        continue;
+      AssetImportDiagnostic diagnostic;
+      diagnostic.severity = DiagnosticSeverityFromString(item.value("severity", std::string("error")));
+      diagnostic.code = item.value("code", std::string());
+      diagnostic.message = item.value("message", std::string());
+      diagnostic.assetGuid = item.value("assetGuid", std::string());
+      diagnostic.sourcePath = item.value("sourcePath", std::string());
+      diagnostic.importerId = item.value("importerId", std::string());
+      metadata.diagnostics.push_back(std::move(diagnostic));
     }
   }
 
@@ -169,6 +206,9 @@ bool SaveAssetMetadata(const AssetMetadata& metadata, std::string* outError) {
     j["importerId"] = metadata.importerId;
   if (!metadata.sourcePath.empty())
     j["sourcePath"] = metadata.sourcePath;
+  j["lastImportSucceeded"] = metadata.lastImportSucceeded;
+  if (!metadata.lastImportReason.empty())
+    j["lastImportReason"] = metadata.lastImportReason;
 
   json settings = json::object();
   std::vector<std::string> settingKeys;
@@ -188,6 +228,16 @@ bool SaveAssetMetadata(const AssetMetadata& metadata, std::string* outError) {
   for (const AssetDependencyRecord& dep : metadata.dependencies) {
     j["dependencies"].push_back(
         json{{"kind", DependencyKindToString(dep.kind)}, {"value", dep.value}});
+  }
+
+  j["diagnostics"] = json::array();
+  for (const AssetImportDiagnostic& diagnostic : metadata.diagnostics) {
+    j["diagnostics"].push_back(json{{"severity", DiagnosticSeverityToString(diagnostic.severity)},
+                                    {"code", diagnostic.code},
+                                    {"message", diagnostic.message},
+                                    {"assetGuid", diagnostic.assetGuid},
+                                    {"sourcePath", diagnostic.sourcePath},
+                                    {"importerId", diagnostic.importerId}});
   }
 
   std::ofstream stream(metadataPath);

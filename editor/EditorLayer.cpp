@@ -3416,7 +3416,14 @@ void EditorLayer::DrawAssetsPanel() {
       dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 30.0f), meshCol, ext.c_str());
     }
 
-    std::string nameLabel = assetId;
+    AssetMetadata tileMetadata;
+    const bool hasTileMetadata = LoadAssetMetadata(asset.guid, &tileMetadata, nullptr);
+    const bool hasDiagnostics = hasTileMetadata &&
+                                (!tileMetadata.lastImportSucceeded || !tileMetadata.diagnostics.empty());
+
+    std::string nameLabel = asset.displayName.empty() ? assetId : asset.displayName;
+    if (hasDiagnostics)
+      nameLabel += " !";
     const float maxLabelW = tileW - 14.0f;
     if (ImGui::CalcTextSize(nameLabel.c_str()).x > maxLabelW) {
       while (!nameLabel.empty() && ImGui::CalcTextSize((nameLabel + "...").c_str()).x > maxLabelW)
@@ -3426,7 +3433,9 @@ void EditorLayer::DrawAssetsPanel() {
     const ImVec2 nameSz = ImGui::CalcTextSize(nameLabel.c_str());
     const float nameX = tileMin.x + std::max(7.0f, (tileW - nameSz.x) * 0.5f);
     const float nameY = thumbMax.y + 6.0f;
-    dl->AddText(ImVec2(nameX, nameY), ImGui::GetColorU32(ImGuiCol_Text), nameLabel.c_str());
+    const ImU32 nameColor = hasDiagnostics ? IM_COL32(255, 120, 120, 255)
+                                           : ImGui::GetColorU32(ImGuiCol_Text);
+    dl->AddText(ImVec2(nameX, nameY), nameColor, nameLabel.c_str());
 
     ImGui::EndChild();
     ImGui::PopID();
@@ -3896,10 +3905,66 @@ void EditorLayer::DrawPropertiesPanel() {
         ImGui::TextDisabled("GUID");
         ImGui::TextWrapped("%s", assetIt->second.guid.c_str());
 
+        AssetMetadata assetMetadata;
+        std::string metadataError;
+        const bool hasAssetMetadata = LoadAssetMetadata(assetIt->second.guid, &assetMetadata, &metadataError);
+        if (hasAssetMetadata) {
+          if (!assetMetadata.importerId.empty()) {
+            ImGui::TextDisabled("Importer");
+            ImGui::TextWrapped("%s", assetMetadata.importerId.c_str());
+          }
+          if (!assetMetadata.sourcePath.empty()) {
+            ImGui::TextDisabled("Source");
+            ImGui::TextWrapped("%s", assetMetadata.sourcePath.c_str());
+          }
+          if (!assetMetadata.lastImportReason.empty()) {
+            ImGui::TextDisabled("Last rebuild reason");
+            ImGui::TextWrapped("%s", assetMetadata.lastImportReason.c_str());
+          }
+          if (!assetMetadata.diagnostics.empty()) {
+            ImGui::TextDisabled("Diagnostics");
+            for (const AssetImportDiagnostic& diagnostic : assetMetadata.diagnostics) {
+              const ImVec4 color =
+                  diagnostic.severity == AssetDiagnosticSeverity::Error
+                      ? ImVec4(1.f, 0.4f, 0.4f, 1.f)
+                      : diagnostic.severity == AssetDiagnosticSeverity::Warning
+                            ? ImVec4(1.f, 0.8f, 0.35f, 1.f)
+                            : ImVec4(0.6f, 0.85f, 1.f, 1.f);
+              const std::string line = "[" + diagnostic.code + "] " + diagnostic.message;
+              ImGui::TextWrapped("%s", line.c_str());
+              const ImVec2 min = ImGui::GetItemRectMin();
+              const ImVec2 max = ImGui::GetItemRectMax();
+              ImGui::GetWindowDrawList()->AddRectFilled(
+                  ImVec2(min.x - 6.0f, min.y + 3.0f),
+                  ImVec2(min.x - 2.0f, max.y - 3.0f),
+                  ImGui::ColorConvertFloat4ToU32(color),
+                  1.0f);
+            }
+          }
+        }
+
         if (ImGui::Button("Deselect Asset", ImVec2(-1.0f, 0.0f))) {
           m_selectedAssetId.clear();
           ImGui::End();
           return;
+        }
+
+        if (hasAssetMetadata) {
+          if (ImGui::Button("Reimport Asset", ImVec2(-1.0f, 0.0f))) {
+            const AssetReimportResult reimportResult =
+                m_assetImportService.ReimportAssetWithDependents(&m_document,
+                                                                 assetIt->second.guid,
+                                                                 "Manual reimport from editor");
+            if (reimportResult.ok) {
+              m_document.dirty = true;
+              m_assetImportError.clear();
+              TriggerReload();
+            } else {
+              m_assetImportError = reimportResult.error;
+            }
+          }
+          if (!m_assetImportError.empty())
+            ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", m_assetImportError.c_str());
         }
 
         ImGui::Spacing();
