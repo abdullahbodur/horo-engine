@@ -1,103 +1,103 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file is the working contract for coding agents in `horo-engine`.
 
-## Build Commands
+## Role
 
-```bash
-make              # Debug build (default)
-make test         # Build and run all tests
-make release      # Optimized release build
-make configure    # Run CMake configuration only
-make format       # Format all sources in-place (clang-format, Google style)
-make format-check # Check formatting without changes (used in CI)
-make coverage     # Generate HTML coverage report at build/coverage/html/index.html
-make clean        # Remove debug build dir
-make clean-all    # Remove all build dirs
-```
+Default posture: make careful, production-grade C++ changes for a real engine codebase.
 
-**CMake directly:**
-```bash
-cmake --preset debug && cmake --build --preset debug
-ctest --preset debug --output-on-failure
-```
+Optimize for, in order:
+- correctness
+- root-cause fixes
+- ownership and lifetime safety
+- architecture consistency
+- regression prevention
+- delivery speed
 
-**Run a single test binary:**
-```bash
-./build/debug/bin/test_ecs         # or any test binary name
-./build/debug/bin/test_editor
-```
+## C++ Expectations
 
-**Linux build deps:**
-```bash
-libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-libwayland-dev libxkbcommon-dev libgl1-mesa-dev libglu1-mesa-dev
-```
+- Prefer simple, explicit code over clever or overly generic abstractions.
+- Make ownership obvious. Favor RAII, value semantics, and clear lifetime boundaries.
+- Keep state transitions explicit, especially in editor, scene loading, and runtime lifecycle code.
+- Avoid hidden global behavior and side effects.
+- Do not introduce new heap allocation, virtual dispatch, or template complexity unless it clearly improves the design.
+- Prefer narrow interfaces and stable headers.
+- When the code already has a typed model, do not push behavior back into stringly-typed maps or ad hoc property parsing.
+- Preserve invariants first; cleanup and elegance come second.
 
-## Testing
+## C++ Design And Coding Style
 
-Framework: **Catch2** (BSL-1.0). All test sources are in `tests/`.
+- Follow the existing local style and `clang-format` output. Do not do style-only rewrites.
+- Keep functions focused and easy to reason about. Break up long functions when it improves clarity, not just to move lines around.
+- Prefer explicit types where they improve readability; use `auto` when the type is obvious from the right-hand side.
+- Use `const` aggressively for inputs and helper variables that should not change.
+- Prefer `enum class`, small structs, and plain data carriers over loose flag combinations and magic strings.
+- Minimize macro usage.
+- Comments should explain invariants, ownership, or non-obvious intent. Do not add comments that restate the code.
+- Headers should expose the minimum necessary surface. Prefer forward declarations when they keep dependencies cleaner.
 
-23 test executables covering: math, physics (broadphase, narrowphase/GJK, constraints, integration), ECS (registry, scene, systems), camera, transforms, editor, and OBJ import.
+## How To Work In This Repo
 
-## Architecture
+- Inspect the real implementation before changing it.
+- Understand the boundary you are touching:
+  - editor document and UI state
+  - serialization and path handling
+  - typed scene model and runtime conversion
+  - lifecycle and reload flows
+- Solve the bug completely, but avoid unrelated cleanup unless it reduces real risk.
+- If a broader refactor is tempting, prefer a narrow safe fix and note the follow-up.
+- When verification is partial, say exactly what was and was not validated.
 
-**Horo Engine** is a modular C++20 3D game engine shipped as a static library (`libMonolithEngine.a`), intended to be embedded as a git submodule.
+For general project documentation, build commands, and module overview, use [README.md](README.md).
 
-### Module Overview
+## High-Risk Areas
 
-| Module | Path | Responsibility |
-|--------|------|----------------|
-| **core** | `core/` | `Application` base class (OnInit/OnUpdate/OnFixedUpdate/OnRender/OnShutdown), `Window` (GLFW), `Logger`, `Time` |
-| **math** | `math/` | Vec2/3/4, Mat3/4, Quaternion, Transform — fully custom, GLM only used as reference |
-| **physics** | `physics/` | `PhysicsWorld`: broadphase (brute-force), narrowphase (GJK + SAT), constraint solver (friction/restitution), semi-implicit Euler integration |
-| **renderer** | `renderer/` | OpenGL 4.1 rendering: `Renderer`, `Camera`, `Mesh`, `Shader`, `Material`, `Light`, `Texture`, `ObjLoader` |
-| **input** | `input/` | `Input` with key/mouse state tracking (down, pressed first-frame, released), mouse delta and scroll |
-| **scene** | `scene/` | ECS: type-indexed `Registry` (automatic pool management, no manual Add<T> registrations), `Entity`, `Scene`, `System` |
-| **scene/components** | `scene/components/` | `TransformComponent`, `MeshComponent`, `RigidBodyComponent`, `CameraComponent`, `BehaviorComponent` |
-| **scene/systems** | `scene/systems/` | `RenderSystem`, `PhysicsSystem`, `CameraSystem`, `BehaviorSystem` |
-| **editor** | `editor/` | ImGui-based scene editor: entity hierarchy, component inspector, asset import, raycasting (entity picking), JSON serialization |
-| **vendor** | `vendor/` | glad, glm, stb; GLFW/ImGui/nlohmann-json/Catch2 via CMake FetchContent |
+- `editor/`: scene mutations, drag/drop flows, asset operations, selection state, live editing
+- `scene/`: typed scene model, conversion pipeline, lifecycle coordination, reference runtime behavior
+- `core/ProjectPath`: cross-platform path handling and temp/project-root behavior
+- Serialization, reload, and file-deletion paths are easy places to create silent data loss or cross-platform regressions
 
-### Data Flow
+Changes in these areas should bias toward explicit validation and regression tests.
 
-```
-Application
-  ├── Window (GLFW)
-  ├── Input (GLFW callbacks)
-  ├── Scene
-  │   ├── Registry (ECS)
-  │   ├── PhysicsWorld
-  │   │   ├── Broadphase → collision pairs
-  │   │   ├── Narrowphase (GJK/SAT) → contact manifolds
-  │   │   ├── ConstraintSolver → impulses
-  │   │   └── SemiImplicitEuler → integration
-  │   └── Systems (Render, Physics, Camera, Behavior)
-  ├── Renderer (OpenGL 4.1)
-  └── EditorLayer (ImGui)
-      ├── SceneDocument + SceneSerializer (JSON)
-      ├── Raycaster (entity picking)
-      └── EditorAssetImport
-```
+## Verification Bar
 
-### Editor Architecture
+- Every behavior change should add or update regression coverage when practical.
+- Run targeted tests first, then broader validation when the change crosses subsystem boundaries.
+- Think across Linux, macOS, and Windows when paths, temp files, file deletion, or case sensitivity are involved.
+- Do not claim success without stating what commands, tests, or manual checks actually ran.
 
-The editor (`editor/`) is structured as:
-- `EditorLayer` — top-level ImGui layer, owns the editor lifecycle
-- `EditorUiLogic` — UI state machine, handles panels, modals, toolbar
-- `SceneDocument` — document model (selected entity, dirty state, undo stack foundation)
-- `SceneSerializer` — reads/writes `.horo` JSON scene files via `nlohmann/json`
-- `EditorSchema` — component schema definitions for the inspector (drives field rendering generically)
-- `Raycaster` — mouse ray → entity picking using physics colliders
+## Review Mindset
 
-### ECS Design
+Default review posture:
+- look for correctness bugs first
+- check ownership, lifetime, and invalid state transitions
+- look for missing tests and quiet behavior drift
+- call out uncertainty instead of guessing
+- do not overwrite user changes unless explicitly asked
 
-`Registry` uses a type-indexed map of `IComponentPoolBase*` (erased) with concrete `ComponentPool<T>`. No explicit component registration—pools are created on first use. `Scene` owns a `Registry` and routes `Systems` through it.
+When reviewing or preparing a PR, focus on:
+- why the bug happened
+- why the fix is safe
+- which invariant is now protected
+- what regression coverage was added
 
-## Code Style
+## Commits And PRs
 
-Google C++ Style Guide, enforced by clang-format. CI fails on formatting violations (`make format-check`).
+Use Conventional Commits with a truthful narrow type and scope.
 
-## CI
+Preferred examples:
+- `feat(editor): add asset viewport drag placement`
+- `fix(core): handle empty ProjectPath init`
+- `test(mcp): normalize deleted asset directory assertions`
 
-GitHub Actions runs on Linux (GCC), macOS (Clang), and Windows (MSVC 2022). Coverage is collected on Linux via lcov. See `.github/workflows/ci.yml`.
+Rules:
+- write the subject in imperative mood
+- keep one commit focused on one coherent intent
+- avoid placeholder subjects such as `wip`, `misc`, `tmp`, `update`, or `fix stuff`
+
+Use [`.github/pull_request_template.md`](.github/pull_request_template.md) for PR structure.
+
+## References
+
+- General repo and build documentation: [README.md](README.md)
+- PR structure: [`.github/pull_request_template.md`](.github/pull_request_template.md)
