@@ -28,6 +28,11 @@ bool ShouldOpenQuickOpen(bool currToggle,
                          bool flyMode,
                          bool wantsTextInput,
                          bool anyItemActive);
+bool ShouldOpenCommandPalette(bool currToggle,
+                              bool prevToggle,
+                              bool flyMode,
+                              bool wantsTextInput,
+                              bool anyItemActive);
 
 bool ShouldCopySelectionRef(bool currCopyRef,
                             bool prevCopyRef,

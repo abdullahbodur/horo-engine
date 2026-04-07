@@ -125,6 +125,14 @@ class EditorLayer {
 
  private:
   enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
+  enum class PendingSceneAction {
+    None,
+    NewScene,
+    OpenSceneFile,
+    LoadSceneFromDisk,
+    ReloadSceneFromDisk,
+    CloseEditor,
+  };
 
   // Run native file dialogs on the next Render() tick so GLFW/ImGui is not mid-frame.
   enum class DeferredFilePick {
@@ -196,6 +204,7 @@ class EditorLayer {
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
+  void DrawCommandPalettePopup();
   void DrawQuickOpenPopup();
   void DrawStatusBar();
   void DrawBottomDock();
@@ -220,6 +229,9 @@ class EditorLayer {
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
+  void RequestSceneAction(PendingSceneAction action);
+  bool ExecutePendingSceneAction(std::string* outError);
+  void ExecuteCommandPaletteAction(const std::string& commandId);
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
@@ -316,6 +328,9 @@ class EditorLayer {
   bool m_quickOpenOpen = false;
   bool m_prevQuickOpenToggle = false;
   std::string m_quickOpenQuery;
+  bool m_commandPaletteOpen = false;
+  bool m_prevCommandPaletteToggle = false;
+  std::string m_commandPaletteQuery;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
   bool m_confirmExitOpen = false;
@@ -323,6 +338,7 @@ class EditorLayer {
   std::string m_pendingDeleteAssetId;
   std::string m_pendingDeleteAssetError;
   std::string m_exitConfirmError;
+  PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
   bool m_renameObjectOpen = false;
   int m_renameObjectIndex = -1;
   std::string m_renameObjectDraft;

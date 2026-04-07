@@ -1389,7 +1389,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevHelpToggle = currHelpToggle;
 
-    const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    const bool currQuickOpenToggle =
+        accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
     if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle, m_flyMode,
                             io.WantTextInput, ImGui::IsAnyItemActive())) {
       m_quickOpenOpen = true;
@@ -1397,8 +1398,21 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevQuickOpenToggle = currQuickOpenToggle;
 
+    const bool currCommandPaletteToggle =
+        accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    if (ShouldOpenCommandPalette(currCommandPaletteToggle,
+                                 m_prevCommandPaletteToggle,
+                                 m_flyMode,
+                                 io.WantTextInput,
+                                 ImGui::IsAnyItemActive())) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
+    m_prevCommandPaletteToggle = currCommandPaletteToggle;
+
     const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
-    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
+    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_commandPaletteOpen ||
+                                  m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
     // Escape: dismiss gizmo only (no editor quit on Escape; use File / window close).
@@ -1751,6 +1765,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     DrawBottomDock();
     DrawStatusBar();
     DrawHelpPopup();
+    DrawCommandPalettePopup();
     DrawQuickOpenPopup();
     DrawSettingsModal();
     DrawDeleteConfirmModals();
@@ -1920,9 +1935,9 @@ void EditorLayer::DrawToolbar() {
     ImGui::OpenPopup("##toolbar_file_popup");
   if (ImGui::BeginPopup("##toolbar_file_popup")) {
     if (ImGui::MenuItem("New Scene"))
-      AddNewScene();
+      RequestSceneAction(PendingSceneAction::NewScene);
     if (ImGui::MenuItem("Open Scene..."))
-      OpenAdditionalSceneFile();
+      RequestSceneAction(PendingSceneAction::OpenSceneFile);
     if (ImGui::MenuItem("Reset Layout"))
       m_resetDockLayoutRequested = true;
     ImGui::Separator();
@@ -2002,6 +2017,10 @@ void EditorLayer::DrawToolbar() {
       m_helpOpen = true;
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
+    if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
     if (ImGui::MenuItem("Reset Layout"))
       m_resetDockLayoutRequested = true;
     ImGui::EndPopup();
@@ -2034,14 +2053,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SetCursorPosX(io.DisplaySize.x - rightW);
 
   if (ImGui::Button("Load")) {
-    std::string path =
-        m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
-    try {
-      m_document = SceneSerializer::LoadFromFile(path);
-      m_selectedIndices.clear();
-    } catch (const std::exception& e) {
-      LOG_ERROR("EditorLayer: failed to load scene: %s", e.what());
-    }
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
   }
   ImGui::SameLine();
 
@@ -2060,13 +2072,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
 
   if (ImGui::Button("Close editor")) {
-    if (ResolveEditorExitDecision(m_document.dirty) ==
-        EditorExitDecision::PromptUnsavedConfirm) {
-      m_confirmExitOpen = true;
-      m_exitConfirmError.clear();
-    } else {
-      m_closeRequested = true;
-    }
+    RequestSceneAction(PendingSceneAction::CloseEditor);
   }
 
   ImGui::End();
@@ -3762,6 +3768,55 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::End();
 }
 
+void EditorLayer::DrawCommandPalettePopup() {
+  if (m_commandPaletteOpen) {
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::IsPopupOpen("Command Palette"))
+      ImGui::OpenPopup("Command Palette");
+  }
+
+  if (!ImGui::BeginPopupModal("Command Palette", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Search commands");
+  ImGui::SetNextItemWidth(480.0f);
+  char queryBuf[256] = {};
+  std::snprintf(queryBuf, sizeof(queryBuf), "%s", m_commandPaletteQuery.c_str());
+  if (ImGui::InputTextWithHint("##command_palette_input",
+                               "Type a command...",
+                               queryBuf,
+                               sizeof(queryBuf))) {
+    m_commandPaletteQuery = queryBuf;
+  }
+
+  ImGui::Separator();
+  bool executed = false;
+  int shownCount = 0;
+  for (const CommandPaletteRow& row : GetEditorCommands()) {
+    if (!MatchesCommandPaletteQuery(row, m_commandPaletteQuery))
+      continue;
+
+    const std::string label = std::string(row.command) + "##cmd_" + row.id;
+    if (ImGui::Selectable(label.c_str(), false)) {
+      ExecuteCommandPaletteAction(row.id);
+      executed = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", row.keys);
+    ++shownCount;
+  }
+
+  if (shownCount == 0)
+    ImGui::TextDisabled("No command matches '%s'", m_commandPaletteQuery.c_str());
+
+  if (executed || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    m_commandPaletteOpen = false;
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
 void EditorLayer::DrawQuickOpenPopup() {
   if (m_quickOpenOpen) {
     ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
@@ -3944,8 +3999,29 @@ void EditorLayer::DrawExitConfirmModal() {
   if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     return;
 
+  const char* actionLabel = "continue";
+  switch (m_pendingSceneAction) {
+    case PendingSceneAction::NewScene:
+      actionLabel = "create a new scene";
+      break;
+    case PendingSceneAction::OpenSceneFile:
+      actionLabel = "open another scene";
+      break;
+    case PendingSceneAction::LoadSceneFromDisk:
+      actionLabel = "load the scene from disk";
+      break;
+    case PendingSceneAction::ReloadSceneFromDisk:
+      actionLabel = "reload the scene";
+      break;
+    case PendingSceneAction::CloseEditor:
+      actionLabel = "exit editor mode";
+      break;
+    case PendingSceneAction::None:
+      break;
+  }
+
   ImGui::TextUnformatted("You have unsaved changes.");
-  ImGui::TextDisabled("Are you sure you want to exit editor mode?");
+  ImGui::TextDisabled("Save or discard them before you %s.", actionLabel);
   ImGui::Separator();
 
   if (!m_exitConfirmError.empty())
@@ -3954,26 +4030,32 @@ void EditorLayer::DrawExitConfirmModal() {
   if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
+    m_pendingSceneAction = PendingSceneAction::None;
     ImGui::CloseCurrentPopup();
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Discard & Exit", ImVec2(120.0f, 0.0f))) {
-    DiscardUnsavedChanges();
+  if (ImGui::Button("Discard", ImVec2(120.0f, 0.0f))) {
+    if (m_pendingSceneAction == PendingSceneAction::CloseEditor)
+      DiscardUnsavedChanges();
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
     ImGui::CloseCurrentPopup();
-    m_closeRequested = true;
+    std::string actionError;
+    if (!ExecutePendingSceneAction(&actionError))
+      m_exitConfirmError = actionError;
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Save & Exit", ImVec2(120.0f, 0.0f))) {
+  if (ImGui::Button("Save & Continue", ImVec2(120.0f, 0.0f))) {
     std::string saveError;
     if (SaveDocument(&saveError)) {
       m_confirmExitOpen = false;
       m_exitConfirmError.clear();
       ImGui::CloseCurrentPopup();
-      m_closeRequested = true;
+      std::string actionError;
+      if (!ExecutePendingSceneAction(&actionError))
+        m_exitConfirmError = actionError;
     } else {
       m_exitConfirmError = saveError;
     }
@@ -5468,6 +5550,80 @@ void EditorLayer::DiscardUnsavedChanges() {
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
   TriggerReload();
+}
+
+void EditorLayer::RequestSceneAction(PendingSceneAction action) {
+  if (action == PendingSceneAction::None)
+    return;
+
+  m_pendingSceneAction = action;
+  m_exitConfirmError.clear();
+  if (m_document.dirty) {
+    m_confirmExitOpen = true;
+    return;
+  }
+
+  std::string actionError;
+  if (!ExecutePendingSceneAction(&actionError))
+    LOG_ERROR("[Editor] Scene action failed: %s", actionError.c_str());
+}
+
+bool EditorLayer::ExecutePendingSceneAction(std::string* outError) {
+  if (outError)
+    outError->clear();
+
+  const PendingSceneAction action = m_pendingSceneAction;
+  m_pendingSceneAction = PendingSceneAction::None;
+
+  switch (action) {
+    case PendingSceneAction::None:
+      return true;
+    case PendingSceneAction::NewScene:
+      AddNewScene();
+      m_lastSavedDocument = m_document;
+      return true;
+    case PendingSceneAction::OpenSceneFile:
+      OpenAdditionalSceneFile();
+      return true;
+    case PendingSceneAction::LoadSceneFromDisk: {
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+    }
+    case PendingSceneAction::ReloadSceneFromDisk: {
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+    }
+    case PendingSceneAction::CloseEditor:
+      m_closeRequested = true;
+      return true;
+  }
+
+  return true;
+}
+
+void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
+  if (commandId == "new_scene")
+    RequestSceneAction(PendingSceneAction::NewScene);
+  else if (commandId == "open_scene")
+    RequestSceneAction(PendingSceneAction::OpenSceneFile);
+  else if (commandId == "load_scene")
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
+  else if (commandId == "reload_scene")
+    RequestSceneAction(PendingSceneAction::ReloadSceneFromDisk);
+  else if (commandId == "save_scene") {
+    std::string saveError;
+    if (!SaveDocument(&saveError))
+      LOG_ERROR("[Editor] Save failed: %s", saveError.c_str());
+  } else if (commandId == "reset_layout") {
+    m_resetDockLayoutRequested = true;
+  } else if (commandId == "quick_open") {
+    m_quickOpenOpen = true;
+    m_quickOpenQuery.clear();
+  } else if (commandId == "close_editor") {
+    RequestSceneAction(PendingSceneAction::CloseEditor);
+  }
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {

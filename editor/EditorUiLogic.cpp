@@ -21,6 +21,14 @@ bool ShouldOpenQuickOpen(bool currToggle,
   return currToggle && !prevToggle && !flyMode && !wantsTextInput && !anyItemActive;
 }
 
+bool ShouldOpenCommandPalette(bool currToggle,
+                              bool prevToggle,
+                              bool flyMode,
+                              bool wantsTextInput,
+                              bool anyItemActive) {
+  return currToggle && !prevToggle && !flyMode && !wantsTextInput && !anyItemActive;
+}
+
 bool ShouldCopySelectionRef(bool currCopyRef,
                             bool prevCopyRef,
                             bool wantsTextInput,
