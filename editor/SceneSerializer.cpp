@@ -90,6 +90,13 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
     so.pitch = obj.value("pitch", 0.0f);
     so.roll = obj.value("roll", 0.0f);
     so.assetId = obj.value("asset", "");
+    if (obj.contains("prefab") && obj["prefab"].is_object()) {
+      ScenePrefabInstance prefab;
+      prefab.prefabId = obj["prefab"].value("id", "");
+      prefab.sourcePath = obj["prefab"].value("path", "");
+      if (!prefab.prefabId.empty() || !prefab.sourcePath.empty())
+        so.prefabInstance = std::move(prefab);
+    }
 
     auto pos = obj.value("position", json::array({0.f, 0.f, 0.f}));
     auto scl = obj.value("scale", json::array({1.f, 1.f, 1.f}));
@@ -203,6 +210,10 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     if (!so.assetId.empty()) {
       // Asset reference — mesh/renderScale live in the assets block.
       obj["asset"] = so.assetId;
+    }
+    if (so.prefabInstance.has_value()) {
+      obj["prefab"] = json{{"id", so.prefabInstance->prefabId},
+                           {"path", so.prefabInstance->sourcePath}};
     }
 
     // Persist type-specific and hierarchy props for both asset-backed and inline objects.

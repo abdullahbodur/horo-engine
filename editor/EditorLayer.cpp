@@ -103,6 +103,11 @@ bool ComponentDescsEqual(const ComponentDesc& lhs, const ComponentDesc& rhs) {
 }
 
 bool SceneObjectsEqual(const SceneObject& lhs, const SceneObject& rhs) {
+  const bool prefabEqual =
+      (!lhs.prefabInstance.has_value() && !rhs.prefabInstance.has_value()) ||
+      (lhs.prefabInstance.has_value() && rhs.prefabInstance.has_value() &&
+       lhs.prefabInstance->prefabId == rhs.prefabInstance->prefabId &&
+       lhs.prefabInstance->sourcePath == rhs.prefabInstance->sourcePath);
   if (lhs.id != rhs.id ||
       lhs.type != rhs.type ||
       lhs.position.x != rhs.position.x ||
@@ -115,6 +120,7 @@ bool SceneObjectsEqual(const SceneObject& lhs, const SceneObject& rhs) {
       lhs.pitch != rhs.pitch ||
       lhs.roll != rhs.roll ||
       lhs.assetId != rhs.assetId ||
+      !prefabEqual ||
       lhs.props != rhs.props ||
       lhs.components.size() != rhs.components.size()) {
     return false;
@@ -227,6 +233,33 @@ static int FindObjectIndexById(const SceneDocument& doc, const std::string& id) 
       return i;
   }
   return -1;
+}
+
+std::string SanitizePrefabStem(std::string value) {
+  for (char& ch : value) {
+    const bool alphaNum = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                          (ch >= '0' && ch <= '9');
+    if (!alphaNum && ch != '_' && ch != '-')
+      ch = '_';
+  }
+  while (!value.empty() && value.front() == '_')
+    value.erase(value.begin());
+  while (!value.empty() && value.back() == '_')
+    value.pop_back();
+  return value.empty() ? "prefab" : value;
+}
+
+std::filesystem::path BuildUniquePrefabPath(const SceneDocument& doc, const SceneObject& object) {
+  const std::filesystem::path prefabDir = ProjectPath::Resolve("assets/prefabs");
+  const std::string stemBase = SanitizePrefabStem(object.id.empty() ? doc.sceneId + "_prefab"
+                                                                    : object.id + "_prefab");
+  std::filesystem::path candidate = prefabDir / (stemBase + ".horo");
+  int suffix = 2;
+  while (std::filesystem::exists(candidate)) {
+    candidate = prefabDir / (stemBase + "_" + std::to_string(suffix) + ".horo");
+    ++suffix;
+  }
+  return candidate;
 }
 
 static bool IsDescendantOf(const SceneDocument& doc, int nodeIdx, int ancestorIdx) {
@@ -2106,6 +2139,11 @@ void EditorLayer::DrawToolbar() {
       ImGui::BeginDisabled();
     if (ImGui::MenuItem("Rename..."))
       OpenRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Create Prefab")) {
+      std::string prefabError;
+      if (!CreatePrefabFromSelection(&prefabError))
+        LOG_ERROR("[Editor] Create prefab failed: %s", prefabError.c_str());
+    }
     if (!hasSingleSelection)
       ImGui::EndDisabled();
     if (ImGui::MenuItem("Duplicate"))
@@ -4483,6 +4521,10 @@ void EditorLayer::DrawPropertiesPanel() {
                          : (obj.type == SceneObjectType::Camera) ? "Camera"
                                                                  : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
+  if (obj.prefabInstance.has_value()) {
+    ImGui::LabelText("Prefab", "%s", obj.prefabInstance->prefabId.c_str());
+    ImGui::TextDisabled("%s", obj.prefabInstance->sourcePath.c_str());
+  }
 
   {
     std::string currentParent = GetParentId(obj);
@@ -5471,6 +5513,10 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     out["pitch"] = object.pitch;
     out["roll"] = object.roll;
     out["assetId"] = object.assetId;
+    if (object.prefabInstance.has_value()) {
+      out["prefab"] = json{{"id", object.prefabInstance->prefabId},
+                           {"path", object.prefabInstance->sourcePath}};
+    }
     const auto parentIt = object.props.find("parentId");
     if (parentIt != object.props.end() && !parentIt->second.empty())
       out["parentId"] = parentIt->second;
@@ -5616,6 +5662,30 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     return Mcp::McpCommandResult{true,
                                  json{{"created", summarizeObject(object)}},
                                  std::string()};
+  }
+
+  if (toolName == "editor.create_prefab") {
+    const std::string id = arguments.value("id", std::string());
+    if (!id.empty())
+      SetSelectedObjectIds({id});
+
+    std::string prefabPath;
+    std::string prefabError;
+    if (!CreatePrefabFromSelection(&prefabError, &prefabPath))
+      return Mcp::McpCommandResult{false, json::object(), prefabError};
+
+    const int idx = PrimaryIdx();
+    const SceneObject* object =
+        (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            ? &m_document.objects[static_cast<size_t>(idx)]
+            : nullptr;
+    return Mcp::McpCommandResult{
+        true,
+        json{{"prefabPath", prefabPath},
+             {"prefabId", object && object->prefabInstance.has_value() ? object->prefabInstance->prefabId
+                                                                       : std::string()},
+             {"instance", object ? summarizeObject(*object) : json::object()}},
+        std::string()};
   }
 
   if (toolName == "editor.update_object" || toolName == "editor.transform") {
@@ -6059,6 +6129,69 @@ void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
   } else if (commandId == "close_editor") {
     RequestSceneAction(PendingSceneAction::CloseEditor);
   }
+}
+
+bool EditorLayer::CreatePrefabFromSelection(std::string* outError, std::string* outPrefabPath) {
+  if (outError)
+    outError->clear();
+  if (outPrefabPath)
+    outPrefabPath->clear();
+
+  const int primaryIdx = PrimaryIdx();
+  if (m_selectedIndices.size() != 1 ||
+      primaryIdx < 0 ||
+      primaryIdx >= static_cast<int>(m_document.objects.size())) {
+    if (outError)
+      *outError = "Select exactly one object to create a prefab.";
+    return false;
+  }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+  const SceneObject& sourceObject = m_document.objects[static_cast<size_t>(primaryIdx)];
+  const std::filesystem::path prefabAbsPath = BuildUniquePrefabPath(m_document, sourceObject);
+  std::error_code ec;
+  std::filesystem::create_directories(prefabAbsPath.parent_path(), ec);
+  if (ec) {
+    if (outError)
+      *outError = "Failed to create prefab directory: " + ec.message();
+    return false;
+  }
+
+  SceneDocument prefabDoc;
+  prefabDoc.version = m_document.version;
+  prefabDoc.sceneId = prefabAbsPath.stem().string();
+  prefabDoc.sceneName = sourceObject.id.empty() ? prefabDoc.sceneId : sourceObject.id;
+  prefabDoc.filePath = prefabAbsPath.generic_string();
+
+  SceneObject prefabObject = sourceObject;
+  prefabObject.prefabInstance.reset();
+  prefabObject.props.erase("parentId");
+  prefabDoc.objects.push_back(std::move(prefabObject));
+  if (!sourceObject.assetId.empty()) {
+    const auto assetIt = m_document.assets.find(sourceObject.assetId);
+    if (assetIt != m_document.assets.end())
+      prefabDoc.assets[sourceObject.assetId] = assetIt->second;
+  }
+
+  try {
+    SceneSerializer::SaveToFile(prefabDoc, prefabAbsPath.generic_string());
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+
+  const std::filesystem::path relativePath =
+      prefabAbsPath.lexically_relative(ProjectPath::Root()).lexically_normal();
+  SceneObject& object = m_document.objects[static_cast<size_t>(primaryIdx)];
+  object.prefabInstance = ScenePrefabInstance{prefabDoc.sceneId, relativePath.generic_string()};
+  m_document.dirty = true;
+  TriggerReload();
+  CommitHistoryChange(before);
+
+  if (outPrefabPath)
+    *outPrefabPath = relativePath.generic_string();
+  return true;
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {

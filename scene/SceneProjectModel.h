@@ -66,6 +66,11 @@ struct SceneLooseComponent {
   std::unordered_map<std::string, std::string> props;
 };
 
+struct ScenePrefabReference {
+  std::string prefabId;
+  std::string sourcePath;
+};
+
 struct SceneNodeDefinition {
   std::string id;
   SceneNodeKind kind = SceneNodeKind::Panel;
@@ -75,6 +80,7 @@ struct SceneNodeDefinition {
   float pitch = 0.0f;
   float roll = 0.0f;
   std::string assetId;
+  std::optional<ScenePrefabReference> prefabInstance;
   std::optional<std::string> parentId;
   std::unordered_map<std::string, std::string> extraProps;
   std::optional<SceneCameraProperties> camera;

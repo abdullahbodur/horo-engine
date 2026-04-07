@@ -23,6 +23,8 @@
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
+#include "editor/SceneProjectBridge.h"
+#include "editor/SceneRuntimeBridge.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 
@@ -823,6 +825,26 @@ TEST_CASE("SceneSerializer: inline props survive when object has no asset refere
     REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
 }
 
+TEST_CASE("SceneSerializer: prefab instance metadata round-trips", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject obj;
+    obj.id = "crate_instance";
+    obj.type = SceneObjectType::Prop;
+    obj.position = {4.0f, 1.0f, 2.0f};
+    obj.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("prefab_instance_roundtrip.horo");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].prefabInstance.has_value());
+    REQUIRE(loaded.objects[0].prefabInstance->prefabId == "crate_prefab");
+    REQUIRE(loaded.objects[0].prefabInstance->sourcePath == "assets/prefabs/crate_prefab.horo");
+}
+
 TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]") {
     SceneDocument doc;
     SceneObject src;
@@ -1255,6 +1277,7 @@ TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][m
     EditorLayer editor;
     editor.LoadDocument(doc);
     REQUIRE(editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "crate"}}).ok);
+    const std::string previousDisplayName = editor.GetDocument().assets.at("crate").displayName;
 
     const auto updateResult = editor.ExecuteMcpCommand(
         "editor.update_asset",
@@ -1265,10 +1288,103 @@ TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][m
 
     const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
-    REQUIRE(editor.GetDocument().assets.at("crate").displayName.empty());
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName == previousDisplayName);
     REQUIRE(editor.GetDocument().assets.at("crate").albedoMap.empty());
     REQUIRE(editor.GetSelectedAssetId() == "crate");
     REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instance", "[editor][mcp][prefab]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_create_prefab";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "prefabs");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1.0000,2.0000,3.0000", ""};
+
+    SceneObject obj;
+    obj.id = "crate_prop";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    obj.position = {7.0f, 0.0f, 9.0f};
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand("editor.create_prefab", nlohmann::json{{"id", "crate_prop"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["prefabPath"].is_string());
+
+    const fs::path prefabPath = projectRoot / result.data["prefabPath"].get<std::string>();
+    REQUIRE(fs::exists(prefabPath));
+
+    SceneDocument prefabDoc = SceneSerializer::LoadFromFile(prefabPath.string());
+    REQUIRE(prefabDoc.objects.size() == 1);
+    REQUIRE(prefabDoc.objects[0].id == "crate_prop");
+    REQUIRE_FALSE(prefabDoc.objects[0].prefabInstance.has_value());
+
+    const SceneObject& updated = editor.GetDocument().objects[0];
+    REQUIRE(updated.prefabInstance.has_value());
+    REQUIRE(updated.prefabInstance->sourcePath == result.data["prefabPath"].get<std::string>());
+    REQUIRE(updated.prefabInstance->prefabId == prefabPath.stem().string());
+    REQUIRE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "[editor][prefab][runtime]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_runtime_prefab_instance";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "prefabs");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument prefabDoc;
+    prefabDoc.filePath = (projectRoot / "assets" / "prefabs" / "crate_prefab.horo").string();
+    prefabDoc.assets["crate"] = AssetDef{"assets/models/crate.obj", "2.0000,3.0000,4.0000", ""};
+
+    SceneObject prefabObject;
+    prefabObject.id = "crate_template";
+    prefabObject.type = SceneObjectType::Prop;
+    prefabObject.assetId = "crate";
+    prefabObject.position = {0.0f, 0.0f, 0.0f};
+    prefabObject.scale = {1.5f, 1.0f, 0.5f};
+    prefabDoc.objects.push_back(prefabObject);
+    SceneSerializer::SaveToFile(prefabDoc, prefabDoc.filePath);
+
+    SceneDocument doc;
+    SceneObject instance;
+    instance.id = "crate_instance";
+    instance.type = SceneObjectType::Prop;
+    instance.position = {8.0f, 0.0f, 6.0f};
+    instance.scale = {0.5f, 2.0f, 1.0f};
+    instance.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    doc.objects.push_back(instance);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.assets.size() == 1);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].assetId == "crate");
+    REQUIRE(model.scene.nodes[0].prefabInstance.has_value());
+
+    const RuntimeSceneBuildResult runtime = Monolith::Editor::BuildRuntimeSceneDefinition(doc);
+    REQUIRE(runtime.issues.empty());
+    REQUIRE(runtime.definition.rooms.size() == 1);
+    REQUIRE(runtime.definition.rooms[0].props.size() == 1);
+
+    const RuntimeSceneProp& prop = runtime.definition.rooms[0].props[0];
+    REQUIRE(prop.id == "crate_instance");
+    REQUIRE(prop.meshTag == "assets/models/crate.obj");
+    REQUIRE(prop.position.x == Approx(8.0f));
+    REQUIRE(prop.position.z == Approx(6.0f));
+    REQUIRE(prop.scale.x == Approx(1.0f));
+    REQUIRE(prop.scale.y == Approx(6.0f));
+    REQUIRE(prop.scale.z == Approx(4.0f));
 }
 
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {

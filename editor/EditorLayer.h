@@ -232,6 +232,7 @@ class EditorLayer {
   void RequestSceneAction(PendingSceneAction action);
   bool ExecutePendingSceneAction(std::string* outError);
   void ExecuteCommandPaletteAction(const std::string& commandId);
+  bool CreatePrefabFromSelection(std::string* outError = nullptr, std::string* outPrefabPath = nullptr);
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});

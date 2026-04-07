@@ -116,6 +116,18 @@ SceneProjectValidationResult ValidateSceneProjectModel(const SceneProjectModel& 
                path + ".assetId",
                "assetId must resolve to a declared scene asset.");
     }
+    if (node.prefabInstance.has_value()) {
+      if (node.prefabInstance->prefabId.empty()) {
+        addIssue(SceneProjectValidationIssue::Severity::Error,
+                 path + ".prefabInstance.prefabId",
+                 "prefabId must not be empty when a prefab instance is declared.");
+      }
+      if (node.prefabInstance->sourcePath.empty()) {
+        addIssue(SceneProjectValidationIssue::Severity::Error,
+                 path + ".prefabInstance.sourcePath",
+                 "sourcePath must not be empty when a prefab instance is declared.");
+      }
+    }
     if (node.parentId.has_value() && !node.parentId->empty() && nodeIds.count(*node.parentId) == 0) {
       addIssue(SceneProjectValidationIssue::Severity::Warning,
                path + ".parentId",
