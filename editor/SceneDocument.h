@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "math/Vec3.h"
@@ -27,6 +28,20 @@ struct AssetDef {
   std::string mesh;         // mesh tag, e.g. "stone.obj"
   std::string renderScale;  // "x,y,z" — matches the renderScale prop convention
   std::string albedoMap;    // optional diffuse texture path (e.g. assets/models/foo.png)
+  std::string guid;         // stable path-independent identity for imported content
+  std::string displayName;  // human-facing label shown in the editor
+
+  AssetDef() = default;
+  AssetDef(std::string meshValue,
+           std::string renderScaleValue,
+           std::string albedoMapValue = {},
+           std::string guidValue = {},
+           std::string displayNameValue = {})
+      : mesh(std::move(meshValue)),
+        renderScale(std::move(renderScaleValue)),
+        albedoMap(std::move(albedoMapValue)),
+        guid(std::move(guidValue)),
+        displayName(std::move(displayNameValue)) {}
 };
 
 // One generic scene object: transform + optional asset reference + props bag.

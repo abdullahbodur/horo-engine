@@ -30,7 +30,14 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   model.scene.metadata.sceneId = "world";
   model.scene.settings.spawnPoint = {1.0f, 2.0f, 3.0f};
   model.scene.settings.extraSettings["gravity"] = "0.0,-4.0,0.0";
-  model.scene.assets.push_back({"stone", "stone.obj", {2.0f, 1.5f, 0.5f}, "stone.png"});
+  SceneAssetDefinition stoneAsset;
+  stoneAsset.id = "stone";
+  stoneAsset.mesh = "stone.obj";
+  stoneAsset.renderScale = {2.0f, 1.5f, 0.5f};
+  stoneAsset.albedoMap = "stone.png";
+  stoneAsset.guid = "guid_stone";
+  stoneAsset.displayName = "Stone";
+  model.scene.assets.push_back(std::move(stoneAsset));
 
   SceneNodeDefinition panel;
   panel.id = "panel_000";

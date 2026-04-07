@@ -30,6 +30,8 @@ struct SceneAssetDefinition {
   std::string mesh;
   Vec3 renderScale = Vec3::One();
   std::string albedoMap;
+  std::string guid;
+  std::string displayName;
 };
 
 struct SceneCameraProperties {

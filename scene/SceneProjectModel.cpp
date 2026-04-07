@@ -65,6 +65,7 @@ SceneProjectValidationResult ValidateSceneProjectModel(const SceneProjectModel& 
   }
 
   std::unordered_set<std::string> assetIds;
+  std::unordered_set<std::string> assetGuids;
   for (std::size_t i = 0; i < model.scene.assets.size(); ++i) {
     const auto& asset = model.scene.assets[i];
     const std::string path = "scene.assets[" + std::to_string(i) + "]";
@@ -78,6 +79,15 @@ SceneProjectValidationResult ValidateSceneProjectModel(const SceneProjectModel& 
       addIssue(SceneProjectValidationIssue::Severity::Error,
                path + ".id",
                "Asset id must be unique.");
+    }
+    if (asset.guid.empty()) {
+      addIssue(SceneProjectValidationIssue::Severity::Error,
+               path + ".guid",
+               "Asset guid must not be empty.");
+    } else if (!assetGuids.insert(asset.guid).second) {
+      addIssue(SceneProjectValidationIssue::Severity::Error,
+               path + ".guid",
+               "Asset guid must be unique.");
     }
   }
 

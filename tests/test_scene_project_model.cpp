@@ -120,6 +120,8 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(stone->renderScale.x == Approx(2.0f));
   REQUIRE(stone->renderScale.y == Approx(1.5f));
   REQUIRE(stone->renderScale.z == Approx(0.5f));
+  REQUIRE_FALSE(stone->guid.empty());
+  REQUIRE(stone->displayName == "stone");
 
   const SceneNodeDefinition* cam = FindNode(model, "cam_000");
   REQUIRE(cam != nullptr);
@@ -195,6 +197,8 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   REQUIRE(roundTrip.settings.at("spawnPoint") == "10.0000,0.5000,-4.0000");
   REQUIRE(roundTrip.assets.at("crate_asset").mesh == "crate.obj");
   REQUIRE(roundTrip.assets.at("crate_asset").renderScale == "1.0000,2.0000,3.0000");
+  REQUIRE_FALSE(roundTrip.assets.at("crate_asset").guid.empty());
+  REQUIRE(roundTrip.assets.at("crate_asset").displayName == "crate_asset");
   REQUIRE(roundTrip.objects.size() == 2);
   REQUIRE(roundTrip.objects[1].id == "crate_000");
   REQUIRE(roundTrip.objects[1].assetId == "crate_asset");
