@@ -1255,6 +1255,7 @@ TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][m
     EditorLayer editor;
     editor.LoadDocument(doc);
     REQUIRE(editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "crate"}}).ok);
+    const std::string previousDisplayName = editor.GetDocument().assets.at("crate").displayName;
 
     const auto updateResult = editor.ExecuteMcpCommand(
         "editor.update_asset",
@@ -1265,7 +1266,7 @@ TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][m
 
     const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
-    REQUIRE(editor.GetDocument().assets.at("crate").displayName.empty());
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName == previousDisplayName);
     REQUIRE(editor.GetDocument().assets.at("crate").albedoMap.empty());
     REQUIRE(editor.GetSelectedAssetId() == "crate");
     REQUIRE_FALSE(editor.GetDocument().dirty);
