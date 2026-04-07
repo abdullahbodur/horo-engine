@@ -933,6 +933,8 @@ TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]"
     REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
     REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
     REQUIRE(hasCommandWithKeys("Command palette", "Ctrl/Cmd + Shift + P"));
+    REQUIRE(hasCommandWithKeys("Undo last scene change", "Ctrl/Cmd + Z"));
+    REQUIRE(hasCommandWithKeys("Redo last scene change", "Ctrl/Cmd + Shift + Z / Ctrl+Y"));
 }
 
 TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
@@ -1150,6 +1152,125 @@ TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[edito
     REQUIRE(selectedIds[2] == updated.objects[3].id);
 }
 
+TEST_CASE("Editor MCP undo and redo restore created object selection", "[editor][mcp][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto createResult = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "panel_created"}});
+    REQUIRE(createResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(undoResult.data["undone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.empty());
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+
+    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redoResult.ok);
+    REQUIRE(redoResult.data["redone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].id == "panel_created");
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+}
+
+TEST_CASE("Editor MCP undo and redo restore duplicate selection and dirty state", "[editor][mcp][history]") {
+    SceneDocument doc;
+
+    SceneObject first;
+    first.id = "prop_a";
+    first.type = SceneObjectType::Prop;
+    doc.objects.push_back(first);
+
+    SceneObject second;
+    second.id = "prop_b";
+    second.type = SceneObjectType::Prop;
+    doc.objects.push_back(second);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto duplicateResult = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_a", "prop_b"})}});
+    REQUIRE(duplicateResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);
+    const std::vector<std::string> duplicatedSelection = editor.GetSelectedObjectIds();
+    REQUIRE(duplicatedSelection.size() == 2);
+    REQUIRE(editor.GetDocument().dirty);
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 2);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+
+    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redoResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == duplicatedSelection);
+}
+
+TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][mcp][history]") {
+    SceneDocument doc;
+    doc.sceneId = "forest";
+    doc.sceneName = "Forest";
+    doc.filePath = TmpPath("forest_scene.horo");
+
+    SceneObject object;
+    object.id = "tree";
+    object.type = SceneObjectType::Prop;
+    doc.objects.push_back(object);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto newSceneResult = editor.ExecuteMcpCommand(
+        "editor.new_scene",
+        nlohmann::json{{"sceneId", "empty"}, {"sceneName", "Empty Scene"}});
+    REQUIRE(newSceneResult.ok);
+    REQUIRE(editor.GetDocument().sceneId == "empty");
+    REQUIRE(editor.GetDocument().sceneName == "Empty Scene");
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().sceneId == "forest");
+    REQUIRE(editor.GetDocument().sceneName == "Forest");
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][mcp][history]") {
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1,1,1", ""};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    REQUIRE(editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "crate"}}).ok);
+
+    const auto updateResult = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "crate"}, {"displayName", "Crate Large"}, {"albedoMap", "assets/models/crate.png"}});
+    REQUIRE(updateResult.ok);
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName == "Crate Large");
+    REQUIRE(editor.GetSelectedAssetId() == "crate");
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName.empty());
+    REQUIRE(editor.GetDocument().assets.at("crate").albedoMap.empty());
+    REQUIRE(editor.GetSelectedAssetId() == "crate");
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
     REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
@@ -1179,6 +1300,8 @@ TEST_CASE("Editor helpers: command palette table includes scene actions", "[edit
     REQUIRE(hasCommand("open_scene", "Open Scene..."));
     REQUIRE(hasCommand("save_scene", "Save Scene"));
     REQUIRE(hasCommand("close_editor", "Close Editor"));
+    REQUIRE(hasCommand("undo", "Undo"));
+    REQUIRE(hasCommand("redo", "Redo"));
 }
 
 TEST_CASE("Editor UI logic: command palette shares quick-open gating", "[editor]") {
