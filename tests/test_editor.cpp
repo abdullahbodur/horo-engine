@@ -1612,6 +1612,17 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
 }
 
+TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui]") {
+    REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
+    REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
+
+    REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
+    REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
+
+    REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
+    REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
+}
+
 TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
     namespace fs = std::filesystem;
     const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_missing";

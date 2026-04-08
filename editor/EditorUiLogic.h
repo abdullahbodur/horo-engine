@@ -73,6 +73,9 @@ EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges);
 bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload);
 
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
+float ComputeEditorLeftDockWidth(float displayWidth);
+float ComputeEditorRightPanelWidth(float displayWidth);
+float ComputeEditorBottomDockHeight(float displayHeight);
 EditorViewportRect BuildEditorViewportRect(float displayWidth,
                                            float displayHeight,
                                            float toolbarHeight,

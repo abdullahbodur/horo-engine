@@ -71,6 +71,18 @@ EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot) {
   return out;
 }
 
+float ComputeEditorLeftDockWidth(float displayWidth) {
+  return std::clamp(displayWidth * 0.16f, 220.0f, 320.0f);
+}
+
+float ComputeEditorRightPanelWidth(float displayWidth) {
+  return std::clamp(displayWidth * 0.18f, 280.0f, 380.0f);
+}
+
+float ComputeEditorBottomDockHeight(float displayHeight) {
+  return std::clamp(displayHeight * 0.18f, 180.0f, 260.0f);
+}
+
 EditorViewportRect BuildEditorViewportRect(float displayWidth,
                                            float displayHeight,
                                            float toolbarHeight,

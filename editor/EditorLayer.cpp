@@ -78,9 +78,7 @@ namespace {
 // or the status strip.
 constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
-constexpr float kBottomDockH = 200.0f;
-constexpr float kLeftDockW = 308.0f;
-constexpr float kRightDockW = 280.0f;
+constexpr float kHierarchySectionRatio = 0.56f;
 constexpr char kEditorHierarchyWindow[] = "Hierarchy";
 constexpr char kEditorAssetsWindow[] = "Assets";
 constexpr char kEditorWorkspaceWindow[] = "Workspace";
@@ -88,6 +86,10 @@ constexpr char kEditorPropertiesWindow[] = "Properties";
 constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
+
+constexpr ImGuiWindowFlags kMainPanelWindowFlags =
+    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoSavedSettings;
 
 // World-space selection / picking bounds for a prop when ECS has a valid _eid.
 bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Vec3& outHalf) {
@@ -1820,35 +1822,29 @@ void EditorLayer::RefreshViewportPanelRect() {
 
 void EditorLayer::DrawViewportPanel() {
   ImGuiIO& io = ImGui::GetIO();
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
   const EditorViewportRect defaultRect =
       BuildEditorViewportRect(io.DisplaySize.x,
                               io.DisplaySize.y,
                               kEditorToolbarH,
                               kEditorStatusH,
-                              kBottomDockH,
-                              kLeftDockW,
-                              kRightDockW);
-  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_FirstUseEver);
+                              bottomDockH,
+                              leftDockW,
+                              rightDockW);
+  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(defaultRect.maxX - defaultRect.minX,
                                   defaultRect.maxY - defaultRect.minY),
-                           ImGuiCond_FirstUseEver);
+                           ImGuiCond_Always);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
   ImGui::SetNextWindowBgAlpha(0.06f);
   m_viewportPanelRect = {};
   if (ImGui::Begin(kEditorViewportWindow,
                    nullptr,
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                   kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
+                       ImGuiWindowFlags_NoScrollWithMouse)) {
     RefreshViewportPanelRect();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddRect(ImVec2(m_viewportPanelRect.minX, m_viewportPanelRect.minY),
-                      ImVec2(m_viewportPanelRect.maxX, m_viewportPanelRect.maxY),
-                      IM_COL32(112, 138, 176, 160),
-                      0.0f,
-                      0,
-                      1.0f);
-    drawList->AddText(ImVec2(m_viewportPanelRect.minX + 12.0f, m_viewportPanelRect.minY + 12.0f),
-                      IM_COL32(214, 222, 236, 200),
-                      m_playMode ? "Viewport (Play)" : "Viewport");
   }
   ImGui::End();
   ImGui::PopStyleVar();
@@ -2188,10 +2184,11 @@ static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
 
 void EditorLayer::DrawBottomDock() {
   ImGuiIO& io = ImGui::GetIO();
-  const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(900.0f, kBottomDockH), ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorWorkspaceWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH), ImGuiCond_Always);
+  ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
   if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Project")) {
@@ -2668,9 +2665,10 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
   constexpr float kWinW = 128.0f;
   constexpr float kWinH = 138.0f;
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const float viewportRight = m_viewportPanelRect.maxX > m_viewportPanelRect.minX
                                   ? m_viewportPanelRect.maxX
-                                  : io.DisplaySize.x - kRightDockW;
+                                  : io.DisplaySize.x - rightDockW;
   const float viewportTop =
       m_viewportPanelRect.maxY > m_viewportPanelRect.minY ? m_viewportPanelRect.minY : kEditorToolbarH;
   const float wx = viewportRight - kWinW - 10.0f;
@@ -2843,11 +2841,13 @@ static const char* ObjectTypeIcon(SceneObjectType type) {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f)),
-                           ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorHierarchyWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, hierarchyHeight), ImGuiCond_Always);
+  ImGui::Begin(kEditorHierarchyWindow, nullptr, kMainPanelWindowFlags);
 
   // Search bar (applies to primary scene)
   char searchBuf[256] = {};
@@ -3381,11 +3381,14 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string* outError) {
 
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  const float assetsTop = kEditorToolbarH + std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f) + 4.0f;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorAssetsWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float assetsTop = kEditorToolbarH + hierarchyHeight + 4.0f;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_Always);
+  ImGui::Begin(kEditorAssetsWindow, nullptr, kMainPanelWindowFlags);
 
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
@@ -4068,11 +4071,13 @@ void EditorLayer::DrawExitConfirmModal() {
 
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - kRightDockW, kEditorToolbarH), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kRightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
-                           ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorPropertiesWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightDockW, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(rightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
+                           ImGuiCond_Always);
+  ImGui::Begin(kEditorPropertiesWindow, nullptr, kMainPanelWindowFlags);
 
   // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
