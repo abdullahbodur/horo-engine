@@ -78,10 +78,15 @@ List-style resources accept `limit` and `offset`, and query-driven reads such as
 - `editor.delete_asset`
 - `editor.scene_status`
 - `editor.get_scene_file`
+- `editor.list_schema_types`
+- `editor.get_schema`
 - `editor.new_scene`
 - `editor.save_scene`
 - `editor.reload_scene`
 - `editor.search_console`
+
+`editor.list_schema_types` and `editor.get_schema` expose the same object and component metadata that
+drives `assets/editor_schema.json`, including defaults, enum options, and numeric bounds.
 
 ## Claude Code
 
@@ -177,5 +182,6 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 - Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a narrow `query` and `limit`.
 - Use `editor.get_object` only for the specific object you need.
+- Use `editor.list_schema_types` and `editor.get_schema` before mutating typed props or components.
 - Prefer `console.recent` over asking for long log history.
 - Mutate with targeted tools instead of requesting broad state dumps first.

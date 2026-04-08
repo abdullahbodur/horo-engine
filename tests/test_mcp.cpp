@@ -183,6 +183,100 @@ bool NearlyEqualJsonFloat(const json& value, float expected, float eps = 0.001f)
   return std::fabs(value.get<float>() - expected) <= eps;
 }
 
+McpSchemaFieldSnapshot MakeSchemaField(std::string key,
+                                       std::string label,
+                                       std::string widget,
+                                       std::string defaultValue,
+                                       std::vector<std::string> options = {},
+                                       bool hasMin = false,
+                                       float minVal = 0.0f,
+                                       bool hasMax = false,
+                                       float maxVal = 0.0f,
+                                       std::string description = {}) {
+  McpSchemaFieldSnapshot field;
+  field.key = std::move(key);
+  field.label = std::move(label);
+  field.description = std::move(description);
+  field.widget = std::move(widget);
+  field.defaultValue = std::move(defaultValue);
+  field.options = std::move(options);
+  field.hasMin = hasMin;
+  field.minVal = minVal;
+  field.hasMax = hasMax;
+  field.maxVal = maxVal;
+  return field;
+}
+
+void PopulateSchemaSnapshot(McpEditorSnapshot* snapshot) {
+  REQUIRE(snapshot != nullptr);
+
+  McpSchemaEntrySnapshot panel;
+  panel.kind = "object";
+  panel.name = "Panel";
+  panel.label = "Panel";
+  panel.fields.push_back(MakeSchemaField("material", "Material", "enum", "stone",
+                                         {"stone", "metal", "wood"}));
+  snapshot->schema.objectTypes.push_back(std::move(panel));
+
+  McpSchemaEntrySnapshot prop;
+  prop.kind = "object";
+  prop.name = "Prop";
+  prop.label = "Prop";
+  prop.fields.push_back(
+      MakeSchemaField("mesh", "Mesh", "enum", "box", {"box", "sphere", "cylinder", "pyramid"}));
+  snapshot->schema.objectTypes.push_back(std::move(prop));
+
+  McpSchemaEntrySnapshot lightObject;
+  lightObject.kind = "object";
+  lightObject.name = "Light";
+  lightObject.label = "Light";
+  lightObject.fields.push_back(MakeSchemaField("lightType", "Type", "enum", "point",
+                                               {"point", "directional"}));
+  lightObject.fields.push_back(
+      MakeSchemaField("radius", "Radius", "float", "10.0", {}, true, 0.5f, true, 50.0f));
+  lightObject.fields.push_back(
+      MakeSchemaField("intensity", "Intensity", "float", "1.0", {}, true, 0.1f, true, 20.0f));
+  lightObject.fields.push_back(
+      MakeSchemaField("color", "Color RGB", "color3", "1.0000,1.0000,1.0000"));
+  snapshot->schema.objectTypes.push_back(std::move(lightObject));
+
+  McpSchemaEntrySnapshot lightComponent;
+  lightComponent.kind = "component";
+  lightComponent.name = "light";
+  lightComponent.label = "Light";
+  lightComponent.appliesTo = {"Panel", "Prop"};
+  lightComponent.fields.push_back(MakeSchemaField("lightType", "Type", "enum", "point",
+                                                  {"point", "directional"}));
+  lightComponent.fields.push_back(
+      MakeSchemaField("radius", "Radius", "float", "5.0", {}, true, 0.5f, true, 50.0f));
+  lightComponent.fields.push_back(
+      MakeSchemaField("intensity", "Intensity", "float", "1.0", {}, true, 0.1f, true, 20.0f));
+  lightComponent.fields.push_back(
+      MakeSchemaField("color", "Color RGB", "color3", "1.0000,1.0000,1.0000"));
+  snapshot->schema.components.push_back(std::move(lightComponent));
+
+  McpSchemaEntrySnapshot rigidbody;
+  rigidbody.kind = "component";
+  rigidbody.name = "rigidbody";
+  rigidbody.label = "RigidBody";
+  rigidbody.appliesTo = {"Prop"};
+  rigidbody.fields.push_back(
+      MakeSchemaField("mass", "Mass", "float", "1.0", {}, true, 0.0f, true, 500.0f));
+  rigidbody.fields.push_back(MakeSchemaField("isKinematic", "Kinematic", "bool", "false"));
+  rigidbody.fields.push_back(MakeSchemaField("useGravity", "Use Gravity", "bool", "true"));
+  snapshot->schema.components.push_back(std::move(rigidbody));
+
+  McpSchemaEntrySnapshot script;
+  script.kind = "component";
+  script.name = "script";
+  script.label = "Script";
+  script.appliesTo = {"Panel", "Prop", "Light", "Camera"};
+  script.fields.push_back(MakeSchemaField("behaviorTag", "Behavior", "string", "",
+                                          {}, false, 0.0f, false, 0.0f,
+                                          "Runtime behavior id resolved by the game."));
+  snapshot->schema.components.push_back(std::move(script));
+}
+
 McpEditorSnapshot MakeSnapshot() {
   McpEditorSnapshot snapshot;
   snapshot.editorActive = true;
@@ -253,6 +347,7 @@ McpEditorSnapshot MakeSnapshot() {
                                    "parentId does not resolve to a declared scene node."});
   snapshot.build.issues.push_back({"runtime", "warning", "scene.nodes[3].light",
                                    "Light node is missing typed light properties; using defaults."});
+  PopulateSchemaSnapshot(&snapshot);
   return snapshot;
 }
 
@@ -468,6 +563,28 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(buildStatus["issues"].size() == 1);
   REQUIRE(buildStatus["moreIssues"] == 1);
 
+  const json schemaCatalog = BuildSchemaCatalogJson(snapshot);
+  REQUIRE(schemaCatalog["objectTypeCount"] == 3);
+  REQUIRE(schemaCatalog["componentCount"] == 3);
+  REQUIRE(schemaCatalog["entryCount"] == 6);
+
+  const json componentCatalog = BuildSchemaCatalogJson(snapshot, "component");
+  REQUIRE(componentCatalog["kind"] == "component");
+  REQUIRE(componentCatalog["entryCount"] == 3);
+  REQUIRE(componentCatalog["entries"][0]["kind"] == "component");
+
+  const json componentSchema = BuildSchemaJson(snapshot, "light", "component");
+  REQUIRE(componentSchema["name"] == "light");
+  REQUIRE(componentSchema["kind"] == "component");
+  REQUIRE(componentSchema["appliesTo"].size() == 2);
+  REQUIRE(componentSchema["fields"].size() == 4);
+  REQUIRE(NearlyEqualJsonFloat(componentSchema["fields"][1]["numeric"]["min"], 0.5f));
+
+  const json objectSchema = BuildSchemaJson(snapshot, "Light", "object");
+  REQUIRE(objectSchema["name"] == "Light");
+  REQUIRE(objectSchema["fields"][0]["options"][1] == "directional");
+  REQUIRE(objectSchema["fields"][2]["widget"] == "float");
+
   const json objectList = BuildObjectListJson(snapshot, 8, "Prop", "root", false);
   REQUIRE(objectList["matchedObjects"] == 2);
   REQUIRE(objectList["objects"].size() == 2);
@@ -552,18 +669,27 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   REQUIRE(ping["result"].empty());
 
   const json toolList = ProtocolRequest(protocol, "tools/list", json::object(), 3);
-  REQUIRE(toolList["result"]["tools"].size() == 31);
+  REQUIRE(toolList["result"]["tools"].size() == 33);
   REQUIRE(toolList["result"]["tools"][0]["name"] == "editor_search");
   const json* createObjectTool = nullptr;
+  const json* listSchemaTool = nullptr;
+  const json* getSchemaTool = nullptr;
   for (const json& tool : toolList["result"]["tools"]) {
     if (tool.value("name", std::string()) == "editor_create_object") {
       createObjectTool = &tool;
-      break;
     }
+    if (tool.value("name", std::string()) == "editor_list_schema_types")
+      listSchemaTool = &tool;
+    if (tool.value("name", std::string()) == "editor_get_schema")
+      getSchemaTool = &tool;
   }
   REQUIRE(createObjectTool != nullptr);
   REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["items"]["type"] == "number");
   REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["minItems"] == 3);
+  REQUIRE(listSchemaTool != nullptr);
+  REQUIRE((*listSchemaTool)["inputSchema"]["properties"]["kind"]["enum"].size() == 3);
+  REQUIRE(getSchemaTool != nullptr);
+  REQUIRE((*getSchemaTool)["inputSchema"]["required"][0] == "name");
 
   const json resourceList = ProtocolRequest(protocol, "resources/list", json::object(), 4);
   REQUIRE(resourceList["result"]["resources"].size() == 11);
@@ -665,8 +791,17 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   const json searchConsole = CallTool(protocol, "editor.search_console", json{{"query", "exploded"}, {"limit", 5}}, 115);
   REQUIRE(searchConsole["result"]["structuredContent"]["matchedLines"] == 1);
 
-  REQUIRE(activity.size() >= 20);
-  REQUIRE(activity.back().target == "editor.search_console");
+  const json listSchema = CallTool(protocol, "editor.list_schema_types", json{{"kind", "component"}}, 116);
+  REQUIRE(listSchema["result"]["structuredContent"]["kind"] == "component");
+  REQUIRE(listSchema["result"]["structuredContent"]["entryCount"] == 3);
+
+  const json getSchema = CallTool(protocol, "editor_get_schema", json{{"name", "light"}, {"kind", "component"}}, 117);
+  REQUIRE(getSchema["result"]["structuredContent"]["name"] == "light");
+  REQUIRE(getSchema["result"]["structuredContent"]["fields"].size() == 4);
+  REQUIRE(getSchema["result"]["structuredContent"]["fields"][0]["options"][1] == "directional");
+
+  REQUIRE(activity.size() >= 22);
+  REQUIRE(activity.back().target == "editor.get_schema");
   REQUIRE(activity.back().ok);
 }
 
@@ -878,6 +1013,9 @@ TEST_CASE("McpProtocol returns expected errors for unsupported or unavailable pa
   const json unknownTool = CallTool(protocolWithSnapshot, "editor.missing", json::object(), 402);
   REQUIRE(unknownTool["error"]["message"] == "Unknown tool.");
 
+  const json missingSchema = CallTool(protocolWithSnapshot, "editor.get_schema", json{{"name", "missing"}}, 4021);
+  REQUIRE(missingSchema["error"]["message"] == "Schema not found.");
+
   const json objectNotFound = CallTool(protocolWithSnapshot, "editor.get_object", json{{"id", "missing"}}, 403);
   REQUIRE(objectNotFound["error"]["message"] == "Object not found.");
 
@@ -940,7 +1078,7 @@ TEST_CASE("McpController localhost server serves reads, writes, and status snaps
 
   const McpStatusSnapshot status = controller.GetStatusSnapshot();
   REQUIRE(status.running);
-  REQUIRE(status.toolCount == 31);
+  REQUIRE(status.toolCount == 33);
   REQUIRE(status.resourceCount == 11);
   REQUIRE(status.totalRequests >= 3);
 

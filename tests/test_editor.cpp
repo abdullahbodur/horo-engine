@@ -451,6 +451,94 @@ TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]") {
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
+TEST_CASE("EditorSchema: loads component schema metadata and lookups", "[editor][schema]") {
+    const std::string json = R"({
+        "types": {
+            "Prop": {
+                "label": "Prop",
+                "appliesTo": ["Prop"],
+                "fields": [
+                    {"key": "mesh", "label": "Mesh", "type": "enum", "options": ["box"], "default": "box"}
+                ]
+            }
+        },
+        "components": {
+            "light": {
+                "label": "Light",
+                "appliesTo": ["Prop", "Panel"],
+                "fields": [
+                    {
+                        "key": "intensity",
+                        "label": "Intensity",
+                        "description": "Brightness.",
+                        "type": "float",
+                        "min": 0.1,
+                        "max": 20.0,
+                        "default": "1.0"
+                    },
+                    {
+                        "key": "lightType",
+                        "label": "Type",
+                        "type": "enum",
+                        "options": ["point", "directional"],
+                        "default": "point"
+                    }
+                ]
+            }
+        }
+    })";
+    WriteFile(TmpPath("schema_components.json"), json);
+
+    EditorSchema schema;
+    schema.LoadFromFile(TmpPath("schema_components.json"));
+
+    const TypeSchema* propSchema = schema.GetSchemaByName("Prop");
+    REQUIRE(propSchema != nullptr);
+    REQUIRE(propSchema->name == "Prop");
+    REQUIRE(propSchema->label == "Prop");
+    REQUIRE(propSchema->appliesTo.size() == 1);
+    REQUIRE(propSchema->appliesTo[0] == "Prop");
+
+    const ComponentSchema* lightSchema = schema.GetComponentSchema("light");
+    REQUIRE(lightSchema != nullptr);
+    REQUIRE(lightSchema->name == "light");
+    REQUIRE(lightSchema->label == "Light");
+    REQUIRE(lightSchema->appliesTo.size() == 2);
+    REQUIRE(lightSchema->appliesTo[0] == "Prop");
+    REQUIRE(lightSchema->fields.size() == 2);
+    REQUIRE(lightSchema->fields[0].description == "Brightness.");
+    REQUIRE(lightSchema->fields[0].hasMin);
+    REQUIRE(lightSchema->fields[0].minVal == Approx(0.1f));
+    REQUIRE(lightSchema->fields[0].hasMax);
+    REQUIRE(lightSchema->fields[0].maxVal == Approx(20.0f));
+    REQUIRE(lightSchema->fields[1].widget == FieldDef::Widget::Enum);
+    REQUIRE(lightSchema->fields[1].options.size() == 2);
+}
+
+TEST_CASE("EditorSchema: bundled schema exposes shared component definitions", "[editor][schema]") {
+    const std::filesystem::path schemaPath = Monolith::ProjectPath::Root() / "assets" / "editor_schema.json";
+    REQUIRE(std::filesystem::exists(schemaPath));
+
+    EditorSchema schema;
+    schema.LoadFromFile(schemaPath.string());
+
+    const ComponentSchema* rigidbody = schema.GetComponentSchema("rigidbody");
+    REQUIRE(rigidbody != nullptr);
+    REQUIRE(rigidbody->label == "RigidBody");
+    REQUIRE(rigidbody->appliesTo.size() == 1);
+    REQUIRE(rigidbody->appliesTo[0] == "Prop");
+    REQUIRE(rigidbody->fields.size() == 3);
+    REQUIRE(rigidbody->fields[0].key == "mass");
+    REQUIRE(rigidbody->fields[0].hasMin);
+    REQUIRE(rigidbody->fields[0].minVal == Approx(0.0f));
+
+    const ComponentSchema* script = schema.GetComponentSchema("script");
+    REQUIRE(script != nullptr);
+    REQUIRE(script->fields.size() == 1);
+    REQUIRE(script->fields[0].key == "behaviorTag");
+    REQUIRE(script->fields[0].allowEmpty);
+}
+
 // ===========================================================================
 // SceneSerializer
 // ===========================================================================

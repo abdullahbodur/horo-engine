@@ -103,6 +103,8 @@ const std::vector<McpCatalogEntry>& GetToolCatalog() {
       {"editor.delete_asset", "tool", "Delete one asset definition."},
       {"editor.scene_status", "tool", "Return compact scene status."},
       {"editor.get_scene_file", "tool", "Return the active scene file path and save state."},
+      {"editor.list_schema_types", "tool", "List object and component schemas exposed to MCP."},
+      {"editor.get_schema", "tool", "Fetch one object or component schema by name."},
       {"editor.new_scene", "tool", "Create a new empty scene document."},
       {"editor.save_scene", "tool", "Save the active scene document."},
       {"editor.reload_scene", "tool", "Queue an in-editor scene reload."},
@@ -254,6 +256,14 @@ json BuildToolList() {
                                            {"limit", {{"type", "integer"}, {"minimum", 1}, {"maximum", 64}}}};
     } else if (entry.name == "editor.count_assets") {
       tool["inputSchema"]["properties"] = {{"query", {{"type", "string"}}}};
+    } else if (entry.name == "editor.list_schema_types") {
+      tool["inputSchema"]["properties"] = {
+          {"kind", {{"type", "string"}, {"enum", json::array({"all", "object", "component"})}}}};
+    } else if (entry.name == "editor.get_schema") {
+      tool["inputSchema"]["required"] = json::array({"name"});
+      tool["inputSchema"]["properties"] = {
+          {"name", {{"type", "string"}}},
+          {"kind", {{"type", "string"}, {"enum", json::array({"all", "object", "component"})}}}};
     } else if (entry.name == "editor.new_scene") {
       tool["inputSchema"]["properties"] = {{"sceneName", {{"type", "string"}}},
                                            {"sceneId", {{"type", "string"}}}};
@@ -603,6 +613,25 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
     if (name == "editor.search_console") {
       const json payloadOut = SearchConsoleSnapshot(*snapshot, arguments.value("query", std::string()),
                                                     arguments.value("limit", 8));
+      const json result = MakeSuccess(id, BuildTextToolResult(payloadOut));
+      finish("tool", name, method, id, true, 200, std::string(), &result, {});
+      return MakeJsonResponse(200, "OK", result);
+    }
+    if (name == "editor.list_schema_types") {
+      const json payloadOut = BuildSchemaCatalogJson(*snapshot, arguments.value("kind", std::string()));
+      const json result = MakeSuccess(id, BuildTextToolResult(payloadOut));
+      finish("tool", name, method, id, true, 200, std::string(), &result, {});
+      return MakeJsonResponse(200, "OK", result);
+    }
+    if (name == "editor.get_schema") {
+      const std::string schemaName = arguments.value("name", std::string());
+      const json payloadOut =
+          BuildSchemaJson(*snapshot, schemaName, arguments.value("kind", std::string()));
+      if (payloadOut.empty()) {
+        const json result = MakeError(id, -32602, "Schema not found.");
+        finish("tool", name, method, id, false, 200, "Schema not found.", &result, {});
+        return MakeJsonResponse(200, "OK", result);
+      }
       const json result = MakeSuccess(id, BuildTextToolResult(payloadOut));
       finish("tool", name, method, id, true, 200, std::string(), &result, {});
       return MakeJsonResponse(200, "OK", result);

@@ -75,12 +75,16 @@ Tools:
 - `editor.delete_asset`
 - `editor.scene_status`
 - `editor.get_scene_file`
+- `editor.list_schema_types`
+- `editor.get_schema`
 - `editor.new_scene`
 - `editor.save_scene`
 - `editor.reload_scene`
 - `editor.search_console`
 
 The design is intentionally summary-first to keep token usage low.
+Schema tools expose the same `assets/editor_schema.json` metadata that powers editor defaults, enum
+choices, and numeric bounds for object and component fields.
 
 For client compatibility, `tools/list` exposes these tool ids with underscores instead of dots
 (for example `editor_search`). The server continues to accept the dotted aliases as well.
@@ -247,6 +251,7 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 - Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a small `limit`.
 - Call `editor.get_object` only for the object you actually need.
+- Use `editor.list_schema_types` and `editor.get_schema` before editing typed props or components.
 - Prefer `console.recent` over long log history.
 - Use targeted mutation tools directly instead of first requesting the whole scene.
 
