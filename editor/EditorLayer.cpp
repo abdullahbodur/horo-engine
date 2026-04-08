@@ -1961,6 +1961,7 @@ void EditorLayer::DrawToolbar() {
 
   const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
                                 m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
+  const bool hasSelection = !m_selectedIndices.empty();
   const int primaryIdx = PrimaryIdx();
   const bool hasSingleSelection = CanEditSingleSelection(
       static_cast<int>(m_selectedIndices.size()),
@@ -2009,18 +2010,24 @@ void EditorLayer::DrawToolbar() {
   }
   ImGui::SameLine();
 
-  if (!hasSingleSelection)
+  if (!hasSelection)
     ImGui::BeginDisabled();
   if (ImGui::Button("Edit"))
     ImGui::OpenPopup("##toolbar_edit_popup");
   if (ImGui::BeginPopup("##toolbar_edit_popup")) {
+    if (!hasSingleSelection)
+      ImGui::BeginDisabled();
     if (ImGui::MenuItem("Rename..."))
       OpenRenameObjectModal(primaryIdx);
+    if (!hasSingleSelection)
+      ImGui::EndDisabled();
     if (ImGui::MenuItem("Duplicate"))
-      DuplicatePrimarySelection();
+      DuplicateSelectedObjects();
     if (ImGui::MenuItem("Delete"))
       RequestDeleteSelectedObjects();
     ImGui::Separator();
+    if (!hasSingleSelection)
+      ImGui::BeginDisabled();
     if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C")) {
       const int idx = PrimaryIdx();
       if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
@@ -2030,9 +2037,11 @@ void EditorLayer::DrawToolbar() {
         m_clipboardToastTime = 1.5f;
       }
     }
+    if (!hasSingleSelection)
+      ImGui::EndDisabled();
     ImGui::EndPopup();
   }
-  if (!hasSingleSelection)
+  if (!hasSelection)
     ImGui::EndDisabled();
   ImGui::SameLine();
 
@@ -4123,6 +4132,104 @@ void EditorLayer::DrawPropertiesPanel() {
   if (m_selectedIndices.size() > 1) {
     ImGui::Text("%d objects selected", static_cast<int>(m_selectedIndices.size()));
     ImGui::Separator();
+
+    std::string sharedAssetId;
+    bool hasSharedAssetId = true;
+    bool firstObject = true;
+    for (int idx : m_selectedIndices) {
+      if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+        continue;
+      const SceneObject& selected = m_document.objects[static_cast<size_t>(idx)];
+      if (firstObject) {
+        sharedAssetId = selected.assetId;
+        firstObject = false;
+      } else if (sharedAssetId != selected.assetId) {
+        hasSharedAssetId = false;
+        break;
+      }
+    }
+
+    ImGui::TextDisabled("Asset");
+    if (firstObject) {
+      ImGui::TextDisabled("No valid selection");
+    } else if (hasSharedAssetId && sharedAssetId.empty()) {
+      ImGui::TextUnformatted("<none>");
+    } else if (hasSharedAssetId) {
+      ImGui::TextUnformatted(sharedAssetId.c_str());
+    } else {
+      ImGui::TextDisabled("Mixed");
+    }
+
+    std::vector<const char*> assetItems;
+    assetItems.reserve(m_document.assets.size() + 2);
+    assetItems.push_back("<keep current>");
+    assetItems.push_back("<clear>");
+    std::vector<std::string> assetIds;
+    assetIds.reserve(m_document.assets.size());
+    for (const auto& [assetId, _] : m_document.assets)
+      assetIds.push_back(assetId);
+    std::sort(assetIds.begin(), assetIds.end());
+    for (const std::string& assetId : assetIds)
+      assetItems.push_back(assetId.c_str());
+
+    ImGui::Combo("Batch Asset", &m_batchAssetChoice, assetItems.data(), static_cast<int>(assetItems.size()));
+    if (ImGui::Button("Apply Asset")) {
+      if (m_batchAssetChoice == 1) {
+        for (int idx : m_selectedIndices) {
+          if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            m_document.objects[static_cast<size_t>(idx)].assetId.clear();
+        }
+      } else if (m_batchAssetChoice > 1) {
+        const std::string selectedAssetId = assetIds[static_cast<size_t>(m_batchAssetChoice - 2)];
+        for (int idx : m_selectedIndices) {
+          if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            m_document.objects[static_cast<size_t>(idx)].assetId = selectedAssetId;
+        }
+      }
+      if (m_batchAssetChoice > 0) {
+        SyncAssetScaleMetadata(&m_document);
+        m_document.dirty = true;
+        TriggerReload();
+      }
+    }
+
+    ImGui::Separator();
+    float moveBy[3] = {m_batchTranslateDraft.x, m_batchTranslateDraft.y, m_batchTranslateDraft.z};
+    if (ImGui::DragFloat3("Move By", moveBy, 0.05f))
+      m_batchTranslateDraft = {moveBy[0], moveBy[1], moveBy[2]};
+
+    float rotateBy[3] = {m_batchRotateDraft.x, m_batchRotateDraft.y, m_batchRotateDraft.z};
+    if (ImGui::DragFloat3("Rotate By (P/Y/R)", rotateBy, 1.0f))
+      m_batchRotateDraft = {rotateBy[0], rotateBy[1], rotateBy[2]};
+
+    float scaleBy[3] = {m_batchScaleDraft.x, m_batchScaleDraft.y, m_batchScaleDraft.z};
+    if (ImGui::DragFloat3("Scale By", scaleBy, 0.02f, 0.01f, 20.0f))
+      m_batchScaleDraft = {scaleBy[0], scaleBy[1], scaleBy[2]};
+
+    if (ImGui::Button("Apply Batch Transform")) {
+      for (int idx : m_selectedIndices) {
+        if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+          continue;
+        SceneObject& object = m_document.objects[static_cast<size_t>(idx)];
+        object.position = object.position + m_batchTranslateDraft;
+        object.pitch += m_batchRotateDraft.x;
+        object.yaw += m_batchRotateDraft.y;
+        object.roll += m_batchRotateDraft.z;
+        object.scale.x *= m_batchScaleDraft.x;
+        object.scale.y *= m_batchScaleDraft.y;
+        object.scale.z *= m_batchScaleDraft.z;
+        if (m_transformCb)
+          m_transformCb(object);
+      }
+      m_document.dirty = true;
+      TriggerReload();
+    }
+
+    ImGui::Separator();
+    if (ImGui::Button("Duplicate Selected")) {
+      DuplicateSelectedObjects();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Delete Selected")) {
       RequestDeleteSelectedObjects();
     }
@@ -5377,20 +5484,42 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.duplicate") {
-    const std::string id = arguments.value("id", std::string());
-    const int idx = findIndexById(id);
-    if (idx < 0)
-      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
-    const int count = std::max(1, std::min(8, arguments.value("count", 1)));
-    json created = json::array();
-    for (int i = 0; i < count; ++i) {
-      SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
-      clone.position.x += static_cast<float>(i + 1);
-      clone.position.z += static_cast<float>(i + 1);
-      m_document.objects.push_back(std::move(clone));
-      created.push_back(summarizeObject(m_document.objects.back()));
+    std::vector<int> sourceIndices;
+    if (arguments.contains("id") && arguments["id"].is_string()) {
+      const int idx = findIndexById(arguments["id"].get<std::string>());
+      if (idx >= 0)
+        sourceIndices.push_back(idx);
     }
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    if (arguments.contains("ids") && arguments["ids"].is_array()) {
+      for (const json& item : arguments["ids"]) {
+        if (!item.is_string())
+          continue;
+        const int idx = findIndexById(item.get<std::string>());
+        if (idx >= 0)
+          sourceIndices.push_back(idx);
+      }
+    }
+    if (sourceIndices.empty())
+      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
+
+    std::sort(sourceIndices.begin(), sourceIndices.end());
+    sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+
+    const int count =
+        (sourceIndices.size() == 1) ? std::max(1, std::min(8, arguments.value("count", 1))) : 1;
+    json created = json::array();
+    std::vector<int> duplicatedIndices;
+    for (int idx : sourceIndices) {
+      for (int i = 0; i < count; ++i) {
+        SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
+        clone.position.x += static_cast<float>(i + 1);
+        clone.position.z += static_cast<float>(i + 1);
+        m_document.objects.push_back(std::move(clone));
+        duplicatedIndices.push_back(static_cast<int>(m_document.objects.size()) - 1);
+        created.push_back(summarizeObject(m_document.objects.back()));
+      }
+    }
+    m_selectedIndices = std::move(duplicatedIndices);
     m_document.dirty = true;
     TriggerReload();
     return Mcp::McpCommandResult{true, json{{"duplicates", std::move(created)}}, std::string()};
@@ -5825,6 +5954,36 @@ void EditorLayer::DuplicatePrimarySelection() {
   clone.position.z += 1.0f;
   m_document.objects.push_back(std::move(clone));
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+  m_document.dirty = true;
+  TriggerReload();
+}
+
+void EditorLayer::DuplicateSelectedObjects() {
+  if (m_selectedIndices.empty())
+    return;
+  if (m_selectedIndices.size() == 1) {
+    DuplicatePrimarySelection();
+    return;
+  }
+
+  std::vector<int> sourceIndices = m_selectedIndices;
+  std::sort(sourceIndices.begin(), sourceIndices.end());
+  sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+
+  std::vector<int> duplicatedIndices;
+  duplicatedIndices.reserve(sourceIndices.size());
+  for (int idx : sourceIndices) {
+    if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+      continue;
+    SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
+    clone.position.x += 1.0f;
+    clone.position.z += 1.0f;
+    m_document.objects.push_back(std::move(clone));
+    duplicatedIndices.push_back(static_cast<int>(m_document.objects.size()) - 1);
+  }
+
+  if (!duplicatedIndices.empty())
+    m_selectedIndices = std::move(duplicatedIndices);
   m_document.dirty = true;
   TriggerReload();
 }

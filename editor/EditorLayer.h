@@ -234,6 +234,7 @@ class EditorLayer {
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
+  void DuplicateSelectedObjects();
   bool CreateObjectFromAsset(const std::string& assetId,
                              const std::string& parentId = {},
                              const Vec3* worldPosition = nullptr,
@@ -317,6 +318,10 @@ class EditorLayer {
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;
   std::string m_objectSearchQuery;
+  Vec3 m_batchTranslateDraft = Vec3::Zero();
+  Vec3 m_batchRotateDraft = Vec3::Zero();
+  Vec3 m_batchScaleDraft = Vec3::One();
+  int m_batchAssetChoice = 0;
   bool m_helpOpen = false;
   bool m_prevHelpToggle = false;
   std::string m_helpSearchQuery;
