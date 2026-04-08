@@ -78,9 +78,7 @@ namespace {
 // or the status strip.
 constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
-constexpr float kBottomDockH = 200.0f;
-constexpr float kLeftDockW = 308.0f;
-constexpr float kRightDockW = 280.0f;
+constexpr float kHierarchySectionRatio = 0.56f;
 constexpr char kEditorHierarchyWindow[] = "Hierarchy";
 constexpr char kEditorAssetsWindow[] = "Assets";
 constexpr char kEditorWorkspaceWindow[] = "Workspace";
@@ -88,6 +86,10 @@ constexpr char kEditorPropertiesWindow[] = "Properties";
 constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
+
+constexpr ImGuiWindowFlags kMainPanelWindowFlags =
+    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoSavedSettings;
 
 // World-space selection / picking bounds for a prop when ECS has a valid _eid.
 bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Vec3& outHalf) {
@@ -1389,7 +1391,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevHelpToggle = currHelpToggle;
 
-    const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    const bool currQuickOpenToggle =
+        accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
     if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle, m_flyMode,
                             io.WantTextInput, ImGui::IsAnyItemActive())) {
       m_quickOpenOpen = true;
@@ -1397,8 +1400,21 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevQuickOpenToggle = currQuickOpenToggle;
 
+    const bool currCommandPaletteToggle =
+        accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    if (ShouldOpenCommandPalette(currCommandPaletteToggle,
+                                 m_prevCommandPaletteToggle,
+                                 m_flyMode,
+                                 io.WantTextInput,
+                                 ImGui::IsAnyItemActive())) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
+    m_prevCommandPaletteToggle = currCommandPaletteToggle;
+
     const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
-    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
+    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_commandPaletteOpen ||
+                                  m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
     // Escape: dismiss gizmo only (no editor quit on Escape; use File / window close).
@@ -1744,20 +1760,20 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   if (m_active) {
     DrawToolbar();
     DrawDockspace();
-    DrawViewportPanel();
+    DrawViewportPanel(cam, screenW, screenH);
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
     DrawBottomDock();
     DrawStatusBar();
     DrawHelpPopup();
+    DrawCommandPalettePopup();
     DrawQuickOpenPopup();
     DrawSettingsModal();
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     if (!m_playMode) {
       DrawViewGimbal(cam);
-      DrawViewportDropTarget(cam, screenW, screenH);
       DrawSelectionHighlight();  // queues to DebugDraw
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
@@ -1803,37 +1819,72 @@ void EditorLayer::RefreshViewportPanelRect() {
   m_viewportPanelRect.maxY = winPos.y + innerMax.y;
 }
 
-void EditorLayer::DrawViewportPanel() {
+void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH) {
+  struct ViewportAssetDropContext {
+    EditorLayer* editor = nullptr;
+    const Camera* camera = nullptr;
+    int screenW = 0;
+    int screenH = 0;
+  };
+
   ImGuiIO& io = ImGui::GetIO();
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
   const EditorViewportRect defaultRect =
       BuildEditorViewportRect(io.DisplaySize.x,
                               io.DisplaySize.y,
                               kEditorToolbarH,
                               kEditorStatusH,
-                              kBottomDockH,
-                              kLeftDockW,
-                              kRightDockW);
-  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_FirstUseEver);
+                              bottomDockH,
+                              leftDockW,
+                              rightDockW);
+  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(defaultRect.maxX - defaultRect.minX,
                                   defaultRect.maxY - defaultRect.minY),
-                           ImGuiCond_FirstUseEver);
+                           ImGuiCond_Always);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
   ImGui::SetNextWindowBgAlpha(0.06f);
   m_viewportPanelRect = {};
   if (ImGui::Begin(kEditorViewportWindow,
                    nullptr,
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                   kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
+                       ImGuiWindowFlags_NoScrollWithMouse)) {
     RefreshViewportPanelRect();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddRect(ImVec2(m_viewportPanelRect.minX, m_viewportPanelRect.minY),
-                      ImVec2(m_viewportPanelRect.maxX, m_viewportPanelRect.maxY),
-                      IM_COL32(112, 138, 176, 160),
-                      0.0f,
-                      0,
-                      1.0f);
-    drawList->AddText(ImVec2(m_viewportPanelRect.minX + 12.0f, m_viewportPanelRect.minY + 12.0f),
-                      IM_COL32(214, 222, 236, 200),
-                      m_playMode ? "Viewport (Play)" : "Viewport");
+    const ImVec2 dropTargetSize = ImGui::GetContentRegionAvail();
+    ViewportAssetDropContext dropContext{this, &cam, screenW, screenH};
+    DrawViewportAssetDropTarget(
+        m_playMode,
+        dropTargetSize.x,
+        dropTargetSize.y,
+        &dropContext,
+        [](void* userData, const char* assetIdText) -> bool {
+          auto* context = static_cast<ViewportAssetDropContext*>(userData);
+          if (!context || !context->editor || !context->camera || !assetIdText)
+            return false;
+
+          EditorLayer& editor = *context->editor;
+          const std::string assetId(assetIdText);
+          if (editor.m_document.assets.find(assetId) == editor.m_document.assets.end()) {
+            LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+            return false;
+          }
+
+          Vec3 dropPos = Vec3::Zero();
+          if (!editor.TryBuildViewportDropPosition(
+                  *context->camera, context->screenW, context->screenH, assetId, &dropPos)) {
+            LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
+            return false;
+          }
+
+          std::string createError;
+          if (!editor.CreateObjectFromAsset(
+                  assetId, std::string(), &dropPos, nullptr, nullptr, &createError)) {
+            LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
+            return false;
+          }
+          return true;
+        });
   }
   ImGui::End();
   ImGui::PopStyleVar();
@@ -1920,9 +1971,9 @@ void EditorLayer::DrawToolbar() {
     ImGui::OpenPopup("##toolbar_file_popup");
   if (ImGui::BeginPopup("##toolbar_file_popup")) {
     if (ImGui::MenuItem("New Scene"))
-      AddNewScene();
+      RequestSceneAction(PendingSceneAction::NewScene);
     if (ImGui::MenuItem("Open Scene..."))
-      OpenAdditionalSceneFile();
+      RequestSceneAction(PendingSceneAction::OpenSceneFile);
     if (ImGui::MenuItem("Reset Layout"))
       m_resetDockLayoutRequested = true;
     ImGui::Separator();
@@ -2002,6 +2053,10 @@ void EditorLayer::DrawToolbar() {
       m_helpOpen = true;
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
+    if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
     if (ImGui::MenuItem("Reset Layout"))
       m_resetDockLayoutRequested = true;
     ImGui::EndPopup();
@@ -2034,14 +2089,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SetCursorPosX(io.DisplaySize.x - rightW);
 
   if (ImGui::Button("Load")) {
-    std::string path =
-        m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
-    try {
-      m_document = SceneSerializer::LoadFromFile(path);
-      m_selectedIndices.clear();
-    } catch (const std::exception& e) {
-      LOG_ERROR("EditorLayer: failed to load scene: %s", e.what());
-    }
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
   }
   ImGui::SameLine();
 
@@ -2060,13 +2108,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
 
   if (ImGui::Button("Close editor")) {
-    if (ResolveEditorExitDecision(m_document.dirty) ==
-        EditorExitDecision::PromptUnsavedConfirm) {
-      m_confirmExitOpen = true;
-      m_exitConfirmError.clear();
-    } else {
-      m_closeRequested = true;
-    }
+    RequestSceneAction(PendingSceneAction::CloseEditor);
   }
 
   ImGui::End();
@@ -2182,10 +2224,11 @@ static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
 
 void EditorLayer::DrawBottomDock() {
   ImGuiIO& io = ImGui::GetIO();
-  const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(900.0f, kBottomDockH), ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorWorkspaceWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH), ImGuiCond_Always);
+  ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
   if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Project")) {
@@ -2662,9 +2705,10 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
   constexpr float kWinW = 128.0f;
   constexpr float kWinH = 138.0f;
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const float viewportRight = m_viewportPanelRect.maxX > m_viewportPanelRect.minX
                                   ? m_viewportPanelRect.maxX
-                                  : io.DisplaySize.x - kRightDockW;
+                                  : io.DisplaySize.x - rightDockW;
   const float viewportTop =
       m_viewportPanelRect.maxY > m_viewportPanelRect.minY ? m_viewportPanelRect.minY : kEditorToolbarH;
   const float wx = viewportRight - kWinW - 10.0f;
@@ -2837,11 +2881,13 @@ static const char* ObjectTypeIcon(SceneObjectType type) {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f)),
-                           ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorHierarchyWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, hierarchyHeight), ImGuiCond_Always);
+  ImGui::Begin(kEditorHierarchyWindow, nullptr, kMainPanelWindowFlags);
 
   // Search bar (applies to primary scene)
   char searchBuf[256] = {};
@@ -3375,11 +3421,14 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string* outError) {
 
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  const float assetsTop = kEditorToolbarH + std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f) + 4.0f;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorAssetsWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float assetsTop = kEditorToolbarH + hierarchyHeight + 4.0f;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_Always);
+  ImGui::Begin(kEditorAssetsWindow, nullptr, kMainPanelWindowFlags);
 
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
@@ -3762,6 +3811,55 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::End();
 }
 
+void EditorLayer::DrawCommandPalettePopup() {
+  if (m_commandPaletteOpen) {
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::IsPopupOpen("Command Palette"))
+      ImGui::OpenPopup("Command Palette");
+  }
+
+  if (!ImGui::BeginPopupModal("Command Palette", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Search commands");
+  ImGui::SetNextItemWidth(480.0f);
+  char queryBuf[256] = {};
+  std::snprintf(queryBuf, sizeof(queryBuf), "%s", m_commandPaletteQuery.c_str());
+  if (ImGui::InputTextWithHint("##command_palette_input",
+                               "Type a command...",
+                               queryBuf,
+                               sizeof(queryBuf))) {
+    m_commandPaletteQuery = queryBuf;
+  }
+
+  ImGui::Separator();
+  bool executed = false;
+  int shownCount = 0;
+  for (const CommandPaletteRow& row : GetEditorCommands()) {
+    if (!MatchesCommandPaletteQuery(row, m_commandPaletteQuery))
+      continue;
+
+    const std::string label = std::string(row.command) + "##cmd_" + row.id;
+    if (ImGui::Selectable(label.c_str(), false)) {
+      ExecuteCommandPaletteAction(row.id);
+      executed = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", row.keys);
+    ++shownCount;
+  }
+
+  if (shownCount == 0)
+    ImGui::TextDisabled("No command matches '%s'", m_commandPaletteQuery.c_str());
+
+  if (executed || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    m_commandPaletteOpen = false;
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
 void EditorLayer::DrawQuickOpenPopup() {
   if (m_quickOpenOpen) {
     ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
@@ -3944,8 +4042,29 @@ void EditorLayer::DrawExitConfirmModal() {
   if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     return;
 
+  const char* actionLabel = "continue";
+  switch (m_pendingSceneAction) {
+    case PendingSceneAction::NewScene:
+      actionLabel = "create a new scene";
+      break;
+    case PendingSceneAction::OpenSceneFile:
+      actionLabel = "open another scene";
+      break;
+    case PendingSceneAction::LoadSceneFromDisk:
+      actionLabel = "load the scene from disk";
+      break;
+    case PendingSceneAction::ReloadSceneFromDisk:
+      actionLabel = "reload the scene";
+      break;
+    case PendingSceneAction::CloseEditor:
+      actionLabel = "exit editor mode";
+      break;
+    case PendingSceneAction::None:
+      break;
+  }
+
   ImGui::TextUnformatted("You have unsaved changes.");
-  ImGui::TextDisabled("Are you sure you want to exit editor mode?");
+  ImGui::TextDisabled("Save or discard them before you %s.", actionLabel);
   ImGui::Separator();
 
   if (!m_exitConfirmError.empty())
@@ -3954,26 +4073,32 @@ void EditorLayer::DrawExitConfirmModal() {
   if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
+    m_pendingSceneAction = PendingSceneAction::None;
     ImGui::CloseCurrentPopup();
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Discard & Exit", ImVec2(120.0f, 0.0f))) {
-    DiscardUnsavedChanges();
+  if (ImGui::Button("Discard", ImVec2(120.0f, 0.0f))) {
+    if (m_pendingSceneAction == PendingSceneAction::CloseEditor)
+      DiscardUnsavedChanges();
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
     ImGui::CloseCurrentPopup();
-    m_closeRequested = true;
+    std::string actionError;
+    if (!ExecutePendingSceneAction(&actionError))
+      m_exitConfirmError = actionError;
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Save & Exit", ImVec2(120.0f, 0.0f))) {
+  if (ImGui::Button("Save & Continue", ImVec2(120.0f, 0.0f))) {
     std::string saveError;
     if (SaveDocument(&saveError)) {
       m_confirmExitOpen = false;
       m_exitConfirmError.clear();
       ImGui::CloseCurrentPopup();
-      m_closeRequested = true;
+      std::string actionError;
+      if (!ExecutePendingSceneAction(&actionError))
+        m_exitConfirmError = actionError;
     } else {
       m_exitConfirmError = saveError;
     }
@@ -3986,11 +4111,13 @@ void EditorLayer::DrawExitConfirmModal() {
 
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - kRightDockW, kEditorToolbarH), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(kRightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
-                           ImGuiCond_FirstUseEver);
-  ImGui::Begin(kEditorPropertiesWindow);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightDockW, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(rightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
+                           ImGuiCond_Always);
+  ImGui::Begin(kEditorPropertiesWindow, nullptr, kMainPanelWindowFlags);
 
   // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
@@ -5470,6 +5597,80 @@ void EditorLayer::DiscardUnsavedChanges() {
   TriggerReload();
 }
 
+void EditorLayer::RequestSceneAction(PendingSceneAction action) {
+  if (action == PendingSceneAction::None)
+    return;
+
+  m_pendingSceneAction = action;
+  m_exitConfirmError.clear();
+  if (m_document.dirty) {
+    m_confirmExitOpen = true;
+    return;
+  }
+
+  std::string actionError;
+  if (!ExecutePendingSceneAction(&actionError))
+    LOG_ERROR("[Editor] Scene action failed: %s", actionError.c_str());
+}
+
+bool EditorLayer::ExecutePendingSceneAction(std::string* outError) {
+  if (outError)
+    outError->clear();
+
+  const PendingSceneAction action = m_pendingSceneAction;
+  m_pendingSceneAction = PendingSceneAction::None;
+
+  switch (action) {
+    case PendingSceneAction::None:
+      return true;
+    case PendingSceneAction::NewScene:
+      AddNewScene();
+      m_lastSavedDocument = m_document;
+      return true;
+    case PendingSceneAction::OpenSceneFile:
+      OpenAdditionalSceneFile();
+      return true;
+    case PendingSceneAction::LoadSceneFromDisk: {
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+    }
+    case PendingSceneAction::ReloadSceneFromDisk: {
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+    }
+    case PendingSceneAction::CloseEditor:
+      m_closeRequested = true;
+      return true;
+  }
+
+  return true;
+}
+
+void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
+  if (commandId == "new_scene")
+    RequestSceneAction(PendingSceneAction::NewScene);
+  else if (commandId == "open_scene")
+    RequestSceneAction(PendingSceneAction::OpenSceneFile);
+  else if (commandId == "load_scene")
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
+  else if (commandId == "reload_scene")
+    RequestSceneAction(PendingSceneAction::ReloadSceneFromDisk);
+  else if (commandId == "save_scene") {
+    std::string saveError;
+    if (!SaveDocument(&saveError))
+      LOG_ERROR("[Editor] Save failed: %s", saveError.c_str());
+  } else if (commandId == "reset_layout") {
+    m_resetDockLayoutRequested = true;
+  } else if (commandId == "quick_open") {
+    m_quickOpenOpen = true;
+    m_quickOpenQuery.clear();
+  } else if (commandId == "close_editor") {
+    RequestSceneAction(PendingSceneAction::CloseEditor);
+  }
+}
+
 void EditorLayer::RequestDeleteSelectedObjects() {
   if (m_selectedIndices.empty())
     return;
@@ -5842,68 +6043,6 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   }
   glLineWidth(1.0f);
   glEnable(GL_DEPTH_TEST);
-}
-
-// ---- Viewport drag-drop target -----------------------------------------------
-
-void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
-  // Only show when an ASSET_ID drag-drop is actively in progress.
-  // This prevents the full-screen window from intercepting normal mouse clicks.
-  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
-  if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
-    return;
-  if (m_viewportPanelRect.maxX <= m_viewportPanelRect.minX ||
-      m_viewportPanelRect.maxY <= m_viewportPanelRect.minY)
-    return;
-
-  ImGuiIO& io = ImGui::GetIO();
-  const EditorViewportRect& viewportRect = m_viewportPanelRect;
-  ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
-  ImGui::SetNextWindowSize(
-      ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
-  ImGui::SetNextWindowBgAlpha(0.0f);
-  // No NoInputs — drop target must be hoverable to accept the payload
-  ImGui::Begin("##viewport_drop", nullptr,
-               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
-
-  const ImVec2 dropTargetSize(viewportRect.maxX - viewportRect.minX,
-                              viewportRect.maxY - viewportRect.minY);
-  ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
-
-  if (ImGui::BeginDragDropTarget()) {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
-      const std::string assetId(static_cast<const char*>(payload->Data));
-      if (m_document.assets.find(assetId) == m_document.assets.end()) {
-        LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      const ImVec2 mp = io.MousePos;
-      if (!viewportRect.Contains(mp.x, mp.y)) {
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      Vec3 dropPos = Vec3::Zero();
-      if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
-        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      std::string createError;
-      if (!CreateObjectFromAsset(assetId, std::string(), &dropPos, nullptr, nullptr, &createError))
-        LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
-    }
-    ImGui::EndDragDropTarget();
-  }
-
-  ImGui::End();
 }
 
 }  // namespace Editor

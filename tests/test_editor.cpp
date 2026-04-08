@@ -10,6 +10,10 @@
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
@@ -141,6 +145,49 @@ struct HomeDirGuard {
 #endif
     }
 };
+
+struct ImGuiContextGuard {
+    ImGuiContextGuard() {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        unsigned char* fontPixels = nullptr;
+        int fontWidth = 0;
+        int fontHeight = 0;
+        io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontWidth, &fontHeight);
+        io.DisplaySize = ImVec2(1280.0f, 720.0f);
+        io.DeltaTime = 1.0f / 60.0f;
+        io.MousePos = ImVec2(32.0f, 32.0f);
+        io.MouseDown[0] = false;
+    }
+
+    ~ImGuiContextGuard() {
+        ImGui::DestroyContext();
+    }
+};
+
+static void SeedExternalAssetDragPayload(const char* assetId) {
+    REQUIRE(assetId != nullptr);
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    ImGuiPayload& payload = g.DragDropPayload;
+    payload.Clear();
+    payload.SourceId = 1;
+    payload.Data = const_cast<char*>(assetId);
+    payload.DataSize = static_cast<int>(std::strlen(assetId)) + 1;
+    payload.DataFrameCount = g.FrameCount;
+    payload.Delivery = false;
+    payload.Preview = false;
+    ImStrncpy(payload.DataType, "ASSET_ID", IM_ARRAYSIZE(payload.DataType));
+
+    g.DragDropActive = true;
+    g.DragDropSourceFlags = ImGuiDragDropFlags_SourceExtern;
+    g.DragDropSourceFrameCount = g.FrameCount - 1;
+    g.DragDropMouseButton = -1;
+    g.DragDropAcceptFlags = ImGuiDragDropFlags_None;
+    g.DragDropAcceptIdCurr = 0;
+    g.DragDropAcceptIdPrev = 0;
+    g.DragDropAcceptFrameCount = -1;
+}
 
 // ===========================================================================
 // EditorSchema
@@ -872,6 +919,14 @@ TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[
     REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
 }
 
+TEST_CASE("Editor helpers: command palette query matches command and shortcut", "[editor]") {
+    CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
+    REQUIRE(MatchesCommandPaletteQuery(row, "save"));
+    REQUIRE(MatchesCommandPaletteQuery(row, "toolbar"));
+    REQUIRE(MatchesCommandPaletteQuery(row, "scene"));
+    REQUIRE_FALSE(MatchesCommandPaletteQuery(row, "delete"));
+}
+
 TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
     REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Prop)) == "prop");
     REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Light)) == "light");
@@ -924,6 +979,7 @@ TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]"
     REQUIRE(hasCommandWithKeys("Run or stop game in viewport", "Toolbar: Play / Stop"));
     REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
     REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
+    REQUIRE(hasCommandWithKeys("Command palette", "Ctrl/Cmd + Shift + P"));
 }
 
 TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
@@ -1062,6 +1118,29 @@ TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]") {
+    const auto rows = GetEditorCommands();
+    REQUIRE_FALSE(rows.empty());
+
+    auto hasCommand = [&](const char* id, const char* command) {
+        return std::any_of(rows.begin(), rows.end(), [&](const CommandPaletteRow& row) {
+            return std::string(row.id) == id && std::string(row.command) == command;
+        });
+    };
+
+    REQUIRE(hasCommand("new_scene", "New Scene"));
+    REQUIRE(hasCommand("open_scene", "Open Scene..."));
+    REQUIRE(hasCommand("save_scene", "Save Scene"));
+    REQUIRE(hasCommand("close_editor", "Close Editor"));
+}
+
+TEST_CASE("Editor UI logic: command palette shares quick-open gating", "[editor]") {
+    REQUIRE(ShouldOpenCommandPalette(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, true, false, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, false, true, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, true, false, false, false));
 }
 
 TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]") {
@@ -1578,6 +1657,93 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(150.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(1500.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
+}
+
+TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui]") {
+    REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
+    REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
+
+    REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
+    REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
+
+    REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
+    REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
+}
+
+TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        false,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char* assetId) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return assetId && std::string(assetId) == "crate";
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE(result.targetVisible);
+    REQUIRE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
+}
+
+TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportPlayModeTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        true,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char*) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return true;
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE_FALSE(result.targetVisible);
+    REQUIRE_FALSE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
 }
 
 TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {

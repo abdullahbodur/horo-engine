@@ -28,7 +28,7 @@ endif()
 add_subdirectory(vendor)
 
 # ---- MonolithEngine static library ----
-file(GLOB_RECURSE ENGINE_SOURCES
+file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
