@@ -1760,7 +1760,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   if (m_active) {
     DrawToolbar();
     DrawDockspace();
-    DrawViewportPanel();
+    DrawViewportPanel(cam, screenW, screenH);
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
@@ -1774,7 +1774,6 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     DrawExitConfirmModal();
     if (!m_playMode) {
       DrawViewGimbal(cam);
-      DrawViewportDropTarget(cam, screenW, screenH);
       DrawSelectionHighlight();  // queues to DebugDraw
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
@@ -1820,7 +1819,7 @@ void EditorLayer::RefreshViewportPanelRect() {
   m_viewportPanelRect.maxY = winPos.y + innerMax.y;
 }
 
-void EditorLayer::DrawViewportPanel() {
+void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH) {
   ImGuiIO& io = ImGui::GetIO();
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
@@ -1845,6 +1844,39 @@ void EditorLayer::DrawViewportPanel() {
                    kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
                        ImGuiWindowFlags_NoScrollWithMouse)) {
     RefreshViewportPanelRect();
+
+    const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
+    if (!m_playMode && activeDrag && activeDrag->IsDataType("ASSET_ID")) {
+      const ImVec2 dropTargetSize = ImGui::GetContentRegionAvail();
+      if (dropTargetSize.x > 0.0f && dropTargetSize.y > 0.0f) {
+        ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
+        if (ImGui::BeginDragDropTarget()) {
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
+            const std::string assetId(static_cast<const char*>(payload->Data));
+            if (m_document.assets.find(assetId) == m_document.assets.end()) {
+              LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+            } else {
+              Vec3 dropPos = Vec3::Zero();
+              if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
+                LOG_WARN(
+                    "[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
+              } else {
+                std::string createError;
+                if (!CreateObjectFromAsset(assetId,
+                                           std::string(),
+                                           &dropPos,
+                                           nullptr,
+                                           nullptr,
+                                           &createError)) {
+                  LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
+                }
+              }
+            }
+          }
+          ImGui::EndDragDropTarget();
+        }
+      }
+    }
   }
   ImGui::End();
   ImGui::PopStyleVar();
@@ -6003,68 +6035,6 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   }
   glLineWidth(1.0f);
   glEnable(GL_DEPTH_TEST);
-}
-
-// ---- Viewport drag-drop target -----------------------------------------------
-
-void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
-  // Only show when an ASSET_ID drag-drop is actively in progress.
-  // This prevents the full-screen window from intercepting normal mouse clicks.
-  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
-  if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
-    return;
-  if (m_viewportPanelRect.maxX <= m_viewportPanelRect.minX ||
-      m_viewportPanelRect.maxY <= m_viewportPanelRect.minY)
-    return;
-
-  ImGuiIO& io = ImGui::GetIO();
-  const EditorViewportRect& viewportRect = m_viewportPanelRect;
-  ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
-  ImGui::SetNextWindowSize(
-      ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
-  ImGui::SetNextWindowBgAlpha(0.0f);
-  // No NoInputs — drop target must be hoverable to accept the payload
-  ImGui::Begin("##viewport_drop", nullptr,
-               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
-
-  const ImVec2 dropTargetSize(viewportRect.maxX - viewportRect.minX,
-                              viewportRect.maxY - viewportRect.minY);
-  ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
-
-  if (ImGui::BeginDragDropTarget()) {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
-      const std::string assetId(static_cast<const char*>(payload->Data));
-      if (m_document.assets.find(assetId) == m_document.assets.end()) {
-        LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      const ImVec2 mp = io.MousePos;
-      if (!viewportRect.Contains(mp.x, mp.y)) {
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      Vec3 dropPos = Vec3::Zero();
-      if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
-        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      std::string createError;
-      if (!CreateObjectFromAsset(assetId, std::string(), &dropPos, nullptr, nullptr, &createError))
-        LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
-    }
-    ImGui::EndDragDropTarget();
-  }
-
-  ImGui::End();
 }
 
 }  // namespace Editor

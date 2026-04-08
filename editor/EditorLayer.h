@@ -196,7 +196,7 @@ class EditorLayer {
 
   void DrawToolbar();
   void DrawDockspace();
-  void DrawViewportPanel();
+  void DrawViewportPanel(const Camera& cam, int screenW, int screenH);
   void DrawViewGimbal(const Camera& cam);
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
@@ -220,7 +220,6 @@ class EditorLayer {
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void DrawWireframeOverlay(const Camera& cam);
-  void DrawViewportDropTarget(const Camera& cam, int screenW, int screenH);
   void ApplyPendingViewSnap(Camera& cam);
   void LoadWorkspaceState();
   void SaveWorkspaceStateIfNeeded(bool force);
