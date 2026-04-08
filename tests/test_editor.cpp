@@ -151,6 +151,10 @@ struct ImGuiContextGuard {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
+        unsigned char* fontPixels = nullptr;
+        int fontWidth = 0;
+        int fontHeight = 0;
+        io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontWidth, &fontHeight);
         io.DisplaySize = ImVec2(1280.0f, 720.0f);
         io.DeltaTime = 1.0f / 60.0f;
         io.MousePos = ImVec2(32.0f, 32.0f);
