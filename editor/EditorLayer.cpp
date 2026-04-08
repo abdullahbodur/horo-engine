@@ -1820,6 +1820,13 @@ void EditorLayer::RefreshViewportPanelRect() {
 }
 
 void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH) {
+  struct ViewportAssetDropContext {
+    EditorLayer* editor = nullptr;
+    const Camera* camera = nullptr;
+    int screenW = 0;
+    int screenH = 0;
+  };
+
   ImGuiIO& io = ImGui::GetIO();
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
@@ -1844,39 +1851,40 @@ void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH)
                    kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
                        ImGuiWindowFlags_NoScrollWithMouse)) {
     RefreshViewportPanelRect();
+    const ImVec2 dropTargetSize = ImGui::GetContentRegionAvail();
+    ViewportAssetDropContext dropContext{this, &cam, screenW, screenH};
+    DrawViewportAssetDropTarget(
+        m_playMode,
+        dropTargetSize.x,
+        dropTargetSize.y,
+        &dropContext,
+        [](void* userData, const char* assetIdText) -> bool {
+          auto* context = static_cast<ViewportAssetDropContext*>(userData);
+          if (!context || !context->editor || !context->camera || !assetIdText)
+            return false;
 
-    const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
-    if (!m_playMode && activeDrag && activeDrag->IsDataType("ASSET_ID")) {
-      const ImVec2 dropTargetSize = ImGui::GetContentRegionAvail();
-      if (dropTargetSize.x > 0.0f && dropTargetSize.y > 0.0f) {
-        ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
-        if (ImGui::BeginDragDropTarget()) {
-          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
-            const std::string assetId(static_cast<const char*>(payload->Data));
-            if (m_document.assets.find(assetId) == m_document.assets.end()) {
-              LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
-            } else {
-              Vec3 dropPos = Vec3::Zero();
-              if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
-                LOG_WARN(
-                    "[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
-              } else {
-                std::string createError;
-                if (!CreateObjectFromAsset(assetId,
-                                           std::string(),
-                                           &dropPos,
-                                           nullptr,
-                                           nullptr,
-                                           &createError)) {
-                  LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
-                }
-              }
-            }
+          EditorLayer& editor = *context->editor;
+          const std::string assetId(assetIdText);
+          if (editor.m_document.assets.find(assetId) == editor.m_document.assets.end()) {
+            LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+            return false;
           }
-          ImGui::EndDragDropTarget();
-        }
-      }
-    }
+
+          Vec3 dropPos = Vec3::Zero();
+          if (!editor.TryBuildViewportDropPosition(
+                  *context->camera, context->screenW, context->screenH, assetId, &dropPos)) {
+            LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
+            return false;
+          }
+
+          std::string createError;
+          if (!editor.CreateObjectFromAsset(
+                  assetId, std::string(), &dropPos, nullptr, nullptr, &createError)) {
+            LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
+            return false;
+          }
+          return true;
+        });
   }
   ImGui::End();
   ImGui::PopStyleVar();

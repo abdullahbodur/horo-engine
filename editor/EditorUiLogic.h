@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include <imgui.h>
+
 #include "math/Vec3.h"
 
 namespace Monolith {
@@ -64,6 +66,15 @@ struct EditorStatusText {
   const char* reloadText = "idle";
 };
 
+using EditorViewportAssetDropHandler = bool (*)(void* userData, const char* assetId);
+
+struct EditorViewportAssetDropResult {
+  bool targetVisible = false;
+  bool payloadMatched = false;
+  bool delivered = false;
+  bool accepted = false;
+};
+
 enum class EditorExitDecision {
   ExitImmediately,
   PromptUnsavedConfirm,
@@ -76,6 +87,11 @@ EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot);
 float ComputeEditorLeftDockWidth(float displayWidth);
 float ComputeEditorRightPanelWidth(float displayWidth);
 float ComputeEditorBottomDockHeight(float displayHeight);
+EditorViewportAssetDropResult DrawViewportAssetDropTarget(bool playMode,
+                                                          float targetWidth,
+                                                          float targetHeight,
+                                                          void* userData,
+                                                          EditorViewportAssetDropHandler onDrop);
 EditorViewportRect BuildEditorViewportRect(float displayWidth,
                                            float displayHeight,
                                            float toolbarHeight,

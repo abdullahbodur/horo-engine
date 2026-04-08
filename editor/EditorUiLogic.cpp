@@ -83,6 +83,35 @@ float ComputeEditorBottomDockHeight(float displayHeight) {
   return std::clamp(displayHeight * 0.18f, 180.0f, 260.0f);
 }
 
+EditorViewportAssetDropResult DrawViewportAssetDropTarget(bool playMode,
+                                                          float targetWidth,
+                                                          float targetHeight,
+                                                          void* userData,
+                                                          EditorViewportAssetDropHandler onDrop) {
+  EditorViewportAssetDropResult result;
+  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
+  if (playMode || !activeDrag || !activeDrag->IsDataType("ASSET_ID"))
+    return result;
+  if (targetWidth <= 0.0f || targetHeight <= 0.0f)
+    return result;
+
+  result.targetVisible = true;
+  ImGui::InvisibleButton("##viewport_drop_target", ImVec2(targetWidth, targetHeight));
+  if (!ImGui::BeginDragDropTarget())
+    return result;
+
+  if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+          "ASSET_ID", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
+    result.payloadMatched = true;
+    result.delivered = payload->Delivery;
+    if (payload->Delivery && onDrop) {
+      result.accepted = onDrop(userData, static_cast<const char*>(payload->Data));
+    }
+  }
+  ImGui::EndDragDropTarget();
+  return result;
+}
+
 EditorViewportRect BuildEditorViewportRect(float displayWidth,
                                            float displayHeight,
                                            float toolbarHeight,

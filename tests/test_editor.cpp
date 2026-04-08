@@ -10,6 +10,10 @@
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
@@ -141,6 +145,45 @@ struct HomeDirGuard {
 #endif
     }
 };
+
+struct ImGuiContextGuard {
+    ImGuiContextGuard() {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.DisplaySize = ImVec2(1280.0f, 720.0f);
+        io.DeltaTime = 1.0f / 60.0f;
+        io.MousePos = ImVec2(32.0f, 32.0f);
+        io.MouseDown[0] = false;
+    }
+
+    ~ImGuiContextGuard() {
+        ImGui::DestroyContext();
+    }
+};
+
+static void SeedExternalAssetDragPayload(const char* assetId) {
+    REQUIRE(assetId != nullptr);
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    ImGuiPayload& payload = g.DragDropPayload;
+    payload.Clear();
+    payload.SourceId = 1;
+    payload.Data = const_cast<char*>(assetId);
+    payload.DataSize = static_cast<int>(std::strlen(assetId)) + 1;
+    payload.DataFrameCount = g.FrameCount;
+    payload.Delivery = false;
+    payload.Preview = false;
+    ImStrncpy(payload.DataType, "ASSET_ID", IM_ARRAYSIZE(payload.DataType));
+
+    g.DragDropActive = true;
+    g.DragDropSourceFlags = ImGuiDragDropFlags_SourceExtern;
+    g.DragDropSourceFrameCount = g.FrameCount - 1;
+    g.DragDropMouseButton = -1;
+    g.DragDropAcceptFlags = ImGuiDragDropFlags_None;
+    g.DragDropAcceptIdCurr = 0;
+    g.DragDropAcceptIdPrev = 0;
+    g.DragDropAcceptFrameCount = -1;
+}
 
 // ===========================================================================
 // EditorSchema
@@ -1621,6 +1664,82 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[edit
 
     REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
     REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
+}
+
+TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        false,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char* assetId) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return assetId && std::string(assetId) == "crate";
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE(result.targetVisible);
+    REQUIRE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
+}
+
+TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportPlayModeTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        true,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char*) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return true;
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE_FALSE(result.targetVisible);
+    REQUIRE_FALSE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
 }
 
 TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
