@@ -1,5 +1,4 @@
 #pragma once
-#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -229,8 +228,7 @@ class EditorLayer {
   void BeginResponsiveLayoutFrame(const ImVec2& displaySize);
   void EndResponsiveLayoutFrame(const ImVec2& displaySize);
   void RefreshViewportPanelRect();
-  void ApplyResponsiveWindowLayout(size_t slot, const EditorWindowRect& defaultRect);
-  void CaptureResponsiveWindowLayout(size_t slot);
+  void ApplyResponsiveWindowLayout(const ImVec2& position, const ImVec2& size);
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
@@ -363,7 +361,6 @@ class EditorLayer {
   bool m_forceResponsiveLayoutReset = false;
   ImVec2 m_lastLayoutDisplaySize = ImVec2(0.0f, 0.0f);
   bool m_layoutResizePending = false;
-  std::array<EditorWindowRect, 5> m_responsiveWindowRects{};
   EditorViewportRect m_viewportPanelRect;
 
   // Wireframe overlay

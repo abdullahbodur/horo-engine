@@ -1612,30 +1612,6 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
 }
 
-TEST_CASE("Editor window rect scaling preserves relative layout across resize", "[editor][ui]") {
-    const EditorWindowRect rect{120.0f, 80.0f, 640.0f, 360.0f, true};
-    const EditorWindowRect scaled =
-        ScaleEditorWindowRect(rect, 1600.0f, 900.0f, 2400.0f, 1350.0f, 160.0f, 120.0f);
-
-    REQUIRE(scaled.valid);
-    REQUIRE(scaled.x == Approx(180.0f));
-    REQUIRE(scaled.y == Approx(120.0f));
-    REQUIRE(scaled.width == Approx(960.0f));
-    REQUIRE(scaled.height == Approx(540.0f));
-}
-
-TEST_CASE("Editor window rect scaling clamps panels inside resized display", "[editor][ui]") {
-    const EditorWindowRect rect{900.0f, 700.0f, 400.0f, 220.0f, true};
-    const EditorWindowRect scaled =
-        ScaleEditorWindowRect(rect, 1000.0f, 800.0f, 300.0f, 200.0f, 160.0f, 120.0f);
-
-    REQUIRE(scaled.valid);
-    REQUIRE(scaled.width == Approx(160.0f));
-    REQUIRE(scaled.height == Approx(120.0f));
-    REQUIRE(scaled.x == Approx(140.0f));
-    REQUIRE(scaled.y == Approx(80.0f));
-}
-
 TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
     namespace fs = std::filesystem;
     const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_missing";
