@@ -47,6 +47,8 @@ User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPRO
 - `build.status`
 
 These resources are compact by default and intentionally avoid full-scene dumps.
+List-style resources accept `limit` and `offset`, and query-driven reads such as `scene.objects` and
+`assets.catalog` match case-insensitively.
 
 ## Tools
 
@@ -172,6 +174,7 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 ## Token-minimal usage guidance
 
 - Prefer `scene.summary` before calling object-level tools.
+- Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a narrow `query` and `limit`.
 - Use `editor.get_object` only for the specific object you need.
 - Prefer `console.recent` over asking for long log history.

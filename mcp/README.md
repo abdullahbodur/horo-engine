@@ -44,6 +44,9 @@ Resources:
 - `console.summary`
 - `build.status`
 
+List-style resources accept `limit` and `offset`, and query-driven reads such as `scene.objects` and
+`assets.catalog` match case-insensitively.
+
 Tools:
 
 - `editor.search`
@@ -241,6 +244,7 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 ## Token-minimal usage tips
 
 - Ask for `scene.summary` first instead of broad object dumps.
+- Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a small `limit`.
 - Call `editor.get_object` only for the object you actually need.
 - Prefer `console.recent` over long log history.

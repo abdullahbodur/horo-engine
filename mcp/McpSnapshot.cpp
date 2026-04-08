@@ -37,6 +37,10 @@ size_t ClampLimit(size_t requested, size_t fallback, size_t maximum) {
   return std::max<size_t>(1, std::min(requested, maximum));
 }
 
+size_t ClampOffset(size_t requested, size_t total) {
+  return std::min(requested, total);
+}
+
 json Vec3ToJson(const Vec3& value) {
   return json::array({value.x, value.y, value.z});
 }
@@ -252,41 +256,60 @@ json BuildAssetsSelectionJson(const McpEditorSnapshot& snapshot) {
 
 json BuildAssetsCatalogJson(const McpEditorSnapshot& snapshot,
                             size_t assetLimit,
-                            const std::string& query) {
+                            const std::string& query,
+                            size_t offset) {
   const size_t safeLimit = ClampLimit(assetLimit, 12, kMaxSummaryAssets);
-  json assets = json::array();
+  std::vector<json> matchedAssets;
+  matchedAssets.reserve(snapshot.assets.size());
   size_t totalMatches = 0;
   for (const McpAssetSnapshot& asset : snapshot.assets) {
     if (!AssetMatchesQuery(asset, query))
       continue;
     ++totalMatches;
-    if (assets.size() >= safeLimit)
-      continue;
-    assets.push_back(BuildAssetSummaryJson(asset, CountAssetReferences(snapshot, asset.id)));
+    matchedAssets.push_back(BuildAssetSummaryJson(asset, CountAssetReferences(snapshot, asset.id)));
   }
-  const size_t shownAssets = assets.size();
+
+  const size_t safeOffset = ClampOffset(offset, matchedAssets.size());
+  json assets = json::array();
+  const size_t end = std::min(safeOffset + safeLimit, matchedAssets.size());
+  for (size_t i = safeOffset; i < end; ++i)
+    assets.push_back(std::move(matchedAssets[i]));
+  const size_t returned = assets.size();
+  const bool hasMore = end < matchedAssets.size();
+
   return json{
       {"query", query},
+      {"offset", safeOffset},
+      {"limit", safeLimit},
+      {"returned", returned},
+      {"hasMore", hasMore},
       {"assetCount", snapshot.assets.size()},
       {"matchedAssets", totalMatches},
       {"assets", std::move(assets)},
-      {"moreAssets", totalMatches > shownAssets ? totalMatches - shownAssets : 0},
+      {"moreAssets", totalMatches > safeOffset + returned ? totalMatches - safeOffset - returned : 0},
   };
 }
 
-json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit) {
-  json out = json::object();
-  out["lineCount"] = snapshot.consoleEntries.size();
+json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit, size_t offset) {
+  const size_t safeLimit = ClampLimit(lineLimit, 20, kMaxSummaryConsoleLines);
+  const size_t safeOffset = ClampOffset(offset, snapshot.consoleEntries.size());
+  const size_t remaining = snapshot.consoleEntries.size() - safeOffset;
+  const size_t count = std::min(safeLimit, remaining);
 
   json lines = json::array();
-  const size_t count =
-      std::min(ClampLimit(lineLimit, 20, kMaxSummaryConsoleLines), snapshot.consoleEntries.size());
-  for (size_t i = 0; i < count; ++i) {
-    const McpConsoleEntry& entry = snapshot.consoleEntries[snapshot.consoleEntries.size() - count + i];
-    lines.push_back(BuildConsoleEntryJson(entry));
-  }
+  const size_t startIndex = snapshot.consoleEntries.size() - safeOffset - count;
+  for (size_t i = startIndex; i < startIndex + count; ++i)
+    lines.push_back(BuildConsoleEntryJson(snapshot.consoleEntries[i]));
+  const bool hasMore = safeOffset + count < snapshot.consoleEntries.size();
+
+  json out = json::object();
+  out["offset"] = safeOffset;
+  out["limit"] = safeLimit;
+  out["returned"] = count;
+  out["hasMore"] = hasMore;
+  out["lineCount"] = snapshot.consoleEntries.size();
   out["lines"] = std::move(lines);
-  out["truncated"] = snapshot.consoleEntries.size() > count;
+  out["truncated"] = hasMore;
   return out;
 }
 
@@ -346,10 +369,12 @@ json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                          size_t objectLimit,
                          const std::string& typeFilter,
                          const std::string& query,
-                         bool selectedOnly) {
+                         bool selectedOnly,
+                         size_t offset) {
   const size_t safeLimit = ClampLimit(objectLimit, 12, kMaxSummaryObjects);
   const std::string normalizedType = ToLowerAscii(typeFilter);
-  json objects = json::array();
+  std::vector<json> matchedObjects;
+  matchedObjects.reserve(snapshot.objects.size());
   size_t totalMatches = 0;
 
   for (const McpObjectSnapshot& object : snapshot.objects) {
@@ -364,23 +389,30 @@ json BuildObjectListJson(const McpEditorSnapshot& snapshot,
       continue;
 
     ++totalMatches;
-    if (objects.size() >= safeLimit)
-      continue;
-    objects.push_back(BuildObjectSummaryJson(object));
+    matchedObjects.push_back(BuildObjectSummaryJson(object));
   }
-  const size_t shownObjects = objects.size();
+  const size_t safeOffset = ClampOffset(offset, matchedObjects.size());
+  json objects = json::array();
+  const size_t end = std::min(safeOffset + safeLimit, matchedObjects.size());
+  for (size_t i = safeOffset; i < end; ++i)
+    objects.push_back(std::move(matchedObjects[i]));
+  const size_t returned = objects.size();
 
   return json{
       {"query", query},
       {"type", typeFilter},
       {"selectedOnly", selectedOnly},
+      {"offset", safeOffset},
+      {"limit", safeLimit},
+      {"returned", returned},
+      {"hasMore", end < matchedObjects.size()},
       {"matchedObjects", totalMatches},
       {"objects", std::move(objects)},
-      {"moreObjects", totalMatches > shownObjects ? totalMatches - shownObjects : 0},
+      {"moreObjects", totalMatches > safeOffset + returned ? totalMatches - safeOffset - returned : 0},
   };
 }
 
-json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit) {
+json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit, size_t offset) {
   const size_t safeLimit = ClampLimit(objectLimit, 32, kMaxSummaryObjects);
   std::unordered_map<std::string, std::vector<const McpObjectSnapshot*>> children;
   std::vector<const McpObjectSnapshot*> roots;
@@ -394,33 +426,40 @@ json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit) {
       children[parentId].push_back(&object);
   }
 
-  json entries = json::array();
+  std::vector<json> flattenedEntries;
+  flattenedEntries.reserve(snapshot.objects.size());
   std::function<void(const McpObjectSnapshot*, int)> visit = [&](const McpObjectSnapshot* object, int depth) {
-    if (!object || entries.size() >= safeLimit)
+    if (!object)
       return;
     json item = BuildObjectSummaryJson(*object);
     item["depth"] = depth;
     item["childCount"] = children[object->id].size();
-    entries.push_back(std::move(item));
-    for (const McpObjectSnapshot* child : children[object->id]) {
-      if (entries.size() >= safeLimit)
-        break;
+    flattenedEntries.push_back(std::move(item));
+    for (const McpObjectSnapshot* child : children[object->id])
       visit(child, depth + 1);
-    }
   };
 
-  for (const McpObjectSnapshot* root : roots) {
-    if (entries.size() >= safeLimit)
-      break;
+  for (const McpObjectSnapshot* root : roots)
     visit(root, 0);
-  }
-  const size_t shownEntries = entries.size();
+
+  const size_t safeOffset = ClampOffset(offset, flattenedEntries.size());
+  json entries = json::array();
+  const size_t end = std::min(safeOffset + safeLimit, flattenedEntries.size());
+  for (size_t i = safeOffset; i < end; ++i)
+    entries.push_back(std::move(flattenedEntries[i]));
+  const size_t returned = entries.size();
 
   return json{
       {"objectCount", snapshot.objects.size()},
       {"roots", roots.size()},
+      {"offset", safeOffset},
+      {"limit", safeLimit},
+      {"returned", returned},
+      {"hasMore", end < flattenedEntries.size()},
       {"entries", std::move(entries)},
-      {"moreObjects", snapshot.objects.size() > shownEntries ? snapshot.objects.size() - shownEntries : 0},
+      {"moreObjects", snapshot.objects.size() > safeOffset + returned
+                          ? snapshot.objects.size() - safeOffset - returned
+                          : 0},
   };
 }
 

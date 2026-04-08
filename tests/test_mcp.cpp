@@ -432,10 +432,27 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(catalog["matchedAssets"] == 1);
   REQUIRE(catalog["assets"][0]["id"] == "hero");
 
+  const json catalogCaseInsensitive = BuildAssetsCatalogJson(snapshot, 8, "HERO");
+  REQUIRE(catalogCaseInsensitive["matchedAssets"] == 1);
+
+  const json pagedCatalog = BuildAssetsCatalogJson(snapshot, 1, "", 1);
+  REQUIRE(pagedCatalog["offset"] == 1);
+  REQUIRE(pagedCatalog["limit"] == 1);
+  REQUIRE(pagedCatalog["returned"] == 1);
+  REQUIRE(pagedCatalog["hasMore"].get<bool>());
+  REQUIRE(pagedCatalog["assets"][0]["id"] == "hero");
+
   const json recentConsole = BuildConsoleJson(snapshot, 2);
   REQUIRE(recentConsole["lineCount"] == 4);
   REQUIRE(recentConsole["lines"].size() == 2);
   REQUIRE(recentConsole["lines"][1]["message"] == "Hero animation warmed");
+
+  const json pagedConsole = BuildConsoleJson(snapshot, 2, 1);
+  REQUIRE(pagedConsole["offset"] == 1);
+  REQUIRE(pagedConsole["returned"] == 2);
+  REQUIRE(pagedConsole["hasMore"].get<bool>());
+  REQUIRE(pagedConsole["lines"][0]["message"] == "Missing optional collider for obj_light");
+  REQUIRE(pagedConsole["lines"][1]["message"] == "Renderer exploded briefly");
 
   const json consoleSummary = BuildConsoleSummaryJson(snapshot, 2);
   REQUIRE(consoleSummary["infoCount"] == 2);
@@ -455,15 +472,30 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(objectList["matchedObjects"] == 2);
   REQUIRE(objectList["objects"].size() == 2);
 
+  const json objectListCaseInsensitive = BuildObjectListJson(snapshot, 8, "prop", "ROOT", false);
+  REQUIRE(objectListCaseInsensitive["matchedObjects"] == 2);
+
   const json selectedOnly = BuildObjectListJson(snapshot, 8, "", "", true);
   REQUIRE(selectedOnly["matchedObjects"] == 2);
   REQUIRE(selectedOnly["objects"].size() == 2);
+
+  const json pagedObjects = BuildObjectListJson(snapshot, 1, "Prop", "", false, 1);
+  REQUIRE(pagedObjects["offset"] == 1);
+  REQUIRE(pagedObjects["returned"] == 1);
+  REQUIRE_FALSE(pagedObjects["hasMore"].get<bool>());
+  REQUIRE(pagedObjects["objects"][0]["id"] == "obj_child");
 
   const json hierarchy = BuildHierarchyJson(snapshot, 8);
   REQUIRE(hierarchy["objectCount"] == 4);
   REQUIRE(hierarchy["roots"] == 2);
   REQUIRE(hierarchy["entries"].size() == 4);
   REQUIRE(hierarchy["entries"][0]["depth"] == 0);
+
+  const json pagedHierarchy = BuildHierarchyJson(snapshot, 2, 1);
+  REQUIRE(pagedHierarchy["offset"] == 1);
+  REQUIRE(pagedHierarchy["limit"] == 2);
+  REQUIRE(pagedHierarchy["returned"] == 2);
+  REQUIRE(pagedHierarchy["hasMore"].get<bool>());
 
   const json searchAll = SearchSnapshot(snapshot, "hero", 5, "all");
   REQUIRE(searchAll["assets"].size() == 1);
@@ -547,6 +579,38 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
     REQUIRE(response["result"]["contents"][0]["uri"] == resourceUris[i]);
     REQUIRE_FALSE(response["result"]["contents"][0]["text"].get<std::string>().empty());
   }
+
+  const json resourceObjects =
+      ReadResource(protocol, "scene://objects", json{{"limit", 1}, {"offset", 1}, {"type", "Prop"}}, 30);
+  const json resourceObjectsPayload =
+      json::parse(resourceObjects["result"]["contents"][0]["text"].get<std::string>());
+  REQUIRE(resourceObjectsPayload["offset"] == 1);
+  REQUIRE(resourceObjectsPayload["returned"] == 1);
+  REQUIRE(resourceObjectsPayload["objects"][0]["id"] == "obj_child");
+
+  const json resourceConsole =
+      ReadResource(protocol, "console://recent", json{{"limit", 2}, {"offset", 1}}, 31);
+  const json resourceConsolePayload =
+      json::parse(resourceConsole["result"]["contents"][0]["text"].get<std::string>());
+  REQUIRE(resourceConsolePayload["offset"] == 1);
+  REQUIRE(resourceConsolePayload["returned"] == 2);
+  REQUIRE(resourceConsolePayload["hasMore"].get<bool>());
+
+  const json resourceHierarchy =
+      ReadResource(protocol, "scene://hierarchy", json{{"limit", 2}, {"offset", 1}}, 32);
+  const json resourceHierarchyPayload =
+      json::parse(resourceHierarchy["result"]["contents"][0]["text"].get<std::string>());
+  REQUIRE(resourceHierarchyPayload["offset"] == 1);
+  REQUIRE(resourceHierarchyPayload["returned"] == 2);
+  REQUIRE(resourceHierarchyPayload["hasMore"].get<bool>());
+
+  const json resourceCatalog =
+      ReadResource(protocol, "assets://catalog", json{{"limit", 1}, {"offset", 1}}, 33);
+  const json resourceCatalogPayload =
+      json::parse(resourceCatalog["result"]["contents"][0]["text"].get<std::string>());
+  REQUIRE(resourceCatalogPayload["offset"] == 1);
+  REQUIRE(resourceCatalogPayload["returned"] == 1);
+  REQUIRE(resourceCatalogPayload["hasMore"].get<bool>());
 
   const json getObject = CallTool(protocol, "editor.get_object", json{{"id", "obj_root"}}, 100);
   REQUIRE(getObject["result"]["structuredContent"]["id"] == "obj_root");

@@ -94,16 +94,22 @@ nlohmann::json BuildAssetsJson(const McpEditorSnapshot& snapshot, size_t assetLi
 nlohmann::json BuildAssetsSelectionJson(const McpEditorSnapshot& snapshot);
 nlohmann::json BuildAssetsCatalogJson(const McpEditorSnapshot& snapshot,
                                       size_t assetLimit = 12,
-                                      const std::string& query = {});
-nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 20);
+                                      const std::string& query = {},
+                                      size_t offset = 0);
+nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot,
+                                size_t lineLimit = 20,
+                                size_t offset = 0);
 nlohmann::json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 5);
 nlohmann::json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit = 5);
 nlohmann::json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                                    size_t objectLimit = 12,
                                    const std::string& typeFilter = {},
                                    const std::string& query = {},
-                                   bool selectedOnly = false);
-nlohmann::json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit = 32);
+                                   bool selectedOnly = false,
+                                   size_t offset = 0);
+nlohmann::json BuildHierarchyJson(const McpEditorSnapshot& snapshot,
+                                  size_t objectLimit = 32,
+                                  size_t offset = 0);
 nlohmann::json BuildObjectJson(const McpObjectSnapshot& object);
 nlohmann::json BuildObjectEdgesJson(const McpObjectSnapshot& object);
 nlohmann::json BuildAssetJson(const McpAssetSnapshot& asset);

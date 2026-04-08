@@ -278,18 +278,20 @@ json BuildResourcePayload(const McpEditorSnapshot& snapshot, const std::string& 
   if (uri == "scene://assets")
     return BuildAssetsJson(snapshot, params.value("limit", 12));
   if (uri == "scene://hierarchy")
-    return BuildHierarchyJson(snapshot, params.value("limit", 32));
+    return BuildHierarchyJson(snapshot, params.value("limit", 32), params.value("offset", 0));
   if (uri == "scene://objects")
     return BuildObjectListJson(snapshot, params.value("limit", 12), params.value("type", std::string()),
-                               params.value("query", std::string()), params.value("selectedOnly", false));
+                               params.value("query", std::string()), params.value("selectedOnly", false),
+                               params.value("offset", 0));
   if (uri == "scene://scene_status")
     return BuildSceneStatusJson(snapshot);
   if (uri == "assets://selection")
     return BuildAssetsSelectionJson(snapshot);
   if (uri == "assets://catalog")
-    return BuildAssetsCatalogJson(snapshot, params.value("limit", 12), params.value("query", std::string()));
+    return BuildAssetsCatalogJson(snapshot, params.value("limit", 12), params.value("query", std::string()),
+                                  params.value("offset", 0));
   if (uri == "console://recent")
-    return BuildConsoleJson(snapshot, params.value("limit", 20));
+    return BuildConsoleJson(snapshot, params.value("limit", 20), params.value("offset", 0));
   if (uri == "console://summary")
     return BuildConsoleSummaryJson(snapshot, params.value("limit", 5));
   if (uri == "build://status")
