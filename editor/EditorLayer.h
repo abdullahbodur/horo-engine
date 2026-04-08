@@ -6,11 +6,14 @@
 #include <unordered_set>
 #include <vector>
 
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 #include "core/LogBuffer.h"
 #include "editor/AssetImportService.h"
 #include "editor/EditorSchema.h"
+#include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/SceneDocument.h"
 #include "editor/TransformGizmo.h"
 #include "mcp/McpController.h"
@@ -122,6 +125,14 @@ class EditorLayer {
 
  private:
   enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
+  enum class PendingSceneAction {
+    None,
+    NewScene,
+    OpenSceneFile,
+    LoadSceneFromDisk,
+    ReloadSceneFromDisk,
+    CloseEditor,
+  };
 
   // Run native file dialogs on the next Render() tick so GLFW/ImGui is not mid-frame.
   enum class DeferredFilePick {
@@ -184,6 +195,8 @@ class EditorLayer {
   void TriggerReload();      // snapshot document → pending and set wantsReload
 
   void DrawToolbar();
+  void DrawDockspace();
+  void DrawViewportPanel(const Camera& cam, int screenW, int screenH);
   void DrawViewGimbal(const Camera& cam);
   void DrawHotReloadOverlay();
   void DrawClipboardToast();
@@ -191,6 +204,7 @@ class EditorLayer {
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
+  void DrawCommandPalettePopup();
   void DrawQuickOpenPopup();
   void DrawStatusBar();
   void DrawBottomDock();
@@ -206,14 +220,22 @@ class EditorLayer {
   void HandlePicking(const Camera& cam, int screenW, int screenH);
   void DrawSelectionHighlight();
   void DrawWireframeOverlay(const Camera& cam);
-  void DrawViewportDropTarget(const Camera& cam, int screenW, int screenH);
   void ApplyPendingViewSnap(Camera& cam);
+  void LoadWorkspaceState();
+  void SaveWorkspaceStateIfNeeded(bool force);
+  void MarkWorkspaceStateDirty();
+  void RefreshViewportPanelRect();
   std::string BuildSelectionRefCode(const SceneObject& obj, int idx) const;
   void RequestDeleteSelectedObjects();
   void RequestDeleteAsset(const std::string& assetId);
+  void RequestSceneAction(PendingSceneAction action);
+  bool ExecutePendingSceneAction(std::string* outError);
+  void ExecuteCommandPaletteAction(const std::string& commandId);
+  bool CreatePrefabFromSelection(std::string* outError = nullptr, std::string* outPrefabPath = nullptr);
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
+  void DuplicateSelectedObjects();
   bool CreateObjectFromAsset(const std::string& assetId,
                              const std::string& parentId = {},
                              const Vec3* worldPosition = nullptr,
@@ -234,6 +256,27 @@ class EditorLayer {
   bool ReloadDocumentFromDisk(std::string* outError,
                               const std::vector<std::string>* preferredSelectionIds = nullptr,
                               const std::string* preferredAssetId = nullptr);
+  struct EditorHistorySnapshot {
+    SceneDocument document;
+    SceneDocument savedDocument;
+    std::vector<std::string> selectedObjectIds;
+    std::string selectedAssetId;
+  };
+  EditorHistorySnapshot CaptureHistorySnapshot() const;
+  void RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot);
+  void CommitHistoryChange(const EditorHistorySnapshot& before);
+  void BeginHistoryTransaction(const EditorHistorySnapshot& before);
+  void FinalizeHistoryTransaction();
+  void ClearHistory();
+  void RefreshHistorySavedBaseline();
+  bool CanUndoHistory() const;
+  bool CanRedoHistory() const;
+  bool UndoHistory();
+  bool RedoHistory();
+  void ApplyLoadedDocument(SceneDocument doc, bool resetHistory);
+  static bool HistorySnapshotsEqual(const EditorHistorySnapshot& lhs,
+                                    const EditorHistorySnapshot& rhs);
+  static void TrimHistory(std::vector<EditorHistorySnapshot>* history);
   struct AssetDeleteResult {
     bool ok = false;
     int clearedReferences = 0;
@@ -297,6 +340,10 @@ class EditorLayer {
   bool m_assetSearchOpen = false;
   std::string m_assetSearchQuery;
   std::string m_objectSearchQuery;
+  Vec3 m_batchTranslateDraft = Vec3::Zero();
+  Vec3 m_batchRotateDraft = Vec3::Zero();
+  Vec3 m_batchScaleDraft = Vec3::One();
+  int m_batchAssetChoice = 0;
   bool m_helpOpen = false;
   bool m_prevHelpToggle = false;
   std::string m_helpSearchQuery;
@@ -307,6 +354,11 @@ class EditorLayer {
   bool m_quickOpenOpen = false;
   bool m_prevQuickOpenToggle = false;
   std::string m_quickOpenQuery;
+  bool m_commandPaletteOpen = false;
+  bool m_prevCommandPaletteToggle = false;
+  std::string m_commandPaletteQuery;
+  bool m_prevUndo = false;
+  bool m_prevRedo = false;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
   bool m_confirmExitOpen = false;
@@ -314,6 +366,7 @@ class EditorLayer {
   std::string m_pendingDeleteAssetId;
   std::string m_pendingDeleteAssetError;
   std::string m_exitConfirmError;
+  PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
   bool m_renameObjectOpen = false;
   int m_renameObjectIndex = -1;
   std::string m_renameObjectDraft;
@@ -323,7 +376,19 @@ class EditorLayer {
   bool m_projectBrowserRootValid = false;
   std::filesystem::path m_projectBrowserCwd;
   bool m_projectBrowserCwdValid = false;
+  std::filesystem::path m_savedProjectBrowserCwd;
   std::unordered_set<std::string> m_projectExtraBlocklist;
+  EditorWorkspaceDocument m_workspaceDocument;
+  bool m_workspaceStateDirty = false;
+  std::string m_imguiIniPath;
+  bool m_hasPersistedDockLayout = false;
+  bool m_resetDockLayoutRequested = false;
+  EditorViewportRect m_viewportPanelRect;
+  std::vector<EditorHistorySnapshot> m_undoHistory;
+  std::vector<EditorHistorySnapshot> m_redoHistory;
+  bool m_historyTransactionOpen = false;
+  EditorHistorySnapshot m_historyTransactionBefore;
+  bool m_gizmoHistoryPending = false;
 
   // Wireframe overlay
   bool m_wireframeMode = false;

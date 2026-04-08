@@ -47,6 +47,7 @@
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
@@ -77,28 +78,87 @@ namespace {
 // or the status strip.
 constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
-constexpr float kBottomDockH = 200.0f;
-constexpr float kLeftDockW = 308.0f;
+constexpr float kHierarchySectionRatio = 0.56f;
+constexpr char kEditorHierarchyWindow[] = "Hierarchy";
+constexpr char kEditorAssetsWindow[] = "Assets";
+constexpr char kEditorWorkspaceWindow[] = "Workspace";
+constexpr char kEditorPropertiesWindow[] = "Properties";
+constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
+constexpr size_t kMaxEditorHistorySnapshots = 128;
 
-// Split Objects (top) vs Assets (bottom) within [toolbar .. status]. Small gap so they
-// never z-fight at the seam.
-static void ComputeLeftColumnLayout(const ImGuiIO& io,
-                                    float* outObjectsTop,
-                                    float* outObjectsH,
-                                    float* outAssetsTop,
-                                    float* outAssetsH) {
-  const float workTop = kEditorToolbarH;
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  const float workH = std::max(0.0f, workBottom - workTop);
-  constexpr float kMidGap = 4.0f;
-  const float mid = workTop + workH * 0.52f;
-  *outObjectsTop = workTop;
-  *outObjectsH = std::max(48.0f, mid - workTop - kMidGap * 0.5f);
-  *outAssetsTop = mid + kMidGap * 0.5f;
-  *outAssetsH = std::max(64.0f, workBottom - *outAssetsTop);
+bool AssetDefsEqual(const AssetDef& lhs, const AssetDef& rhs) {
+  return lhs.mesh == rhs.mesh &&
+         lhs.renderScale == rhs.renderScale &&
+         lhs.albedoMap == rhs.albedoMap &&
+         lhs.guid == rhs.guid &&
+         lhs.displayName == rhs.displayName;
 }
+
+bool ComponentDescsEqual(const ComponentDesc& lhs, const ComponentDesc& rhs) {
+  return lhs.type == rhs.type && lhs.props == rhs.props;
+}
+
+bool SceneObjectsEqual(const SceneObject& lhs, const SceneObject& rhs) {
+  const bool prefabEqual =
+      (!lhs.prefabInstance.has_value() && !rhs.prefabInstance.has_value()) ||
+      (lhs.prefabInstance.has_value() && rhs.prefabInstance.has_value() &&
+       lhs.prefabInstance->prefabId == rhs.prefabInstance->prefabId &&
+       lhs.prefabInstance->sourcePath == rhs.prefabInstance->sourcePath);
+  if (lhs.id != rhs.id ||
+      lhs.type != rhs.type ||
+      lhs.position.x != rhs.position.x ||
+      lhs.position.y != rhs.position.y ||
+      lhs.position.z != rhs.position.z ||
+      lhs.scale.x != rhs.scale.x ||
+      lhs.scale.y != rhs.scale.y ||
+      lhs.scale.z != rhs.scale.z ||
+      lhs.yaw != rhs.yaw ||
+      lhs.pitch != rhs.pitch ||
+      lhs.roll != rhs.roll ||
+      lhs.assetId != rhs.assetId ||
+      !prefabEqual ||
+      lhs.props != rhs.props ||
+      lhs.components.size() != rhs.components.size()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < lhs.components.size(); ++i) {
+    if (!ComponentDescsEqual(lhs.components[i], rhs.components[i]))
+      return false;
+  }
+  return true;
+}
+
+bool SceneDocumentsEqual(const SceneDocument& lhs, const SceneDocument& rhs) {
+  if (lhs.version != rhs.version ||
+      lhs.sceneId != rhs.sceneId ||
+      lhs.sceneName != rhs.sceneName ||
+      lhs.filePath != rhs.filePath ||
+      lhs.settings != rhs.settings ||
+      lhs.assets.size() != rhs.assets.size() ||
+      lhs.objects.size() != rhs.objects.size()) {
+    return false;
+  }
+
+  for (const auto& [assetId, asset] : lhs.assets) {
+    const auto it = rhs.assets.find(assetId);
+    if (it == rhs.assets.end() || !AssetDefsEqual(asset, it->second))
+      return false;
+  }
+
+  for (size_t i = 0; i < lhs.objects.size(); ++i) {
+    if (!SceneObjectsEqual(lhs.objects[i], rhs.objects[i]))
+      return false;
+  }
+
+  return true;
+}
+
+constexpr ImGuiWindowFlags kMainPanelWindowFlags =
+    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoSavedSettings;
 
 // World-space selection / picking bounds for a prop when ECS has a valid _eid.
 bool TryPropWorldAabb(Registry& reg, const SceneObject& obj, Vec3& outCenter, Vec3& outHalf) {
@@ -175,6 +235,33 @@ static int FindObjectIndexById(const SceneDocument& doc, const std::string& id) 
       return i;
   }
   return -1;
+}
+
+std::string SanitizePrefabStem(std::string value) {
+  for (char& ch : value) {
+    const bool alphaNum = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                          (ch >= '0' && ch <= '9');
+    if (!alphaNum && ch != '_' && ch != '-')
+      ch = '_';
+  }
+  while (!value.empty() && value.front() == '_')
+    value.erase(value.begin());
+  while (!value.empty() && value.back() == '_')
+    value.pop_back();
+  return value.empty() ? "prefab" : value;
+}
+
+std::filesystem::path BuildUniquePrefabPath(const SceneDocument& doc, const SceneObject& object) {
+  const std::filesystem::path prefabDir = ProjectPath::Resolve("assets/prefabs");
+  const std::string stemBase = SanitizePrefabStem(object.id.empty() ? doc.sceneId + "_prefab"
+                                                                    : object.id + "_prefab");
+  std::filesystem::path candidate = prefabDir / (stemBase + ".horo");
+  int suffix = 2;
+  while (std::filesystem::exists(candidate)) {
+    candidate = prefabDir / (stemBase + "_" + std::to_string(suffix) + ".horo");
+    ++suffix;
+  }
+  return candidate;
 }
 
 static bool IsDescendantOf(const SceneDocument& doc, int nodeIdx, int ancestorIdx) {
@@ -1033,7 +1120,19 @@ void EditorLayer::Init(GLFWwindow* window) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGui::StyleColorsDark();
-  ImGui::GetIO().IniFilename = nullptr;  // don't write imgui.ini
+  ImGuiIO& io = ImGui::GetIO();
+  m_imguiIniPath = ResolveEditorLayoutPath().string();
+  std::error_code settingsEc;
+  std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(), settingsEc);
+  if (settingsEc) {
+    LOG_WARN("[Editor] Failed to ensure editor settings directory: %s", settingsEc.message().c_str());
+    m_imguiIniPath.clear();
+    io.IniFilename = nullptr;
+  } else {
+    m_hasPersistedDockLayout = std::filesystem::exists(ResolveEditorLayoutPath());
+    io.IniFilename = m_imguiIniPath.c_str();
+  }
+  LoadWorkspaceState();
 
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 410");
@@ -1057,6 +1156,9 @@ void EditorLayer::Init(GLFWwindow* window) {
 }
 
 void EditorLayer::Shutdown() {
+  SaveWorkspaceStateIfNeeded(true);
+  if (!m_imguiIniPath.empty())
+    ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
   m_mcpController.Shutdown();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -1098,6 +1200,18 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   }
   m_projectBrowserRoot = std::move(canon);
   m_projectBrowserRootValid = true;
+  if (!m_savedProjectBrowserCwd.empty()) {
+    std::filesystem::path preferred = m_savedProjectBrowserCwd;
+    if (preferred.is_relative())
+      preferred = m_projectBrowserRoot / preferred;
+    preferred = std::filesystem::weakly_canonical(preferred, ec);
+    if (!ec && std::filesystem::is_directory(preferred) &&
+        preferred.native().rfind(m_projectBrowserRoot.native(), 0) == 0) {
+      m_projectBrowserCwd = std::move(preferred);
+      m_projectBrowserCwdValid = true;
+      return;
+    }
+  }
   m_projectBrowserCwd = m_projectBrowserRoot;
   m_projectBrowserCwdValid = true;
 }
@@ -1111,7 +1225,48 @@ void EditorLayer::InvalidateProjectBrowserCache() {
   m_projectDirCache.clear();
 }
 
-void EditorLayer::LoadDocument(SceneDocument doc) {
+void EditorLayer::LoadWorkspaceState() {
+  m_workspaceDocument = LoadEditorWorkspaceDocument();
+  if (m_workspaceDocument.parseError) {
+    LOG_WARN("[Editor] Workspace settings load fallback: %s", m_workspaceDocument.error.c_str());
+  }
+
+  m_consoleShowInfo = m_workspaceDocument.state.consoleShowInfo;
+  m_consoleShowWarn = m_workspaceDocument.state.consoleShowWarn;
+  m_consoleShowError = m_workspaceDocument.state.consoleShowError;
+  if (!m_workspaceDocument.state.projectBrowserCwd.empty())
+    m_savedProjectBrowserCwd = std::filesystem::path(m_workspaceDocument.state.projectBrowserCwd);
+  m_workspaceStateDirty = false;
+}
+
+void EditorLayer::SaveWorkspaceStateIfNeeded(bool force) {
+  if (!force && !m_workspaceStateDirty)
+    return;
+
+  m_workspaceDocument.state.consoleShowInfo = m_consoleShowInfo;
+  m_workspaceDocument.state.consoleShowWarn = m_consoleShowWarn;
+  m_workspaceDocument.state.consoleShowError = m_consoleShowError;
+  if (m_projectBrowserCwdValid && !m_projectBrowserCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = m_projectBrowserCwd.generic_string();
+  } else if (!m_savedProjectBrowserCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = m_savedProjectBrowserCwd.generic_string();
+  } else {
+    m_workspaceDocument.state.projectBrowserCwd.clear();
+  }
+
+  std::string saveError;
+  if (!SaveEditorWorkspaceDocument(&m_workspaceDocument, &saveError)) {
+    LOG_WARN("[Editor] Failed to save workspace settings: %s", saveError.c_str());
+    return;
+  }
+  m_workspaceStateDirty = false;
+}
+
+void EditorLayer::MarkWorkspaceStateDirty() {
+  m_workspaceStateDirty = true;
+}
+
+void EditorLayer::ApplyLoadedDocument(SceneDocument doc, bool resetHistory) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/scene.json";
 
@@ -1147,6 +1302,12 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
+  if (resetHistory)
+    ClearHistory();
+}
+
+void EditorLayer::LoadDocument(SceneDocument doc) {
+  ApplyLoadedDocument(std::move(doc), true);
 }
 
 void EditorLayer::OnPathsDropped(int pathCount, const char** utf8Paths, float dropX, float dropY) {
@@ -1332,7 +1493,8 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevHelpToggle = currHelpToggle;
 
-    const bool currQuickOpenToggle = accelHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    const bool currQuickOpenToggle =
+        accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
     if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle, m_flyMode,
                             io.WantTextInput, ImGui::IsAnyItemActive())) {
       m_quickOpenOpen = true;
@@ -1340,14 +1502,44 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
     }
     m_prevQuickOpenToggle = currQuickOpenToggle;
 
+    const bool currCommandPaletteToggle =
+        accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
+    if (ShouldOpenCommandPalette(currCommandPaletteToggle,
+                                 m_prevCommandPaletteToggle,
+                                 m_flyMode,
+                                 io.WantTextInput,
+                                 ImGui::IsAnyItemActive())) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
+    m_prevCommandPaletteToggle = currCommandPaletteToggle;
+
     const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
-    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_assetSearchOpen ||
+    const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen || m_commandPaletteOpen ||
+                                  m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
+    const bool currUndo = accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS;
+    const bool currRedo =
+        accelHeld &&
+        ((shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS) ||
+         glfwGetKey(m_window, GLFW_KEY_Y) == GLFW_PRESS);
+    if (!m_flyMode && !io.WantTextInput && !ImGui::IsAnyItemActive() && !hasBlockingPopup) {
+      if (currUndo && !m_prevUndo)
+        UndoHistory();
+      if (currRedo && !m_prevRedo)
+        RedoHistory();
+    }
+    m_prevUndo = currUndo;
+    m_prevRedo = currRedo;
     // Escape: dismiss gizmo only (no editor quit on Escape; use File / window close).
     if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
         !hasBlockingPopup && m_gizmo.IsActive()) {
       m_gizmo.Deactivate();
+      if (m_gizmoHistoryPending) {
+        FinalizeHistoryTransaction();
+        m_gizmoHistoryPending = false;
+      }
     }
     m_prevEsc = currEsc;
 
@@ -1419,6 +1611,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
         if (syncIdx < 0 ||
             syncIdx >= static_cast<int>(m_document.objects.size())) {
           m_gizmo.Deactivate();
+          if (m_gizmoHistoryPending) {
+            FinalizeHistoryTransaction();
+            m_gizmoHistoryPending = false;
+          }
         } else {
           const auto& syncObj = m_document.objects[syncIdx];
           Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
@@ -1531,6 +1727,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                      || std::abs(dScale.y - 1.0f) > 1e-6f
                      || std::abs(dScale.z - 1.0f) > 1e-6f;
         if (anyDelta) {
+          if (!m_gizmoHistoryPending) {
+            BeginHistoryTransaction(CaptureHistorySnapshot());
+            m_gizmoHistoryPending = true;
+          }
           for (int si : m_selectedIndices) {
             if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
               continue;
@@ -1565,6 +1765,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                 m_document, si, oldObjPos, oldObjRot,
                 applyObj.position, nextRot, m_transformCb, m_selectedIndices);
           }
+        }
+        if (m_gizmoHistoryPending && m_gizmo.GetDragAxis() == GizmoAxis::None) {
+          FinalizeHistoryTransaction();
+          m_gizmoHistoryPending = false;
         }
       }
 
@@ -1676,6 +1880,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     m_albedoDraftDrop.Clear();
     m_albedoSelDrop.Clear();
     m_viewGizmoPickRect.Clear();
+    m_viewportPanelRect = {};
   }
   ProcessPendingPathDrops();
 
@@ -1683,23 +1888,28 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
+  const EditorHistorySnapshot frameHistoryBefore = m_active ? CaptureHistorySnapshot()
+                                                            : EditorHistorySnapshot{};
+  const size_t undoHistorySizeBeforeRender = m_undoHistory.size();
+  const size_t redoHistorySizeBeforeRender = m_redoHistory.size();
+
   if (m_active) {
     DrawToolbar();
-    if (!m_playMode)
-      DrawViewGimbal(cam);
+    DrawDockspace();
+    DrawViewportPanel(cam, screenW, screenH);
     DrawObjectList();
     DrawAssetsPanel();
-    if (!m_playMode)
-      DrawViewportDropTarget(cam, screenW, screenH);
     DrawPropertiesPanel();
     DrawBottomDock();
     DrawStatusBar();
     DrawHelpPopup();
+    DrawCommandPalettePopup();
     DrawQuickOpenPopup();
     DrawSettingsModal();
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     if (!m_playMode) {
+      DrawViewGimbal(cam);
       DrawSelectionHighlight();  // queues to DebugDraw
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
@@ -1707,6 +1917,14 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   }
   DrawHotReloadOverlay();
   DrawClipboardToast();
+  SaveWorkspaceStateIfNeeded(false);
+
+  if (m_active &&
+      !m_historyTransactionOpen &&
+      m_undoHistory.size() == undoHistorySizeBeforeRender &&
+      m_redoHistory.size() == redoHistorySizeBeforeRender) {
+    CommitHistoryChange(frameHistoryBefore);
+  }
 
   // Wireframe pass: clears solid scene and draws edges; must happen before
   // DebugDraw::Flush so selection highlight/gizmo render on top.
@@ -1718,6 +1936,101 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void EditorLayer::DrawDockspace() {
+  if (!m_resetDockLayoutRequested)
+    return;
+
+  ImGui::LoadIniSettingsFromMemory("", 0);
+  if (!m_imguiIniPath.empty()) {
+    std::error_code ec;
+    std::filesystem::remove(ResolveEditorLayoutPath(), ec);
+    ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
+  }
+  m_hasPersistedDockLayout = false;
+  m_resetDockLayoutRequested = false;
+}
+
+void EditorLayer::RefreshViewportPanelRect() {
+  const ImVec2 winPos = ImGui::GetWindowPos();
+  const ImVec2 innerMin = ImGui::GetWindowContentRegionMin();
+  const ImVec2 innerMax = ImGui::GetWindowContentRegionMax();
+  m_viewportPanelRect.minX = winPos.x + innerMin.x;
+  m_viewportPanelRect.minY = winPos.y + innerMin.y;
+  m_viewportPanelRect.maxX = winPos.x + innerMax.x;
+  m_viewportPanelRect.maxY = winPos.y + innerMax.y;
+}
+
+void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH) {
+  struct ViewportAssetDropContext {
+    EditorLayer* editor = nullptr;
+    const Camera* camera = nullptr;
+    int screenW = 0;
+    int screenH = 0;
+  };
+
+  ImGuiIO& io = ImGui::GetIO();
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const EditorViewportRect defaultRect =
+      BuildEditorViewportRect(io.DisplaySize.x,
+                              io.DisplaySize.y,
+                              kEditorToolbarH,
+                              kEditorStatusH,
+                              bottomDockH,
+                              leftDockW,
+                              rightDockW);
+  ImGui::SetNextWindowPos(ImVec2(defaultRect.minX, defaultRect.minY), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(defaultRect.maxX - defaultRect.minX,
+                                  defaultRect.maxY - defaultRect.minY),
+                           ImGuiCond_Always);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+  ImGui::SetNextWindowBgAlpha(0.06f);
+  m_viewportPanelRect = {};
+  if (ImGui::Begin(kEditorViewportWindow,
+                   nullptr,
+                   kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
+                       ImGuiWindowFlags_NoScrollWithMouse)) {
+    RefreshViewportPanelRect();
+    const ImVec2 dropTargetSize = ImGui::GetContentRegionAvail();
+    ViewportAssetDropContext dropContext{this, &cam, screenW, screenH};
+    DrawViewportAssetDropTarget(
+        m_playMode,
+        dropTargetSize.x,
+        dropTargetSize.y,
+        &dropContext,
+        [](void* userData, const char* assetIdText) -> bool {
+          auto* context = static_cast<ViewportAssetDropContext*>(userData);
+          if (!context || !context->editor || !context->camera || !assetIdText)
+            return false;
+
+          EditorLayer& editor = *context->editor;
+          const std::string assetId(assetIdText);
+          if (editor.m_document.assets.find(assetId) == editor.m_document.assets.end()) {
+            LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
+            return false;
+          }
+
+          Vec3 dropPos = Vec3::Zero();
+          if (!editor.TryBuildViewportDropPosition(
+                  *context->camera, context->screenW, context->screenH, assetId, &dropPos)) {
+            LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
+            return false;
+          }
+
+          std::string createError;
+          if (!editor.CreateObjectFromAsset(
+                  assetId, std::string(), &dropPos, nullptr, nullptr, &createError)) {
+            LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
+            return false;
+          }
+          return true;
+        });
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
 }
 
 void EditorLayer::DrawClipboardToast() {
@@ -1791,6 +2104,7 @@ void EditorLayer::DrawToolbar() {
 
   const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
                                 m_document.assets.find(m_selectedAssetId) != m_document.assets.end();
+  const bool hasSelection = !m_selectedIndices.empty();
   const int primaryIdx = PrimaryIdx();
   const bool hasSingleSelection = CanEditSingleSelection(
       static_cast<int>(m_selectedIndices.size()),
@@ -1801,9 +2115,11 @@ void EditorLayer::DrawToolbar() {
     ImGui::OpenPopup("##toolbar_file_popup");
   if (ImGui::BeginPopup("##toolbar_file_popup")) {
     if (ImGui::MenuItem("New Scene"))
-      AddNewScene();
+      RequestSceneAction(PendingSceneAction::NewScene);
     if (ImGui::MenuItem("Open Scene..."))
-      OpenAdditionalSceneFile();
+      RequestSceneAction(PendingSceneAction::OpenSceneFile);
+    if (ImGui::MenuItem("Reset Layout"))
+      m_resetDockLayoutRequested = true;
     ImGui::Separator();
     if (ImGui::MenuItem("Settings...")) {
       m_settingsOpen = true;
@@ -1837,18 +2153,42 @@ void EditorLayer::DrawToolbar() {
   }
   ImGui::SameLine();
 
-  if (!hasSingleSelection)
-    ImGui::BeginDisabled();
   if (ImGui::Button("Edit"))
     ImGui::OpenPopup("##toolbar_edit_popup");
   if (ImGui::BeginPopup("##toolbar_edit_popup")) {
+    if (!CanUndoHistory())
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z"))
+      UndoHistory();
+    if (!CanUndoHistory())
+      ImGui::EndDisabled();
+    if (!CanRedoHistory())
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y"))
+      RedoHistory();
+    if (!CanRedoHistory())
+      ImGui::EndDisabled();
+    ImGui::Separator();
+    if (!hasSelection)
+      ImGui::BeginDisabled();
+    if (!hasSingleSelection)
+      ImGui::BeginDisabled();
     if (ImGui::MenuItem("Rename..."))
       OpenRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Create Prefab")) {
+      std::string prefabError;
+      if (!CreatePrefabFromSelection(&prefabError))
+        LOG_ERROR("[Editor] Create prefab failed: %s", prefabError.c_str());
+    }
+    if (!hasSingleSelection)
+      ImGui::EndDisabled();
     if (ImGui::MenuItem("Duplicate"))
-      DuplicatePrimarySelection();
+      DuplicateSelectedObjects();
     if (ImGui::MenuItem("Delete"))
       RequestDeleteSelectedObjects();
     ImGui::Separator();
+    if (!hasSingleSelection)
+      ImGui::BeginDisabled();
     if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C")) {
       const int idx = PrimaryIdx();
       if (idx >= 0 && idx < static_cast<int>(m_document.objects.size())) {
@@ -1858,10 +2198,12 @@ void EditorLayer::DrawToolbar() {
         m_clipboardToastTime = 1.5f;
       }
     }
+    if (!hasSingleSelection)
+      ImGui::EndDisabled();
+    if (!hasSelection)
+      ImGui::EndDisabled();
     ImGui::EndPopup();
   }
-  if (!hasSingleSelection)
-    ImGui::EndDisabled();
   ImGui::SameLine();
 
   if (ImGui::Button("View"))
@@ -1881,6 +2223,12 @@ void EditorLayer::DrawToolbar() {
       m_helpOpen = true;
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
+    if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
+      m_commandPaletteOpen = true;
+      m_commandPaletteQuery.clear();
+    }
+    if (ImGui::MenuItem("Reset Layout"))
+      m_resetDockLayoutRequested = true;
     ImGui::EndPopup();
   }
   ImGui::SameLine();
@@ -1911,14 +2259,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SetCursorPosX(io.DisplaySize.x - rightW);
 
   if (ImGui::Button("Load")) {
-    std::string path =
-        m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
-    try {
-      m_document = SceneSerializer::LoadFromFile(path);
-      m_selectedIndices.clear();
-    } catch (const std::exception& e) {
-      LOG_ERROR("EditorLayer: failed to load scene: %s", e.what());
-    }
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
   }
   ImGui::SameLine();
 
@@ -1937,13 +2278,7 @@ void EditorLayer::DrawToolbar() {
   ImGui::SameLine();
 
   if (ImGui::Button("Close editor")) {
-    if (ResolveEditorExitDecision(m_document.dirty) ==
-        EditorExitDecision::PromptUnsavedConfirm) {
-      m_confirmExitOpen = true;
-      m_exitConfirmError.clear();
-    } else {
-      m_closeRequested = true;
-    }
+    RequestSceneAction(PendingSceneAction::CloseEditor);
   }
 
   ImGui::End();
@@ -2059,14 +2394,11 @@ static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
 
 void EditorLayer::DrawBottomDock() {
   ImGuiIO& io = ImGui::GetIO();
-  const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop));
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kBottomDockH));
-  ImGui::SetNextWindowBgAlpha(0.88f);
-  ImGui::Begin("##editor_bottom_dock",
-               nullptr,
-               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH), ImGuiCond_Always);
+  ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
   if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Project")) {
@@ -2200,6 +2532,8 @@ void EditorLayer::DrawBottomDock() {
         if (cwdChanged) {
           m_projectBrowserCwd = std::move(nextCwd);
           m_projectBrowserCwdValid = true;
+          m_savedProjectBrowserCwd = m_projectBrowserCwd;
+          MarkWorkspaceStateDirty();
         }
 
         ImGui::EndChild();
@@ -2216,11 +2550,14 @@ void EditorLayer::DrawBottomDock() {
       if (ImGui::SmallButton("Clear"))
         LogBuffer::Instance().Clear();
       ImGui::SameLine();
-      ImGui::Checkbox("Info", &m_consoleShowInfo);
+      if (ImGui::Checkbox("Info", &m_consoleShowInfo))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
-      ImGui::Checkbox("Warn", &m_consoleShowWarn);
+      if (ImGui::Checkbox("Warn", &m_consoleShowWarn))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
-      ImGui::Checkbox("Error", &m_consoleShowError);
+      if (ImGui::Checkbox("Error", &m_consoleShowError))
+        MarkWorkspaceStateDirty();
       ImGui::SameLine();
       ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
 
@@ -2536,11 +2873,16 @@ void EditorLayer::DrawSettingsModal() {
 
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
-  constexpr float kPanelW = 280.0f;
   constexpr float kWinW = 128.0f;
   constexpr float kWinH = 138.0f;
-  const float wx = io.DisplaySize.x - kPanelW - kWinW - 10.0f;
-  const float wy = 42.0f;
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float viewportRight = m_viewportPanelRect.maxX > m_viewportPanelRect.minX
+                                  ? m_viewportPanelRect.maxX
+                                  : io.DisplaySize.x - rightDockW;
+  const float viewportTop =
+      m_viewportPanelRect.maxY > m_viewportPanelRect.minY ? m_viewportPanelRect.minY : kEditorToolbarH;
+  const float wx = viewportRight - kWinW - 10.0f;
+  const float wy = viewportTop + 10.0f;
 
   // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
   constexpr float kBtnSize = 28.0f;
@@ -2709,17 +3051,13 @@ static const char* ObjectTypeIcon(SceneObjectType type) {
 
 void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
-  float objTop = 0.0f;
-  float objH = 0.0f;
-  float asTop = 0.0f;
-  float asH = 0.0f;
-  ComputeLeftColumnLayout(io, &objTop, &objH, &asTop, &asH);
-
-  ImGui::SetNextWindowPos(ImVec2(0.0f, objTop));
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, objH));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, hierarchyHeight), ImGuiCond_Always);
+  ImGui::Begin(kEditorHierarchyWindow, nullptr, kMainPanelWindowFlags);
 
   // Search bar (applies to primary scene)
   char searchBuf[256] = {};
@@ -3214,10 +3552,7 @@ void EditorLayer::OpenAdditionalSceneFile() {
   if (GetOpenFileNameA(&ofn)) {
     try {
       SceneDocument doc = SceneSerializer::LoadFromFile(filePath);
-      m_document = std::move(doc);
-      m_lastSavedDocument = m_document;
-      m_selectedIndices.clear();
-      m_selectedAssetId.clear();
+      ApplyLoadedDocument(std::move(doc), false);
     } catch (const std::exception& e) {
       LOG_ERROR("EditorLayer: failed to open scene '{}': {}", filePath, e.what());
     }
@@ -3253,17 +3588,14 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string* outError) {
 
 void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  float objTop = 0.0f;
-  float objH = 0.0f;
-  float assetsTop = 0.0f;
-  float assetsH = 0.0f;
-  ComputeLeftColumnLayout(io, &objTop, &objH, &assetsTop, &assetsH);
-
-  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop));
-  ImGui::SetNextWindowSize(ImVec2(kLeftDockW, assetsH));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight = std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float assetsTop = kEditorToolbarH + hierarchyHeight + 4.0f;
+  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(leftDockW, std::max(180.0f, workBottom - assetsTop)), ImGuiCond_Always);
+  ImGui::Begin(kEditorAssetsWindow, nullptr, kMainPanelWindowFlags);
 
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
@@ -3273,7 +3605,7 @@ void EditorLayer::DrawAssetsPanel() {
   if (ImGui::Button("+", ImVec2(28.0f, 0.0f)))
     m_openNewAssetHeader = true;
   ImGui::SameLine();
-  ImGui::SetCursorPosX(kLeftDockW - 74.0f);
+  ImGui::SetCursorPosX(std::max(0.0f, ImGui::GetWindowContentRegionMax().x - 74.0f));
   if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
     m_assetSearchOpen = true;
     m_assetSearchQuery.clear();
@@ -3646,6 +3978,55 @@ void EditorLayer::DrawHelpPopup() {
   ImGui::End();
 }
 
+void EditorLayer::DrawCommandPalettePopup() {
+  if (m_commandPaletteOpen) {
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::IsPopupOpen("Command Palette"))
+      ImGui::OpenPopup("Command Palette");
+  }
+
+  if (!ImGui::BeginPopupModal("Command Palette", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    return;
+
+  ImGui::TextDisabled("Search commands");
+  ImGui::SetNextItemWidth(480.0f);
+  char queryBuf[256] = {};
+  std::snprintf(queryBuf, sizeof(queryBuf), "%s", m_commandPaletteQuery.c_str());
+  if (ImGui::InputTextWithHint("##command_palette_input",
+                               "Type a command...",
+                               queryBuf,
+                               sizeof(queryBuf))) {
+    m_commandPaletteQuery = queryBuf;
+  }
+
+  ImGui::Separator();
+  bool executed = false;
+  int shownCount = 0;
+  for (const CommandPaletteRow& row : GetEditorCommands()) {
+    if (!MatchesCommandPaletteQuery(row, m_commandPaletteQuery))
+      continue;
+
+    const std::string label = std::string(row.command) + "##cmd_" + row.id;
+    if (ImGui::Selectable(label.c_str(), false)) {
+      ExecuteCommandPaletteAction(row.id);
+      executed = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", row.keys);
+    ++shownCount;
+  }
+
+  if (shownCount == 0)
+    ImGui::TextDisabled("No command matches '%s'", m_commandPaletteQuery.c_str());
+
+  if (executed || ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    m_commandPaletteOpen = false;
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
 void EditorLayer::DrawQuickOpenPopup() {
   if (m_quickOpenOpen) {
     ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
@@ -3828,8 +4209,29 @@ void EditorLayer::DrawExitConfirmModal() {
   if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     return;
 
+  const char* actionLabel = "continue";
+  switch (m_pendingSceneAction) {
+    case PendingSceneAction::NewScene:
+      actionLabel = "create a new scene";
+      break;
+    case PendingSceneAction::OpenSceneFile:
+      actionLabel = "open another scene";
+      break;
+    case PendingSceneAction::LoadSceneFromDisk:
+      actionLabel = "load the scene from disk";
+      break;
+    case PendingSceneAction::ReloadSceneFromDisk:
+      actionLabel = "reload the scene";
+      break;
+    case PendingSceneAction::CloseEditor:
+      actionLabel = "exit editor mode";
+      break;
+    case PendingSceneAction::None:
+      break;
+  }
+
   ImGui::TextUnformatted("You have unsaved changes.");
-  ImGui::TextDisabled("Are you sure you want to exit editor mode?");
+  ImGui::TextDisabled("Save or discard them before you %s.", actionLabel);
   ImGui::Separator();
 
   if (!m_exitConfirmError.empty())
@@ -3838,26 +4240,32 @@ void EditorLayer::DrawExitConfirmModal() {
   if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
+    m_pendingSceneAction = PendingSceneAction::None;
     ImGui::CloseCurrentPopup();
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Discard & Exit", ImVec2(120.0f, 0.0f))) {
-    DiscardUnsavedChanges();
+  if (ImGui::Button("Discard", ImVec2(120.0f, 0.0f))) {
+    if (m_pendingSceneAction == PendingSceneAction::CloseEditor)
+      DiscardUnsavedChanges();
     m_confirmExitOpen = false;
     m_exitConfirmError.clear();
     ImGui::CloseCurrentPopup();
-    m_closeRequested = true;
+    std::string actionError;
+    if (!ExecutePendingSceneAction(&actionError))
+      m_exitConfirmError = actionError;
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Save & Exit", ImVec2(120.0f, 0.0f))) {
+  if (ImGui::Button("Save & Continue", ImVec2(120.0f, 0.0f))) {
     std::string saveError;
     if (SaveDocument(&saveError)) {
       m_confirmExitOpen = false;
       m_exitConfirmError.clear();
       ImGui::CloseCurrentPopup();
-      m_closeRequested = true;
+      std::string actionError;
+      if (!ExecutePendingSceneAction(&actionError))
+        m_exitConfirmError = actionError;
     } else {
       m_exitConfirmError = saveError;
     }
@@ -3870,20 +4278,116 @@ void EditorLayer::DrawExitConfirmModal() {
 
 void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
-  const float W = 280.0f;
-  const float workTop = kEditorToolbarH;
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - W, workTop));
-  ImGui::SetNextWindowSize(ImVec2(W, workBottom - workTop));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::Begin(
-      "Properties", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightDockW, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(rightDockW, std::max(260.0f, workBottom - kEditorToolbarH)),
+                           ImGuiCond_Always);
+  ImGui::Begin(kEditorPropertiesWindow, nullptr, kMainPanelWindowFlags);
 
   // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
     ImGui::Text("%d objects selected", static_cast<int>(m_selectedIndices.size()));
     ImGui::Separator();
+
+    std::string sharedAssetId;
+    bool hasSharedAssetId = true;
+    bool firstObject = true;
+    for (int idx : m_selectedIndices) {
+      if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+        continue;
+      const SceneObject& selected = m_document.objects[static_cast<size_t>(idx)];
+      if (firstObject) {
+        sharedAssetId = selected.assetId;
+        firstObject = false;
+      } else if (sharedAssetId != selected.assetId) {
+        hasSharedAssetId = false;
+        break;
+      }
+    }
+
+    ImGui::TextDisabled("Asset");
+    if (firstObject) {
+      ImGui::TextDisabled("No valid selection");
+    } else if (hasSharedAssetId && sharedAssetId.empty()) {
+      ImGui::TextUnformatted("<none>");
+    } else if (hasSharedAssetId) {
+      ImGui::TextUnformatted(sharedAssetId.c_str());
+    } else {
+      ImGui::TextDisabled("Mixed");
+    }
+
+    std::vector<const char*> assetItems;
+    assetItems.reserve(m_document.assets.size() + 2);
+    assetItems.push_back("<keep current>");
+    assetItems.push_back("<clear>");
+    std::vector<std::string> assetIds;
+    assetIds.reserve(m_document.assets.size());
+    for (const auto& [assetId, _] : m_document.assets)
+      assetIds.push_back(assetId);
+    std::sort(assetIds.begin(), assetIds.end());
+    for (const std::string& assetId : assetIds)
+      assetItems.push_back(assetId.c_str());
+
+    ImGui::Combo("Batch Asset", &m_batchAssetChoice, assetItems.data(), static_cast<int>(assetItems.size()));
+    if (ImGui::Button("Apply Asset")) {
+      if (m_batchAssetChoice == 1) {
+        for (int idx : m_selectedIndices) {
+          if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            m_document.objects[static_cast<size_t>(idx)].assetId.clear();
+        }
+      } else if (m_batchAssetChoice > 1) {
+        const std::string selectedAssetId = assetIds[static_cast<size_t>(m_batchAssetChoice - 2)];
+        for (int idx : m_selectedIndices) {
+          if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            m_document.objects[static_cast<size_t>(idx)].assetId = selectedAssetId;
+        }
+      }
+      if (m_batchAssetChoice > 0) {
+        SyncAssetScaleMetadata(&m_document);
+        m_document.dirty = true;
+        TriggerReload();
+      }
+    }
+
+    ImGui::Separator();
+    float moveBy[3] = {m_batchTranslateDraft.x, m_batchTranslateDraft.y, m_batchTranslateDraft.z};
+    if (ImGui::DragFloat3("Move By", moveBy, 0.05f))
+      m_batchTranslateDraft = {moveBy[0], moveBy[1], moveBy[2]};
+
+    float rotateBy[3] = {m_batchRotateDraft.x, m_batchRotateDraft.y, m_batchRotateDraft.z};
+    if (ImGui::DragFloat3("Rotate By (P/Y/R)", rotateBy, 1.0f))
+      m_batchRotateDraft = {rotateBy[0], rotateBy[1], rotateBy[2]};
+
+    float scaleBy[3] = {m_batchScaleDraft.x, m_batchScaleDraft.y, m_batchScaleDraft.z};
+    if (ImGui::DragFloat3("Scale By", scaleBy, 0.02f, 0.01f, 20.0f))
+      m_batchScaleDraft = {scaleBy[0], scaleBy[1], scaleBy[2]};
+
+    if (ImGui::Button("Apply Batch Transform")) {
+      for (int idx : m_selectedIndices) {
+        if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+          continue;
+        SceneObject& object = m_document.objects[static_cast<size_t>(idx)];
+        object.position = object.position + m_batchTranslateDraft;
+        object.pitch += m_batchRotateDraft.x;
+        object.yaw += m_batchRotateDraft.y;
+        object.roll += m_batchRotateDraft.z;
+        object.scale.x *= m_batchScaleDraft.x;
+        object.scale.y *= m_batchScaleDraft.y;
+        object.scale.z *= m_batchScaleDraft.z;
+        if (m_transformCb)
+          m_transformCb(object);
+      }
+      m_document.dirty = true;
+      TriggerReload();
+    }
+
+    ImGui::Separator();
+    if (ImGui::Button("Duplicate Selected")) {
+      DuplicateSelectedObjects();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Delete Selected")) {
       RequestDeleteSelectedObjects();
     }
@@ -4062,6 +4566,10 @@ void EditorLayer::DrawPropertiesPanel() {
                          : (obj.type == SceneObjectType::Camera) ? "Camera"
                                                                  : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
+  if (obj.prefabInstance.has_value()) {
+    ImGui::LabelText("Prefab", "%s", obj.prefabInstance->prefabId.c_str());
+    ImGui::TextDisabled("%s", obj.prefabInstance->sourcePath.c_str());
+  }
 
   {
     std::string currentParent = GetParentId(obj);
@@ -4567,11 +5075,14 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
 
   if (!clicked)
     return;
-  if (ImGui::GetIO().WantCaptureMouse)
-    return;
 
   double mx, my;
   glfwGetCursorPos(m_window, &mx, &my);
+  if (!m_viewportPanelRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+    return;
+  if (ImGui::GetIO().WantCaptureMouse &&
+      !m_viewportPanelRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+    return;
   if (m_viewGizmoPickRect.valid &&
       m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
     return;
@@ -4777,7 +5288,7 @@ bool EditorLayer::ReloadDocumentFromDisk(std::string* outError,
   try {
     SceneDocument reloaded = SceneSerializer::LoadFromFile(path);
     reloaded.dirty = false;
-    LoadDocument(std::move(reloaded));
+    ApplyLoadedDocument(std::move(reloaded), false);
     m_document.filePath = path;
     m_lastSavedDocument = m_document;
     if (preferredSelectionIds)
@@ -4791,6 +5302,129 @@ bool EditorLayer::ReloadDocumentFromDisk(std::string* outError,
       *outError = e.what();
     return false;
   }
+}
+
+bool EditorLayer::HistorySnapshotsEqual(const EditorHistorySnapshot& lhs,
+                                        const EditorHistorySnapshot& rhs) {
+  return SceneDocumentsEqual(lhs.document, rhs.document) &&
+         SceneDocumentsEqual(lhs.savedDocument, rhs.savedDocument) &&
+         lhs.selectedObjectIds == rhs.selectedObjectIds &&
+         lhs.selectedAssetId == rhs.selectedAssetId;
+}
+
+void EditorLayer::TrimHistory(std::vector<EditorHistorySnapshot>* history) {
+  if (!history)
+    return;
+  if (history->size() <= kMaxEditorHistorySnapshots)
+    return;
+  history->erase(history->begin(),
+                 history->begin() + static_cast<std::ptrdiff_t>(history->size() - kMaxEditorHistorySnapshots));
+}
+
+EditorLayer::EditorHistorySnapshot EditorLayer::CaptureHistorySnapshot() const {
+  EditorHistorySnapshot snapshot;
+  snapshot.document = m_document;
+  snapshot.savedDocument = m_lastSavedDocument;
+  snapshot.selectedObjectIds = GetSelectedObjectIds();
+  snapshot.selectedAssetId = m_selectedAssetId;
+  return snapshot;
+}
+
+void EditorLayer::RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot) {
+  m_document = snapshot.document;
+  m_lastSavedDocument = snapshot.savedDocument;
+  SetSelectedObjectIds(snapshot.selectedObjectIds);
+  if (!snapshot.selectedAssetId.empty() &&
+      m_document.assets.find(snapshot.selectedAssetId) != m_document.assets.end()) {
+    m_selectedAssetId = snapshot.selectedAssetId;
+  } else {
+    m_selectedAssetId.clear();
+  }
+  TriggerReload();
+}
+
+void EditorLayer::CommitHistoryChange(const EditorHistorySnapshot& before) {
+  const EditorHistorySnapshot after = CaptureHistorySnapshot();
+  if (HistorySnapshotsEqual(before, after))
+    return;
+
+  m_undoHistory.push_back(before);
+  TrimHistory(&m_undoHistory);
+  m_redoHistory.clear();
+}
+
+void EditorLayer::BeginHistoryTransaction(const EditorHistorySnapshot& before) {
+  if (m_historyTransactionOpen)
+    return;
+  m_historyTransactionBefore = before;
+  m_historyTransactionOpen = true;
+}
+
+void EditorLayer::FinalizeHistoryTransaction() {
+  if (!m_historyTransactionOpen)
+    return;
+  CommitHistoryChange(m_historyTransactionBefore);
+  m_historyTransactionOpen = false;
+}
+
+void EditorLayer::ClearHistory() {
+  m_undoHistory.clear();
+  m_redoHistory.clear();
+  m_historyTransactionOpen = false;
+}
+
+void EditorLayer::RefreshHistorySavedBaseline() {
+  auto refreshSnapshot = [this](EditorHistorySnapshot* snapshot) {
+    if (!snapshot)
+      return;
+    if (snapshot->document.filePath == m_document.filePath) {
+      snapshot->savedDocument = m_lastSavedDocument;
+      snapshot->document.dirty = !SceneDocumentsEqual(snapshot->document, snapshot->savedDocument);
+    }
+  };
+
+  for (EditorHistorySnapshot& snapshot : m_undoHistory)
+    refreshSnapshot(&snapshot);
+  for (EditorHistorySnapshot& snapshot : m_redoHistory)
+    refreshSnapshot(&snapshot);
+  if (m_historyTransactionOpen)
+    refreshSnapshot(&m_historyTransactionBefore);
+}
+
+bool EditorLayer::CanUndoHistory() const {
+  return !m_undoHistory.empty();
+}
+
+bool EditorLayer::CanRedoHistory() const {
+  return !m_redoHistory.empty();
+}
+
+bool EditorLayer::UndoHistory() {
+  FinalizeHistoryTransaction();
+  if (m_undoHistory.empty())
+    return false;
+
+  const EditorHistorySnapshot current = CaptureHistorySnapshot();
+  const EditorHistorySnapshot target = m_undoHistory.back();
+  m_undoHistory.pop_back();
+  m_redoHistory.push_back(current);
+  TrimHistory(&m_redoHistory);
+  RestoreHistorySnapshot(target);
+  return true;
+}
+
+bool EditorLayer::RedoHistory() {
+  FinalizeHistoryTransaction();
+  if (m_redoHistory.empty())
+    return false;
+
+  const EditorHistorySnapshot current = CaptureHistorySnapshot();
+  const EditorHistorySnapshot target = m_redoHistory.back();
+  m_redoHistory.pop_back();
+  m_undoHistory.push_back(current);
+  TrimHistory(&m_undoHistory);
+  RestoreHistorySnapshot(target);
+  return true;
 }
 
 void EditorLayer::ProcessMcpCommands() {
@@ -4924,6 +5558,10 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     out["pitch"] = object.pitch;
     out["roll"] = object.roll;
     out["assetId"] = object.assetId;
+    if (object.prefabInstance.has_value()) {
+      out["prefab"] = json{{"id", object.prefabInstance->prefabId},
+                           {"path", object.prefabInstance->sourcePath}};
+    }
     const auto parentIt = object.props.find("parentId");
     if (parentIt != object.props.end() && !parentIt->second.empty())
       out["parentId"] = parentIt->second;
@@ -4973,7 +5611,28 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     return Mcp::McpCommandResult{true, json{{"cleared", true}}, std::string()};
   }
 
+  if (toolName == "editor.undo") {
+    const bool undone = UndoHistory();
+    return Mcp::McpCommandResult{true,
+                                 json{{"undone", undone},
+                                      {"dirty", m_document.dirty},
+                                      {"selectedObjectIds", GetSelectedObjectIds()},
+                                      {"selectedAssetId", m_selectedAssetId}},
+                                 std::string()};
+  }
+
+  if (toolName == "editor.redo") {
+    const bool redone = RedoHistory();
+    return Mcp::McpCommandResult{true,
+                                 json{{"redone", redone},
+                                      {"dirty", m_document.dirty},
+                                      {"selectedObjectIds", GetSelectedObjectIds()},
+                                      {"selectedAssetId", m_selectedAssetId}},
+                                 std::string()};
+  }
+
   if (toolName == "editor.create_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     SceneObjectType type = SceneObjectType::Panel;
     if (!ParseSceneObjectType(arguments.value("type", std::string()), &type))
       return Mcp::McpCommandResult{false, json::object(), "Invalid object type."};
@@ -5010,6 +5669,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"created", summarizeObject(m_document.objects.back())}},
                                  std::string()};
@@ -5049,7 +5709,32 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
                                  std::string()};
   }
 
+  if (toolName == "editor.create_prefab") {
+    const std::string id = arguments.value("id", std::string());
+    if (!id.empty())
+      SetSelectedObjectIds({id});
+
+    std::string prefabPath;
+    std::string prefabError;
+    if (!CreatePrefabFromSelection(&prefabError, &prefabPath))
+      return Mcp::McpCommandResult{false, json::object(), prefabError};
+
+    const int idx = PrimaryIdx();
+    const SceneObject* object =
+        (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            ? &m_document.objects[static_cast<size_t>(idx)]
+            : nullptr;
+    return Mcp::McpCommandResult{
+        true,
+        json{{"prefabPath", prefabPath},
+             {"prefabId", object && object->prefabInstance.has_value() ? object->prefabInstance->prefabId
+                                                                       : std::string()},
+             {"instance", object ? summarizeObject(*object) : json::object()}},
+        std::string()};
+  }
+
   if (toolName == "editor.update_object" || toolName == "editor.transform") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const int idx = findIndexById(id);
     if (idx < 0)
@@ -5083,10 +5768,12 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     if (m_transformCb)
       m_transformCb(object);
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true, json{{"updated", summarizeObject(object)}}, std::string()};
   }
 
   if (toolName == "editor.rename_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const std::string newId = arguments.value("newId", std::string());
     const int idx = findIndexById(id);
@@ -5103,12 +5790,14 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     RewriteObjectIdReferences(&m_document, oldId, newId);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"renamed", true}, {"oldId", oldId}, {"newId", newId}},
                                  std::string()};
   }
 
   if (toolName == "editor.reparent_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const int idx = findIndexById(id);
     if (idx < 0)
@@ -5129,32 +5818,58 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     }
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"id", id}, {"parentId", parentId}},
                                  std::string()};
   }
 
   if (toolName == "editor.duplicate") {
-    const std::string id = arguments.value("id", std::string());
-    const int idx = findIndexById(id);
-    if (idx < 0)
-      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
-    const int count = std::max(1, std::min(8, arguments.value("count", 1)));
-    json created = json::array();
-    for (int i = 0; i < count; ++i) {
-      SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
-      clone.position.x += static_cast<float>(i + 1);
-      clone.position.z += static_cast<float>(i + 1);
-      m_document.objects.push_back(std::move(clone));
-      created.push_back(summarizeObject(m_document.objects.back()));
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
+    std::vector<int> sourceIndices;
+    if (arguments.contains("id") && arguments["id"].is_string()) {
+      const int idx = findIndexById(arguments["id"].get<std::string>());
+      if (idx >= 0)
+        sourceIndices.push_back(idx);
     }
-    m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
+    if (arguments.contains("ids") && arguments["ids"].is_array()) {
+      for (const json& item : arguments["ids"]) {
+        if (!item.is_string())
+          continue;
+        const int idx = findIndexById(item.get<std::string>());
+        if (idx >= 0)
+          sourceIndices.push_back(idx);
+      }
+    }
+    if (sourceIndices.empty())
+      return Mcp::McpCommandResult{false, json::object(), "Object not found."};
+
+    std::sort(sourceIndices.begin(), sourceIndices.end());
+    sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+
+    const int count =
+        (sourceIndices.size() == 1) ? std::max(1, std::min(8, arguments.value("count", 1))) : 1;
+    json created = json::array();
+    std::vector<int> duplicatedIndices;
+    for (int idx : sourceIndices) {
+      for (int i = 0; i < count; ++i) {
+        SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
+        clone.position.x += static_cast<float>(i + 1);
+        clone.position.z += static_cast<float>(i + 1);
+        m_document.objects.push_back(std::move(clone));
+        duplicatedIndices.push_back(static_cast<int>(m_document.objects.size()) - 1);
+        created.push_back(summarizeObject(m_document.objects.back()));
+      }
+    }
+    m_selectedIndices = std::move(duplicatedIndices);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true, json{{"duplicates", std::move(created)}}, std::string()};
   }
 
   if (toolName == "editor.delete") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     std::vector<int> indices;
     if (arguments.contains("id") && arguments["id"].is_string()) {
       const int idx = findIndexById(arguments["id"].get<std::string>());
@@ -5181,6 +5896,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     m_selectedIndices.clear();
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"deletedCount", static_cast<int>(indices.size())}},
                                  std::string()};
@@ -5195,6 +5911,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.update_asset") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string assetId = arguments.value("id", std::string());
     auto it = m_document.assets.find(assetId);
     if (it == m_document.assets.end())
@@ -5213,6 +5930,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     EnsureAssetIdentity(assetId, &it->second);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"asset", summarizeAsset(assetId, it->second)}},
                                  std::string()};
@@ -5235,6 +5953,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.new_scene") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     AddNewScene();
     if (arguments.contains("sceneId") && arguments["sceneId"].is_string() &&
         !arguments["sceneId"].get<std::string>().empty()) {
@@ -5246,6 +5965,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     }
     m_lastSavedDocument = m_document;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"sceneId", m_document.sceneId},
                                       {"sceneName", m_document.sceneName},
@@ -5262,11 +5982,13 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.reload_scene") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::vector<std::string> previousSelectionIds = GetSelectedObjectIds();
     const std::string previousAssetId = m_selectedAssetId;
     std::string reloadError;
     if (!ReloadDocumentFromDisk(&reloadError, &previousSelectionIds, &previousAssetId))
       return Mcp::McpCommandResult{false, json::object(), reloadError};
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"reloadPending", true},
                                       {"filePath", m_document.filePath},
@@ -5280,6 +6002,8 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
 bool EditorLayer::SaveDocument(std::string* outError) {
   if (outError)
     outError->clear();
+
+  FinalizeHistoryTransaction();
 
   std::string path = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
   m_document.filePath = path;
@@ -5295,6 +6019,7 @@ bool EditorLayer::SaveDocument(std::string* outError) {
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
     m_lastSavedDocument = m_document;
+    RefreshHistorySavedBaseline();
     LOG_INFO("[Editor] Scene saved OK");
     TriggerReload();  // rebuild scene so changes are immediately visible
     return true;
@@ -5313,6 +6038,8 @@ EditorLayer::AssetDeleteResult EditorLayer::DeleteAssetDefinition(const std::str
     result.error = "Asset not found.";
     return result;
   }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
 
   const std::filesystem::path managedDirectory = GetManagedImportedAssetDirectory(it->second);
   if (!managedDirectory.empty()) {
@@ -5340,6 +6067,7 @@ EditorLayer::AssetDeleteResult EditorLayer::DeleteAssetDefinition(const std::str
   m_document.assets.erase(it);
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 
   result.ok = true;
   return result;
@@ -5353,6 +6081,162 @@ void EditorLayer::DiscardUnsavedChanges() {
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
   TriggerReload();
+}
+
+void EditorLayer::RequestSceneAction(PendingSceneAction action) {
+  if (action == PendingSceneAction::None)
+    return;
+
+  m_pendingSceneAction = action;
+  m_exitConfirmError.clear();
+  if (m_document.dirty) {
+    m_confirmExitOpen = true;
+    return;
+  }
+
+  std::string actionError;
+  if (!ExecutePendingSceneAction(&actionError))
+    LOG_ERROR("[Editor] Scene action failed: %s", actionError.c_str());
+}
+
+bool EditorLayer::ExecutePendingSceneAction(std::string* outError) {
+  if (outError)
+    outError->clear();
+
+  const PendingSceneAction action = m_pendingSceneAction;
+  m_pendingSceneAction = PendingSceneAction::None;
+
+  switch (action) {
+    case PendingSceneAction::None:
+      return true;
+    case PendingSceneAction::NewScene: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
+      AddNewScene();
+      m_lastSavedDocument = m_document;
+      CommitHistoryChange(before);
+      return true;
+    }
+    case PendingSceneAction::OpenSceneFile:
+    {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
+      OpenAdditionalSceneFile();
+      CommitHistoryChange(before);
+      return true;
+    }
+    case PendingSceneAction::LoadSceneFromDisk: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      const bool ok = ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      if (ok)
+        CommitHistoryChange(before);
+      return ok;
+    }
+    case PendingSceneAction::ReloadSceneFromDisk: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
+      const std::vector<std::string> selectionIds = GetSelectedObjectIds();
+      const std::string selectedAssetId = m_selectedAssetId;
+      const bool ok = ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      if (ok)
+        CommitHistoryChange(before);
+      return ok;
+    }
+    case PendingSceneAction::CloseEditor:
+      m_closeRequested = true;
+      return true;
+  }
+
+  return true;
+}
+
+void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
+  if (commandId == "undo")
+    UndoHistory();
+  else if (commandId == "redo")
+    RedoHistory();
+  else if (commandId == "new_scene")
+    RequestSceneAction(PendingSceneAction::NewScene);
+  else if (commandId == "open_scene")
+    RequestSceneAction(PendingSceneAction::OpenSceneFile);
+  else if (commandId == "load_scene")
+    RequestSceneAction(PendingSceneAction::LoadSceneFromDisk);
+  else if (commandId == "reload_scene")
+    RequestSceneAction(PendingSceneAction::ReloadSceneFromDisk);
+  else if (commandId == "save_scene") {
+    std::string saveError;
+    if (!SaveDocument(&saveError))
+      LOG_ERROR("[Editor] Save failed: %s", saveError.c_str());
+  } else if (commandId == "reset_layout") {
+    m_resetDockLayoutRequested = true;
+  } else if (commandId == "quick_open") {
+    m_quickOpenOpen = true;
+    m_quickOpenQuery.clear();
+  } else if (commandId == "close_editor") {
+    RequestSceneAction(PendingSceneAction::CloseEditor);
+  }
+}
+
+bool EditorLayer::CreatePrefabFromSelection(std::string* outError, std::string* outPrefabPath) {
+  if (outError)
+    outError->clear();
+  if (outPrefabPath)
+    outPrefabPath->clear();
+
+  const int primaryIdx = PrimaryIdx();
+  if (m_selectedIndices.size() != 1 ||
+      primaryIdx < 0 ||
+      primaryIdx >= static_cast<int>(m_document.objects.size())) {
+    if (outError)
+      *outError = "Select exactly one object to create a prefab.";
+    return false;
+  }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+  const SceneObject& sourceObject = m_document.objects[static_cast<size_t>(primaryIdx)];
+  const std::filesystem::path prefabAbsPath = BuildUniquePrefabPath(m_document, sourceObject);
+  std::error_code ec;
+  std::filesystem::create_directories(prefabAbsPath.parent_path(), ec);
+  if (ec) {
+    if (outError)
+      *outError = "Failed to create prefab directory: " + ec.message();
+    return false;
+  }
+
+  SceneDocument prefabDoc;
+  prefabDoc.version = m_document.version;
+  prefabDoc.sceneId = prefabAbsPath.stem().string();
+  prefabDoc.sceneName = sourceObject.id.empty() ? prefabDoc.sceneId : sourceObject.id;
+  prefabDoc.filePath = prefabAbsPath.generic_string();
+
+  SceneObject prefabObject = sourceObject;
+  prefabObject.prefabInstance.reset();
+  prefabObject.props.erase("parentId");
+  prefabDoc.objects.push_back(std::move(prefabObject));
+  if (!sourceObject.assetId.empty()) {
+    const auto assetIt = m_document.assets.find(sourceObject.assetId);
+    if (assetIt != m_document.assets.end())
+      prefabDoc.assets[sourceObject.assetId] = assetIt->second;
+  }
+
+  try {
+    SceneSerializer::SaveToFile(prefabDoc, prefabAbsPath.generic_string());
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+
+  const std::filesystem::path relativePath =
+      prefabAbsPath.lexically_relative(ProjectPath::Root()).lexically_normal();
+  SceneObject& object = m_document.objects[static_cast<size_t>(primaryIdx)];
+  object.prefabInstance = ScenePrefabInstance{prefabDoc.sceneId, relativePath.generic_string()};
+  m_document.dirty = true;
+  TriggerReload();
+  CommitHistoryChange(before);
+
+  if (outPrefabPath)
+    *outPrefabPath = relativePath.generic_string();
+  return true;
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {
@@ -5384,6 +6268,7 @@ void EditorLayer::OpenRenameObjectModal(int index) {
 }
 
 void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
   SceneObject obj;
   obj.id = (type == SceneObjectType::Camera) ? GenerateCameraId(m_document) : GenerateId(m_document);
   obj.type = type;
@@ -5401,6 +6286,7 @@ void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 }
 
 void EditorLayer::AddObjectFromSelectedAsset(const std::string& parentId) {
@@ -5427,6 +6313,8 @@ bool EditorLayer::CreateObjectFromAsset(const std::string& assetId,
     return false;
   }
 
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+
   SceneObject object = MakeObjectFromAsset(m_document, assetId, m_schema);
   if (preferredId && !preferredId->empty()) {
     if (IsReservedObjectId(m_document, *preferredId)) {
@@ -5446,6 +6334,7 @@ bool EditorLayer::CreateObjectFromAsset(const std::string& assetId,
   m_selectedAssetId = assetId;
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 
   if (outCreated)
     *outCreated = m_document.objects.back();
@@ -5504,6 +6393,7 @@ void EditorLayer::DuplicatePrimarySelection() {
   const int primaryIdx = PrimaryIdx();
   if (primaryIdx < 0 || primaryIdx >= static_cast<int>(m_document.objects.size()))
     return;
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
   SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(primaryIdx)]);
   clone.position.x += 1.0f;
   clone.position.z += 1.0f;
@@ -5511,6 +6401,40 @@ void EditorLayer::DuplicatePrimarySelection() {
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
+}
+
+void EditorLayer::DuplicateSelectedObjects() {
+  if (m_selectedIndices.empty())
+    return;
+  if (m_selectedIndices.size() == 1) {
+    DuplicatePrimarySelection();
+    return;
+  }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+
+  std::vector<int> sourceIndices = m_selectedIndices;
+  std::sort(sourceIndices.begin(), sourceIndices.end());
+  sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+
+  std::vector<int> duplicatedIndices;
+  duplicatedIndices.reserve(sourceIndices.size());
+  for (int idx : sourceIndices) {
+    if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
+      continue;
+    SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(idx)]);
+    clone.position.x += 1.0f;
+    clone.position.z += 1.0f;
+    m_document.objects.push_back(std::move(clone));
+    duplicatedIndices.push_back(static_cast<int>(m_document.objects.size()) - 1);
+  }
+
+  if (!duplicatedIndices.empty())
+    m_selectedIndices = std::move(duplicatedIndices);
+  m_document.dirty = true;
+  TriggerReload();
+  CommitHistoryChange(before);
 }
 
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,
@@ -5727,67 +6651,6 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   }
   glLineWidth(1.0f);
   glEnable(GL_DEPTH_TEST);
-}
-
-// ---- Viewport drag-drop target -----------------------------------------------
-
-void EditorLayer::DrawViewportDropTarget(const Camera& cam, int screenW, int screenH) {
-  // Only show when an ASSET_ID drag-drop is actively in progress.
-  // This prevents the full-screen window from intercepting normal mouse clicks.
-  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
-  if (!activeDrag || !activeDrag->IsDataType("ASSET_ID"))
-    return;
-
-  ImGuiIO& io = ImGui::GetIO();
-  const EditorViewportRect viewportRect =
-      BuildEditorViewportRect(io.DisplaySize.x, io.DisplaySize.y, kEditorToolbarH, kEditorStatusH,
-                              kBottomDockH, kLeftDockW, 280.0f);
-  ImGui::SetNextWindowPos(ImVec2(viewportRect.minX, viewportRect.minY));
-  ImGui::SetNextWindowSize(
-      ImVec2(viewportRect.maxX - viewportRect.minX, viewportRect.maxY - viewportRect.minY));
-  ImGui::SetNextWindowBgAlpha(0.0f);
-  // No NoInputs — drop target must be hoverable to accept the payload
-  ImGui::Begin("##viewport_drop", nullptr,
-               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
-
-  const ImVec2 dropTargetSize(viewportRect.maxX - viewportRect.minX,
-                              viewportRect.maxY - viewportRect.minY);
-  ImGui::InvisibleButton("##viewport_drop_target", dropTargetSize);
-
-  if (ImGui::BeginDragDropTarget()) {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ID")) {
-      const std::string assetId(static_cast<const char*>(payload->Data));
-      if (m_document.assets.find(assetId) == m_document.assets.end()) {
-        LOG_WARN("[Editor] Viewport drop rejected: missing asset '%s'", assetId.c_str());
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      const ImVec2 mp = io.MousePos;
-      if (!viewportRect.Contains(mp.x, mp.y)) {
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      Vec3 dropPos = Vec3::Zero();
-      if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
-        LOG_WARN("[Editor] Viewport drop rejected: camera ray did not hit a placement surface");
-        ImGui::EndDragDropTarget();
-        ImGui::End();
-        return;
-      }
-
-      std::string createError;
-      if (!CreateObjectFromAsset(assetId, std::string(), &dropPos, nullptr, nullptr, &createError))
-        LOG_WARN("[Editor] Viewport drop failed: %s", createError.c_str());
-    }
-    ImGui::EndDragDropTarget();
-  }
-
-  ImGui::End();
 }
 
 }  // namespace Editor

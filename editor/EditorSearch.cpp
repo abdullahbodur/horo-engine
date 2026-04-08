@@ -9,9 +9,12 @@ namespace Editor {
 
 namespace {
 
-constexpr std::array<ShortcutRow, 14> kEditorShortcuts = {{{"Editor", "Run or stop game in viewport", "Toolbar: Play / Stop"},
+constexpr std::array<ShortcutRow, 17> kEditorShortcuts = {{{"Editor", "Run or stop game in viewport", "Toolbar: Play / Stop"},
                                                             {"Editor", "Toggle shortcuts help", "? or F1"},
                                                             {"Editor", "Quick open", "Ctrl/Cmd + P"},
+                                                            {"Editor", "Command palette", "Ctrl/Cmd + Shift + P"},
+                                                            {"Editor", "Undo last scene change", "Ctrl/Cmd + Z"},
+                                                            {"Editor", "Redo last scene change", "Ctrl/Cmd + Shift + Z / Ctrl+Y"},
                                                             {"Camera", "Toggle fly mode", "Tab"},
                                                             {"Camera", "Move in fly mode", "W A S D"},
                                                             {"Camera", "Look around in fly mode", "Mouse"},
@@ -23,6 +26,17 @@ constexpr std::array<ShortcutRow, 14> kEditorShortcuts = {{{"Editor", "Run or st
                                                             {"Scene", "Save scene", "Toolbar: Save"},
                                                             {"Assets", "Add prop from selected asset", "Toolbar: + Prop from Asset"},
                                                             {"Clipboard", "Copy selected object reference", "Ctrl/Cmd + Shift + C"}}};
+
+constexpr std::array<CommandPaletteRow, 10> kEditorCommands = {{{"undo", "Undo", "Ctrl/Cmd + Z"},
+                                                                 {"redo", "Redo", "Ctrl/Cmd + Shift + Z / Ctrl+Y"},
+                                                                 {"new_scene", "New Scene", "File"},
+                                                                 {"open_scene", "Open Scene...", "File"},
+                                                                 {"load_scene", "Load Scene", "Toolbar"},
+                                                                 {"reload_scene", "Reload Scene", "Palette"},
+                                                                 {"save_scene", "Save Scene", "Toolbar"},
+                                                                 {"reset_layout", "Reset Layout", "View"},
+                                                                 {"quick_open", "Quick Open", "Ctrl/Cmd + P"},
+                                                                 {"close_editor", "Close Editor", "Toolbar"}}};
 
 std::string ToLower(std::string text) {
   std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
@@ -63,8 +77,21 @@ bool MatchesShortcutQuery(const ShortcutRow& row, const std::string& queryRaw) {
          ContainsCaseInsensitive(row.keys, queryRaw);
 }
 
+bool MatchesCommandPaletteQuery(const CommandPaletteRow& row, const std::string& queryRaw) {
+  if (queryRaw.empty())
+    return true;
+
+  return ContainsCaseInsensitive(row.command, queryRaw) ||
+         ContainsCaseInsensitive(row.keys, queryRaw) ||
+         ContainsCaseInsensitive(row.id, queryRaw);
+}
+
 std::span<const ShortcutRow> GetEditorShortcuts() {
   return kEditorShortcuts;
+}
+
+std::span<const CommandPaletteRow> GetEditorCommands() {
+  return kEditorCommands;
 }
 
 bool ObjectMatchesQuickOpenQuery(const SceneObject& obj, const std::string& queryRaw) {

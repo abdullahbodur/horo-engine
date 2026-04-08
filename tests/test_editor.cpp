@@ -10,6 +10,10 @@
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
@@ -20,8 +24,11 @@
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
+#include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
+#include "editor/SceneProjectBridge.h"
+#include "editor/SceneRuntimeBridge.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 
@@ -89,6 +96,100 @@ struct ProjectPathGuard {
         Monolith::ProjectPath::Init(previousRoot);
     }
 };
+
+struct HomeDirGuard {
+    std::string previousUserProfile;
+    std::string previousHomeDrive;
+    std::string previousHomePath;
+    std::string previousHome;
+
+    static std::string ReadEnv(const char* name) {
+        if (!name || !*name)
+            return {};
+#ifdef _WIN32
+        char* value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || !value)
+            return {};
+        std::string out(value);
+        free(value);
+        return out;
+#else
+        const char* value = std::getenv(name);
+        return value ? std::string(value) : std::string();
+#endif
+    }
+
+    explicit HomeDirGuard(const std::filesystem::path& nextHome)
+        : previousUserProfile(ReadEnv("USERPROFILE")),
+          previousHomeDrive(ReadEnv("HOMEDRIVE")),
+          previousHomePath(ReadEnv("HOMEPATH")),
+          previousHome(ReadEnv("HOME")) {
+#ifdef _WIN32
+        _putenv_s("USERPROFILE", nextHome.string().c_str());
+        _putenv_s("HOMEDRIVE", "");
+        _putenv_s("HOMEPATH", "");
+#else
+        setenv("HOME", nextHome.string().c_str(), 1);
+#endif
+    }
+
+    ~HomeDirGuard() {
+#ifdef _WIN32
+        _putenv_s("USERPROFILE", previousUserProfile.c_str());
+        _putenv_s("HOMEDRIVE", previousHomeDrive.c_str());
+        _putenv_s("HOMEPATH", previousHomePath.c_str());
+#else
+        if (previousHome.empty())
+            unsetenv("HOME");
+        else
+            setenv("HOME", previousHome.c_str(), 1);
+#endif
+    }
+};
+
+struct ImGuiContextGuard {
+    ImGuiContextGuard() {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        unsigned char* fontPixels = nullptr;
+        int fontWidth = 0;
+        int fontHeight = 0;
+        io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontWidth, &fontHeight);
+        io.DisplaySize = ImVec2(1280.0f, 720.0f);
+        io.DeltaTime = 1.0f / 60.0f;
+        io.MousePos = ImVec2(32.0f, 32.0f);
+        io.MouseDown[0] = false;
+    }
+
+    ~ImGuiContextGuard() {
+        ImGui::DestroyContext();
+    }
+};
+
+static void SeedExternalAssetDragPayload(const char* assetId) {
+    REQUIRE(assetId != nullptr);
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    ImGuiPayload& payload = g.DragDropPayload;
+    payload.Clear();
+    payload.SourceId = 1;
+    payload.Data = const_cast<char*>(assetId);
+    payload.DataSize = static_cast<int>(std::strlen(assetId)) + 1;
+    payload.DataFrameCount = g.FrameCount;
+    payload.Delivery = false;
+    payload.Preview = false;
+    ImStrncpy(payload.DataType, "ASSET_ID", IM_ARRAYSIZE(payload.DataType));
+
+    g.DragDropActive = true;
+    g.DragDropSourceFlags = ImGuiDragDropFlags_SourceExtern;
+    g.DragDropSourceFrameCount = g.FrameCount - 1;
+    g.DragDropMouseButton = -1;
+    g.DragDropAcceptFlags = ImGuiDragDropFlags_None;
+    g.DragDropAcceptIdCurr = 0;
+    g.DragDropAcceptIdPrev = 0;
+    g.DragDropAcceptFrameCount = -1;
+}
 
 // ===========================================================================
 // EditorSchema
@@ -771,6 +872,26 @@ TEST_CASE("SceneSerializer: inline props survive when object has no asset refere
     REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
 }
 
+TEST_CASE("SceneSerializer: prefab instance metadata round-trips", "[editor][serializer]") {
+    SceneDocument doc;
+
+    SceneObject obj;
+    obj.id = "crate_instance";
+    obj.type = SceneObjectType::Prop;
+    obj.position = {4.0f, 1.0f, 2.0f};
+    obj.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    doc.objects.push_back(obj);
+
+    const std::string path = TmpPath("prefab_instance_roundtrip.horo");
+    SceneSerializer::SaveToFile(doc, path);
+    SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+
+    REQUIRE(loaded.objects.size() == 1);
+    REQUIRE(loaded.objects[0].prefabInstance.has_value());
+    REQUIRE(loaded.objects[0].prefabInstance->prefabId == "crate_prefab");
+    REQUIRE(loaded.objects[0].prefabInstance->sourcePath == "assets/prefabs/crate_prefab.horo");
+}
+
 TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]") {
     SceneDocument doc;
     SceneObject src;
@@ -818,6 +939,14 @@ TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[
     REQUIRE(MatchesShortcutQuery(row, "quick"));
     REQUIRE(MatchesShortcutQuery(row, "cmd"));
     REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
+}
+
+TEST_CASE("Editor helpers: command palette query matches command and shortcut", "[editor]") {
+    CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
+    REQUIRE(MatchesCommandPaletteQuery(row, "save"));
+    REQUIRE(MatchesCommandPaletteQuery(row, "toolbar"));
+    REQUIRE(MatchesCommandPaletteQuery(row, "scene"));
+    REQUIRE_FALSE(MatchesCommandPaletteQuery(row, "delete"));
 }
 
 TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
@@ -872,6 +1001,9 @@ TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]"
     REQUIRE(hasCommandWithKeys("Run or stop game in viewport", "Toolbar: Play / Stop"));
     REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
     REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
+    REQUIRE(hasCommandWithKeys("Command palette", "Ctrl/Cmd + Shift + P"));
+    REQUIRE(hasCommandWithKeys("Undo last scene change", "Ctrl/Cmd + Z"));
+    REQUIRE(hasCommandWithKeys("Redo last scene change", "Ctrl/Cmd + Shift + Z / Ctrl+Y"));
 }
 
 TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
@@ -997,6 +1129,311 @@ TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "
     REQUIRE(updated.objects[2].position.z == Approx(6.0f));
 }
 
+TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor][mcp][selection]") {
+    SceneDocument doc;
+
+    SceneObject first;
+    first.id = "panel_a";
+    first.type = SceneObjectType::Panel;
+    first.position = {1.0f, 0.0f, 2.0f};
+    doc.objects.push_back(first);
+
+    SceneObject second;
+    second.id = "prop_b";
+    second.type = SceneObjectType::Prop;
+    second.position = {3.0f, 0.0f, 4.0f};
+    doc.objects.push_back(second);
+
+    SceneObject third;
+    third.id = "light_c";
+    third.type = SceneObjectType::Light;
+    third.position = {5.0f, 1.0f, 6.0f};
+    doc.objects.push_back(third);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"light_c", "panel_a", "panel_a"})}, {"count", 4}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].is_array());
+    REQUIRE(result.data["duplicates"].size() == 2);
+
+    const SceneDocument& updated = editor.GetDocument();
+    REQUIRE(updated.objects.size() == 5);
+    REQUIRE(updated.dirty);
+
+    const SceneObject& panelClone = updated.objects[3];
+    REQUIRE(panelClone.id != "panel_a");
+    REQUIRE(panelClone.type == SceneObjectType::Panel);
+    REQUIRE(panelClone.position.x == Approx(2.0f));
+    REQUIRE(panelClone.position.y == Approx(0.0f));
+    REQUIRE(panelClone.position.z == Approx(3.0f));
+
+    const SceneObject& lightClone = updated.objects[4];
+    REQUIRE(lightClone.id != "light_c");
+    REQUIRE(lightClone.type == SceneObjectType::Light);
+    REQUIRE(lightClone.position.x == Approx(6.0f));
+    REQUIRE(lightClone.position.y == Approx(1.0f));
+    REQUIRE(lightClone.position.z == Approx(7.0f));
+
+    const std::vector<std::string> selectedIds = editor.GetSelectedObjectIds();
+    REQUIRE(selectedIds.size() == 2);
+    REQUIRE(selectedIds[0] == panelClone.id);
+    REQUIRE(selectedIds[1] == lightClone.id);
+}
+
+TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[editor][mcp][selection]") {
+    SceneDocument doc;
+
+    SceneObject source;
+    source.id = "camera_main";
+    source.type = SceneObjectType::Camera;
+    source.position = {10.0f, 2.0f, -4.0f};
+    doc.objects.push_back(source);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"id", "camera_main"}, {"count", 3}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].size() == 3);
+
+    const SceneDocument& updated = editor.GetDocument();
+    REQUIRE(updated.objects.size() == 4);
+
+    for (size_t i = 1; i < updated.objects.size(); ++i) {
+        const SceneObject& clone = updated.objects[i];
+        const float expectedOffset = static_cast<float>(i);
+        REQUIRE(clone.id != "camera_main");
+        REQUIRE(clone.position.x == Approx(10.0f + expectedOffset));
+        REQUIRE(clone.position.y == Approx(2.0f));
+        REQUIRE(clone.position.z == Approx(-4.0f + expectedOffset));
+    }
+
+    const std::vector<std::string> selectedIds = editor.GetSelectedObjectIds();
+    REQUIRE(selectedIds.size() == 3);
+    REQUIRE(selectedIds[0] == updated.objects[1].id);
+    REQUIRE(selectedIds[1] == updated.objects[2].id);
+    REQUIRE(selectedIds[2] == updated.objects[3].id);
+}
+
+TEST_CASE("Editor MCP undo and redo restore created object selection", "[editor][mcp][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto createResult = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "panel_created"}});
+    REQUIRE(createResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(undoResult.data["undone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.empty());
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+
+    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redoResult.ok);
+    REQUIRE(redoResult.data["redone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].id == "panel_created");
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+}
+
+TEST_CASE("Editor MCP undo and redo restore duplicate selection and dirty state", "[editor][mcp][history]") {
+    SceneDocument doc;
+
+    SceneObject first;
+    first.id = "prop_a";
+    first.type = SceneObjectType::Prop;
+    doc.objects.push_back(first);
+
+    SceneObject second;
+    second.id = "prop_b";
+    second.type = SceneObjectType::Prop;
+    doc.objects.push_back(second);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto duplicateResult = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_a", "prop_b"})}});
+    REQUIRE(duplicateResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);
+    const std::vector<std::string> duplicatedSelection = editor.GetSelectedObjectIds();
+    REQUIRE(duplicatedSelection.size() == 2);
+    REQUIRE(editor.GetDocument().dirty);
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 2);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+
+    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redoResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);
+    REQUIRE(editor.GetDocument().dirty);
+    REQUIRE(editor.GetSelectedObjectIds() == duplicatedSelection);
+}
+
+TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][mcp][history]") {
+    SceneDocument doc;
+    doc.sceneId = "forest";
+    doc.sceneName = "Forest";
+    doc.filePath = TmpPath("forest_scene.horo");
+
+    SceneObject object;
+    object.id = "tree";
+    object.type = SceneObjectType::Prop;
+    doc.objects.push_back(object);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto newSceneResult = editor.ExecuteMcpCommand(
+        "editor.new_scene",
+        nlohmann::json{{"sceneId", "empty"}, {"sceneName", "Empty Scene"}});
+    REQUIRE(newSceneResult.ok);
+    REQUIRE(editor.GetDocument().sceneId == "empty");
+    REQUIRE(editor.GetDocument().sceneName == "Empty Scene");
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().sceneId == "forest");
+    REQUIRE(editor.GetDocument().sceneName == "Forest");
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][mcp][history]") {
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1,1,1", ""};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    REQUIRE(editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "crate"}}).ok);
+    const std::string previousDisplayName = editor.GetDocument().assets.at("crate").displayName;
+
+    const auto updateResult = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "crate"}, {"displayName", "Crate Large"}, {"albedoMap", "assets/models/crate.png"}});
+    REQUIRE(updateResult.ok);
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName == "Crate Large");
+    REQUIRE(editor.GetSelectedAssetId() == "crate");
+
+    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName == previousDisplayName);
+    REQUIRE(editor.GetDocument().assets.at("crate").albedoMap.empty());
+    REQUIRE(editor.GetSelectedAssetId() == "crate");
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instance", "[editor][mcp][prefab]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_create_prefab";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "prefabs");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1.0000,2.0000,3.0000", ""};
+
+    SceneObject obj;
+    obj.id = "crate_prop";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "crate";
+    obj.position = {7.0f, 0.0f, 9.0f};
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand("editor.create_prefab", nlohmann::json{{"id", "crate_prop"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["prefabPath"].is_string());
+
+    const fs::path prefabPath = projectRoot / result.data["prefabPath"].get<std::string>();
+    REQUIRE(fs::exists(prefabPath));
+
+    SceneDocument prefabDoc = SceneSerializer::LoadFromFile(prefabPath.string());
+    REQUIRE(prefabDoc.objects.size() == 1);
+    REQUIRE(prefabDoc.objects[0].id == "crate_prop");
+    REQUIRE_FALSE(prefabDoc.objects[0].prefabInstance.has_value());
+
+    const SceneObject& updated = editor.GetDocument().objects[0];
+    REQUIRE(updated.prefabInstance.has_value());
+    REQUIRE(updated.prefabInstance->sourcePath == result.data["prefabPath"].get<std::string>());
+    REQUIRE(updated.prefabInstance->prefabId == prefabPath.stem().string());
+    REQUIRE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "[editor][prefab][runtime]") {
+    namespace fs = std::filesystem;
+
+    const fs::path projectRoot = fs::temp_directory_path() / "horo_runtime_prefab_instance";
+    fs::remove_all(projectRoot);
+    fs::create_directories(projectRoot / "assets" / "prefabs");
+
+    ProjectPathGuard projectPath(projectRoot);
+
+    SceneDocument prefabDoc;
+    prefabDoc.filePath = (projectRoot / "assets" / "prefabs" / "crate_prefab.horo").string();
+    prefabDoc.assets["crate"] = AssetDef{"assets/models/crate.obj", "2.0000,3.0000,4.0000", ""};
+
+    SceneObject prefabObject;
+    prefabObject.id = "crate_template";
+    prefabObject.type = SceneObjectType::Prop;
+    prefabObject.assetId = "crate";
+    prefabObject.position = {0.0f, 0.0f, 0.0f};
+    prefabObject.scale = {1.5f, 1.0f, 0.5f};
+    prefabDoc.objects.push_back(prefabObject);
+    SceneSerializer::SaveToFile(prefabDoc, prefabDoc.filePath);
+
+    SceneDocument doc;
+    SceneObject instance;
+    instance.id = "crate_instance";
+    instance.type = SceneObjectType::Prop;
+    instance.position = {8.0f, 0.0f, 6.0f};
+    instance.scale = {0.5f, 2.0f, 1.0f};
+    instance.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    doc.objects.push_back(instance);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.assets.size() == 1);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].assetId == "crate");
+    REQUIRE(model.scene.nodes[0].prefabInstance.has_value());
+
+    const RuntimeSceneBuildResult runtime = Monolith::Editor::BuildRuntimeSceneDefinition(doc);
+    REQUIRE(runtime.issues.empty());
+    REQUIRE(runtime.definition.rooms.size() == 1);
+    REQUIRE(runtime.definition.rooms[0].props.size() == 1);
+
+    const RuntimeSceneProp& prop = runtime.definition.rooms[0].props[0];
+    REQUIRE(prop.id == "crate_instance");
+    REQUIRE(prop.meshTag == "assets/models/crate.obj");
+    REQUIRE(prop.position.x == Approx(8.0f));
+    REQUIRE(prop.position.z == Approx(6.0f));
+    REQUIRE(prop.scale.x == Approx(1.0f));
+    REQUIRE(prop.scale.y == Approx(6.0f));
+    REQUIRE(prop.scale.z == Approx(4.0f));
+}
+
 TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
     REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
@@ -1010,6 +1447,31 @@ TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]") {
+    const auto rows = GetEditorCommands();
+    REQUIRE_FALSE(rows.empty());
+
+    auto hasCommand = [&](const char* id, const char* command) {
+        return std::any_of(rows.begin(), rows.end(), [&](const CommandPaletteRow& row) {
+            return std::string(row.id) == id && std::string(row.command) == command;
+        });
+    };
+
+    REQUIRE(hasCommand("new_scene", "New Scene"));
+    REQUIRE(hasCommand("open_scene", "Open Scene..."));
+    REQUIRE(hasCommand("save_scene", "Save Scene"));
+    REQUIRE(hasCommand("close_editor", "Close Editor"));
+    REQUIRE(hasCommand("undo", "Undo"));
+    REQUIRE(hasCommand("redo", "Redo"));
+}
+
+TEST_CASE("Editor UI logic: command palette shares quick-open gating", "[editor]") {
+    REQUIRE(ShouldOpenCommandPalette(true, false, false, false, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, true, false, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, false, true, false));
+    REQUIRE_FALSE(ShouldOpenCommandPalette(true, true, false, false, false));
 }
 
 TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]") {
@@ -1526,6 +1988,153 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(150.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(1500.0f, 200.0f));
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
+}
+
+TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui]") {
+    REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
+    REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
+
+    REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
+    REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
+
+    REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
+    REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
+}
+
+TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        false,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char* assetId) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return assetId && std::string(assetId) == "crate";
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE(result.targetVisible);
+    REQUIRE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
+}
+
+TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]") {
+    ImGuiContextGuard imgui;
+    bool callbackInvoked = false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(48.0f, 48.0f);
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
+    ImGui::Begin("ViewportPlayModeTest");
+
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    g.HoveredWindow = ImGui::GetCurrentWindow();
+    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
+    SeedExternalAssetDragPayload("crate");
+
+    const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
+        true,
+        220.0f,
+        140.0f,
+        &callbackInvoked,
+        [](void* userData, const char*) {
+            auto* invoked = static_cast<bool*>(userData);
+            *invoked = true;
+            return true;
+        });
+
+    ImGui::End();
+    ImGui::EndFrame();
+
+    REQUIRE_FALSE(result.targetVisible);
+    REQUIRE_FALSE(result.payloadMatched);
+    REQUIRE_FALSE(result.delivered);
+    REQUIRE_FALSE(result.accepted);
+    REQUIRE_FALSE(callbackInvoked);
+}
+
+TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_missing";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome);
+    HomeDirGuard homeGuard(tempHome);
+
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE_FALSE(loaded.loadedFromDisk);
+    REQUIRE_FALSE(loaded.parseError);
+    REQUIRE(loaded.state.consoleShowInfo);
+    REQUIRE(loaded.state.consoleShowWarn);
+    REQUIRE(loaded.state.consoleShowError);
+    REQUIRE(loaded.state.projectBrowserCwd.empty());
+    REQUIRE(ResolveEditorLayoutPath() == tempHome / ".horo" / "editor_layout.ini");
+    REQUIRE(ResolveEditorWorkspacePath() == tempHome / ".horo" / "editor_workspace.json");
+}
+
+TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_invalid";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome / ".horo");
+    HomeDirGuard homeGuard(tempHome);
+
+    WriteFile((tempHome / ".horo" / "editor_workspace.json").string(), "{ invalid json");
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE(loaded.loadedFromDisk);
+    REQUIRE(loaded.parseError);
+    REQUIRE_FALSE(loaded.error.empty());
+    REQUIRE(loaded.state.consoleShowInfo);
+}
+
+TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[editor][workspace]") {
+    namespace fs = std::filesystem;
+    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_roundtrip";
+    fs::remove_all(tempHome);
+    fs::create_directories(tempHome);
+    HomeDirGuard homeGuard(tempHome);
+
+    EditorWorkspaceDocument doc;
+    doc.state.consoleShowInfo = false;
+    doc.state.consoleShowWarn = true;
+    doc.state.consoleShowError = false;
+    doc.state.projectBrowserCwd = "C:/project/assets";
+
+    std::string saveError;
+    REQUIRE(SaveEditorWorkspaceDocument(&doc, &saveError));
+    REQUIRE(saveError.empty());
+    REQUIRE(fs::exists(tempHome / ".horo" / "editor_workspace.json"));
+
+    const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
+    REQUIRE(loaded.loadedFromDisk);
+    REQUIRE_FALSE(loaded.parseError);
+    REQUIRE_FALSE(loaded.state.consoleShowInfo);
+    REQUIRE(loaded.state.consoleShowWarn);
+    REQUIRE_FALSE(loaded.state.consoleShowError);
+    REQUIRE(loaded.state.projectBrowserCwd == "C:/project/assets");
 }
 
 TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {

@@ -21,6 +21,14 @@ bool ShouldOpenQuickOpen(bool currToggle,
   return currToggle && !prevToggle && !flyMode && !wantsTextInput && !anyItemActive;
 }
 
+bool ShouldOpenCommandPalette(bool currToggle,
+                              bool prevToggle,
+                              bool flyMode,
+                              bool wantsTextInput,
+                              bool anyItemActive) {
+  return currToggle && !prevToggle && !flyMode && !wantsTextInput && !anyItemActive;
+}
+
 bool ShouldCopySelectionRef(bool currCopyRef,
                             bool prevCopyRef,
                             bool wantsTextInput,
@@ -61,6 +69,47 @@ EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot& snapshot) {
   out.flyText = snapshot.flyMode ? "on" : "off";
   out.reloadText = snapshot.reloadPending ? "pending" : "idle";
   return out;
+}
+
+float ComputeEditorLeftDockWidth(float displayWidth) {
+  return std::clamp(displayWidth * 0.16f, 220.0f, 320.0f);
+}
+
+float ComputeEditorRightPanelWidth(float displayWidth) {
+  return std::clamp(displayWidth * 0.18f, 280.0f, 380.0f);
+}
+
+float ComputeEditorBottomDockHeight(float displayHeight) {
+  return std::clamp(displayHeight * 0.18f, 180.0f, 260.0f);
+}
+
+EditorViewportAssetDropResult DrawViewportAssetDropTarget(bool playMode,
+                                                          float targetWidth,
+                                                          float targetHeight,
+                                                          void* userData,
+                                                          EditorViewportAssetDropHandler onDrop) {
+  EditorViewportAssetDropResult result;
+  const ImGuiPayload* activeDrag = ImGui::GetDragDropPayload();
+  if (playMode || !activeDrag || !activeDrag->IsDataType("ASSET_ID"))
+    return result;
+  if (targetWidth <= 0.0f || targetHeight <= 0.0f)
+    return result;
+
+  result.targetVisible = true;
+  ImGui::InvisibleButton("##viewport_drop_target", ImVec2(targetWidth, targetHeight));
+  if (!ImGui::BeginDragDropTarget())
+    return result;
+
+  if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+          "ASSET_ID", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
+    result.payloadMatched = true;
+    result.delivered = payload->Delivery;
+    if (payload->Delivery && onDrop) {
+      result.accepted = onDrop(userData, static_cast<const char*>(payload->Data));
+    }
+  }
+  ImGui::EndDragDropTarget();
+  return result;
 }
 
 EditorViewportRect BuildEditorViewportRect(float displayWidth,
