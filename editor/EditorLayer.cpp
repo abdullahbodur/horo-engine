@@ -46,6 +46,7 @@
 #include "editor/EditorDebugTrace.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
+#include "editor/SceneProjectBridge.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
@@ -65,6 +66,7 @@
 #include "renderer/Texture.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
+#include "scene/SceneRuntimeConversion.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/PlayerTagComponent.h"
 #include "scene/components/TransformComponent.h"
@@ -87,6 +89,66 @@ constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
 constexpr size_t kMaxEditorHistorySnapshots = 128;
+
+std::string BuildIssueKey(const std::string& severity,
+                          const std::string& path,
+                          const std::string& message) {
+  return severity + "\n" + path + "\n" + message;
+}
+
+std::string BuildIssueSeverityText(SceneProjectValidationIssue::Severity severity) {
+  return severity == SceneProjectValidationIssue::Severity::Error ? "error" : "warning";
+}
+
+std::string BuildIssueSeverityText(RuntimeSceneBuildIssue::Severity severity) {
+  return severity == RuntimeSceneBuildIssue::Severity::Error ? "error" : "warning";
+}
+
+Mcp::McpBuildSnapshot BuildMcpBuildSnapshot(const SceneDocument& document) {
+  Mcp::McpBuildSnapshot snapshot;
+  snapshot.available = true;
+
+  const SceneProjectModel model = BuildSceneProjectModel(document);
+  snapshot.assetCount = model.scene.assets.size();
+  snapshot.nodeCount = model.scene.nodes.size();
+
+  const SceneProjectValidationResult validation = ValidateSceneProjectModel(model);
+  std::unordered_set<std::string> validationIssueKeys;
+  for (const SceneProjectValidationIssue& issue : validation.issues) {
+    const std::string severity = BuildIssueSeverityText(issue.severity);
+    validationIssueKeys.insert(BuildIssueKey(severity, issue.path, issue.message));
+    if (issue.severity == SceneProjectValidationIssue::Severity::Error)
+      ++snapshot.sceneValidationErrors;
+    else
+      ++snapshot.sceneValidationWarnings;
+    snapshot.issues.push_back(Mcp::McpBuildIssueSnapshot{"validation", severity, issue.path, issue.message});
+  }
+
+  const RuntimeSceneBuildResult runtimeBuild = Monolith::BuildRuntimeSceneDefinition(model);
+  snapshot.roomCount = runtimeBuild.definition.rooms.size();
+  snapshot.lightCount = runtimeBuild.definition.lights.size();
+  snapshot.hasSceneCamera = runtimeBuild.definition.sceneCamera.has_value();
+  for (const RuntimeSceneRoom& room : runtimeBuild.definition.rooms) {
+    snapshot.panelCount += room.panels.size();
+    snapshot.propCount += room.props.size();
+  }
+
+  for (const RuntimeSceneBuildIssue& issue : runtimeBuild.issues) {
+    const std::string severity = BuildIssueSeverityText(issue.severity);
+    if (validationIssueKeys.count(BuildIssueKey(severity, issue.path, issue.message)) != 0)
+      continue;
+    if (issue.severity == RuntimeSceneBuildIssue::Severity::Error)
+      ++snapshot.runtimeBuildErrors;
+    else
+      ++snapshot.runtimeBuildWarnings;
+    snapshot.issues.push_back(Mcp::McpBuildIssueSnapshot{"runtime", severity, issue.path, issue.message});
+  }
+
+  const size_t totalErrors = snapshot.sceneValidationErrors + snapshot.runtimeBuildErrors;
+  const size_t totalWarnings = snapshot.sceneValidationWarnings + snapshot.runtimeBuildWarnings;
+  snapshot.status = totalErrors > 0 ? "error" : totalWarnings > 0 ? "warning" : "ok";
+  return snapshot;
+}
 
 bool AssetDefsEqual(const AssetDef& lhs, const AssetDef& rhs) {
   return lhs.mesh == rhs.mesh &&
@@ -5494,6 +5556,7 @@ void EditorLayer::PublishMcpSnapshot() {
     });
   }
 
+  snapshot.build = BuildMcpBuildSnapshot(m_document);
   m_mcpController.PublishSnapshot(snapshot);
 }
 

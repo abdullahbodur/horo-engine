@@ -111,6 +111,15 @@ json BuildConsoleEntryJson(const McpConsoleEntry& entry) {
   };
 }
 
+json BuildBuildIssueJson(const McpBuildIssueSnapshot& issue) {
+  return json{
+      {"stage", issue.stage},
+      {"severity", issue.severity},
+      {"path", issue.path},
+      {"message", issue.message},
+  };
+}
+
 bool ObjectMatchesQuery(const McpObjectSnapshot& object, const std::string& query) {
   if (ContainsCaseInsensitive(object.id, query) || ContainsCaseInsensitive(object.type, query) ||
       ContainsCaseInsensitive(object.assetId, query) || ContainsCaseInsensitive(GetParentId(object), query)) {
@@ -303,6 +312,34 @@ json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit
   };
   out["recent"] = BuildConsoleJson(snapshot, lineLimit)["lines"];
   return out;
+}
+
+json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit) {
+  const size_t safeLimit = ClampLimit(issueLimit, 5, 25);
+  json issues = json::array();
+  const size_t count = std::min(safeLimit, snapshot.build.issues.size());
+  for (size_t i = 0; i < count; ++i)
+    issues.push_back(BuildBuildIssueJson(snapshot.build.issues[i]));
+
+  return json{
+      {"available", snapshot.build.available},
+      {"source", snapshot.build.source},
+      {"status", snapshot.build.status},
+      {"assetCount", snapshot.build.assetCount},
+      {"nodeCount", snapshot.build.nodeCount},
+      {"sceneValidationErrors", snapshot.build.sceneValidationErrors},
+      {"sceneValidationWarnings", snapshot.build.sceneValidationWarnings},
+      {"runtimeBuildErrors", snapshot.build.runtimeBuildErrors},
+      {"runtimeBuildWarnings", snapshot.build.runtimeBuildWarnings},
+      {"roomCount", snapshot.build.roomCount},
+      {"panelCount", snapshot.build.panelCount},
+      {"propCount", snapshot.build.propCount},
+      {"lightCount", snapshot.build.lightCount},
+      {"hasSceneCamera", snapshot.build.hasSceneCamera},
+      {"issueCount", snapshot.build.issues.size()},
+      {"issues", std::move(issues)},
+      {"moreIssues", snapshot.build.issues.size() > count ? snapshot.build.issues.size() - count : 0},
+  };
 }
 
 json BuildObjectListJson(const McpEditorSnapshot& snapshot,

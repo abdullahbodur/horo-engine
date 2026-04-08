@@ -43,6 +43,31 @@ struct McpConsoleEntry {
   std::string message;
 };
 
+struct McpBuildIssueSnapshot {
+  std::string stage;
+  std::string severity;
+  std::string path;
+  std::string message;
+};
+
+struct McpBuildSnapshot {
+  bool available = false;
+  std::string source = "scene_project_runtime";
+  std::string status = "unavailable";
+  size_t assetCount = 0;
+  size_t nodeCount = 0;
+  size_t sceneValidationErrors = 0;
+  size_t sceneValidationWarnings = 0;
+  size_t runtimeBuildErrors = 0;
+  size_t runtimeBuildWarnings = 0;
+  size_t roomCount = 0;
+  size_t panelCount = 0;
+  size_t propCount = 0;
+  size_t lightCount = 0;
+  bool hasSceneCamera = false;
+  std::vector<McpBuildIssueSnapshot> issues;
+};
+
 struct McpEditorSnapshot {
   bool editorActive = false;
   bool playMode = false;
@@ -56,6 +81,7 @@ struct McpEditorSnapshot {
   std::vector<McpObjectSnapshot> objects;
   std::vector<McpAssetSnapshot> assets;
   std::vector<McpConsoleEntry> consoleEntries;
+  McpBuildSnapshot build;
 };
 
 std::shared_ptr<const McpEditorSnapshot> CloneSnapshot(const McpEditorSnapshot& snapshot);
@@ -71,6 +97,7 @@ nlohmann::json BuildAssetsCatalogJson(const McpEditorSnapshot& snapshot,
                                       const std::string& query = {});
 nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 20);
 nlohmann::json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 5);
+nlohmann::json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit = 5);
 nlohmann::json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                                    size_t objectLimit = 12,
                                    const std::string& typeFilter = {},

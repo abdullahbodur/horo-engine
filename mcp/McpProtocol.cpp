@@ -123,6 +123,7 @@ const std::vector<McpCatalogEntry>& GetResourceCatalog() {
       {"assets.catalog", "assets://catalog", "Filtered asset catalog summary."},
       {"console.recent", "console://recent", "Recent console lines."},
       {"console.summary", "console://summary", "Console severity counts and latest lines."},
+      {"build.status", "build://status", "Compact typed-scene and runtime build health."},
   };
   return catalog;
 }
@@ -159,7 +160,7 @@ bool IsKnownResourceUri(const std::string& uri) {
   static const std::unordered_set<std::string> uris = {
       "scene://summary",  "scene://selection",   "scene://assets",      "scene://hierarchy",
       "scene://objects",  "scene://scene_status","assets://selection",  "assets://catalog",
-      "console://recent", "console://summary",
+      "console://recent", "console://summary",   "build://status",
   };
   return uris.find(uri) != uris.end();
 }
@@ -291,6 +292,8 @@ json BuildResourcePayload(const McpEditorSnapshot& snapshot, const std::string& 
     return BuildConsoleJson(snapshot, params.value("limit", 20));
   if (uri == "console://summary")
     return BuildConsoleSummaryJson(snapshot, params.value("limit", 5));
+  if (uri == "build://status")
+    return BuildBuildStatusJson(snapshot, params.value("limit", 5));
   return json::object();
 }
 

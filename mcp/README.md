@@ -42,6 +42,7 @@ Resources:
 - `assets.catalog`
 - `console.recent`
 - `console.summary`
+- `build.status`
 
 Tools:
 

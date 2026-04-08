@@ -238,6 +238,21 @@ McpEditorSnapshot MakeSnapshot() {
   snapshot.consoleEntries.push_back({"12:00:01", "WARN", "Missing optional collider for obj_light"});
   snapshot.consoleEntries.push_back({"12:00:02", "ERROR", "Renderer exploded briefly"});
   snapshot.consoleEntries.push_back({"12:00:03", "INFO", "Hero animation warmed"});
+  snapshot.build.available = true;
+  snapshot.build.source = "scene_project_runtime";
+  snapshot.build.status = "warning";
+  snapshot.build.assetCount = 3;
+  snapshot.build.nodeCount = 4;
+  snapshot.build.sceneValidationWarnings = 1;
+  snapshot.build.runtimeBuildWarnings = 1;
+  snapshot.build.roomCount = 1;
+  snapshot.build.propCount = 4;
+  snapshot.build.lightCount = 1;
+  snapshot.build.hasSceneCamera = true;
+  snapshot.build.issues.push_back({"validation", "warning", "scene.nodes[1].parentId",
+                                   "parentId does not resolve to a declared scene node."});
+  snapshot.build.issues.push_back({"runtime", "warning", "scene.nodes[3].light",
+                                   "Light node is missing typed light properties; using defaults."});
   return snapshot;
 }
 
@@ -428,6 +443,14 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(consoleSummary["errorCount"] == 1);
   REQUIRE(consoleSummary["recent"].size() == 2);
 
+  const json buildStatus = BuildBuildStatusJson(snapshot, 1);
+  REQUIRE(buildStatus["status"] == "warning");
+  REQUIRE(buildStatus["sceneValidationWarnings"] == 1);
+  REQUIRE(buildStatus["runtimeBuildWarnings"] == 1);
+  REQUIRE(buildStatus["issueCount"] == 2);
+  REQUIRE(buildStatus["issues"].size() == 1);
+  REQUIRE(buildStatus["moreIssues"] == 1);
+
   const json objectList = BuildObjectListJson(snapshot, 8, "Prop", "root", false);
   REQUIRE(objectList["matchedObjects"] == 2);
   REQUIRE(objectList["objects"].size() == 2);
@@ -511,12 +534,12 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["minItems"] == 3);
 
   const json resourceList = ProtocolRequest(protocol, "resources/list", json::object(), 4);
-  REQUIRE(resourceList["result"]["resources"].size() == 10);
+  REQUIRE(resourceList["result"]["resources"].size() == 11);
 
   const std::vector<std::string> resourceUris = {
       "scene://summary",   "scene://selection",   "scene://assets",      "scene://hierarchy",
       "scene://objects",   "scene://scene_status","assets://selection",  "assets://catalog",
-      "console://recent",  "console://summary",
+      "console://recent",  "console://summary",   "build://status",
   };
   for (size_t i = 0; i < resourceUris.size(); ++i) {
     const json response =
@@ -854,7 +877,7 @@ TEST_CASE("McpController localhost server serves reads, writes, and status snaps
   const McpStatusSnapshot status = controller.GetStatusSnapshot();
   REQUIRE(status.running);
   REQUIRE(status.toolCount == 31);
-  REQUIRE(status.resourceCount == 10);
+  REQUIRE(status.resourceCount == 11);
   REQUIRE(status.totalRequests >= 3);
 
   controller.SetEditorActive(false);

@@ -44,6 +44,7 @@ User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPRO
 - `assets.catalog`
 - `console.recent`
 - `console.summary`
+- `build.status`
 
 These resources are compact by default and intentionally avoid full-scene dumps.
 
