@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <initializer_list>
 
+#include "core/ProjectPath.h"
 #include "editor/AssetIdentity.h"
+#include "editor/SceneSerializer.h"
 
 namespace Monolith {
 namespace Editor {
@@ -99,6 +101,160 @@ void EraseKeys(std::unordered_map<std::string, std::string>* props,
     props->erase(key);
 }
 
+void MergeTypedAsset(SceneProjectModel* model, const SceneAssetDefinition& asset) {
+  if (!model)
+    return;
+  for (SceneAssetDefinition& existing : model->scene.assets) {
+    if (existing.id == asset.id) {
+      existing = asset;
+      return;
+    }
+  }
+  model->scene.assets.push_back(asset);
+}
+
+SceneNodeDefinition BuildNodeDefinitionFromObject(const SceneObject& object) {
+  SceneNodeDefinition node;
+  node.id = object.id;
+  node.kind = ToSceneNodeKind(object.type);
+  node.position = object.position;
+  node.scale = object.scale;
+  node.yaw = object.yaw;
+  node.pitch = object.pitch;
+  node.roll = object.roll;
+  node.assetId = object.assetId;
+  node.extraProps = object.props;
+  if (object.prefabInstance.has_value()) {
+    node.prefabInstance = ScenePrefabReference{object.prefabInstance->prefabId,
+                                               object.prefabInstance->sourcePath};
+  }
+
+  const auto parentIt = node.extraProps.find("parentId");
+  if (parentIt != node.extraProps.end() && !parentIt->second.empty()) {
+    node.parentId = parentIt->second;
+    node.extraProps.erase(parentIt);
+  }
+
+  if (node.kind == SceneNodeKind::Camera) {
+    SceneCameraProperties camera;
+    if (const std::string* fov = FindProp(node.extraProps, "fov"))
+      camera.fovY = ParseFloat(*fov, camera.fovY);
+    if (const std::string* nearClip = FindProp(node.extraProps, "nearClip"))
+      camera.nearClip = ParseFloat(*nearClip, camera.nearClip);
+    if (const std::string* farClip = FindProp(node.extraProps, "farClip"))
+      camera.farClip = ParseFloat(*farClip, camera.farClip);
+    camera.extraProps = node.extraProps;
+    EraseKeys(&camera.extraProps, {"fov", "nearClip", "farClip"});
+    EraseKeys(&node.extraProps, {"fov", "nearClip", "farClip"});
+    node.camera = std::move(camera);
+  }
+
+  if (node.kind == SceneNodeKind::Light) {
+    SceneLightProperties light;
+    if (const std::string* lightType = FindProp(node.extraProps, "lightType")) {
+      light.kind = (*lightType == "directional") ? SceneLightKind::Directional : SceneLightKind::Point;
+    }
+    if (const std::string* intensity = FindProp(node.extraProps, "intensity"))
+      light.intensity = ParseFloat(*intensity, light.intensity);
+    if (const std::string* color = FindProp(node.extraProps, "color"))
+      light.color = ParseVec3Csv(*color, light.color);
+    if (const std::string* radius = FindProp(node.extraProps, "radius"))
+      light.radius = ParseFloat(*radius, light.radius);
+    light.extraProps = node.extraProps;
+    EraseKeys(&light.extraProps, {"lightType", "intensity", "color", "radius"});
+    EraseKeys(&node.extraProps, {"lightType", "intensity", "color", "radius"});
+    node.light = std::move(light);
+  }
+
+  for (const auto& component : object.components) {
+    if (component.type == "script" && !node.script.has_value()) {
+      SceneScriptProperties script;
+      const auto it = component.props.find("behaviorTag");
+      if (it != component.props.end())
+        script.behaviorTag = it->second;
+      script.extraProps = component.props;
+      script.extraProps.erase("behaviorTag");
+      node.script = std::move(script);
+      continue;
+    }
+    if (component.type == "rigidbody" && !node.rigidbody.has_value()) {
+      SceneRigidBodyProperties rigidbody;
+      const auto massIt = component.props.find("mass");
+      if (massIt != component.props.end())
+        rigidbody.mass = ParseFloat(massIt->second, rigidbody.mass);
+      const auto kinIt = component.props.find("isKinematic");
+      if (kinIt != component.props.end())
+        rigidbody.isKinematic = ParseBool(kinIt->second, rigidbody.isKinematic);
+      const auto gravIt = component.props.find("useGravity");
+      if (gravIt != component.props.end())
+        rigidbody.useGravity = ParseBool(gravIt->second, rigidbody.useGravity);
+      rigidbody.extraProps = component.props;
+      EraseKeys(&rigidbody.extraProps, {"mass", "isKinematic", "useGravity"});
+      node.rigidbody = std::move(rigidbody);
+      continue;
+    }
+    if (component.type == "light" && !node.light.has_value()) {
+      SceneLightProperties light;
+      const auto typeIt = component.props.find("lightType");
+      if (typeIt != component.props.end())
+        light.kind = (typeIt->second == "directional") ? SceneLightKind::Directional
+                                                       : SceneLightKind::Point;
+      const auto intensityIt = component.props.find("intensity");
+      if (intensityIt != component.props.end())
+        light.intensity = ParseFloat(intensityIt->second, light.intensity);
+      const auto colorIt = component.props.find("color");
+      if (colorIt != component.props.end())
+        light.color = ParseVec3Csv(colorIt->second, light.color);
+      const auto radiusIt = component.props.find("radius");
+      if (radiusIt != component.props.end())
+        light.radius = ParseFloat(radiusIt->second, light.radius);
+      light.extraProps = component.props;
+      EraseKeys(&light.extraProps, {"lightType", "intensity", "color", "radius"});
+      node.light = std::move(light);
+      continue;
+    }
+
+    node.extraComponents.push_back({component.type, component.props});
+  }
+
+  if (!node.script.has_value()) {
+    const auto behaviorIt = object.props.find("behavior");
+    if (behaviorIt != object.props.end() && !behaviorIt->second.empty() && behaviorIt->second != "none") {
+      SceneScriptProperties script;
+      script.behaviorTag = behaviorIt->second;
+      node.script = std::move(script);
+      node.extraProps.erase("behavior");
+    }
+  }
+
+  if (!node.light.has_value()) {
+    const auto legacyLightIt = object.props.find("isLight");
+    if (legacyLightIt != object.props.end() && ParseBool(legacyLightIt->second, false)) {
+      node.light = SceneLightProperties{};
+      node.extraProps.erase("isLight");
+    }
+  }
+
+  return node;
+}
+
+void ApplyPrefabOverrides(const SceneObject& instanceObject, SceneNodeDefinition* node) {
+  if (!node)
+    return;
+  node->id = instanceObject.id;
+  node->position = instanceObject.position;
+  node->scale = instanceObject.scale;
+  node->yaw = instanceObject.yaw;
+  node->pitch = instanceObject.pitch;
+  node->roll = instanceObject.roll;
+
+  const auto parentIt = instanceObject.props.find("parentId");
+  if (parentIt != instanceObject.props.end() && !parentIt->second.empty())
+    node->parentId = parentIt->second;
+  else
+    node->parentId.reset();
+}
+
 }  // namespace
 
 SceneProjectModel BuildSceneProjectModel(const SceneDocument& doc) {
@@ -144,120 +300,34 @@ SceneProjectModel BuildSceneProjectModel(const SceneDocument& doc) {
 
   model.scene.nodes.reserve(doc.objects.size());
   for (const auto& object : doc.objects) {
-    SceneNodeDefinition node;
-    node.id = object.id;
-    node.kind = ToSceneNodeKind(object.type);
-    node.position = object.position;
-    node.scale = object.scale;
-    node.yaw = object.yaw;
-    node.pitch = object.pitch;
-    node.roll = object.roll;
-    node.assetId = object.assetId;
-    node.extraProps = object.props;
+    SceneNodeDefinition node = BuildNodeDefinitionFromObject(object);
+    if (object.prefabInstance.has_value() && !object.prefabInstance->sourcePath.empty()) {
+      try {
+        const std::filesystem::path prefabPath = std::filesystem::path(object.prefabInstance->sourcePath).is_absolute()
+                                                     ? std::filesystem::path(object.prefabInstance->sourcePath)
+                                                     : ProjectPath::Resolve(object.prefabInstance->sourcePath);
+        const SceneDocument prefabDoc = SceneSerializer::LoadFromFile(prefabPath.generic_string());
+        if (!prefabDoc.objects.empty()) {
+          for (const auto& [assetId, asset] : prefabDoc.assets) {
+            AssetDef normalizedAsset = asset;
+            EnsureAssetIdentity(assetId, &normalizedAsset);
+            MergeTypedAsset(&model,
+                            SceneAssetDefinition{assetId,
+                                                 normalizedAsset.mesh,
+                                                 ParseVec3Csv(normalizedAsset.renderScale, Vec3::One()),
+                                                 normalizedAsset.albedoMap,
+                                                 normalizedAsset.guid,
+                                                 MakeAssetDisplayName(assetId, normalizedAsset)});
+          }
 
-    const auto parentIt = node.extraProps.find("parentId");
-    if (parentIt != node.extraProps.end() && !parentIt->second.empty()) {
-      node.parentId = parentIt->second;
-      node.extraProps.erase(parentIt);
-    }
-
-    if (node.kind == SceneNodeKind::Camera) {
-      SceneCameraProperties camera;
-      if (const std::string* fov = FindProp(node.extraProps, "fov"))
-        camera.fovY = ParseFloat(*fov, camera.fovY);
-      if (const std::string* nearClip = FindProp(node.extraProps, "nearClip"))
-        camera.nearClip = ParseFloat(*nearClip, camera.nearClip);
-      if (const std::string* farClip = FindProp(node.extraProps, "farClip"))
-        camera.farClip = ParseFloat(*farClip, camera.farClip);
-      camera.extraProps = node.extraProps;
-      EraseKeys(&camera.extraProps, {"fov", "nearClip", "farClip"});
-      EraseKeys(&node.extraProps, {"fov", "nearClip", "farClip"});
-      node.camera = std::move(camera);
-    }
-
-    if (node.kind == SceneNodeKind::Light) {
-      SceneLightProperties light;
-      if (const std::string* lightType = FindProp(node.extraProps, "lightType")) {
-        light.kind = (*lightType == "directional") ? SceneLightKind::Directional : SceneLightKind::Point;
-      }
-      if (const std::string* intensity = FindProp(node.extraProps, "intensity"))
-        light.intensity = ParseFloat(*intensity, light.intensity);
-      if (const std::string* color = FindProp(node.extraProps, "color"))
-        light.color = ParseVec3Csv(*color, light.color);
-      if (const std::string* radius = FindProp(node.extraProps, "radius"))
-        light.radius = ParseFloat(*radius, light.radius);
-      light.extraProps = node.extraProps;
-      EraseKeys(&light.extraProps, {"lightType", "intensity", "color", "radius"});
-      EraseKeys(&node.extraProps, {"lightType", "intensity", "color", "radius"});
-      node.light = std::move(light);
-    }
-
-    for (const auto& component : object.components) {
-      if (component.type == "script" && !node.script.has_value()) {
-        SceneScriptProperties script;
-        const auto it = component.props.find("behaviorTag");
-        if (it != component.props.end())
-          script.behaviorTag = it->second;
-        script.extraProps = component.props;
-        script.extraProps.erase("behaviorTag");
-        node.script = std::move(script);
-        continue;
-      }
-      if (component.type == "rigidbody" && !node.rigidbody.has_value()) {
-        SceneRigidBodyProperties rigidbody;
-        const auto massIt = component.props.find("mass");
-        if (massIt != component.props.end())
-          rigidbody.mass = ParseFloat(massIt->second, rigidbody.mass);
-        const auto kinIt = component.props.find("isKinematic");
-        if (kinIt != component.props.end())
-          rigidbody.isKinematic = ParseBool(kinIt->second, rigidbody.isKinematic);
-        const auto gravIt = component.props.find("useGravity");
-        if (gravIt != component.props.end())
-          rigidbody.useGravity = ParseBool(gravIt->second, rigidbody.useGravity);
-        rigidbody.extraProps = component.props;
-        EraseKeys(&rigidbody.extraProps, {"mass", "isKinematic", "useGravity"});
-        node.rigidbody = std::move(rigidbody);
-        continue;
-      }
-      if (component.type == "light" && !node.light.has_value()) {
-        SceneLightProperties light;
-        const auto typeIt = component.props.find("lightType");
-        if (typeIt != component.props.end())
-          light.kind = (typeIt->second == "directional") ? SceneLightKind::Directional
-                                                         : SceneLightKind::Point;
-        const auto intensityIt = component.props.find("intensity");
-        if (intensityIt != component.props.end())
-          light.intensity = ParseFloat(intensityIt->second, light.intensity);
-        const auto colorIt = component.props.find("color");
-        if (colorIt != component.props.end())
-          light.color = ParseVec3Csv(colorIt->second, light.color);
-        const auto radiusIt = component.props.find("radius");
-        if (radiusIt != component.props.end())
-          light.radius = ParseFloat(radiusIt->second, light.radius);
-        light.extraProps = component.props;
-        EraseKeys(&light.extraProps, {"lightType", "intensity", "color", "radius"});
-        node.light = std::move(light);
-        continue;
-      }
-
-      node.extraComponents.push_back({component.type, component.props});
-    }
-
-    if (!node.script.has_value()) {
-      const auto behaviorIt = object.props.find("behavior");
-      if (behaviorIt != object.props.end() && !behaviorIt->second.empty() && behaviorIt->second != "none") {
-        SceneScriptProperties script;
-        script.behaviorTag = behaviorIt->second;
-        node.script = std::move(script);
-        node.extraProps.erase("behavior");
-      }
-    }
-
-    if (!node.light.has_value()) {
-      const auto legacyLightIt = object.props.find("isLight");
-      if (legacyLightIt != object.props.end() && ParseBool(legacyLightIt->second, false)) {
-        node.light = SceneLightProperties{};
-        node.extraProps.erase("isLight");
+          SceneNodeDefinition prefabNode = BuildNodeDefinitionFromObject(prefabDoc.objects.front());
+          prefabNode.prefabInstance = ScenePrefabReference{object.prefabInstance->prefabId,
+                                                           object.prefabInstance->sourcePath};
+          ApplyPrefabOverrides(object, &prefabNode);
+          node = std::move(prefabNode);
+        }
+      } catch (...) {
+        // Preserve the instance metadata even if the source prefab cannot be resolved at build time.
       }
     }
 
@@ -292,6 +362,10 @@ SceneDocument BuildSceneDocument(const SceneProjectModel& model) {
     object.pitch = node.pitch;
     object.roll = node.roll;
     object.assetId = node.assetId;
+    if (node.prefabInstance.has_value()) {
+      object.prefabInstance = ScenePrefabInstance{node.prefabInstance->prefabId,
+                                                  node.prefabInstance->sourcePath};
+    }
     object.props = node.extraProps;
 
     if (node.parentId.has_value() && !node.parentId->empty())

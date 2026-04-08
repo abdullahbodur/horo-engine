@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -41,7 +42,12 @@ struct AssetDef {
         renderScale(std::move(renderScaleValue)),
         albedoMap(std::move(albedoMapValue)),
         guid(std::move(guidValue)),
-        displayName(std::move(displayNameValue)) {}
+      displayName(std::move(displayNameValue)) {}
+};
+
+struct ScenePrefabInstance {
+  std::string prefabId;
+  std::string sourcePath;
 };
 
 // One generic scene object: transform + optional asset reference + props bag.
@@ -57,6 +63,7 @@ struct SceneObject {
   float pitch = 0.0f;        // degrees around X axis; clamped ±89 for Camera objects
   float roll = 0.0f;         // degrees around Z axis
   std::string assetId;       // empty → use inline props
+  std::optional<ScenePrefabInstance> prefabInstance;
   std::unordered_map<std::string, std::string> props;
   std::vector<ComponentDesc> components;  // attached components (light, rigidbody, script, …)
 };

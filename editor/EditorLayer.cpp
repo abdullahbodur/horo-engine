@@ -86,6 +86,75 @@ constexpr char kEditorPropertiesWindow[] = "Properties";
 constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
+constexpr size_t kMaxEditorHistorySnapshots = 128;
+
+bool AssetDefsEqual(const AssetDef& lhs, const AssetDef& rhs) {
+  return lhs.mesh == rhs.mesh &&
+         lhs.renderScale == rhs.renderScale &&
+         lhs.albedoMap == rhs.albedoMap &&
+         lhs.guid == rhs.guid &&
+         lhs.displayName == rhs.displayName;
+}
+
+bool ComponentDescsEqual(const ComponentDesc& lhs, const ComponentDesc& rhs) {
+  return lhs.type == rhs.type && lhs.props == rhs.props;
+}
+
+bool SceneObjectsEqual(const SceneObject& lhs, const SceneObject& rhs) {
+  const bool prefabEqual =
+      (!lhs.prefabInstance.has_value() && !rhs.prefabInstance.has_value()) ||
+      (lhs.prefabInstance.has_value() && rhs.prefabInstance.has_value() &&
+       lhs.prefabInstance->prefabId == rhs.prefabInstance->prefabId &&
+       lhs.prefabInstance->sourcePath == rhs.prefabInstance->sourcePath);
+  if (lhs.id != rhs.id ||
+      lhs.type != rhs.type ||
+      lhs.position.x != rhs.position.x ||
+      lhs.position.y != rhs.position.y ||
+      lhs.position.z != rhs.position.z ||
+      lhs.scale.x != rhs.scale.x ||
+      lhs.scale.y != rhs.scale.y ||
+      lhs.scale.z != rhs.scale.z ||
+      lhs.yaw != rhs.yaw ||
+      lhs.pitch != rhs.pitch ||
+      lhs.roll != rhs.roll ||
+      lhs.assetId != rhs.assetId ||
+      !prefabEqual ||
+      lhs.props != rhs.props ||
+      lhs.components.size() != rhs.components.size()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < lhs.components.size(); ++i) {
+    if (!ComponentDescsEqual(lhs.components[i], rhs.components[i]))
+      return false;
+  }
+  return true;
+}
+
+bool SceneDocumentsEqual(const SceneDocument& lhs, const SceneDocument& rhs) {
+  if (lhs.version != rhs.version ||
+      lhs.sceneId != rhs.sceneId ||
+      lhs.sceneName != rhs.sceneName ||
+      lhs.filePath != rhs.filePath ||
+      lhs.settings != rhs.settings ||
+      lhs.assets.size() != rhs.assets.size() ||
+      lhs.objects.size() != rhs.objects.size()) {
+    return false;
+  }
+
+  for (const auto& [assetId, asset] : lhs.assets) {
+    const auto it = rhs.assets.find(assetId);
+    if (it == rhs.assets.end() || !AssetDefsEqual(asset, it->second))
+      return false;
+  }
+
+  for (size_t i = 0; i < lhs.objects.size(); ++i) {
+    if (!SceneObjectsEqual(lhs.objects[i], rhs.objects[i]))
+      return false;
+  }
+
+  return true;
+}
 
 constexpr ImGuiWindowFlags kMainPanelWindowFlags =
     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
@@ -166,6 +235,33 @@ static int FindObjectIndexById(const SceneDocument& doc, const std::string& id) 
       return i;
   }
   return -1;
+}
+
+std::string SanitizePrefabStem(std::string value) {
+  for (char& ch : value) {
+    const bool alphaNum = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                          (ch >= '0' && ch <= '9');
+    if (!alphaNum && ch != '_' && ch != '-')
+      ch = '_';
+  }
+  while (!value.empty() && value.front() == '_')
+    value.erase(value.begin());
+  while (!value.empty() && value.back() == '_')
+    value.pop_back();
+  return value.empty() ? "prefab" : value;
+}
+
+std::filesystem::path BuildUniquePrefabPath(const SceneDocument& doc, const SceneObject& object) {
+  const std::filesystem::path prefabDir = ProjectPath::Resolve("assets/prefabs");
+  const std::string stemBase = SanitizePrefabStem(object.id.empty() ? doc.sceneId + "_prefab"
+                                                                    : object.id + "_prefab");
+  std::filesystem::path candidate = prefabDir / (stemBase + ".horo");
+  int suffix = 2;
+  while (std::filesystem::exists(candidate)) {
+    candidate = prefabDir / (stemBase + "_" + std::to_string(suffix) + ".horo");
+    ++suffix;
+  }
+  return candidate;
 }
 
 static bool IsDescendantOf(const SceneDocument& doc, int nodeIdx, int ancestorIdx) {
@@ -1170,7 +1266,7 @@ void EditorLayer::MarkWorkspaceStateDirty() {
   m_workspaceStateDirty = true;
 }
 
-void EditorLayer::LoadDocument(SceneDocument doc) {
+void EditorLayer::ApplyLoadedDocument(SceneDocument doc, bool resetHistory) {
   if (doc.filePath.empty())
     doc.filePath = "assets/scenes/scene.json";
 
@@ -1206,6 +1302,12 @@ void EditorLayer::LoadDocument(SceneDocument doc) {
   m_lastSavedDocument = m_document;
   m_selectedIndices.clear();
   m_selectedAssetId.clear();
+  if (resetHistory)
+    ClearHistory();
+}
+
+void EditorLayer::LoadDocument(SceneDocument doc) {
+  ApplyLoadedDocument(std::move(doc), true);
 }
 
 void EditorLayer::OnPathsDropped(int pathCount, const char** utf8Paths, float dropX, float dropY) {
@@ -1417,10 +1519,27 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                                   m_assetSearchOpen ||
                                   m_confirmDeleteObjectsOpen || m_confirmDeleteAssetOpen ||
                                   m_confirmExitOpen;
+    const bool currUndo = accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS;
+    const bool currRedo =
+        accelHeld &&
+        ((shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS) ||
+         glfwGetKey(m_window, GLFW_KEY_Y) == GLFW_PRESS);
+    if (!m_flyMode && !io.WantTextInput && !ImGui::IsAnyItemActive() && !hasBlockingPopup) {
+      if (currUndo && !m_prevUndo)
+        UndoHistory();
+      if (currRedo && !m_prevRedo)
+        RedoHistory();
+    }
+    m_prevUndo = currUndo;
+    m_prevRedo = currRedo;
     // Escape: dismiss gizmo only (no editor quit on Escape; use File / window close).
     if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
         !hasBlockingPopup && m_gizmo.IsActive()) {
       m_gizmo.Deactivate();
+      if (m_gizmoHistoryPending) {
+        FinalizeHistoryTransaction();
+        m_gizmoHistoryPending = false;
+      }
     }
     m_prevEsc = currEsc;
 
@@ -1492,6 +1611,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
         if (syncIdx < 0 ||
             syncIdx >= static_cast<int>(m_document.objects.size())) {
           m_gizmo.Deactivate();
+          if (m_gizmoHistoryPending) {
+            FinalizeHistoryTransaction();
+            m_gizmoHistoryPending = false;
+          }
         } else {
           const auto& syncObj = m_document.objects[syncIdx];
           Quaternion  syncRot = Quaternion::FromEuler(ToRadians(syncObj.pitch),
@@ -1604,6 +1727,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                      || std::abs(dScale.y - 1.0f) > 1e-6f
                      || std::abs(dScale.z - 1.0f) > 1e-6f;
         if (anyDelta) {
+          if (!m_gizmoHistoryPending) {
+            BeginHistoryTransaction(CaptureHistorySnapshot());
+            m_gizmoHistoryPending = true;
+          }
           for (int si : m_selectedIndices) {
             if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
               continue;
@@ -1638,6 +1765,10 @@ bool EditorLayer::OnUpdate(float dt, Camera& cam, int screenW, int screenH) {
                 m_document, si, oldObjPos, oldObjRot,
                 applyObj.position, nextRot, m_transformCb, m_selectedIndices);
           }
+        }
+        if (m_gizmoHistoryPending && m_gizmo.GetDragAxis() == GizmoAxis::None) {
+          FinalizeHistoryTransaction();
+          m_gizmoHistoryPending = false;
         }
       }
 
@@ -1757,6 +1888,11 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
+  const EditorHistorySnapshot frameHistoryBefore = m_active ? CaptureHistorySnapshot()
+                                                            : EditorHistorySnapshot{};
+  const size_t undoHistorySizeBeforeRender = m_undoHistory.size();
+  const size_t redoHistorySizeBeforeRender = m_redoHistory.size();
+
   if (m_active) {
     DrawToolbar();
     DrawDockspace();
@@ -1782,6 +1918,13 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   DrawHotReloadOverlay();
   DrawClipboardToast();
   SaveWorkspaceStateIfNeeded(false);
+
+  if (m_active &&
+      !m_historyTransactionOpen &&
+      m_undoHistory.size() == undoHistorySizeBeforeRender &&
+      m_redoHistory.size() == redoHistorySizeBeforeRender) {
+    CommitHistoryChange(frameHistoryBefore);
+  }
 
   // Wireframe pass: clears solid scene and draws edges; must happen before
   // DebugDraw::Flush so selection highlight/gizmo render on top.
@@ -2010,15 +2153,33 @@ void EditorLayer::DrawToolbar() {
   }
   ImGui::SameLine();
 
-  if (!hasSelection)
-    ImGui::BeginDisabled();
   if (ImGui::Button("Edit"))
     ImGui::OpenPopup("##toolbar_edit_popup");
   if (ImGui::BeginPopup("##toolbar_edit_popup")) {
+    if (!CanUndoHistory())
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z"))
+      UndoHistory();
+    if (!CanUndoHistory())
+      ImGui::EndDisabled();
+    if (!CanRedoHistory())
+      ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y"))
+      RedoHistory();
+    if (!CanRedoHistory())
+      ImGui::EndDisabled();
+    ImGui::Separator();
+    if (!hasSelection)
+      ImGui::BeginDisabled();
     if (!hasSingleSelection)
       ImGui::BeginDisabled();
     if (ImGui::MenuItem("Rename..."))
       OpenRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Create Prefab")) {
+      std::string prefabError;
+      if (!CreatePrefabFromSelection(&prefabError))
+        LOG_ERROR("[Editor] Create prefab failed: %s", prefabError.c_str());
+    }
     if (!hasSingleSelection)
       ImGui::EndDisabled();
     if (ImGui::MenuItem("Duplicate"))
@@ -2039,10 +2200,10 @@ void EditorLayer::DrawToolbar() {
     }
     if (!hasSingleSelection)
       ImGui::EndDisabled();
+    if (!hasSelection)
+      ImGui::EndDisabled();
     ImGui::EndPopup();
   }
-  if (!hasSelection)
-    ImGui::EndDisabled();
   ImGui::SameLine();
 
   if (ImGui::Button("View"))
@@ -3391,10 +3552,7 @@ void EditorLayer::OpenAdditionalSceneFile() {
   if (GetOpenFileNameA(&ofn)) {
     try {
       SceneDocument doc = SceneSerializer::LoadFromFile(filePath);
-      m_document = std::move(doc);
-      m_lastSavedDocument = m_document;
-      m_selectedIndices.clear();
-      m_selectedAssetId.clear();
+      ApplyLoadedDocument(std::move(doc), false);
     } catch (const std::exception& e) {
       LOG_ERROR("EditorLayer: failed to open scene '{}': {}", filePath, e.what());
     }
@@ -4408,6 +4566,10 @@ void EditorLayer::DrawPropertiesPanel() {
                          : (obj.type == SceneObjectType::Camera) ? "Camera"
                                                                  : "Panel";
   ImGui::LabelText("Type", "%s", typeName);
+  if (obj.prefabInstance.has_value()) {
+    ImGui::LabelText("Prefab", "%s", obj.prefabInstance->prefabId.c_str());
+    ImGui::TextDisabled("%s", obj.prefabInstance->sourcePath.c_str());
+  }
 
   {
     std::string currentParent = GetParentId(obj);
@@ -5126,7 +5288,7 @@ bool EditorLayer::ReloadDocumentFromDisk(std::string* outError,
   try {
     SceneDocument reloaded = SceneSerializer::LoadFromFile(path);
     reloaded.dirty = false;
-    LoadDocument(std::move(reloaded));
+    ApplyLoadedDocument(std::move(reloaded), false);
     m_document.filePath = path;
     m_lastSavedDocument = m_document;
     if (preferredSelectionIds)
@@ -5140,6 +5302,129 @@ bool EditorLayer::ReloadDocumentFromDisk(std::string* outError,
       *outError = e.what();
     return false;
   }
+}
+
+bool EditorLayer::HistorySnapshotsEqual(const EditorHistorySnapshot& lhs,
+                                        const EditorHistorySnapshot& rhs) {
+  return SceneDocumentsEqual(lhs.document, rhs.document) &&
+         SceneDocumentsEqual(lhs.savedDocument, rhs.savedDocument) &&
+         lhs.selectedObjectIds == rhs.selectedObjectIds &&
+         lhs.selectedAssetId == rhs.selectedAssetId;
+}
+
+void EditorLayer::TrimHistory(std::vector<EditorHistorySnapshot>* history) {
+  if (!history)
+    return;
+  if (history->size() <= kMaxEditorHistorySnapshots)
+    return;
+  history->erase(history->begin(),
+                 history->begin() + static_cast<std::ptrdiff_t>(history->size() - kMaxEditorHistorySnapshots));
+}
+
+EditorLayer::EditorHistorySnapshot EditorLayer::CaptureHistorySnapshot() const {
+  EditorHistorySnapshot snapshot;
+  snapshot.document = m_document;
+  snapshot.savedDocument = m_lastSavedDocument;
+  snapshot.selectedObjectIds = GetSelectedObjectIds();
+  snapshot.selectedAssetId = m_selectedAssetId;
+  return snapshot;
+}
+
+void EditorLayer::RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot) {
+  m_document = snapshot.document;
+  m_lastSavedDocument = snapshot.savedDocument;
+  SetSelectedObjectIds(snapshot.selectedObjectIds);
+  if (!snapshot.selectedAssetId.empty() &&
+      m_document.assets.find(snapshot.selectedAssetId) != m_document.assets.end()) {
+    m_selectedAssetId = snapshot.selectedAssetId;
+  } else {
+    m_selectedAssetId.clear();
+  }
+  TriggerReload();
+}
+
+void EditorLayer::CommitHistoryChange(const EditorHistorySnapshot& before) {
+  const EditorHistorySnapshot after = CaptureHistorySnapshot();
+  if (HistorySnapshotsEqual(before, after))
+    return;
+
+  m_undoHistory.push_back(before);
+  TrimHistory(&m_undoHistory);
+  m_redoHistory.clear();
+}
+
+void EditorLayer::BeginHistoryTransaction(const EditorHistorySnapshot& before) {
+  if (m_historyTransactionOpen)
+    return;
+  m_historyTransactionBefore = before;
+  m_historyTransactionOpen = true;
+}
+
+void EditorLayer::FinalizeHistoryTransaction() {
+  if (!m_historyTransactionOpen)
+    return;
+  CommitHistoryChange(m_historyTransactionBefore);
+  m_historyTransactionOpen = false;
+}
+
+void EditorLayer::ClearHistory() {
+  m_undoHistory.clear();
+  m_redoHistory.clear();
+  m_historyTransactionOpen = false;
+}
+
+void EditorLayer::RefreshHistorySavedBaseline() {
+  auto refreshSnapshot = [this](EditorHistorySnapshot* snapshot) {
+    if (!snapshot)
+      return;
+    if (snapshot->document.filePath == m_document.filePath) {
+      snapshot->savedDocument = m_lastSavedDocument;
+      snapshot->document.dirty = !SceneDocumentsEqual(snapshot->document, snapshot->savedDocument);
+    }
+  };
+
+  for (EditorHistorySnapshot& snapshot : m_undoHistory)
+    refreshSnapshot(&snapshot);
+  for (EditorHistorySnapshot& snapshot : m_redoHistory)
+    refreshSnapshot(&snapshot);
+  if (m_historyTransactionOpen)
+    refreshSnapshot(&m_historyTransactionBefore);
+}
+
+bool EditorLayer::CanUndoHistory() const {
+  return !m_undoHistory.empty();
+}
+
+bool EditorLayer::CanRedoHistory() const {
+  return !m_redoHistory.empty();
+}
+
+bool EditorLayer::UndoHistory() {
+  FinalizeHistoryTransaction();
+  if (m_undoHistory.empty())
+    return false;
+
+  const EditorHistorySnapshot current = CaptureHistorySnapshot();
+  const EditorHistorySnapshot target = m_undoHistory.back();
+  m_undoHistory.pop_back();
+  m_redoHistory.push_back(current);
+  TrimHistory(&m_redoHistory);
+  RestoreHistorySnapshot(target);
+  return true;
+}
+
+bool EditorLayer::RedoHistory() {
+  FinalizeHistoryTransaction();
+  if (m_redoHistory.empty())
+    return false;
+
+  const EditorHistorySnapshot current = CaptureHistorySnapshot();
+  const EditorHistorySnapshot target = m_redoHistory.back();
+  m_redoHistory.pop_back();
+  m_undoHistory.push_back(current);
+  TrimHistory(&m_undoHistory);
+  RestoreHistorySnapshot(target);
+  return true;
 }
 
 void EditorLayer::ProcessMcpCommands() {
@@ -5273,6 +5558,10 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     out["pitch"] = object.pitch;
     out["roll"] = object.roll;
     out["assetId"] = object.assetId;
+    if (object.prefabInstance.has_value()) {
+      out["prefab"] = json{{"id", object.prefabInstance->prefabId},
+                           {"path", object.prefabInstance->sourcePath}};
+    }
     const auto parentIt = object.props.find("parentId");
     if (parentIt != object.props.end() && !parentIt->second.empty())
       out["parentId"] = parentIt->second;
@@ -5322,7 +5611,28 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     return Mcp::McpCommandResult{true, json{{"cleared", true}}, std::string()};
   }
 
+  if (toolName == "editor.undo") {
+    const bool undone = UndoHistory();
+    return Mcp::McpCommandResult{true,
+                                 json{{"undone", undone},
+                                      {"dirty", m_document.dirty},
+                                      {"selectedObjectIds", GetSelectedObjectIds()},
+                                      {"selectedAssetId", m_selectedAssetId}},
+                                 std::string()};
+  }
+
+  if (toolName == "editor.redo") {
+    const bool redone = RedoHistory();
+    return Mcp::McpCommandResult{true,
+                                 json{{"redone", redone},
+                                      {"dirty", m_document.dirty},
+                                      {"selectedObjectIds", GetSelectedObjectIds()},
+                                      {"selectedAssetId", m_selectedAssetId}},
+                                 std::string()};
+  }
+
   if (toolName == "editor.create_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     SceneObjectType type = SceneObjectType::Panel;
     if (!ParseSceneObjectType(arguments.value("type", std::string()), &type))
       return Mcp::McpCommandResult{false, json::object(), "Invalid object type."};
@@ -5359,6 +5669,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"created", summarizeObject(m_document.objects.back())}},
                                  std::string()};
@@ -5398,7 +5709,32 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
                                  std::string()};
   }
 
+  if (toolName == "editor.create_prefab") {
+    const std::string id = arguments.value("id", std::string());
+    if (!id.empty())
+      SetSelectedObjectIds({id});
+
+    std::string prefabPath;
+    std::string prefabError;
+    if (!CreatePrefabFromSelection(&prefabError, &prefabPath))
+      return Mcp::McpCommandResult{false, json::object(), prefabError};
+
+    const int idx = PrimaryIdx();
+    const SceneObject* object =
+        (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            ? &m_document.objects[static_cast<size_t>(idx)]
+            : nullptr;
+    return Mcp::McpCommandResult{
+        true,
+        json{{"prefabPath", prefabPath},
+             {"prefabId", object && object->prefabInstance.has_value() ? object->prefabInstance->prefabId
+                                                                       : std::string()},
+             {"instance", object ? summarizeObject(*object) : json::object()}},
+        std::string()};
+  }
+
   if (toolName == "editor.update_object" || toolName == "editor.transform") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const int idx = findIndexById(id);
     if (idx < 0)
@@ -5432,10 +5768,12 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     if (m_transformCb)
       m_transformCb(object);
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true, json{{"updated", summarizeObject(object)}}, std::string()};
   }
 
   if (toolName == "editor.rename_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const std::string newId = arguments.value("newId", std::string());
     const int idx = findIndexById(id);
@@ -5452,12 +5790,14 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     RewriteObjectIdReferences(&m_document, oldId, newId);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"renamed", true}, {"oldId", oldId}, {"newId", newId}},
                                  std::string()};
   }
 
   if (toolName == "editor.reparent_object") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string id = arguments.value("id", std::string());
     const int idx = findIndexById(id);
     if (idx < 0)
@@ -5478,12 +5818,14 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     }
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"id", id}, {"parentId", parentId}},
                                  std::string()};
   }
 
   if (toolName == "editor.duplicate") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     std::vector<int> sourceIndices;
     if (arguments.contains("id") && arguments["id"].is_string()) {
       const int idx = findIndexById(arguments["id"].get<std::string>());
@@ -5522,10 +5864,12 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     m_selectedIndices = std::move(duplicatedIndices);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true, json{{"duplicates", std::move(created)}}, std::string()};
   }
 
   if (toolName == "editor.delete") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     std::vector<int> indices;
     if (arguments.contains("id") && arguments["id"].is_string()) {
       const int idx = findIndexById(arguments["id"].get<std::string>());
@@ -5552,6 +5896,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     m_selectedIndices.clear();
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"deletedCount", static_cast<int>(indices.size())}},
                                  std::string()};
@@ -5566,6 +5911,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.update_asset") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::string assetId = arguments.value("id", std::string());
     auto it = m_document.assets.find(assetId);
     if (it == m_document.assets.end())
@@ -5584,6 +5930,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     EnsureAssetIdentity(assetId, &it->second);
     m_document.dirty = true;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"asset", summarizeAsset(assetId, it->second)}},
                                  std::string()};
@@ -5606,6 +5953,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.new_scene") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     AddNewScene();
     if (arguments.contains("sceneId") && arguments["sceneId"].is_string() &&
         !arguments["sceneId"].get<std::string>().empty()) {
@@ -5617,6 +5965,7 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
     }
     m_lastSavedDocument = m_document;
     TriggerReload();
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"sceneId", m_document.sceneId},
                                       {"sceneName", m_document.sceneName},
@@ -5633,11 +5982,13 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
   }
 
   if (toolName == "editor.reload_scene") {
+    const EditorHistorySnapshot before = CaptureHistorySnapshot();
     const std::vector<std::string> previousSelectionIds = GetSelectedObjectIds();
     const std::string previousAssetId = m_selectedAssetId;
     std::string reloadError;
     if (!ReloadDocumentFromDisk(&reloadError, &previousSelectionIds, &previousAssetId))
       return Mcp::McpCommandResult{false, json::object(), reloadError};
+    CommitHistoryChange(before);
     return Mcp::McpCommandResult{true,
                                  json{{"reloadPending", true},
                                       {"filePath", m_document.filePath},
@@ -5651,6 +6002,8 @@ Mcp::McpCommandResult EditorLayer::ExecuteMcpCommand(const std::string& toolName
 bool EditorLayer::SaveDocument(std::string* outError) {
   if (outError)
     outError->clear();
+
+  FinalizeHistoryTransaction();
 
   std::string path = m_document.filePath.empty() ? "assets/scenes/scene.json" : m_document.filePath;
   m_document.filePath = path;
@@ -5666,6 +6019,7 @@ bool EditorLayer::SaveDocument(std::string* outError) {
     SceneSerializer::SaveToFile(m_document, path);
     m_document.dirty = false;
     m_lastSavedDocument = m_document;
+    RefreshHistorySavedBaseline();
     LOG_INFO("[Editor] Scene saved OK");
     TriggerReload();  // rebuild scene so changes are immediately visible
     return true;
@@ -5684,6 +6038,8 @@ EditorLayer::AssetDeleteResult EditorLayer::DeleteAssetDefinition(const std::str
     result.error = "Asset not found.";
     return result;
   }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
 
   const std::filesystem::path managedDirectory = GetManagedImportedAssetDirectory(it->second);
   if (!managedDirectory.empty()) {
@@ -5711,6 +6067,7 @@ EditorLayer::AssetDeleteResult EditorLayer::DeleteAssetDefinition(const std::str
   m_document.assets.erase(it);
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 
   result.ok = true;
   return result;
@@ -5752,22 +6109,37 @@ bool EditorLayer::ExecutePendingSceneAction(std::string* outError) {
   switch (action) {
     case PendingSceneAction::None:
       return true;
-    case PendingSceneAction::NewScene:
+    case PendingSceneAction::NewScene: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
       AddNewScene();
       m_lastSavedDocument = m_document;
+      CommitHistoryChange(before);
       return true;
+    }
     case PendingSceneAction::OpenSceneFile:
+    {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
       OpenAdditionalSceneFile();
+      CommitHistoryChange(before);
       return true;
+    }
     case PendingSceneAction::LoadSceneFromDisk: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
       const std::vector<std::string> selectionIds = GetSelectedObjectIds();
       const std::string selectedAssetId = m_selectedAssetId;
-      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      const bool ok = ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      if (ok)
+        CommitHistoryChange(before);
+      return ok;
     }
     case PendingSceneAction::ReloadSceneFromDisk: {
+      const EditorHistorySnapshot before = CaptureHistorySnapshot();
       const std::vector<std::string> selectionIds = GetSelectedObjectIds();
       const std::string selectedAssetId = m_selectedAssetId;
-      return ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      const bool ok = ReloadDocumentFromDisk(outError, &selectionIds, &selectedAssetId);
+      if (ok)
+        CommitHistoryChange(before);
+      return ok;
     }
     case PendingSceneAction::CloseEditor:
       m_closeRequested = true;
@@ -5778,7 +6150,11 @@ bool EditorLayer::ExecutePendingSceneAction(std::string* outError) {
 }
 
 void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
-  if (commandId == "new_scene")
+  if (commandId == "undo")
+    UndoHistory();
+  else if (commandId == "redo")
+    RedoHistory();
+  else if (commandId == "new_scene")
     RequestSceneAction(PendingSceneAction::NewScene);
   else if (commandId == "open_scene")
     RequestSceneAction(PendingSceneAction::OpenSceneFile);
@@ -5798,6 +6174,69 @@ void EditorLayer::ExecuteCommandPaletteAction(const std::string& commandId) {
   } else if (commandId == "close_editor") {
     RequestSceneAction(PendingSceneAction::CloseEditor);
   }
+}
+
+bool EditorLayer::CreatePrefabFromSelection(std::string* outError, std::string* outPrefabPath) {
+  if (outError)
+    outError->clear();
+  if (outPrefabPath)
+    outPrefabPath->clear();
+
+  const int primaryIdx = PrimaryIdx();
+  if (m_selectedIndices.size() != 1 ||
+      primaryIdx < 0 ||
+      primaryIdx >= static_cast<int>(m_document.objects.size())) {
+    if (outError)
+      *outError = "Select exactly one object to create a prefab.";
+    return false;
+  }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+  const SceneObject& sourceObject = m_document.objects[static_cast<size_t>(primaryIdx)];
+  const std::filesystem::path prefabAbsPath = BuildUniquePrefabPath(m_document, sourceObject);
+  std::error_code ec;
+  std::filesystem::create_directories(prefabAbsPath.parent_path(), ec);
+  if (ec) {
+    if (outError)
+      *outError = "Failed to create prefab directory: " + ec.message();
+    return false;
+  }
+
+  SceneDocument prefabDoc;
+  prefabDoc.version = m_document.version;
+  prefabDoc.sceneId = prefabAbsPath.stem().string();
+  prefabDoc.sceneName = sourceObject.id.empty() ? prefabDoc.sceneId : sourceObject.id;
+  prefabDoc.filePath = prefabAbsPath.generic_string();
+
+  SceneObject prefabObject = sourceObject;
+  prefabObject.prefabInstance.reset();
+  prefabObject.props.erase("parentId");
+  prefabDoc.objects.push_back(std::move(prefabObject));
+  if (!sourceObject.assetId.empty()) {
+    const auto assetIt = m_document.assets.find(sourceObject.assetId);
+    if (assetIt != m_document.assets.end())
+      prefabDoc.assets[sourceObject.assetId] = assetIt->second;
+  }
+
+  try {
+    SceneSerializer::SaveToFile(prefabDoc, prefabAbsPath.generic_string());
+  } catch (const std::exception& e) {
+    if (outError)
+      *outError = e.what();
+    return false;
+  }
+
+  const std::filesystem::path relativePath =
+      prefabAbsPath.lexically_relative(ProjectPath::Root()).lexically_normal();
+  SceneObject& object = m_document.objects[static_cast<size_t>(primaryIdx)];
+  object.prefabInstance = ScenePrefabInstance{prefabDoc.sceneId, relativePath.generic_string()};
+  m_document.dirty = true;
+  TriggerReload();
+  CommitHistoryChange(before);
+
+  if (outPrefabPath)
+    *outPrefabPath = relativePath.generic_string();
+  return true;
 }
 
 void EditorLayer::RequestDeleteSelectedObjects() {
@@ -5829,6 +6268,7 @@ void EditorLayer::OpenRenameObjectModal(int index) {
 }
 
 void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
   SceneObject obj;
   obj.id = (type == SceneObjectType::Camera) ? GenerateCameraId(m_document) : GenerateId(m_document);
   obj.type = type;
@@ -5846,6 +6286,7 @@ void EditorLayer::AddObject(SceneObjectType type, const std::string& parentId) {
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 }
 
 void EditorLayer::AddObjectFromSelectedAsset(const std::string& parentId) {
@@ -5872,6 +6313,8 @@ bool EditorLayer::CreateObjectFromAsset(const std::string& assetId,
     return false;
   }
 
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
+
   SceneObject object = MakeObjectFromAsset(m_document, assetId, m_schema);
   if (preferredId && !preferredId->empty()) {
     if (IsReservedObjectId(m_document, *preferredId)) {
@@ -5891,6 +6334,7 @@ bool EditorLayer::CreateObjectFromAsset(const std::string& assetId,
   m_selectedAssetId = assetId;
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 
   if (outCreated)
     *outCreated = m_document.objects.back();
@@ -5949,6 +6393,7 @@ void EditorLayer::DuplicatePrimarySelection() {
   const int primaryIdx = PrimaryIdx();
   if (primaryIdx < 0 || primaryIdx >= static_cast<int>(m_document.objects.size()))
     return;
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
   SceneObject clone = DuplicateObject(m_document, m_document.objects[static_cast<size_t>(primaryIdx)]);
   clone.position.x += 1.0f;
   clone.position.z += 1.0f;
@@ -5956,6 +6401,7 @@ void EditorLayer::DuplicatePrimarySelection() {
   m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 }
 
 void EditorLayer::DuplicateSelectedObjects() {
@@ -5965,6 +6411,8 @@ void EditorLayer::DuplicateSelectedObjects() {
     DuplicatePrimarySelection();
     return;
   }
+
+  const EditorHistorySnapshot before = CaptureHistorySnapshot();
 
   std::vector<int> sourceIndices = m_selectedIndices;
   std::sort(sourceIndices.begin(), sourceIndices.end());
@@ -5986,6 +6434,7 @@ void EditorLayer::DuplicateSelectedObjects() {
     m_selectedIndices = std::move(duplicatedIndices);
   m_document.dirty = true;
   TriggerReload();
+  CommitHistoryChange(before);
 }
 
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument& doc,

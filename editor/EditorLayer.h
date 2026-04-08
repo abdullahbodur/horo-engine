@@ -231,6 +231,7 @@ class EditorLayer {
   void RequestSceneAction(PendingSceneAction action);
   bool ExecutePendingSceneAction(std::string* outError);
   void ExecuteCommandPaletteAction(const std::string& commandId);
+  bool CreatePrefabFromSelection(std::string* outError = nullptr, std::string* outPrefabPath = nullptr);
   void OpenRenameObjectModal(int index);
   void AddObject(SceneObjectType type, const std::string& parentId = {});
   void AddObjectFromSelectedAsset(const std::string& parentId = {});
@@ -255,6 +256,27 @@ class EditorLayer {
   bool ReloadDocumentFromDisk(std::string* outError,
                               const std::vector<std::string>* preferredSelectionIds = nullptr,
                               const std::string* preferredAssetId = nullptr);
+  struct EditorHistorySnapshot {
+    SceneDocument document;
+    SceneDocument savedDocument;
+    std::vector<std::string> selectedObjectIds;
+    std::string selectedAssetId;
+  };
+  EditorHistorySnapshot CaptureHistorySnapshot() const;
+  void RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot);
+  void CommitHistoryChange(const EditorHistorySnapshot& before);
+  void BeginHistoryTransaction(const EditorHistorySnapshot& before);
+  void FinalizeHistoryTransaction();
+  void ClearHistory();
+  void RefreshHistorySavedBaseline();
+  bool CanUndoHistory() const;
+  bool CanRedoHistory() const;
+  bool UndoHistory();
+  bool RedoHistory();
+  void ApplyLoadedDocument(SceneDocument doc, bool resetHistory);
+  static bool HistorySnapshotsEqual(const EditorHistorySnapshot& lhs,
+                                    const EditorHistorySnapshot& rhs);
+  static void TrimHistory(std::vector<EditorHistorySnapshot>* history);
   struct AssetDeleteResult {
     bool ok = false;
     int clearedReferences = 0;
@@ -335,6 +357,8 @@ class EditorLayer {
   bool m_commandPaletteOpen = false;
   bool m_prevCommandPaletteToggle = false;
   std::string m_commandPaletteQuery;
+  bool m_prevUndo = false;
+  bool m_prevRedo = false;
   bool m_confirmDeleteObjectsOpen = false;
   bool m_confirmDeleteAssetOpen = false;
   bool m_confirmExitOpen = false;
@@ -360,6 +384,11 @@ class EditorLayer {
   bool m_hasPersistedDockLayout = false;
   bool m_resetDockLayoutRequested = false;
   EditorViewportRect m_viewportPanelRect;
+  std::vector<EditorHistorySnapshot> m_undoHistory;
+  std::vector<EditorHistorySnapshot> m_redoHistory;
+  bool m_historyTransactionOpen = false;
+  EditorHistorySnapshot m_historyTransactionBefore;
+  bool m_gizmoHistoryPending = false;
 
   // Wireframe overlay
   bool m_wireframeMode = false;
