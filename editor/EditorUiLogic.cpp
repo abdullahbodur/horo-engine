@@ -86,6 +86,32 @@ EditorViewportRect BuildEditorViewportRect(float displayWidth,
   return rect;
 }
 
+EditorWindowRect ScaleEditorWindowRect(const EditorWindowRect& rect,
+                                       float oldDisplayWidth,
+                                       float oldDisplayHeight,
+                                       float newDisplayWidth,
+                                       float newDisplayHeight,
+                                       float minWidth,
+                                       float minHeight) {
+  EditorWindowRect out;
+  if (!rect.valid)
+    return out;
+  if (oldDisplayWidth <= 0.0f || oldDisplayHeight <= 0.0f)
+    return out;
+  if (newDisplayWidth <= 0.0f || newDisplayHeight <= 0.0f)
+    return out;
+
+  const float scaleX = newDisplayWidth / oldDisplayWidth;
+  const float scaleY = newDisplayHeight / oldDisplayHeight;
+
+  out.width = std::clamp(rect.width * scaleX, std::max(1.0f, minWidth), newDisplayWidth);
+  out.height = std::clamp(rect.height * scaleY, std::max(1.0f, minHeight), newDisplayHeight);
+  out.x = std::clamp(rect.x * scaleX, 0.0f, std::max(0.0f, newDisplayWidth - out.width));
+  out.y = std::clamp(rect.y * scaleY, 0.0f, std::max(0.0f, newDisplayHeight - out.height));
+  out.valid = true;
+  return out;
+}
+
 bool TryParseVec3Csv(const std::string& text, Vec3* outValue) {
   if (!outValue)
     return false;

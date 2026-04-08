@@ -86,6 +86,13 @@ constexpr char kEditorAssetsWindow[] = "Assets";
 constexpr char kEditorWorkspaceWindow[] = "Workspace";
 constexpr char kEditorPropertiesWindow[] = "Properties";
 constexpr char kEditorViewportWindow[] = "Viewport";
+constexpr size_t kResponsiveViewportSlot = 0;
+constexpr size_t kResponsiveHierarchySlot = 1;
+constexpr size_t kResponsiveAssetsSlot = 2;
+constexpr size_t kResponsivePropertiesSlot = 3;
+constexpr size_t kResponsiveWorkspaceSlot = 4;
+constexpr float kResponsiveMinPanelW = 160.0f;
+constexpr float kResponsiveMinPanelH = 120.0f;
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
 
@@ -1834,12 +1841,45 @@ void EditorLayer::EndResponsiveLayoutFrame(const ImVec2& displaySize) {
   m_forceResponsiveLayoutReset = false;
 }
 
-void EditorLayer::ApplyResponsiveWindowLayout(const ImVec2& position, const ImVec2& size) {
+void EditorLayer::ApplyResponsiveWindowLayout(size_t slot, const EditorWindowRect& defaultRect) {
+  if (slot >= m_responsiveWindowRects.size() || !defaultRect.valid)
+    return;
+
   ImGuiCond cond = ImGuiCond_FirstUseEver;
-  if (m_forceResponsiveLayoutReset || m_layoutResizePending)
+  EditorWindowRect nextRect = defaultRect;
+
+  if (m_forceResponsiveLayoutReset) {
     cond = ImGuiCond_Always;
-  ImGui::SetNextWindowPos(position, cond);
-  ImGui::SetNextWindowSize(size, cond);
+  } else if (m_layoutResizePending) {
+    const EditorWindowRect& cached = m_responsiveWindowRects[slot];
+    const EditorWindowRect scaled = ScaleEditorWindowRect(cached,
+                                                          m_lastLayoutDisplaySize.x,
+                                                          m_lastLayoutDisplaySize.y,
+                                                          ImGui::GetIO().DisplaySize.x,
+                                                          ImGui::GetIO().DisplaySize.y,
+                                                          kResponsiveMinPanelW,
+                                                          kResponsiveMinPanelH);
+    if (scaled.valid)
+      nextRect = scaled;
+    cond = ImGuiCond_Always;
+  }
+
+  ImGui::SetNextWindowPos(ImVec2(nextRect.x, nextRect.y), cond);
+  ImGui::SetNextWindowSize(ImVec2(nextRect.width, nextRect.height), cond);
+}
+
+void EditorLayer::CaptureResponsiveWindowLayout(size_t slot) {
+  if (slot >= m_responsiveWindowRects.size())
+    return;
+
+  const ImVec2 windowPos = ImGui::GetWindowPos();
+  const ImVec2 windowSize = ImGui::GetWindowSize();
+  EditorWindowRect& rect = m_responsiveWindowRects[slot];
+  rect.x = windowPos.x;
+  rect.y = windowPos.y;
+  rect.width = windowSize.x;
+  rect.height = windowSize.y;
+  rect.valid = windowSize.x > 0.0f && windowSize.y > 0.0f;
 }
 
 void EditorLayer::RefreshViewportPanelRect() {
@@ -1862,15 +1902,19 @@ void EditorLayer::DrawViewportPanel() {
                               kBottomDockH,
                               kLeftDockW,
                               kRightDockW);
-  ApplyResponsiveWindowLayout(ImVec2(defaultRect.minX, defaultRect.minY),
-                              ImVec2(defaultRect.maxX - defaultRect.minX,
-                                     defaultRect.maxY - defaultRect.minY));
+  ApplyResponsiveWindowLayout(kResponsiveViewportSlot,
+                              EditorWindowRect{defaultRect.minX,
+                                               defaultRect.minY,
+                                               defaultRect.maxX - defaultRect.minX,
+                                               defaultRect.maxY - defaultRect.minY,
+                                               true});
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
   ImGui::SetNextWindowBgAlpha(0.06f);
   m_viewportPanelRect = {};
   if (ImGui::Begin(kEditorViewportWindow,
                    nullptr,
                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+    CaptureResponsiveWindowLayout(kResponsiveViewportSlot);
     RefreshViewportPanelRect();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->AddRect(ImVec2(m_viewportPanelRect.minX, m_viewportPanelRect.minY),
@@ -2222,8 +2266,11 @@ static void FormatLogTime(const LogLine& entry, char* buf, size_t bufSize) {
 void EditorLayer::DrawBottomDock() {
   ImGuiIO& io = ImGui::GetIO();
   const float dockTop = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
-  ApplyResponsiveWindowLayout(ImVec2(0.0f, dockTop), ImVec2(io.DisplaySize.x, kBottomDockH));
+  ApplyResponsiveWindowLayout(
+      kResponsiveWorkspaceSlot,
+      EditorWindowRect{0.0f, dockTop, 900.0f, kBottomDockH, true});
   ImGui::Begin(kEditorWorkspaceWindow);
+  CaptureResponsiveWindowLayout(kResponsiveWorkspaceSlot);
 
   if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Project")) {
@@ -2877,9 +2924,14 @@ void EditorLayer::DrawObjectList() {
   ImGuiIO& io = ImGui::GetIO();
   const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
   ApplyResponsiveWindowLayout(
-      ImVec2(0.0f, kEditorToolbarH),
-      ImVec2(kLeftDockW, std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f)));
+      kResponsiveHierarchySlot,
+      EditorWindowRect{0.0f,
+                       kEditorToolbarH,
+                       kLeftDockW,
+                       std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f),
+                       true});
   ImGui::Begin(kEditorHierarchyWindow);
+  CaptureResponsiveWindowLayout(kResponsiveHierarchySlot);
 
   // Search bar (applies to primary scene)
   char searchBuf[256] = {};
@@ -3415,9 +3467,15 @@ void EditorLayer::DrawAssetsPanel() {
   ImGuiIO& io = ImGui::GetIO();
   const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
   const float assetsTop = kEditorToolbarH + std::max(220.0f, (workBottom - kEditorToolbarH) * 0.52f) + 4.0f;
-  ApplyResponsiveWindowLayout(ImVec2(0.0f, assetsTop),
-                              ImVec2(kLeftDockW, std::max(180.0f, workBottom - assetsTop)));
+  ApplyResponsiveWindowLayout(
+      kResponsiveAssetsSlot,
+      EditorWindowRect{0.0f,
+                       assetsTop,
+                       kLeftDockW,
+                       std::max(180.0f, workBottom - assetsTop),
+                       true});
   ImGui::Begin(kEditorAssetsWindow);
+  CaptureResponsiveWindowLayout(kResponsiveAssetsSlot);
 
   m_albedoDraftDrop.Clear();
   m_albedoSelDrop.Clear();
@@ -4102,9 +4160,14 @@ void EditorLayer::DrawPropertiesPanel() {
   ImGuiIO& io = ImGui::GetIO();
   const float workBottom = io.DisplaySize.y - kEditorStatusH - kBottomDockH;
   ApplyResponsiveWindowLayout(
-      ImVec2(io.DisplaySize.x - kRightDockW, kEditorToolbarH),
-      ImVec2(kRightDockW, std::max(260.0f, workBottom - kEditorToolbarH)));
+      kResponsivePropertiesSlot,
+      EditorWindowRect{io.DisplaySize.x - kRightDockW,
+                       kEditorToolbarH,
+                       kRightDockW,
+                       std::max(260.0f, workBottom - kEditorToolbarH),
+                       true});
   ImGui::Begin(kEditorPropertiesWindow);
+  CaptureResponsiveWindowLayout(kResponsivePropertiesSlot);
 
   // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
