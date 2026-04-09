@@ -72,6 +72,14 @@ void Renderer::EndPass() {
   s_passActive = false;
 }
 
+bool Renderer::IsFrameActive() {
+  return s_frameActive;
+}
+
+bool Renderer::IsPassActive() {
+  return s_passActive;
+}
+
 void Renderer::BeginScene(const Camera& camera) {
   if (s_compatibilitySceneActive)
     EndScene();

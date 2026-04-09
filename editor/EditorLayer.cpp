@@ -6859,7 +6859,11 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 
-  Renderer::BeginScene(cam);
+  const bool ownsFrame = !Renderer::IsFrameActive();
+  if (ownsFrame)
+    Renderer::BeginFrame(RenderFrameConfig{{}, "editor-wireframe-overlay"});
+  Renderer::BeginPass(
+      RenderPassConfig{RenderPassId::WireframeOverlay, RenderView::FromCamera(cam), "editor-wireframe-overlay"});
   glDisable(GL_DEPTH_TEST);
   glLineWidth(1.5f);
   for (const auto& obj : m_document.objects) {
@@ -6875,7 +6879,9 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
     const Mat4 model = BuildObjectModelMatrix(m_document, obj);
     Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
   }
-  Renderer::EndScene();
+  Renderer::EndPass();
+  if (ownsFrame)
+    Renderer::EndFrame();
   glLineWidth(1.0f);
   glEnable(GL_DEPTH_TEST);
 }

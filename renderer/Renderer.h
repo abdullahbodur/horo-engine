@@ -23,6 +23,8 @@ class Renderer {
   static void EndFrame();
   static void BeginPass(const RenderPassConfig& pass);
   static void EndPass();
+  static bool IsFrameActive();
+  static bool IsPassActive();
 
   static void BeginScene(const Camera& camera);
   static void EndScene();
