@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -159,4 +160,20 @@ TEST_CASE("RenderSystem submits visible mesh entities into the active explicit p
   REQUIRE(backend.lastMesh.material == material.get());
 
   Renderer::ResetBackend();
+}
+
+TEST_CASE("Material copies share shader and texture resource handles",
+          "[renderer][foundation][ownership]") {
+  auto shader = std::make_shared<Shader>();
+  auto texture = std::make_shared<Texture>();
+
+  Material original;
+  original.shader = shader;
+  original.albedoMap = texture;
+
+  Material copy = original;
+
+  REQUIRE(copy.shader == shader);
+  REQUIRE(copy.albedoMap == texture);
+  REQUIRE_FALSE(copy.HasShader());
 }
