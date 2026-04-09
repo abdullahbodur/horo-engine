@@ -62,6 +62,10 @@ static std::string TmpPath(const std::string& name) {
     return (std::filesystem::temp_directory_path() / name).string();
 }
 
+static std::filesystem::path RepoRootFromTestSource() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path().lexically_normal();
+}
+
 static void WriteFile(const std::string& path, const std::string& content) {
     std::ofstream f(path);
     f << content;
@@ -516,7 +520,7 @@ TEST_CASE("EditorSchema: loads component schema metadata and lookups", "[editor]
 }
 
 TEST_CASE("EditorSchema: bundled schema exposes shared component definitions", "[editor][schema]") {
-    const std::filesystem::path schemaPath = Monolith::ProjectPath::Root() / "assets" / "editor_schema.json";
+    const std::filesystem::path schemaPath = RepoRootFromTestSource() / "assets" / "editor_schema.json";
     REQUIRE(std::filesystem::exists(schemaPath));
 
     EditorSchema schema;
