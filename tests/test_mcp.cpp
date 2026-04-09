@@ -442,6 +442,17 @@ json ParseBody(const McpHttpResponse& response) {
   return json::parse(response.body);
 }
 
+std::vector<json> ReadJsonLines(const std::filesystem::path& path) {
+  std::vector<json> lines;
+  std::ifstream in(path);
+  std::string line;
+  while (std::getline(in, line)) {
+    if (!line.empty())
+      lines.push_back(json::parse(line));
+  }
+  return lines;
+}
+
 json ProtocolRequest(McpProtocol& protocol, const std::string& method, const json& params = json::object(), int id = 1) {
   const McpHttpResponse response = protocol.HandleHttp(
       McpHttpRequest{"POST", "/mcp", {}, json{{"jsonrpc", "2.0"}, {"id", id}, {"method", method}, {"params", params}}.dump()});
@@ -1060,6 +1071,77 @@ TEST_CASE("McpProtocol validates schema-backed mutations and preview tokens befo
           "previewToken does not match the current scene state or arguments.");
 
   REQUIRE(invoked.empty());
+}
+
+TEST_CASE("McpProtocol writes apply audit records to project root and fallback settings path",
+          "[mcp][protocol][audit]") {
+  namespace fs = std::filesystem;
+
+  EnvGuard env("horo_mcp_audit");
+  const fs::path projectRoot = env.tempHome / "project";
+  fs::create_directories(projectRoot / "assets");
+  {
+    std::ofstream presets(projectRoot / "CMakePresets.json");
+    presets << "{}";
+  }
+
+  McpEditorSnapshot snapshot = MakeSnapshot();
+  std::vector<std::string> invoked;
+  ProjectRootGuard projectRootGuard(projectRoot);
+  McpProtocol protocol(McpProtocolContext{
+      [&snapshot]() { return CloneSnapshot(snapshot); },
+      [&invoked](const std::string& toolName, const json&) {
+        invoked.push_back(toolName);
+        if (toolName == "editor.delete_asset")
+          return McpCommandResult{false, json::object(), "delete rejected"};
+        return McpCommandResult{true, json{{"handledTool", toolName}}, {}};
+      },
+      {},
+  });
+
+  const json deletePreview =
+      CallTool(protocol, "editor.delete", json{{"ids", json::array({"obj_light"})}, {"mode", "preview"}}, 700);
+  const std::string deleteToken =
+      deletePreview["result"]["structuredContent"]["previewToken"].get<std::string>();
+  const json deleteApply =
+      CallTool(protocol, "editor.delete",
+               json{{"ids", json::array({"obj_light"})}, {"mode", "apply"}, {"previewToken", deleteToken}}, 701);
+  REQUIRE(deleteApply["result"]["structuredContent"]["handledTool"] == "editor.delete");
+
+  const json deleteAssetPreview =
+      CallTool(protocol, "editor.delete_asset", json{{"id", "hero"}, {"mode", "preview"}}, 702);
+  const std::string deleteAssetToken =
+      deleteAssetPreview["result"]["structuredContent"]["previewToken"].get<std::string>();
+  const json deleteAssetApply =
+      CallTool(protocol, "editor.delete_asset",
+               json{{"id", "hero"}, {"mode", "apply"}, {"previewToken", deleteAssetToken}}, 703);
+  REQUIRE(deleteAssetApply["error"]["message"] == "delete rejected");
+
+  const fs::path auditPath = projectRoot / ".horo" / "mcp-audit.jsonl";
+  REQUIRE(fs::exists(auditPath));
+  const std::vector<json> records = ReadJsonLines(auditPath);
+  REQUIRE(records.size() == 2);
+  REQUIRE(records[0]["tool"] == "editor.delete");
+  REQUIRE(records[0]["mode"] == "apply");
+  REQUIRE(records[0]["result"] == "success");
+  REQUIRE(records[0]["previewToken"] == deleteToken);
+  REQUIRE(records[0]["changedIds"][0] == "obj_light");
+  REQUIRE(records[1]["tool"] == "editor.delete_asset");
+  REQUIRE(records[1]["result"] == "error");
+  REQUIRE(records[1]["error"] == "delete rejected");
+  REQUIRE(records[1]["previewToken"] == deleteAssetToken);
+
+  invoked.clear();
+  ProjectRootGuard clearProjectRoot{std::filesystem::path()};
+  const json selectApply = CallTool(protocol, "editor.select", json{{"id", "obj_root"}}, 704);
+  REQUIRE(selectApply["result"]["structuredContent"]["handledTool"] == "editor.select");
+
+  const fs::path fallbackAuditPath = ResolveMcpSettingsDirectory() / "mcp-audit.jsonl";
+  REQUIRE(fs::exists(fallbackAuditPath));
+  const std::vector<json> fallbackRecords = ReadJsonLines(fallbackAuditPath);
+  REQUIRE(fallbackRecords.size() == 1);
+  REQUIRE(fallbackRecords[0]["tool"] == "editor.select");
+  REQUIRE(fallbackRecords[0]["result"] == "success");
 }
 
 TEST_CASE("McpProtocol returns expected errors for unsupported or unavailable paths", "[mcp][protocol]") {
