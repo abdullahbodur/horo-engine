@@ -11,10 +11,8 @@ IRenderBackend* g_backend = &g_defaultBackend;
 
 }  // namespace
 
-std::vector<Light> Renderer::s_compatLights;
 bool Renderer::s_frameActive = false;
 bool Renderer::s_passActive = false;
-bool Renderer::s_compatibilitySceneActive = false;
 
 IRenderBackend* Renderer::ActiveBackend() {
   return g_backend ? g_backend : &g_defaultBackend;
@@ -24,8 +22,6 @@ void Renderer::UseBackend(IRenderBackend* backend) {
   g_backend = backend ? backend : &g_defaultBackend;
   s_frameActive = false;
   s_passActive = false;
-  s_compatibilitySceneActive = false;
-  s_compatLights.clear();
 }
 
 void Renderer::ResetBackend() {
@@ -38,7 +34,6 @@ void Renderer::BeginFrame(const RenderFrameConfig& frame) {
 
   ActiveBackend()->BeginFrame(frame);
   s_frameActive = true;
-  s_compatibilitySceneActive = false;
 }
 
 void Renderer::EndFrame() {
@@ -50,7 +45,6 @@ void Renderer::EndFrame() {
 
   ActiveBackend()->EndFrame();
   s_frameActive = false;
-  s_compatibilitySceneActive = false;
 }
 
 void Renderer::BeginPass(const RenderPassConfig& pass) {
@@ -78,30 +72,6 @@ bool Renderer::IsFrameActive() {
 
 bool Renderer::IsPassActive() {
   return s_passActive;
-}
-
-void Renderer::BeginScene(const Camera& camera) {
-  if (s_compatibilitySceneActive)
-    EndScene();
-
-  BeginFrame(RenderFrameConfig{s_compatLights, "compatibility-scene"});
-  BeginPass(RenderPassConfig{
-      RenderPassId::CompatibilityScene,
-      RenderView::FromCamera(camera),
-      "compatibility-scene-pass",
-  });
-  s_compatibilitySceneActive = true;
-}
-
-void Renderer::EndScene() {
-  if (!s_compatibilitySceneActive)
-    return;
-
-  EndFrame();
-}
-
-void Renderer::SetLights(const std::vector<Light>& lights) {
-  s_compatLights = lights;
 }
 
 void Renderer::Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& material) {

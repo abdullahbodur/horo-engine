@@ -16,9 +16,9 @@ class Material {
   std::shared_ptr<Texture> albedoMap;  // optional; falls back to u_color if null
   float uvScale = 1.0f;                // texture tiling multiplier (>1 = more tiles = zoomed out)
 
-  Shader* shader = nullptr;  // non-owning
+  std::shared_ptr<Shader> shader;  // shared resource handle used by renderer backends
 
-  void Apply() const;
+  bool HasShader() const { return shader && shader->IsValid(); }
 };
 
 }  // namespace Monolith

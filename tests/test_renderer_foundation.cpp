@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -96,7 +97,7 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Renderer compatibility scene API is bridged through backend seam",
+TEST_CASE("Renderer supports multiple explicit passes within a single frame",
           "[renderer][foundation]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
@@ -107,17 +108,32 @@ TEST_CASE("Renderer compatibility scene API is bridged through backend seam",
   std::vector<Light> lights(3);
   Mesh mesh;
   Material material;
+  Shader shader;
 
-  Renderer::SetLights(lights);
-  Renderer::BeginScene(camera);
+  Renderer::BeginFrame(RenderFrameConfig{lights, "multi-pass-frame"});
+  Renderer::BeginPass(
+      RenderPassConfig{RenderPassId::OpaqueScene, RenderView::FromCamera(camera), "opaque"});
   Renderer::Submit(mesh, Mat4::Identity(), material);
-  Renderer::EndScene();
+  Renderer::EndPass();
+  Renderer::BeginPass(
+      RenderPassConfig{RenderPassId::WireframeOverlay, RenderView::FromCamera(camera), "wireframe"});
+  Renderer::SubmitWireframe(mesh, Mat4::Identity(), shader, 0.3f, 0.7f, 0.2f);
+  Renderer::EndPass();
+  Renderer::EndFrame();
 
   REQUIRE(backend.events ==
-          std::vector<std::string>{"begin-frame", "begin-pass", "draw-mesh", "end-pass", "end-frame"});
+          std::vector<std::string>{"begin-frame",
+                                   "begin-pass",
+                                   "draw-mesh",
+                                   "end-pass",
+                                   "begin-pass",
+                                   "draw-wireframe",
+                                   "end-pass",
+                                   "end-frame"});
   REQUIRE(backend.lastFrame.lights.size() == 3);
-  REQUIRE(backend.lastPass.id == RenderPassId::CompatibilityScene);
+  REQUIRE(backend.lastPass.id == RenderPassId::WireframeOverlay);
   REQUIRE(backend.lastPass.view.cameraPosition.x == Catch::Approx(4.0f));
+  REQUIRE(Renderer::GetDrawCallCount() == 2);
 
   Renderer::ResetBackend();
 }
@@ -159,4 +175,20 @@ TEST_CASE("RenderSystem submits visible mesh entities into the active explicit p
   REQUIRE(backend.lastMesh.material == material.get());
 
   Renderer::ResetBackend();
+}
+
+TEST_CASE("Material copies share shader and texture resource handles",
+          "[renderer][foundation][ownership]") {
+  auto shader = std::make_shared<Shader>();
+  auto texture = std::make_shared<Texture>();
+
+  Material original;
+  original.shader = shader;
+  original.albedoMap = texture;
+
+  Material copy = original;
+
+  REQUIRE(copy.shader == shader);
+  REQUIRE(copy.albedoMap == texture);
+  REQUIRE_FALSE(copy.HasShader());
 }

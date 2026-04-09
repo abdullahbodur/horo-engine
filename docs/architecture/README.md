@@ -5,6 +5,7 @@ This directory documents the current engine architecture, calls out temporary ex
 ## Documents
 
 - [module-boundaries.md](./module-boundaries.md)
+- [renderer-foundation.md](./renderer-foundation.md)
 - [ownership-lifecycle.md](./ownership-lifecycle.md)
 - [error-result-model.md](./error-result-model.md)
 - [threading-and-mutation.md](./threading-and-mutation.md)

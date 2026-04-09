@@ -35,4 +35,3 @@
 - `Mesh`/`SkinnedMesh` are move-only RAII wrappers over VAO/VBO/EBO resources.
 - `Material` can use either solid color or optional `albedoMap` texture.
 - Shaders are copied to `build/.../bin/shaders` by CMake post-build command.
-- `Renderer::BeginScene/EndScene` remain as compatibility helpers while callers migrate to the explicit frame/pass contract.

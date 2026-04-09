@@ -10,6 +10,32 @@
 
 namespace Monolith {
 
+namespace {
+
+static Shader* ResolveMaterialShader(const Material& material) {
+  return material.shader && material.shader->IsValid() ? material.shader.get() : nullptr;
+}
+
+static void BindMaterial(const Material& material) {
+  Shader* shader = ResolveMaterialShader(material);
+  if (!shader)
+    return;
+
+  shader->Bind();
+  shader->SetVec4("u_color", material.color);
+  shader->SetFloat("u_roughness", material.roughness);
+  shader->SetFloat("u_metallic", material.metallic);
+  shader->SetInt("u_albedoMap", 0);
+  shader->SetFloat("u_uvScale", material.uvScale);
+
+  const bool hasTexture = material.albedoMap && material.albedoMap->IsValid();
+  if (hasTexture)
+    material.albedoMap->Bind(0);
+  shader->SetInt("u_hasTexture", hasTexture ? 1 : 0);
+}
+
+}  // namespace
+
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
   m_lights = frame.lights;
   if (m_lights.size() > 8)
@@ -63,16 +89,16 @@ void OpenGLRenderBackend::DrawMesh(const MeshDrawCommand& command) {
   if (!m_passActive || !command.mesh || !command.material)
     return;
 
-  command.material->Apply();
-  if (!command.material->shader || !command.material->shader->IsValid())
+  BindMaterial(*command.material);
+  Shader* shader = ResolveMaterialShader(*command.material);
+  if (!shader)
     return;
 
-  Shader& shader = *command.material->shader;
-  shader.SetMat4("u_model", command.modelMatrix);
-  shader.SetMat4("u_view", m_activeView.view);
-  shader.SetMat4("u_projection", m_activeView.projection);
-  shader.SetVec3("u_cameraPos", m_activeView.cameraPosition);
-  UploadLights(shader);
+  shader->SetMat4("u_model", command.modelMatrix);
+  shader->SetMat4("u_view", m_activeView.view);
+  shader->SetMat4("u_projection", m_activeView.projection);
+  shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
+  UploadLights(*shader);
 
   command.mesh->Draw();
   ++m_drawCalls;
@@ -82,23 +108,23 @@ void OpenGLRenderBackend::DrawSkinnedMesh(const SkinnedMeshDrawCommand& command)
   if (!m_passActive || !command.mesh || !command.material)
     return;
 
-  command.material->Apply();
-  if (!command.material->shader || !command.material->shader->IsValid())
+  BindMaterial(*command.material);
+  Shader* shader = ResolveMaterialShader(*command.material);
+  if (!shader)
     return;
 
-  Shader& shader = *command.material->shader;
-  shader.SetMat4("u_model", command.modelMatrix);
-  shader.SetMat4("u_view", m_activeView.view);
-  shader.SetMat4("u_projection", m_activeView.projection);
-  shader.SetVec3("u_cameraPos", m_activeView.cameraPosition);
+  shader->SetMat4("u_model", command.modelMatrix);
+  shader->SetMat4("u_view", m_activeView.view);
+  shader->SetMat4("u_projection", m_activeView.projection);
+  shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
 
   const std::vector<Mat4>* boneMatrices = command.boneMatrices;
   const int boneCount =
       boneMatrices ? std::min(static_cast<int>(boneMatrices->size()), 64) : 0;
   if (boneCount > 0)
-    shader.SetMat4Array("u_boneMatrices", boneCount, (*boneMatrices)[0].Data());
+    shader->SetMat4Array("u_boneMatrices", boneCount, (*boneMatrices)[0].Data());
 
-  UploadLights(shader);
+  UploadLights(*shader);
 
   command.mesh->Draw();
   ++m_drawCalls;

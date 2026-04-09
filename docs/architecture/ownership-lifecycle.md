@@ -30,6 +30,8 @@ Use these terms consistently:
 - Renderer/context objects own GPU-backed state and must be initialized and shutdown deterministically.
 - Mesh/shader/texture wrappers are owning handles unless a type explicitly says otherwise.
 - Non-owning pointers or references to GPU resources must never outlive the owning renderer/resource manager.
+- `Material` stores shared shader/texture handles and does not perform backend binding itself.
+- Renderer backends borrow material resource handles only for the duration of an active submission.
 
 ### Editor State
 
