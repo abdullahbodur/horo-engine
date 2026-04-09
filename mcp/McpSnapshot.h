@@ -73,6 +73,7 @@ struct McpSchemaFieldSnapshot {
   std::string label;
   std::string description;
   std::string widget = "string";
+  bool hasDefault = false;
   bool required = false;
   bool allowEmpty = true;
   bool allowCustomValue = false;

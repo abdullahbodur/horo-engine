@@ -198,6 +198,7 @@ McpSchemaFieldSnapshot MakeSchemaField(std::string key,
   field.label = std::move(label);
   field.description = std::move(description);
   field.widget = std::move(widget);
+  field.hasDefault = true;
   field.defaultValue = std::move(defaultValue);
   field.options = std::move(options);
   field.hasMin = hasMin;
@@ -686,10 +687,20 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
   REQUIRE(createObjectTool != nullptr);
   REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["items"]["type"] == "number");
   REQUIRE((*createObjectTool)["inputSchema"]["properties"]["position"]["minItems"] == 3);
+  REQUIRE((*createObjectTool)["inputSchema"]["properties"]["mode"]["enum"][0] == "preview");
   REQUIRE(listSchemaTool != nullptr);
   REQUIRE((*listSchemaTool)["inputSchema"]["properties"]["kind"]["enum"].size() == 3);
   REQUIRE(getSchemaTool != nullptr);
   REQUIRE((*getSchemaTool)["inputSchema"]["required"][0] == "name");
+  const json* deleteTool = nullptr;
+  for (const json& tool : toolList["result"]["tools"]) {
+    if (tool.value("name", std::string()) == "editor_delete") {
+      deleteTool = &tool;
+      break;
+    }
+  }
+  REQUIRE(deleteTool != nullptr);
+  REQUIRE((*deleteTool)["inputSchema"]["properties"]["previewToken"]["type"] == "string");
 
   const json resourceList = ProtocolRequest(protocol, "resources/list", json::object(), 4);
   REQUIRE(resourceList["result"]["resources"].size() == 11);
@@ -935,7 +946,7 @@ TEST_CASE("Editor MCP delete_asset reports managed file deletion details", "[mcp
   REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "stone"));
 }
 
-TEST_CASE("McpProtocol dispatches every write tool and serializes success and failure", "[mcp][protocol]") {
+TEST_CASE("McpProtocol dispatches write tools and gates destructive apply behind previews", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<std::string> invoked;
   McpProtocol protocol(McpProtocolContext{
@@ -949,7 +960,7 @@ TEST_CASE("McpProtocol dispatches every write tool and serializes success and fa
       {},
   });
 
-  const std::vector<std::pair<std::string, json>> writeTools = {
+  const std::vector<std::pair<std::string, json>> applyOnlyTools = {
       {"editor.select", json{{"id", "obj_root"}}},
       {"editor.clear_selection", json::object()},
       {"editor.create_object", json{{"type", "Prop"}, {"id", "spawned"}}},
@@ -959,28 +970,96 @@ TEST_CASE("McpProtocol dispatches every write tool and serializes success and fa
       {"editor.rename_object", json{{"id", "obj_root"}, {"newId", "obj_root_renamed"}}},
       {"editor.reparent_object", json{{"id", "obj_child"}, {"parentId", "obj_camera"}}},
       {"editor.duplicate", json{{"id", "obj_root"}, {"count", 2}}},
-      {"editor.delete", json{{"ids", json::array({"obj_light"})}}},
       {"editor.select_asset", json{{"id", "crate"}}},
       {"editor.update_asset", json{{"id", "crate"}, {"mesh", "assets/models/crate_v2.obj"}}},
+      {"editor.save_scene", json::object()},
+  };
+
+  for (size_t i = 0; i < applyOnlyTools.size(); ++i) {
+    const json response =
+        CallTool(protocol, applyOnlyTools[i].first, applyOnlyTools[i].second, 300 + static_cast<int>(i));
+    REQUIRE(response["result"]["structuredContent"]["handledTool"] == applyOnlyTools[i].first);
+    REQUIRE(response["result"]["structuredContent"]["echo"]["mode"] == "apply");
+  }
+
+  const std::vector<std::pair<std::string, json>> destructiveTools = {
+      {"editor.delete", json{{"ids", json::array({"obj_light"})}}},
       {"editor.delete_asset", json{{"id", "hero"}}},
       {"editor.new_scene", json{{"sceneId", "fresh"}, {"sceneName", "Fresh"}}},
-      {"editor.save_scene", json::object()},
       {"editor.reload_scene", json::object()},
   };
 
-  for (size_t i = 0; i < writeTools.size(); ++i) {
-    const json response = CallTool(protocol, writeTools[i].first, writeTools[i].second, 300 + static_cast<int>(i));
-    if (writeTools[i].first == "editor.delete_asset") {
+  for (size_t i = 0; i < destructiveTools.size(); ++i) {
+    json previewArguments = destructiveTools[i].second;
+    previewArguments["mode"] = "preview";
+    const json preview =
+        CallTool(protocol, destructiveTools[i].first, previewArguments, 400 + static_cast<int>(i));
+    REQUIRE(preview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(preview["result"]["structuredContent"]["previewToken"].is_string());
+
+    json applyArguments = destructiveTools[i].second;
+    applyArguments["mode"] = "apply";
+    applyArguments["previewToken"] = preview["result"]["structuredContent"]["previewToken"];
+    const json response =
+        CallTool(protocol, destructiveTools[i].first, applyArguments, 500 + static_cast<int>(i));
+    if (destructiveTools[i].first == "editor.delete_asset") {
       REQUIRE(response["error"]["message"] == "delete rejected");
       continue;
     }
-    REQUIRE(response["result"]["structuredContent"]["handledTool"] == writeTools[i].first);
-    REQUIRE(response["result"]["structuredContent"]["echo"] == writeTools[i].second);
+    REQUIRE(response["result"]["structuredContent"]["handledTool"] == destructiveTools[i].first);
+    REQUIRE(response["result"]["structuredContent"]["echo"]["mode"] == "apply");
+    REQUIRE(response["result"]["structuredContent"]["echo"]["previewToken"].is_string());
   }
 
-  REQUIRE(invoked.size() == writeTools.size());
+  REQUIRE(invoked.size() == applyOnlyTools.size() + destructiveTools.size());
   REQUIRE(invoked.front() == "editor.select");
   REQUIRE(invoked.back() == "editor.reload_scene");
+}
+
+TEST_CASE("McpProtocol validates schema-backed mutations and preview tokens before queueing",
+          "[mcp][protocol]") {
+  McpEditorSnapshot snapshot = MakeSnapshot();
+  std::vector<std::string> invoked;
+  McpProtocol protocol(McpProtocolContext{
+      [&snapshot]() { return CloneSnapshot(snapshot); },
+      [&invoked](const std::string& toolName, const json&) {
+        invoked.push_back(toolName);
+        return McpCommandResult{true, json{{"handledTool", toolName}}, {}};
+      },
+      {},
+  });
+
+  const json invalidEnum = CallTool(
+      protocol, "editor.create_object",
+      json{{"type", "Light"}, {"props", json{{"lightType", "spot"}}}}, 600);
+  REQUIRE(invalidEnum["error"]["message"] == "props.lightType must be one of: point, directional.");
+
+  const json invalidComponentRange =
+      CallTool(protocol, "editor.update_object",
+               json{{"id", "obj_root"},
+                    {"components", json::array({json{{"type", "light"},
+                                                     {"props", json{{"radius", 0.1}}}}})}},
+               601);
+  REQUIRE(invalidComponentRange["error"]["message"] ==
+          "components[0].props.radius must be >= 0.5000.");
+
+  const json deleteWithoutPreview =
+      CallTool(protocol, "editor.delete", json{{"ids", json::array({"obj_light"})}}, 602);
+  REQUIRE(deleteWithoutPreview["error"]["message"] == "previewToken is required for apply mode.");
+
+  const json deletePreview =
+      CallTool(protocol, "editor.delete", json{{"ids", json::array({"obj_light"})}, {"mode", "preview"}}, 603);
+  REQUIRE(deletePreview["result"]["structuredContent"]["preview"]["deletedCount"] == 1);
+  const std::string previewToken =
+      deletePreview["result"]["structuredContent"]["previewToken"].get<std::string>();
+
+  const json deleteMismatchedApply = CallTool(
+      protocol, "editor.delete",
+      json{{"ids", json::array({"obj_root"})}, {"mode", "apply"}, {"previewToken", previewToken}}, 604);
+  REQUIRE(deleteMismatchedApply["error"]["message"] ==
+          "previewToken does not match the current scene state or arguments.");
+
+  REQUIRE(invoked.empty());
 }
 
 TEST_CASE("McpProtocol returns expected errors for unsupported or unavailable paths", "[mcp][protocol]") {

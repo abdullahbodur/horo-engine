@@ -85,6 +85,9 @@ Tools:
 The design is intentionally summary-first to keep token usage low.
 Schema tools expose the same `assets/editor_schema.json` metadata that powers editor defaults, enum
 choices, and numeric bounds for object and component fields.
+Every write tool accepts `mode: "preview" | "apply"`. Preview calls never mutate the editor and return
+a `previewToken`; destructive apply calls for delete/new-scene/reload flows must present the matching
+token from the latest preview.
 
 For client compatibility, `tools/list` exposes these tool ids with underscores instead of dots
 (for example `editor_search`). The server continues to accept the dotted aliases as well.

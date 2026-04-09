@@ -87,6 +87,9 @@ List-style resources accept `limit` and `offset`, and query-driven reads such as
 
 `editor.list_schema_types` and `editor.get_schema` expose the same object and component metadata that
 drives `assets/editor_schema.json`, including defaults, enum options, and numeric bounds.
+Write tools accept `mode: "preview" | "apply"`. Preview requests never mutate editor state and return
+a `previewToken`; destructive applies for `editor.delete`, `editor.delete_asset`, `editor.new_scene`,
+and `editor.reload_scene` require the matching token.
 
 ## Claude Code
 

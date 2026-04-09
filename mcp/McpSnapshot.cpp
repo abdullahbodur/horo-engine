@@ -141,6 +141,7 @@ json BuildSchemaFieldJson(const McpSchemaFieldSnapshot& field) {
       {"label", field.label},
       {"description", field.description},
       {"widget", field.widget},
+      {"hasDefault", field.hasDefault},
       {"default", field.defaultValue},
       {"required", field.required},
       {"allowEmpty", field.allowEmpty},
