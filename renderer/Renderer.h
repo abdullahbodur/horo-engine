@@ -3,7 +3,9 @@
 
 #include "math/Mat4.h"
 #include "renderer/Camera.h"
+#include "renderer/IRenderBackend.h"
 #include "renderer/Light.h"
+#include "renderer/RenderTypes.h"
 
 namespace Monolith {
 
@@ -14,6 +16,14 @@ class SkinnedMesh;
 
 class Renderer {
  public:
+  static void UseBackend(IRenderBackend* backend);
+  static void ResetBackend();
+
+  static void BeginFrame(const RenderFrameConfig& frame);
+  static void EndFrame();
+  static void BeginPass(const RenderPassConfig& pass);
+  static void EndPass();
+
   static void BeginScene(const Camera& camera);
   static void EndScene();
 
@@ -37,15 +47,15 @@ class Renderer {
                               float g = 0.8f,
                               float b = 0.2f);
 
-  static int GetDrawCallCount() { return s_drawCalls; }
+  static int GetDrawCallCount();
 
  private:
-  static Mat4 s_view;
-  static Mat4 s_projection;
-  static Vec3 s_cameraPos;
-  static std::vector<Light> s_lights;
-  static int s_drawCalls;
-  static unsigned int s_lastLightProgram;
+  static IRenderBackend* ActiveBackend();
+
+  static std::vector<Light> s_compatLights;
+  static bool s_frameActive;
+  static bool s_passActive;
+  static bool s_compatibilitySceneActive;
 };
 
 }  // namespace Monolith

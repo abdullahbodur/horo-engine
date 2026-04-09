@@ -6875,6 +6875,7 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
     const Mat4 model = BuildObjectModelMatrix(m_document, obj);
     Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
   }
+  Renderer::EndScene();
   glLineWidth(1.0f);
   glEnable(GL_DEPTH_TEST);
 }
