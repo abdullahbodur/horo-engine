@@ -5,9 +5,15 @@
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <unordered_set>
+
+#include "core/ProjectPath.h"
+#include "mcp/McpSettings.h"
 
 namespace Monolith {
 namespace Mcp {
@@ -191,6 +197,113 @@ std::string FormatFloatText(double value) {
   std::ostringstream out;
   out << std::fixed << std::setprecision(4) << value;
   return out.str();
+}
+
+std::string FormatAuditTimestamp() {
+  using clock = std::chrono::system_clock;
+  const std::time_t now = clock::to_time_t(clock::now());
+  std::tm tmBuf{};
+#ifdef _WIN32
+  gmtime_s(&tmBuf, &now);
+#else
+  gmtime_r(&now, &tmBuf);
+#endif
+  char buffer[48];
+  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tmBuf);
+  return buffer;
+}
+
+std::filesystem::path ResolveMcpAuditPath() {
+  namespace fs = std::filesystem;
+  const fs::path projectRoot = Monolith::ProjectPath::Root();
+  if (!projectRoot.empty()) {
+    std::error_code ec;
+    if (fs::exists(projectRoot, ec) && !ec)
+      return projectRoot / ".horo" / "mcp-audit.jsonl";
+  }
+  return ResolveMcpSettingsDirectory() / "mcp-audit.jsonl";
+}
+
+json BuildChangedIds(const std::string& toolName, const json& arguments, const json& summary) {
+  json changedIds = json::array();
+  auto pushUnique = [&](const std::string& value) {
+    if (value.empty())
+      return;
+    for (const json& item : changedIds) {
+      if (item.is_string() && item.get<std::string>() == value)
+        return;
+    }
+    changedIds.push_back(value);
+  };
+
+  if (arguments.contains("id") && arguments["id"].is_string())
+    pushUnique(arguments["id"].get<std::string>());
+  if (arguments.contains("ids") && arguments["ids"].is_array()) {
+    for (const json& item : arguments["ids"]) {
+      if (item.is_string())
+        pushUnique(item.get<std::string>());
+    }
+  }
+  if (toolName == "editor.new_scene" && arguments.contains("sceneId") && arguments["sceneId"].is_string())
+    pushUnique(arguments["sceneId"].get<std::string>());
+
+  const std::vector<std::string> summaryKeys = {"created", "updated", "asset", "renamed", "duplicates"};
+  for (const std::string& key : summaryKeys) {
+    if (!summary.contains(key))
+      continue;
+    const json& value = summary[key];
+    if (value.is_object() && value.contains("id") && value["id"].is_string())
+      pushUnique(value["id"].get<std::string>());
+    if (value.is_array()) {
+      for (const json& item : value) {
+        if (item.is_object() && item.contains("id") && item["id"].is_string())
+          pushUnique(item["id"].get<std::string>());
+      }
+    }
+  }
+  for (const char* key : {"newId", "deletedAssetId", "sceneId"}) {
+    if (summary.contains(key) && summary[key].is_string())
+      pushUnique(summary[key].get<std::string>());
+  }
+
+  return changedIds;
+}
+
+void AppendMutationAuditRecord(const json& requestId,
+                               const McpEditorSnapshot& snapshot,
+                               const std::string& toolName,
+                               const std::string& mode,
+                               const json& arguments,
+                               bool ok,
+                               const json& summary,
+                               const std::string& errorText) {
+  namespace fs = std::filesystem;
+
+  const fs::path auditPath = ResolveMcpAuditPath();
+  std::error_code ec;
+  fs::create_directories(auditPath.parent_path(), ec);
+  if (ec)
+    return;
+
+  std::ofstream out(auditPath, std::ios::app);
+  if (!out.is_open())
+    return;
+
+  json record = {
+      {"timestamp", FormatAuditTimestamp()},
+      {"requestId", requestId.is_null() ? std::string() : JsonToCompactString(requestId)},
+      {"tool", toolName},
+      {"mode", mode},
+      {"previewToken", arguments.value("previewToken", std::string())},
+      {"sceneId", snapshot.sceneId},
+      {"sceneFilePath", snapshot.sceneFilePath},
+      {"result", ok ? "success" : "error"},
+      {"error", ok ? std::string() : errorText},
+      {"changedIds", BuildChangedIds(toolName, arguments, summary)},
+      {"summary", summary},
+  };
+
+  out << record.dump() << "\n";
 }
 
 bool TryParseFloatText(const std::string& text, double* out) {
@@ -1669,11 +1782,21 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
     json normalizedArguments = json::object();
     if (!NormalizeWriteArguments(*snapshot, name, StripMutationControls(arguments), &normalizedArguments,
                                  &validationError)) {
+      if (mode == "apply") {
+        AppendMutationAuditRecord(id, *snapshot, name, mode, StripMutationControls(arguments), false,
+                                  json{{"arguments", StripMutationControls(arguments)}}, validationError);
+      }
       const json result = MakeError(id, -32602, validationError);
       finish("tool", name, method, id, false, 200, validationError, &result, {});
       return MakeJsonResponse(200, "OK", result);
     }
     normalizedArguments["mode"] = mode;
+
+    auto appendApplyAudit = [&](bool ok, const json& summary, const std::string& errorText) {
+      if (mode != "apply")
+        return;
+      AppendMutationAuditRecord(id, *snapshot, name, mode, normalizedArguments, ok, summary, errorText);
+    };
 
     auto storePreviewToken = [&](const json& canonicalArguments) {
       std::scoped_lock lock(m_previewMutex);
@@ -1721,6 +1844,8 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
 
     if (IsDestructiveToolName(name)) {
       if (!arguments.contains("previewToken") || !arguments["previewToken"].is_string()) {
+        appendApplyAudit(false, BuildMutationPreviewPayload(*snapshot, name, StripMutationControls(normalizedArguments)),
+                         "previewToken is required for apply mode.");
         const json result = MakeError(id, -32602, "previewToken is required for apply mode.");
         finish("tool", name, method, id, false, 200, "previewToken is required for apply mode.",
                &result, {});
@@ -1730,6 +1855,7 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
       std::string previewError;
       const json canonicalArguments = StripMutationControls(normalizedArguments);
       if (!consumePreviewToken(previewToken, canonicalArguments, &previewError)) {
+        appendApplyAudit(false, BuildMutationPreviewPayload(*snapshot, name, canonicalArguments), previewError);
         const json result = MakeError(id, -32602, previewError);
         finish("tool", name, method, id, false, 200, previewError, &result, {});
         return MakeJsonResponse(200, "OK", result);
@@ -1738,6 +1864,8 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
     }
 
     if (!m_context.commandInvoker) {
+      appendApplyAudit(false, BuildMutationPreviewPayload(*snapshot, name, StripMutationControls(normalizedArguments)),
+                       "Command queue unavailable.");
       const json result = MakeError(id, -32002, "Command queue unavailable.");
       finish("tool", name, method, id, false, 503, "Command queue unavailable.", &result, {});
       return MakeJsonResponse(503, "Service Unavailable", result);
@@ -1745,10 +1873,16 @@ McpHttpResponse McpProtocol::HandleHttp(const McpHttpRequest& request) const {
 
     const McpCommandResult commandResult = m_context.commandInvoker(name, normalizedArguments);
     if (!commandResult.ok) {
+      appendApplyAudit(false,
+                       commandResult.data.empty()
+                           ? BuildMutationPreviewPayload(*snapshot, name, StripMutationControls(normalizedArguments))
+                           : commandResult.data,
+                       commandResult.error);
       const json result = MakeError(id, -32010, commandResult.error);
       finish("tool", name, method, id, false, 200, commandResult.error, &result, {});
       return MakeJsonResponse(200, "OK", result);
     }
+    appendApplyAudit(true, commandResult.data, std::string());
     const json result = MakeSuccess(id, BuildTextToolResult(commandResult.data));
     finish("tool", name, method, id, true, 200, std::string(), &result, {});
     return MakeJsonResponse(200, "OK", result);

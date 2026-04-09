@@ -88,6 +88,8 @@ choices, and numeric bounds for object and component fields.
 Every write tool accepts `mode: "preview" | "apply"`. Preview calls never mutate the editor and return
 a `previewToken`; destructive apply calls for delete/new-scene/reload flows must present the matching
 token from the latest preview.
+Apply calls append JSONL audit entries to `<project-root>/.horo/mcp-audit.jsonl`, or to
+`ResolveMcpSettingsDirectory()/mcp-audit.jsonl` when no project root is available.
 
 For client compatibility, `tools/list` exposes these tool ids with underscores instead of dots
 (for example `editor_search`). The server continues to accept the dotted aliases as well.
@@ -249,6 +251,8 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 - If Horo's port changes, update the VS Code MCP config and restart the server
 
 ## Token-minimal usage tips
+
+Recommended AI workflow: inspect -> narrow query -> schema lookup -> preview -> apply -> audit.
 
 - Ask for `scene.summary` first instead of broad object dumps.
 - Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.

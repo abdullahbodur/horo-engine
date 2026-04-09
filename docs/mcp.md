@@ -90,6 +90,8 @@ drives `assets/editor_schema.json`, including defaults, enum options, and numeri
 Write tools accept `mode: "preview" | "apply"`. Preview requests never mutate editor state and return
 a `previewToken`; destructive applies for `editor.delete`, `editor.delete_asset`, `editor.new_scene`,
 and `editor.reload_scene` require the matching token.
+Apply requests append audit records to `<project-root>/.horo/mcp-audit.jsonl`, or
+`~/.horo/mcp-audit.jsonl` when no project root is resolved.
 
 ## Claude Code
 
@@ -180,6 +182,8 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 - If Horo's port changes, update the VS Code MCP config and restart the server
 
 ## Token-minimal usage guidance
+
+Recommended AI workflow: inspect -> narrow query -> schema lookup -> preview -> apply -> audit.
 
 - Prefer `scene.summary` before calling object-level tools.
 - Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
