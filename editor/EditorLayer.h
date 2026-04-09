@@ -419,6 +419,7 @@ class EditorLayer {
   static std::string GenerateId(const SceneDocument& doc);
   static std::string GenerateCameraId(const SceneDocument& doc);
   void ApplySchemaDefaults(SceneObject& obj) const;
+  void ApplyComponentSchemaDefaults(ComponentDesc& component) const;
 };
 
 }  // namespace Editor

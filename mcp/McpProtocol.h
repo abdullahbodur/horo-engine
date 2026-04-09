@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -70,7 +72,17 @@ class McpProtocol {
   const std::vector<McpCatalogEntry>& ResourceCatalog() const;
 
  private:
+  struct PreviewRecord {
+    std::string toolName;
+    nlohmann::json arguments = nlohmann::json::object();
+    std::string sceneId;
+    std::string sceneFilePath;
+  };
+
   McpProtocolContext m_context;
+  mutable std::mutex m_previewMutex;
+  mutable uint64_t m_nextPreviewToken = 0;
+  mutable std::unordered_map<std::string, PreviewRecord> m_previewRecords;
 };
 
 }  // namespace Mcp

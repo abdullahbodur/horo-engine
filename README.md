@@ -322,6 +322,9 @@ horo-engine/
 Horo Engine now ships with a built-in MCP server for the editor. Enable it from `File -> Settings...` in the editor and the server will auto-start on `http://127.0.0.1:39281/mcp` whenever the editor is open.
 
 User settings live in `~/.horo/settings.json` (Windows: `%USERPROFILE%\\.horo\\settings.json`). The MCP tab in the editor shows runtime status, recent requests, and copy-ready Claude/Codex configuration snippets.
+The recommended AI workflow is: inspect -> narrow query -> schema lookup -> preview -> apply -> audit.
+Apply-mode mutations also append audit records to `.horo/mcp-audit.jsonl` under the active project root
+when available.
 
 Integration details and token-minimal usage guidance live in [docs/mcp.md](/c:/Users/abdul/projects/fun/game/horo-engine/docs/mcp.md).
 
