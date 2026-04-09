@@ -124,6 +124,74 @@ json BuildBuildIssueJson(const McpBuildIssueSnapshot& issue) {
   };
 }
 
+std::string NormalizeSchemaKind(std::string value) {
+  value = ToLowerAscii(std::move(value));
+  if (value.empty() || value == "all")
+    return "all";
+  if (value == "object" || value == "objects" || value == "type" || value == "types")
+    return "object";
+  if (value == "component" || value == "components")
+    return "component";
+  return value;
+}
+
+json BuildSchemaFieldJson(const McpSchemaFieldSnapshot& field) {
+  json out = json{
+      {"key", field.key},
+      {"label", field.label},
+      {"description", field.description},
+      {"widget", field.widget},
+      {"hasDefault", field.hasDefault},
+      {"default", field.defaultValue},
+      {"required", field.required},
+      {"allowEmpty", field.allowEmpty},
+      {"allowCustomValue", field.allowCustomValue},
+  };
+  if (!field.options.empty())
+    out["options"] = field.options;
+  if (field.hasMin || field.hasMax) {
+    json numeric = json::object();
+    if (field.hasMin)
+      numeric["min"] = field.minVal;
+    if (field.hasMax)
+      numeric["max"] = field.maxVal;
+    out["numeric"] = std::move(numeric);
+  }
+  return out;
+}
+
+json BuildSchemaEntrySummaryJson(const McpSchemaEntrySnapshot& entry) {
+  json out = json{
+      {"kind", entry.kind},
+      {"name", entry.name},
+      {"label", entry.label},
+      {"fieldCount", entry.fields.size()},
+  };
+  if (!entry.appliesTo.empty())
+    out["appliesTo"] = entry.appliesTo;
+  return out;
+}
+
+json BuildSchemaEntryJson(const McpSchemaEntrySnapshot& entry) {
+  json fields = json::array();
+  for (const McpSchemaFieldSnapshot& field : entry.fields)
+    fields.push_back(BuildSchemaFieldJson(field));
+
+  json out = BuildSchemaEntrySummaryJson(entry);
+  out["fields"] = std::move(fields);
+  return out;
+}
+
+const McpSchemaEntrySnapshot* FindSchemaEntry(const std::vector<McpSchemaEntrySnapshot>& entries,
+                                              const std::string& name) {
+  const std::string normalizedName = ToLowerAscii(name);
+  for (const McpSchemaEntrySnapshot& entry : entries) {
+    if (ToLowerAscii(entry.name) == normalizedName)
+      return &entry;
+  }
+  return nullptr;
+}
+
 bool ObjectMatchesQuery(const McpObjectSnapshot& object, const std::string& query) {
   if (ContainsCaseInsensitive(object.id, query) || ContainsCaseInsensitive(object.type, query) ||
       ContainsCaseInsensitive(object.assetId, query) || ContainsCaseInsensitive(GetParentId(object), query)) {
@@ -363,6 +431,43 @@ json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit) 
       {"issues", std::move(issues)},
       {"moreIssues", snapshot.build.issues.size() > count ? snapshot.build.issues.size() - count : 0},
   };
+}
+
+json BuildSchemaCatalogJson(const McpEditorSnapshot& snapshot, const std::string& kindFilter) {
+  const std::string normalizedKind = NormalizeSchemaKind(kindFilter);
+  json entries = json::array();
+
+  if (normalizedKind == "all" || normalizedKind == "object") {
+    for (const McpSchemaEntrySnapshot& entry : snapshot.schema.objectTypes)
+      entries.push_back(BuildSchemaEntrySummaryJson(entry));
+  }
+  if (normalizedKind == "all" || normalizedKind == "component") {
+    for (const McpSchemaEntrySnapshot& entry : snapshot.schema.components)
+      entries.push_back(BuildSchemaEntrySummaryJson(entry));
+  }
+
+  return json{
+      {"kind", normalizedKind},
+      {"objectTypeCount", snapshot.schema.objectTypes.size()},
+      {"componentCount", snapshot.schema.components.size()},
+      {"entryCount", entries.size()},
+      {"entries", std::move(entries)},
+  };
+}
+
+json BuildSchemaJson(const McpEditorSnapshot& snapshot,
+                     const std::string& name,
+                     const std::string& kindFilter) {
+  const std::string normalizedKind = NormalizeSchemaKind(kindFilter);
+  if (normalizedKind == "all" || normalizedKind == "object") {
+    if (const McpSchemaEntrySnapshot* entry = FindSchemaEntry(snapshot.schema.objectTypes, name))
+      return BuildSchemaEntryJson(*entry);
+  }
+  if (normalizedKind == "all" || normalizedKind == "component") {
+    if (const McpSchemaEntrySnapshot* entry = FindSchemaEntry(snapshot.schema.components, name))
+      return BuildSchemaEntryJson(*entry);
+  }
+  return json::object();
 }
 
 json BuildObjectListJson(const McpEditorSnapshot& snapshot,

@@ -68,6 +68,36 @@ struct McpBuildSnapshot {
   std::vector<McpBuildIssueSnapshot> issues;
 };
 
+struct McpSchemaFieldSnapshot {
+  std::string key;
+  std::string label;
+  std::string description;
+  std::string widget = "string";
+  bool hasDefault = false;
+  bool required = false;
+  bool allowEmpty = true;
+  bool allowCustomValue = false;
+  bool hasMin = false;
+  bool hasMax = false;
+  float minVal = 0.0f;
+  float maxVal = 1.0f;
+  std::vector<std::string> options;
+  std::string defaultValue;
+};
+
+struct McpSchemaEntrySnapshot {
+  std::string kind;
+  std::string name;
+  std::string label;
+  std::vector<std::string> appliesTo;
+  std::vector<McpSchemaFieldSnapshot> fields;
+};
+
+struct McpSchemaCatalogSnapshot {
+  std::vector<McpSchemaEntrySnapshot> objectTypes;
+  std::vector<McpSchemaEntrySnapshot> components;
+};
+
 struct McpEditorSnapshot {
   bool editorActive = false;
   bool playMode = false;
@@ -82,6 +112,7 @@ struct McpEditorSnapshot {
   std::vector<McpAssetSnapshot> assets;
   std::vector<McpConsoleEntry> consoleEntries;
   McpBuildSnapshot build;
+  McpSchemaCatalogSnapshot schema;
 };
 
 std::shared_ptr<const McpEditorSnapshot> CloneSnapshot(const McpEditorSnapshot& snapshot);
@@ -101,6 +132,11 @@ nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot,
                                 size_t offset = 0);
 nlohmann::json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 5);
 nlohmann::json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit = 5);
+nlohmann::json BuildSchemaCatalogJson(const McpEditorSnapshot& snapshot,
+                                      const std::string& kindFilter = {});
+nlohmann::json BuildSchemaJson(const McpEditorSnapshot& snapshot,
+                               const std::string& name,
+                               const std::string& kindFilter = {});
 nlohmann::json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                                    size_t objectLimit = 12,
                                    const std::string& typeFilter = {},
