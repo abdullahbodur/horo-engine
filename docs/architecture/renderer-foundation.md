@@ -21,8 +21,6 @@ Callers should prefer:
 4. `Renderer::EndPass()`
 5. `Renderer::EndFrame()`
 
-`Renderer::BeginScene/EndScene` remain compatibility helpers only while older callers are migrated.
-
 ## Backend Isolation
 
 - `OpenGLRenderBackend` owns OpenGL-specific draw submission and program binding behavior.
