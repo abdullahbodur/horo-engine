@@ -23,8 +23,11 @@
 
 #include "core/Application.h"
 #include "editor/SceneSerializer.h"
-#include "scene/SceneReferenceRuntime.h"
+#include "renderer/DebugDraw.h"
+#include "renderer/RenderContext.h"
+#include "renderer/Renderer.h"
 #include "scene/Scene.h"
+#include "scene/SceneReferenceRuntime.h"
 
 namespace MyGame {
 
@@ -59,7 +62,13 @@ class MyGameApp : public Monolith::Application {
   // STEP 5: Rendering (variable framerate).
   void OnRender(float alpha) override {
     Monolith::RenderContext::BeginFrame();
+    Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
+    Monolith::Renderer::BeginPass({Monolith::RenderPassId::OpaqueScene,
+                                   Monolith::RenderView::FromCamera(m_camera),
+                                   "starter-template-scene"});
     m_scene.RenderSystems(alpha);
+    Monolith::Renderer::EndPass();
+    Monolith::Renderer::EndFrame();
     Monolith::RenderContext::EndFrame();
   }
 

@@ -8,8 +8,8 @@
 
 namespace Monolith {
 
-// Submits all visible mesh entities.  BeginScene/EndScene are called by the
-// owner (GameScene::Render) so they bracket this submission pass.
+// Submits all visible mesh entities into whichever explicit renderer pass is
+// currently active. Frame/pass orchestration stays with the scene owner.
 void RenderSystem::OnUpdate(Registry& registry, float dt) {
   (void)dt;
 

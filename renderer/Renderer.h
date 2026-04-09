@@ -23,12 +23,8 @@ class Renderer {
   static void EndFrame();
   static void BeginPass(const RenderPassConfig& pass);
   static void EndPass();
-
-  static void BeginScene(const Camera& camera);
-  static void EndScene();
-
-  // Upload lights once per frame (call before Submit calls)
-  static void SetLights(const std::vector<Light>& lights);
+  static bool IsFrameActive();
+  static bool IsPassActive();
 
   // Submit a mesh for rendering with a given model matrix and material
   static void Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& material);
@@ -52,10 +48,8 @@ class Renderer {
  private:
   static IRenderBackend* ActiveBackend();
 
-  static std::vector<Light> s_compatLights;
   static bool s_frameActive;
   static bool s_passActive;
-  static bool s_compatibilitySceneActive;
 };
 
 }  // namespace Monolith

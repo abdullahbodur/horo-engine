@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <vector>
 
 #include "math/Vec3.h"
@@ -35,7 +36,7 @@ class DebugDraw {
   };
 
   static std::vector<LineVertex> s_lines;
-  static Shader* s_shader;
+  static std::unique_ptr<Shader> s_shader;
   static unsigned int s_vao, s_vbo;
   static bool s_initialized;
 };

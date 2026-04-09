@@ -23,7 +23,7 @@ namespace Monolith {
 unsigned int DebugHUD::s_vao = 0;
 unsigned int DebugHUD::s_vbo = 0;
 unsigned int DebugHUD::s_fontTex = 0;
-Shader* DebugHUD::s_shader = nullptr;
+std::unique_ptr<Shader> DebugHUD::s_shader;
 bool DebugHUD::s_initialized = false;
 bool DebugHUD::s_visible = false;
 bool DebugHUD::s_showCollisionBoxes = false;
@@ -1237,7 +1237,7 @@ void DebugHUD::Init(int screenW, int screenH) {
   s_screenW = screenW;
   s_screenH = screenH;
 
-  s_shader = new Shader(Shader::FromSource(HUD_VERT, HUD_FRAG));
+  s_shader = std::make_unique<Shader>(Shader::FromSource(HUD_VERT, HUD_FRAG));
 
   BuildFontAtlas();
 
@@ -1278,8 +1278,7 @@ void DebugHUD::Shutdown() {
     glDeleteVertexArrays(1, &s_vao);
     s_vao = 0;
   }
-  delete s_shader;
-  s_shader = nullptr;
+  s_shader.reset();
   s_initialized = false;
 }
 

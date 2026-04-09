@@ -14,9 +14,8 @@
 
 namespace Monolith {
 
-// Submits all visible skinned-mesh entities.
-// BeginScene/EndScene are called by the scene owner before and after all
-// render systems run, exactly as with RenderSystem.
+// Submits all visible skinned-mesh entities into the active explicit renderer
+// pass. Frame/pass orchestration stays with the scene owner.
 void SkinnedRenderSystem::OnUpdate(Registry& registry, float dt) {
   (void)dt;
 

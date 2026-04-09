@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "math/Mat4.h"
@@ -46,7 +47,7 @@ class DebugHUD {
   };
 
   static unsigned int s_vao, s_vbo, s_fontTex;
-  static Shader* s_shader;
+  static std::unique_ptr<Shader> s_shader;
   static bool s_initialized, s_visible, s_showCollisionBoxes;
 
 #ifndef NDEBUG

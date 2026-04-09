@@ -20,6 +20,12 @@ struct EditorViewportRect {
   }
 };
 
+struct EditorViewGimbalLayout {
+  EditorViewportRect wireButtonRect;
+  EditorViewportRect gimbalRect;
+  EditorViewportRect pickRect;
+};
+
 bool ShouldToggleHelpPopup(bool currToggle,
                            bool prevToggle,
                            bool wantsTextInput,
@@ -99,6 +105,10 @@ EditorViewportRect BuildEditorViewportRect(float displayWidth,
                                            float bottomDockHeight,
                                            float leftDockWidth,
                                            float rightPanelWidth);
+EditorViewGimbalLayout BuildEditorViewGimbalLayout(const EditorViewportRect& viewportRect,
+                                                   float displayWidth,
+                                                   float rightPanelWidth,
+                                                   float toolbarHeight);
 bool TryParseVec3Csv(const std::string& text, Vec3* outValue);
 
 }  // namespace Editor
