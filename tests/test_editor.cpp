@@ -2082,6 +2082,23 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
 }
 
+TEST_CASE("Editor view gimbal layout reserves wire button and combined pick rect", "[editor][ui]") {
+    const EditorViewportRect viewport =
+        BuildEditorViewportRect(1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
+    const EditorViewGimbalLayout layout =
+        BuildEditorViewGimbalLayout(viewport, 1600.0f, 280.0f, 36.0f);
+
+    REQUIRE(layout.gimbalRect.maxX == Approx(viewport.maxX - 10.0f));
+    REQUIRE(layout.gimbalRect.minY == Approx(viewport.minY + 10.0f));
+    REQUIRE(layout.wireButtonRect.maxX < layout.gimbalRect.minX);
+    REQUIRE(layout.pickRect.minX == Approx(layout.wireButtonRect.minX));
+    REQUIRE(layout.pickRect.maxX == Approx(layout.gimbalRect.maxX));
+    REQUIRE(layout.pickRect.minY == Approx(layout.gimbalRect.minY));
+    REQUIRE(layout.pickRect.maxY == Approx(layout.gimbalRect.maxY));
+    REQUIRE(layout.pickRect.Contains(layout.wireButtonRect.minX + 4.0f, layout.wireButtonRect.minY + 4.0f));
+    REQUIRE(layout.pickRect.Contains(layout.gimbalRect.maxX - 4.0f, layout.gimbalRect.maxY - 4.0f));
+}
+
 TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui]") {
     REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
     REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
