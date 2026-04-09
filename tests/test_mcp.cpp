@@ -1144,6 +1144,66 @@ TEST_CASE("McpProtocol writes apply audit records to project root and fallback s
   REQUIRE(fallbackRecords[0]["result"] == "success");
 }
 
+TEST_CASE("McpProtocol supports the recommended inspect to audit workflow", "[mcp][protocol][workflow]") {
+  namespace fs = std::filesystem;
+
+  EnvGuard env("horo_mcp_workflow");
+  const fs::path projectRoot = env.tempHome / "project";
+  fs::create_directories(projectRoot / "assets");
+  {
+    std::ofstream presets(projectRoot / "CMakePresets.json");
+    presets << "{}";
+  }
+
+  McpEditorSnapshot snapshot = MakeSnapshot();
+  ProjectRootGuard projectRootGuard(projectRoot);
+  McpProtocol protocol(McpProtocolContext{
+      [&snapshot]() { return CloneSnapshot(snapshot); },
+      [](const std::string& toolName, const json& arguments) {
+        if (toolName == "editor.delete") {
+          return McpCommandResult{
+              true,
+              json{{"deletedCount", arguments.contains("ids") ? arguments["ids"].size() : 0}},
+              {}};
+        }
+        return McpCommandResult{true, json{{"handledTool", toolName}}, {}};
+      },
+      {},
+  });
+
+  const json sceneSummary = ReadResource(protocol, "scene://summary", json{{"limit", 2}}, 800);
+  const json sceneSummaryPayload =
+      json::parse(sceneSummary["result"]["contents"][0]["text"].get<std::string>());
+  REQUIRE(sceneSummaryPayload["objectCount"] == 4);
+
+  const json search = CallTool(protocol, "editor.search", json{{"query", "hero"}, {"limit", 3}}, 801);
+  REQUIRE(search["result"]["structuredContent"]["assets"].size() == 1);
+
+  const json schema = CallTool(protocol, "editor.get_schema", json{{"name", "light"}, {"kind", "component"}}, 802);
+  REQUIRE(schema["result"]["structuredContent"]["fields"].size() == 4);
+
+  const json preview =
+      CallTool(protocol, "editor.delete", json{{"ids", json::array({"obj_light"})}, {"mode", "preview"}}, 803);
+  REQUIRE(preview["result"]["structuredContent"]["preview"]["deletedCount"] == 1);
+  const std::string previewToken =
+      preview["result"]["structuredContent"]["previewToken"].get<std::string>();
+
+  const json apply = CallTool(protocol, "editor.delete",
+                              json{{"ids", json::array({"obj_light"})},
+                                   {"mode", "apply"},
+                                   {"previewToken", previewToken}},
+                              804);
+  REQUIRE(apply["result"]["structuredContent"]["deletedCount"] == 1);
+
+  const fs::path auditPath = projectRoot / ".horo" / "mcp-audit.jsonl";
+  REQUIRE(fs::exists(auditPath));
+  const std::vector<json> records = ReadJsonLines(auditPath);
+  REQUIRE(records.size() == 1);
+  REQUIRE(records[0]["tool"] == "editor.delete");
+  REQUIRE(records[0]["previewToken"] == previewToken);
+  REQUIRE(records[0]["result"] == "success");
+}
+
 TEST_CASE("McpProtocol returns expected errors for unsupported or unavailable paths", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocolWithSnapshot(McpProtocolContext{
