@@ -23,7 +23,12 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
+          if ! sudo apt-get update -qq; then
+            # Ubuntu hosted runners occasionally include broken Microsoft apt mirrors.
+            # Remove them and retry so CI remains deterministic.
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update -qq
+          fi
           sudo apt-get install -y --no-install-recommends \
             ninja-build \
             libwayland-dev wayland-protocols libxkbcommon-dev \
@@ -122,7 +127,12 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
+          if ! sudo apt-get update -qq; then
+            # Ubuntu hosted runners occasionally include broken Microsoft apt mirrors.
+            # Remove them and retry so CI remains deterministic.
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update -qq
+          fi
           sudo apt-get install -y --no-install-recommends \
             ninja-build lcov \
             libwayland-dev wayland-protocols libxkbcommon-dev \
