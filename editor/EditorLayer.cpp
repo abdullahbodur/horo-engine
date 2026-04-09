@@ -46,6 +46,7 @@
 #include "editor/EditorDebugTrace.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
+#include "editor/SceneProjectBridge.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
@@ -65,6 +66,7 @@
 #include "renderer/Texture.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
+#include "scene/SceneRuntimeConversion.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/PlayerTagComponent.h"
 #include "scene/components/TransformComponent.h"
@@ -87,6 +89,179 @@ constexpr char kEditorViewportWindow[] = "Viewport";
 // Avoid re-reading directories every ImGui frame (Windows "not responding" on large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
 constexpr size_t kMaxEditorHistorySnapshots = 128;
+
+std::string BuildIssueKey(const std::string& severity,
+                          const std::string& path,
+                          const std::string& message) {
+  return severity + "\n" + path + "\n" + message;
+}
+
+std::string BuildIssueSeverityText(SceneProjectValidationIssue::Severity severity) {
+  return severity == SceneProjectValidationIssue::Severity::Error ? "error" : "warning";
+}
+
+std::string BuildIssueSeverityText(RuntimeSceneBuildIssue::Severity severity) {
+  return severity == RuntimeSceneBuildIssue::Severity::Error ? "error" : "warning";
+}
+
+Mcp::McpBuildSnapshot BuildMcpBuildSnapshot(const SceneDocument& document) {
+  Mcp::McpBuildSnapshot snapshot;
+  snapshot.available = true;
+
+  const SceneProjectModel model = BuildSceneProjectModel(document);
+  snapshot.assetCount = model.scene.assets.size();
+  snapshot.nodeCount = model.scene.nodes.size();
+
+  const SceneProjectValidationResult validation = ValidateSceneProjectModel(model);
+  std::unordered_set<std::string> validationIssueKeys;
+  for (const SceneProjectValidationIssue& issue : validation.issues) {
+    const std::string severity = BuildIssueSeverityText(issue.severity);
+    validationIssueKeys.insert(BuildIssueKey(severity, issue.path, issue.message));
+    if (issue.severity == SceneProjectValidationIssue::Severity::Error)
+      ++snapshot.sceneValidationErrors;
+    else
+      ++snapshot.sceneValidationWarnings;
+    snapshot.issues.push_back(Mcp::McpBuildIssueSnapshot{"validation", severity, issue.path, issue.message});
+  }
+
+  const RuntimeSceneBuildResult runtimeBuild = Monolith::BuildRuntimeSceneDefinition(model);
+  snapshot.roomCount = runtimeBuild.definition.rooms.size();
+  snapshot.lightCount = runtimeBuild.definition.lights.size();
+  snapshot.hasSceneCamera = runtimeBuild.definition.sceneCamera.has_value();
+  for (const RuntimeSceneRoom& room : runtimeBuild.definition.rooms) {
+    snapshot.panelCount += room.panels.size();
+    snapshot.propCount += room.props.size();
+  }
+
+  for (const RuntimeSceneBuildIssue& issue : runtimeBuild.issues) {
+    const std::string severity = BuildIssueSeverityText(issue.severity);
+    if (validationIssueKeys.count(BuildIssueKey(severity, issue.path, issue.message)) != 0)
+      continue;
+    if (issue.severity == RuntimeSceneBuildIssue::Severity::Error)
+      ++snapshot.runtimeBuildErrors;
+    else
+      ++snapshot.runtimeBuildWarnings;
+    snapshot.issues.push_back(Mcp::McpBuildIssueSnapshot{"runtime", severity, issue.path, issue.message});
+  }
+
+  const size_t totalErrors = snapshot.sceneValidationErrors + snapshot.runtimeBuildErrors;
+  const size_t totalWarnings = snapshot.sceneValidationWarnings + snapshot.runtimeBuildWarnings;
+  snapshot.status = totalErrors > 0 ? "error" : totalWarnings > 0 ? "warning" : "ok";
+  return snapshot;
+}
+
+const char* FieldWidgetToString(FieldDef::Widget widget) {
+  switch (widget) {
+    case FieldDef::Widget::Float:
+      return "float";
+    case FieldDef::Widget::Bool:
+      return "bool";
+    case FieldDef::Widget::Enum:
+      return "enum";
+    case FieldDef::Widget::Color3:
+      return "color3";
+    case FieldDef::Widget::String:
+    default:
+      return "string";
+  }
+}
+
+Mcp::McpSchemaFieldSnapshot BuildMcpSchemaFieldSnapshot(const FieldDef& field) {
+  Mcp::McpSchemaFieldSnapshot snapshot;
+  snapshot.key = field.key;
+  snapshot.label = field.label;
+  snapshot.description = field.description;
+  snapshot.widget = FieldWidgetToString(field.widget);
+  snapshot.hasDefault = field.hasDefault;
+  snapshot.required = field.required;
+  snapshot.allowEmpty = field.allowEmpty;
+  snapshot.allowCustomValue = field.allowCustomValue;
+  snapshot.hasMin = field.hasMin;
+  snapshot.hasMax = field.hasMax;
+  snapshot.minVal = field.minVal;
+  snapshot.maxVal = field.maxVal;
+  snapshot.options = field.options;
+  snapshot.defaultValue = field.defaultValue;
+  return snapshot;
+}
+
+Mcp::McpSchemaEntrySnapshot BuildMcpSchemaEntrySnapshot(const TypeSchema& schema) {
+  Mcp::McpSchemaEntrySnapshot snapshot;
+  snapshot.kind = "object";
+  snapshot.name = schema.name;
+  snapshot.label = schema.label;
+  snapshot.appliesTo = schema.appliesTo;
+  snapshot.fields.reserve(schema.fields.size());
+  for (const FieldDef& field : schema.fields)
+    snapshot.fields.push_back(BuildMcpSchemaFieldSnapshot(field));
+  return snapshot;
+}
+
+Mcp::McpSchemaEntrySnapshot BuildMcpSchemaEntrySnapshot(const ComponentSchema& schema) {
+  Mcp::McpSchemaEntrySnapshot snapshot;
+  snapshot.kind = "component";
+  snapshot.name = schema.name;
+  snapshot.label = schema.label;
+  snapshot.appliesTo = schema.appliesTo;
+  snapshot.fields.reserve(schema.fields.size());
+  for (const FieldDef& field : schema.fields)
+    snapshot.fields.push_back(BuildMcpSchemaFieldSnapshot(field));
+  return snapshot;
+}
+
+Mcp::McpSchemaCatalogSnapshot BuildMcpSchemaCatalogSnapshot(const EditorSchema& schema) {
+  Mcp::McpSchemaCatalogSnapshot snapshot;
+
+  std::vector<std::string> typeNames;
+  typeNames.reserve(schema.TypeSchemas().size());
+  for (const auto& entry : schema.TypeSchemas())
+    typeNames.push_back(entry.first);
+  std::sort(typeNames.begin(), typeNames.end());
+  for (const std::string& typeName : typeNames)
+    snapshot.objectTypes.push_back(BuildMcpSchemaEntrySnapshot(schema.TypeSchemas().at(typeName)));
+
+  std::vector<std::string> componentTypes;
+  componentTypes.reserve(schema.ComponentSchemas().size());
+  for (const auto& entry : schema.ComponentSchemas())
+    componentTypes.push_back(entry.first);
+  std::sort(componentTypes.begin(), componentTypes.end());
+  for (const std::string& componentType : componentTypes)
+    snapshot.components.push_back(BuildMcpSchemaEntrySnapshot(schema.ComponentSchemas().at(componentType)));
+
+  return snapshot;
+}
+
+bool SchemaAppliesToObjectType(const std::vector<std::string>& appliesTo, SceneObjectType objectType) {
+  if (appliesTo.empty())
+    return true;
+  std::string typeName = "panel";
+  switch (objectType) {
+    case SceneObjectType::Prop:
+      typeName = "prop";
+      break;
+    case SceneObjectType::Light:
+      typeName = "light";
+      break;
+    case SceneObjectType::Camera:
+      typeName = "camera";
+      break;
+    case SceneObjectType::Panel:
+    default:
+      typeName = "panel";
+      break;
+  }
+  auto normalize = [](std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    return value;
+  };
+  for (const std::string& entry : appliesTo) {
+    if (normalize(entry) == typeName)
+      return true;
+  }
+  return false;
+}
 
 bool AssetDefsEqual(const AssetDef& lhs, const AssetDef& rhs) {
   return lhs.mesh == rhs.mesh &&
@@ -5030,30 +5205,69 @@ void EditorLayer::DrawPropertiesPanel() {
     ImGui::OpenPopup("##add_component_popup");
   }
   if (ImGui::BeginPopup("##add_component_popup")) {
-    if (ImGui::MenuItem("Light")) {
-      ComponentDesc cd;
-      cd.type = "light";
-      cd.props["intensity"] = "1.0000";
-      cd.props["color"] = "1.0000,1.0000,1.0000";
-      cd.props["radius"] = "5.0000";
-      obj.components.push_back(std::move(cd));
-      m_document.dirty = true;
+    std::vector<const ComponentSchema*> componentSchemas;
+    componentSchemas.reserve(m_schema.ComponentSchemas().size());
+    for (const auto& entry : m_schema.ComponentSchemas()) {
+      if (SchemaAppliesToObjectType(entry.second.appliesTo, obj.type))
+        componentSchemas.push_back(&entry.second);
     }
-    if (ImGui::MenuItem("RigidBody")) {
-      ComponentDesc cd;
-      cd.type = "rigidbody";
-      cd.props["mass"] = "1.0000";
-      cd.props["isKinematic"] = "false";
-      cd.props["useGravity"] = "true";
-      obj.components.push_back(std::move(cd));
-      m_document.dirty = true;
-    }
-    if (ImGui::MenuItem("Script")) {
-      ComponentDesc cd;
-      cd.type = "script";
-      cd.props["behaviorTag"] = "";
-      obj.components.push_back(std::move(cd));
-      m_document.dirty = true;
+    std::sort(componentSchemas.begin(), componentSchemas.end(),
+              [](const ComponentSchema* lhs, const ComponentSchema* rhs) {
+                const std::string lhsLabel = lhs ? lhs->label : std::string();
+                const std::string rhsLabel = rhs ? rhs->label : std::string();
+                if (lhsLabel != rhsLabel)
+                  return lhsLabel < rhsLabel;
+                return lhs && rhs ? lhs->name < rhs->name : lhs < rhs;
+              });
+
+    if (!componentSchemas.empty()) {
+      for (const ComponentSchema* componentSchema : componentSchemas) {
+        if (!componentSchema)
+          continue;
+        const std::string menuLabel =
+            componentSchema->label.empty() ? componentSchema->name : componentSchema->label;
+        if (ImGui::MenuItem(menuLabel.c_str())) {
+          ComponentDesc component;
+          component.type = componentSchema->name;
+          ApplyComponentSchemaDefaults(component);
+          obj.components.push_back(std::move(component));
+          m_document.dirty = true;
+        }
+      }
+    } else {
+      if (ImGui::MenuItem("Light")) {
+        ComponentDesc component;
+        component.type = "light";
+        ApplyComponentSchemaDefaults(component);
+        if (component.props.empty()) {
+          component.props["intensity"] = "1.0000";
+          component.props["color"] = "1.0000,1.0000,1.0000";
+          component.props["radius"] = "5.0000";
+        }
+        obj.components.push_back(std::move(component));
+        m_document.dirty = true;
+      }
+      if (ImGui::MenuItem("RigidBody")) {
+        ComponentDesc component;
+        component.type = "rigidbody";
+        ApplyComponentSchemaDefaults(component);
+        if (component.props.empty()) {
+          component.props["mass"] = "1.0000";
+          component.props["isKinematic"] = "false";
+          component.props["useGravity"] = "true";
+        }
+        obj.components.push_back(std::move(component));
+        m_document.dirty = true;
+      }
+      if (ImGui::MenuItem("Script")) {
+        ComponentDesc component;
+        component.type = "script";
+        ApplyComponentSchemaDefaults(component);
+        if (component.props.empty())
+          component.props["behaviorTag"] = "";
+        obj.components.push_back(std::move(component));
+        m_document.dirty = true;
+      }
     }
     ImGui::EndPopup();
   }
@@ -5494,6 +5708,8 @@ void EditorLayer::PublishMcpSnapshot() {
     });
   }
 
+  snapshot.build = BuildMcpBuildSnapshot(m_document);
+  snapshot.schema = BuildMcpSchemaCatalogSnapshot(m_schema);
   m_mcpController.PublishSnapshot(snapshot);
 }
 
@@ -6623,8 +6839,18 @@ void EditorLayer::ApplySchemaDefaults(SceneObject& obj) const {
   if (!schema)
     return;
   for (const auto& fd : schema->fields)
-    if (obj.props.find(fd.key) == obj.props.end())
+    if (fd.hasDefault && obj.props.find(fd.key) == obj.props.end())
       obj.props[fd.key] = fd.defaultValue;
+}
+
+void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc& component) const {
+  const ComponentSchema* schema = m_schema.GetComponentSchema(component.type);
+  if (!schema)
+    return;
+  for (const FieldDef& field : schema->fields) {
+    if (field.hasDefault && component.props.find(field.key) == component.props.end())
+      component.props[field.key] = field.defaultValue;
+  }
 }
 
 // ---- Wireframe overlay -------------------------------------------------------

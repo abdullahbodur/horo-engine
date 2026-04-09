@@ -44,8 +44,11 @@ User settings are stored in `~/.horo/settings.json` on macOS/Linux and `%USERPRO
 - `assets.catalog`
 - `console.recent`
 - `console.summary`
+- `build.status`
 
 These resources are compact by default and intentionally avoid full-scene dumps.
+List-style resources accept `limit` and `offset`, and query-driven reads such as `scene.objects` and
+`assets.catalog` match case-insensitively.
 
 ## Tools
 
@@ -75,10 +78,20 @@ These resources are compact by default and intentionally avoid full-scene dumps.
 - `editor.delete_asset`
 - `editor.scene_status`
 - `editor.get_scene_file`
+- `editor.list_schema_types`
+- `editor.get_schema`
 - `editor.new_scene`
 - `editor.save_scene`
 - `editor.reload_scene`
 - `editor.search_console`
+
+`editor.list_schema_types` and `editor.get_schema` expose the same object and component metadata that
+drives `assets/editor_schema.json`, including defaults, enum options, and numeric bounds.
+Write tools accept `mode: "preview" | "apply"`. Preview requests never mutate editor state and return
+a `previewToken`; destructive applies for `editor.delete`, `editor.delete_asset`, `editor.new_scene`,
+and `editor.reload_scene` require the matching token.
+Apply requests append audit records to `<project-root>/.horo/mcp-audit.jsonl`, or
+`~/.horo/mcp-audit.jsonl` when no project root is resolved.
 
 ## Claude Code
 
@@ -170,8 +183,12 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 
 ## Token-minimal usage guidance
 
+Recommended AI workflow: inspect -> narrow query -> schema lookup -> preview -> apply -> audit.
+
 - Prefer `scene.summary` before calling object-level tools.
+- Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a narrow `query` and `limit`.
 - Use `editor.get_object` only for the specific object you need.
+- Use `editor.list_schema_types` and `editor.get_schema` before mutating typed props or components.
 - Prefer `console.recent` over asking for long log history.
 - Mutate with targeted tools instead of requesting broad state dumps first.

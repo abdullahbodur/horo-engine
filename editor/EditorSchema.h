@@ -13,7 +13,14 @@ struct FieldDef {
 
   std::string key;
   std::string label;
+  std::string description;
   Widget widget = Widget::String;
+  bool hasDefault = false;
+  bool required = false;
+  bool allowEmpty = true;
+  bool allowCustomValue = false;
+  bool hasMin = false;
+  bool hasMax = false;
   float minVal = 0.0f;
   float maxVal = 1.0f;
   std::vector<std::string> options;  // for Enum widget
@@ -21,6 +28,16 @@ struct FieldDef {
 };
 
 struct TypeSchema {
+  std::string name;
+  std::string label;
+  std::vector<std::string> appliesTo;
+  std::vector<FieldDef> fields;
+};
+
+struct ComponentSchema {
+  std::string name;
+  std::string label;
+  std::vector<std::string> appliesTo;
   std::vector<FieldDef> fields;
 };
 
@@ -33,9 +50,16 @@ class EditorSchema {
 
   // Returns nullptr if no schema registered for this type.
   const TypeSchema* GetSchema(SceneObjectType t) const;
+  const TypeSchema* GetSchemaByName(const std::string& typeName) const;
+  const ComponentSchema* GetComponentSchema(const std::string& componentType) const;
+  const std::unordered_map<std::string, TypeSchema>& TypeSchemas() const { return m_schemas; }
+  const std::unordered_map<std::string, ComponentSchema>& ComponentSchemas() const {
+    return m_componentSchemas;
+  }
 
  private:
   std::unordered_map<std::string, TypeSchema> m_schemas;
+  std::unordered_map<std::string, ComponentSchema> m_componentSchemas;
 };
 
 }  // namespace Editor

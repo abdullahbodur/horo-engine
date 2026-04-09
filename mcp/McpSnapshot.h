@@ -43,6 +43,61 @@ struct McpConsoleEntry {
   std::string message;
 };
 
+struct McpBuildIssueSnapshot {
+  std::string stage;
+  std::string severity;
+  std::string path;
+  std::string message;
+};
+
+struct McpBuildSnapshot {
+  bool available = false;
+  std::string source = "scene_project_runtime";
+  std::string status = "unavailable";
+  size_t assetCount = 0;
+  size_t nodeCount = 0;
+  size_t sceneValidationErrors = 0;
+  size_t sceneValidationWarnings = 0;
+  size_t runtimeBuildErrors = 0;
+  size_t runtimeBuildWarnings = 0;
+  size_t roomCount = 0;
+  size_t panelCount = 0;
+  size_t propCount = 0;
+  size_t lightCount = 0;
+  bool hasSceneCamera = false;
+  std::vector<McpBuildIssueSnapshot> issues;
+};
+
+struct McpSchemaFieldSnapshot {
+  std::string key;
+  std::string label;
+  std::string description;
+  std::string widget = "string";
+  bool hasDefault = false;
+  bool required = false;
+  bool allowEmpty = true;
+  bool allowCustomValue = false;
+  bool hasMin = false;
+  bool hasMax = false;
+  float minVal = 0.0f;
+  float maxVal = 1.0f;
+  std::vector<std::string> options;
+  std::string defaultValue;
+};
+
+struct McpSchemaEntrySnapshot {
+  std::string kind;
+  std::string name;
+  std::string label;
+  std::vector<std::string> appliesTo;
+  std::vector<McpSchemaFieldSnapshot> fields;
+};
+
+struct McpSchemaCatalogSnapshot {
+  std::vector<McpSchemaEntrySnapshot> objectTypes;
+  std::vector<McpSchemaEntrySnapshot> components;
+};
+
 struct McpEditorSnapshot {
   bool editorActive = false;
   bool playMode = false;
@@ -56,6 +111,8 @@ struct McpEditorSnapshot {
   std::vector<McpObjectSnapshot> objects;
   std::vector<McpAssetSnapshot> assets;
   std::vector<McpConsoleEntry> consoleEntries;
+  McpBuildSnapshot build;
+  McpSchemaCatalogSnapshot schema;
 };
 
 std::shared_ptr<const McpEditorSnapshot> CloneSnapshot(const McpEditorSnapshot& snapshot);
@@ -68,15 +125,27 @@ nlohmann::json BuildAssetsJson(const McpEditorSnapshot& snapshot, size_t assetLi
 nlohmann::json BuildAssetsSelectionJson(const McpEditorSnapshot& snapshot);
 nlohmann::json BuildAssetsCatalogJson(const McpEditorSnapshot& snapshot,
                                       size_t assetLimit = 12,
-                                      const std::string& query = {});
-nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 20);
+                                      const std::string& query = {},
+                                      size_t offset = 0);
+nlohmann::json BuildConsoleJson(const McpEditorSnapshot& snapshot,
+                                size_t lineLimit = 20,
+                                size_t offset = 0);
 nlohmann::json BuildConsoleSummaryJson(const McpEditorSnapshot& snapshot, size_t lineLimit = 5);
+nlohmann::json BuildBuildStatusJson(const McpEditorSnapshot& snapshot, size_t issueLimit = 5);
+nlohmann::json BuildSchemaCatalogJson(const McpEditorSnapshot& snapshot,
+                                      const std::string& kindFilter = {});
+nlohmann::json BuildSchemaJson(const McpEditorSnapshot& snapshot,
+                               const std::string& name,
+                               const std::string& kindFilter = {});
 nlohmann::json BuildObjectListJson(const McpEditorSnapshot& snapshot,
                                    size_t objectLimit = 12,
                                    const std::string& typeFilter = {},
                                    const std::string& query = {},
-                                   bool selectedOnly = false);
-nlohmann::json BuildHierarchyJson(const McpEditorSnapshot& snapshot, size_t objectLimit = 32);
+                                   bool selectedOnly = false,
+                                   size_t offset = 0);
+nlohmann::json BuildHierarchyJson(const McpEditorSnapshot& snapshot,
+                                  size_t objectLimit = 32,
+                                  size_t offset = 0);
 nlohmann::json BuildObjectJson(const McpObjectSnapshot& object);
 nlohmann::json BuildObjectEdgesJson(const McpObjectSnapshot& object);
 nlohmann::json BuildAssetJson(const McpAssetSnapshot& asset);

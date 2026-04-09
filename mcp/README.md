@@ -42,6 +42,10 @@ Resources:
 - `assets.catalog`
 - `console.recent`
 - `console.summary`
+- `build.status`
+
+List-style resources accept `limit` and `offset`, and query-driven reads such as `scene.objects` and
+`assets.catalog` match case-insensitively.
 
 Tools:
 
@@ -71,12 +75,21 @@ Tools:
 - `editor.delete_asset`
 - `editor.scene_status`
 - `editor.get_scene_file`
+- `editor.list_schema_types`
+- `editor.get_schema`
 - `editor.new_scene`
 - `editor.save_scene`
 - `editor.reload_scene`
 - `editor.search_console`
 
 The design is intentionally summary-first to keep token usage low.
+Schema tools expose the same `assets/editor_schema.json` metadata that powers editor defaults, enum
+choices, and numeric bounds for object and component fields.
+Every write tool accepts `mode: "preview" | "apply"`. Preview calls never mutate the editor and return
+a `previewToken`; destructive apply calls for delete/new-scene/reload flows must present the matching
+token from the latest preview.
+Apply calls append JSONL audit entries to `<project-root>/.horo/mcp-audit.jsonl`, or to
+`ResolveMcpSettingsDirectory()/mcp-audit.jsonl` when no project root is available.
 
 For client compatibility, `tools/list` exposes these tool ids with underscores instead of dots
 (for example `editor_search`). The server continues to accept the dotted aliases as well.
@@ -239,9 +252,13 @@ code --add-mcp "{\"name\":\"horoEngine\",\"type\":\"http\",\"url\":\"http://127.
 
 ## Token-minimal usage tips
 
+Recommended AI workflow: inspect -> narrow query -> schema lookup -> preview -> apply -> audit.
+
 - Ask for `scene.summary` first instead of broad object dumps.
+- Use `limit` + `offset` on `scene.objects`, `scene.hierarchy`, `assets.catalog`, and `console.recent`.
 - Use `editor.search` with a small `limit`.
 - Call `editor.get_object` only for the object you actually need.
+- Use `editor.list_schema_types` and `editor.get_schema` before editing typed props or components.
 - Prefer `console.recent` over long log history.
 - Use targeted mutation tools directly instead of first requesting the whole scene.
 
