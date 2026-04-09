@@ -172,6 +172,7 @@ Mcp::McpSchemaFieldSnapshot BuildMcpSchemaFieldSnapshot(const FieldDef& field) {
   snapshot.label = field.label;
   snapshot.description = field.description;
   snapshot.widget = FieldWidgetToString(field.widget);
+  snapshot.hasDefault = field.hasDefault;
   snapshot.required = field.required;
   snapshot.allowEmpty = field.allowEmpty;
   snapshot.allowCustomValue = field.allowCustomValue;
@@ -6838,7 +6839,7 @@ void EditorLayer::ApplySchemaDefaults(SceneObject& obj) const {
   if (!schema)
     return;
   for (const auto& fd : schema->fields)
-    if (obj.props.find(fd.key) == obj.props.end())
+    if (fd.hasDefault && obj.props.find(fd.key) == obj.props.end())
       obj.props[fd.key] = fd.defaultValue;
 }
 
@@ -6847,7 +6848,7 @@ void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc& component) const {
   if (!schema)
     return;
   for (const FieldDef& field : schema->fields) {
-    if (component.props.find(field.key) == component.props.end())
+    if (field.hasDefault && component.props.find(field.key) == component.props.end())
       component.props[field.key] = field.defaultValue;
   }
 }

@@ -15,6 +15,7 @@ struct FieldDef {
   std::string label;
   std::string description;
   Widget widget = Widget::String;
+  bool hasDefault = false;
   bool required = false;
   bool allowEmpty = true;
   bool allowCustomValue = false;

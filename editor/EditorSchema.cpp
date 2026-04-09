@@ -27,6 +27,7 @@ FieldDef ParseFieldDef(const json& fd) {
   field.key = fd.value("key", "");
   field.label = fd.value("label", field.key);
   field.description = fd.value("description", "");
+  field.hasDefault = fd.contains("default");
   field.defaultValue = fd.value("default", "");
   field.required = fd.value("required", false);
   field.allowEmpty = fd.value("allowEmpty", true);
