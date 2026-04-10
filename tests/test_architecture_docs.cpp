@@ -36,6 +36,8 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
   REQUIRE(std::filesystem::is_regular_file(
       docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      docsRoot / "vulkan-backend-integration-and-backend-parity.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
@@ -58,6 +60,8 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(architectureReadme.find("renderer-foundation.md") != std::string::npos);
   REQUIRE(architectureReadme.find("backend-agnostic-rendering-foundation-and-runtime-selection.md") !=
           std::string::npos);
+  REQUIRE(architectureReadme.find("vulkan-backend-integration-and-backend-parity.md") !=
+          std::string::npos);
 
   RequireFileContains(docsRoot / "renderer-foundation.md", "IRenderBackend");
   RequireFileContains(docsRoot / "renderer-foundation.md", "RenderPassConfig");
@@ -65,6 +69,10 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   RequireFileContains(docsRoot / "renderer-foundation.md", "OpenGLRenderBackend");
   RequireFileContains(docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md",
                       "runtime backend selection");
+  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+                      "capability-driven parity");
+  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+                      "editor viewport");
 }
 
 TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",
