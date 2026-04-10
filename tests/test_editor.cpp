@@ -22,6 +22,7 @@
 #include "editor/AssetImporterRegistry.h"
 #include "editor/EditorSchema.h"
 #include "editor/EditorAssetImport.h"
+#include "editor/EditorImGuiBackend.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/EditorWorkspaceSettings.h"
@@ -217,6 +218,13 @@ TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]"
     EditorSchema schema;
     REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
+}
+
+TEST_CASE("EditorImGuiBackend: only OpenGL is supported in the current integration slice",
+          "[editor][imgui][backend]") {
+    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
+    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
+    REQUIRE_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
 }
 
 TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {

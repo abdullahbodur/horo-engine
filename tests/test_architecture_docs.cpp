@@ -119,6 +119,10 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
 
   const std::string editorLayer = ReadTextFile(root / "editor" / "EditorLayer.cpp");
   REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
+  REQUIRE(editorLayer.find("ImGui_ImplOpenGL3_") == std::string::npos);
+
+  const std::string editorImGuiBackend = ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
+  REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") != std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {
