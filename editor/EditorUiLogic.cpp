@@ -6,6 +6,12 @@
 namespace Monolith {
 namespace Editor {
 
+namespace {
+
+constexpr EditorViewGimbalMetrics kEditorViewGimbalMetrics{};
+
+}  // namespace
+
 bool ShouldToggleHelpPopup(bool currToggle,
                            bool prevToggle,
                            bool wantsTextInput,
@@ -96,6 +102,9 @@ EditorViewportAssetDropResult DrawViewportAssetDropTarget(bool playMode,
     return result;
 
   result.targetVisible = true;
+  // The viewport drag-drop target spans the full panel, so it must explicitly
+  // allow later widgets (wireframe toggle, view gimbal) to overlap it.
+  ImGui::SetNextItemAllowOverlap();
   ImGui::InvisibleButton("##viewport_drop_target", ImVec2(targetWidth, targetHeight));
   if (!ImGui::BeginDragDropTarget())
     return result;
@@ -125,6 +134,36 @@ EditorViewportRect BuildEditorViewportRect(float displayWidth,
   rect.maxX = std::max(rect.minX, displayWidth - rightPanelWidth);
   rect.maxY = std::max(rect.minY, displayHeight - statusHeight - bottomDockHeight);
   return rect;
+}
+
+const EditorViewGimbalMetrics& GetEditorViewGimbalMetrics() {
+  return kEditorViewGimbalMetrics;
+}
+
+EditorViewGimbalLayout BuildEditorViewGimbalLayout(const EditorViewportRect& viewportRect,
+                                                   float displayWidth,
+                                                   float rightPanelWidth,
+                                                   float toolbarHeight) {
+  const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
+
+  const float viewportRight =
+      viewportRect.maxX > viewportRect.minX ? viewportRect.maxX : displayWidth - rightPanelWidth;
+  const float viewportTop =
+      viewportRect.maxY > viewportRect.minY ? viewportRect.minY : toolbarHeight;
+  const float wx = viewportRight - metrics.windowWidth - metrics.edgeMargin;
+  const float wy = viewportTop + metrics.edgeMargin;
+  const float btnX = wx - metrics.buttonFrameSize - metrics.buttonGap;
+  const float btnY = wy;
+
+  EditorViewGimbalLayout layout;
+  layout.wireButtonRect =
+      {btnX, btnY, btnX + metrics.buttonFrameSize, btnY + metrics.buttonFrameSize};
+  layout.gimbalRect = {wx, wy, wx + metrics.windowWidth, wy + metrics.windowHeight};
+  layout.pickRect = {std::min(layout.wireButtonRect.minX, layout.gimbalRect.minX),
+                     std::min(layout.wireButtonRect.minY, layout.gimbalRect.minY),
+                     std::max(layout.wireButtonRect.maxX, layout.gimbalRect.maxX),
+                     std::max(layout.wireButtonRect.maxY, layout.gimbalRect.maxY)};
+  return layout;
 }
 
 bool TryParseVec3Csv(const std::string& text, Vec3* outValue) {

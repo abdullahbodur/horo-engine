@@ -1,114 +1,152 @@
 #include "renderer/Renderer.h"
 
-#include <algorithm>
-#include <string>
+#include <memory>
 
-#include "renderer/Material.h"
-#include "renderer/Mesh.h"
-#include "renderer/Shader.h"
-#include "renderer/SkinnedMesh.h"
+#include "core/Assert.h"
+#include "renderer/RenderBackendFactory.h"
 
 namespace Monolith {
 
-Mat4 Renderer::s_view;
-Mat4 Renderer::s_projection;
-Vec3 Renderer::s_cameraPos;
-std::vector<Light> Renderer::s_lights;
-int Renderer::s_drawCalls = 0;
-unsigned int Renderer::s_lastLightProgram = 0;
+namespace {
 
-void Renderer::BeginScene(const Camera& camera) {
-  s_view = camera.GetView();
-  s_projection = camera.GetProjection();
-  s_cameraPos = camera.position;
-  s_drawCalls = 0;
-  s_lastLightProgram = 0;
+std::unique_ptr<IRenderBackend> CreateDefaultOwnedBackend() {
+  RenderBackendCreateResult createResult = CreateRenderBackend({});
+  MONOLITH_ASSERT(createResult.backend != nullptr,
+                  "Failed to create the default OpenGL render backend");
+  return std::move(createResult.backend);
 }
 
-void Renderer::EndScene() {}
+std::unique_ptr<IRenderBackend> g_ownedBackend = CreateDefaultOwnedBackend();
+IRenderBackend* g_backend = g_ownedBackend.get();
 
-void Renderer::SetLights(const std::vector<Light>& lights) {
-  s_lights = lights;
-  if (s_lights.size() > 8)
-    s_lights.resize(8);
+IRenderBackend* ResetToDefaultBackend() {
+  g_ownedBackend = CreateDefaultOwnedBackend();
+  g_backend = g_ownedBackend.get();
+  return g_backend;
+}
+
+}  // namespace
+
+bool Renderer::s_frameActive = false;
+bool Renderer::s_passActive = false;
+
+IRenderBackend* Renderer::ActiveBackend() {
+  MONOLITH_ASSERT(g_backend != nullptr, "Renderer backend pointer should never be null");
+  return g_backend;
+}
+
+RenderBackendInitResult Renderer::InitializeBackend(const RenderBackendSelection& selection) {
+  MONOLITH_ASSERT(!s_frameActive && !s_passActive,
+                  "Cannot initialize render backend while a frame or pass is active");
+
+  RenderBackendInitResult out;
+  out.requested = selection.requested;
+
+  RenderBackendCreateResult createResult = CreateRenderBackend(selection);
+  out.selected = createResult.selected;
+  out.error = std::move(createResult.error);
+  if (!createResult.backend)
+    return out;
+
+  g_ownedBackend = std::move(createResult.backend);
+  g_backend = g_ownedBackend.get();
+  out.ok = true;
+  out.selected = g_backend->GetBackendId();
+  out.capabilities = g_backend->GetCapabilities();
+  return out;
+}
+
+RenderBackendId Renderer::GetBackendId() {
+  return ActiveBackend()->GetBackendId();
+}
+
+RenderBackendCapabilities Renderer::GetBackendCapabilities() {
+  return ActiveBackend()->GetCapabilities();
+}
+
+bool Renderer::IsBackendSupported(RenderBackendId backendId) {
+  return Monolith::IsRenderBackendSupported(backendId);
+}
+
+void Renderer::UseBackend(IRenderBackend* backend) {
+  MONOLITH_ASSERT(!s_frameActive && !s_passActive,
+                  "Cannot swap render backend while a frame or pass is active");
+  g_ownedBackend.reset();
+  g_backend = backend ? backend : ResetToDefaultBackend();
+}
+
+void Renderer::ResetBackend() {
+  MONOLITH_ASSERT(!s_frameActive && !s_passActive,
+                  "Cannot reset render backend while a frame or pass is active");
+  ResetToDefaultBackend();
+}
+
+void Renderer::BeginFrame(const RenderFrameConfig& frame) {
+  MONOLITH_ASSERT(!s_frameActive, "Renderer::BeginFrame called while a frame is already active");
+
+  ActiveBackend()->BeginFrame(frame);
+  s_frameActive = true;
+}
+
+void Renderer::EndFrame() {
+  MONOLITH_ASSERT(s_frameActive, "Renderer::EndFrame called without an active frame");
+  if (!s_frameActive)
+    return;
+
+  if (s_passActive)
+    EndPass();
+
+  ActiveBackend()->EndFrame();
+  s_frameActive = false;
+}
+
+void Renderer::BeginPass(const RenderPassConfig& pass) {
+  MONOLITH_ASSERT(s_frameActive, "Renderer::BeginPass called without an active frame");
+  MONOLITH_ASSERT(!s_passActive, "Renderer::BeginPass called while another pass is still active");
+  if (!s_frameActive || s_passActive)
+    return;
+
+  ActiveBackend()->BeginPass(pass);
+  s_passActive = true;
+}
+
+void Renderer::EndPass() {
+  MONOLITH_ASSERT(s_passActive, "Renderer::EndPass called without an active pass");
+  if (!s_passActive)
+    return;
+
+  ActiveBackend()->EndPass();
+  s_passActive = false;
+}
+
+bool Renderer::IsFrameActive() {
+  return s_frameActive;
+}
+
+bool Renderer::IsPassActive() {
+  return s_passActive;
 }
 
 void Renderer::Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& material) {
-  material.Apply();
-  if (!material.shader)
-    return;
-
-  material.shader->SetMat4("u_model", modelMatrix);
-  material.shader->SetMat4("u_view", s_view);
-  material.shader->SetMat4("u_projection", s_projection);
-  material.shader->SetVec3("u_cameraPos", s_cameraPos);
-
-  unsigned int progID = material.shader->GetProgramID();
-  if (progID != s_lastLightProgram) {
-    int count = static_cast<int>(s_lights.size());
-    material.shader->SetInt("u_lightCount", count);
-    for (int i = 0; i < count; ++i) {
-      std::string b = "u_lights[" + std::to_string(i) + "].";
-      material.shader->SetInt(b + "type", static_cast<int>(s_lights[i].type));
-      material.shader->SetVec3(b + "position", s_lights[i].position);
-      material.shader->SetVec3(b + "direction", s_lights[i].direction);
-      material.shader->SetVec3(b + "color", s_lights[i].color * s_lights[i].intensity);
-      material.shader->SetFloat(b + "radius", s_lights[i].radius);
-    }
-    s_lastLightProgram = progID;
-  }
-
-  mesh.Draw();
-  ++s_drawCalls;
+  ActiveBackend()->DrawMesh(MeshDrawCommand{&mesh, &material, modelMatrix});
 }
 
 void Renderer::SubmitSkinned(const SkinnedMesh& mesh,
                               const Mat4& modelMatrix,
                               Material& material,
                               const std::vector<Mat4>& boneMatrices) {
-  material.Apply();
-  if (!material.shader)
-    return;
-
-  material.shader->SetMat4("u_model", modelMatrix);
-  material.shader->SetMat4("u_view", s_view);
-  material.shader->SetMat4("u_projection", s_projection);
-  material.shader->SetVec3("u_cameraPos", s_cameraPos);
-
-  // Upload bone palette — capped at 64 to match the shader's u_boneMatrices array size.
-  int count = std::min(static_cast<int>(boneMatrices.size()), 64);
-  if (count > 0)
-    material.shader->SetMat4Array("u_boneMatrices", count, boneMatrices[0].Data());
-
-  unsigned int progID = material.shader->GetProgramID();
-  if (progID != s_lastLightProgram) {
-    int lightCount = static_cast<int>(s_lights.size());
-    material.shader->SetInt("u_lightCount", lightCount);
-    for (int i = 0; i < lightCount; ++i) {
-      std::string b = "u_lights[" + std::to_string(i) + "].";
-      material.shader->SetInt(b + "type", static_cast<int>(s_lights[i].type));
-      material.shader->SetVec3(b + "position", s_lights[i].position);
-      material.shader->SetVec3(b + "direction", s_lights[i].direction);
-      material.shader->SetVec3(b + "color", s_lights[i].color * s_lights[i].intensity);
-      material.shader->SetFloat(b + "radius", s_lights[i].radius);
-    }
-    s_lastLightProgram = progID;
-  }
-
-  mesh.Draw();
-  ++s_drawCalls;
+  ActiveBackend()->DrawSkinnedMesh(
+      SkinnedMeshDrawCommand{&mesh, &material, modelMatrix, &boneMatrices});
 }
 
 void Renderer::SubmitWireframe(
     const Mesh& mesh, const Mat4& model, Shader& shader, float r, float g, float b) {
-  shader.Bind();
-  shader.SetMat4("u_model", model);
-  shader.SetMat4("u_view", s_view);
-  shader.SetMat4("u_projection", s_projection);
-  shader.SetVec4("u_color", {r, g, b, 1.0f});
+  ActiveBackend()->DrawWireframe(
+      WireframeDrawCommand{&mesh, &shader, model, {r, g, b, 1.0f}});
+}
 
-  mesh.DrawWireframe();
-  ++s_drawCalls;
+int Renderer::GetDrawCallCount() {
+  return ActiveBackend()->GetDrawCallCount();
 }
 
 }  // namespace Monolith

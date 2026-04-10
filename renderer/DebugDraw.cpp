@@ -10,7 +10,7 @@
 namespace Monolith {
 
 std::vector<DebugDraw::LineVertex> DebugDraw::s_lines;
-Shader* DebugDraw::s_shader = nullptr;
+std::unique_ptr<Shader> DebugDraw::s_shader;
 unsigned int DebugDraw::s_vao = 0;
 unsigned int DebugDraw::s_vbo = 0;
 bool DebugDraw::s_initialized = false;
@@ -36,7 +36,7 @@ void main() { FragColor = v_color; }
 )glsl";
 
 void DebugDraw::Init() {
-  s_shader = new Shader(Shader::FromSource(DEBUG_VERT, DEBUG_FRAG));
+  s_shader = std::make_unique<Shader>(Shader::FromSource(DEBUG_VERT, DEBUG_FRAG));
 
   glGenVertexArrays(1, &s_vao);
   glBindVertexArray(s_vao);
@@ -72,8 +72,7 @@ void DebugDraw::Shutdown() {
     glDeleteBuffers(1, &s_vbo);
   if (s_vao)
     glDeleteVertexArrays(1, &s_vao);
-  delete s_shader;
-  s_shader = nullptr;
+  s_shader.reset();
   s_initialized = false;
 }
 

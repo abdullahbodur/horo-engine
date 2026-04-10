@@ -85,15 +85,15 @@ Forbidden direction by policy:
 
 - Purpose: rendering API, camera, meshes, shaders, textures, debug draw, render context
 - Public surface:
-  - headers needed by game/runtime code such as `renderer/Camera.h`, render context interfaces, mesh/shader resource APIs
+  - headers needed by game/runtime code such as `renderer/Camera.h`, frame/pass descriptor types, the `Renderer` facade, and mesh/shader resource APIs
 - Internal surface:
-  - backend details, preview helpers, and implementation-only rendering utilities
+  - backend details such as `OpenGLRenderBackend`, preview helpers, and implementation-only rendering utilities
 - Allowed dependencies:
   - `math`, `core`, `scene`
 - Forbidden upward dependencies:
   - `editor`, `mcp`
 - Known current exceptions:
-  - some editor workflows currently include renderer details directly instead of going through narrower orchestration seams
+  - some editor workflows still own OpenGL-adjacent preview code directly instead of going through narrower orchestration seams
 
 ### `physics`
 

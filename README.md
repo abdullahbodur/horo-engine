@@ -248,10 +248,11 @@ world.Step(1.0f / 60.0f);
 ### Renderer
 
 ```cpp
-Renderer::BeginScene(camera);
-Renderer::SetLights(lights);
+Renderer::BeginFrame({lights, "game-frame"});
+Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "main-scene"});
 Renderer::Submit(mesh, modelMatrix, material);
-Renderer::EndScene();
+Renderer::EndPass();
+Renderer::EndFrame();
 
 // Procedural meshes
 Mesh sphere = Mesh::CreateSphere(1.0f, 32, 32);

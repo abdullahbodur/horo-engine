@@ -18,6 +18,11 @@ std::string ReadTextFile(const std::filesystem::path& path) {
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
+void RequireFileContains(const std::filesystem::path& path, const std::string& snippet) {
+  const std::string text = ReadTextFile(path);
+  REQUIRE(text.find(snippet) != std::string::npos);
+}
+
 }  // namespace
 
 TEST_CASE("Architecture docs exist and are discoverable from README", "[architecture][docs]") {
@@ -28,6 +33,9 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_directory(docsRoot));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "README.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "module-boundaries.md"));
+  REQUIRE(std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
@@ -45,6 +53,37 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(moduleBoundaries.find("input") != std::string::npos);
   REQUIRE(moduleBoundaries.find("editor") != std::string::npos);
   REQUIRE(moduleBoundaries.find("mcp") != std::string::npos);
+
+  const std::string architectureReadme = ReadTextFile(docsRoot / "README.md");
+  REQUIRE(architectureReadme.find("renderer-foundation.md") != std::string::npos);
+  REQUIRE(architectureReadme.find("backend-agnostic-rendering-foundation-and-runtime-selection.md") !=
+          std::string::npos);
+
+  RequireFileContains(docsRoot / "renderer-foundation.md", "IRenderBackend");
+  RequireFileContains(docsRoot / "renderer-foundation.md", "RenderPassConfig");
+  RequireFileContains(docsRoot / "renderer-foundation.md", "Material");
+  RequireFileContains(docsRoot / "renderer-foundation.md", "OpenGLRenderBackend");
+  RequireFileContains(docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md",
+                      "runtime backend selection");
+}
+
+TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",
+          "[architecture][renderer]") {
+  const std::filesystem::path root =
+      std::filesystem::path(__FILE__).parent_path().parent_path();
+
+  const std::string backend = ReadTextFile(root / "renderer" / "OpenGLRenderBackend.cpp");
+  REQUIRE(backend.find("GetProgramID(") != std::string::npos);
+
+  const std::string renderer = ReadTextFile(root / "renderer" / "Renderer.cpp");
+  REQUIRE(renderer.find("GetProgramID(") == std::string::npos);
+
+  const std::string renderSystem = ReadTextFile(root / "scene" / "systems" / "RenderSystem.cpp");
+  REQUIRE(renderSystem.find("GetProgramID(") == std::string::npos);
+
+  const std::string skinnedRenderSystem =
+      ReadTextFile(root / "scene" / "systems" / "SkinnedRenderSystem.cpp");
+  REQUIRE(skinnedRenderSystem.find("GetProgramID(") == std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {

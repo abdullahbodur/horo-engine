@@ -1,10 +1,10 @@
 # Renderer Module
 
-`renderer/` contains the OpenGL 4.1 rendering stack and asset-loading pipeline.
+`renderer/` contains the rendering foundation, its OpenGL backend, and the asset-loading pipeline.
 
 ## Responsibilities
 
-- GPU draw orchestration (`Renderer`)
+- GPU draw orchestration (`Renderer`) and backend seam types (`IRenderBackend`, `RenderFrameConfig`, `RenderPassConfig`)
 - Camera view/projection control (`Camera`)
 - Mesh abstractions (`Mesh`, `SkinnedMesh`) and draw submission
 - Material/shader bindings (`Material`, `Shader`)
@@ -16,11 +16,13 @@
 
 ## Main APIs
 
-- `Renderer::BeginScene(camera)`
-- `Renderer::SetLights(lights)`
+- `Renderer::BeginFrame(frameConfig)`
+- `Renderer::BeginPass(passConfig)`
 - `Renderer::Submit(mesh, modelMatrix, material)`
 - `Renderer::SubmitSkinned(skinnedMesh, modelMatrix, material, boneMatrices)`
-- `Renderer::EndScene()`
+- `Renderer::SubmitWireframe(mesh, modelMatrix, shader, r, g, b)`
+- `Renderer::EndPass()`
+- `Renderer::EndFrame()`
 
 ## Geometry Sources
 

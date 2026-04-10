@@ -1,9 +1,11 @@
 #pragma once
+#include <string>
 #include <vector>
 
 #include "math/Mat4.h"
-#include "renderer/Camera.h"
-#include "renderer/Light.h"
+#include "renderer/RenderBackend.h"
+#include "renderer/IRenderBackend.h"
+#include "renderer/RenderTypes.h"
 
 namespace Monolith {
 
@@ -14,11 +16,21 @@ class SkinnedMesh;
 
 class Renderer {
  public:
-  static void BeginScene(const Camera& camera);
-  static void EndScene();
+  static RenderBackendInitResult InitializeBackend(const RenderBackendSelection& selection = {});
+  static RenderBackendId GetBackendId();
+  static RenderBackendCapabilities GetBackendCapabilities();
+  static bool IsBackendSupported(RenderBackendId backendId);
 
-  // Upload lights once per frame (call before Submit calls)
-  static void SetLights(const std::vector<Light>& lights);
+  // Test seam: temporarily override the active backend with an externally owned implementation.
+  static void UseBackend(IRenderBackend* backend);
+  static void ResetBackend();
+
+  static void BeginFrame(const RenderFrameConfig& frame);
+  static void EndFrame();
+  static void BeginPass(const RenderPassConfig& pass);
+  static void EndPass();
+  static bool IsFrameActive();
+  static bool IsPassActive();
 
   // Submit a mesh for rendering with a given model matrix and material
   static void Submit(const Mesh& mesh, const Mat4& modelMatrix, Material& material);
@@ -37,15 +49,13 @@ class Renderer {
                               float g = 0.8f,
                               float b = 0.2f);
 
-  static int GetDrawCallCount() { return s_drawCalls; }
+  static int GetDrawCallCount();
 
  private:
-  static Mat4 s_view;
-  static Mat4 s_projection;
-  static Vec3 s_cameraPos;
-  static std::vector<Light> s_lights;
-  static int s_drawCalls;
-  static unsigned int s_lastLightProgram;
+  static IRenderBackend* ActiveBackend();
+
+  static bool s_frameActive;
+  static bool s_passActive;
 };
 
 }  // namespace Monolith

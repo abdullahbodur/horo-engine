@@ -61,6 +61,7 @@
 #include "renderer/ObjLoader.h"
 #include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
+#include "renderer/RenderViewUtils.h"
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
 #include "renderer/Texture.h"
@@ -2057,6 +2058,7 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     m_viewGizmoPickRect.Clear();
     m_viewportPanelRect = {};
   }
+  m_viewGizmoPickRect.Clear();
   ProcessPendingPathDrops();
 
   ImGui_ImplOpenGL3_NewFrame();
@@ -2084,7 +2086,6 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
     DrawDeleteConfirmModals();
     DrawExitConfirmModal();
     if (!m_playMode) {
-      DrawViewGimbal(cam);
       DrawSelectionHighlight();  // queues to DebugDraw
       if (m_gizmo.IsActive())
         m_gizmo.Draw(cam, screenW, screenH);  // queues to DebugDraw
@@ -2203,6 +2204,9 @@ void EditorLayer::DrawViewportPanel(const Camera& cam, int screenW, int screenH)
           }
           return true;
         });
+
+    if (!m_playMode)
+      DrawViewGimbal(cam);
   }
   ImGui::End();
   ImGui::PopStyleVar();
@@ -3048,68 +3052,72 @@ void EditorLayer::DrawSettingsModal() {
 
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
-  constexpr float kWinW = 128.0f;
-  constexpr float kWinH = 138.0f;
+  const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
-  const float viewportRight = m_viewportPanelRect.maxX > m_viewportPanelRect.minX
-                                  ? m_viewportPanelRect.maxX
-                                  : io.DisplaySize.x - rightDockW;
-  const float viewportTop =
-      m_viewportPanelRect.maxY > m_viewportPanelRect.minY ? m_viewportPanelRect.minY : kEditorToolbarH;
-  const float wx = viewportRight - kWinW - 10.0f;
-  const float wy = viewportTop + 10.0f;
+  const EditorViewGimbalLayout layout =
+      BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
+  const float wx = layout.gimbalRect.minX;
+  const float wy = layout.gimbalRect.minY;
+  const ImVec2 viewportPos = ImGui::GetWindowPos();
+  const ImVec2 btnLocalPos(layout.wireButtonRect.minX - viewportPos.x,
+                           layout.wireButtonRect.minY - viewportPos.y);
+  const ImVec2 gimbalLocalPos(layout.gimbalRect.minX - viewportPos.x,
+                              layout.gimbalRect.minY - viewportPos.y);
+  ImDrawList* dl = ImGui::GetWindowDrawList();
 
   // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
-  constexpr float kBtnSize = 28.0f;
-  constexpr float kBtnFrameSize = 36.0f;
-  constexpr float kBtnGap = 10.0f;
-  const float btnX = wx - kBtnFrameSize - kBtnGap;
-  const float btnY = wy;
-  ImGui::SetNextWindowPos(ImVec2(btnX, btnY));
-  ImGui::SetNextWindowSize(ImVec2(kBtnFrameSize, kBtnFrameSize));
-  ImGui::SetNextWindowBgAlpha(0.0f);
-  ImGui::Begin("##wire_btn", nullptr,
-               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
-  const float btnPad = (kBtnFrameSize - kBtnSize) * 0.5f;
-  ImGui::SetCursorPos(ImVec2(btnPad, btnPad));
+  dl->AddRectFilled(ImVec2(layout.wireButtonRect.minX, layout.wireButtonRect.minY),
+                    ImVec2(layout.wireButtonRect.maxX, layout.wireButtonRect.maxY),
+                    IM_COL32(95, 95, 95, 220),
+                    0.0f);
+  const float btnPad = (metrics.buttonFrameSize - metrics.buttonSize) * 0.5f;
+  ImGui::SetCursorPos(ImVec2(btnLocalPos.x + btnPad, btnLocalPos.y + btnPad));
   if (m_wireframeMode)
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
   else
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
-  if (ImGui::Button("[W]", ImVec2(kBtnSize, kBtnSize)))
+  if (ImGui::Button("##wire_btn_toggle", ImVec2(metrics.buttonSize, metrics.buttonSize)))
     m_wireframeMode = !m_wireframeMode;
   ImGui::PopStyleColor();
+  dl->AddText(ImVec2(layout.wireButtonRect.minX + metrics.titleOffsetX,
+                     layout.wireButtonRect.minY + metrics.titleOffsetY),
+              IM_COL32(230, 235, 245, 255),
+              "[W]");
   if (ImGui::IsItemHovered())
     ImGui::SetTooltip("Toggle Wireframe");
-  ImGui::End();
 
-  ImGui::SetNextWindowPos(ImVec2(wx, wy));
-  ImGui::SetNextWindowSize(ImVec2(kWinW, kWinH));
-  ImGui::SetNextWindowBgAlpha(0.78f);
-  ImGui::Begin("##view_gimbal",
-               nullptr,
-               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-  const ImVec2 wpos = ImGui::GetWindowPos();
-  const ImVec2 wsize = ImGui::GetWindowSize();
   m_viewGizmoPickRect.valid = true;
-  m_viewGizmoPickRect.minX = wpos.x;
-  m_viewGizmoPickRect.minY = wpos.y;
-  m_viewGizmoPickRect.maxX = wpos.x + wsize.x;
-  m_viewGizmoPickRect.maxY = wpos.y + wsize.y;
+  m_viewGizmoPickRect.minX = layout.pickRect.minX;
+  m_viewGizmoPickRect.minY = layout.pickRect.minY;
+  m_viewGizmoPickRect.maxX = layout.pickRect.maxX;
+  m_viewGizmoPickRect.maxY = layout.pickRect.maxY;
 
-  ImGui::TextUnformatted("View");
+  dl->AddRectFilled(ImVec2(layout.gimbalRect.minX, layout.gimbalRect.minY),
+                    ImVec2(layout.gimbalRect.maxX, layout.gimbalRect.maxY),
+                    IM_COL32(18, 18, 20, 200),
+                    0.0f);
+  dl->AddRect(ImVec2(layout.gimbalRect.minX, layout.gimbalRect.minY),
+              ImVec2(layout.gimbalRect.maxX, layout.gimbalRect.maxY),
+              IM_COL32(90, 90, 90, 255),
+              0.0f,
+              0,
+              1.0f);
+  dl->AddText(ImVec2(wx + metrics.titleOffsetX, wy + metrics.titleOffsetY),
+              IM_COL32(240, 240, 240, 255),
+              "View");
 
   const int idx = PrimaryIdx();
 
-  ImDrawList* dl = ImGui::GetWindowDrawList();
-  const ImVec2 inner0 = ImGui::GetWindowContentRegionMin();
-  const ImVec2 inner1 = ImGui::GetWindowContentRegionMax();
-  const ImVec2 center = ImVec2(wpos.x + inner0.x + (inner1.x - inner0.x) * 0.5f,
-                               wpos.y + inner0.y + (inner1.y - inner0.y) * 0.5f + 6.0f);
+  const float hitRegionWidth =
+      layout.gimbalRect.maxX - layout.gimbalRect.minX - 2.0f * metrics.contentOffsetX;
+  ImGui::SetCursorPos(ImVec2(gimbalLocalPos.x + metrics.contentOffsetX,
+                             gimbalLocalPos.y + metrics.contentOffsetY));
+  ImGui::InvisibleButton("##view_gimbal_hit", ImVec2(hitRegionWidth, metrics.hitRegionHeight));
+  const ImVec2 hitMin = ImGui::GetItemRectMin();
+  const ImVec2 hitMax = ImGui::GetItemRectMax();
+  const ImVec2 center = ImVec2((hitMin.x + hitMax.x) * 0.5f, (hitMin.y + hitMax.y) * 0.5f + 3.0f);
+  const bool canvasHovered = ImGui::IsItemHovered();
+  const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
   constexpr float kShaftPx = 36.0f;
   constexpr float kHitPx = 12.0f;
@@ -3145,7 +3153,7 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
 
   ViewSnap hoverSnap = ViewSnap::None;
 
-  if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
+  if (canvasHovered) {
     const ImVec2 mouse = io.MousePos;
     float bestD = kHitPxSq;  // was kHitPxSq * 4.f — that doubled the effective hit radius
     const float cx = center.x, cy = center.y;
@@ -3202,14 +3210,14 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
                 cPos, ad.label);
   }
 
-  if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) && ImGui::IsMouseClicked(0) &&
-      hoverSnap != ViewSnap::None)
+  if (canvasClicked && hoverSnap != ViewSnap::None)
     m_pendingViewSnap = hoverSnap;
 
   if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
-    ImGui::TextDisabled("Pivot: origin");
-
-  ImGui::End();
+    dl->AddText(ImVec2(wx + metrics.titleOffsetX,
+                       layout.gimbalRect.maxY - metrics.pivotTextOffsetY),
+                IM_COL32(150, 150, 150, 255),
+                "Pivot: origin");
 }
 
 // ---- Hierarchy panel ---------------------------------------------------------
@@ -5297,6 +5305,12 @@ void EditorLayer::HandlePicking(const Camera& cam, int screenW, int screenH) {
   if (ImGui::GetIO().WantCaptureMouse &&
       !m_viewportPanelRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
     return;
+  const ImGuiIO& io = ImGui::GetIO();
+  const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
+  const EditorViewGimbalLayout viewGimbalLayout =
+      BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
+  if (viewGimbalLayout.pickRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+    return;
   if (m_viewGizmoPickRect.valid &&
       m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
     return;
@@ -6859,9 +6873,11 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 
-  Renderer::BeginScene(cam);
-  glDisable(GL_DEPTH_TEST);
-  glLineWidth(1.5f);
+  const bool ownsFrame = !Renderer::IsFrameActive();
+  if (ownsFrame)
+    Renderer::BeginFrame(RenderFrameConfig{{}, "editor-wireframe-overlay"});
+  Renderer::BeginPass(
+      RenderPassConfig{RenderPassId::WireframeOverlay, BuildRenderView(cam), "editor-wireframe-overlay"});
   for (const auto& obj : m_document.objects) {
     std::string meshPath;
     if (!TryResolveObjectMeshPath(m_document, obj, &meshPath, nullptr))
@@ -6875,8 +6891,9 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
     const Mat4 model = BuildObjectModelMatrix(m_document, obj);
     Renderer::SubmitWireframe(*meshEntry->mesh, model, m_wireframeShader, 0.3f, 0.85f, 0.3f);
   }
-  glLineWidth(1.0f);
-  glEnable(GL_DEPTH_TEST);
+  Renderer::EndPass();
+  if (ownsFrame)
+    Renderer::EndFrame();
 }
 
 }  // namespace Editor
