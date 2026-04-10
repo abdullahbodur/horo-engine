@@ -47,6 +47,23 @@ RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
 
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
   MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+  glFrontFace(GL_CCW);
+  glEnable(GL_MULTISAMPLE);
+
+  GLbitfield clearMask = 0;
+  if (frame.clearColorBuffer) {
+    glClearColor(frame.clearColor.x, frame.clearColor.y, frame.clearColor.z, frame.clearColor.w);
+    clearMask |= GL_COLOR_BUFFER_BIT;
+  }
+  if (frame.clearDepthBuffer)
+    clearMask |= GL_DEPTH_BUFFER_BIT;
+  if (clearMask != 0)
+    glClear(clearMask);
+
   m_lights = frame.lights;
   if (m_lights.size() > 8)
     m_lights.resize(8);

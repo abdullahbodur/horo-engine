@@ -86,12 +86,20 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string renderer = ReadTextFile(root / "renderer" / "Renderer.cpp");
   REQUIRE(renderer.find("GetProgramID(") == std::string::npos);
 
+  const std::string renderContext = ReadTextFile(root / "renderer" / "RenderContext.cpp");
+  REQUIRE(renderContext.find("glViewport(") == std::string::npos);
+  REQUIRE(renderContext.find("glad/glad.h") == std::string::npos);
+
   const std::string renderSystem = ReadTextFile(root / "scene" / "systems" / "RenderSystem.cpp");
   REQUIRE(renderSystem.find("GetProgramID(") == std::string::npos);
 
   const std::string skinnedRenderSystem =
       ReadTextFile(root / "scene" / "systems" / "SkinnedRenderSystem.cpp");
   REQUIRE(skinnedRenderSystem.find("GetProgramID(") == std::string::npos);
+
+  const std::string starterTemplate = ReadTextFile(root / "scene" / "STARTER_TEMPLATE.h");
+  REQUIRE(starterTemplate.find("RenderContext::BeginFrame") == std::string::npos);
+  REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {

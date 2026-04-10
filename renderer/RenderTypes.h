@@ -31,6 +31,9 @@ struct RenderView {
 struct RenderFrameConfig {
   std::vector<Light> lights;
   std::string debugLabel;
+  Vec4 clearColor = {0.1f, 0.1f, 0.15f, 1.0f};
+  bool clearColorBuffer = true;
+  bool clearDepthBuffer = true;
 };
 
 struct RenderPassConfig {

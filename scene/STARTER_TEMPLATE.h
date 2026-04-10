@@ -25,7 +25,6 @@
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderBackend.h"
-#include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderViewUtils.h"
 #include "scene/Scene.h"
@@ -46,7 +45,6 @@ class MyGameApp : public Monolith::Application {
     if (!backendInit.ok)
       throw std::runtime_error("Failed to initialize renderer backend: " + backendInit.error);
 
-    Monolith::RenderContext::Init();
     Monolith::DebugDraw::Init();
     m_referenceRuntime = std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);
 
@@ -66,7 +64,6 @@ class MyGameApp : public Monolith::Application {
 
   // STEP 5: Rendering (variable framerate).
   void OnRender(float alpha) override {
-    Monolith::RenderContext::BeginFrame();
     Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
     Monolith::Renderer::BeginPass({Monolith::RenderPassId::OpaqueScene,
                                    Monolith::BuildRenderView(m_camera),
@@ -74,7 +71,6 @@ class MyGameApp : public Monolith::Application {
     m_scene.RenderSystems(alpha);
     Monolith::Renderer::EndPass();
     Monolith::Renderer::EndFrame();
-    Monolith::RenderContext::EndFrame();
   }
 
   void OnShutdown() override {

@@ -103,6 +103,24 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   Renderer::ResetBackend();
 }
 
+TEST_CASE("Renderer forwards frame output config through the backend seam",
+          "[renderer][foundation][frame-output]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+
+  const Vec4 clearColor{0.3f, 0.2f, 0.1f, 1.0f};
+  Renderer::BeginFrame(RenderFrameConfig{{}, "frame-output", clearColor, false, true});
+  Renderer::EndFrame();
+
+  REQUIRE(backend.events == std::vector<std::string>{"begin-frame", "end-frame"});
+  REQUIRE(backend.lastFrame.debugLabel == "frame-output");
+  REQUIRE(backend.lastFrame.clearColor == clearColor);
+  REQUIRE_FALSE(backend.lastFrame.clearColorBuffer);
+  REQUIRE(backend.lastFrame.clearDepthBuffer);
+
+  Renderer::ResetBackend();
+}
+
 TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection",
           "[renderer][foundation][backend]") {
   const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Auto});

@@ -59,7 +59,6 @@
 #include "renderer/GltfLoader.h"
 #include "renderer/Mesh.h"
 #include "renderer/ObjLoader.h"
-#include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/Shader.h"
@@ -6874,8 +6873,12 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
     return;
 
   const bool ownsFrame = !Renderer::IsFrameActive();
-  if (ownsFrame)
-    Renderer::BeginFrame(RenderFrameConfig{{}, "editor-wireframe-overlay"});
+  if (ownsFrame) {
+    RenderFrameConfig overlayFrame{{}, "editor-wireframe-overlay"};
+    overlayFrame.clearColorBuffer = false;
+    overlayFrame.clearDepthBuffer = false;
+    Renderer::BeginFrame(overlayFrame);
+  }
   Renderer::BeginPass(
       RenderPassConfig{RenderPassId::WireframeOverlay, BuildRenderView(cam), "editor-wireframe-overlay"});
   for (const auto& obj : m_document.objects) {
