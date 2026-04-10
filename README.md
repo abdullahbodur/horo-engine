@@ -249,7 +249,7 @@ world.Step(1.0f / 60.0f);
 
 ```cpp
 Renderer::BeginFrame({lights, "game-frame"});
-Renderer::BeginPass({RenderPassId::OpaqueScene, RenderView::FromCamera(camera), "main-scene"});
+Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "main-scene"});
 Renderer::Submit(mesh, modelMatrix, material);
 Renderer::EndPass();
 Renderer::EndFrame();

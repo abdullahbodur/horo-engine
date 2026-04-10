@@ -26,6 +26,7 @@
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
+#include "renderer/RenderViewUtils.h"
 #include "scene/Scene.h"
 #include "scene/SceneReferenceRuntime.h"
 
@@ -64,7 +65,7 @@ class MyGameApp : public Monolith::Application {
     Monolith::RenderContext::BeginFrame();
     Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
     Monolith::Renderer::BeginPass({Monolith::RenderPassId::OpaqueScene,
-                                   Monolith::RenderView::FromCamera(m_camera),
+                                   Monolith::BuildRenderView(m_camera),
                                    "starter-template-scene"});
     m_scene.RenderSystems(alpha);
     Monolith::Renderer::EndPass();

@@ -2,9 +2,7 @@
 #include <vector>
 
 #include "math/Mat4.h"
-#include "renderer/Camera.h"
 #include "renderer/IRenderBackend.h"
-#include "renderer/Light.h"
 #include "renderer/RenderTypes.h"
 
 namespace Monolith {

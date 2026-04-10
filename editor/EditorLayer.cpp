@@ -61,6 +61,7 @@
 #include "renderer/ObjLoader.h"
 #include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
+#include "renderer/RenderViewUtils.h"
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
 #include "renderer/Texture.h"
@@ -3051,11 +3052,10 @@ void EditorLayer::DrawSettingsModal() {
 
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
+  const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const EditorViewGimbalLayout layout =
       BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
-  constexpr float kWinW = 128.0f;
-  constexpr float kWinH = 138.0f;
   const float wx = layout.gimbalRect.minX;
   const float wy = layout.gimbalRect.minY;
   const ImVec2 viewportPos = ImGui::GetWindowPos();
@@ -3066,22 +3066,21 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
   // Wireframe toggle button — top-aligned near the gimbal, centered inside its own framed box.
-  constexpr float kBtnSize = 28.0f;
-  constexpr float kBtnFrameSize = 36.0f;
   dl->AddRectFilled(ImVec2(layout.wireButtonRect.minX, layout.wireButtonRect.minY),
                     ImVec2(layout.wireButtonRect.maxX, layout.wireButtonRect.maxY),
                     IM_COL32(95, 95, 95, 220),
                     0.0f);
-  const float btnPad = (kBtnFrameSize - kBtnSize) * 0.5f;
+  const float btnPad = (metrics.buttonFrameSize - metrics.buttonSize) * 0.5f;
   ImGui::SetCursorPos(ImVec2(btnLocalPos.x + btnPad, btnLocalPos.y + btnPad));
   if (m_wireframeMode)
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
   else
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
-  if (ImGui::Button("##wire_btn_toggle", ImVec2(kBtnSize, kBtnSize)))
+  if (ImGui::Button("##wire_btn_toggle", ImVec2(metrics.buttonSize, metrics.buttonSize)))
     m_wireframeMode = !m_wireframeMode;
   ImGui::PopStyleColor();
-  dl->AddText(ImVec2(layout.wireButtonRect.minX + 8.0f, layout.wireButtonRect.minY + 8.0f),
+  dl->AddText(ImVec2(layout.wireButtonRect.minX + metrics.titleOffsetX,
+                     layout.wireButtonRect.minY + metrics.titleOffsetY),
               IM_COL32(230, 235, 245, 255),
               "[W]");
   if (ImGui::IsItemHovered())
@@ -3103,12 +3102,17 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
               0.0f,
               0,
               1.0f);
-  dl->AddText(ImVec2(wx + 8.0f, wy + 8.0f), IM_COL32(240, 240, 240, 255), "View");
+  dl->AddText(ImVec2(wx + metrics.titleOffsetX, wy + metrics.titleOffsetY),
+              IM_COL32(240, 240, 240, 255),
+              "View");
 
   const int idx = PrimaryIdx();
 
-  ImGui::SetCursorPos(ImVec2(gimbalLocalPos.x + 10.0f, gimbalLocalPos.y + 26.0f));
-  ImGui::InvisibleButton("##view_gimbal_hit", ImVec2(kWinW - 20.0f, 94.0f));
+  const float hitRegionWidth =
+      layout.gimbalRect.maxX - layout.gimbalRect.minX - 2.0f * metrics.contentOffsetX;
+  ImGui::SetCursorPos(ImVec2(gimbalLocalPos.x + metrics.contentOffsetX,
+                             gimbalLocalPos.y + metrics.contentOffsetY));
+  ImGui::InvisibleButton("##view_gimbal_hit", ImVec2(hitRegionWidth, metrics.hitRegionHeight));
   const ImVec2 hitMin = ImGui::GetItemRectMin();
   const ImVec2 hitMax = ImGui::GetItemRectMax();
   const ImVec2 center = ImVec2((hitMin.x + hitMax.x) * 0.5f, (hitMin.y + hitMax.y) * 0.5f + 3.0f);
@@ -3210,7 +3214,8 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
     m_pendingViewSnap = hoverSnap;
 
   if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
-    dl->AddText(ImVec2(wx + 8.0f, wy + kWinH - 18.0f),
+    dl->AddText(ImVec2(wx + metrics.titleOffsetX,
+                       layout.gimbalRect.maxY - metrics.pivotTextOffsetY),
                 IM_COL32(150, 150, 150, 255),
                 "Pivot: origin");
 }
@@ -6872,9 +6877,7 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   if (ownsFrame)
     Renderer::BeginFrame(RenderFrameConfig{{}, "editor-wireframe-overlay"});
   Renderer::BeginPass(
-      RenderPassConfig{RenderPassId::WireframeOverlay, RenderView::FromCamera(cam), "editor-wireframe-overlay"});
-  glDisable(GL_DEPTH_TEST);
-  glLineWidth(1.5f);
+      RenderPassConfig{RenderPassId::WireframeOverlay, BuildRenderView(cam), "editor-wireframe-overlay"});
   for (const auto& obj : m_document.objects) {
     std::string meshPath;
     if (!TryResolveObjectMeshPath(m_document, obj, &meshPath, nullptr))
@@ -6891,8 +6894,6 @@ void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
   Renderer::EndPass();
   if (ownsFrame)
     Renderer::EndFrame();
-  glLineWidth(1.0f);
-  glEnable(GL_DEPTH_TEST);
 }
 
 }  // namespace Editor

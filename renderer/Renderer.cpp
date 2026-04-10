@@ -1,5 +1,6 @@
 #include "renderer/Renderer.h"
 
+#include "core/Assert.h"
 #include "renderer/OpenGLRenderBackend.h"
 
 namespace Monolith {
@@ -19,9 +20,9 @@ IRenderBackend* Renderer::ActiveBackend() {
 }
 
 void Renderer::UseBackend(IRenderBackend* backend) {
+  MONOLITH_ASSERT(!s_frameActive && !s_passActive,
+                  "Cannot swap render backend while a frame or pass is active");
   g_backend = backend ? backend : &g_defaultBackend;
-  s_frameActive = false;
-  s_passActive = false;
 }
 
 void Renderer::ResetBackend() {
@@ -29,14 +30,14 @@ void Renderer::ResetBackend() {
 }
 
 void Renderer::BeginFrame(const RenderFrameConfig& frame) {
-  if (s_frameActive)
-    EndFrame();
+  MONOLITH_ASSERT(!s_frameActive, "Renderer::BeginFrame called while a frame is already active");
 
   ActiveBackend()->BeginFrame(frame);
   s_frameActive = true;
 }
 
 void Renderer::EndFrame() {
+  MONOLITH_ASSERT(s_frameActive, "Renderer::EndFrame called without an active frame");
   if (!s_frameActive)
     return;
 
@@ -48,17 +49,17 @@ void Renderer::EndFrame() {
 }
 
 void Renderer::BeginPass(const RenderPassConfig& pass) {
-  if (!s_frameActive)
+  MONOLITH_ASSERT(s_frameActive, "Renderer::BeginPass called without an active frame");
+  MONOLITH_ASSERT(!s_passActive, "Renderer::BeginPass called while another pass is still active");
+  if (!s_frameActive || s_passActive)
     return;
-
-  if (s_passActive)
-    EndPass();
 
   ActiveBackend()->BeginPass(pass);
   s_passActive = true;
 }
 
 void Renderer::EndPass() {
+  MONOLITH_ASSERT(s_passActive, "Renderer::EndPass called without an active pass");
   if (!s_passActive)
     return;
 
