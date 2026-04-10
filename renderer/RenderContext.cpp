@@ -1,6 +1,19 @@
 #include "renderer/RenderContext.h"
 
+#include "renderer/Renderer.h"
+
 namespace Monolith {
+
+void RenderContext::Init() {}
+
+void RenderContext::BeginFrame(const Vec4& clearColor) {
+  Renderer::BeginFrame(MakeFrameConfig({}, "compat-render-context-frame", clearColor));
+}
+
+void RenderContext::EndFrame() {
+  if (Renderer::IsFrameActive())
+    Renderer::EndFrame();
+}
 
 RenderFrameConfig RenderContext::MakeFrameConfig(std::vector<Light> lights,
                                                  std::string debugLabel,
