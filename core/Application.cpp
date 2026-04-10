@@ -109,7 +109,8 @@ void Application::Run() {
     OnUpdate(Time::DeltaTime());
     OnRender(alpha);
 
-    m_window->SwapBuffers();
+    if (m_window->OwnsPresentation())
+      m_window->SwapBuffers();
   }
 
   OnShutdown();

@@ -20,6 +20,16 @@ enum class WindowGraphicsApi {
   Vulkan,
 };
 
+struct WindowGraphicsApiTraits {
+  bool createsClientContext = false;
+  bool windowOwnsPresentation = false;
+  bool windowOwnsVSync = false;
+  bool windowOwnsViewportResize = false;
+  bool requestsMsaaSamples = false;
+};
+
+WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi);
+
 struct WindowSpec {
   std::string title = "Monolith";
   int width = 1280;
@@ -50,6 +60,10 @@ class Window {
   float GetAspect() const;
   bool IsVSyncEnabled() const { return m_vsync; }
   WindowGraphicsApi GetGraphicsApi() const { return m_graphicsApi; }
+  WindowGraphicsApiTraits GetGraphicsApiTraits() const;
+  bool OwnsPresentation() const;
+  bool OwnsVSync() const;
+  bool OwnsViewportResize() const;
 
   GLFWwindow* GetNativeHandle() const { return m_window; }
 
