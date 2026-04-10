@@ -12,6 +12,7 @@ struct AppSpec {
   int width = 1280;
   int height = 720;
   bool vsync = true;
+  WindowGraphicsApi graphicsApi = WindowGraphicsApi::OpenGL;
   // Repo-relative path to the main scene file (e.g. "assets/scenes/scene.json").
   // Resolved to an absolute path via ProjectPath at construction time.
   std::string defaultSceneFile;

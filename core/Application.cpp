@@ -1,7 +1,5 @@
 #include "core/Application.h"
 
-#include <glad/glad.h>
-
 #include <filesystem>
 #include <string_view>
 #include <system_error>
@@ -69,6 +67,7 @@ Application::Application(const AppSpec& spec) {
   ws.width = spec.width;
   ws.height = spec.height;
   ws.vsync = spec.vsync;
+  ws.graphicsApi = spec.graphicsApi;
 
   m_window = std::make_unique<Window>(ws);
   m_window->SetCloseCallback([this]() { m_running = false; });

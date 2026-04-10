@@ -36,9 +36,7 @@ namespace MyGame {
 // STEP 1: Create a minimal app class.
 class MyGameApp : public Monolith::Application {
  public:
-  MyGameApp() : Application(AppSpec{
-      "My Game", 1280, 720, true, "assets/scenes/level.json"
-  }) {}
+  MyGameApp() : Application(BuildAppSpec()) {}
 
   protected:
   // STEP 2: Setup (called once at startup).
@@ -88,6 +86,17 @@ class MyGameApp : public Monolith::Application {
   Monolith::Scene m_scene;
   std::unique_ptr<Monolith::SceneReferenceRuntime> m_referenceRuntime;
   Monolith::Camera m_camera;
+
+  static Monolith::AppSpec BuildAppSpec() {
+    Monolith::AppSpec spec;
+    spec.name = "My Game";
+    spec.width = 1280;
+    spec.height = 720;
+    spec.vsync = true;
+    spec.graphicsApi = Monolith::WindowGraphicsApi::OpenGL;
+    spec.defaultSceneFile = "assets/scenes/level.json";
+    return spec;
+  }
 
   void LoadSceneFromFile(const std::string& path) {
     const Monolith::Editor::SceneDocument doc = Monolith::Editor::SceneSerializer::LoadFromFile(path);
