@@ -1,11 +1,12 @@
 #pragma once
+#include <memory>
 #include <string>
 
 namespace Monolith {
 
 class Texture {
  public:
-  Texture() = default;
+  Texture();
   ~Texture();
 
   Texture(const Texture&) = delete;
@@ -19,13 +20,16 @@ class Texture {
   void Bind(unsigned int slot = 0) const;
   void Unbind() const;
 
-  bool IsValid() const { return m_id != 0; }
+  bool IsValid() const;
   int GetWidth() const { return m_width; }
   int GetHeight() const { return m_height; }
-  unsigned int GetNativeId() const { return m_id; }
+  // Temporary OpenGL escape hatch used by editor integration until offscreen/ImGui
+  // texture presentation is fully backend-neutral.
+  unsigned int GetNativeId() const;
 
  private:
-  unsigned int m_id = 0;
+  struct TextureStorage;
+  std::unique_ptr<TextureStorage> m_textureStorage;
   int m_width = 0;
   int m_height = 0;
 };

@@ -4,9 +4,18 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory>
 #include <utility>
 
 namespace Monolith {
+
+struct SkinnedMesh::GpuStorage {
+  unsigned int vao = 0;
+  unsigned int vbo = 0;
+  unsigned int ebo = 0;
+};
+
+SkinnedMesh::SkinnedMesh() = default;
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -17,29 +26,27 @@ SkinnedMesh::~SkinnedMesh() {
 }
 
 SkinnedMesh::SkinnedMesh(SkinnedMesh&& o) noexcept
-    : m_vao(o.m_vao),
-      m_vbo(o.m_vbo),
-      m_ebo(o.m_ebo),
+    : m_gpu(std::move(o.m_gpu)),
       m_indexCount(o.m_indexCount),
       m_halfExtents(o.m_halfExtents),
       m_localAabbCenter(o.m_localAabbCenter) {
-  o.m_vao = o.m_vbo = o.m_ebo = 0;
   o.m_indexCount = 0;
 }
 
 SkinnedMesh& SkinnedMesh::operator=(SkinnedMesh&& o) noexcept {
   if (this != &o) {
     Release();
-    m_vao              = o.m_vao;
-    m_vbo              = o.m_vbo;
-    m_ebo              = o.m_ebo;
+    m_gpu              = std::move(o.m_gpu);
     m_indexCount       = o.m_indexCount;
     m_halfExtents      = o.m_halfExtents;
     m_localAabbCenter  = o.m_localAabbCenter;
-    o.m_vao = o.m_vbo = o.m_ebo = 0;
     o.m_indexCount = 0;
   }
   return *this;
+}
+
+bool SkinnedMesh::IsValid() const {
+  return m_gpu && m_gpu->vao != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +60,9 @@ void SkinnedMesh::SetData(const std::vector<SkinnedVertex>& vertices,
 }
 
 void SkinnedMesh::Draw() const {
-  glBindVertexArray(m_vao);
+  if (!m_gpu)
+    return;
+  glBindVertexArray(m_gpu->vao);
   glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, nullptr);
   glBindVertexArray(0);
 }
@@ -65,21 +74,22 @@ void SkinnedMesh::Draw() const {
 void SkinnedMesh::Upload(const std::vector<SkinnedVertex>& vertices,
                          const std::vector<unsigned int>& indices) {
   m_indexCount = static_cast<int>(indices.size());
+  m_gpu = std::make_unique<GpuStorage>();
 
-  glGenVertexArrays(1, &m_vao);
-  glBindVertexArray(m_vao);
+  glGenVertexArrays(1, &m_gpu->vao);
+  glBindVertexArray(m_gpu->vao);
 
   // --- VBO ---
-  glGenBuffers(1, &m_vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+  glGenBuffers(1, &m_gpu->vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, m_gpu->vbo);
   glBufferData(GL_ARRAY_BUFFER,
                static_cast<GLsizeiptr>(vertices.size() * sizeof(SkinnedVertex)),
                vertices.data(),
                GL_STATIC_DRAW);
 
   // --- EBO ---
-  glGenBuffers(1, &m_ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+  glGenBuffers(1, &m_gpu->ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_gpu->ebo);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
                indices.data(),
@@ -152,13 +162,15 @@ void SkinnedMesh::Upload(const std::vector<SkinnedVertex>& vertices,
 }
 
 void SkinnedMesh::Release() {
-  if (m_ebo)
-    glDeleteBuffers(1, &m_ebo);
-  if (m_vbo)
-    glDeleteBuffers(1, &m_vbo);
-  if (m_vao)
-    glDeleteVertexArrays(1, &m_vao);
-  m_vao = m_vbo = m_ebo = 0;
+  if (m_gpu) {
+    if (m_gpu->ebo)
+      glDeleteBuffers(1, &m_gpu->ebo);
+    if (m_gpu->vbo)
+      glDeleteBuffers(1, &m_gpu->vbo);
+    if (m_gpu->vao)
+      glDeleteVertexArrays(1, &m_gpu->vao);
+    m_gpu.reset();
+  }
   m_indexCount = 0;
 }
 

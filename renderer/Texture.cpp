@@ -5,29 +5,43 @@
 #include <glad/glad.h>
 #include <stb_image.h>
 
+#include <memory>
+
 #include "core/Logger.h"
 
 namespace Monolith {
 
+struct Texture::TextureStorage {
+  unsigned int id = 0;
+};
+
+Texture::Texture() = default;
+
 Texture::~Texture() {
-  if (m_id)
-    glDeleteTextures(1, &m_id);
+  if (m_textureStorage && m_textureStorage->id)
+    glDeleteTextures(1, &m_textureStorage->id);
 }
 
-Texture::Texture(Texture&& o) noexcept : m_id(o.m_id), m_width(o.m_width), m_height(o.m_height) {
-  o.m_id = 0;
-}
+Texture::Texture(Texture&& o) noexcept
+    : m_textureStorage(std::move(o.m_textureStorage)), m_width(o.m_width), m_height(o.m_height) {}
 
 Texture& Texture::operator=(Texture&& o) noexcept {
   if (this != &o) {
-    if (m_id)
-      glDeleteTextures(1, &m_id);
-    m_id = o.m_id;
+    if (m_textureStorage && m_textureStorage->id)
+      glDeleteTextures(1, &m_textureStorage->id);
+    m_textureStorage = std::move(o.m_textureStorage);
     m_width = o.m_width;
     m_height = o.m_height;
-    o.m_id = 0;
   }
   return *this;
+}
+
+bool Texture::IsValid() const {
+  return m_textureStorage && m_textureStorage->id != 0;
+}
+
+unsigned int Texture::GetNativeId() const {
+  return m_textureStorage ? m_textureStorage->id : 0;
 }
 
 Texture Texture::FromFile(const std::string& path, bool flipY) {
@@ -40,8 +54,9 @@ Texture Texture::FromFile(const std::string& path, bool flipY) {
   }
 
   Texture t;
-  glGenTextures(1, &t.m_id);
-  glBindTexture(GL_TEXTURE_2D, t.m_id);
+  t.m_textureStorage = std::make_unique<TextureStorage>();
+  glGenTextures(1, &t.m_textureStorage->id);
+  glBindTexture(GL_TEXTURE_2D, t.m_textureStorage->id);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
   glGenerateMipmap(GL_TEXTURE_2D);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -57,8 +72,9 @@ Texture Texture::FromFile(const std::string& path, bool flipY) {
 
 Texture Texture::CreateWhite1x1() {
   Texture t;
-  glGenTextures(1, &t.m_id);
-  glBindTexture(GL_TEXTURE_2D, t.m_id);
+  t.m_textureStorage = std::make_unique<TextureStorage>();
+  glGenTextures(1, &t.m_textureStorage->id);
+  glBindTexture(GL_TEXTURE_2D, t.m_textureStorage->id);
   unsigned char white[4] = {255, 255, 255, 255};
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -70,7 +86,7 @@ Texture Texture::CreateWhite1x1() {
 
 void Texture::Bind(unsigned int slot) const {
   glActiveTexture(GL_TEXTURE0 + slot);
-  glBindTexture(GL_TEXTURE_2D, m_id);
+  glBindTexture(GL_TEXTURE_2D, GetNativeId());
 }
 
 void Texture::Unbind() const {
