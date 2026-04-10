@@ -20,6 +20,7 @@ struct RenderBackendCapabilities {
 
 struct RenderBackendSelection {
   RenderBackendId requested = RenderBackendId::Auto;
+  void* nativeWindowHandle = nullptr;
 };
 
 struct RenderBackendInitResult {

@@ -15,6 +15,43 @@ if(NOT TARGET glfw)
     FetchContent_MakeAvailable(glfw)
 endif()
 
+# ---- Optional Vulkan headers + loader scaffolding ----
+if(MONOLITH_ENGINE_ENABLE_VULKAN)
+    if(NOT TARGET monolith_vulkan_headers)
+        FetchContent_Declare(
+            vulkan_headers
+            GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+            GIT_TAG        vulkan-sdk-1.4.341.0
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_Populate(vulkan_headers)
+
+        add_library(monolith_vulkan_headers INTERFACE)
+        target_include_directories(monolith_vulkan_headers INTERFACE
+            ${vulkan_headers_SOURCE_DIR}/include
+        )
+    endif()
+
+    if(NOT TARGET monolith_volk)
+        FetchContent_Declare(
+            volk
+            GIT_REPOSITORY https://github.com/zeux/volk.git
+            GIT_TAG        1.4.304
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_Populate(volk)
+
+        add_library(monolith_volk STATIC ${volk_SOURCE_DIR}/volk.c)
+        target_include_directories(monolith_volk PUBLIC ${volk_SOURCE_DIR})
+        target_link_libraries(monolith_volk PUBLIC monolith_vulkan_headers)
+        target_compile_definitions(monolith_volk PUBLIC VK_NO_PROTOTYPES)
+        target_compile_options(monolith_volk PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/W0>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+        )
+    endif()
+endif()
+
 # ---- glad (OpenGL 4.1 Core, pre-generated, committed) ----
 if(NOT TARGET glad)
     add_subdirectory(glad)

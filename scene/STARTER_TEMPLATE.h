@@ -40,8 +40,11 @@ class MyGameApp : public Monolith::Application {
   protected:
   // STEP 2: Setup (called once at startup).
   void OnInit() override {
+    Monolith::RenderBackendSelection backendSelection;
+    backendSelection.requested = Monolith::RenderBackendId::OpenGL;
+    backendSelection.nativeWindowHandle = GetWindow().GetNativeHandle();
     const Monolith::RenderBackendInitResult backendInit =
-        Monolith::Renderer::InitializeBackend({Monolith::RenderBackendId::OpenGL});
+        Monolith::Renderer::InitializeBackend(backendSelection);
     if (!backendInit.ok)
       throw std::runtime_error("Failed to initialize renderer backend: " + backendInit.error);
 
