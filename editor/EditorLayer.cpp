@@ -993,6 +993,10 @@ static void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh,
 // meshKey must be the resolved mesh path (same key used in meshCache).
 static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
                                           const std::string& meshKey) {
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  if (!caps.supportsOffscreenTargets || !caps.supportsNativeTextureHandles)
+    return 0;
+
   auto& renderer = AssetThumbnailRenderer::Instance();
 
   // Return existing per-mesh texture if already rendered this session.
@@ -1090,6 +1094,8 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
     return false;
 
   auto loadTextureByPath = [&](const std::filesystem::path& path) -> unsigned int {
+    if (!Renderer::GetBackendCapabilities().supportsNativeTextureHandles)
+      return 0;
     if (path.empty())
       return 0;
     std::error_code ec;
@@ -3052,6 +3058,9 @@ void EditorLayer::DrawSettingsModal() {
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
   const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
+  const bool supportsWireframeOverlay = Renderer::GetBackendCapabilities().supportsWireframeOverlay;
+  if (!supportsWireframeOverlay)
+    m_wireframeMode = false;
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const EditorViewGimbalLayout layout =
       BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
@@ -3075,15 +3084,23 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
   else
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
+  if (!supportsWireframeOverlay)
+    ImGui::BeginDisabled();
   if (ImGui::Button("##wire_btn_toggle", ImVec2(metrics.buttonSize, metrics.buttonSize)))
     m_wireframeMode = !m_wireframeMode;
+  if (!supportsWireframeOverlay)
+    ImGui::EndDisabled();
   ImGui::PopStyleColor();
   dl->AddText(ImVec2(layout.wireButtonRect.minX + metrics.titleOffsetX,
                      layout.wireButtonRect.minY + metrics.titleOffsetY),
               IM_COL32(230, 235, 245, 255),
               "[W]");
-  if (ImGui::IsItemHovered())
-    ImGui::SetTooltip("Toggle Wireframe");
+  if (ImGui::IsItemHovered()) {
+    if (supportsWireframeOverlay)
+      ImGui::SetTooltip("Toggle Wireframe");
+    else
+      ImGui::SetTooltip("Wireframe overlay is unavailable on the active render backend");
+  }
 
   m_viewGizmoPickRect.valid = true;
   m_viewGizmoPickRect.minX = layout.pickRect.minX;
@@ -6869,6 +6886,11 @@ void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc& component) const {
 // ---- Wireframe overlay -------------------------------------------------------
 
 void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
+  if (!Renderer::GetBackendCapabilities().supportsWireframeOverlay) {
+    m_wireframeMode = false;
+    return;
+  }
+
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 

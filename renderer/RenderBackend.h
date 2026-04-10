@@ -13,6 +13,10 @@ enum class RenderBackendId {
 struct RenderBackendCapabilities {
   bool supportsWireframeOverlay = false;
   bool supportsDebugLabels = false;
+  bool supportsOffscreenTargets = false;
+  bool supportsNativeTextureHandles = false;
+  bool supportsReadback = false;
+  bool supportsDebugHud = false;
   bool supportsComputePasses = false;
   bool supportsGpuTimestamps = false;
   bool supportsBindlessResources = false;

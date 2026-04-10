@@ -26,6 +26,10 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
     case RenderBackendId::OpenGL:
       return {.supportsWireframeOverlay = true,
               .supportsDebugLabels = false,
+              .supportsOffscreenTargets = true,
+              .supportsNativeTextureHandles = true,
+              .supportsReadback = true,
+              .supportsDebugHud = true,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,
               .supportsBindlessResources = false};
