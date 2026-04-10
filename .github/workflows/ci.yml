@@ -209,3 +209,17 @@ jobs:
           name: coverage-report-${{ github.sha }}
           path: build/coverage/html
           retention-days: 30
+
+  # ----------------------------------------------------------------
+  # Starter integration — final PR gate.
+  # Validates this PR commit inside horo-engine-starter on all OS targets.
+  # ----------------------------------------------------------------
+  starter-integration:
+    name: Starter Integration
+    if: github.event_name == 'pull_request'
+    needs: [coverage]
+    uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
+    with:
+      engine_repository: ${{ github.repository }}
+      engine_ref: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit
