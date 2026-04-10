@@ -24,6 +24,7 @@
 #include "core/Application.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
+#include "renderer/RenderBackend.h"
 #include "renderer/RenderContext.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderViewUtils.h"
@@ -39,9 +40,14 @@ class MyGameApp : public Monolith::Application {
       "My Game", 1280, 720, true, "assets/scenes/level.json"
   }) {}
 
- protected:
+  protected:
   // STEP 2: Setup (called once at startup).
   void OnInit() override {
+    const Monolith::RenderBackendInitResult backendInit =
+        Monolith::Renderer::InitializeBackend({Monolith::RenderBackendId::OpenGL});
+    if (!backendInit.ok)
+      throw std::runtime_error("Failed to initialize renderer backend: " + backendInit.error);
+
     Monolith::RenderContext::Init();
     Monolith::DebugDraw::Init();
     m_referenceRuntime = std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);

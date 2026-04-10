@@ -9,6 +9,7 @@
 #include "renderer/IRenderBackend.h"
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
+#include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderViewUtils.h"
 #include "scene/Registry.h"
@@ -58,6 +59,10 @@ class FakeRenderBackend : public IRenderBackend {
     ++drawCalls;
   }
 
+  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+  RenderBackendCapabilities GetCapabilities() const override {
+    return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+  }
   int GetDrawCallCount() const override { return drawCalls; }
 
   std::vector<std::string> events;
@@ -96,6 +101,33 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   REQUIRE(Renderer::GetDrawCallCount() == 1);
 
   Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection",
+          "[renderer][foundation][backend]") {
+  const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Auto});
+
+  REQUIRE(init.ok);
+  REQUIRE(init.requested == RenderBackendId::Auto);
+  REQUIRE(init.selected == RenderBackendId::OpenGL);
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
+
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  REQUIRE(caps.supportsWireframeOverlay);
+  REQUIRE_FALSE(caps.supportsComputePasses);
+}
+
+TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend",
+          "[renderer][foundation][backend]") {
+  REQUIRE(Renderer::InitializeBackend({RenderBackendId::OpenGL}).ok);
+
+  const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Vulkan});
+
+  REQUIRE_FALSE(init.ok);
+  REQUIRE(init.selected == RenderBackendId::Vulkan);
+  REQUIRE_FALSE(init.error.empty());
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
+  REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
 }
 
 TEST_CASE("Renderer supports multiple explicit passes within a single frame",

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer/RenderBackend.h"
 #include "renderer/RenderTypes.h"
 
 namespace Monolith {
@@ -17,6 +18,8 @@ class IRenderBackend {
   virtual void DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) = 0;
   virtual void DrawWireframe(const WireframeDrawCommand& command) = 0;
 
+  virtual RenderBackendId GetBackendId() const = 0;
+  virtual RenderBackendCapabilities GetCapabilities() const = 0;
   virtual int GetDrawCallCount() const = 0;
 };
 

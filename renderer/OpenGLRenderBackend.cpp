@@ -41,6 +41,10 @@ static void BindMaterial(const Material& material) {
 
 }  // namespace
 
+RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
+  return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+}
+
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
   MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
   m_lights = frame.lights;

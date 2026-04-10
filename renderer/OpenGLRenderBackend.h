@@ -18,6 +18,8 @@ class OpenGLRenderBackend : public IRenderBackend {
   void DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) override;
   void DrawWireframe(const WireframeDrawCommand& command) override;
 
+  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+  RenderBackendCapabilities GetCapabilities() const override;
   int GetDrawCallCount() const override { return m_drawCalls; }
 
  private:
