@@ -2,6 +2,8 @@
 #include <memory>
 #include <string>
 
+#include "renderer/RenderTargetHandle.h"
+
 namespace Monolith {
 
 class Texture {
@@ -26,6 +28,7 @@ class Texture {
   // Temporary OpenGL escape hatch used by editor integration until offscreen/ImGui
   // texture presentation is fully backend-neutral.
   unsigned int GetNativeId() const;
+  RenderTargetHandle GetRenderTargetHandle(bool needsYFlip = false) const;
 
  private:
   struct TextureStorage;
