@@ -29,8 +29,10 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   const std::filesystem::path root =
       std::filesystem::path(__FILE__).parent_path().parent_path();
   const std::filesystem::path docsRoot = root / "docs" / "architecture";
+  const std::filesystem::path devDocsRoot = root / "docs" / "development";
 
   REQUIRE(std::filesystem::is_directory(docsRoot));
+  REQUIRE(std::filesystem::is_directory(devDocsRoot));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "README.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "module-boundaries.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
@@ -41,9 +43,11 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
+  REQUIRE(std::filesystem::is_regular_file(devDocsRoot / "backend-parity-validation-matrix.md"));
 
   const std::string readme = ReadTextFile(root / "README.md");
   REQUIRE(readme.find("docs/architecture") != std::string::npos);
+  REQUIRE(readme.find("backend-parity-validation-matrix.md") != std::string::npos);
   REQUIRE(readme.find("new headers are internal by default") != std::string::npos);
 
   const std::string moduleBoundaries = ReadTextFile(docsRoot / "module-boundaries.md");
@@ -73,6 +77,7 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
                       "capability-driven parity");
   RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
                       "editor viewport");
+  RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md", "Vulkan-enabled build");
 }
 
 TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",

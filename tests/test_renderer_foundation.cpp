@@ -176,6 +176,37 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
 #endif
 }
 
+TEST_CASE("RenderBackendSelection preserves native window handles for backend bootstrap",
+          "[renderer][foundation][backend][selection]") {
+  RenderBackendSelection selection;
+  selection.requested = RenderBackendId::Vulkan;
+  selection.nativeWindowHandle = reinterpret_cast<void*>(0x1234);
+
+  REQUIRE(selection.requested == RenderBackendId::Vulkan);
+  REQUIRE(selection.nativeWindowHandle == reinterpret_cast<void*>(0x1234));
+}
+
+TEST_CASE("Backend capability defaults express the current parity matrix",
+          "[renderer][foundation][backend][parity]") {
+  const RenderBackendCapabilities glCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+  REQUIRE(glCaps.supportsDebugDraw);
+  REQUIRE(glCaps.supportsWireframeOverlay);
+  REQUIRE(glCaps.supportsOffscreenTargets);
+  REQUIRE(glCaps.supportsNativeTextureHandles);
+  REQUIRE(glCaps.supportsReadback);
+  REQUIRE(glCaps.supportsDepthReadback);
+  REQUIRE(glCaps.supportsDebugHud);
+
+  const RenderBackendCapabilities vkCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
+  REQUIRE_FALSE(vkCaps.supportsDebugDraw);
+  REQUIRE_FALSE(vkCaps.supportsWireframeOverlay);
+  REQUIRE_FALSE(vkCaps.supportsOffscreenTargets);
+  REQUIRE_FALSE(vkCaps.supportsNativeTextureHandles);
+  REQUIRE_FALSE(vkCaps.supportsReadback);
+  REQUIRE_FALSE(vkCaps.supportsDepthReadback);
+  REQUIRE_FALSE(vkCaps.supportsDebugHud);
+}
+
 #if defined(MONOLITH_HAS_VULKAN)
 TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
           "[renderer][foundation][vulkan][opaque]") {
