@@ -9,7 +9,9 @@
 #include "renderer/IRenderBackend.h"
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
+#include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"
+#include "renderer/RenderViewUtils.h"
 #include "scene/Registry.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
@@ -57,6 +59,10 @@ class FakeRenderBackend : public IRenderBackend {
     ++drawCalls;
   }
 
+  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+  RenderBackendCapabilities GetCapabilities() const override {
+    return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+  }
   int GetDrawCallCount() const override { return drawCalls; }
 
   std::vector<std::string> events;
@@ -81,7 +87,7 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   Material material;
 
   Renderer::BeginFrame(RenderFrameConfig{lights, "test-frame"});
-  Renderer::BeginPass(RenderPassConfig{RenderPassId::OpaqueScene, RenderView::FromCamera(camera), "main"});
+  Renderer::BeginPass(RenderPassConfig{RenderPassId::OpaqueScene, BuildRenderView(camera), "main"});
   Renderer::Submit(mesh, Mat4::Identity(), material);
   Renderer::EndPass();
   Renderer::EndFrame();
@@ -95,6 +101,33 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   REQUIRE(Renderer::GetDrawCallCount() == 1);
 
   Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection",
+          "[renderer][foundation][backend]") {
+  const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Auto});
+
+  REQUIRE(init.ok);
+  REQUIRE(init.requested == RenderBackendId::Auto);
+  REQUIRE(init.selected == RenderBackendId::OpenGL);
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
+
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  REQUIRE(caps.supportsWireframeOverlay);
+  REQUIRE_FALSE(caps.supportsComputePasses);
+}
+
+TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend",
+          "[renderer][foundation][backend]") {
+  REQUIRE(Renderer::InitializeBackend({RenderBackendId::OpenGL}).ok);
+
+  const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Vulkan});
+
+  REQUIRE_FALSE(init.ok);
+  REQUIRE(init.selected == RenderBackendId::Vulkan);
+  REQUIRE_FALSE(init.error.empty());
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
+  REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
 }
 
 TEST_CASE("Renderer supports multiple explicit passes within a single frame",
@@ -112,11 +145,11 @@ TEST_CASE("Renderer supports multiple explicit passes within a single frame",
 
   Renderer::BeginFrame(RenderFrameConfig{lights, "multi-pass-frame"});
   Renderer::BeginPass(
-      RenderPassConfig{RenderPassId::OpaqueScene, RenderView::FromCamera(camera), "opaque"});
+      RenderPassConfig{RenderPassId::OpaqueScene, BuildRenderView(camera), "opaque"});
   Renderer::Submit(mesh, Mat4::Identity(), material);
   Renderer::EndPass();
   Renderer::BeginPass(
-      RenderPassConfig{RenderPassId::WireframeOverlay, RenderView::FromCamera(camera), "wireframe"});
+      RenderPassConfig{RenderPassId::WireframeOverlay, BuildRenderView(camera), "wireframe"});
   Renderer::SubmitWireframe(mesh, Mat4::Identity(), shader, 0.3f, 0.7f, 0.2f);
   Renderer::EndPass();
   Renderer::EndFrame();
@@ -164,7 +197,7 @@ TEST_CASE("RenderSystem submits visible mesh entities into the active explicit p
   RenderSystem system(camera, alpha);
 
   Renderer::BeginFrame({{}, "scene-frame"});
-  Renderer::BeginPass({RenderPassId::OpaqueScene, RenderView::FromCamera(camera), "scene-pass"});
+  Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "scene-pass"});
   system.OnUpdate(registry, 0.0f);
   Renderer::EndPass();
   Renderer::EndFrame();

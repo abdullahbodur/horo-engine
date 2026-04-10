@@ -6,6 +6,12 @@
 namespace Monolith {
 namespace Editor {
 
+namespace {
+
+constexpr EditorViewGimbalMetrics kEditorViewGimbalMetrics{};
+
+}  // namespace
+
 bool ShouldToggleHelpPopup(bool currToggle,
                            bool prevToggle,
                            bool wantsTextInput,
@@ -130,27 +136,29 @@ EditorViewportRect BuildEditorViewportRect(float displayWidth,
   return rect;
 }
 
+const EditorViewGimbalMetrics& GetEditorViewGimbalMetrics() {
+  return kEditorViewGimbalMetrics;
+}
+
 EditorViewGimbalLayout BuildEditorViewGimbalLayout(const EditorViewportRect& viewportRect,
                                                    float displayWidth,
                                                    float rightPanelWidth,
                                                    float toolbarHeight) {
-  constexpr float kWinW = 128.0f;
-  constexpr float kWinH = 138.0f;
-  constexpr float kBtnFrameSize = 36.0f;
-  constexpr float kBtnGap = 10.0f;
+  const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
 
   const float viewportRight =
       viewportRect.maxX > viewportRect.minX ? viewportRect.maxX : displayWidth - rightPanelWidth;
   const float viewportTop =
       viewportRect.maxY > viewportRect.minY ? viewportRect.minY : toolbarHeight;
-  const float wx = viewportRight - kWinW - 10.0f;
-  const float wy = viewportTop + 10.0f;
-  const float btnX = wx - kBtnFrameSize - kBtnGap;
+  const float wx = viewportRight - metrics.windowWidth - metrics.edgeMargin;
+  const float wy = viewportTop + metrics.edgeMargin;
+  const float btnX = wx - metrics.buttonFrameSize - metrics.buttonGap;
   const float btnY = wy;
 
   EditorViewGimbalLayout layout;
-  layout.wireButtonRect = {btnX, btnY, btnX + kBtnFrameSize, btnY + kBtnFrameSize};
-  layout.gimbalRect = {wx, wy, wx + kWinW, wy + kWinH};
+  layout.wireButtonRect =
+      {btnX, btnY, btnX + metrics.buttonFrameSize, btnY + metrics.buttonFrameSize};
+  layout.gimbalRect = {wx, wy, wx + metrics.windowWidth, wy + metrics.windowHeight};
   layout.pickRect = {std::min(layout.wireButtonRect.minX, layout.gimbalRect.minX),
                      std::min(layout.wireButtonRect.minY, layout.gimbalRect.minY),
                      std::max(layout.wireButtonRect.maxX, layout.gimbalRect.maxX),

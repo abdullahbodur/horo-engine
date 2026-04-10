@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <string>
 
+#include <glad/glad.h>
+
+#include "core/Assert.h"
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
@@ -11,6 +14,8 @@
 namespace Monolith {
 
 namespace {
+
+constexpr float kWireframeOverlayLineWidth = 1.5f;
 
 static Shader* ResolveMaterialShader(const Material& material) {
   return material.shader && material.shader->IsValid() ? material.shader.get() : nullptr;
@@ -36,7 +41,12 @@ static void BindMaterial(const Material& material) {
 
 }  // namespace
 
+RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
+  return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+}
+
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
+  MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
   m_lights = frame.lights;
   if (m_lights.size() > 8)
     m_lights.resize(8);
@@ -46,21 +56,41 @@ void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
 }
 
 void OpenGLRenderBackend::EndFrame() {
-  m_passActive = false;
+  if (m_passActive)
+    EndPass();
   m_frameActive = false;
   m_lastLightProgram = 0;
 }
 
 void OpenGLRenderBackend::BeginPass(const RenderPassConfig& pass) {
-  if (!m_frameActive)
+  MONOLITH_ASSERT(m_frameActive, "OpenGLRenderBackend::BeginPass called without an active frame");
+  MONOLITH_ASSERT(!m_passActive, "OpenGLRenderBackend::BeginPass called while a pass is active");
+  if (!m_frameActive || m_passActive)
     return;
 
   m_activeView = pass.view;
+  m_activePassId = pass.id;
   m_passActive = true;
   m_lastLightProgram = 0;
+
+  if (pass.id == RenderPassId::WireframeOverlay) {
+    m_previousDepthTestEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(kWireframeOverlayLineWidth);
+    m_hasPassStateOverride = true;
+  }
 }
 
 void OpenGLRenderBackend::EndPass() {
+  if (m_hasPassStateOverride && m_activePassId == RenderPassId::WireframeOverlay) {
+    if (m_previousDepthTestEnabled)
+      glEnable(GL_DEPTH_TEST);
+    else
+      glDisable(GL_DEPTH_TEST);
+    glLineWidth(1.0f);
+    m_hasPassStateOverride = false;
+  }
+
   m_passActive = false;
   m_lastLightProgram = 0;
 }

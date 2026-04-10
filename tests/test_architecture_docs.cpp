@@ -34,6 +34,8 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "README.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "module-boundaries.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
@@ -54,11 +56,15 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
 
   const std::string architectureReadme = ReadTextFile(docsRoot / "README.md");
   REQUIRE(architectureReadme.find("renderer-foundation.md") != std::string::npos);
+  REQUIRE(architectureReadme.find("backend-agnostic-rendering-foundation-and-runtime-selection.md") !=
+          std::string::npos);
 
   RequireFileContains(docsRoot / "renderer-foundation.md", "IRenderBackend");
   RequireFileContains(docsRoot / "renderer-foundation.md", "RenderPassConfig");
   RequireFileContains(docsRoot / "renderer-foundation.md", "Material");
   RequireFileContains(docsRoot / "renderer-foundation.md", "OpenGLRenderBackend");
+  RequireFileContains(docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md",
+                      "runtime backend selection");
 }
 
 TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",

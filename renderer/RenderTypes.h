@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "math/Mat4.h"
+#include "math/Vec3.h"
 #include "math/Vec4.h"
-#include "renderer/Camera.h"
 #include "renderer/Light.h"
 
 namespace Monolith {
@@ -26,10 +26,6 @@ struct RenderView {
   Mat4 view = Mat4::Identity();
   Mat4 projection = Mat4::Identity();
   Vec3 cameraPosition = Vec3::Zero();
-
-  static RenderView FromCamera(const Camera& camera) {
-    return {camera.GetView(), camera.GetProjection(), camera.position};
-  }
 };
 
 struct RenderFrameConfig {

@@ -1,10 +1,10 @@
 #pragma once
+#include <string>
 #include <vector>
 
 #include "math/Mat4.h"
-#include "renderer/Camera.h"
+#include "renderer/RenderBackend.h"
 #include "renderer/IRenderBackend.h"
-#include "renderer/Light.h"
 #include "renderer/RenderTypes.h"
 
 namespace Monolith {
@@ -16,6 +16,12 @@ class SkinnedMesh;
 
 class Renderer {
  public:
+  static RenderBackendInitResult InitializeBackend(const RenderBackendSelection& selection = {});
+  static RenderBackendId GetBackendId();
+  static RenderBackendCapabilities GetBackendCapabilities();
+  static bool IsBackendSupported(RenderBackendId backendId);
+
+  // Test seam: temporarily override the active backend with an externally owned implementation.
   static void UseBackend(IRenderBackend* backend);
   static void ResetBackend();
 
