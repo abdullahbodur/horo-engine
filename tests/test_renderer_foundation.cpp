@@ -135,10 +135,12 @@ TEST_CASE("Renderer initializes the default OpenGL backend through a typed selec
   REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
 
   const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  REQUIRE(caps.supportsDebugDraw);
   REQUIRE(caps.supportsWireframeOverlay);
   REQUIRE(caps.supportsOffscreenTargets);
   REQUIRE(caps.supportsNativeTextureHandles);
   REQUIRE(caps.supportsReadback);
+  REQUIRE(caps.supportsDepthReadback);
   REQUIRE(caps.supportsDebugHud);
   REQUIRE_FALSE(caps.supportsComputePasses);
 }
@@ -158,10 +160,12 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
 
   const RenderBackendCapabilities vulkanCaps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
+  REQUIRE_FALSE(vulkanCaps.supportsDebugDraw);
   REQUIRE_FALSE(vulkanCaps.supportsWireframeOverlay);
   REQUIRE_FALSE(vulkanCaps.supportsOffscreenTargets);
   REQUIRE_FALSE(vulkanCaps.supportsNativeTextureHandles);
   REQUIRE_FALSE(vulkanCaps.supportsReadback);
+  REQUIRE_FALSE(vulkanCaps.supportsDepthReadback);
   REQUIRE_FALSE(vulkanCaps.supportsDebugHud);
 #else
   REQUIRE_FALSE(init.ok);

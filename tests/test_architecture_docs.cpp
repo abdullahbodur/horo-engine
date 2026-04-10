@@ -123,6 +123,15 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
 
   const std::string editorImGuiBackend = ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
   REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") != std::string::npos);
+
+  const std::string debugDraw = ReadTextFile(root / "renderer" / "DebugDraw.cpp");
+  REQUIRE(debugDraw.find("supportsDebugDraw") != std::string::npos);
+
+  const std::string screenshot = ReadTextFile(root / "core" / "Screenshot.cpp");
+  REQUIRE(screenshot.find("supportsReadback") != std::string::npos);
+
+  const std::string debugHud = ReadTextFile(root / "renderer" / "DebugHUD.cpp");
+  REQUIRE(debugHud.find("supportsDepthReadback") != std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {

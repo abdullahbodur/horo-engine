@@ -111,10 +111,12 @@ VulkanRenderBackend::~VulkanRenderBackend() {
 
 RenderBackendCapabilities VulkanRenderBackend::GetCapabilities() const {
   RenderBackendCapabilities caps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
+  caps.supportsDebugDraw = false;
   caps.supportsDebugLabels = false;
   caps.supportsOffscreenTargets = false;
   caps.supportsNativeTextureHandles = false;
   caps.supportsReadback = false;
+  caps.supportsDepthReadback = false;
   caps.supportsDebugHud = false;
   caps.supportsComputePasses = false;
   caps.supportsGpuTimestamps = false;
