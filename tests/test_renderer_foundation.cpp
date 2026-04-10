@@ -141,11 +141,19 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
 
   const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Vulkan});
 
+#if defined(MONOLITH_HAS_VULKAN)
+  REQUIRE_FALSE(init.ok);
+  REQUIRE(init.selected == RenderBackendId::Vulkan);
+  REQUIRE(init.error.find("window handle") != std::string::npos);
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
+  REQUIRE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
+#else
   REQUIRE_FALSE(init.ok);
   REQUIRE(init.selected == RenderBackendId::Vulkan);
   REQUIRE_FALSE(init.error.empty());
   REQUIRE(Renderer::GetBackendId() == RenderBackendId::OpenGL);
   REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
+#endif
 }
 
 TEST_CASE("Renderer supports multiple explicit passes within a single frame",

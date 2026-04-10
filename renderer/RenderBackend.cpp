@@ -41,7 +41,11 @@ bool IsRenderBackendSupported(RenderBackendId backendId) {
     case RenderBackendId::OpenGL:
       return true;
     case RenderBackendId::Vulkan:
+#if defined(MONOLITH_HAS_VULKAN)
+      return true;
+#else
       return false;
+#endif
     case RenderBackendId::Auto:
       break;
   }

@@ -1,0 +1,53 @@
+#pragma once
+
+#include <memory>
+#include <string>
+
+#include "renderer/IRenderBackend.h"
+
+namespace Monolith {
+
+class VulkanRenderBackend : public IRenderBackend {
+ public:
+  explicit VulkanRenderBackend(void* nativeWindowHandle);
+  ~VulkanRenderBackend() override;
+
+  VulkanRenderBackend(const VulkanRenderBackend&) = delete;
+  VulkanRenderBackend& operator=(const VulkanRenderBackend&) = delete;
+  VulkanRenderBackend(VulkanRenderBackend&&) = delete;
+  VulkanRenderBackend& operator=(VulkanRenderBackend&&) = delete;
+
+  void BeginFrame(const RenderFrameConfig& frame) override;
+  void EndFrame() override;
+  void BeginPass(const RenderPassConfig& pass) override;
+  void EndPass() override;
+
+  void DrawMesh(const MeshDrawCommand& command) override;
+  void DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) override;
+  void DrawWireframe(const WireframeDrawCommand& command) override;
+
+  RenderBackendId GetBackendId() const override { return RenderBackendId::Vulkan; }
+  RenderBackendCapabilities GetCapabilities() const override;
+  int GetDrawCallCount() const override { return m_drawCalls; }
+
+  bool IsInitialized() const;
+  const std::string& GetLastError() const { return m_lastError; }
+
+ private:
+  struct Context;
+
+  bool Initialize(void* nativeWindowHandle);
+  void Shutdown();
+  bool RecreateSwapchain();
+  void DestroySwapchain();
+  bool RecordFrameCommands(const RenderFrameConfig& frame);
+
+  std::unique_ptr<Context> m_context;
+  std::string m_lastError;
+  RenderPassId m_activePassId = RenderPassId::OpaqueScene;
+  int m_drawCalls = 0;
+  bool m_frameActive = false;
+  bool m_passActive = false;
+};
+
+}  // namespace Monolith
