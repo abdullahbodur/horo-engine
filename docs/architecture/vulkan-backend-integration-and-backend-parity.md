@@ -100,14 +100,68 @@ Hidden no-ops are not acceptable unless the fallback is documented and test-cove
 
 The current renderer capability model already tracks a small set of backend features. Vulkan parity work is expected to extend that model so higher-level systems can make explicit decisions about at least:
 
+- debug draw support
 - wireframe overlay support
 - debug label support
 - offscreen target support
+- native texture handle support
 - readback / screenshot support
+- depth-readback support
 - editor viewport support
 - debug HUD feature availability
 
+The current parity stack has already established explicit capability gates for:
+
+- debug draw
+- wireframe overlay
+- offscreen target usage in editor preview flows
+- native texture handle usage in editor preview flows
+- screenshot/readback
+- depth-readback-dependent DebugHUD behavior
+- ImGui backend selection support
+
 This document does not require all of those fields to be added in one PR. It requires the final parity work to move toward explicit capability checks instead of backend-specific branching in editor or scene code.
+
+## Current Implemented Foundation State
+
+The current stacked implementation toward this epic now provides:
+
+- backend-aware window/bootstrap ownership split
+- backend-owned frame output control
+- hidden OpenGL payload storage behind resource implementations
+- opt-in Vulkan dependency scaffolding (`Vulkan-Headers` + `volk`)
+- minimal Vulkan backend bootstrap with instance/device/surface/swapchain/clear/present
+- opaque-scene submission acceptance through the Vulkan backend seam
+- backend-neutral preview handle abstraction for editor thumbnail paths
+- editor ImGui backend routing through an explicit backend shim
+- capability-gated debug draw, screenshot/readback, and DebugHUD depth-readback behavior
+
+This means the architecture discussion is no longer purely aspirational. Follow-up work should now focus on turning these seams into fuller parity rather than reintroducing OpenGL assumptions into the engine-facing layers.
+
+## Remaining Work After The Current Stack
+
+The largest remaining gaps after the current implementation stack are:
+
+- real Vulkan mesh/material/pipeline translation beyond accepted opaque-scene submissions
+- backend-neutral editor viewport rendering rather than seam-only backend routing
+- full offscreen render-target ownership beyond preview handles
+- backend-owned screenshot/readback implementations rather than capability-gated OpenGL-only behavior
+- broader parity CI once Vulkan coverage is stable enough for hosted runners
+
+These gaps should be treated as explicit backlog, not silent capability drift.
+
+## Validation Strategy
+
+The living validation contract for this epic now lives in:
+
+- `docs/development/backend-parity-validation-matrix.md`
+
+That matrix complements this architecture document by defining:
+
+- required default-build contract tests
+- Vulkan-enabled smoke coverage
+- required command lines for parity-related PRs
+- current known validation gaps
 
 ## Acceptance Criteria For Closing The Scope Phase
 
