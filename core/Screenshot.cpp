@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/Logger.h"
+#include "renderer/Renderer.h"
 
 namespace Monolith {
 
@@ -73,6 +74,11 @@ static bool WriteBMP(const std::string& path, int w, int h, const std::vector<ui
 std::string Screenshot::Save(int w, int h, const std::string& folder) {
   if (w <= 0 || h <= 0)
     return {};
+
+  if (!Renderer::GetBackendCapabilities().supportsReadback) {
+    LOG_WARN("Screenshot: active render backend does not support readback capture.");
+    return {};
+  }
 
   // Read framebuffer — GL_BGR so bytes land in BMP order directly
   std::vector<uint8_t> pixels(static_cast<size_t>(w * h * 3));

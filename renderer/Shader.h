@@ -1,6 +1,6 @@
 #pragma once
+#include <memory>
 #include <string>
-#include <unordered_map>
 
 #include "math/Mat3.h"
 #include "math/Mat4.h"
@@ -11,7 +11,7 @@ namespace Monolith {
 
 class Shader {
  public:
-  Shader() = default;
+  Shader();
   ~Shader();
 
   Shader(const Shader&) = delete;
@@ -28,8 +28,8 @@ class Shader {
   void Bind() const;
   void Unbind() const;
 
-  bool IsValid() const { return m_program != 0; }
-  unsigned int GetProgramID() const { return m_program; }
+  bool IsValid() const;
+  unsigned int GetProgramID() const;
 
   // Uniform setters
   void SetInt(const std::string& name, int v) const;
@@ -45,8 +45,8 @@ class Shader {
   void SetMat4Array(const std::string& name, int count, const float* data) const;
 
  private:
-  unsigned int m_program = 0;
-  mutable std::unordered_map<std::string, int> m_uniformCache;
+  struct ProgramStorage;
+  std::unique_ptr<ProgramStorage> m_programStorage;
 
   int GetUniformLocation(const std::string& name) const;
   static unsigned int CompileShader(unsigned int type, const std::string& src);

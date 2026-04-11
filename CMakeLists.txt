@@ -14,6 +14,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
     option(MONOLITH_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
+    option(MONOLITH_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
 
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
@@ -60,6 +61,11 @@ target_link_libraries(MonolithEngine
         nlohmann_json::nlohmann_json
         tinygltf
 )
+
+if(MONOLITH_ENGINE_ENABLE_VULKAN)
+    target_link_libraries(MonolithEngine PUBLIC monolith_volk monolith_vulkan_headers)
+    target_compile_definitions(MonolithEngine PUBLIC MONOLITH_HAS_VULKAN=1)
+endif()
 
 if(APPLE)
     target_link_libraries(MonolithEngine PUBLIC "-framework OpenGL")

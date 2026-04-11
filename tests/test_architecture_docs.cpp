@@ -86,6 +86,22 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string renderer = ReadTextFile(root / "renderer" / "Renderer.cpp");
   REQUIRE(renderer.find("GetProgramID(") == std::string::npos);
 
+  const std::string meshHeader = ReadTextFile(root / "renderer" / "Mesh.h");
+  REQUIRE(meshHeader.find("m_vao") == std::string::npos);
+  REQUIRE(meshHeader.find("m_vbo") == std::string::npos);
+  REQUIRE(meshHeader.find("m_ebo") == std::string::npos);
+
+  const std::string shaderHeader = ReadTextFile(root / "renderer" / "Shader.h");
+  REQUIRE(shaderHeader.find("unsigned int m_program") == std::string::npos);
+
+  const std::string textureHeader = ReadTextFile(root / "renderer" / "Texture.h");
+  REQUIRE(textureHeader.find("unsigned int m_id") == std::string::npos);
+
+  const std::string skinnedMeshHeader = ReadTextFile(root / "renderer" / "SkinnedMesh.h");
+  REQUIRE(skinnedMeshHeader.find("m_vao") == std::string::npos);
+  REQUIRE(skinnedMeshHeader.find("m_vbo") == std::string::npos);
+  REQUIRE(skinnedMeshHeader.find("m_ebo") == std::string::npos);
+
   const std::string renderContext = ReadTextFile(root / "renderer" / "RenderContext.cpp");
   REQUIRE(renderContext.find("glViewport(") == std::string::npos);
   REQUIRE(renderContext.find("glad/glad.h") == std::string::npos);
@@ -100,6 +116,9 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string starterTemplate = ReadTextFile(root / "scene" / "STARTER_TEMPLATE.h");
   REQUIRE(starterTemplate.find("RenderContext::BeginFrame") == std::string::npos);
   REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
+
+  const std::string editorLayer = ReadTextFile(root / "editor" / "EditorLayer.cpp");
+  REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {

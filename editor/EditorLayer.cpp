@@ -991,17 +991,21 @@ static void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh,
 
 // Render a mesh to the thumbnail framebuffer and return a per-mesh cached texture ID.
 // meshKey must be the resolved mesh path (same key used in meshCache).
-static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
-                                          const std::string& meshKey) {
+static RenderTargetHandle RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh& mesh,
+                                                const std::string& meshKey) {
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  if (!caps.supportsOffscreenTargets || !caps.supportsNativeTextureHandles)
+    return {};
+
   auto& renderer = AssetThumbnailRenderer::Instance();
 
   // Return existing per-mesh texture if already rendered this session.
   auto cacheIt = renderer.renderedTextureCache.find(meshKey);
   if (cacheIt != renderer.renderedTextureCache.end())
-    return cacheIt->second;
+    return RenderTargetHandle::OpenGLTexture(cacheIt->second, true);
 
   if (!renderer.IsValid())
-    return 0;
+    return {};
 
   // Save GL state (viewport)
   GLint prevViewport[4] = {0, 0, 1, 1};
@@ -1068,18 +1072,15 @@ static unsigned int RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMe
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 
-  return destTex;
+  return RenderTargetHandle::OpenGLTexture(destTex, true);
 }
 
-static bool TryGetAssetPreviewTextureId(const std::string& assetId,
-                                        const AssetDef& asset,
-                                        unsigned int* outTextureId,
-                                        bool* outNeedsYFlip = nullptr) {
-  if (!outTextureId)
+static bool TryGetAssetPreviewHandle(const std::string& assetId,
+                                     const AssetDef& asset,
+                                     RenderTargetHandle* outHandle) {
+  if (!outHandle)
     return false;
-  *outTextureId = 0;
-  if (outNeedsYFlip)
-    *outNeedsYFlip = false;
+  *outHandle = {};
 
   static std::unordered_map<std::string, Texture> s_textureByPath;
   static std::unordered_map<std::string, std::shared_ptr<Texture>> s_gltfTextureByMesh;
@@ -1089,12 +1090,14 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
   if (s_noPreviewCache.find(key) != s_noPreviewCache.end())
     return false;
 
-  auto loadTextureByPath = [&](const std::filesystem::path& path) -> unsigned int {
+  auto loadTextureByPath = [&](const std::filesystem::path& path) -> RenderTargetHandle {
+    if (!Renderer::GetBackendCapabilities().supportsNativeTextureHandles)
+      return {};
     if (path.empty())
-      return 0;
+      return {};
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec) || ec)
-      return 0;
+      return {};
     const std::string abs = path.generic_string();
     auto it = s_textureByPath.find(abs);
     if (it == s_textureByPath.end()) {
@@ -1102,8 +1105,8 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
       it = s_textureByPath.emplace(abs, std::move(tex)).first;
     }
     if (!it->second.IsValid())
-      return 0;
-    return it->second.GetNativeId();
+      return {};
+    return it->second.GetRenderTargetHandle();
   };
 
   // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
@@ -1113,13 +1116,9 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
       if (auto* meshEntry = TryLoadAssetMesh(asset.mesh)) {
         const std::string meshKey =
             ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
-        const unsigned int texId = RenderMeshToThumbnail(*meshEntry, meshKey);
-        if (texId != 0) {
-          *outTextureId = texId;
-          // OpenGL FBO textures have origin at bottom-left; ImGui expects top-left.
-          // Caller must flip Y UVs when displaying this texture.
-          if (outNeedsYFlip)
-            *outNeedsYFlip = true;
+        const RenderTargetHandle handle = RenderMeshToThumbnail(*meshEntry, meshKey);
+        if (handle.IsValid()) {
+          *outHandle = handle;
           return true;
         }
       }
@@ -1129,9 +1128,9 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
   // Priority 2: Fallback to texture-based thumbnails
   if (!asset.albedoMap.empty()) {
     const std::filesystem::path albedo = ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
-    const unsigned int texId = loadTextureByPath(albedo);
-    if (texId != 0) {
-      *outTextureId = texId;
+    const RenderTargetHandle handle = loadTextureByPath(albedo);
+    if (handle.IsValid()) {
+      *outHandle = handle;
       return true;
     }
   }
@@ -1142,9 +1141,9 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
 
     if (ext == ".obj") {
       const std::string diffusePath = ObjLoader::FindDiffuseTexture(meshPath.generic_string());
-      const unsigned int texId = loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
-      if (texId != 0) {
-        *outTextureId = texId;
+      const RenderTargetHandle handle = loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
+      if (handle.IsValid()) {
+        *outHandle = handle;
         return true;
       }
     }
@@ -1158,7 +1157,7 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
           it = s_gltfTextureByMesh.emplace(absMesh, std::move(result.albedoTexture)).first;
       }
       if (it != s_gltfTextureByMesh.end() && it->second && it->second->IsValid()) {
-        *outTextureId = it->second->GetNativeId();
+        *outHandle = it->second->GetRenderTargetHandle();
         return true;
       }
     }
@@ -1168,8 +1167,10 @@ static bool TryGetAssetPreviewTextureId(const std::string& assetId,
   return false;
 }
 
-static ImTextureID ToImTextureId(unsigned int textureId) {
-  return (ImTextureID)(intptr_t)textureId;
+static ImTextureID ToImTextureId(const RenderTargetHandle& handle) {
+  if (!handle.IsValid() || handle.nativeType != RenderNativeHandleType::OpenGLTexture2D)
+    return (ImTextureID)0;
+  return (ImTextureID)(intptr_t)handle.nativeHandle;
 }
 
 std::string PickTextureFilePath() {
@@ -3052,6 +3053,9 @@ void EditorLayer::DrawSettingsModal() {
 void EditorLayer::DrawViewGimbal(const Camera& cam) {
   ImGuiIO& io = ImGui::GetIO();
   const EditorViewGimbalMetrics& metrics = GetEditorViewGimbalMetrics();
+  const bool supportsWireframeOverlay = Renderer::GetBackendCapabilities().supportsWireframeOverlay;
+  if (!supportsWireframeOverlay)
+    m_wireframeMode = false;
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const EditorViewGimbalLayout layout =
       BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
@@ -3075,15 +3079,23 @@ void EditorLayer::DrawViewGimbal(const Camera& cam) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.15f, 0.90f));
   else
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.22f, 0.30f, 0.80f));
+  if (!supportsWireframeOverlay)
+    ImGui::BeginDisabled();
   if (ImGui::Button("##wire_btn_toggle", ImVec2(metrics.buttonSize, metrics.buttonSize)))
     m_wireframeMode = !m_wireframeMode;
+  if (!supportsWireframeOverlay)
+    ImGui::EndDisabled();
   ImGui::PopStyleColor();
   dl->AddText(ImVec2(layout.wireButtonRect.minX + metrics.titleOffsetX,
                      layout.wireButtonRect.minY + metrics.titleOffsetY),
               IM_COL32(230, 235, 245, 255),
               "[W]");
-  if (ImGui::IsItemHovered())
-    ImGui::SetTooltip("Toggle Wireframe");
+  if (ImGui::IsItemHovered()) {
+    if (supportsWireframeOverlay)
+      ImGui::SetTooltip("Toggle Wireframe");
+    else
+      ImGui::SetTooltip("Wireframe overlay is unavailable on the active render backend");
+  }
 
   m_viewGizmoPickRect.valid = true;
   m_viewGizmoPickRect.minX = layout.pickRect.minX;
@@ -3915,12 +3927,11 @@ void EditorLayer::DrawAssetsPanel() {
                       6.0f);
     dl->AddRect(thumbMin, thumbMax, ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)), 6.0f);
 
-    unsigned int previewTexId = 0;
-    bool previewNeedsYFlip = false;
-    if (TryGetAssetPreviewTextureId(assetId, asset, &previewTexId, &previewNeedsYFlip) && previewTexId != 0) {
-      const ImVec2 uv0 = previewNeedsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
-      const ImVec2 uv1 = previewNeedsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
-      dl->AddImage(ToImTextureId(previewTexId), thumbMin, thumbMax, uv0, uv1);
+    RenderTargetHandle previewHandle;
+    if (TryGetAssetPreviewHandle(assetId, asset, &previewHandle) && previewHandle.IsValid()) {
+      const ImVec2 uv0 = previewHandle.needsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+      const ImVec2 uv1 = previewHandle.needsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+      dl->AddImage(ToImTextureId(previewHandle), thumbMin, thumbMax, uv0, uv1);
     } else {
       const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.67f, 0.74f, 0.84f, 0.95f));
       const ImU32 meshCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
@@ -6869,6 +6880,11 @@ void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc& component) const {
 // ---- Wireframe overlay -------------------------------------------------------
 
 void EditorLayer::DrawWireframeOverlay(const Camera& cam) {
+  if (!Renderer::GetBackendCapabilities().supportsWireframeOverlay) {
+    m_wireframeMode = false;
+    return;
+  }
+
   if (!m_wireframeMode || !m_wireframeShader.IsValid())
     return;
 

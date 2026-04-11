@@ -26,6 +26,10 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
     case RenderBackendId::OpenGL:
       return {.supportsWireframeOverlay = true,
               .supportsDebugLabels = false,
+              .supportsOffscreenTargets = true,
+              .supportsNativeTextureHandles = true,
+              .supportsReadback = true,
+              .supportsDebugHud = true,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,
               .supportsBindlessResources = false};
@@ -41,7 +45,11 @@ bool IsRenderBackendSupported(RenderBackendId backendId) {
     case RenderBackendId::OpenGL:
       return true;
     case RenderBackendId::Vulkan:
+#if defined(MONOLITH_HAS_VULKAN)
+      return true;
+#else
       return false;
+#endif
     case RenderBackendId::Auto:
       break;
   }
