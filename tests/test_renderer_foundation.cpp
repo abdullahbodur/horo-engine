@@ -24,65 +24,76 @@
 
 using namespace Monolith;
 
-namespace {
+namespace
+{
 
-class FakeRenderBackend : public IRenderBackend {
- public:
-  void BeginFrame(const RenderFrameConfig& frame) override {
-    events.push_back("begin-frame");
-    lastFrame = frame;
-  }
+  class FakeRenderBackend : public IRenderBackend
+  {
+  public:
+    void BeginFrame(const RenderFrameConfig &frame) override
+    {
+      events.push_back("begin-frame");
+      lastFrame = frame;
+    }
 
-  void EndFrame() override {
-    events.push_back("end-frame");
-  }
+    void EndFrame() override
+    {
+      events.push_back("end-frame");
+    }
 
-  void BeginPass(const RenderPassConfig& pass) override {
-    events.push_back("begin-pass");
-    lastPass = pass;
-  }
+    void BeginPass(const RenderPassConfig &pass) override
+    {
+      events.push_back("begin-pass");
+      lastPass = pass;
+    }
 
-  void EndPass() override {
-    events.push_back("end-pass");
-  }
+    void EndPass() override
+    {
+      events.push_back("end-pass");
+    }
 
-  void DrawMesh(const MeshDrawCommand& command) override {
-    events.push_back("draw-mesh");
-    lastMesh = command;
-    ++drawCalls;
-  }
+    void DrawMesh(const MeshDrawCommand &command) override
+    {
+      events.push_back("draw-mesh");
+      lastMesh = command;
+      ++drawCalls;
+    }
 
-  void DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) override {
-    events.push_back("draw-skinned");
-    lastSkinned = command;
-    ++drawCalls;
-  }
+    void DrawSkinnedMesh(const SkinnedMeshDrawCommand &command) override
+    {
+      events.push_back("draw-skinned");
+      lastSkinned = command;
+      ++drawCalls;
+    }
 
-  void DrawWireframe(const WireframeDrawCommand& command) override {
-    events.push_back("draw-wireframe");
-    lastWireframe = command;
-    ++drawCalls;
-  }
+    void DrawWireframe(const WireframeDrawCommand &command) override
+    {
+      events.push_back("draw-wireframe");
+      lastWireframe = command;
+      ++drawCalls;
+    }
 
-  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
-  RenderBackendCapabilities GetCapabilities() const override {
-    return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
-  }
-  int GetDrawCallCount() const override { return drawCalls; }
+    RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+    RenderBackendCapabilities GetCapabilities() const override
+    {
+      return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+    }
+    int GetDrawCallCount() const override { return drawCalls; }
 
-  std::vector<std::string> events;
-  RenderFrameConfig lastFrame;
-  RenderPassConfig lastPass;
-  MeshDrawCommand lastMesh;
-  SkinnedMeshDrawCommand lastSkinned;
-  WireframeDrawCommand lastWireframe;
-  int drawCalls = 0;
-};
+    std::vector<std::string> events;
+    RenderFrameConfig lastFrame;
+    RenderPassConfig lastPass;
+    MeshDrawCommand lastMesh;
+    SkinnedMeshDrawCommand lastSkinned;
+    WireframeDrawCommand lastWireframe;
+    int drawCalls = 0;
+  };
 
-}  // namespace
+} // namespace
 
 TEST_CASE("Renderer routes explicit frame and pass commands through backend seam",
-          "[renderer][foundation]") {
+          "[renderer][foundation]")
+{
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -109,7 +120,8 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
 }
 
 TEST_CASE("Renderer forwards frame output config through the backend seam",
-          "[renderer][foundation][frame-output]") {
+          "[renderer][foundation][frame-output]")
+{
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -127,7 +139,8 @@ TEST_CASE("Renderer forwards frame output config through the backend seam",
 }
 
 TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection",
-          "[renderer][foundation][backend]") {
+          "[renderer][foundation][backend]")
+{
   const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Auto});
 
   REQUIRE(init.ok);
@@ -147,7 +160,8 @@ TEST_CASE("Renderer initializes the default OpenGL backend through a typed selec
 }
 
 TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend",
-          "[renderer][foundation][backend]") {
+          "[renderer][foundation][backend]")
+{
   REQUIRE(Renderer::InitializeBackend({RenderBackendId::OpenGL}).ok);
 
   const RenderBackendInitResult init = Renderer::InitializeBackend({RenderBackendId::Vulkan});
@@ -178,17 +192,19 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
 }
 
 TEST_CASE("RenderBackendSelection preserves native window handles for backend bootstrap",
-          "[renderer][foundation][backend][selection]") {
+          "[renderer][foundation][backend][selection]")
+{
   RenderBackendSelection selection;
   selection.requested = RenderBackendId::Vulkan;
-  selection.nativeWindowHandle = reinterpret_cast<void*>(0x1234);
+  selection.nativeWindowHandle = reinterpret_cast<void *>(0x1234);
 
   REQUIRE(selection.requested == RenderBackendId::Vulkan);
-  REQUIRE(selection.nativeWindowHandle == reinterpret_cast<void*>(0x1234));
+  REQUIRE(selection.nativeWindowHandle == reinterpret_cast<void *>(0x1234));
 }
 
 TEST_CASE("Backend capability defaults express the current parity matrix",
-          "[renderer][foundation][backend][parity]") {
+          "[renderer][foundation][backend][parity]")
+{
   const RenderBackendCapabilities glCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
   REQUIRE(glCaps.supportsDebugDraw);
   REQUIRE(glCaps.supportsWireframeOverlay);
@@ -210,7 +226,8 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
 
 #if defined(MONOLITH_HAS_VULKAN)
 TEST_CASE("Vulkan material translation snapshots backend-relevant material state",
-          "[renderer][foundation][vulkan][translation]") {
+          "[renderer][foundation][vulkan][translation]")
+{
   Material material;
   material.color = {0.2f, 0.4f, 0.6f, 1.0f};
   material.roughness = 0.25f;
@@ -231,7 +248,8 @@ TEST_CASE("Vulkan material translation snapshots backend-relevant material state
 }
 
 TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
-          "[renderer][foundation][vulkan][pipeline]") {
+          "[renderer][foundation][vulkan][pipeline]")
+{
   VulkanRenderBackend::TranslatedMaterialState materialState;
   materialState.usesAlbedoMap = true;
   materialState.usesCustomShader = false;
@@ -246,19 +264,22 @@ TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
 }
 
 TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a window",
-          "[renderer][foundation][vulkan][scaffold]") {
+          "[renderer][foundation][vulkan][scaffold]")
+{
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
-  if (!glfwVulkanSupported()) {
+  if (!glfwVulkanSupported())
+  {
     glfwTerminate();
     SKIP("GLFW reports Vulkan unsupported on this machine");
   }
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow* window = glfwCreateWindow(64, 64, "vulkan-scaffold-test", nullptr, nullptr);
-  if (!window) {
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-scaffold-test", nullptr, nullptr);
+  if (!window)
+  {
     glfwTerminate();
     SKIP("Unable to create hidden GLFW window for Vulkan raster scaffold test");
   }
@@ -275,19 +296,22 @@ TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a
 }
 
 TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
-          "[renderer][foundation][vulkan][opaque]") {
+          "[renderer][foundation][vulkan][opaque]")
+{
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
-  if (!glfwVulkanSupported()) {
+  if (!glfwVulkanSupported())
+  {
     glfwTerminate();
     SKIP("GLFW reports Vulkan unsupported on this machine");
   }
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow* window = glfwCreateWindow(64, 64, "vulkan-test", nullptr, nullptr);
-  if (!window) {
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-test", nullptr, nullptr);
+  if (!window)
+  {
     glfwTerminate();
     SKIP("Unable to create hidden GLFW window for Vulkan backend test");
   }
@@ -297,7 +321,8 @@ TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with
   selection.nativeWindowHandle = window;
   const RenderBackendInitResult init = Renderer::InitializeBackend(selection);
 
-  if (!init.ok) {
+  if (!init.ok)
+  {
     glfwDestroyWindow(window);
     glfwTerminate();
     FAIL(init.error);
@@ -320,10 +345,53 @@ TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with
   glfwDestroyWindow(window);
   glfwTerminate();
 }
+
+TEST_CASE("Vulkan backend reports actionable diagnostics for scaffold-only opaque draw execution",
+          "[renderer][foundation][vulkan][opaque][diagnostics]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-diagnostics-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan diagnostics test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+
+  Mesh mesh;
+  Material material;
+  Camera camera;
+
+  backend.BeginFrame({{}, "vulkan-opaque-diagnostics"});
+  backend.BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "vulkan-opaque-pass"});
+  backend.DrawMesh({&mesh, &material, Mat4::Identity()});
+  backend.EndPass();
+  backend.EndFrame();
+
+  REQUIRE(backend.GetDrawCallCount() == 1);
+  REQUIRE(backend.GetLastError().find("draw submissions are queued") != std::string::npos);
+  REQUIRE(backend.GetLastError().find("Pending draws: 1") != std::string::npos);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
 #endif
 
 TEST_CASE("Renderer supports multiple explicit passes within a single frame",
-          "[renderer][foundation]") {
+          "[renderer][foundation]")
+{
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -364,7 +432,8 @@ TEST_CASE("Renderer supports multiple explicit passes within a single frame",
 }
 
 TEST_CASE("RenderSystem submits visible mesh entities into the active explicit pass",
-          "[renderer][foundation][scene]") {
+          "[renderer][foundation][scene]")
+{
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -403,7 +472,8 @@ TEST_CASE("RenderSystem submits visible mesh entities into the active explicit p
 }
 
 TEST_CASE("Material copies share shader and texture resource handles",
-          "[renderer][foundation][ownership]") {
+          "[renderer][foundation][ownership]")
+{
   auto shader = std::make_shared<Shader>();
   auto texture = std::make_shared<Texture>();
 
