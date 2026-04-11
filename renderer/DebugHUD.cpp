@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "input/Input.h"
+#include "renderer/Renderer.h"
 #include "input/KeyCodes.h"
 
 // Windows headers (pulled in by glad) define DrawText as DrawTextA — undefine to avoid collision
@@ -1237,6 +1238,12 @@ void DebugHUD::Init(int screenW, int screenH) {
   s_screenW = screenW;
   s_screenH = screenH;
 
+  if (!Renderer::GetBackendCapabilities().supportsDebugHud) {
+    s_initialized = false;
+    s_visible = false;
+    return;
+  }
+
   s_shader = std::make_unique<Shader>(Shader::FromSource(HUD_VERT, HUD_FRAG));
 
   BuildFontAtlas();
@@ -1343,6 +1350,9 @@ void DebugHUD::SubmitWorldLabel(const Vec3& worldPos, const Mat4& vp, const char
 // ---- Update ----
 
 void DebugHUD::Update(float dt, const HUDStats& stats) {
+  if (!Renderer::GetBackendCapabilities().supportsDebugHud)
+    return;
+
   if (Input::IsKeyPressed(Key::F3))
     s_visible = !s_visible;
   if (Input::IsKeyPressed(Key::F4))
@@ -1377,6 +1387,8 @@ void DebugHUD::Update(float dt, const HUDStats& stats) {
 // ---- Render ----
 
 void DebugHUD::Render() {
+  if (!Renderer::GetBackendCapabilities().supportsDebugHud)
+    return;
   if (!s_initialized)
     return;
   const bool forceNoCameraOverlay = s_stats.showNoCameraOverlay;

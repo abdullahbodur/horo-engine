@@ -5,6 +5,7 @@
 #include <limits>
 #include <optional>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -92,6 +93,14 @@ struct VulkanRenderBackend::Context {
   bool frameCommandsRecorded = false;
 };
 
+namespace {
+
+constexpr bool IsSupportedVulkanScenePass(const RenderPassId passId) {
+  return passId == RenderPassId::OpaqueScene || passId == RenderPassId::CompatibilityScene;
+}
+
+}  // namespace
+
 VulkanRenderBackend::VulkanRenderBackend(void* nativeWindowHandle) {
   Initialize(nativeWindowHandle);
 }
@@ -103,6 +112,10 @@ VulkanRenderBackend::~VulkanRenderBackend() {
 RenderBackendCapabilities VulkanRenderBackend::GetCapabilities() const {
   RenderBackendCapabilities caps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
   caps.supportsDebugLabels = false;
+  caps.supportsOffscreenTargets = false;
+  caps.supportsNativeTextureHandles = false;
+  caps.supportsReadback = false;
+  caps.supportsDebugHud = false;
   caps.supportsComputePasses = false;
   caps.supportsGpuTimestamps = false;
   caps.supportsBindlessResources = false;
@@ -572,6 +585,13 @@ bool VulkanRenderBackend::RecordFrameCommands(const RenderFrameConfig& frame) {
   }
 
   if (frame.clearColorBuffer) {
+    if (!m_pendingOpaqueDraws.empty()) {
+      // Placeholder for the first opaque-scene submission slice: keep the current
+      // clear/present bootstrap, but make frame recording aware that opaque scene
+      // work was queued through the backend seam.
+      m_lastError.clear();
+    }
+
     const VkImageMemoryBarrier toTransfer{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext = nullptr,
@@ -673,8 +693,11 @@ void VulkanRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
                           m_lastError,
                           "vkResetFences"),
                   m_lastError.c_str());
-  MONOLITH_ASSERT(RecordFrameCommands(frame), m_lastError.c_str());
 
+  m_activeFrame = frame;
+  m_activeView = {};
+  m_pendingOpaqueDraws.clear();
+  m_context->frameCommandsRecorded = false;
   m_drawCalls = 0;
   m_frameActive = true;
 }
@@ -686,6 +709,10 @@ void VulkanRenderBackend::EndFrame() {
 
   if (m_passActive)
     EndPass();
+
+  if (!m_context->frameCommandsRecorded) {
+    MONOLITH_ASSERT(RecordFrameCommands(m_activeFrame), m_lastError.c_str());
+  }
 
   if (m_context->frameCommandsRecorded) {
     const VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TRANSFER_BIT};
@@ -730,6 +757,7 @@ void VulkanRenderBackend::EndFrame() {
   }
 
   m_frameActive = false;
+  m_pendingOpaqueDraws.clear();
 }
 
 void VulkanRenderBackend::BeginPass(const RenderPassConfig& pass) {
@@ -739,6 +767,7 @@ void VulkanRenderBackend::BeginPass(const RenderPassConfig& pass) {
     return;
 
   m_activePassId = pass.id;
+  m_activeView = pass.view;
   m_passActive = true;
 }
 
@@ -749,7 +778,13 @@ void VulkanRenderBackend::EndPass() {
   m_passActive = false;
 }
 
-void VulkanRenderBackend::DrawMesh(const MeshDrawCommand&) {}
+void VulkanRenderBackend::DrawMesh(const MeshDrawCommand& command) {
+  if (!m_passActive || !IsSupportedVulkanScenePass(m_activePassId) || !command.mesh || !command.material)
+    return;
+
+  m_pendingOpaqueDraws.push_back(PendingOpaqueDraw{command.mesh, command.material, command.modelMatrix});
+  ++m_drawCalls;
+}
 
 void VulkanRenderBackend::DrawSkinnedMesh(const SkinnedMeshDrawCommand&) {}
 
