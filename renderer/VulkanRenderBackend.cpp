@@ -86,6 +86,8 @@ struct VulkanRenderBackend::Context {
   VkRenderPass opaqueRenderPass = VK_NULL_HANDLE;
   VkPipelineLayout opaquePipelineLayout = VK_NULL_HANDLE;
   VkPipelineCache opaquePipelineCache = VK_NULL_HANDLE;
+  std::array<std::string, 2> opaqueShaderEntryNames = {"main", "main"};
+  std::array<VkPipelineShaderStageCreateInfo, 2> opaqueShaderStages{};
   bool opaqueShaderPipelineScaffoldReady = false;
   bool opaqueGraphicsPipelineScaffoldReady = false;
   std::vector<VkImage> swapchainImages;
@@ -633,14 +635,37 @@ void VulkanRenderBackend::DestroyOpaquePipelineCreationScaffold() {
 }
 
 bool VulkanRenderBackend::CreateOpaqueShaderPipelineScaffold() {
-  m_context->opaqueShaderPipelineScaffoldReady = m_context->opaquePipelineLayout != VK_NULL_HANDLE &&
-                                                 m_context->opaquePipelineCache != VK_NULL_HANDLE;
+  m_context->opaqueShaderStages[0] = VkPipelineShaderStageCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = VK_NULL_HANDLE,
+      .pName = m_context->opaqueShaderEntryNames[0].c_str(),
+      .pSpecializationInfo = nullptr,
+  };
+  m_context->opaqueShaderStages[1] = VkPipelineShaderStageCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = VK_NULL_HANDLE,
+      .pName = m_context->opaqueShaderEntryNames[1].c_str(),
+      .pSpecializationInfo = nullptr,
+  };
+
+  m_context->opaqueShaderPipelineScaffoldReady =
+      m_context->opaquePipelineLayout != VK_NULL_HANDLE &&
+      m_context->opaquePipelineCache != VK_NULL_HANDLE &&
+      m_context->opaqueShaderStages[0].pName != nullptr &&
+      m_context->opaqueShaderStages[1].pName != nullptr;
   return m_context->opaqueShaderPipelineScaffoldReady;
 }
 
 void VulkanRenderBackend::DestroyOpaqueShaderPipelineScaffold() {
   if (!m_context)
     return;
+  m_context->opaqueShaderStages = {};
   m_context->opaqueShaderPipelineScaffoldReady = false;
 }
 
