@@ -36,7 +36,17 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
               .supportsGpuTimestamps = false,
               .supportsBindlessResources = false};
     case RenderBackendId::Vulkan:
-      return {};
+      return {.supportsDebugDraw = false,
+              .supportsWireframeOverlay = false,
+              .supportsDebugLabels = false,
+              .supportsOffscreenTargets = true,
+              .supportsNativeTextureHandles = true,
+              .supportsReadback = false,
+              .supportsDepthReadback = false,
+              .supportsDebugHud = false,
+              .supportsComputePasses = false,
+              .supportsGpuTimestamps = false,
+              .supportsBindlessResources = false};
   }
 
   return {};

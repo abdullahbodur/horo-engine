@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "renderer/IRenderBackend.h"
+#include "renderer/RenderTargetHandle.h"
 
 namespace Monolith
 {
@@ -30,6 +32,20 @@ namespace Monolith
     void DrawMesh(const MeshDrawCommand &command) override;
     void DrawSkinnedMesh(const SkinnedMeshDrawCommand &command) override;
     void DrawWireframe(const WireframeDrawCommand &command) override;
+    bool ReadbackColorBgr8(int width,
+                           int height,
+                           std::vector<uint8_t> &outPixels,
+                           std::string *outError) override;
+    bool ReadbackDepth32F(int width,
+                          int height,
+                          std::vector<float> &outDepth,
+                          std::string *outError) override;
+    bool EnsureEditorViewportRenderTarget(uint32_t width,
+                                          uint32_t height,
+                                          std::string *outError) override;
+    bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
+                                                bool needsYFlip,
+                                                std::string *outError) override;
 
     RenderBackendId GetBackendId() const override { return RenderBackendId::Vulkan; }
     RenderBackendCapabilities GetCapabilities() const override;
@@ -40,6 +56,7 @@ namespace Monolith
     bool HasOpaquePipelineCreationScaffold() const;
     bool HasOpaqueShaderPipelineScaffold() const;
     bool HasOpaqueGraphicsPipelineScaffold() const;
+    bool HasOpaqueDrawExecutionReady() const;
     bool TryGetImGuiVulkanInitData(void **outInstance,
                                    void **outPhysicalDevice,
                                    void **outDevice,
@@ -50,6 +67,25 @@ namespace Monolith
     void *GetActiveCommandBufferHandle() const;
     void QueueOverlayRenderCallback(OverlayRenderCallback callback, void *userData);
     const std::string &GetLastError() const { return m_lastError; }
+    int GetExecutedOpaqueIndexedDrawCount() const { return m_executedOpaqueIndexedDraws; }
+
+    struct OffscreenTargetMetadata
+    {
+      uint32_t width = 0;
+      uint32_t height = 0;
+      uint64_t generation = 0;
+      bool readyForSampling = false;
+      bool hasImGuiDescriptor = false;
+    };
+
+    bool EnsureOffscreenRenderTarget(const std::string &targetKey, uint32_t width, uint32_t height);
+    bool TryGetOffscreenRenderTargetHandle(const std::string &targetKey,
+                                           RenderTargetHandle *outHandle,
+                                           bool needsYFlip = false);
+    bool TryGetOffscreenRenderTargetMetadata(const std::string &targetKey,
+                                             OffscreenTargetMetadata *outMetadata) const;
+    void DestroyOffscreenRenderTarget(const std::string &targetKey);
+    void DestroyAllOffscreenRenderTargets();
 
     struct TranslatedMaterialState
     {
@@ -84,14 +120,36 @@ namespace Monolith
     void DestroyOpaqueRasterScaffold();
     bool CreateOpaquePipelineCreationScaffold();
     void DestroyOpaquePipelineCreationScaffold();
+    bool CreateDepthResources();
+    void DestroyDepthResources();
+    bool EnsureReadbackBuffers();
+    void DestroyReadbackBuffers();
+    bool CreateOpaqueMaterialBindingScaffold();
+    void DestroyOpaqueMaterialBindingScaffold();
+    bool CreateOpaqueDrawIndexBuffer();
+    void DestroyOpaqueDrawIndexBuffer();
+    bool EnsureOpaqueMeshGpuBuffers(const Mesh &mesh);
+    void DestroyOpaqueMeshGpuBuffers();
+    bool GetOrCreateOpaquePipeline(const OpaquePipelineKey &key, void **outPipelineHandle);
     bool CreateOpaqueShaderPipelineScaffold();
     void DestroyOpaqueShaderPipelineScaffold();
     bool CreateOpaqueGraphicsPipelineScaffold();
     void DestroyOpaqueGraphicsPipelineScaffold();
     bool RecordFrameCommands(const RenderFrameConfig &frame);
+    bool EnsureOffscreenRenderPass();
+    void DestroyOffscreenRenderPass();
+    bool CreateOffscreenRenderTargetResources(const std::string &targetKey,
+                                              uint32_t width,
+                                              uint32_t height,
+                                              uint64_t previousGeneration);
+    void DestroyOffscreenRenderTargetResources(const std::string &targetKey);
+    bool TryRegisterOffscreenTargetImGuiDescriptor(const std::string &targetKey,
+                                                   RenderTargetHandle *outHandle,
+                                                   bool needsYFlip);
 
     struct PendingOpaqueDraw
     {
+      const Mesh *mesh = nullptr;
       int indexCount = 0;
       Mat4 modelMatrix = Mat4::Identity();
       TranslatedMaterialState material;
@@ -107,6 +165,7 @@ namespace Monolith
     std::string m_lastError;
     RenderPassId m_activePassId = RenderPassId::OpaqueScene;
     int m_drawCalls = 0;
+    int m_executedOpaqueIndexedDraws = 0;
     bool m_frameActive = false;
     bool m_passActive = false;
   };
