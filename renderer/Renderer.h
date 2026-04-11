@@ -20,6 +20,7 @@ class Renderer {
   static RenderBackendId GetBackendId();
   static RenderBackendCapabilities GetBackendCapabilities();
   static bool IsBackendSupported(RenderBackendId backendId);
+  static IRenderBackend* GetBackendForInterop();
 
   // Test seam: temporarily override the active backend with an externally owned implementation.
   static void UseBackend(IRenderBackend* backend);

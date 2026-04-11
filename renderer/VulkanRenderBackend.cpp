@@ -254,6 +254,51 @@ namespace Monolith
     return HasOpaqueShaderPipelineScaffold() && m_context && m_context->opaqueGraphicsPipelineScaffoldReady;
   }
 
+  bool VulkanRenderBackend::TryGetImGuiVulkanInitData(void **outInstance,
+                                                      void **outPhysicalDevice,
+                                                      void **outDevice,
+                                                      uint32_t *outQueueFamily,
+                                                      void **outQueue,
+                                                      void **outRenderPass,
+                                                      uint32_t *outImageCount) const
+  {
+    if (!IsInitialized() || !m_context)
+      return false;
+
+    if (outInstance)
+      *outInstance = reinterpret_cast<void *>(m_context->instance);
+    if (outPhysicalDevice)
+      *outPhysicalDevice = reinterpret_cast<void *>(m_context->physicalDevice);
+    if (outDevice)
+      *outDevice = reinterpret_cast<void *>(m_context->device);
+    if (outQueueFamily)
+      *outQueueFamily = m_context->graphicsQueueFamily;
+    if (outQueue)
+      *outQueue = reinterpret_cast<void *>(m_context->graphicsQueue);
+    if (outRenderPass)
+      *outRenderPass = reinterpret_cast<void *>(m_context->opaqueRenderPass);
+    if (outImageCount)
+      *outImageCount = static_cast<uint32_t>(m_context->swapchainImages.size());
+
+    return m_context->instance != VK_NULL_HANDLE &&
+           m_context->physicalDevice != VK_NULL_HANDLE &&
+           m_context->device != VK_NULL_HANDLE &&
+           m_context->graphicsQueue != VK_NULL_HANDLE &&
+           m_context->opaqueRenderPass != VK_NULL_HANDLE &&
+           !m_context->swapchainImages.empty();
+  }
+
+  void *VulkanRenderBackend::GetActiveCommandBufferHandle() const
+  {
+    if (!m_context || m_context->commandBuffers.empty() ||
+        m_context->activeImageIndex >= m_context->commandBuffers.size())
+    {
+      return nullptr;
+    }
+
+    return reinterpret_cast<void *>(m_context->commandBuffers[m_context->activeImageIndex]);
+  }
+
   bool VulkanRenderBackend::Initialize(void *nativeWindowHandle)
   {
     m_lastError.clear();
@@ -1489,6 +1534,22 @@ namespace Monolith
   bool VulkanRenderBackend::IsInitialized() const
   {
     return false;
+  }
+
+  bool VulkanRenderBackend::TryGetImGuiVulkanInitData(void **,
+                                                      void **,
+                                                      void **,
+                                                      uint32_t *,
+                                                      void **,
+                                                      void **,
+                                                      uint32_t *) const
+  {
+    return false;
+  }
+
+  void *VulkanRenderBackend::GetActiveCommandBufferHandle() const
+  {
+    return nullptr;
   }
 
   bool VulkanRenderBackend::Initialize(void *)

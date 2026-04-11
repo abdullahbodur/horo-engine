@@ -1,11 +1,70 @@
 #include "editor/EditorImGuiBackend.h"
 
+#include <algorithm>
+
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include "renderer/Renderer.h"
+#include "renderer/VulkanRenderBackend.h"
+
+#if defined(MONOLITH_HAS_VULKAN)
+#include <imgui_impl_vulkan.h>
+#endif
+
 namespace Monolith::Editor {
+
+namespace {
+
+#if defined(MONOLITH_HAS_VULKAN)
+struct VulkanImGuiState {
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  bool initialized = false;
+};
+
+VulkanImGuiState g_vulkanImGuiState;
+
+VkDescriptorPool CreateVulkanImGuiDescriptorPool(VkDevice device) {
+  const VkDescriptorPoolSize poolSizes[] = {
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 64},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 512},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 64},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 64},
+      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 64},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 128},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 128},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 64},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 64},
+      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 64},
+  };
+
+  const VkDescriptorPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+      .maxSets = 512,
+      .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
+      .pPoolSizes = poolSizes,
+  };
+
+  VkDescriptorPool pool = VK_NULL_HANDLE;
+  if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &pool) != VK_SUCCESS)
+    return VK_NULL_HANDLE;
+  return pool;
+}
+
+void DestroyVulkanImGuiDescriptorPool(VkDevice device) {
+  if (device == VK_NULL_HANDLE || g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE)
+    return;
+  vkDestroyDescriptorPool(device, g_vulkanImGuiState.descriptorPool, nullptr);
+  g_vulkanImGuiState.descriptorPool = VK_NULL_HANDLE;
+}
+#endif
+
+}  // namespace
 
 bool IsSupportedEditorImGuiBackend(RenderBackendId backendId) {
   switch (backendId) {
@@ -13,7 +72,11 @@ bool IsSupportedEditorImGuiBackend(RenderBackendId backendId) {
     case RenderBackendId::OpenGL:
       return true;
     case RenderBackendId::Vulkan:
+#if defined(MONOLITH_HAS_VULKAN)
+      return true;
+#else
       return false;
+#endif
   }
 
   return false;
@@ -23,32 +86,165 @@ bool InitEditorImGuiBackend(GLFWwindow* window, RenderBackendId backendId) {
   if (!window || !IsSupportedEditorImGuiBackend(backendId))
     return false;
 
-  ImGui_ImplGlfw_InitForOpenGL(window, true);
-  ImGui_ImplOpenGL3_Init("#version 410");
-  return true;
+  switch (backendId) {
+    case RenderBackendId::Auto:
+    case RenderBackendId::OpenGL:
+      ImGui_ImplGlfw_InitForOpenGL(window, true);
+      ImGui_ImplOpenGL3_Init("#version 410");
+      return true;
+    case RenderBackendId::Vulkan: {
+#if defined(MONOLITH_HAS_VULKAN)
+      auto* backend = dynamic_cast<VulkanRenderBackend*>(Renderer::GetBackendForInterop());
+      if (!backend)
+        return false;
+
+      void* instanceHandle = nullptr;
+      void* physicalDeviceHandle = nullptr;
+      void* deviceHandle = nullptr;
+      void* queueHandle = nullptr;
+      void* renderPassHandle = nullptr;
+      uint32_t queueFamily = 0;
+      uint32_t imageCount = 0;
+      if (!backend->TryGetImGuiVulkanInitData(&instanceHandle,
+                                              &physicalDeviceHandle,
+                                              &deviceHandle,
+                                              &queueFamily,
+                                              &queueHandle,
+                                              &renderPassHandle,
+                                              &imageCount)) {
+        return false;
+      }
+
+      const VkDevice device = reinterpret_cast<VkDevice>(deviceHandle);
+      if (g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE) {
+        g_vulkanImGuiState.descriptorPool = CreateVulkanImGuiDescriptorPool(device);
+      }
+      if (g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE)
+        return false;
+
+      if (!ImGui_ImplGlfw_InitForVulkan(window, true)) {
+        DestroyVulkanImGuiDescriptorPool(device);
+        return false;
+      }
+
+      ImGui_ImplVulkan_InitInfo initInfo{};
+      initInfo.Instance = reinterpret_cast<VkInstance>(instanceHandle);
+      initInfo.PhysicalDevice = reinterpret_cast<VkPhysicalDevice>(physicalDeviceHandle);
+      initInfo.Device = device;
+      initInfo.QueueFamily = queueFamily;
+      initInfo.Queue = reinterpret_cast<VkQueue>(queueHandle);
+      initInfo.DescriptorPool = g_vulkanImGuiState.descriptorPool;
+      initInfo.RenderPass = reinterpret_cast<VkRenderPass>(renderPassHandle);
+      initInfo.MinImageCount = std::max(2u, imageCount);
+      initInfo.ImageCount = std::max(2u, imageCount);
+      initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+      initInfo.Subpass = 0;
+      initInfo.UseDynamicRendering = false;
+
+      if (!ImGui_ImplVulkan_Init(&initInfo)) {
+        ImGui_ImplGlfw_Shutdown();
+        DestroyVulkanImGuiDescriptorPool(device);
+        return false;
+      }
+
+      g_vulkanImGuiState.initialized = true;
+      return true;
+#else
+      return false;
+#endif
+    }
+  }
+
+  return false;
 }
 
 void ShutdownEditorImGuiBackend(RenderBackendId backendId) {
   if (!IsSupportedEditorImGuiBackend(backendId))
     return;
 
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
+  switch (backendId) {
+    case RenderBackendId::Auto:
+    case RenderBackendId::OpenGL:
+      ImGui_ImplOpenGL3_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+      return;
+    case RenderBackendId::Vulkan: {
+#if defined(MONOLITH_HAS_VULKAN)
+      if (!g_vulkanImGuiState.initialized)
+        return;
+
+      ImGui_ImplVulkan_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+      g_vulkanImGuiState.initialized = false;
+
+      auto* backend = dynamic_cast<VulkanRenderBackend*>(Renderer::GetBackendForInterop());
+      if (backend) {
+        void* deviceHandle = nullptr;
+        if (backend->TryGetImGuiVulkanInitData(nullptr,
+                                              nullptr,
+                                              &deviceHandle,
+                                              nullptr,
+                                              nullptr,
+                                              nullptr,
+                                              nullptr)) {
+          DestroyVulkanImGuiDescriptorPool(reinterpret_cast<VkDevice>(deviceHandle));
+        }
+      }
+#endif
+      return;
+    }
+  }
 }
 
 void BeginEditorImGuiFrame(RenderBackendId backendId) {
   if (!IsSupportedEditorImGuiBackend(backendId))
     return;
 
-  ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
+  switch (backendId) {
+    case RenderBackendId::Auto:
+    case RenderBackendId::OpenGL:
+      ImGui_ImplOpenGL3_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+      return;
+    case RenderBackendId::Vulkan:
+#if defined(MONOLITH_HAS_VULKAN)
+      if (!g_vulkanImGuiState.initialized)
+        return;
+      ImGui_ImplVulkan_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+#endif
+      return;
+  }
 }
 
 void RenderEditorImGuiDrawData(RenderBackendId backendId, ImDrawData* drawData) {
   if (!IsSupportedEditorImGuiBackend(backendId) || !drawData)
     return;
 
-  ImGui_ImplOpenGL3_RenderDrawData(drawData);
+  switch (backendId) {
+    case RenderBackendId::Auto:
+    case RenderBackendId::OpenGL:
+      ImGui_ImplOpenGL3_RenderDrawData(drawData);
+      return;
+    case RenderBackendId::Vulkan:
+#if defined(MONOLITH_HAS_VULKAN)
+      if (!g_vulkanImGuiState.initialized)
+        return;
+
+      // Vulkan draw data submission requires an active recording command buffer.
+      if (!Renderer::IsPassActive())
+        return;
+
+      if (auto* backend = dynamic_cast<VulkanRenderBackend*>(Renderer::GetBackendForInterop())) {
+        void* commandBufferHandle = backend->GetActiveCommandBufferHandle();
+        if (commandBufferHandle != nullptr) {
+          ImGui_ImplVulkan_RenderDrawData(drawData,
+                                          reinterpret_cast<VkCommandBuffer>(commandBufferHandle));
+        }
+      }
+#endif
+      return;
+  }
 }
 
 }  // namespace Monolith::Editor

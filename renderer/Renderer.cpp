@@ -64,6 +64,10 @@ RenderBackendCapabilities Renderer::GetBackendCapabilities() {
   return ActiveBackend()->GetCapabilities();
 }
 
+IRenderBackend* Renderer::GetBackendForInterop() {
+  return ActiveBackend();
+}
+
 bool Renderer::IsBackendSupported(RenderBackendId backendId) {
   return Monolith::IsRenderBackendSupported(backendId);
 }

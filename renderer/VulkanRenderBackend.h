@@ -36,6 +36,14 @@ class VulkanRenderBackend : public IRenderBackend {
   bool HasOpaquePipelineCreationScaffold() const;
   bool HasOpaqueShaderPipelineScaffold() const;
   bool HasOpaqueGraphicsPipelineScaffold() const;
+  bool TryGetImGuiVulkanInitData(void** outInstance,
+                                 void** outPhysicalDevice,
+                                 void** outDevice,
+                                 uint32_t* outQueueFamily,
+                                 void** outQueue,
+                                 void** outRenderPass,
+                                 uint32_t* outImageCount) const;
+  void* GetActiveCommandBufferHandle() const;
   const std::string& GetLastError() const { return m_lastError; }
 
   struct TranslatedMaterialState {

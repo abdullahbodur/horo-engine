@@ -220,11 +220,16 @@ TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]"
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorImGuiBackend: only OpenGL is supported in the current integration slice",
+TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
           "[editor][imgui][backend]") {
     REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
     REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
+
+#if defined(MONOLITH_HAS_VULKAN)
+    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
+#else
     REQUIRE_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
+#endif
 }
 
 TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {
