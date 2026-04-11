@@ -302,6 +302,22 @@ namespace Monolith
   void VulkanRenderBackend::QueueOverlayRenderCallback(OverlayRenderCallback callback,
                                                        void *userData)
   {
+    if (!m_frameActive)
+    {
+      m_pendingOverlayRenderCallback = nullptr;
+      m_pendingOverlayRenderUserData = nullptr;
+      m_lastError =
+          "Vulkan overlay render callbacks must be queued during an active frame.";
+      return;
+    }
+
+    if (!callback || !userData)
+    {
+      m_pendingOverlayRenderCallback = nullptr;
+      m_pendingOverlayRenderUserData = nullptr;
+      return;
+    }
+
     m_pendingOverlayRenderCallback = callback;
     m_pendingOverlayRenderUserData = userData;
   }

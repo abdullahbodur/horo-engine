@@ -452,13 +452,13 @@ TEST_CASE("Vulkan backend executes queued overlay callbacks while recording fram
 
   OverlayRenderProbe overlayProbe;
 
-  backend.BeginFrame({{}, "vulkan-overlay-baseline"});
-  backend.EndFrame();
-
-  // Editor integration may queue draw data after frame submission; backend
-  // should consume it on the next frame recording.
+  // Frame-external queueing should be ignored by the backend.
   backend.QueueOverlayRenderCallback(&CaptureOverlayRenderProbe, &overlayProbe);
+  REQUIRE_FALSE(overlayProbe.invoked);
+  REQUIRE(backend.GetLastError().find("active frame") != std::string::npos);
+
   backend.BeginFrame({{}, "vulkan-overlay-frame"});
+  backend.QueueOverlayRenderCallback(&CaptureOverlayRenderProbe, &overlayProbe);
   backend.EndFrame();
 
   REQUIRE(overlayProbe.invoked);
