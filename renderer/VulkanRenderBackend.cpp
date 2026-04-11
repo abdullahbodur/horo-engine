@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "core/Assert.h"
+#include "renderer/Material.h"
+#include "renderer/Mesh.h"
 
 #if defined(MONOLITH_HAS_VULKAN)
 #include <volk.h>
@@ -100,6 +102,22 @@ constexpr bool IsSupportedVulkanScenePass(const RenderPassId passId) {
 }
 
 }  // namespace
+
+VulkanRenderBackend::TranslatedMaterialState VulkanRenderBackend::TranslateMaterialState(
+    const Material& material) {
+  TranslatedMaterialState translated;
+  translated.baseColor = material.color;
+  translated.roughness = material.roughness;
+  translated.metallic = material.metallic;
+  translated.uvScale = material.uvScale;
+  translated.usesAlbedoMap = material.albedoMap && material.albedoMap->IsValid();
+  translated.usesCustomShader = material.shader && material.shader->IsValid();
+  return translated;
+}
+
+int VulkanRenderBackend::ResolveIndexCount(const Mesh& mesh) {
+  return mesh.GetIndexCount();
+}
 
 VulkanRenderBackend::VulkanRenderBackend(void* nativeWindowHandle) {
   Initialize(nativeWindowHandle);
@@ -784,7 +802,10 @@ void VulkanRenderBackend::DrawMesh(const MeshDrawCommand& command) {
   if (!m_passActive || !IsSupportedVulkanScenePass(m_activePassId) || !command.mesh || !command.material)
     return;
 
-  m_pendingOpaqueDraws.push_back(PendingOpaqueDraw{command.mesh, command.material, command.modelMatrix});
+  m_pendingOpaqueDraws.push_back(
+      PendingOpaqueDraw{ResolveIndexCount(*command.mesh),
+                        command.modelMatrix,
+                        TranslateMaterialState(*command.material)});
   ++m_drawCalls;
 }
 

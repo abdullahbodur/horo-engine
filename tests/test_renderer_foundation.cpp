@@ -16,6 +16,7 @@
 #include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderViewUtils.h"
+#include "renderer/VulkanRenderBackend.h"
 #include "scene/Registry.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
@@ -208,6 +209,27 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
 }
 
 #if defined(MONOLITH_HAS_VULKAN)
+TEST_CASE("Vulkan material translation snapshots backend-relevant material state",
+          "[renderer][foundation][vulkan][translation]") {
+  Material material;
+  material.color = {0.2f, 0.4f, 0.6f, 1.0f};
+  material.roughness = 0.25f;
+  material.metallic = 0.75f;
+  material.uvScale = 2.5f;
+  material.albedoMap = std::make_shared<Texture>();
+  material.shader = std::make_shared<Shader>();
+
+  const VulkanRenderBackend::TranslatedMaterialState translated =
+      VulkanRenderBackend::TranslateMaterialState(material);
+
+  REQUIRE(translated.baseColor == material.color);
+  REQUIRE(translated.roughness == Catch::Approx(material.roughness));
+  REQUIRE(translated.metallic == Catch::Approx(material.metallic));
+  REQUIRE(translated.uvScale == Catch::Approx(material.uvScale));
+  REQUIRE_FALSE(translated.usesAlbedoMap);
+  REQUIRE_FALSE(translated.usesCustomShader);
+}
+
 TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
           "[renderer][foundation][vulkan][opaque]") {
   if (!glfwInit())

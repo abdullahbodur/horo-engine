@@ -34,6 +34,18 @@ class VulkanRenderBackend : public IRenderBackend {
   bool IsInitialized() const;
   const std::string& GetLastError() const { return m_lastError; }
 
+  struct TranslatedMaterialState {
+    Vec4 baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+    float uvScale = 1.0f;
+    bool usesAlbedoMap = false;
+    bool usesCustomShader = false;
+  };
+
+  static TranslatedMaterialState TranslateMaterialState(const Material& material);
+  static int ResolveIndexCount(const Mesh& mesh);
+
  private:
   struct Context;
 
@@ -44,9 +56,9 @@ class VulkanRenderBackend : public IRenderBackend {
   bool RecordFrameCommands(const RenderFrameConfig& frame);
 
   struct PendingOpaqueDraw {
-    const Mesh* mesh = nullptr;
-    const Material* material = nullptr;
+    int indexCount = 0;
     Mat4 modelMatrix = Mat4::Identity();
+    TranslatedMaterialState material;
   };
 
   std::unique_ptr<Context> m_context;
