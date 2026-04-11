@@ -24,17 +24,29 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
     case RenderBackendId::Auto:
       return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
     case RenderBackendId::OpenGL:
-      return {.supportsWireframeOverlay = true,
+      return {.supportsDebugDraw = true,
+              .supportsWireframeOverlay = true,
               .supportsDebugLabels = false,
               .supportsOffscreenTargets = true,
               .supportsNativeTextureHandles = true,
               .supportsReadback = true,
+              .supportsDepthReadback = true,
               .supportsDebugHud = true,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,
               .supportsBindlessResources = false};
     case RenderBackendId::Vulkan:
-      return {};
+      return {.supportsDebugDraw = false,
+              .supportsWireframeOverlay = false,
+              .supportsDebugLabels = false,
+              .supportsOffscreenTargets = true,
+              .supportsNativeTextureHandles = true,
+              .supportsReadback = false,
+              .supportsDepthReadback = false,
+              .supportsDebugHud = false,
+              .supportsComputePasses = false,
+              .supportsGpuTimestamps = false,
+              .supportsBindlessResources = false};
   }
 
   return {};

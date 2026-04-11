@@ -8,6 +8,7 @@
 #include <cstring>
 #include <vector>
 
+#include "core/Logger.h"
 #include "input/Input.h"
 #include "renderer/Renderer.h"
 #include "input/KeyCodes.h"
@@ -1535,20 +1536,28 @@ void DebugHUD::Render() {
 
   // --- World-space object labels (independent of s_visible / s_settingsOpen) ---
   if (s_labelsVisible && s_labelCount > 0) {
-    if (s_occlusionCulling) {
-      int total = s_screenW * s_screenH;
-      s_depthBuf.resize(static_cast<std::vector<float>::size_type>(total));
-      glReadPixels(0, 0, s_screenW, s_screenH, GL_DEPTH_COMPONENT, GL_FLOAT, s_depthBuf.data());
+    if (s_occlusionCulling && Renderer::GetBackendCapabilities().supportsDepthReadback) {
+      std::string readbackError;
+      if (!Renderer::ReadbackDepth32F(s_screenW, s_screenH, s_depthBuf, &readbackError)) {
+        LOG_WARN("DebugHUD: depth readback failed (%s). Rendering labels without occlusion.",
+                 readbackError.c_str());
+        s_depthBuf.clear();
+      }
 
-      for (int i = 0; i < s_labelCount; ++i) {
-        int px = std::clamp(static_cast<int>(s_labels[i].x), 0, s_screenW - 1);
-        int py = std::clamp(s_screenH - 1 - static_cast<int>(s_labels[i].y), 0, s_screenH - 1);
-        float bufDepth =
-            s_depthBuf[static_cast<std::vector<float>::size_type>(py * s_screenW + px)];
-        float labelDepth = (s_labels[i].ndcZ + 1.0f) * 0.5f;
-        if (labelDepth > bufDepth + 0.005f)
-          continue;
-        DrawText(s_labels[i].text, s_labels[i].x, s_labels[i].y, 0.2f, 1.0f, 0.4f, 1.5f);
+      if (!s_depthBuf.empty()) {
+        for (int i = 0; i < s_labelCount; ++i) {
+          int px = std::clamp(static_cast<int>(s_labels[i].x), 0, s_screenW - 1);
+          int py = std::clamp(s_screenH - 1 - static_cast<int>(s_labels[i].y), 0, s_screenH - 1);
+          float bufDepth =
+              s_depthBuf[static_cast<std::vector<float>::size_type>(py * s_screenW + px)];
+          float labelDepth = (s_labels[i].ndcZ + 1.0f) * 0.5f;
+          if (labelDepth > bufDepth + 0.005f)
+            continue;
+          DrawText(s_labels[i].text, s_labels[i].x, s_labels[i].y, 0.2f, 1.0f, 0.4f, 1.5f);
+        }
+      } else {
+        for (int i = 0; i < s_labelCount; ++i)
+          DrawText(s_labels[i].text, s_labels[i].x, s_labels[i].y, 0.2f, 1.0f, 0.4f, 1.5f);
       }
     } else {
       for (int i = 0; i < s_labelCount; ++i)

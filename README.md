@@ -219,6 +219,8 @@ for (Entity e : registry.GetEntities<TransformComponent>()) { ... }
 
 The engine architecture guidance lives under [docs/architecture](./docs/architecture/README.md).
 
+Renderer/backend validation notes live under [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md).
+
 That doc set defines:
 - module boundaries and allowed dependencies
 - ownership and shutdown rules
