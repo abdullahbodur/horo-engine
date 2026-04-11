@@ -24,6 +24,7 @@ namespace Monolith::Editor
     struct VulkanImGuiState
     {
       VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+      VkRenderPass renderPass = VK_NULL_HANDLE;
       bool initialized = false;
       uint32_t minImageCount = 0;
     };
@@ -77,6 +78,52 @@ namespace Monolith::Editor
       ImGui_ImplVulkan_RenderDrawData(reinterpret_cast<ImDrawData *>(userData),
                                       reinterpret_cast<VkCommandBuffer>(commandBufferHandle));
     }
+
+    bool TryBuildVulkanImGuiInitInfo(VulkanRenderBackend *backend,
+                                     ImGui_ImplVulkan_InitInfo *outInitInfo,
+                                     uint32_t *outMinImageCount,
+                                     VkRenderPass *outRenderPass)
+    {
+      if (!backend || !outInitInfo || !outMinImageCount || !outRenderPass)
+        return false;
+
+      void *instanceHandle = nullptr;
+      void *physicalDeviceHandle = nullptr;
+      void *deviceHandle = nullptr;
+      void *queueHandle = nullptr;
+      void *renderPassHandle = nullptr;
+      uint32_t queueFamily = 0;
+      uint32_t imageCount = 0;
+      if (!backend->TryGetImGuiVulkanInitData(&instanceHandle,
+                                              &physicalDeviceHandle,
+                                              &deviceHandle,
+                                              &queueFamily,
+                                              &queueHandle,
+                                              &renderPassHandle,
+                                              &imageCount))
+      {
+        return false;
+      }
+
+      ImGui_ImplVulkan_InitInfo initInfo{};
+      initInfo.Instance = reinterpret_cast<VkInstance>(instanceHandle);
+      initInfo.PhysicalDevice = reinterpret_cast<VkPhysicalDevice>(physicalDeviceHandle);
+      initInfo.Device = reinterpret_cast<VkDevice>(deviceHandle);
+      initInfo.QueueFamily = queueFamily;
+      initInfo.Queue = reinterpret_cast<VkQueue>(queueHandle);
+      initInfo.DescriptorPool = g_vulkanImGuiState.descriptorPool;
+      initInfo.RenderPass = reinterpret_cast<VkRenderPass>(renderPassHandle);
+      initInfo.MinImageCount = std::max(2u, imageCount);
+      initInfo.ImageCount = std::max(2u, imageCount);
+      initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+      initInfo.Subpass = 0;
+      initInfo.UseDynamicRendering = false;
+
+      *outInitInfo = initInfo;
+      *outMinImageCount = initInfo.MinImageCount;
+      *outRenderPass = initInfo.RenderPass;
+      return true;
+    }
 #endif
 
   } // namespace
@@ -118,25 +165,13 @@ namespace Monolith::Editor
       if (!backend)
         return false;
 
-      void *instanceHandle = nullptr;
-      void *physicalDeviceHandle = nullptr;
-      void *deviceHandle = nullptr;
-      void *queueHandle = nullptr;
-      void *renderPassHandle = nullptr;
-      uint32_t queueFamily = 0;
-      uint32_t imageCount = 0;
-      if (!backend->TryGetImGuiVulkanInitData(&instanceHandle,
-                                              &physicalDeviceHandle,
-                                              &deviceHandle,
-                                              &queueFamily,
-                                              &queueHandle,
-                                              &renderPassHandle,
-                                              &imageCount))
-      {
+      ImGui_ImplVulkan_InitInfo initInfo{};
+      uint32_t minImageCount = 0;
+      VkRenderPass renderPass = VK_NULL_HANDLE;
+      if (!TryBuildVulkanImGuiInitInfo(backend, &initInfo, &minImageCount, &renderPass))
         return false;
-      }
 
-      const VkDevice device = reinterpret_cast<VkDevice>(deviceHandle);
+      const VkDevice device = initInfo.Device;
       if (g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE)
       {
         g_vulkanImGuiState.descriptorPool = CreateVulkanImGuiDescriptorPool(device);
@@ -144,25 +179,14 @@ namespace Monolith::Editor
       if (g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE)
         return false;
 
+      if (!TryBuildVulkanImGuiInitInfo(backend, &initInfo, &minImageCount, &renderPass))
+        return false;
+
       if (!ImGui_ImplGlfw_InitForVulkan(window, true))
       {
         DestroyVulkanImGuiDescriptorPool(device);
         return false;
       }
-
-      ImGui_ImplVulkan_InitInfo initInfo{};
-      initInfo.Instance = reinterpret_cast<VkInstance>(instanceHandle);
-      initInfo.PhysicalDevice = reinterpret_cast<VkPhysicalDevice>(physicalDeviceHandle);
-      initInfo.Device = device;
-      initInfo.QueueFamily = queueFamily;
-      initInfo.Queue = reinterpret_cast<VkQueue>(queueHandle);
-      initInfo.DescriptorPool = g_vulkanImGuiState.descriptorPool;
-      initInfo.RenderPass = reinterpret_cast<VkRenderPass>(renderPassHandle);
-      initInfo.MinImageCount = std::max(2u, imageCount);
-      initInfo.ImageCount = std::max(2u, imageCount);
-      initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-      initInfo.Subpass = 0;
-      initInfo.UseDynamicRendering = false;
 
       if (!ImGui_ImplVulkan_Init(&initInfo))
       {
@@ -172,7 +196,8 @@ namespace Monolith::Editor
       }
 
       g_vulkanImGuiState.initialized = true;
-      g_vulkanImGuiState.minImageCount = initInfo.MinImageCount;
+  g_vulkanImGuiState.minImageCount = minImageCount;
+  g_vulkanImGuiState.renderPass = renderPass;
       return true;
 #else
       return false;
@@ -205,6 +230,7 @@ namespace Monolith::Editor
       ImGui_ImplGlfw_Shutdown();
       g_vulkanImGuiState.initialized = false;
       g_vulkanImGuiState.minImageCount = 0;
+      g_vulkanImGuiState.renderPass = VK_NULL_HANDLE;
 
       auto *backend = dynamic_cast<VulkanRenderBackend *>(Renderer::GetBackendForInterop());
       if (backend)
@@ -246,21 +272,29 @@ namespace Monolith::Editor
 
       if (auto *backend = dynamic_cast<VulkanRenderBackend *>(Renderer::GetBackendForInterop()))
       {
-        uint32_t imageCount = 0;
-        if (backend->TryGetImGuiVulkanInitData(nullptr,
-                                               nullptr,
-                                               nullptr,
-                                               nullptr,
-                                               nullptr,
-                                               nullptr,
-                                               &imageCount))
+        ImGui_ImplVulkan_InitInfo initInfo{};
+        uint32_t minImageCount = 0;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
+        if (!TryBuildVulkanImGuiInitInfo(backend, &initInfo, &minImageCount, &renderPass))
+          return;
+
+        if (renderPass != g_vulkanImGuiState.renderPass)
         {
-          const uint32_t minImageCount = std::max(2u, imageCount);
-          if (minImageCount != g_vulkanImGuiState.minImageCount)
+          ImGui_ImplVulkan_Shutdown();
+          if (!ImGui_ImplVulkan_Init(&initInfo))
           {
-            ImGui_ImplVulkan_SetMinImageCount(minImageCount);
-            g_vulkanImGuiState.minImageCount = minImageCount;
+            g_vulkanImGuiState.initialized = false;
+            g_vulkanImGuiState.minImageCount = 0;
+            g_vulkanImGuiState.renderPass = VK_NULL_HANDLE;
+            return;
           }
+          g_vulkanImGuiState.renderPass = renderPass;
+          g_vulkanImGuiState.minImageCount = minImageCount;
+        }
+        else if (minImageCount != g_vulkanImGuiState.minImageCount)
+        {
+          ImGui_ImplVulkan_SetMinImageCount(minImageCount);
+          g_vulkanImGuiState.minImageCount = minImageCount;
         }
       }
 
@@ -285,6 +319,8 @@ namespace Monolith::Editor
     case RenderBackendId::Vulkan:
 #if defined(MONOLITH_HAS_VULKAN)
       if (!g_vulkanImGuiState.initialized)
+        return;
+      if (!Renderer::IsFrameActive())
         return;
       if (auto *backend = dynamic_cast<VulkanRenderBackend *>(Renderer::GetBackendForInterop()))
       {
