@@ -268,6 +268,7 @@ TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a
   REQUIRE(backend.HasOpaqueRasterScaffold());
   REQUIRE(backend.HasOpaquePipelineCreationScaffold());
   REQUIRE(backend.HasOpaqueShaderPipelineScaffold());
+  REQUIRE(backend.HasOpaqueGraphicsPipelineScaffold());
 
   glfwDestroyWindow(window);
   glfwTerminate();

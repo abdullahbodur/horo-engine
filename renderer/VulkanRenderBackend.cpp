@@ -87,6 +87,7 @@ struct VulkanRenderBackend::Context {
   VkPipelineLayout opaquePipelineLayout = VK_NULL_HANDLE;
   VkPipelineCache opaquePipelineCache = VK_NULL_HANDLE;
   bool opaqueShaderPipelineScaffoldReady = false;
+  bool opaqueGraphicsPipelineScaffoldReady = false;
   std::vector<VkImage> swapchainImages;
   std::vector<VkImageView> swapchainImageViews;
   std::vector<VkFramebuffer> opaqueFramebuffers;
@@ -174,6 +175,10 @@ bool VulkanRenderBackend::HasOpaquePipelineCreationScaffold() const {
 
 bool VulkanRenderBackend::HasOpaqueShaderPipelineScaffold() const {
   return HasOpaquePipelineCreationScaffold() && m_context && m_context->opaqueShaderPipelineScaffoldReady;
+}
+
+bool VulkanRenderBackend::HasOpaqueGraphicsPipelineScaffold() const {
+  return HasOpaqueShaderPipelineScaffold() && m_context && m_context->opaqueGraphicsPipelineScaffoldReady;
 }
 
 bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
@@ -434,6 +439,11 @@ bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
     return false;
   }
 
+  if (!CreateOpaqueGraphicsPipelineScaffold()) {
+    Shutdown();
+    return false;
+  }
+
   return true;
 }
 
@@ -446,6 +456,7 @@ void VulkanRenderBackend::Shutdown() {
 
   DestroySwapchain();
 
+  DestroyOpaqueGraphicsPipelineScaffold();
   DestroyOpaqueShaderPipelineScaffold();
   DestroyOpaquePipelineCreationScaffold();
 
@@ -631,6 +642,21 @@ void VulkanRenderBackend::DestroyOpaqueShaderPipelineScaffold() {
   if (!m_context)
     return;
   m_context->opaqueShaderPipelineScaffoldReady = false;
+}
+
+bool VulkanRenderBackend::CreateOpaqueGraphicsPipelineScaffold() {
+  m_context->opaqueGraphicsPipelineScaffoldReady =
+      m_context->opaqueShaderPipelineScaffoldReady && m_context->opaqueRenderPass != VK_NULL_HANDLE;
+  if (!m_context->opaqueGraphicsPipelineScaffoldReady) {
+    m_lastError = "Opaque graphics pipeline scaffold prerequisites are incomplete.";
+  }
+  return m_context->opaqueGraphicsPipelineScaffoldReady;
+}
+
+void VulkanRenderBackend::DestroyOpaqueGraphicsPipelineScaffold() {
+  if (!m_context)
+    return;
+  m_context->opaqueGraphicsPipelineScaffoldReady = false;
 }
 
 bool VulkanRenderBackend::RecreateSwapchain() {

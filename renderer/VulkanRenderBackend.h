@@ -35,6 +35,7 @@ class VulkanRenderBackend : public IRenderBackend {
   bool HasOpaqueRasterScaffold() const;
   bool HasOpaquePipelineCreationScaffold() const;
   bool HasOpaqueShaderPipelineScaffold() const;
+  bool HasOpaqueGraphicsPipelineScaffold() const;
   const std::string& GetLastError() const { return m_lastError; }
 
   struct TranslatedMaterialState {
@@ -70,6 +71,8 @@ class VulkanRenderBackend : public IRenderBackend {
   void DestroyOpaquePipelineCreationScaffold();
   bool CreateOpaqueShaderPipelineScaffold();
   void DestroyOpaqueShaderPipelineScaffold();
+  bool CreateOpaqueGraphicsPipelineScaffold();
+  void DestroyOpaqueGraphicsPipelineScaffold();
   bool RecordFrameCommands(const RenderFrameConfig& frame);
 
   struct PendingOpaqueDraw {
