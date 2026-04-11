@@ -85,6 +85,7 @@ struct VulkanRenderBackend::Context {
   VkExtent2D swapchainExtent = {1, 1};
   VkRenderPass opaqueRenderPass = VK_NULL_HANDLE;
   VkPipelineLayout opaquePipelineLayout = VK_NULL_HANDLE;
+  VkPipelineCache opaquePipelineCache = VK_NULL_HANDLE;
   std::vector<VkImage> swapchainImages;
   std::vector<VkImageView> swapchainImageViews;
   std::vector<VkFramebuffer> opaqueFramebuffers;
@@ -164,6 +165,10 @@ bool VulkanRenderBackend::HasOpaqueRasterScaffold() const {
          m_context->opaquePipelineLayout != VK_NULL_HANDLE &&
          m_context->opaqueFramebuffers.size() == m_context->swapchainImageViews.size() &&
          !m_context->opaqueFramebuffers.empty();
+}
+
+bool VulkanRenderBackend::HasOpaquePipelineCreationScaffold() const {
+  return HasOpaqueRasterScaffold() && m_context && m_context->opaquePipelineCache != VK_NULL_HANDLE;
 }
 
 bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
@@ -409,6 +414,11 @@ bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
     return false;
   }
 
+  if (!CreateOpaquePipelineCreationScaffold()) {
+    Shutdown();
+    return false;
+  }
+
   if (!RecreateSwapchain()) {
     Shutdown();
     return false;
@@ -425,6 +435,8 @@ void VulkanRenderBackend::Shutdown() {
     vkDeviceWaitIdle(m_context->device);
 
   DestroySwapchain();
+
+  DestroyOpaquePipelineCreationScaffold();
 
   if (m_context->opaquePipelineLayout != VK_NULL_HANDLE)
     vkDestroyPipelineLayout(m_context->device, m_context->opaquePipelineLayout, nullptr);
@@ -569,6 +581,32 @@ void VulkanRenderBackend::DestroyOpaqueRasterScaffold() {
   if (m_context->opaqueRenderPass != VK_NULL_HANDLE) {
     vkDestroyRenderPass(m_context->device, m_context->opaqueRenderPass, nullptr);
     m_context->opaqueRenderPass = VK_NULL_HANDLE;
+  }
+}
+
+bool VulkanRenderBackend::CreateOpaquePipelineCreationScaffold() {
+  const VkPipelineCacheCreateInfo pipelineCacheInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .initialDataSize = 0,
+      .pInitialData = nullptr,
+  };
+  return CheckVk(vkCreatePipelineCache(m_context->device,
+                                       &pipelineCacheInfo,
+                                       nullptr,
+                                       &m_context->opaquePipelineCache),
+                 m_lastError,
+                 "vkCreatePipelineCache");
+}
+
+void VulkanRenderBackend::DestroyOpaquePipelineCreationScaffold() {
+  if (!m_context || m_context->device == VK_NULL_HANDLE)
+    return;
+
+  if (m_context->opaquePipelineCache != VK_NULL_HANDLE) {
+    vkDestroyPipelineCache(m_context->device, m_context->opaquePipelineCache, nullptr);
+    m_context->opaquePipelineCache = VK_NULL_HANDLE;
   }
 }
 
