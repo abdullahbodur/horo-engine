@@ -83,8 +83,11 @@ struct VulkanRenderBackend::Context {
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   VkFormat swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
   VkExtent2D swapchainExtent = {1, 1};
+  VkRenderPass opaqueRenderPass = VK_NULL_HANDLE;
+  VkPipelineLayout opaquePipelineLayout = VK_NULL_HANDLE;
   std::vector<VkImage> swapchainImages;
   std::vector<VkImageView> swapchainImageViews;
+  std::vector<VkFramebuffer> opaqueFramebuffers;
   std::vector<VkCommandBuffer> commandBuffers;
   std::vector<bool> imageWasPresented;
   VkCommandPool commandPool = VK_NULL_HANDLE;
@@ -154,6 +157,13 @@ RenderBackendCapabilities VulkanRenderBackend::GetCapabilities() const {
 
 bool VulkanRenderBackend::IsInitialized() const {
   return m_context && m_context->device != VK_NULL_HANDLE && m_context->swapchain != VK_NULL_HANDLE;
+}
+
+bool VulkanRenderBackend::HasOpaqueRasterScaffold() const {
+  return m_context && m_context->opaqueRenderPass != VK_NULL_HANDLE &&
+         m_context->opaquePipelineLayout != VK_NULL_HANDLE &&
+         m_context->opaqueFramebuffers.size() == m_context->swapchainImageViews.size() &&
+         !m_context->opaqueFramebuffers.empty();
 }
 
 bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
@@ -380,6 +390,25 @@ bool VulkanRenderBackend::Initialize(void* nativeWindowHandle) {
     return false;
   }
 
+  const VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .setLayoutCount = 0,
+      .pSetLayouts = nullptr,
+      .pushConstantRangeCount = 0,
+      .pPushConstantRanges = nullptr,
+  };
+  if (!CheckVk(vkCreatePipelineLayout(m_context->device,
+                                      &pipelineLayoutInfo,
+                                      nullptr,
+                                      &m_context->opaquePipelineLayout),
+               m_lastError,
+               "vkCreatePipelineLayout")) {
+    Shutdown();
+    return false;
+  }
+
   if (!RecreateSwapchain()) {
     Shutdown();
     return false;
@@ -396,6 +425,9 @@ void VulkanRenderBackend::Shutdown() {
     vkDeviceWaitIdle(m_context->device);
 
   DestroySwapchain();
+
+  if (m_context->opaquePipelineLayout != VK_NULL_HANDLE)
+    vkDestroyPipelineLayout(m_context->device, m_context->opaquePipelineLayout, nullptr);
 
   if (m_context->inFlightFence != VK_NULL_HANDLE)
     vkDestroyFence(m_context->device, m_context->inFlightFence, nullptr);
@@ -421,6 +453,8 @@ void VulkanRenderBackend::DestroySwapchain() {
   if (!m_context || m_context->device == VK_NULL_HANDLE)
     return;
 
+  DestroyOpaqueRasterScaffold();
+
   if (!m_context->commandBuffers.empty()) {
     vkFreeCommandBuffers(m_context->device,
                          m_context->commandPool,
@@ -438,6 +472,103 @@ void VulkanRenderBackend::DestroySwapchain() {
   if (m_context->swapchain != VK_NULL_HANDLE) {
     vkDestroySwapchainKHR(m_context->device, m_context->swapchain, nullptr);
     m_context->swapchain = VK_NULL_HANDLE;
+  }
+}
+
+bool VulkanRenderBackend::CreateOpaqueRasterScaffold() {
+  const VkAttachmentDescription colorAttachment{
+      .flags = 0,
+      .format = m_context->swapchainFormat,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
+  const VkAttachmentReference colorAttachmentRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  const VkSubpassDescription subpass{
+      .flags = 0,
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .inputAttachmentCount = 0,
+      .pInputAttachments = nullptr,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &colorAttachmentRef,
+      .pResolveAttachments = nullptr,
+      .pDepthStencilAttachment = nullptr,
+      .preserveAttachmentCount = 0,
+      .pPreserveAttachments = nullptr,
+  };
+  const VkSubpassDependency dependency{
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+      .dependencyFlags = 0,
+  };
+  const VkRenderPassCreateInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .attachmentCount = 1,
+      .pAttachments = &colorAttachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 1,
+      .pDependencies = &dependency,
+  };
+  if (!CheckVk(vkCreateRenderPass(m_context->device,
+                                  &renderPassInfo,
+                                  nullptr,
+                                  &m_context->opaqueRenderPass),
+               m_lastError,
+               "vkCreateRenderPass")) {
+    return false;
+  }
+
+  m_context->opaqueFramebuffers.resize(m_context->swapchainImageViews.size());
+  for (size_t i = 0; i < m_context->swapchainImageViews.size(); ++i) {
+    const VkImageView attachment = m_context->swapchainImageViews[i];
+    const VkFramebufferCreateInfo framebufferInfo{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .renderPass = m_context->opaqueRenderPass,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .width = m_context->swapchainExtent.width,
+        .height = m_context->swapchainExtent.height,
+        .layers = 1,
+    };
+    if (!CheckVk(vkCreateFramebuffer(m_context->device,
+                                     &framebufferInfo,
+                                     nullptr,
+                                     &m_context->opaqueFramebuffers[i]),
+                 m_lastError,
+                 "vkCreateFramebuffer")) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void VulkanRenderBackend::DestroyOpaqueRasterScaffold() {
+  if (!m_context || m_context->device == VK_NULL_HANDLE)
+    return;
+
+  for (VkFramebuffer framebuffer : m_context->opaqueFramebuffers) {
+    if (framebuffer != VK_NULL_HANDLE)
+      vkDestroyFramebuffer(m_context->device, framebuffer, nullptr);
+  }
+  m_context->opaqueFramebuffers.clear();
+
+  if (m_context->opaqueRenderPass != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(m_context->device, m_context->opaqueRenderPass, nullptr);
+    m_context->opaqueRenderPass = VK_NULL_HANDLE;
   }
 }
 
@@ -594,6 +725,9 @@ bool VulkanRenderBackend::RecreateSwapchain() {
                "vkAllocateCommandBuffers")) {
     return false;
   }
+
+  if (!CreateOpaqueRasterScaffold())
+    return false;
 
   return true;
 }

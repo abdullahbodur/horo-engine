@@ -32,6 +32,7 @@ class VulkanRenderBackend : public IRenderBackend {
   int GetDrawCallCount() const override { return m_drawCalls; }
 
   bool IsInitialized() const;
+  bool HasOpaqueRasterScaffold() const;
   const std::string& GetLastError() const { return m_lastError; }
 
   struct TranslatedMaterialState {
@@ -61,6 +62,8 @@ class VulkanRenderBackend : public IRenderBackend {
   void Shutdown();
   bool RecreateSwapchain();
   void DestroySwapchain();
+  bool CreateOpaqueRasterScaffold();
+  void DestroyOpaqueRasterScaffold();
   bool RecordFrameCommands(const RenderFrameConfig& frame);
 
   struct PendingOpaqueDraw {

@@ -245,6 +245,32 @@ TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
   REQUIRE(key.depthTestEnabled);
 }
 
+TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a window",
+          "[renderer][foundation][vulkan][scaffold]") {
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported()) {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow* window = glfwCreateWindow(64, 64, "vulkan-scaffold-test", nullptr, nullptr);
+  if (!window) {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan raster scaffold test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+  REQUIRE(backend.HasOpaqueRasterScaffold());
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
 TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
           "[renderer][foundation][vulkan][opaque]") {
   if (!glfwInit())
