@@ -79,7 +79,7 @@ if(NOT TARGET imgui_lib)
     )
     FetchContent_MakeAvailable(imgui)
 
-    add_library(imgui_lib STATIC
+    set(MONOLITH_IMGUI_SOURCES
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -87,11 +87,25 @@ if(NOT TARGET imgui_lib)
         ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     )
+
+    if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        list(APPEND MONOLITH_IMGUI_SOURCES
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+        )
+    endif()
+
+    add_library(imgui_lib STATIC ${MONOLITH_IMGUI_SOURCES})
     target_include_directories(imgui_lib PUBLIC
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
     )
     target_link_libraries(imgui_lib PUBLIC glfw glad)
+
+    if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        target_compile_definitions(imgui_lib PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
+        target_link_libraries(imgui_lib PUBLIC monolith_volk monolith_vulkan_headers)
+    endif()
+
     # Suppress vendor warnings (MSVC -WX, GCC/Clang -Werror)
     target_compile_options(imgui_lib PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W0>
