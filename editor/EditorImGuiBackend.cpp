@@ -196,8 +196,8 @@ namespace Monolith::Editor
       }
 
       g_vulkanImGuiState.initialized = true;
-  g_vulkanImGuiState.minImageCount = minImageCount;
-  g_vulkanImGuiState.renderPass = renderPass;
+      g_vulkanImGuiState.minImageCount = minImageCount;
+      g_vulkanImGuiState.renderPass = renderPass;
       return true;
 #else
       return false;
