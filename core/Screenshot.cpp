@@ -1,7 +1,5 @@
 #include "core/Screenshot.h"
 
-#include <glad/glad.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -80,9 +78,12 @@ std::string Screenshot::Save(int w, int h, const std::string& folder) {
     return {};
   }
 
-  // Read framebuffer — GL_BGR so bytes land in BMP order directly
-  std::vector<uint8_t> pixels(static_cast<size_t>(w * h * 3));
-  glReadPixels(0, 0, w, h, GL_BGR, GL_UNSIGNED_BYTE, pixels.data());
+  std::vector<uint8_t> pixels;
+  std::string readbackError;
+  if (!Renderer::ReadbackColorBgr8(w, h, pixels, &readbackError)) {
+    LOG_ERROR("Screenshot: color readback failed (%s)", readbackError.c_str());
+    return {};
+  }
 
   // Build timestamped filename
   std::time_t now = std::time(nullptr);

@@ -11,7 +11,10 @@ These tests protect backend-neutral engine contracts and should remain green reg
   - frame/pass lifecycle invariants
   - capability reporting
   - unsupported backend request handling
-  - Vulkan bootstrap / opaque-scene submission smoke path when enabled
+  - Vulkan bootstrap / opaque-scene real indexed draw execution-or-diagnostics path when enabled
+  - Vulkan offscreen target lifecycle + handle metadata + resize generation validation
+  - Vulkan editor viewport target provisioning + per-frame stability + resize generation validation
+  - Vulkan color/depth readback capability-gated success/failure diagnostics
 - `test_architecture_docs`
   - architecture document discoverability
   - backend-boundary guardrails in higher-level code
@@ -41,7 +44,9 @@ These tests protect backend-neutral engine contracts and should remain green reg
   - real hidden-window bootstrap
   - swapchain init + clear + present
   - opaque-scene submission acceptance
+  - offscreen render-target create/resize/destroy metadata stability
 - `test_editor` validates seam behavior under unsupported editor/debug/readback capabilities
+  and keeps OpenGL-oriented editor behavior stable
 
 ## Required Validation Commands
 
@@ -68,6 +73,5 @@ ctest --test-dir build/debug-msvc-vulkan-tests -C Debug --output-on-failure -R "
 
 ## Known Gaps
 
-- Vulkan editor rendering is still seam-level, not full visual parity
-- debug HUD/readback behavior on Vulkan is currently fallback-only through capabilities
-- parity matrix coverage will expand again once editor rendering and readback implementations land
+- debug HUD parity on Vulkan remains capability-gated while richer tooling panels mature
+- broader Vulkan-enabled CI coverage remains branch/PR-local until hosted-runner stability is proven
