@@ -1535,7 +1535,7 @@ void DebugHUD::Render() {
 
   // --- World-space object labels (independent of s_visible / s_settingsOpen) ---
   if (s_labelsVisible && s_labelCount > 0) {
-    if (s_occlusionCulling) {
+    if (s_occlusionCulling && Renderer::GetBackendCapabilities().supportsDepthReadback) {
       int total = s_screenW * s_screenH;
       s_depthBuf.resize(static_cast<std::vector<float>::size_type>(total));
       glReadPixels(0, 0, s_screenW, s_screenH, GL_DEPTH_COMPONENT, GL_FLOAT, s_depthBuf.data());
