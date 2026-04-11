@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+#if defined(MONOLITH_HAS_VULKAN)
+#include <GLFW/glfw3.h>
+#endif
+
 #include "math/Mat4.h"
 #include "renderer/IRenderBackend.h"
 #include "renderer/Material.h"
@@ -167,6 +171,55 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
   REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
 #endif
 }
+
+#if defined(MONOLITH_HAS_VULKAN)
+TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
+          "[renderer][foundation][vulkan][opaque]") {
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported()) {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow* window = glfwCreateWindow(64, 64, "vulkan-test", nullptr, nullptr);
+  if (!window) {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan backend test");
+  }
+
+  RenderBackendSelection selection;
+  selection.requested = RenderBackendId::Vulkan;
+  selection.nativeWindowHandle = window;
+  const RenderBackendInitResult init = Renderer::InitializeBackend(selection);
+
+  if (!init.ok) {
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    FAIL(init.error);
+  }
+
+  Mesh mesh;
+  Material material;
+  Camera camera;
+
+  Renderer::BeginFrame({{}, "vulkan-opaque-scene"});
+  Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "vulkan-opaque-pass"});
+  Renderer::Submit(mesh, Mat4::Identity(), material);
+  Renderer::EndPass();
+  Renderer::EndFrame();
+
+  REQUIRE(Renderer::GetBackendId() == RenderBackendId::Vulkan);
+  REQUIRE(Renderer::GetDrawCallCount() == 1);
+
+  Renderer::ResetBackend();
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+#endif
 
 TEST_CASE("Renderer supports multiple explicit passes within a single frame",
           "[renderer][foundation]") {

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "renderer/IRenderBackend.h"
 
@@ -42,7 +43,16 @@ class VulkanRenderBackend : public IRenderBackend {
   void DestroySwapchain();
   bool RecordFrameCommands(const RenderFrameConfig& frame);
 
+  struct PendingOpaqueDraw {
+    const Mesh* mesh = nullptr;
+    const Material* material = nullptr;
+    Mat4 modelMatrix = Mat4::Identity();
+  };
+
   std::unique_ptr<Context> m_context;
+  RenderFrameConfig m_activeFrame;
+  RenderView m_activeView;
+  std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
   std::string m_lastError;
   RenderPassId m_activePassId = RenderPassId::OpaqueScene;
   int m_drawCalls = 0;
