@@ -62,6 +62,14 @@ void DestroyVulkanImGuiDescriptorPool(VkDevice device) {
   vkDestroyDescriptorPool(device, g_vulkanImGuiState.descriptorPool, nullptr);
   g_vulkanImGuiState.descriptorPool = VK_NULL_HANDLE;
 }
+
+void RenderVulkanImGuiDrawDataCallback(void* userData, void* commandBufferHandle) {
+  if (userData == nullptr || commandBufferHandle == nullptr)
+    return;
+
+  ImGui_ImplVulkan_RenderDrawData(reinterpret_cast<ImDrawData*>(userData),
+                                  reinterpret_cast<VkCommandBuffer>(commandBufferHandle));
+}
 #endif
 
 }  // namespace
@@ -230,17 +238,8 @@ void RenderEditorImGuiDrawData(RenderBackendId backendId, ImDrawData* drawData) 
 #if defined(MONOLITH_HAS_VULKAN)
       if (!g_vulkanImGuiState.initialized)
         return;
-
-      // Vulkan draw data submission requires an active recording command buffer.
-      if (!Renderer::IsPassActive())
-        return;
-
       if (auto* backend = dynamic_cast<VulkanRenderBackend*>(Renderer::GetBackendForInterop())) {
-        void* commandBufferHandle = backend->GetActiveCommandBufferHandle();
-        if (commandBufferHandle != nullptr) {
-          ImGui_ImplVulkan_RenderDrawData(drawData,
-                                          reinterpret_cast<VkCommandBuffer>(commandBufferHandle));
-        }
+        backend->QueueOverlayRenderCallback(&RenderVulkanImGuiDrawDataCallback, drawData);
       }
 #endif
       return;

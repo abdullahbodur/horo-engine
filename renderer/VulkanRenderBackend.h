@@ -10,6 +10,8 @@ namespace Monolith {
 
 class VulkanRenderBackend : public IRenderBackend {
  public:
+  using OverlayRenderCallback = void (*)(void* userData, void* commandBufferHandle);
+
   explicit VulkanRenderBackend(void* nativeWindowHandle);
   ~VulkanRenderBackend() override;
 
@@ -44,6 +46,7 @@ class VulkanRenderBackend : public IRenderBackend {
                                  void** outRenderPass,
                                  uint32_t* outImageCount) const;
   void* GetActiveCommandBufferHandle() const;
+  void QueueOverlayRenderCallback(OverlayRenderCallback callback, void* userData);
   const std::string& GetLastError() const { return m_lastError; }
 
   struct TranslatedMaterialState {
@@ -94,6 +97,8 @@ class VulkanRenderBackend : public IRenderBackend {
   RenderFrameConfig m_activeFrame;
   RenderView m_activeView;
   std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
+  OverlayRenderCallback m_pendingOverlayRenderCallback = nullptr;
+  void* m_pendingOverlayRenderUserData = nullptr;
   std::string m_lastError;
   RenderPassId m_activePassId = RenderPassId::OpaqueScene;
   int m_drawCalls = 0;

@@ -299,6 +299,13 @@ namespace Monolith
     return reinterpret_cast<void *>(m_context->commandBuffers[m_context->activeImageIndex]);
   }
 
+  void VulkanRenderBackend::QueueOverlayRenderCallback(OverlayRenderCallback callback,
+                                                       void *userData)
+  {
+    m_pendingOverlayRenderCallback = callback;
+    m_pendingOverlayRenderUserData = userData;
+  }
+
   bool VulkanRenderBackend::Initialize(void *nativeWindowHandle)
   {
     m_lastError.clear();
@@ -1219,6 +1226,7 @@ namespace Monolith
     }
 
     const bool hasQueuedOpaqueDraws = !m_pendingOpaqueDraws.empty();
+    const bool hasQueuedOverlayRender = m_pendingOverlayRenderCallback != nullptr;
     const bool hasExecutableOpaquePipeline =
         m_context->opaqueGraphicsPipelineExecutable &&
         m_context->opaqueGraphicsPipeline != VK_NULL_HANDLE;
@@ -1230,7 +1238,7 @@ namespace Monolith
           std::to_string(m_pendingOpaqueDraws.size());
     }
 
-    if (hasQueuedOpaqueDraws && hasExecutableOpaquePipeline)
+    if (hasQueuedOpaqueDraws || hasQueuedOverlayRender)
     {
       const VkImageMemoryBarrier toColorAttachment{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1281,15 +1289,24 @@ namespace Monolith
       const VkRect2D scissor{{0, 0}, m_context->swapchainExtent};
       vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
       vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-      vkCmdBindPipeline(commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        m_context->opaqueGraphicsPipeline);
-
-      for (const PendingOpaqueDraw &draw : m_pendingOpaqueDraws)
+      if (hasQueuedOpaqueDraws && hasExecutableOpaquePipeline)
       {
-        if (draw.indexCount <= 0)
-          continue;
-        vkCmdDraw(commandBuffer, 3u, 1u, 0u, 0u);
+        vkCmdBindPipeline(commandBuffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          m_context->opaqueGraphicsPipeline);
+
+        for (const PendingOpaqueDraw &draw : m_pendingOpaqueDraws)
+        {
+          if (draw.indexCount <= 0)
+            continue;
+          vkCmdDraw(commandBuffer, 3u, 1u, 0u, 0u);
+        }
+      }
+
+      if (hasQueuedOverlayRender)
+      {
+        m_pendingOverlayRenderCallback(m_pendingOverlayRenderUserData,
+                                       reinterpret_cast<void *>(commandBuffer));
       }
 
       vkCmdEndRenderPass(commandBuffer);
@@ -1473,6 +1490,8 @@ namespace Monolith
 
     m_frameActive = false;
     m_pendingOpaqueDraws.clear();
+    m_pendingOverlayRenderCallback = nullptr;
+    m_pendingOverlayRenderUserData = nullptr;
   }
 
   void VulkanRenderBackend::BeginPass(const RenderPassConfig &pass)
@@ -1551,6 +1570,8 @@ namespace Monolith
   {
     return nullptr;
   }
+
+  void VulkanRenderBackend::QueueOverlayRenderCallback(OverlayRenderCallback, void *) {}
 
   bool VulkanRenderBackend::Initialize(void *)
   {

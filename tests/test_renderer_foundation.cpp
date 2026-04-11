@@ -89,6 +89,23 @@ namespace
     int drawCalls = 0;
   };
 
+#if defined(MONOLITH_HAS_VULKAN)
+  struct OverlayRenderProbe
+  {
+    bool invoked = false;
+    void *commandBufferHandle = nullptr;
+  };
+
+  void CaptureOverlayRenderProbe(void *userData, void *commandBufferHandle)
+  {
+    if (!userData)
+      return;
+    auto *probe = static_cast<OverlayRenderProbe *>(userData);
+    probe->invoked = true;
+    probe->commandBufferHandle = commandBufferHandle;
+  }
+#endif
+
 } // namespace
 
 TEST_CASE("Renderer routes explicit frame and pass commands through backend seam",
@@ -383,6 +400,48 @@ TEST_CASE("Vulkan backend reports actionable diagnostics for scaffold-only opaqu
   REQUIRE(backend.GetDrawCallCount() == 1);
   REQUIRE(backend.GetLastError().find("draw submissions are queued") != std::string::npos);
   REQUIRE(backend.GetLastError().find("Pending draws: 1") != std::string::npos);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+TEST_CASE("Vulkan backend executes queued overlay callbacks while recording frame commands",
+          "[renderer][foundation][vulkan][overlay]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-overlay-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan overlay callback test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+
+  OverlayRenderProbe overlayProbe;
+
+  backend.BeginFrame({{}, "vulkan-overlay-baseline"});
+  backend.EndFrame();
+
+  // Editor integration may queue draw data after frame submission; backend
+  // should consume it on the next frame recording.
+  backend.QueueOverlayRenderCallback(&CaptureOverlayRenderProbe, &overlayProbe);
+  backend.BeginFrame({{}, "vulkan-overlay-frame"});
+  backend.EndFrame();
+
+  REQUIRE(overlayProbe.invoked);
+  REQUIRE(overlayProbe.commandBufferHandle != nullptr);
 
   glfwDestroyWindow(window);
   glfwTerminate();
