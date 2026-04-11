@@ -43,8 +43,16 @@ class VulkanRenderBackend : public IRenderBackend {
     bool usesCustomShader = false;
   };
 
+  struct OpaquePipelineKey {
+    bool usesAlbedoMap = false;
+    bool usesCustomShader = false;
+    bool writesDepth = true;
+    bool depthTestEnabled = true;
+  };
+
   static TranslatedMaterialState TranslateMaterialState(const Material& material);
   static int ResolveIndexCount(const Mesh& mesh);
+  static OpaquePipelineKey BuildOpaquePipelineKey(const TranslatedMaterialState& materialState);
 
  private:
   struct Context;
@@ -59,6 +67,7 @@ class VulkanRenderBackend : public IRenderBackend {
     int indexCount = 0;
     Mat4 modelMatrix = Mat4::Identity();
     TranslatedMaterialState material;
+    OpaquePipelineKey pipelineKey;
   };
 
   std::unique_ptr<Context> m_context;

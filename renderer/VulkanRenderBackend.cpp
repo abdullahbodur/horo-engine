@@ -119,6 +119,16 @@ int VulkanRenderBackend::ResolveIndexCount(const Mesh& mesh) {
   return mesh.GetIndexCount();
 }
 
+VulkanRenderBackend::OpaquePipelineKey VulkanRenderBackend::BuildOpaquePipelineKey(
+    const TranslatedMaterialState& materialState) {
+  OpaquePipelineKey key;
+  key.usesAlbedoMap = materialState.usesAlbedoMap;
+  key.usesCustomShader = materialState.usesCustomShader;
+  key.writesDepth = true;
+  key.depthTestEnabled = true;
+  return key;
+}
+
 VulkanRenderBackend::VulkanRenderBackend(void* nativeWindowHandle) {
   Initialize(nativeWindowHandle);
 }
@@ -805,7 +815,9 @@ void VulkanRenderBackend::DrawMesh(const MeshDrawCommand& command) {
   m_pendingOpaqueDraws.push_back(
       PendingOpaqueDraw{ResolveIndexCount(*command.mesh),
                         command.modelMatrix,
-                        TranslateMaterialState(*command.material)});
+                        TranslateMaterialState(*command.material),
+                        {}});
+  m_pendingOpaqueDraws.back().pipelineKey = BuildOpaquePipelineKey(m_pendingOpaqueDraws.back().material);
   ++m_drawCalls;
 }
 

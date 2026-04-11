@@ -230,6 +230,21 @@ TEST_CASE("Vulkan material translation snapshots backend-relevant material state
   REQUIRE_FALSE(translated.usesCustomShader);
 }
 
+TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
+          "[renderer][foundation][vulkan][pipeline]") {
+  VulkanRenderBackend::TranslatedMaterialState materialState;
+  materialState.usesAlbedoMap = true;
+  materialState.usesCustomShader = false;
+
+  const VulkanRenderBackend::OpaquePipelineKey key =
+      VulkanRenderBackend::BuildOpaquePipelineKey(materialState);
+
+  REQUIRE(key.usesAlbedoMap);
+  REQUIRE_FALSE(key.usesCustomShader);
+  REQUIRE(key.writesDepth);
+  REQUIRE(key.depthTestEnabled);
+}
+
 TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle",
           "[renderer][foundation][vulkan][opaque]") {
   if (!glfwInit())
