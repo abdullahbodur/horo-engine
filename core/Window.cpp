@@ -11,18 +11,48 @@
 
 namespace Monolith {
 
+WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi) {
+  switch (graphicsApi) {
+    case WindowGraphicsApi::OpenGL:
+      return {.createsClientContext = true,
+              .windowOwnsPresentation = true,
+              .windowOwnsVSync = true,
+              .windowOwnsViewportResize = true,
+              .requestsMsaaSamples = true};
+    case WindowGraphicsApi::Vulkan:
+      return {.createsClientContext = false,
+              .windowOwnsPresentation = false,
+              .windowOwnsVSync = false,
+              .windowOwnsViewportResize = false,
+              .requestsMsaaSamples = false};
+  }
+
+  return {};
+}
+
 Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height) {
   if (!glfwInit())
     throw std::runtime_error("glfwInit failed");
 
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  m_graphicsApi = spec.graphicsApi;
+  m_vsync = spec.vsync;
+  const WindowGraphicsApiTraits traits = GetGraphicsApiTraits();
+
+  if (traits.createsClientContext) {
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
+  } else {
+    // Vulkan path: no client graphics context should be created by GLFW.
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  }
+
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-  glfwWindowHint(GLFW_SAMPLES, 4);  // 4x MSAA
+  if (traits.requestsMsaaSamples)
+    glfwWindowHint(GLFW_SAMPLES, 4);  // 4x MSAA
 
   m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
   if (!m_window) {
@@ -30,13 +60,18 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
     throw std::runtime_error("glfwCreateWindow failed");
   }
 
-  glfwMakeContextCurrent(m_window);
-  glfwSwapInterval(spec.vsync ? 1 : 0);
-
-  if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-    glfwDestroyWindow(m_window);
-    glfwTerminate();
-    throw std::runtime_error("gladLoadGLLoader failed");
+  if (traits.createsClientContext) {
+    glfwMakeContextCurrent(m_window);
+    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+      glfwDestroyWindow(m_window);
+      glfwTerminate();
+      throw std::runtime_error("gladLoadGLLoader failed");
+    }
+    SetVSync(spec.vsync);
+    LOG_INFO("OpenGL %s — %s", glGetString(GL_VERSION), glGetString(GL_RENDERER));
+  } else {
+    // Vulkan presentation pacing is backend-owned; the window stores the preference.
+    LOG_INFO("Window initialized for Vulkan backend (GLFW no-client-api surface).");
   }
 
   // Store this pointer for callbacks
@@ -44,8 +79,6 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   glfwSetFramebufferSizeCallback(m_window, FramebufferSizeCallback);
   glfwSetWindowCloseCallback(m_window, WindowCloseCallback);
   glfwSetDropCallback(m_window, DropPathsThunk);
-
-  LOG_INFO("OpenGL %s — %s", glGetString(GL_VERSION), glGetString(GL_RENDERER));
 }
 
 Window::~Window() {
@@ -57,14 +90,40 @@ Window::~Window() {
 void Window::PollEvents() {
   glfwPollEvents();
 }
+
 void Window::SwapBuffers() {
-  glfwSwapBuffers(m_window);
+  if (OwnsPresentation())
+    glfwSwapBuffers(m_window);
 }
+
 bool Window::ShouldClose() const {
   return glfwWindowShouldClose(m_window);
 }
+
+void Window::SetVSync(bool enabled) {
+  m_vsync = enabled;
+  if (OwnsVSync())
+    glfwSwapInterval(enabled ? 1 : 0);
+}
+
 float Window::GetAspect() const {
   return m_height > 0 ? static_cast<float>(m_width) / m_height : 1.0f;
+}
+
+WindowGraphicsApiTraits Window::GetGraphicsApiTraits() const {
+  return Monolith::GetWindowGraphicsApiTraits(m_graphicsApi);
+}
+
+bool Window::OwnsPresentation() const {
+  return GetGraphicsApiTraits().windowOwnsPresentation;
+}
+
+bool Window::OwnsVSync() const {
+  return GetGraphicsApiTraits().windowOwnsVSync;
+}
+
+bool Window::OwnsViewportResize() const {
+  return GetGraphicsApiTraits().windowOwnsViewportResize;
 }
 
 void Window::SetCursorMode(CursorMode mode)
@@ -83,7 +142,8 @@ void Window::FramebufferSizeCallback(GLFWwindow* win, int w, int h) {
   auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
   self->m_width = w;
   self->m_height = h;
-  glViewport(0, 0, w, h);
+  if (self->OwnsViewportResize())
+    glViewport(0, 0, w, h);
   if (self->m_resizeCb)
     self->m_resizeCb(w, h);
 }

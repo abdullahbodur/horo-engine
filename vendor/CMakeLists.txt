@@ -15,6 +15,43 @@ if(NOT TARGET glfw)
     FetchContent_MakeAvailable(glfw)
 endif()
 
+# ---- Optional Vulkan headers + loader scaffolding ----
+if(MONOLITH_ENGINE_ENABLE_VULKAN)
+    if(NOT TARGET monolith_vulkan_headers)
+        FetchContent_Declare(
+            vulkan_headers
+            GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+            GIT_TAG        vulkan-sdk-1.4.341.0
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_Populate(vulkan_headers)
+
+        add_library(monolith_vulkan_headers INTERFACE)
+        target_include_directories(monolith_vulkan_headers INTERFACE
+            ${vulkan_headers_SOURCE_DIR}/include
+        )
+    endif()
+
+    if(NOT TARGET monolith_volk)
+        FetchContent_Declare(
+            volk
+            GIT_REPOSITORY https://github.com/zeux/volk.git
+            GIT_TAG        1.4.304
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_Populate(volk)
+
+        add_library(monolith_volk STATIC ${volk_SOURCE_DIR}/volk.c)
+        target_include_directories(monolith_volk PUBLIC ${volk_SOURCE_DIR})
+        target_link_libraries(monolith_volk PUBLIC monolith_vulkan_headers)
+        target_compile_definitions(monolith_volk PUBLIC VK_NO_PROTOTYPES)
+        target_compile_options(monolith_volk PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/W0>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+        )
+    endif()
+endif()
+
 # ---- glad (OpenGL 4.1 Core, pre-generated, committed) ----
 if(NOT TARGET glad)
     add_subdirectory(glad)
@@ -42,7 +79,7 @@ if(NOT TARGET imgui_lib)
     )
     FetchContent_MakeAvailable(imgui)
 
-    add_library(imgui_lib STATIC
+    set(MONOLITH_IMGUI_SOURCES
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -50,11 +87,25 @@ if(NOT TARGET imgui_lib)
         ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     )
+
+    if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        list(APPEND MONOLITH_IMGUI_SOURCES
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+        )
+    endif()
+
+    add_library(imgui_lib STATIC ${MONOLITH_IMGUI_SOURCES})
     target_include_directories(imgui_lib PUBLIC
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
     )
     target_link_libraries(imgui_lib PUBLIC glfw glad)
+
+    if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        target_compile_definitions(imgui_lib PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
+        target_link_libraries(imgui_lib PUBLIC monolith_volk monolith_vulkan_headers)
+    endif()
+
     # Suppress vendor warnings (MSVC -WX, GCC/Clang -Werror)
     target_compile_options(imgui_lib PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W0>

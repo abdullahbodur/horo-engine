@@ -3,32 +3,45 @@
 #include <glad/glad.h>
 
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 
 #include "core/Logger.h"
 
 namespace Monolith {
 
+struct Shader::ProgramStorage {
+  unsigned int program = 0;
+  std::unordered_map<std::string, int> uniformCache;
+};
+
+Shader::Shader() = default;
+
 Shader::~Shader() {
-  if (m_program)
-    glDeleteProgram(m_program);
+  if (m_programStorage && m_programStorage->program)
+    glDeleteProgram(m_programStorage->program);
 }
 
 Shader::Shader(Shader&& o) noexcept
-    : m_program(o.m_program), m_uniformCache(std::move(o.m_uniformCache)) {
-  o.m_program = 0;
-}
+    : m_programStorage(std::move(o.m_programStorage)) {}
 
 Shader& Shader::operator=(Shader&& o) noexcept {
   if (this != &o) {
-    if (m_program)
-      glDeleteProgram(m_program);
-    m_program = o.m_program;
-    m_uniformCache = std::move(o.m_uniformCache);
-    o.m_program = 0;
+    if (m_programStorage && m_programStorage->program)
+      glDeleteProgram(m_programStorage->program);
+    m_programStorage = std::move(o.m_programStorage);
   }
   return *this;
+}
+
+bool Shader::IsValid() const {
+  return m_programStorage && m_programStorage->program != 0;
+}
+
+unsigned int Shader::GetProgramID() const {
+  return m_programStorage ? m_programStorage->program : 0;
 }
 
 static std::string ReadFile(const std::string& path) {
@@ -46,9 +59,10 @@ Shader Shader::FromFiles(const std::string& vertPath, const std::string& fragPat
 
 Shader Shader::FromSource(const std::string& vertSrc, const std::string& fragSrc) {
   Shader s;
+  s.m_programStorage = std::make_unique<ProgramStorage>();
   unsigned int vert = CompileShader(GL_VERTEX_SHADER, vertSrc);
   unsigned int frag = CompileShader(GL_FRAGMENT_SHADER, fragSrc);
-  s.m_program = LinkProgram(vert, frag);
+  s.m_programStorage->program = LinkProgram(vert, frag);
   glDeleteShader(vert);
   glDeleteShader(frag);
   return s;
@@ -91,19 +105,22 @@ unsigned int Shader::LinkProgram(unsigned int vert, unsigned int frag) {
 }
 
 void Shader::Bind() const {
-  glUseProgram(m_program);
+  glUseProgram(GetProgramID());
 }
 void Shader::Unbind() const {
   glUseProgram(0);
 }
 
 int Shader::GetUniformLocation(const std::string& name) const {
-  auto it = m_uniformCache.find(name);
-  if (it != m_uniformCache.end())
+  if (!m_programStorage)
+    return -1;
+
+  auto it = m_programStorage->uniformCache.find(name);
+  if (it != m_programStorage->uniformCache.end())
     return it->second;
 
-  int loc = glGetUniformLocation(m_program, name.c_str());
-  m_uniformCache[name] = loc;
+  int loc = glGetUniformLocation(m_programStorage->program, name.c_str());
+  m_programStorage->uniformCache[name] = loc;
   return loc;
 }
 

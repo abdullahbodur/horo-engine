@@ -75,7 +75,7 @@ class EditorLayer {
   bool OnUpdate(float dt, Camera& cam, int screenW, int screenH);
 
   // Render ImGui panels, selection highlight, and transform gizmo.
-  // Must be called after the game 3D render and before RenderContext::EndFrame.
+  // Must be called after the game 3D render and before the backend presents the frame.
   void Render(const Camera& cam, int screenW, int screenH);
 
   // Replace the current document with a live-scene snapshot (called on editor open).
@@ -147,6 +147,7 @@ class EditorLayer {
 
   GLFWwindow* m_window = nullptr;
   bool m_active = false;
+  bool m_imguiBackendInitialized = false;
   bool m_playMode = false;
   bool m_wantsReload = false;
   bool m_prevMouseL = false;

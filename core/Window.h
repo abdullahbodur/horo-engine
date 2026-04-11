@@ -13,11 +13,29 @@ enum class CursorMode
     Disabled,
 };
 
+// Window-level graphics API preference used during platform/window bootstrap.
+// This lives in core so startup does not depend on renderer module headers.
+enum class WindowGraphicsApi {
+  OpenGL,
+  Vulkan,
+};
+
+struct WindowGraphicsApiTraits {
+  bool createsClientContext = false;
+  bool windowOwnsPresentation = false;
+  bool windowOwnsVSync = false;
+  bool windowOwnsViewportResize = false;
+  bool requestsMsaaSamples = false;
+};
+
+WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi);
+
 struct WindowSpec {
   std::string title = "Monolith";
   int width = 1280;
   int height = 720;
   bool vsync = true;
+  WindowGraphicsApi graphicsApi = WindowGraphicsApi::OpenGL;
 };
 
 class Window {
@@ -35,10 +53,17 @@ class Window {
   void PollEvents();
   void SwapBuffers();
   bool ShouldClose() const;
+  void SetVSync(bool enabled);
 
   int GetWidth() const { return m_width; }
   int GetHeight() const { return m_height; }
   float GetAspect() const;
+  bool IsVSyncEnabled() const { return m_vsync; }
+  WindowGraphicsApi GetGraphicsApi() const { return m_graphicsApi; }
+  WindowGraphicsApiTraits GetGraphicsApiTraits() const;
+  bool OwnsPresentation() const;
+  bool OwnsVSync() const;
+  bool OwnsViewportResize() const;
 
   GLFWwindow* GetNativeHandle() const { return m_window; }
 
@@ -52,6 +77,8 @@ class Window {
   GLFWwindow* m_window = nullptr;
   int m_width = 0;
   int m_height = 0;
+  bool m_vsync = true;
+  WindowGraphicsApi m_graphicsApi = WindowGraphicsApi::OpenGL;
   ResizeCallback m_resizeCb;
   CloseCallback m_closeCb;
   FileDropCallback m_fileDropCb;

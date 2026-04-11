@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "math/Vec3.h"
@@ -24,7 +25,7 @@ namespace Monolith {
 // Non-copyable (owns GPU resources).  Move-only, matching the Mesh convention.
 class SkinnedMesh {
  public:
-  SkinnedMesh() = default;
+  SkinnedMesh();
   ~SkinnedMesh();
 
   SkinnedMesh(const SkinnedMesh&) = delete;
@@ -42,7 +43,7 @@ class SkinnedMesh {
   // Bind the VAO and issue a single glDrawElements call.
   void Draw() const;
 
-  bool IsValid() const { return m_vao != 0; }
+  bool IsValid() const;
   int  GetIndexCount() const { return m_indexCount; }
 
   // Axis-aligned bounding box in local (bind-pose) space.
@@ -50,9 +51,8 @@ class SkinnedMesh {
   Vec3 GetLocalAabbCenter() const { return m_localAabbCenter; }
 
  private:
-  unsigned int m_vao = 0;
-  unsigned int m_vbo = 0;
-  unsigned int m_ebo = 0;
+  struct GpuStorage;
+  std::unique_ptr<GpuStorage> m_gpu;
   int  m_indexCount = 0;
   Vec3 m_halfExtents     = {0.5f, 0.5f, 0.5f};
   Vec3 m_localAabbCenter = Vec3::Zero();

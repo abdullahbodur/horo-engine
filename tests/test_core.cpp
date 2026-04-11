@@ -5,8 +5,10 @@
 #include <cstring>
 #include <filesystem>
 
+#include "core/Application.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
+#include "core/Window.h"
 #include "math/MathUtils.h"
 
 using namespace Monolith;
@@ -67,6 +69,36 @@ TEST_CASE("Logger: mixed formatted arguments are handled", "[logger]") {
 TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
     ProjectPath::Init(std::filesystem::path{});
     REQUIRE(ProjectPath::Root().empty());
+}
+
+TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior",
+          "[core][window]") {
+    const WindowGraphicsApiTraits traits = GetWindowGraphicsApiTraits(WindowGraphicsApi::OpenGL);
+
+    REQUIRE(traits.createsClientContext);
+    REQUIRE(traits.windowOwnsPresentation);
+    REQUIRE(traits.windowOwnsVSync);
+    REQUIRE(traits.windowOwnsViewportResize);
+    REQUIRE(traits.requestsMsaaSamples);
+}
+
+TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to the backend",
+          "[core][window]") {
+    const WindowGraphicsApiTraits traits = GetWindowGraphicsApiTraits(WindowGraphicsApi::Vulkan);
+
+    REQUIRE_FALSE(traits.createsClientContext);
+    REQUIRE_FALSE(traits.windowOwnsPresentation);
+    REQUIRE_FALSE(traits.windowOwnsVSync);
+    REQUIRE_FALSE(traits.windowOwnsViewportResize);
+    REQUIRE_FALSE(traits.requestsMsaaSamples);
+}
+
+TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility", "[core][application]") {
+    const AppSpec spec{"Compat App", 1280, 720, true, "assets/scenes/starter_world.json"};
+
+    REQUIRE(spec.name == "Compat App");
+    REQUIRE(spec.defaultSceneFile == "assets/scenes/starter_world.json");
+    REQUIRE(spec.graphicsApi == WindowGraphicsApi::OpenGL);
 }
 
 // ===========================================================================

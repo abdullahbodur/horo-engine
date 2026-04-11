@@ -15,6 +15,9 @@ struct AppSpec {
   // Repo-relative path to the main scene file (e.g. "assets/scenes/scene.json").
   // Resolved to an absolute path via ProjectPath at construction time.
   std::string defaultSceneFile;
+  // Kept after defaultSceneFile to preserve aggregate-initialization compatibility
+  // with existing starter/integration apps that pass scene path as the 5th field.
+  WindowGraphicsApi graphicsApi = WindowGraphicsApi::OpenGL;
 };
 
 class Application {
