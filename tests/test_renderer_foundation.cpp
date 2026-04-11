@@ -15,6 +15,7 @@
 #include "renderer/Mesh.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"
+#include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/VulkanRenderBackend.h"
 #include "scene/Registry.h"
@@ -239,6 +240,26 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE_FALSE(vkCaps.supportsReadback);
   REQUIRE_FALSE(vkCaps.supportsDepthReadback);
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
+}
+
+TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
+          "[renderer][foundation][handles]")
+{
+  const RenderTargetHandle glHandle = RenderTargetHandle::OpenGLTexture(42u, true);
+  REQUIRE(glHandle.IsValid());
+  REQUIRE(glHandle.backendId == RenderBackendId::OpenGL);
+  REQUIRE(glHandle.nativeType == RenderNativeHandleType::OpenGLTexture2D);
+  REQUIRE(glHandle.nativeHandle == 42u);
+  REQUIRE(glHandle.needsYFlip);
+
+  void *fakeDescriptorSet = reinterpret_cast<void *>(0x1234);
+  const RenderTargetHandle vkHandle =
+      RenderTargetHandle::VulkanDescriptorSet(fakeDescriptorSet, false);
+  REQUIRE(vkHandle.IsValid());
+  REQUIRE(vkHandle.backendId == RenderBackendId::Vulkan);
+  REQUIRE(vkHandle.nativeType == RenderNativeHandleType::VulkanImGuiDescriptorSet);
+  REQUIRE(vkHandle.nativeHandle == static_cast<uint64_t>(0x1234));
+  REQUIRE_FALSE(vkHandle.needsYFlip);
 }
 
 #if defined(MONOLITH_HAS_VULKAN)

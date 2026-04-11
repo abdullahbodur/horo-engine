@@ -1171,9 +1171,19 @@ static bool TryGetAssetPreviewHandle(const std::string& assetId,
 }
 
 static ImTextureID ToImTextureId(const RenderTargetHandle& handle) {
-  if (!handle.IsValid() || handle.nativeType != RenderNativeHandleType::OpenGLTexture2D)
+  if (!handle.IsValid())
     return (ImTextureID)0;
-  return (ImTextureID)(intptr_t)handle.nativeHandle;
+
+  switch (handle.nativeType) {
+    case RenderNativeHandleType::OpenGLTexture2D:
+      return (ImTextureID)(intptr_t)handle.nativeHandle;
+    case RenderNativeHandleType::VulkanImGuiDescriptorSet:
+      return (ImTextureID)(intptr_t)handle.nativeHandle;
+    case RenderNativeHandleType::None:
+      return (ImTextureID)0;
+  }
+
+  return (ImTextureID)0;
 }
 
 std::string PickTextureFilePath() {

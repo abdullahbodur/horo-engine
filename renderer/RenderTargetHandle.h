@@ -9,6 +9,7 @@ namespace Monolith {
 enum class RenderNativeHandleType {
   None,
   OpenGLTexture2D,
+  VulkanImGuiDescriptorSet,
 };
 
 struct RenderTargetHandle {
@@ -23,6 +24,13 @@ struct RenderTargetHandle {
     return {RenderBackendId::OpenGL,
             RenderNativeHandleType::OpenGLTexture2D,
             static_cast<uint64_t>(textureId),
+            yFlip};
+  }
+
+  static RenderTargetHandle VulkanDescriptorSet(void* descriptorSet, bool yFlip = false) {
+    return {RenderBackendId::Vulkan,
+            RenderNativeHandleType::VulkanImGuiDescriptorSet,
+            static_cast<uint64_t>(reinterpret_cast<uintptr_t>(descriptorSet)),
             yFlip};
   }
 };
