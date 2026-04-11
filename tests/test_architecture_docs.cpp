@@ -116,6 +116,9 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string starterTemplate = ReadTextFile(root / "scene" / "STARTER_TEMPLATE.h");
   REQUIRE(starterTemplate.find("RenderContext::BeginFrame") == std::string::npos);
   REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
+
+  const std::string editorLayer = ReadTextFile(root / "editor" / "EditorLayer.cpp");
+  REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
 }
 
 TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {

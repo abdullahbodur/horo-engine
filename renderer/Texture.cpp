@@ -44,6 +44,10 @@ unsigned int Texture::GetNativeId() const {
   return m_textureStorage ? m_textureStorage->id : 0;
 }
 
+RenderTargetHandle Texture::GetRenderTargetHandle(bool needsYFlip) const {
+  return RenderTargetHandle::OpenGLTexture(GetNativeId(), needsYFlip);
+}
+
 Texture Texture::FromFile(const std::string& path, bool flipY) {
   stbi_set_flip_vertically_on_load(flipY ? 1 : 0);
   int w, h, ch;
