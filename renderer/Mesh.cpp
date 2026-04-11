@@ -1,8 +1,10 @@
 #include "renderer/Mesh.h"
 
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -10,6 +12,11 @@
 #include "math/MathUtils.h"
 
 namespace Monolith {
+namespace {
+bool HasCurrentGlContext() {
+  return glfwGetCurrentContext() != nullptr;
+}
+}  // namespace
 
 struct Mesh::GpuStorage {
   unsigned int vao = 0;
@@ -26,6 +33,8 @@ Mesh::~Mesh() {
 Mesh::Mesh(Mesh&& o) noexcept
     : m_gpu(std::move(o.m_gpu)),
       m_indexCount(o.m_indexCount),
+      m_cpuVertices(std::move(o.m_cpuVertices)),
+      m_cpuIndices(std::move(o.m_cpuIndices)),
       m_halfExtents(o.m_halfExtents),
       m_localAabbCenter(o.m_localAabbCenter) {
   o.m_indexCount = 0;
@@ -36,6 +45,8 @@ Mesh& Mesh::operator=(Mesh&& o) noexcept {
     Release();
     m_gpu = std::move(o.m_gpu);
     m_indexCount = o.m_indexCount;
+    m_cpuVertices = std::move(o.m_cpuVertices);
+    m_cpuIndices = std::move(o.m_cpuIndices);
     m_halfExtents = o.m_halfExtents;
     m_localAabbCenter = o.m_localAabbCenter;
     o.m_indexCount = 0;
@@ -49,15 +60,19 @@ bool Mesh::IsValid() const {
 
 void Mesh::Release() {
   if (m_gpu) {
-    if (m_gpu->ebo)
-      glDeleteBuffers(1, &m_gpu->ebo);
-    if (m_gpu->vbo)
-      glDeleteBuffers(1, &m_gpu->vbo);
-    if (m_gpu->vao)
-      glDeleteVertexArrays(1, &m_gpu->vao);
+    if (HasCurrentGlContext()) {
+      if (m_gpu->ebo)
+        glDeleteBuffers(1, &m_gpu->ebo);
+      if (m_gpu->vbo)
+        glDeleteBuffers(1, &m_gpu->vbo);
+      if (m_gpu->vao)
+        glDeleteVertexArrays(1, &m_gpu->vao);
+    }
     m_gpu.reset();
   }
   m_indexCount = 0;
+  m_cpuVertices.clear();
+  m_cpuIndices.clear();
 }
 
 void Mesh::SetData(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices) {
@@ -82,7 +97,12 @@ void Mesh::SetData(const std::vector<Vertex>& vertices, const std::vector<unsign
 }
 
 void Mesh::Upload(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices) {
+  m_cpuVertices = vertices;
+  m_cpuIndices.assign(indices.begin(), indices.end());
   m_indexCount = static_cast<int>(indices.size());
+  if (!HasCurrentGlContext())
+    return;
+
   m_gpu = std::make_unique<GpuStorage>();
 
   glGenVertexArrays(1, &m_gpu->vao);

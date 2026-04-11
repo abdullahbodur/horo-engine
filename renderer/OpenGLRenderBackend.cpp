@@ -45,6 +45,56 @@ RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
   return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
 }
 
+bool OpenGLRenderBackend::ReadbackColorBgr8(int width,
+                                            int height,
+                                            std::vector<uint8_t>& outPixels,
+                                            std::string* outError) {
+  if (width <= 0 || height <= 0) {
+    if (outError)
+      *outError = "OpenGL color readback requires positive dimensions.";
+    return false;
+  }
+
+  outPixels.resize(static_cast<std::vector<uint8_t>::size_type>(width) *
+                   static_cast<std::vector<uint8_t>::size_type>(height) * 3u);
+  glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, outPixels.data());
+  return true;
+}
+
+bool OpenGLRenderBackend::ReadbackDepth32F(int width,
+                                           int height,
+                                           std::vector<float>& outDepth,
+                                           std::string* outError) {
+  if (width <= 0 || height <= 0) {
+    if (outError)
+      *outError = "OpenGL depth readback requires positive dimensions.";
+    return false;
+  }
+
+  outDepth.resize(static_cast<std::vector<float>::size_type>(width) *
+                  static_cast<std::vector<float>::size_type>(height));
+  glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, outDepth.data());
+  return true;
+}
+
+bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(uint32_t,
+                                                           uint32_t,
+                                                           std::string* outError) {
+  if (outError)
+    *outError = "Editor viewport render-target provisioning is unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(RenderTargetHandle* outHandle,
+                                                                 bool,
+                                                                 std::string* outError) {
+  if (outHandle)
+    *outHandle = {};
+  if (outError)
+    *outError = "Editor viewport render-target handle is unavailable on OpenGL backend.";
+  return false;
+}
+
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
   MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
   glEnable(GL_DEPTH_TEST);
