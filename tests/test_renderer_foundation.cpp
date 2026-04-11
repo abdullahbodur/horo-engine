@@ -80,7 +80,52 @@ namespace
       return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
     }
     int GetDrawCallCount() const override { return drawCalls; }
-
+    bool ReadbackColorBgr8(int width,
+                           int height,
+                           std::vector<uint8_t> &outPixels,
+                           std::string *outError) override
+    {
+      if (width <= 0 || height <= 0)
+      {
+        if (outError)
+          *outError = "invalid color readback dimensions";
+        return false;
+      }
+      outPixels.assign(static_cast<size_t>(width * height * 3), 0u);
+      return true;
+    }
+    bool ReadbackDepth32F(int width,
+                          int height,
+                          std::vector<float> &outDepth,
+                          std::string *outError) override
+    {
+      if (width <= 0 || height <= 0)
+      {
+        if (outError)
+          *outError = "invalid depth readback dimensions";
+        return false;
+      }
+      outDepth.assign(static_cast<size_t>(width * height), 1.0f);
+      return true;
+    }
+    bool EnsureEditorViewportRenderTarget(uint32_t,
+                                          uint32_t,
+                                          std::string *outError) override
+    {
+      if (outError)
+        *outError = "fake backend has no viewport targets";
+      return false;
+    }
+    bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
+                                                bool,
+                                                std::string *outError) override
+    {
+      if (outHandle)
+        *outHandle = {};
+      if (outError)
+        *outError = "fake backend has no viewport target handle";
+      return false;
+    }
     std::vector<std::string> events;
     RenderFrameConfig lastFrame;
     RenderPassConfig lastPass;
@@ -133,6 +178,19 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   REQUIRE(backend.lastMesh.mesh == &mesh);
   REQUIRE(backend.lastMesh.material == &material);
   REQUIRE(Renderer::GetDrawCallCount() == 1);
+  std::vector<uint8_t> colorReadback;
+  std::vector<float> depthReadback;
+  std::string readbackError;
+  REQUIRE(Renderer::ReadbackColorBgr8(2, 2, colorReadback, &readbackError));
+  REQUIRE(colorReadback.size() == 12u);
+  REQUIRE(Renderer::ReadbackDepth32F(2, 2, depthReadback, &readbackError));
+  REQUIRE(depthReadback.size() == 4u);
+  RenderTargetHandle viewportHandle;
+  REQUIRE_FALSE(Renderer::EnsureEditorViewportRenderTarget(320u, 180u, &readbackError));
+  REQUIRE(readbackError.find("no viewport targets") != std::string::npos);
+  REQUIRE_FALSE(Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, false, &readbackError));
+  REQUIRE(readbackError.find("no viewport target handle") != std::string::npos);
+  REQUIRE_FALSE(viewportHandle.IsValid());
 
   Renderer::ResetBackend();
 }
@@ -195,8 +253,8 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
       GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
   REQUIRE_FALSE(vulkanCaps.supportsDebugDraw);
   REQUIRE_FALSE(vulkanCaps.supportsWireframeOverlay);
-  REQUIRE_FALSE(vulkanCaps.supportsOffscreenTargets);
-  REQUIRE_FALSE(vulkanCaps.supportsNativeTextureHandles);
+  REQUIRE(vulkanCaps.supportsOffscreenTargets);
+  REQUIRE(vulkanCaps.supportsNativeTextureHandles);
   REQUIRE_FALSE(vulkanCaps.supportsReadback);
   REQUIRE_FALSE(vulkanCaps.supportsDepthReadback);
   REQUIRE_FALSE(vulkanCaps.supportsDebugHud);
@@ -235,8 +293,8 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   const RenderBackendCapabilities vkCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
   REQUIRE_FALSE(vkCaps.supportsDebugDraw);
   REQUIRE_FALSE(vkCaps.supportsWireframeOverlay);
-  REQUIRE_FALSE(vkCaps.supportsOffscreenTargets);
-  REQUIRE_FALSE(vkCaps.supportsNativeTextureHandles);
+  REQUIRE(vkCaps.supportsOffscreenTargets);
+  REQUIRE(vkCaps.supportsNativeTextureHandles);
   REQUIRE_FALSE(vkCaps.supportsReadback);
   REQUIRE_FALSE(vkCaps.supportsDepthReadback);
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
@@ -250,6 +308,9 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
   REQUIRE(glHandle.backendId == RenderBackendId::OpenGL);
   REQUIRE(glHandle.nativeType == RenderNativeHandleType::OpenGLTexture2D);
   REQUIRE(glHandle.nativeHandle == 42u);
+  REQUIRE(glHandle.width == 0u);
+  REQUIRE(glHandle.height == 0u);
+  REQUIRE(glHandle.generation == 0u);
   REQUIRE(glHandle.needsYFlip);
 
   void *fakeDescriptorSet = reinterpret_cast<void *>(0x1234);
@@ -259,6 +320,9 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
   REQUIRE(vkHandle.backendId == RenderBackendId::Vulkan);
   REQUIRE(vkHandle.nativeType == RenderNativeHandleType::VulkanImGuiDescriptorSet);
   REQUIRE(vkHandle.nativeHandle == static_cast<uint64_t>(0x1234));
+  REQUIRE(vkHandle.width == 0u);
+  REQUIRE(vkHandle.height == 0u);
+  REQUIRE(vkHandle.generation == 0u);
   REQUIRE_FALSE(vkHandle.needsYFlip);
 }
 
@@ -324,10 +388,19 @@ TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a
 
   VulkanRenderBackend backend(window);
   REQUIRE(backend.IsInitialized());
+  int framebufferWidth = 0;
+  int framebufferHeight = 0;
+  glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+  framebufferWidth = std::max(framebufferWidth, 1);
+  framebufferHeight = std::max(framebufferHeight, 1);
   REQUIRE(backend.HasOpaqueRasterScaffold());
   REQUIRE(backend.HasOpaquePipelineCreationScaffold());
   REQUIRE(backend.HasOpaqueShaderPipelineScaffold());
   REQUIRE(backend.HasOpaqueGraphicsPipelineScaffold());
+  if (!backend.HasOpaqueDrawExecutionReady())
+  {
+    REQUIRE(backend.GetLastError().find("shader modules") != std::string::npos);
+  }
 
   void *instanceHandle = nullptr;
   void *physicalDeviceHandle = nullptr;
@@ -405,8 +478,8 @@ TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan backend reports actionable diagnostics for scaffold-only opaque draw execution",
-          "[renderer][foundation][vulkan][opaque][diagnostics]")
+TEST_CASE("Vulkan backend executes opaque indexed draws when shader pipeline is ready",
+          "[renderer][foundation][vulkan][opaque][draw-indexed]")
 {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
@@ -429,7 +502,7 @@ TEST_CASE("Vulkan backend reports actionable diagnostics for scaffold-only opaqu
   VulkanRenderBackend backend(window);
   REQUIRE(backend.IsInitialized());
 
-  Mesh mesh;
+  Mesh mesh = Mesh::CreateQuad();
   Material material;
   Camera camera;
 
@@ -440,8 +513,16 @@ TEST_CASE("Vulkan backend reports actionable diagnostics for scaffold-only opaqu
   backend.EndFrame();
 
   REQUIRE(backend.GetDrawCallCount() == 1);
-  REQUIRE(backend.GetLastError().find("draw submissions are queued") != std::string::npos);
-  REQUIRE(backend.GetLastError().find("Pending draws: 1") != std::string::npos);
+  if (!backend.HasOpaqueDrawExecutionReady())
+  {
+    REQUIRE(backend.GetLastError().find("shader modules") != std::string::npos);
+    REQUIRE(backend.GetExecutedOpaqueIndexedDrawCount() == 0);
+  }
+  else
+  {
+    REQUIRE(backend.GetExecutedOpaqueIndexedDrawCount() >= 1);
+    REQUIRE(backend.GetLastError().find("draw submissions are queued") == std::string::npos);
+  }
 
   glfwDestroyWindow(window);
   glfwTerminate();
@@ -484,6 +565,331 @@ TEST_CASE("Vulkan backend executes queued overlay callbacks while recording fram
 
   REQUIRE(overlayProbe.invoked);
   REQUIRE(overlayProbe.commandBufferHandle != nullptr);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+TEST_CASE("Vulkan backend manages offscreen render-target lifecycle and resize metadata",
+          "[renderer][foundation][vulkan][offscreen]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-offscreen-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan offscreen target test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+  const RenderBackendCapabilities caps = backend.GetCapabilities();
+  REQUIRE(caps.supportsOffscreenTargets);
+  REQUIRE(caps.supportsNativeTextureHandles);
+
+  const std::string targetKey = "editor-thumb:mesh-a";
+  REQUIRE_FALSE(backend.EnsureOffscreenRenderTarget(targetKey, 0, 128));
+  REQUIRE(backend.GetLastError().find("non-zero") != std::string::npos);
+
+  REQUIRE(backend.EnsureOffscreenRenderTarget(targetKey, 128, 128));
+  VulkanRenderBackend::OffscreenTargetMetadata metadata{};
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata(targetKey, &metadata));
+  REQUIRE(metadata.width == 128u);
+  REQUIRE(metadata.height == 128u);
+  REQUIRE(metadata.generation == 1u);
+  REQUIRE(metadata.readyForSampling);
+  REQUIRE_FALSE(metadata.hasImGuiDescriptor);
+
+  RenderTargetHandle initialHandle{};
+  const bool initialHandleOk = backend.TryGetOffscreenRenderTargetHandle(targetKey, &initialHandle, false);
+  if (initialHandleOk)
+  {
+    REQUIRE(initialHandle.IsValid());
+    REQUIRE(initialHandle.backendId == RenderBackendId::Vulkan);
+    REQUIRE(initialHandle.nativeType == RenderNativeHandleType::VulkanImGuiDescriptorSet);
+    REQUIRE(initialHandle.width == 128u);
+    REQUIRE(initialHandle.height == 128u);
+    REQUIRE(initialHandle.generation == metadata.generation);
+    REQUIRE_FALSE(initialHandle.needsYFlip);
+
+    RenderTargetHandle flippedHandle{};
+    REQUIRE(backend.TryGetOffscreenRenderTargetHandle(targetKey, &flippedHandle, true));
+    REQUIRE(flippedHandle.IsValid());
+    REQUIRE(flippedHandle.nativeHandle == initialHandle.nativeHandle);
+    REQUIRE(flippedHandle.width == initialHandle.width);
+    REQUIRE(flippedHandle.height == initialHandle.height);
+    REQUIRE(flippedHandle.generation == initialHandle.generation);
+    REQUIRE(flippedHandle.needsYFlip);
+  }
+  else
+  {
+    REQUIRE(backend.GetLastError().find("ImGui Vulkan texture registration is not ready") != std::string::npos);
+  }
+
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata(targetKey, &metadata));
+  REQUIRE(metadata.hasImGuiDescriptor == initialHandleOk);
+
+  REQUIRE(backend.EnsureOffscreenRenderTarget(targetKey, 256, 128));
+  VulkanRenderBackend::OffscreenTargetMetadata resizedMetadata{};
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata(targetKey, &resizedMetadata));
+  REQUIRE(resizedMetadata.width == 256u);
+  REQUIRE(resizedMetadata.height == 128u);
+  REQUIRE(resizedMetadata.generation == metadata.generation + 1u);
+  REQUIRE(resizedMetadata.readyForSampling);
+  RenderTargetHandle resizedHandle{};
+  const bool resizedHandleOk = backend.TryGetOffscreenRenderTargetHandle(targetKey, &resizedHandle, false);
+  if (resizedHandleOk)
+  {
+    REQUIRE(resizedHandle.IsValid());
+    REQUIRE(resizedHandle.width == resizedMetadata.width);
+    REQUIRE(resizedHandle.height == resizedMetadata.height);
+    REQUIRE(resizedHandle.generation == resizedMetadata.generation);
+  }
+  else
+  {
+    REQUIRE(backend.GetLastError().find("ImGui Vulkan texture registration is not ready") != std::string::npos);
+  }
+  REQUIRE(resizedMetadata.hasImGuiDescriptor == resizedHandleOk);
+
+  backend.DestroyOffscreenRenderTarget(targetKey);
+  REQUIRE_FALSE(backend.TryGetOffscreenRenderTargetMetadata(targetKey, &resizedMetadata));
+  REQUIRE_FALSE(backend.TryGetOffscreenRenderTargetHandle(targetKey, &resizedHandle, false));
+  REQUIRE(backend.GetLastError().find("unknown target key") != std::string::npos);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+TEST_CASE("Vulkan editor viewport target stays stable across frame recording and resize",
+          "[renderer][foundation][vulkan][viewport]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(96, 96, "vulkan-editor-viewport-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan editor viewport test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+
+  std::string error;
+  RenderTargetHandle missingViewportHandle{};
+  REQUIRE_FALSE(backend.TryGetEditorViewportRenderTargetHandle(&missingViewportHandle, false, &error));
+  REQUIRE(error.find("unknown target key") != std::string::npos);
+  REQUIRE_FALSE(missingViewportHandle.IsValid());
+
+  error.clear();
+  REQUIRE_FALSE(backend.EnsureEditorViewportRenderTarget(0u, 64u, &error));
+  REQUIRE(error.find("non-zero") != std::string::npos);
+
+  error.clear();
+  REQUIRE(backend.EnsureEditorViewportRenderTarget(96u, 64u, &error));
+
+  VulkanRenderBackend::OffscreenTargetMetadata initialMetadata{};
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata("__editor.viewport.scene", &initialMetadata));
+  REQUIRE(initialMetadata.width == 96u);
+  REQUIRE(initialMetadata.height == 64u);
+  REQUIRE(initialMetadata.readyForSampling);
+
+  RenderTargetHandle initialViewportHandle{};
+  const bool initialViewportHandleOk =
+      backend.TryGetEditorViewportRenderTargetHandle(&initialViewportHandle, false, &error);
+  if (initialViewportHandleOk)
+  {
+    REQUIRE(initialViewportHandle.IsValid());
+    REQUIRE(initialViewportHandle.width == initialMetadata.width);
+    REQUIRE(initialViewportHandle.height == initialMetadata.height);
+    REQUIRE(initialViewportHandle.generation == initialMetadata.generation);
+    REQUIRE_FALSE(initialViewportHandle.needsYFlip);
+  }
+  else
+  {
+    REQUIRE(error.find("ImGui Vulkan texture registration is not ready") != std::string::npos);
+  }
+
+  backend.BeginFrame({{}, "vulkan-editor-viewport-frame"});
+  backend.QueueOverlayRenderCallback(&CaptureOverlayRenderProbe, nullptr);
+  backend.EndFrame();
+  REQUIRE(backend.GetLastError().empty());
+
+  VulkanRenderBackend::OffscreenTargetMetadata afterFrameMetadata{};
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata("__editor.viewport.scene", &afterFrameMetadata));
+  REQUIRE(afterFrameMetadata.width == initialMetadata.width);
+  REQUIRE(afterFrameMetadata.height == initialMetadata.height);
+  REQUIRE(afterFrameMetadata.readyForSampling);
+  REQUIRE(afterFrameMetadata.generation == initialMetadata.generation);
+
+  RenderTargetHandle afterFrameViewportHandle{};
+  const bool afterFrameViewportHandleOk =
+      backend.TryGetEditorViewportRenderTargetHandle(&afterFrameViewportHandle, false, &error);
+  REQUIRE(afterFrameViewportHandleOk == initialViewportHandleOk);
+  if (afterFrameViewportHandleOk)
+  {
+    REQUIRE(afterFrameViewportHandle.IsValid());
+    REQUIRE(afterFrameViewportHandle.generation == initialViewportHandle.generation);
+  }
+
+  REQUIRE(backend.EnsureEditorViewportRenderTarget(144u, 72u, &error));
+  VulkanRenderBackend::OffscreenTargetMetadata resizedMetadata{};
+  REQUIRE(backend.TryGetOffscreenRenderTargetMetadata("__editor.viewport.scene", &resizedMetadata));
+  REQUIRE(resizedMetadata.width == 144u);
+  REQUIRE(resizedMetadata.height == 72u);
+  REQUIRE(resizedMetadata.generation == initialMetadata.generation + 1u);
+  REQUIRE(resizedMetadata.readyForSampling);
+
+  RenderTargetHandle resizedViewportHandle{};
+  const bool resizedViewportHandleOk =
+      backend.TryGetEditorViewportRenderTargetHandle(&resizedViewportHandle, true, &error);
+  REQUIRE(resizedViewportHandleOk == initialViewportHandleOk);
+  if (resizedViewportHandleOk)
+  {
+    REQUIRE(resizedViewportHandle.IsValid());
+    REQUIRE(resizedViewportHandle.width == resizedMetadata.width);
+    REQUIRE(resizedViewportHandle.height == resizedMetadata.height);
+    REQUIRE(resizedViewportHandle.generation == resizedMetadata.generation);
+    REQUIRE(resizedViewportHandle.needsYFlip);
+  }
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+TEST_CASE("Vulkan backend reports and executes readback support deterministically",
+          "[renderer][foundation][vulkan][readback]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-readback-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan readback test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+  int framebufferWidth = 0;
+  int framebufferHeight = 0;
+  glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+  framebufferWidth = std::max(framebufferWidth, 1);
+  framebufferHeight = std::max(framebufferHeight, 1);
+
+  const RenderBackendCapabilities caps = backend.GetCapabilities();
+  std::vector<uint8_t> colorReadback;
+  std::vector<float> depthReadback;
+  std::string readbackError;
+
+  if (caps.supportsReadback)
+  {
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(framebufferWidth, framebufferHeight, colorReadback, &readbackError));
+    REQUIRE(readbackError.find("no captured frame yet") != std::string::npos);
+  }
+  else
+  {
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(framebufferWidth, framebufferHeight, colorReadback, &readbackError));
+    REQUIRE(readbackError.find("unavailable") != std::string::npos);
+  }
+
+  if (caps.supportsDepthReadback)
+  {
+    REQUIRE_FALSE(backend.ReadbackDepth32F(framebufferWidth, framebufferHeight, depthReadback, &readbackError));
+    REQUIRE(readbackError.find("no captured frame yet") != std::string::npos);
+  }
+  else
+  {
+    REQUIRE_FALSE(backend.ReadbackDepth32F(framebufferWidth, framebufferHeight, depthReadback, &readbackError));
+    REQUIRE(readbackError.find("unavailable") != std::string::npos);
+  }
+
+  Camera camera;
+  Mesh mesh = Mesh::CreateQuad();
+  Material material;
+  backend.BeginFrame({{}, "vulkan-readback-frame"});
+  backend.BeginPass({RenderPassId::OpaqueScene, BuildRenderView(camera), "vulkan-readback-pass"});
+  backend.DrawMesh({&mesh, &material, Mat4::Identity()});
+  backend.EndPass();
+  backend.EndFrame();
+
+  if (caps.supportsReadback)
+  {
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(framebufferWidth + 1, framebufferHeight, colorReadback, &readbackError));
+    REQUIRE(readbackError.find("must match swapchain extent") != std::string::npos);
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(0, framebufferHeight, colorReadback, &readbackError));
+    REQUIRE(readbackError.find("positive dimensions") != std::string::npos);
+
+    backend.BeginFrame({{}, "vulkan-readback-active-frame"});
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(framebufferWidth, framebufferHeight, colorReadback, &readbackError));
+    REQUIRE(readbackError.find("outside active BeginFrame/EndFrame scope") != std::string::npos);
+    backend.EndFrame();
+
+    const bool colorOk =
+        backend.ReadbackColorBgr8(framebufferWidth, framebufferHeight, colorReadback, &readbackError);
+    if (colorOk)
+      REQUIRE(colorReadback.size() == static_cast<size_t>(framebufferWidth * framebufferHeight * 3));
+    else
+      REQUIRE_FALSE(readbackError.empty());
+  }
+  else
+  {
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(64, 64, colorReadback, &readbackError));
+    REQUIRE_FALSE(readbackError.empty());
+  }
+
+  if (caps.supportsDepthReadback)
+  {
+    REQUIRE_FALSE(backend.ReadbackDepth32F(framebufferWidth, framebufferHeight + 1, depthReadback, &readbackError));
+    REQUIRE(readbackError.find("must match swapchain extent") != std::string::npos);
+    REQUIRE_FALSE(backend.ReadbackDepth32F(framebufferWidth, 0, depthReadback, &readbackError));
+    REQUIRE(readbackError.find("positive dimensions") != std::string::npos);
+
+    backend.BeginFrame({{}, "vulkan-depth-readback-active-frame"});
+    REQUIRE_FALSE(backend.ReadbackDepth32F(framebufferWidth, framebufferHeight, depthReadback, &readbackError));
+    REQUIRE(readbackError.find("outside active BeginFrame/EndFrame scope") != std::string::npos);
+    backend.EndFrame();
+
+    const bool depthOk =
+        backend.ReadbackDepth32F(framebufferWidth, framebufferHeight, depthReadback, &readbackError);
+    if (depthOk)
+      REQUIRE(depthReadback.size() == static_cast<size_t>(framebufferWidth * framebufferHeight));
+    else
+      REQUIRE_FALSE(readbackError.empty());
+  }
+  else
+  {
+    REQUIRE_FALSE(backend.ReadbackDepth32F(64, 64, depthReadback, &readbackError));
+    REQUIRE_FALSE(readbackError.empty());
+  }
 
   glfwDestroyWindow(window);
   glfwTerminate();
