@@ -77,6 +77,10 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
                       "capability-driven parity");
   RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
                       "editor viewport");
+  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+                      "Current Implemented Foundation State");
+  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+                      "backend-parity-validation-matrix.md");
   RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md", "Vulkan-enabled build");
 }
 
