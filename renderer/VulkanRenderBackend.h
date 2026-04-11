@@ -6,91 +6,109 @@
 
 #include "renderer/IRenderBackend.h"
 
-namespace Monolith {
+namespace Monolith
+{
 
-class VulkanRenderBackend : public IRenderBackend {
- public:
-  explicit VulkanRenderBackend(void* nativeWindowHandle);
-  ~VulkanRenderBackend() override;
+  class VulkanRenderBackend : public IRenderBackend
+  {
+  public:
+    using OverlayRenderCallback = void (*)(void *userData, void *commandBufferHandle);
 
-  VulkanRenderBackend(const VulkanRenderBackend&) = delete;
-  VulkanRenderBackend& operator=(const VulkanRenderBackend&) = delete;
-  VulkanRenderBackend(VulkanRenderBackend&&) = delete;
-  VulkanRenderBackend& operator=(VulkanRenderBackend&&) = delete;
+    explicit VulkanRenderBackend(void *nativeWindowHandle);
+    ~VulkanRenderBackend() override;
 
-  void BeginFrame(const RenderFrameConfig& frame) override;
-  void EndFrame() override;
-  void BeginPass(const RenderPassConfig& pass) override;
-  void EndPass() override;
+    VulkanRenderBackend(const VulkanRenderBackend &) = delete;
+    VulkanRenderBackend &operator=(const VulkanRenderBackend &) = delete;
+    VulkanRenderBackend(VulkanRenderBackend &&) = delete;
+    VulkanRenderBackend &operator=(VulkanRenderBackend &&) = delete;
 
-  void DrawMesh(const MeshDrawCommand& command) override;
-  void DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) override;
-  void DrawWireframe(const WireframeDrawCommand& command) override;
+    void BeginFrame(const RenderFrameConfig &frame) override;
+    void EndFrame() override;
+    void BeginPass(const RenderPassConfig &pass) override;
+    void EndPass() override;
 
-  RenderBackendId GetBackendId() const override { return RenderBackendId::Vulkan; }
-  RenderBackendCapabilities GetCapabilities() const override;
-  int GetDrawCallCount() const override { return m_drawCalls; }
+    void DrawMesh(const MeshDrawCommand &command) override;
+    void DrawSkinnedMesh(const SkinnedMeshDrawCommand &command) override;
+    void DrawWireframe(const WireframeDrawCommand &command) override;
 
-  bool IsInitialized() const;
-  bool HasOpaqueRasterScaffold() const;
-  bool HasOpaquePipelineCreationScaffold() const;
-  bool HasOpaqueShaderPipelineScaffold() const;
-  bool HasOpaqueGraphicsPipelineScaffold() const;
-  const std::string& GetLastError() const { return m_lastError; }
+    RenderBackendId GetBackendId() const override { return RenderBackendId::Vulkan; }
+    RenderBackendCapabilities GetCapabilities() const override;
+    int GetDrawCallCount() const override { return m_drawCalls; }
 
-  struct TranslatedMaterialState {
-    Vec4 baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
-    float roughness = 0.5f;
-    float metallic = 0.0f;
-    float uvScale = 1.0f;
-    bool usesAlbedoMap = false;
-    bool usesCustomShader = false;
+    bool IsInitialized() const;
+    bool HasOpaqueRasterScaffold() const;
+    bool HasOpaquePipelineCreationScaffold() const;
+    bool HasOpaqueShaderPipelineScaffold() const;
+    bool HasOpaqueGraphicsPipelineScaffold() const;
+    bool TryGetImGuiVulkanInitData(void **outInstance,
+                                   void **outPhysicalDevice,
+                                   void **outDevice,
+                                   uint32_t *outQueueFamily,
+                                   void **outQueue,
+                                   void **outRenderPass,
+                                   uint32_t *outImageCount) const;
+    void *GetActiveCommandBufferHandle() const;
+    void QueueOverlayRenderCallback(OverlayRenderCallback callback, void *userData);
+    const std::string &GetLastError() const { return m_lastError; }
+
+    struct TranslatedMaterialState
+    {
+      Vec4 baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
+      float roughness = 0.5f;
+      float metallic = 0.0f;
+      float uvScale = 1.0f;
+      bool usesAlbedoMap = false;
+      bool usesCustomShader = false;
+    };
+
+    struct OpaquePipelineKey
+    {
+      bool usesAlbedoMap = false;
+      bool usesCustomShader = false;
+      bool writesDepth = true;
+      bool depthTestEnabled = true;
+    };
+
+    static TranslatedMaterialState TranslateMaterialState(const Material &material);
+    static int ResolveIndexCount(const Mesh &mesh);
+    static OpaquePipelineKey BuildOpaquePipelineKey(const TranslatedMaterialState &materialState);
+
+  private:
+    struct Context;
+
+    bool Initialize(void *nativeWindowHandle);
+    void Shutdown();
+    bool RecreateSwapchain();
+    void DestroySwapchain();
+    bool CreateOpaqueRasterScaffold();
+    void DestroyOpaqueRasterScaffold();
+    bool CreateOpaquePipelineCreationScaffold();
+    void DestroyOpaquePipelineCreationScaffold();
+    bool CreateOpaqueShaderPipelineScaffold();
+    void DestroyOpaqueShaderPipelineScaffold();
+    bool CreateOpaqueGraphicsPipelineScaffold();
+    void DestroyOpaqueGraphicsPipelineScaffold();
+    bool RecordFrameCommands(const RenderFrameConfig &frame);
+
+    struct PendingOpaqueDraw
+    {
+      int indexCount = 0;
+      Mat4 modelMatrix = Mat4::Identity();
+      TranslatedMaterialState material;
+      OpaquePipelineKey pipelineKey;
+    };
+
+    std::unique_ptr<Context> m_context;
+    RenderFrameConfig m_activeFrame;
+    RenderView m_activeView;
+    std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
+    OverlayRenderCallback m_pendingOverlayRenderCallback = nullptr;
+    void *m_pendingOverlayRenderUserData = nullptr;
+    std::string m_lastError;
+    RenderPassId m_activePassId = RenderPassId::OpaqueScene;
+    int m_drawCalls = 0;
+    bool m_frameActive = false;
+    bool m_passActive = false;
   };
 
-  struct OpaquePipelineKey {
-    bool usesAlbedoMap = false;
-    bool usesCustomShader = false;
-    bool writesDepth = true;
-    bool depthTestEnabled = true;
-  };
-
-  static TranslatedMaterialState TranslateMaterialState(const Material& material);
-  static int ResolveIndexCount(const Mesh& mesh);
-  static OpaquePipelineKey BuildOpaquePipelineKey(const TranslatedMaterialState& materialState);
-
- private:
-  struct Context;
-
-  bool Initialize(void* nativeWindowHandle);
-  void Shutdown();
-  bool RecreateSwapchain();
-  void DestroySwapchain();
-  bool CreateOpaqueRasterScaffold();
-  void DestroyOpaqueRasterScaffold();
-  bool CreateOpaquePipelineCreationScaffold();
-  void DestroyOpaquePipelineCreationScaffold();
-  bool CreateOpaqueShaderPipelineScaffold();
-  void DestroyOpaqueShaderPipelineScaffold();
-  bool CreateOpaqueGraphicsPipelineScaffold();
-  void DestroyOpaqueGraphicsPipelineScaffold();
-  bool RecordFrameCommands(const RenderFrameConfig& frame);
-
-  struct PendingOpaqueDraw {
-    int indexCount = 0;
-    Mat4 modelMatrix = Mat4::Identity();
-    TranslatedMaterialState material;
-    OpaquePipelineKey pipelineKey;
-  };
-
-  std::unique_ptr<Context> m_context;
-  RenderFrameConfig m_activeFrame;
-  RenderView m_activeView;
-  std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
-  std::string m_lastError;
-  RenderPassId m_activePassId = RenderPassId::OpaqueScene;
-  int m_drawCalls = 0;
-  bool m_frameActive = false;
-  bool m_passActive = false;
-};
-
-}  // namespace Monolith
+} // namespace Monolith
