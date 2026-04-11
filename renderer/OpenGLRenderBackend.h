@@ -21,6 +21,20 @@ class OpenGLRenderBackend : public IRenderBackend {
   RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
   RenderBackendCapabilities GetCapabilities() const override;
   int GetDrawCallCount() const override { return m_drawCalls; }
+  bool ReadbackColorBgr8(int width,
+                         int height,
+                         std::vector<uint8_t>& outPixels,
+                         std::string* outError) override;
+  bool ReadbackDepth32F(int width,
+                        int height,
+                        std::vector<float>& outDepth,
+                        std::string* outError) override;
+  bool EnsureEditorViewportRenderTarget(uint32_t width,
+                                        uint32_t height,
+                                        std::string* outError) override;
+  bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle* outHandle,
+                                              bool needsYFlip,
+                                              std::string* outError) override;
 
  private:
   void UploadLights(const Shader& shader);

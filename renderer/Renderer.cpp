@@ -175,4 +175,34 @@ namespace Monolith
     return ActiveBackend()->GetDrawCallCount();
   }
 
+  bool Renderer::ReadbackColorBgr8(int width,
+                                   int height,
+                                   std::vector<uint8_t> &outPixels,
+                                   std::string *outError)
+  {
+    return ActiveBackend()->ReadbackColorBgr8(width, height, outPixels, outError);
+  }
+
+  bool Renderer::ReadbackDepth32F(int width,
+                                   int height,
+                                   std::vector<float> &outDepth,
+                                   std::string *outError)
+  {
+    return ActiveBackend()->ReadbackDepth32F(width, height, outDepth, outError);
+  }
+
+  bool Renderer::EnsureEditorViewportRenderTarget(uint32_t width,
+                                                  uint32_t height,
+                                                  std::string *outError)
+  {
+    return ActiveBackend()->EnsureEditorViewportRenderTarget(width, height, outError);
+  }
+
+  bool Renderer::TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
+                                                        bool needsYFlip,
+                                                        std::string *outError)
+  {
+    return ActiveBackend()->TryGetEditorViewportRenderTargetHandle(outHandle, needsYFlip, outError);
+  }
+
 } // namespace Monolith

@@ -1,10 +1,12 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include "math/Mat4.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/IRenderBackend.h"
+#include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
 
 namespace Monolith
@@ -53,6 +55,20 @@ namespace Monolith
                                 float b = 0.2f);
 
     static int GetDrawCallCount();
+    static bool ReadbackColorBgr8(int width,
+                                  int height,
+                                  std::vector<uint8_t> &outPixels,
+                                  std::string *outError = nullptr);
+    static bool ReadbackDepth32F(int width,
+                                 int height,
+                                 std::vector<float> &outDepth,
+                                 std::string *outError = nullptr);
+    static bool EnsureEditorViewportRenderTarget(uint32_t width,
+                                                 uint32_t height,
+                                                 std::string *outError = nullptr);
+    static bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
+                                                       bool needsYFlip = false,
+                                                       std::string *outError = nullptr);
 
   private:
     static IRenderBackend *ActiveBackend();
