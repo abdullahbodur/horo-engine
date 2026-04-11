@@ -1081,6 +1081,10 @@ static bool TryGetAssetPreviewHandle(const std::string& assetId,
     return false;
   *outHandle = {};
 
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  if (!caps.supportsNativeTextureHandles)
+    return false;
+
   static std::unordered_map<std::string, Texture> s_textureByPath;
   static std::unordered_map<std::string, std::shared_ptr<Texture>> s_gltfTextureByMesh;
   static std::unordered_set<std::string> s_noPreviewCache;
@@ -1090,7 +1094,7 @@ static bool TryGetAssetPreviewHandle(const std::string& assetId,
     return false;
 
   auto loadTextureByPath = [&](const std::filesystem::path& path) -> RenderTargetHandle {
-    if (!Renderer::GetBackendCapabilities().supportsNativeTextureHandles)
+    if (!caps.supportsNativeTextureHandles)
       return {};
     if (path.empty())
       return {};
@@ -1109,7 +1113,7 @@ static bool TryGetAssetPreviewHandle(const std::string& assetId,
   };
 
   // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
-  if (!asset.mesh.empty()) {
+  if (caps.supportsOffscreenTargets && !asset.mesh.empty()) {
     auto& thumbnailRenderer = AssetThumbnailRenderer::Instance();
     if (thumbnailRenderer.Init()) {
       if (auto* meshEntry = TryLoadAssetMesh(asset.mesh)) {
