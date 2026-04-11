@@ -24,11 +24,13 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
     case RenderBackendId::Auto:
       return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
     case RenderBackendId::OpenGL:
-      return {.supportsWireframeOverlay = true,
+      return {.supportsDebugDraw = true,
+              .supportsWireframeOverlay = true,
               .supportsDebugLabels = false,
               .supportsOffscreenTargets = true,
               .supportsNativeTextureHandles = true,
               .supportsReadback = true,
+              .supportsDepthReadback = true,
               .supportsDebugHud = true,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,

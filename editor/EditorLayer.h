@@ -147,6 +147,7 @@ class EditorLayer {
 
   GLFWwindow* m_window = nullptr;
   bool m_active = false;
+  bool m_imguiBackendInitialized = false;
   bool m_playMode = false;
   bool m_wantsReload = false;
   bool m_prevMouseL = false;

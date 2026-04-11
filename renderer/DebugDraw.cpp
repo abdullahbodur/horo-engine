@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "math/MathUtils.h"
+#include "renderer/Renderer.h"
 
 namespace Monolith {
 
@@ -36,6 +37,11 @@ void main() { FragColor = v_color; }
 )glsl";
 
 void DebugDraw::Init() {
+  if (!Renderer::GetBackendCapabilities().supportsDebugDraw) {
+    s_initialized = false;
+    return;
+  }
+
   s_shader = std::make_unique<Shader>(Shader::FromSource(DEBUG_VERT, DEBUG_FRAG));
 
   glGenVertexArrays(1, &s_vao);
@@ -77,6 +83,8 @@ void DebugDraw::Shutdown() {
 }
 
 void DebugDraw::Line(const Vec3& from, const Vec3& to, const Vec4& color) {
+  if (!Renderer::GetBackendCapabilities().supportsDebugDraw)
+    return;
   s_lines.push_back({from, color});
   s_lines.push_back({to, color});
 }
@@ -138,6 +146,11 @@ void DebugDraw::Box(const Vec3& center, const Vec3& h, const Vec4& color) {
 }
 
 void DebugDraw::Flush(const Camera& camera) {
+  if (!Renderer::GetBackendCapabilities().supportsDebugDraw) {
+    s_lines.clear();
+    return;
+  }
+
   if (!s_initialized || s_lines.empty())
     return;
 

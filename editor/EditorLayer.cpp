@@ -16,8 +16,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
 
 #include <algorithm>
 #include <array>
@@ -43,6 +41,7 @@
 #include "editor/AssetIdentity.h"
 #include "editor/AssetMetadata.h"
 #include "editor/ProjectEntryFilter.h"
+#include "editor/EditorImGuiBackend.h"
 #include "editor/EditorDebugTrace.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorSearch.h"
@@ -1310,8 +1309,11 @@ void EditorLayer::Init(GLFWwindow* window) {
   }
   LoadWorkspaceState();
 
-  ImGui_ImplGlfw_InitForOpenGL(window, true);
-  ImGui_ImplOpenGL3_Init("#version 410");
+  const RenderBackendId backendId = Renderer::GetBackendId();
+  m_imguiBackendInitialized = InitEditorImGuiBackend(window, backendId);
+  if (!m_imguiBackendInitialized) {
+    LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'", ToString(backendId));
+  }
 
   m_schema.LoadFromFile("assets/editor_schema.json");
 
@@ -1336,8 +1338,9 @@ void EditorLayer::Shutdown() {
   if (!m_imguiIniPath.empty())
     ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
   m_mcpController.Shutdown();
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
+  if (m_imguiBackendInitialized)
+    ShutdownEditorImGuiBackend(Renderer::GetBackendId());
+  m_imguiBackendInitialized = false;
   ImGui::DestroyContext();
 }
 
@@ -2061,8 +2064,8 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   m_viewGizmoPickRect.Clear();
   ProcessPendingPathDrops();
 
-  ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
+  if (m_imguiBackendInitialized)
+    BeginEditorImGuiFrame(Renderer::GetBackendId());
   ImGui::NewFrame();
 
   const EditorHistorySnapshot frameHistoryBefore = m_active ? CaptureHistorySnapshot()
@@ -2111,7 +2114,8 @@ void EditorLayer::Render(const Camera& cam, int screenW, int screenH) {
   DebugDraw::Flush(cam);
 
   ImGui::Render();
-  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+  if (m_imguiBackendInitialized)
+    RenderEditorImGuiDrawData(Renderer::GetBackendId(), ImGui::GetDrawData());
 }
 
 void EditorLayer::DrawDockspace() {
