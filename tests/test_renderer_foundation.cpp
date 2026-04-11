@@ -308,6 +308,27 @@ TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a
   REQUIRE(backend.HasOpaqueShaderPipelineScaffold());
   REQUIRE(backend.HasOpaqueGraphicsPipelineScaffold());
 
+  void *instanceHandle = nullptr;
+  void *physicalDeviceHandle = nullptr;
+  void *deviceHandle = nullptr;
+  void *queueHandle = nullptr;
+  void *renderPassHandle = nullptr;
+  uint32_t queueFamily = 0;
+  uint32_t imageCount = 0;
+  REQUIRE(backend.TryGetImGuiVulkanInitData(&instanceHandle,
+                                            &physicalDeviceHandle,
+                                            &deviceHandle,
+                                            &queueFamily,
+                                            &queueHandle,
+                                            &renderPassHandle,
+                                            &imageCount));
+  REQUIRE(instanceHandle != nullptr);
+  REQUIRE(physicalDeviceHandle != nullptr);
+  REQUIRE(deviceHandle != nullptr);
+  REQUIRE(queueHandle != nullptr);
+  REQUIRE(renderPassHandle != nullptr);
+  REQUIRE(imageCount >= 2);
+
   glfwDestroyWindow(window);
   glfwTerminate();
 }
