@@ -274,6 +274,49 @@ namespace
       *outContract = BuildLightingCompositePassContract(sceneTextures, resolve);
       return true;
     }
+    bool TryGetSceneTracingRepresentationContract(SceneTracingRepresentationContract *outContract,
+                                                  std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      ScreenSpaceReflectionPassContract ssr{};
+      ScreenSpaceGlobalIlluminationPassContract ssgi{};
+      TemporalGiResolvePassContract resolve{};
+      if (!TryGetScreenSpaceReflectionPassContract(&ssr, outError) ||
+          !TryGetScreenSpaceGlobalIlluminationPassContract(&ssgi, outError) ||
+          !TryGetTemporalGiResolvePassContract(&resolve, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      const BackendResourceHandle reference = sceneTextures.Get(SceneTextureSemantic::Depth);
+      MeshDistanceFieldTracingStructure mesh{};
+      mesh.atlas = {reference.backendId, 0x901u, reference.width, reference.height, 3u};
+      mesh.meshCount = 3u;
+      mesh.instanceCount = 5u;
+      mesh.pageCount = 64u;
+      mesh.revision = 3u;
+
+      GlobalDistanceFieldTracingStructure global{};
+      global.volume = {reference.backendId, 0x902u, reference.width, reference.height, 7u};
+      global.clipmapCount = 4u;
+      global.voxelResolution = std::min(reference.width, reference.height);
+      global.worldExtent = 512.0f;
+      global.revision = 7u;
+
+      *outContract = BuildSceneTracingRepresentationContract(
+          ssr,
+          ssgi,
+          resolve,
+          mesh,
+          global,
+          SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+          SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+          true);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -887,6 +930,83 @@ TEST_CASE("Lighting composite contract remains fallback-aware when temporal reso
   REQUIRE_FALSE(fallbackComposite.temporalStabilityExpected);
 }
 
+TEST_CASE("Scene tracing representation contract captures mesh and global distance field state",
+          "[renderer][foundation][temporal][tracing]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x91u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x92u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0x93u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x94u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x95u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x96u, 960u, 540u, 1u});
+  sceneTextures.frameSerial = 90u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0xA1u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::SpecularIrradiance,
+              {RenderBackendId::Vulkan, 0xA2u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0xA3u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0xA4u, 960u, 540u, 2u});
+  history.revision = 77u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true, ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  const ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true);
+  const TemporalGiResolvePassContract resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+
+  MeshDistanceFieldTracingStructure mesh{};
+  mesh.atlas = {RenderBackendId::Vulkan, 0xB1u, 960u, 540u, 5u};
+  mesh.meshCount = 12u;
+  mesh.instanceCount = 20u;
+  mesh.pageCount = 128u;
+  mesh.revision = 5u;
+
+  GlobalDistanceFieldTracingStructure global{};
+  global.volume = {RenderBackendId::Vulkan, 0xB2u, 960u, 540u, 5u};
+  global.clipmapCount = 5u;
+  global.voxelResolution = 540u;
+  global.worldExtent = 1024.0f;
+  global.revision = 5u;
+
+  const SceneTracingRepresentationContract tracing = BuildSceneTracingRepresentationContract(
+      ssr,
+      ssgi,
+      resolve,
+      mesh,
+      global,
+      SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+      SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+      true);
+
+  REQUIRE(tracing.IsValidForOffscreenQueries());
+  REQUIRE(tracing.validationStatus == SceneTracingRepresentationValidationStatus::Valid);
+  REQUIRE(tracing.state == SceneTracingRepresentationState::HybridReady);
+  REQUIRE(tracing.debug.visualizationReady);
+  REQUIRE_FALSE(tracing.debug.usesClosestApproximation);
+  REQUIRE(tracing.mesh.meshCount == 12u);
+  REQUIRE(tracing.global.clipmapCount == 5u);
+
+  mesh.atlas = {};
+  const SceneTracingRepresentationContract missingMesh = BuildSceneTracingRepresentationContract(
+      ssr,
+      ssgi,
+      resolve,
+      mesh,
+      global,
+      SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+      SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+      true);
+  REQUIRE_FALSE(missingMesh.IsValidForOffscreenQueries());
+  REQUIRE(missingMesh.validationStatus ==
+          SceneTracingRepresentationValidationStatus::MissingMeshDistanceField);
+  REQUIRE(missingMesh.debug.usesClosestApproximation);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -944,6 +1064,12 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
            LightingCompositeExecutionStatus::CompositeWithIndirect ||
            compositeContract.executionStatus ==
                LightingCompositeExecutionStatus::DirectLightingOnlyFallback));
+  SceneTracingRepresentationContract tracingContract{};
+  REQUIRE(Renderer::TryGetSceneTracingRepresentationContract(&tracingContract, &error));
+  REQUIRE(tracingContract.validationStatus == SceneTracingRepresentationValidationStatus::Valid);
+  REQUIRE(tracingContract.IsValidForOffscreenQueries());
+  REQUIRE(tracingContract.mesh.IsValid());
+  REQUIRE(tracingContract.global.IsValid());
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

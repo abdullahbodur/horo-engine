@@ -165,6 +165,15 @@ bool OpenGLRenderBackend::TryGetLightingCompositePassContract(
   return false;
 }
 
+bool OpenGLRenderBackend::TryGetSceneTracingRepresentationContract(
+    SceneTracingRepresentationContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "Scene tracing representation contract is unavailable on OpenGL backend.";
+  return false;
+}
+
 bool OpenGLRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string* outError) {
   if (outError)
     *outError = "GI history invalidation is unavailable on OpenGL backend.";

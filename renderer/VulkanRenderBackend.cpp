@@ -47,6 +47,8 @@ namespace Monolith
         "__gi.history.specular_irradiance",
         "__gi.history.validation",
         "__gi.history.moments"};
+    constexpr const char *kMeshDistanceFieldTargetKey = "__scene.tracing.mesh_distance_field";
+    constexpr const char *kGlobalDistanceFieldTargetKey = "__scene.tracing.global_distance_field";
 
     uint64_t HashResourceKey(const std::string &key)
     {
@@ -826,7 +828,50 @@ namespace Monolith
       m_sceneTextureCatalog.Set(semantic, handle);
     }
 
+    if (!EnsureOffscreenRenderTarget(kMeshDistanceFieldTargetKey, width, height))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+    if (!EnsureOffscreenRenderTarget(kGlobalDistanceFieldTargetKey, width, height))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    BackendResourceHandle meshDistanceFieldHandle{};
+    if (!BuildOffscreenResourceHandle(kMeshDistanceFieldTargetKey, &meshDistanceFieldHandle))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    BackendResourceHandle globalDistanceFieldHandle{};
+    if (!BuildOffscreenResourceHandle(kGlobalDistanceFieldTargetKey, &globalDistanceFieldHandle))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    m_meshDistanceFieldTracingStructure.atlas = meshDistanceFieldHandle;
+    m_meshDistanceFieldTracingStructure.meshCount = 0;
+    m_meshDistanceFieldTracingStructure.instanceCount = 0;
+    m_meshDistanceFieldTracingStructure.pageCount = std::max(1u, (width * height) / 256u);
+    m_meshDistanceFieldTracingStructure.revision = meshDistanceFieldHandle.generation;
+
+    m_globalDistanceFieldTracingStructure.volume = globalDistanceFieldHandle;
+    m_globalDistanceFieldTracingStructure.clipmapCount = 4;
+    m_globalDistanceFieldTracingStructure.voxelResolution = std::min(width, height);
+    m_globalDistanceFieldTracingStructure.worldExtent = 512.0f;
+    m_globalDistanceFieldTracingStructure.revision = globalDistanceFieldHandle.generation;
+
     ++m_sceneTextureCatalog.frameSerial;
+    m_lastSceneTracingRepresentationContract = {};
+    m_hasSceneTracingRepresentationContract = false;
     return true;
   }
 
@@ -978,6 +1023,25 @@ namespace Monolith
     return true;
   }
 
+  bool VulkanRenderBackend::TryGetSceneTracingRepresentationContract(
+      SceneTracingRepresentationContract *outContract,
+      std::string *outError) const
+  {
+    if (!outContract)
+      return false;
+
+    if (!m_hasSceneTracingRepresentationContract)
+    {
+      *outContract = {};
+      if (outError)
+        *outError = "Scene tracing representation contract has not been produced for this frame.";
+      return false;
+    }
+
+    *outContract = m_lastSceneTracingRepresentationContract;
+    return true;
+  }
+
   bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason reason,
                                                 std::string *outError)
   {
@@ -1071,6 +1135,29 @@ namespace Monolith
         m_sceneTextureCatalog,
         m_lastTemporalGiResolvePassContract);
     m_hasLightingCompositePassContract = true;
+
+    m_meshDistanceFieldTracingStructure.meshCount =
+        static_cast<uint32_t>(m_context ? m_context->opaqueMeshGpuBuffers.size() : 0u);
+    m_meshDistanceFieldTracingStructure.instanceCount =
+        static_cast<uint32_t>(m_pendingOpaqueDraws.size());
+    m_meshDistanceFieldTracingStructure.revision = std::max(
+        m_meshDistanceFieldTracingStructure.revision,
+        m_meshDistanceFieldTracingStructure.atlas.generation);
+    m_globalDistanceFieldTracingStructure.revision = std::max(
+        m_globalDistanceFieldTracingStructure.revision,
+        m_globalDistanceFieldTracingStructure.volume.generation);
+
+    const bool tracingEnabled = m_activeFrame.temporal.jitter.qualityTier != TemporalQualityTier::Disabled;
+    m_lastSceneTracingRepresentationContract = BuildSceneTracingRepresentationContract(
+        m_lastSsrPassContract,
+        m_lastSsgiPassContract,
+        m_lastTemporalGiResolvePassContract,
+        m_meshDistanceFieldTracingStructure,
+        m_globalDistanceFieldTracingStructure,
+        SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+        SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+        tracingEnabled);
+    m_hasSceneTracingRepresentationContract = true;
   }
 
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &targetKey,
@@ -3868,10 +3955,12 @@ namespace Monolith
     m_lastSsgiPassContract = {};
     m_lastTemporalGiResolvePassContract = {};
     m_lastLightingCompositePassContract = {};
+    m_lastSceneTracingRepresentationContract = {};
     m_hasSsrPassContract = false;
     m_hasSsgiPassContract = false;
     m_hasTemporalGiResolvePassContract = false;
     m_hasLightingCompositePassContract = false;
+    m_hasSceneTracingRepresentationContract = false;
     m_activeView = {};
     if (m_pendingOpaqueDraws.capacity() < 256)
       m_pendingOpaqueDraws.reserve(256);
@@ -4095,6 +4184,12 @@ namespace Monolith
   }
   bool VulkanRenderBackend::TryGetLightingCompositePassContract(
       LightingCompositePassContract *,
+      std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::TryGetSceneTracingRepresentationContract(
+      SceneTracingRepresentationContract *,
       std::string *) const
   {
     return false;

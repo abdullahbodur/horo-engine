@@ -1139,4 +1139,212 @@ namespace Monolith
     return contract;
   }
 
+  enum class SceneTracingRepresentationOwnership : uint8_t
+  {
+    BackendOwnedPersistent = 0,
+    BackendOwnedPerFrame,
+    ExternalTransient,
+  };
+
+  enum class SceneTracingRepresentationUpdatePolicy : uint8_t
+  {
+    Static = 0,
+    SceneBarrierOnly,
+    PerFrameAndSceneBarrier,
+    IncrementalStreaming,
+  };
+
+  struct MeshDistanceFieldTracingStructure
+  {
+    BackendResourceHandle atlas{};
+    uint32_t meshCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t pageCount = 0;
+    uint64_t revision = 0;
+
+    bool IsValid() const { return atlas.IsValid(); }
+  };
+
+  struct GlobalDistanceFieldTracingStructure
+  {
+    BackendResourceHandle volume{};
+    uint32_t clipmapCount = 0;
+    uint32_t voxelResolution = 0;
+    float worldExtent = 0.0f;
+    uint64_t revision = 0;
+
+    bool IsValid() const { return volume.IsValid(); }
+  };
+
+  struct SceneTracingDebugState
+  {
+    bool visualizationReady = false;
+    bool usesClosestApproximation = false;
+    bool temporalHistoryStable = false;
+    GiHistoryResetReason lastHistoryResetReason = GiHistoryResetReason::None;
+    SsrExecutionStatus ssrExecutionStatus = SsrExecutionStatus::Disabled;
+    SsgiExecutionStatus ssgiExecutionStatus = SsgiExecutionStatus::Disabled;
+    TemporalGiResolveExecutionStatus temporalResolveExecutionStatus =
+        TemporalGiResolveExecutionStatus::Disabled;
+  };
+
+  enum class SceneTracingRepresentationValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingScreenSpaceContracts,
+    MissingMeshDistanceField,
+    MissingGlobalDistanceField,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  inline const char *ToString(SceneTracingRepresentationValidationStatus status)
+  {
+    switch (status)
+    {
+    case SceneTracingRepresentationValidationStatus::DisabledBySettings:
+      return "scene tracing representation disabled by settings";
+    case SceneTracingRepresentationValidationStatus::Valid:
+      return "valid";
+    case SceneTracingRepresentationValidationStatus::MissingScreenSpaceContracts:
+      return "scene tracing representation is missing required screen-space contracts";
+    case SceneTracingRepresentationValidationStatus::MissingMeshDistanceField:
+      return "scene tracing representation is missing mesh distance fields";
+    case SceneTracingRepresentationValidationStatus::MissingGlobalDistanceField:
+      return "scene tracing representation is missing global distance field";
+    case SceneTracingRepresentationValidationStatus::BackendMismatch:
+      return "scene tracing representation inputs come from mismatched backends";
+    case SceneTracingRepresentationValidationStatus::DimensionMismatch:
+      return "scene tracing representation inputs have mismatched dimensions";
+    }
+    return "unknown scene tracing representation validation status";
+  }
+
+  enum class SceneTracingRepresentationState : uint8_t
+  {
+    Disabled = 0,
+    Unavailable,
+    MeshDistanceFieldOnly,
+    GlobalDistanceFieldOnly,
+    HybridReady,
+  };
+
+  struct SceneTracingRepresentationContract
+  {
+    MeshDistanceFieldTracingStructure mesh{};
+    GlobalDistanceFieldTracingStructure global{};
+    ScreenSpaceReflectionPassContract ssr{};
+    ScreenSpaceGlobalIlluminationPassContract ssgi{};
+    TemporalGiResolvePassContract temporalResolve{};
+    BackendResourceHandle referenceDepth{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    SceneTracingRepresentationOwnership ownership =
+        SceneTracingRepresentationOwnership::BackendOwnedPersistent;
+    SceneTracingRepresentationUpdatePolicy updatePolicy =
+        SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier;
+    SceneTracingDebugState debug{};
+    SceneTracingRepresentationState state = SceneTracingRepresentationState::Unavailable;
+    SceneTracingRepresentationValidationStatus validationStatus =
+        SceneTracingRepresentationValidationStatus::DisabledBySettings;
+
+    bool IsValidForOffscreenQueries() const
+    {
+      return validationStatus == SceneTracingRepresentationValidationStatus::Valid &&
+             state == SceneTracingRepresentationState::HybridReady;
+    }
+  };
+
+  inline SceneTracingRepresentationContract BuildSceneTracingRepresentationContract(
+      const ScreenSpaceReflectionPassContract &ssrContract,
+      const ScreenSpaceGlobalIlluminationPassContract &ssgiContract,
+      const TemporalGiResolvePassContract &resolveContract,
+      const MeshDistanceFieldTracingStructure &meshStructure,
+      const GlobalDistanceFieldTracingStructure &globalStructure,
+      SceneTracingRepresentationOwnership ownership,
+      SceneTracingRepresentationUpdatePolicy updatePolicy,
+      bool enabled)
+  {
+    SceneTracingRepresentationContract contract{};
+    contract.ssr = ssrContract;
+    contract.ssgi = ssgiContract;
+    contract.temporalResolve = resolveContract;
+    contract.mesh = meshStructure;
+    contract.global = globalStructure;
+    contract.ownership = ownership;
+    contract.updatePolicy = updatePolicy;
+    contract.sceneFrameSerial = std::max(ssrContract.sceneFrameSerial, ssgiContract.sceneFrameSerial);
+    contract.historyRevision = resolveContract.historyRevision;
+    contract.referenceDepth =
+        ssgiContract.depth.IsValid() ? ssgiContract.depth : ssrContract.depth;
+    contract.debug.lastHistoryResetReason = resolveContract.historyResetReason;
+    contract.debug.ssrExecutionStatus = ssrContract.executionStatus;
+    contract.debug.ssgiExecutionStatus = ssgiContract.executionStatus;
+    contract.debug.temporalResolveExecutionStatus = resolveContract.executionStatus;
+    contract.debug.temporalHistoryStable =
+        resolveContract.executionStatus == TemporalGiResolveExecutionStatus::ResolveAndAccumulate &&
+        resolveContract.clampHistoryThisFrame &&
+        !resolveContract.rejectHistoryThisFrame;
+
+    if (!enabled)
+    {
+      contract.state = SceneTracingRepresentationState::Disabled;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    if (ssrContract.validationStatus != SsrInputValidationStatus::Valid ||
+        ssgiContract.validationStatus != SsgiInputValidationStatus::Valid ||
+        resolveContract.validationStatus != TemporalGiResolveValidationStatus::Valid)
+    {
+      contract.state = SceneTracingRepresentationState::Unavailable;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::MissingScreenSpaceContracts;
+      return contract;
+    }
+
+    if (!meshStructure.IsValid())
+    {
+      contract.state = globalStructure.IsValid()
+                           ? SceneTracingRepresentationState::GlobalDistanceFieldOnly
+                           : SceneTracingRepresentationState::Unavailable;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::MissingMeshDistanceField;
+      contract.debug.visualizationReady = globalStructure.IsValid();
+      contract.debug.usesClosestApproximation = true;
+      return contract;
+    }
+    if (!globalStructure.IsValid())
+    {
+      contract.state = SceneTracingRepresentationState::MeshDistanceFieldOnly;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::MissingGlobalDistanceField;
+      contract.debug.visualizationReady = true;
+      contract.debug.usesClosestApproximation = true;
+      return contract;
+    }
+
+    if (contract.referenceDepth.backendId != meshStructure.atlas.backendId ||
+        contract.referenceDepth.backendId != globalStructure.volume.backendId)
+    {
+      contract.state = SceneTracingRepresentationState::Unavailable;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::BackendMismatch;
+      return contract;
+    }
+
+    if (contract.referenceDepth.width != meshStructure.atlas.width ||
+        contract.referenceDepth.height != meshStructure.atlas.height ||
+        contract.referenceDepth.width != globalStructure.volume.width ||
+        contract.referenceDepth.height != globalStructure.volume.height)
+    {
+      contract.state = SceneTracingRepresentationState::Unavailable;
+      contract.validationStatus = SceneTracingRepresentationValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.state = SceneTracingRepresentationState::HybridReady;
+    contract.validationStatus = SceneTracingRepresentationValidationStatus::Valid;
+    contract.debug.visualizationReady = true;
+    contract.debug.usesClosestApproximation = false;
+    return contract;
+  }
+
 } // namespace Monolith
