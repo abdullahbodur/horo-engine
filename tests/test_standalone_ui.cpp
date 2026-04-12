@@ -228,6 +228,26 @@ ImGuiWindow* FindWindowContaining(const char* token) {
   return nullptr;
 }
 
+void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiHarness* state) {
+  IM_CHECK(ctx != nullptr);
+  IM_CHECK(state != nullptr);
+
+  if (state->shell.HasActiveProject())
+    return;
+
+  ctx->SetRef("Horo Launcher");
+  IM_CHECK(ctx->ItemExists("Open Existing Project"));
+  IM_CHECK(ctx->ItemExists("Create New Project"));
+  ImGuiWindow* launcherPanel = FindWindowContaining("LauncherPanel");
+  IM_CHECK(launcherPanel != nullptr);
+  ctx->SetRef(launcherPanel);
+  ctx->ItemInputValue("##new-project-name", "UiSmokeGame");
+  ctx->ItemInputValue("##new-project-path", state->projectRoot.string().c_str());
+  ctx->ItemClick("Create Project");
+  ctx->Yield(3);
+  IM_CHECK(state->shell.HasActiveProject());
+}
+
 ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
   REQUIRE(engine != nullptr);
   REQUIRE(harness != nullptr);
@@ -238,22 +258,74 @@ ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, Standalo
     auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
     IM_CHECK(state != nullptr);
 
-    ctx->SetRef("Horo Launcher");
-    IM_CHECK(ctx->ItemExists("Open Existing Project"));
-    IM_CHECK(ctx->ItemExists("Create New Project"));
-    ImGuiWindow* launcherPanel = FindWindowContaining("LauncherPanel");
-    IM_CHECK(launcherPanel != nullptr);
-    ctx->SetRef(launcherPanel);
-    ctx->ItemInputValue("##new-project-name", "UiSmokeGame");
-    ctx->ItemInputValue("##new-project-path", state->projectRoot.string().c_str());
-    ctx->ItemClick("Create Project");
-    ctx->Yield(3);
-
-    IM_CHECK(state->shell.HasActiveProject());
+    EnsureProjectCreatedFromLauncher(ctx, state);
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
+  };
+
+  return test;
+}
+
+ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
+  REQUIRE(engine != nullptr);
+  REQUIRE(harness != nullptr);
+
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "back_to_home_returns_launcher");
+  test->UserData = harness;
+  test->TestFunc = [](ImGuiTestContext* ctx) {
+    auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
+    IM_CHECK(state != nullptr);
+
+    EnsureProjectCreatedFromLauncher(ctx, state);
+
+    ctx->SetRef("Standalone Project");
+    IM_CHECK(ctx->ItemExists("Back To Home"));
+    ctx->ItemClick("Back To Home");
+    ctx->Yield(2);
+
+    IM_CHECK(!state->shell.HasActiveProject());
+    ctx->SetRef("Horo Launcher");
+    IM_CHECK(ctx->ItemExists("Create New Project"));
+    ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
+    IM_CHECK(recentProjectsList != nullptr);
+    ctx->SetRef(recentProjectsList);
+    IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+  };
+
+  return test;
+}
+
+ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
+  REQUIRE(engine != nullptr);
+  REQUIRE(harness != nullptr);
+
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "open_project_from_recent_projects");
+  test->UserData = harness;
+  test->TestFunc = [](ImGuiTestContext* ctx) {
+    auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
+    IM_CHECK(state != nullptr);
+
+    EnsureProjectCreatedFromLauncher(ctx, state);
+
+    ctx->SetRef("Standalone Project");
+    IM_CHECK(ctx->ItemExists("Back To Home"));
+    ctx->ItemClick("Back To Home");
+    ctx->Yield(2);
+    IM_CHECK(!state->shell.HasActiveProject());
+
+    ctx->SetRef("Horo Launcher");
+    ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
+    IM_CHECK(recentProjectsList != nullptr);
+    ctx->SetRef(recentProjectsList);
+    IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+    ctx->ItemClick("UiSmokeGame");
+    ctx->Yield(3);
+
+    IM_CHECK(state->shell.HasActiveProject());
+    ctx->SetRef("Standalone Project");
+    IM_CHECK(ctx->ItemExists("Back To Home"));
   };
 
   return test;
@@ -277,8 +349,14 @@ TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[st
 
   ImGuiTestEngine_Start(engine, ImGui::GetCurrentContext());
   ImGuiTest* smokeTest = RegisterStandaloneLauncherSmokeTest(engine, &harness);
+  ImGuiTest* backToHomeTest = RegisterStandaloneBackToHomeTest(engine, &harness);
+  ImGuiTest* recentProjectsTest = RegisterStandaloneRecentProjectsTest(engine, &harness);
   REQUIRE(smokeTest != nullptr);
+  REQUIRE(backToHomeTest != nullptr);
+  REQUIRE(recentProjectsTest != nullptr);
   ImGuiTestEngine_QueueTest(engine, smokeTest);
+  ImGuiTestEngine_QueueTest(engine, backToHomeTest);
+  ImGuiTestEngine_QueueTest(engine, recentProjectsTest);
 
   int frameCount = 0;
   while ((testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(engine)) && frameCount < 600) {
@@ -294,18 +372,28 @@ TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[st
   int testsSucceeded = 0;
   ImGuiTestEngine_GetResult(engine, testsRun, testsSucceeded);
   const int smokeStatus = static_cast<int>(smokeTest->Output.Status);
+  const int backToHomeStatus = static_cast<int>(backToHomeTest->Output.Status);
+  const int recentProjectsStatus = static_cast<int>(recentProjectsTest->Output.Status);
   const std::string smokeLog = smokeTest->Output.Log.Buffer.c_str();
+  const std::string backToHomeLog = backToHomeTest->Output.Log.Buffer.c_str();
+  const std::string recentProjectsLog = recentProjectsTest->Output.Log.Buffer.c_str();
 
   INFO(std::string("Smoke test status: ") + std::to_string(smokeStatus));
   INFO(std::string("Smoke test log:\n") + smokeLog);
+  INFO(std::string("Back To Home test status: ") + std::to_string(backToHomeStatus));
+  INFO(std::string("Back To Home test log:\n") + backToHomeLog);
+  INFO(std::string("Recent Projects test status: ") + std::to_string(recentProjectsStatus));
+  INFO(std::string("Recent Projects test log:\n") + recentProjectsLog);
   ImGuiTestEngine_Stop(engine);
   imgui.Release();
   ImGuiTestEngine_DestroyContext(engine);
 
   REQUIRE(frameCount < 600);
-  REQUIRE(testsRun == 1);
-  REQUIRE(testsSucceeded == 1);
+  REQUIRE(testsRun == 3);
+  REQUIRE(testsSucceeded == 3);
   REQUIRE(smokeStatus == ImGuiTestStatus_Success);
+  REQUIRE(backToHomeStatus == ImGuiTestStatus_Success);
+  REQUIRE(recentProjectsStatus == ImGuiTestStatus_Success);
   REQUIRE(harness.shell.HasActiveProject());
   REQUIRE(fs::exists(harness.projectRoot / ".horo" / "project.json"));
   REQUIRE(fs::exists(harness.projectRoot / "src" / "main.cpp"));
