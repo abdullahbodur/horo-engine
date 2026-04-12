@@ -49,6 +49,8 @@ namespace Monolith
         "__gi.history.moments"};
     constexpr const char *kMeshDistanceFieldTargetKey = "__scene.tracing.mesh_distance_field";
     constexpr const char *kGlobalDistanceFieldTargetKey = "__scene.tracing.global_distance_field";
+    constexpr const char *kCachedHitLightingRadianceTargetKey = "__scene.cached_hit_lighting.radiance";
+    constexpr const char *kCachedHitLightingMomentsTargetKey = "__scene.cached_hit_lighting.moments";
 
     uint64_t HashResourceKey(const std::string &key)
     {
@@ -857,6 +859,33 @@ namespace Monolith
       return false;
     }
 
+    const uint64_t previousRadianceGeneration = m_cachedHitLightingRadianceHandle.generation;
+    if (!EnsureOffscreenRenderTarget(kCachedHitLightingRadianceTargetKey, width, height))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+    if (!EnsureOffscreenRenderTarget(kCachedHitLightingMomentsTargetKey, width, height))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    if (!BuildOffscreenResourceHandle(kCachedHitLightingRadianceTargetKey, &m_cachedHitLightingRadianceHandle))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+    if (!BuildOffscreenResourceHandle(kCachedHitLightingMomentsTargetKey, &m_cachedHitLightingMomentsHandle))
+    {
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
     m_meshDistanceFieldTracingStructure.atlas = meshDistanceFieldHandle;
     m_meshDistanceFieldTracingStructure.meshCount = 0;
     m_meshDistanceFieldTracingStructure.instanceCount = 0;
@@ -868,10 +897,23 @@ namespace Monolith
     m_globalDistanceFieldTracingStructure.voxelResolution = std::min(width, height);
     m_globalDistanceFieldTracingStructure.worldExtent = 512.0f;
     m_globalDistanceFieldTracingStructure.revision = globalDistanceFieldHandle.generation;
+    m_cachedHitLightingMaxSurfaceCount = std::max(1u, (width * height) / 4u);
+    m_cachedHitLightingResidentSurfaceCount = std::min(
+        m_cachedHitLightingResidentSurfaceCount,
+        m_cachedHitLightingMaxSurfaceCount);
+    if (previousRadianceGeneration != 0 &&
+        previousRadianceGeneration != m_cachedHitLightingRadianceHandle.generation)
+    {
+      m_cachedHitLightingInvalidationReason = CachedHitLightingInvalidationReason::ViewportResize;
+      m_cachedHitLightingResidentSurfaceCount = 0;
+      ++m_cachedHitLightingRevision;
+    }
 
     ++m_sceneTextureCatalog.frameSerial;
     m_lastSceneTracingRepresentationContract = {};
     m_hasSceneTracingRepresentationContract = false;
+    m_lastCachedHitLightingRepresentationContract = {};
+    m_hasCachedHitLightingRepresentationContract = false;
     return true;
   }
 
@@ -1042,6 +1084,25 @@ namespace Monolith
     return true;
   }
 
+  bool VulkanRenderBackend::TryGetCachedHitLightingRepresentationContract(
+      CachedHitLightingRepresentationContract *outContract,
+      std::string *outError) const
+  {
+    if (!outContract)
+      return false;
+
+    if (!m_hasCachedHitLightingRepresentationContract)
+    {
+      *outContract = {};
+      if (outError)
+        *outError = "Cached hit-lighting representation contract has not been produced for this frame.";
+      return false;
+    }
+
+    *outContract = m_lastCachedHitLightingRepresentationContract;
+    return true;
+  }
+
   bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason reason,
                                                 std::string *outError)
   {
@@ -1088,6 +1149,9 @@ namespace Monolith
     m_giHistoryCatalog.lastResetReason = reason;
     m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
     m_giHistoryCatalog.validForTemporalReuse = false;
+    m_cachedHitLightingInvalidationReason = ToCachedHitLightingInvalidationReason(reason);
+    m_cachedHitLightingResidentSurfaceCount = 0;
+    ++m_cachedHitLightingRevision;
     return true;
   }
 
@@ -1158,6 +1222,47 @@ namespace Monolith
         SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
         tracingEnabled);
     m_hasSceneTracingRepresentationContract = true;
+
+    const bool hitLightingEnabled = m_activeFrame.temporal.jitter.qualityTier >= TemporalQualityTier::Medium;
+    CachedHitLightingCapturePolicy capturePolicy = CachedHitLightingCapturePolicy::Disabled;
+    CachedHitLightingUpdatePolicy updatePolicy = CachedHitLightingUpdatePolicy::Static;
+    if (hitLightingEnabled)
+    {
+      capturePolicy = m_cachedHitLightingInvalidationReason != CachedHitLightingInvalidationReason::None
+                          ? CachedHitLightingCapturePolicy::FullReseedOnInvalidation
+                          : CachedHitLightingCapturePolicy::ScreenSpaceMissesAndDisocclusions;
+      updatePolicy = CachedHitLightingUpdatePolicy::PerFrameBudgeted;
+    }
+
+    if (hitLightingEnabled &&
+        m_lastSceneTracingRepresentationContract.IsValidForOffscreenQueries() &&
+        m_cachedHitLightingMaxSurfaceCount > 0u)
+    {
+      const uint32_t budget = std::max(1u, m_cachedHitLightingMaxSurfaceCount / 16u);
+      m_cachedHitLightingResidentSurfaceCount = std::min(
+          m_cachedHitLightingMaxSurfaceCount,
+          m_cachedHitLightingResidentSurfaceCount + budget);
+    }
+
+    m_lastCachedHitLightingRepresentationContract = BuildCachedHitLightingRepresentationContract(
+        m_lastSceneTracingRepresentationContract,
+        m_lastLightingCompositePassContract,
+        m_cachedHitLightingRadianceHandle,
+        m_cachedHitLightingMomentsHandle,
+        m_cachedHitLightingRevision,
+        m_cachedHitLightingMaxSurfaceCount,
+        m_cachedHitLightingResidentSurfaceCount,
+        capturePolicy,
+        updatePolicy,
+        m_cachedHitLightingInvalidationReason,
+        hitLightingEnabled);
+    m_hasCachedHitLightingRepresentationContract = true;
+    if (m_lastCachedHitLightingRepresentationContract.validationStatus ==
+            CachedHitLightingRepresentationValidationStatus::Valid &&
+        m_cachedHitLightingInvalidationReason != CachedHitLightingInvalidationReason::None)
+    {
+      m_cachedHitLightingInvalidationReason = CachedHitLightingInvalidationReason::None;
+    }
   }
 
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &targetKey,
@@ -3956,11 +4061,13 @@ namespace Monolith
     m_lastTemporalGiResolvePassContract = {};
     m_lastLightingCompositePassContract = {};
     m_lastSceneTracingRepresentationContract = {};
+    m_lastCachedHitLightingRepresentationContract = {};
     m_hasSsrPassContract = false;
     m_hasSsgiPassContract = false;
     m_hasTemporalGiResolvePassContract = false;
     m_hasLightingCompositePassContract = false;
     m_hasSceneTracingRepresentationContract = false;
+    m_hasCachedHitLightingRepresentationContract = false;
     m_activeView = {};
     if (m_pendingOpaqueDraws.capacity() < 256)
       m_pendingOpaqueDraws.reserve(256);
@@ -4190,6 +4297,12 @@ namespace Monolith
   }
   bool VulkanRenderBackend::TryGetSceneTracingRepresentationContract(
       SceneTracingRepresentationContract *,
+      std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::TryGetCachedHitLightingRepresentationContract(
+      CachedHitLightingRepresentationContract *,
       std::string *) const
   {
     return false;

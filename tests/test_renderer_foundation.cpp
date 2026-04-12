@@ -317,6 +317,39 @@ namespace
           true);
       return true;
     }
+    bool TryGetCachedHitLightingRepresentationContract(
+        CachedHitLightingRepresentationContract *outContract,
+        std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      SceneTracingRepresentationContract tracing{};
+      LightingCompositePassContract composite{};
+      if (!TryGetSceneTracingRepresentationContract(&tracing, outError) ||
+          !TryGetLightingCompositePassContract(&composite, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      const BackendResourceHandle reference = tracing.referenceDepth;
+      *outContract = BuildCachedHitLightingRepresentationContract(
+          tracing,
+          composite,
+          {reference.backendId, 0xA01u, reference.width, reference.height, cachedHitLightingRevision},
+          {reference.backendId, 0xA02u, reference.width, reference.height, cachedHitLightingRevision},
+          cachedHitLightingRevision,
+          4096u,
+          cachedHitLightingResidentSurfaceCount,
+          cachedHitLightingInvalidationReason == CachedHitLightingInvalidationReason::None
+              ? CachedHitLightingCapturePolicy::ScreenSpaceMissesAndDisocclusions
+              : CachedHitLightingCapturePolicy::FullReseedOnInvalidation,
+          CachedHitLightingUpdatePolicy::PerFrameBudgeted,
+          cachedHitLightingInvalidationReason,
+          true);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -336,6 +369,9 @@ namespace
       ++giHistory.revision;
       giHistory.lastResetReason = reason;
       giHistory.validForTemporalReuse = false;
+      cachedHitLightingInvalidationReason = ToCachedHitLightingInvalidationReason(reason);
+      ++cachedHitLightingRevision;
+      cachedHitLightingResidentSurfaceCount = 0u;
       return true;
     }
     std::vector<std::string> events;
@@ -347,6 +383,10 @@ namespace
     int drawCalls = 0;
     SceneTextureCatalog sceneTextures;
     GiHistoryCatalog giHistory;
+    CachedHitLightingInvalidationReason cachedHitLightingInvalidationReason =
+        CachedHitLightingInvalidationReason::None;
+    uint64_t cachedHitLightingRevision = 1u;
+    uint32_t cachedHitLightingResidentSurfaceCount = 256u;
   };
 
 #if defined(MONOLITH_HAS_VULKAN)
@@ -1007,6 +1047,91 @@ TEST_CASE("Scene tracing representation contract captures mesh and global distan
   REQUIRE(missingMesh.debug.usesClosestApproximation);
 }
 
+TEST_CASE("Cached hit-lighting contract expresses lifecycle and lookup integration",
+          "[renderer][foundation][temporal][tracing][cache]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0xC1u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0xC2u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0xC3u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0xC4u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0xC5u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0xC6u, 960u, 540u, 1u});
+  sceneTextures.frameSerial = 91u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0xD1u, 960u, 540u, 3u});
+  history.Set(GiHistorySemantic::SpecularIrradiance,
+              {RenderBackendId::Vulkan, 0xD2u, 960u, 540u, 3u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0xD3u, 960u, 540u, 3u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0xD4u, 960u, 540u, 3u});
+  history.revision = 90u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true, ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  const ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true);
+  const TemporalGiResolvePassContract resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  const LightingCompositePassContract composite = BuildLightingCompositePassContract(sceneTextures, resolve);
+
+  MeshDistanceFieldTracingStructure mesh{};
+  mesh.atlas = {RenderBackendId::Vulkan, 0xE1u, 960u, 540u, 6u};
+  GlobalDistanceFieldTracingStructure global{};
+  global.volume = {RenderBackendId::Vulkan, 0xE2u, 960u, 540u, 6u};
+  const SceneTracingRepresentationContract tracing = BuildSceneTracingRepresentationContract(
+      ssr,
+      ssgi,
+      resolve,
+      mesh,
+      global,
+      SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+      SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+      true);
+  REQUIRE(tracing.IsValidForOffscreenQueries());
+
+  const CachedHitLightingRepresentationContract invalidated = BuildCachedHitLightingRepresentationContract(
+      tracing,
+      composite,
+      {RenderBackendId::Vulkan, 0xF1u, 960u, 540u, 8u},
+      {RenderBackendId::Vulkan, 0xF2u, 960u, 540u, 8u},
+      8u,
+      8192u,
+      512u,
+      CachedHitLightingCapturePolicy::FullReseedOnInvalidation,
+      CachedHitLightingUpdatePolicy::PerFrameBudgeted,
+      CachedHitLightingInvalidationReason::SceneBarrier,
+      true);
+  REQUIRE(invalidated.validationStatus == CachedHitLightingRepresentationValidationStatus::Valid);
+  REQUIRE(invalidated.state == CachedHitLightingRepresentationState::Invalidated);
+  REQUIRE_FALSE(invalidated.IsValidForLookup());
+  REQUIRE(invalidated.lookupPolicy.Uses(CachedHitLightingLookupIntegrationPoint::SsrMiss));
+  REQUIRE(invalidated.lookupPolicy.Uses(CachedHitLightingLookupIntegrationPoint::SsgiMiss));
+  REQUIRE(invalidated.lookupPolicy.Uses(CachedHitLightingLookupIntegrationPoint::LightingComposite));
+  REQUIRE(invalidated.debug.captureRequested);
+
+  const CachedHitLightingRepresentationContract ready = BuildCachedHitLightingRepresentationContract(
+      tracing,
+      composite,
+      {RenderBackendId::Vulkan, 0xF1u, 960u, 540u, 9u},
+      {RenderBackendId::Vulkan, 0xF2u, 960u, 540u, 9u},
+      9u,
+      8192u,
+      4096u,
+      CachedHitLightingCapturePolicy::ScreenSpaceMissesAndDisocclusions,
+      CachedHitLightingUpdatePolicy::PerFrameBudgeted,
+      CachedHitLightingInvalidationReason::None,
+      true);
+  REQUIRE(ready.validationStatus == CachedHitLightingRepresentationValidationStatus::Valid);
+  REQUIRE(ready.state == CachedHitLightingRepresentationState::Ready);
+  REQUIRE(ready.IsValidForLookup());
+  REQUIRE(ready.debug.lookupEnabled);
+  REQUIRE(ready.debug.estimatedHitRatio > 0.4f);
+  REQUIRE(ready.updatePolicy == CachedHitLightingUpdatePolicy::PerFrameBudgeted);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -1070,6 +1195,15 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   REQUIRE(tracingContract.IsValidForOffscreenQueries());
   REQUIRE(tracingContract.mesh.IsValid());
   REQUIRE(tracingContract.global.IsValid());
+  CachedHitLightingRepresentationContract cachedHitLightingContract{};
+  REQUIRE(Renderer::TryGetCachedHitLightingRepresentationContract(&cachedHitLightingContract, &error));
+  REQUIRE(cachedHitLightingContract.validationStatus ==
+          CachedHitLightingRepresentationValidationStatus::Valid);
+  REQUIRE(cachedHitLightingContract.lookupPolicy.Uses(
+      CachedHitLightingLookupIntegrationPoint::LightingComposite));
+  REQUIRE((cachedHitLightingContract.state == CachedHitLightingRepresentationState::Warmup ||
+           cachedHitLightingContract.state == CachedHitLightingRepresentationState::Ready ||
+           cachedHitLightingContract.state == CachedHitLightingRepresentationState::Invalidated));
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

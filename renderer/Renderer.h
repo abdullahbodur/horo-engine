@@ -92,6 +92,9 @@ namespace Monolith
     static bool TryGetSceneTracingRepresentationContract(
         SceneTracingRepresentationContract *outContract,
         std::string *outError = nullptr);
+    static bool TryGetCachedHitLightingRepresentationContract(
+        CachedHitLightingRepresentationContract *outContract,
+        std::string *outError = nullptr);
     static bool TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                         std::string *outError = nullptr);
     static bool InvalidateGiHistory(GiHistoryResetReason reason,

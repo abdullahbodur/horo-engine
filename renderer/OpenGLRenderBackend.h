@@ -55,6 +55,9 @@ class OpenGLRenderBackend : public IRenderBackend {
                                            std::string* outError) const override;
   bool TryGetSceneTracingRepresentationContract(SceneTracingRepresentationContract* outContract,
                                                 std::string* outError) const override;
+  bool TryGetCachedHitLightingRepresentationContract(
+      CachedHitLightingRepresentationContract* outContract,
+      std::string* outError) const override;
   bool InvalidateGiHistory(GiHistoryResetReason reason, std::string* outError) override;
 
  private:

@@ -263,6 +263,13 @@ namespace Monolith
     return ActiveBackend()->TryGetSceneTracingRepresentationContract(outContract, outError);
   }
 
+  bool Renderer::TryGetCachedHitLightingRepresentationContract(
+      CachedHitLightingRepresentationContract *outContract,
+      std::string *outError)
+  {
+    return ActiveBackend()->TryGetCachedHitLightingRepresentationContract(outContract, outError);
+  }
+
   bool Renderer::TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                           std::string *outError)
   {

@@ -1347,4 +1347,275 @@ namespace Monolith
     return contract;
   }
 
+  enum class CachedHitLightingCapturePolicy : uint8_t
+  {
+    Disabled = 0,
+    ScreenSpaceMissesOnly,
+    ScreenSpaceMissesAndDisocclusions,
+    FullReseedOnInvalidation,
+  };
+
+  enum class CachedHitLightingUpdatePolicy : uint8_t
+  {
+    Static = 0,
+    SceneBarrierOnly,
+    PerFrameBudgeted,
+  };
+
+  enum class CachedHitLightingInvalidationReason : uint8_t
+  {
+    None = 0,
+    ViewportResize,
+    CameraCut,
+    SceneBarrier,
+    TemporalDisabled,
+    SceneTracingInvalid,
+  };
+
+  inline CachedHitLightingInvalidationReason ToCachedHitLightingInvalidationReason(
+      GiHistoryResetReason reason)
+  {
+    switch (reason)
+    {
+    case GiHistoryResetReason::None:
+      return CachedHitLightingInvalidationReason::None;
+    case GiHistoryResetReason::ViewportResize:
+      return CachedHitLightingInvalidationReason::ViewportResize;
+    case GiHistoryResetReason::CameraCut:
+      return CachedHitLightingInvalidationReason::CameraCut;
+    case GiHistoryResetReason::SceneBarrier:
+    case GiHistoryResetReason::CameraJitterSequenceChanged:
+      return CachedHitLightingInvalidationReason::SceneBarrier;
+    case GiHistoryResetReason::TemporalDisabled:
+      return CachedHitLightingInvalidationReason::TemporalDisabled;
+    }
+    return CachedHitLightingInvalidationReason::None;
+  }
+
+  enum class CachedHitLightingRepresentationValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingSceneTracingRepresentation,
+    MissingLightingCompositeContract,
+    MissingCacheSurface,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  enum class CachedHitLightingRepresentationState : uint8_t
+  {
+    Disabled = 0,
+    Unavailable,
+    Invalidated,
+    Warmup,
+    Ready,
+  };
+
+  enum class CachedHitLightingLookupIntegrationPoint : uint8_t
+  {
+    None = 0,
+    SsrMiss = 1u << 0u,
+    SsgiMiss = 1u << 1u,
+    LightingComposite = 1u << 2u,
+  };
+
+  inline uint8_t CachedHitLightingLookupMask(CachedHitLightingLookupIntegrationPoint point)
+  {
+    return static_cast<uint8_t>(point);
+  }
+
+  struct CachedHitLightingLookupPolicy
+  {
+    uint8_t integrationMask = 0;
+    bool allowApproximationFallback = true;
+    bool requireTemporalStability = true;
+
+    bool Uses(CachedHitLightingLookupIntegrationPoint point) const
+    {
+      return (integrationMask & CachedHitLightingLookupMask(point)) != 0u;
+    }
+  };
+
+  struct CachedHitLightingDebugState
+  {
+    bool cacheAllocated = false;
+    bool lookupEnabled = false;
+    bool captureRequested = false;
+    uint32_t captureBudget = 0;
+    uint32_t capturesCommitted = 0;
+    uint32_t residentSurfaceCount = 0;
+    float estimatedHitRatio = 0.0f;
+    CachedHitLightingInvalidationReason lastInvalidationReason =
+        CachedHitLightingInvalidationReason::None;
+    SceneTracingRepresentationValidationStatus tracingValidationStatus =
+        SceneTracingRepresentationValidationStatus::DisabledBySettings;
+    LightingCompositeValidationStatus compositeValidationStatus =
+        LightingCompositeValidationStatus::MissingBaseColor;
+  };
+
+  struct CachedHitLightingRepresentationContract
+  {
+    BackendResourceHandle radianceCache{};
+    BackendResourceHandle momentsCache{};
+    BackendResourceHandle referenceDepth{};
+    SceneTracingRepresentationContract sceneTracing{};
+    LightingCompositePassContract lightingComposite{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    uint64_t cacheRevision = 0;
+    uint32_t maxSurfaceCount = 0;
+    uint32_t residentSurfaceCount = 0;
+    CachedHitLightingCapturePolicy capturePolicy = CachedHitLightingCapturePolicy::Disabled;
+    CachedHitLightingUpdatePolicy updatePolicy = CachedHitLightingUpdatePolicy::Static;
+    CachedHitLightingLookupPolicy lookupPolicy{};
+    CachedHitLightingDebugState debug{};
+    CachedHitLightingRepresentationValidationStatus validationStatus =
+        CachedHitLightingRepresentationValidationStatus::DisabledBySettings;
+    CachedHitLightingRepresentationState state = CachedHitLightingRepresentationState::Unavailable;
+
+    bool IsValidForLookup() const
+    {
+      return validationStatus == CachedHitLightingRepresentationValidationStatus::Valid &&
+             state == CachedHitLightingRepresentationState::Ready;
+    }
+  };
+
+  inline CachedHitLightingRepresentationContract BuildCachedHitLightingRepresentationContract(
+      const SceneTracingRepresentationContract &sceneTracingContract,
+      const LightingCompositePassContract &lightingCompositeContract,
+      const BackendResourceHandle &radianceCacheHandle,
+      const BackendResourceHandle &momentsCacheHandle,
+      uint64_t cacheRevision,
+      uint32_t maxSurfaceCount,
+      uint32_t residentSurfaceCount,
+      CachedHitLightingCapturePolicy capturePolicy,
+      CachedHitLightingUpdatePolicy updatePolicy,
+      CachedHitLightingInvalidationReason invalidationReason,
+      bool enabled)
+  {
+    CachedHitLightingRepresentationContract contract{};
+    contract.radianceCache = radianceCacheHandle;
+    contract.momentsCache = momentsCacheHandle;
+    contract.sceneTracing = sceneTracingContract;
+    contract.lightingComposite = lightingCompositeContract;
+    contract.sceneFrameSerial = std::max(sceneTracingContract.sceneFrameSerial,
+                                         lightingCompositeContract.sceneFrameSerial);
+    contract.historyRevision = std::max(sceneTracingContract.historyRevision,
+                                        lightingCompositeContract.historyRevision);
+    contract.cacheRevision = cacheRevision;
+    contract.maxSurfaceCount = maxSurfaceCount;
+    contract.residentSurfaceCount = std::min(residentSurfaceCount, maxSurfaceCount);
+    contract.capturePolicy = capturePolicy;
+    contract.updatePolicy = updatePolicy;
+    contract.referenceDepth = sceneTracingContract.referenceDepth.IsValid()
+                                  ? sceneTracingContract.referenceDepth
+                                  : lightingCompositeContract.baseColor;
+    contract.debug.cacheAllocated = radianceCacheHandle.IsValid() && momentsCacheHandle.IsValid();
+    contract.debug.lastInvalidationReason = invalidationReason;
+    contract.debug.tracingValidationStatus = sceneTracingContract.validationStatus;
+    contract.debug.compositeValidationStatus = lightingCompositeContract.validationStatus;
+    contract.debug.residentSurfaceCount = contract.residentSurfaceCount;
+
+    contract.lookupPolicy.integrationMask =
+        CachedHitLightingLookupMask(CachedHitLightingLookupIntegrationPoint::LightingComposite);
+    if (sceneTracingContract.ssr.validationStatus == SsrInputValidationStatus::Valid)
+    {
+      contract.lookupPolicy.integrationMask |=
+          CachedHitLightingLookupMask(CachedHitLightingLookupIntegrationPoint::SsrMiss);
+    }
+    if (sceneTracingContract.ssgi.validationStatus == SsgiInputValidationStatus::Valid)
+    {
+      contract.lookupPolicy.integrationMask |=
+          CachedHitLightingLookupMask(CachedHitLightingLookupIntegrationPoint::SsgiMiss);
+    }
+    contract.lookupPolicy.allowApproximationFallback = sceneTracingContract.debug.usesClosestApproximation;
+    contract.lookupPolicy.requireTemporalStability = true;
+
+    if (!enabled)
+    {
+      contract.state = CachedHitLightingRepresentationState::Disabled;
+      contract.validationStatus = CachedHitLightingRepresentationValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    if (!sceneTracingContract.IsValidForOffscreenQueries())
+    {
+      contract.state = CachedHitLightingRepresentationState::Unavailable;
+      contract.validationStatus =
+          CachedHitLightingRepresentationValidationStatus::MissingSceneTracingRepresentation;
+      return contract;
+    }
+
+    if (lightingCompositeContract.validationStatus != LightingCompositeValidationStatus::Valid)
+    {
+      contract.state = CachedHitLightingRepresentationState::Unavailable;
+      contract.validationStatus =
+          CachedHitLightingRepresentationValidationStatus::MissingLightingCompositeContract;
+      return contract;
+    }
+
+    if (!radianceCacheHandle.IsValid() || !momentsCacheHandle.IsValid())
+    {
+      contract.state = CachedHitLightingRepresentationState::Unavailable;
+      contract.validationStatus = CachedHitLightingRepresentationValidationStatus::MissingCacheSurface;
+      return contract;
+    }
+
+    if (contract.referenceDepth.backendId != radianceCacheHandle.backendId ||
+        contract.referenceDepth.backendId != momentsCacheHandle.backendId)
+    {
+      contract.state = CachedHitLightingRepresentationState::Unavailable;
+      contract.validationStatus = CachedHitLightingRepresentationValidationStatus::BackendMismatch;
+      return contract;
+    }
+
+    if (contract.referenceDepth.width != radianceCacheHandle.width ||
+        contract.referenceDepth.height != radianceCacheHandle.height ||
+        contract.referenceDepth.width != momentsCacheHandle.width ||
+        contract.referenceDepth.height != momentsCacheHandle.height)
+    {
+      contract.state = CachedHitLightingRepresentationState::Unavailable;
+      contract.validationStatus = CachedHitLightingRepresentationValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.validationStatus = CachedHitLightingRepresentationValidationStatus::Valid;
+    contract.debug.captureBudget = std::max(1u, contract.maxSurfaceCount / 16u);
+    contract.debug.captureRequested =
+        invalidationReason != CachedHitLightingInvalidationReason::None ||
+        contract.sceneTracing.ssr.executionStatus == SsrExecutionStatus::FallbackOnly ||
+        contract.sceneTracing.ssgi.executionStatus == SsgiExecutionStatus::FallbackOnly;
+    contract.debug.capturesCommitted =
+        contract.debug.captureRequested
+            ? std::min(contract.debug.captureBudget, contract.maxSurfaceCount - contract.residentSurfaceCount)
+            : 0u;
+
+    if (contract.maxSurfaceCount > 0u)
+    {
+      contract.debug.estimatedHitRatio =
+          static_cast<float>(contract.residentSurfaceCount) / static_cast<float>(contract.maxSurfaceCount);
+    }
+
+    if (invalidationReason != CachedHitLightingInvalidationReason::None)
+    {
+      contract.state = CachedHitLightingRepresentationState::Invalidated;
+      contract.debug.lookupEnabled = false;
+      return contract;
+    }
+
+    if (!sceneTracingContract.debug.temporalHistoryStable ||
+        lightingCompositeContract.executionStatus ==
+            LightingCompositeExecutionStatus::DirectLightingOnlyFallback)
+    {
+      contract.state = CachedHitLightingRepresentationState::Warmup;
+      contract.debug.lookupEnabled = false;
+      return contract;
+    }
+
+    contract.state = CachedHitLightingRepresentationState::Ready;
+    contract.debug.lookupEnabled = true;
+    return contract;
+  }
+
 } // namespace Monolith
