@@ -1482,6 +1482,32 @@ namespace Monolith
 
     // ---- Lifecycle ---------------------------------------------------------------
 
+    void EditorLayer::EnsureImGuiBackendInitialized()
+    {
+      if (m_imguiBackendInitialized || !m_window)
+        return;
+
+      const RenderBackendId requestedBackendId =
+          ResolveEditorImGuiBackend(Renderer::GetBackendId(),
+                                    glfwGetWindowAttrib(m_window, GLFW_CLIENT_API));
+      m_imguiBackendInitialized = InitEditorImGuiBackend(m_window, requestedBackendId);
+      if (!m_imguiBackendInitialized)
+      {
+        if (!m_imguiBackendInitRetryLogged)
+        {
+          LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'; retrying.",
+                   ToString(requestedBackendId));
+          m_imguiBackendInitRetryLogged = true;
+        }
+        return;
+      }
+
+      m_imguiBackendId = requestedBackendId;
+      m_imguiBackendInitRetryLogged = false;
+      LOG_INFO("[Editor] ImGui backend initialized for renderer backend '%s'.",
+               ToString(m_imguiBackendId));
+    }
+
     void EditorLayer::Init(GLFWwindow *window)
     {
       m_window = window;
@@ -1510,16 +1536,10 @@ namespace Monolith
       }
       LoadWorkspaceState();
 
-      const RenderBackendId requestedBackendId =
-          ResolveEditorImGuiBackend(Renderer::GetBackendId(),
-                                    glfwGetWindowAttrib(window, GLFW_CLIENT_API));
-      m_imguiBackendInitialized = InitEditorImGuiBackend(window, requestedBackendId);
-      m_imguiBackendId = m_imguiBackendInitialized ? requestedBackendId : RenderBackendId::Auto;
-      if (!m_imguiBackendInitialized)
-      {
-        LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'",
-                 ToString(requestedBackendId));
-      }
+      m_imguiBackendInitialized = false;
+      m_imguiBackendId = RenderBackendId::Auto;
+      m_imguiBackendInitRetryLogged = false;
+      EnsureImGuiBackendInitialized();
 
       m_schema.LoadFromFile("assets/editor_schema.json");
 
@@ -1552,6 +1572,7 @@ namespace Monolith
         ShutdownEditorImGuiBackend(m_imguiBackendId);
       m_imguiBackendInitialized = false;
       m_imguiBackendId = RenderBackendId::Auto;
+      m_imguiBackendInitRetryLogged = false;
       ImGui::DestroyContext();
     }
 
@@ -2371,6 +2392,7 @@ namespace Monolith
       m_viewGizmoPickRect.Clear();
       ProcessPendingPathDrops();
 
+      EnsureImGuiBackendInitialized();
       if (m_imguiBackendInitialized)
         BeginEditorImGuiFrame(m_imguiBackendId);
       ImGui::NewFrame();

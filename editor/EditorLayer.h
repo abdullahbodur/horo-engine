@@ -68,6 +68,7 @@ class EditorLayer {
 
   // Toggle editor mode and update cursor accordingly.
   void Toggle();
+  void EnsureImGuiBackendInitialized();
 
   // Process input / picking for this frame.
   // In fly mode the camera position/target are updated directly.
@@ -150,6 +151,7 @@ class EditorLayer {
   bool m_active = false;
   bool m_imguiBackendInitialized = false;
   RenderBackendId m_imguiBackendId = RenderBackendId::Auto;
+  bool m_imguiBackendInitRetryLogged = false;
   bool m_playMode = false;
   bool m_wantsReload = false;
   bool m_prevMouseL = false;
