@@ -57,7 +57,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test test-ui test\:ui run-ui run\:ui release coverage clean clean-all format format-check help
+.PHONY: all configure build test test-ui test\:ui test-ui-headless test\:ui-headless release coverage clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -77,19 +77,19 @@ $(SENTINEL_DBG):
 test: build
 	$(TEST_CMD)
 
-## Build + run standalone ImGui UI smoke tests (debug)
-test-ui: build
+## Build + run standalone ImGui UI smoke tests from terminal (debug)
+test-ui-headless: build
 	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_standalone_ui
+
+## Alias for test-ui-headless (npm-style naming)
+test\:ui-headless: test-ui-headless
+
+## Build + launch standalone editor UI window (manual UI verification mode)
+test-ui: build
+	"$(EDITOR_EXE)"
 
 ## Alias for test-ui (npm-style naming)
 test\:ui: test-ui
-
-## Build + run standalone editor with visible UI window
-run-ui: build
-	"$(EDITOR_EXE)"
-
-## Alias for run-ui (npm-style naming)
-run\:ui: run-ui
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -184,10 +184,10 @@ help:
 	@echo ""
 	@echo "  make              Build debug"
 	@echo "  make test         Build & run all 23 engine tests"
-	@echo "  make test-ui      Build & run standalone UI smoke tests"
+	@echo "  make test-ui-headless Build & run standalone UI smoke tests in terminal"
+	@echo "  make test:ui-headless Alias of test-ui-headless"
+	@echo "  make test-ui      Build & launch standalone editor UI window"
 	@echo "  make test:ui      Alias of test-ui"
-	@echo "  make run-ui       Build & launch standalone editor UI window"
-	@echo "  make run:ui       Alias of run-ui"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
