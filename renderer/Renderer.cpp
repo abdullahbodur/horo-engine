@@ -231,6 +231,12 @@ namespace Monolith
     return ActiveBackend()->TryGetGiHistoryCatalog(outCatalog, outError);
   }
 
+  bool Renderer::TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract *outContract,
+                                                         std::string *outError)
+  {
+    return ActiveBackend()->TryGetScreenSpaceReflectionPassContract(outContract, outError);
+  }
+
   bool Renderer::TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                           std::string *outError)
   {

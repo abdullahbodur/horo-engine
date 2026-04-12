@@ -303,4 +303,239 @@ namespace Monolith
     return contract;
   }
 
+  enum class ScreenSpaceReflectionMissPolicy : uint8_t
+  {
+    ProbeFallback = 0,
+    SkyFallback,
+    NoFallback,
+  };
+
+  enum class SsrInputValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingDepth,
+    MissingNormal,
+    MissingRoughnessMetallic,
+    MissingMotionVectors,
+    MissingSpecularHistory,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  inline const char *ToString(SsrInputValidationStatus status)
+  {
+    switch (status)
+    {
+    case SsrInputValidationStatus::DisabledBySettings:
+      return "screen-space reflections disabled by settings";
+    case SsrInputValidationStatus::Valid:
+      return "valid";
+    case SsrInputValidationStatus::MissingDepth:
+      return "missing depth input";
+    case SsrInputValidationStatus::MissingNormal:
+      return "missing normal input";
+    case SsrInputValidationStatus::MissingRoughnessMetallic:
+      return "missing roughness-metallic input";
+    case SsrInputValidationStatus::MissingMotionVectors:
+      return "missing motion vector input";
+    case SsrInputValidationStatus::MissingSpecularHistory:
+      return "missing specular history input";
+    case SsrInputValidationStatus::BackendMismatch:
+      return "screen-space reflection inputs come from mismatched backends";
+    case SsrInputValidationStatus::DimensionMismatch:
+      return "screen-space reflection inputs have mismatched dimensions";
+    }
+    return "unknown screen-space reflection validation status";
+  }
+
+  enum class SsrExecutionStatus : uint8_t
+  {
+    Disabled = 0,
+    MissingInputs,
+    FallbackOnly,
+    Tracing,
+  };
+
+  struct ScreenSpaceReflectionQualityConfig
+  {
+    TemporalQualityTier tier = TemporalQualityTier::Disabled;
+    uint32_t maxTraceSteps = 0;
+    uint32_t resolveStride = 1;
+    uint32_t binaryRefinementSteps = 0;
+    float maxRoughnessForTracing = 0.0f;
+    float thickness = 0.0f;
+    float missFallbackBlend = 1.0f;
+    bool enableTemporalAccumulation = false;
+  };
+
+  inline ScreenSpaceReflectionQualityConfig BuildScreenSpaceReflectionQualityConfig(TemporalQualityTier tier)
+  {
+    ScreenSpaceReflectionQualityConfig config{};
+    config.tier = tier;
+    switch (tier)
+    {
+    case TemporalQualityTier::Disabled:
+      config.maxTraceSteps = 0;
+      config.resolveStride = 1;
+      config.binaryRefinementSteps = 0;
+      config.maxRoughnessForTracing = 0.0f;
+      config.thickness = 0.0f;
+      config.missFallbackBlend = 1.0f;
+      config.enableTemporalAccumulation = false;
+      break;
+    case TemporalQualityTier::Low:
+      config.maxTraceSteps = 12;
+      config.resolveStride = 2;
+      config.binaryRefinementSteps = 1;
+      config.maxRoughnessForTracing = 0.35f;
+      config.thickness = 0.20f;
+      config.missFallbackBlend = 1.0f;
+      config.enableTemporalAccumulation = false;
+      break;
+    case TemporalQualityTier::Medium:
+      config.maxTraceSteps = 24;
+      config.resolveStride = 2;
+      config.binaryRefinementSteps = 2;
+      config.maxRoughnessForTracing = 0.55f;
+      config.thickness = 0.30f;
+      config.missFallbackBlend = 0.65f;
+      config.enableTemporalAccumulation = true;
+      break;
+    case TemporalQualityTier::High:
+      config.maxTraceSteps = 40;
+      config.resolveStride = 1;
+      config.binaryRefinementSteps = 4;
+      config.maxRoughnessForTracing = 0.75f;
+      config.thickness = 0.40f;
+      config.missFallbackBlend = 0.35f;
+      config.enableTemporalAccumulation = true;
+      break;
+    case TemporalQualityTier::Ultra:
+      config.maxTraceSteps = 64;
+      config.resolveStride = 1;
+      config.binaryRefinementSteps = 6;
+      config.maxRoughnessForTracing = 0.90f;
+      config.thickness = 0.50f;
+      config.missFallbackBlend = 0.20f;
+      config.enableTemporalAccumulation = true;
+      break;
+    }
+    return config;
+  }
+
+  struct ScreenSpaceReflectionPassContract
+  {
+    ScreenSpaceReflectionQualityConfig quality{};
+    ScreenSpaceReflectionMissPolicy missPolicy = ScreenSpaceReflectionMissPolicy::ProbeFallback;
+    BackendResourceHandle depth{};
+    BackendResourceHandle normal{};
+    BackendResourceHandle roughnessMetallic{};
+    BackendResourceHandle motionVectors{};
+    BackendResourceHandle historySpecular{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    GiHistoryResetReason historyResetReason = GiHistoryResetReason::None;
+    bool historyValidForReuse = false;
+    bool roughnessAwareTracing = false;
+    SsrExecutionStatus executionStatus = SsrExecutionStatus::Disabled;
+    SsrInputValidationStatus validationStatus = SsrInputValidationStatus::DisabledBySettings;
+
+    bool IsValidForTracing() const
+    {
+      return validationStatus == SsrInputValidationStatus::Valid &&
+             executionStatus == SsrExecutionStatus::Tracing;
+    }
+  };
+
+  inline ScreenSpaceReflectionPassContract
+  BuildScreenSpaceReflectionPassContract(const SceneTextureCatalog &sceneTextures,
+                                         const GiHistoryCatalog &history,
+                                         TemporalQualityTier qualityTier,
+                                         bool enabled,
+                                         ScreenSpaceReflectionMissPolicy missPolicy)
+  {
+    ScreenSpaceReflectionPassContract contract{};
+    contract.quality = BuildScreenSpaceReflectionQualityConfig(qualityTier);
+    contract.missPolicy = missPolicy;
+    contract.sceneFrameSerial = sceneTextures.frameSerial;
+    contract.historyRevision = history.revision;
+    contract.historyResetReason = history.lastResetReason;
+    contract.historyValidForReuse = history.validForTemporalReuse;
+
+    if (!enabled || qualityTier == TemporalQualityTier::Disabled)
+    {
+      contract.executionStatus = SsrExecutionStatus::Disabled;
+      contract.validationStatus = SsrInputValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    contract.depth = sceneTextures.Get(SceneTextureSemantic::Depth);
+    contract.normal = sceneTextures.Get(SceneTextureSemantic::Normal);
+    contract.roughnessMetallic = sceneTextures.Get(SceneTextureSemantic::RoughnessMetallic);
+    contract.motionVectors = sceneTextures.Get(SceneTextureSemantic::MotionVector);
+    contract.historySpecular = history.Get(GiHistorySemantic::SpecularIrradiance);
+    contract.roughnessAwareTracing = contract.roughnessMetallic.IsValid();
+
+    if (!contract.depth.IsValid())
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::MissingDepth;
+      return contract;
+    }
+    if (!contract.normal.IsValid())
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::MissingNormal;
+      return contract;
+    }
+    if (!contract.roughnessMetallic.IsValid())
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::MissingRoughnessMetallic;
+      return contract;
+    }
+    if (!contract.motionVectors.IsValid())
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::MissingMotionVectors;
+      return contract;
+    }
+    if (!contract.historySpecular.IsValid())
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::MissingSpecularHistory;
+      return contract;
+    }
+    if (contract.depth.backendId != contract.normal.backendId ||
+        contract.depth.backendId != contract.roughnessMetallic.backendId ||
+        contract.depth.backendId != contract.motionVectors.backendId ||
+        contract.depth.backendId != contract.historySpecular.backendId)
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::BackendMismatch;
+      return contract;
+    }
+    if (contract.depth.width != contract.normal.width ||
+        contract.depth.height != contract.normal.height ||
+        contract.depth.width != contract.roughnessMetallic.width ||
+        contract.depth.height != contract.roughnessMetallic.height ||
+        contract.depth.width != contract.motionVectors.width ||
+        contract.depth.height != contract.motionVectors.height ||
+        contract.depth.width != contract.historySpecular.width ||
+        contract.depth.height != contract.historySpecular.height)
+    {
+      contract.executionStatus = SsrExecutionStatus::MissingInputs;
+      contract.validationStatus = SsrInputValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.validationStatus = SsrInputValidationStatus::Valid;
+    contract.executionStatus =
+        (contract.quality.enableTemporalAccumulation && !contract.historyValidForReuse)
+            ? SsrExecutionStatus::FallbackOnly
+            : SsrExecutionStatus::Tracing;
+    return contract;
+  }
+
 } // namespace Monolith

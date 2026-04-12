@@ -129,6 +129,15 @@ bool OpenGLRenderBackend::TryGetGiHistoryCatalog(GiHistoryCatalog* outCatalog,
   return false;
 }
 
+bool OpenGLRenderBackend::TryGetScreenSpaceReflectionPassContract(
+    ScreenSpaceReflectionPassContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "Screen-space reflection pass contract is unavailable on OpenGL backend.";
+  return false;
+}
+
 bool OpenGLRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string* outError) {
   if (outError)
     *outError = "GI history invalidation is unavailable on OpenGL backend.";

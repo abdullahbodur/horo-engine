@@ -903,6 +903,24 @@ namespace Monolith
     return true;
   }
 
+  bool VulkanRenderBackend::TryGetScreenSpaceReflectionPassContract(
+      ScreenSpaceReflectionPassContract *outContract, std::string *outError) const
+  {
+    if (!outContract)
+      return false;
+
+    if (!m_hasSsrPassContract)
+    {
+      *outContract = {};
+      if (outError)
+        *outError = "Screen-space reflection pass contract has not been produced for this frame.";
+      return false;
+    }
+
+    *outContract = m_lastSsrPassContract;
+    return true;
+  }
+
   bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason reason,
                                                 std::string *outError)
   {
@@ -950,6 +968,23 @@ namespace Monolith
     m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
     m_giHistoryCatalog.validForTemporalReuse = false;
     return true;
+  }
+
+  void VulkanRenderBackend::ExecuteScreenSpaceReflectionPass()
+  {
+    const TemporalQualityTier qualityTier = m_activeFrame.temporal.jitter.qualityTier;
+    const bool ssrEnabled = qualityTier != TemporalQualityTier::Disabled;
+    const ScreenSpaceReflectionMissPolicy missPolicy = m_activeFrame.temporal.enableTemporalReprojection
+                                                           ? ScreenSpaceReflectionMissPolicy::ProbeFallback
+                                                           : ScreenSpaceReflectionMissPolicy::SkyFallback;
+
+    m_lastSsrPassContract = BuildScreenSpaceReflectionPassContract(
+        m_sceneTextureCatalog,
+        m_giHistoryCatalog,
+        qualityTier,
+        ssrEnabled,
+        missPolicy);
+    m_hasSsrPassContract = true;
   }
 
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &targetKey,
@@ -3743,6 +3778,8 @@ namespace Monolith
     }
     m_lastTemporalHistoryState = currentTemporalHistoryState;
     m_hasTemporalHistoryState = true;
+    m_lastSsrPassContract = {};
+    m_hasSsrPassContract = false;
     m_activeView = {};
     if (m_pendingOpaqueDraws.capacity() < 256)
       m_pendingOpaqueDraws.reserve(256);
@@ -3823,6 +3860,7 @@ namespace Monolith
     m_pendingOpaqueDraws.clear();
     m_pendingOverlayRenderCallback = nullptr;
     m_pendingOverlayRenderUserData = nullptr;
+    ExecuteScreenSpaceReflectionPass();
     if (m_giHistoryCatalog.Has(GiHistorySemantic::DiffuseIrradiance))
     {
       m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
@@ -3943,6 +3981,11 @@ namespace Monolith
   {
     return false;
   }
+  bool VulkanRenderBackend::TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract *,
+                                                                    std::string *) const
+  {
+    return false;
+  }
   bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string *) { return false; }
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &, uint32_t, uint32_t) { return false; }
   bool VulkanRenderBackend::TryGetOffscreenRenderTargetHandle(const std::string &,
@@ -3991,6 +4034,7 @@ namespace Monolith
   bool VulkanRenderBackend::CreateOpaqueGraphicsPipelineScaffold() { return false; }
   void VulkanRenderBackend::DestroyOpaqueGraphicsPipelineScaffold() {}
   bool VulkanRenderBackend::RecordFrameCommands(const RenderFrameConfig &) { return false; }
+  void VulkanRenderBackend::ExecuteScreenSpaceReflectionPass() {}
   bool VulkanRenderBackend::EnsureOffscreenRenderPass() { return false; }
   void VulkanRenderBackend::DestroyOffscreenRenderPass() {}
   bool VulkanRenderBackend::CreateOffscreenRenderTargetResources(const std::string &,

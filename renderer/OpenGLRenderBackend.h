@@ -45,6 +45,8 @@ class OpenGLRenderBackend : public IRenderBackend {
                                 std::string* outError) override;
   bool TryGetGiHistoryCatalog(GiHistoryCatalog* outCatalog,
                               std::string* outError) const override;
+  bool TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract* outContract,
+                                               std::string* outError) const override;
   bool InvalidateGiHistory(GiHistoryResetReason reason, std::string* outError) override;
 
  private:

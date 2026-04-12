@@ -198,6 +198,27 @@ namespace
       *outCatalog = giHistory;
       return true;
     }
+    bool TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract *outContract,
+                                                 std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+      if (!sceneTextures.HasDeferredGBuffer() || !giHistory.Has(GiHistorySemantic::SpecularIrradiance))
+      {
+        if (outError)
+          *outError = "fake backend has no SSR contract inputs";
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildScreenSpaceReflectionPassContract(
+          sceneTextures,
+          giHistory,
+          TemporalQualityTier::Medium,
+          true,
+          ScreenSpaceReflectionMissPolicy::ProbeFallback);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -579,6 +600,58 @@ TEST_CASE("Temporal history reset reasons stay deterministic across scene and ca
           GiHistoryResetReason::SceneBarrier);
 }
 
+TEST_CASE("Screen-space reflection contract maps quality tiers and roughness-aware tracing",
+          "[renderer][foundation][temporal][reflections]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x11u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x12u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0x13u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x14u, 1280u, 720u, 1u});
+  sceneTextures.frameSerial = 44u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::SpecularIrradiance,
+              {RenderBackendId::Vulkan, 0x21u, 1280u, 720u, 7u});
+  history.revision = 15u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract lowContract =
+      BuildScreenSpaceReflectionPassContract(sceneTextures,
+                                             history,
+                                             TemporalQualityTier::Low,
+                                             true,
+                                             ScreenSpaceReflectionMissPolicy::SkyFallback);
+  const ScreenSpaceReflectionPassContract highContract =
+      BuildScreenSpaceReflectionPassContract(sceneTextures,
+                                             history,
+                                             TemporalQualityTier::High,
+                                             true,
+                                             ScreenSpaceReflectionMissPolicy::ProbeFallback);
+
+  REQUIRE(lowContract.IsValidForTracing());
+  REQUIRE(highContract.IsValidForTracing());
+  REQUIRE(lowContract.roughnessAwareTracing);
+  REQUIRE(highContract.quality.maxTraceSteps > lowContract.quality.maxTraceSteps);
+  REQUIRE(highContract.quality.binaryRefinementSteps > lowContract.quality.binaryRefinementSteps);
+  REQUIRE(highContract.quality.resolveStride < lowContract.quality.resolveStride);
+  REQUIRE(highContract.quality.maxRoughnessForTracing > lowContract.quality.maxRoughnessForTracing);
+  REQUIRE(highContract.missPolicy == ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  REQUIRE(lowContract.missPolicy == ScreenSpaceReflectionMissPolicy::SkyFallback);
+
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic, {});
+  const ScreenSpaceReflectionPassContract missingRoughness =
+      BuildScreenSpaceReflectionPassContract(sceneTextures,
+                                             history,
+                                             TemporalQualityTier::High,
+                                             true,
+                                             ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  REQUIRE_FALSE(missingRoughness.IsValidForTracing());
+  REQUIRE(missingRoughness.executionStatus == SsrExecutionStatus::MissingInputs);
+  REQUIRE(missingRoughness.validationStatus == SsrInputValidationStatus::MissingRoughnessMetallic);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -604,6 +677,14 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   REQUIRE(Renderer::TryGetTemporalReprojectionInputContract(&temporalInputs, &error));
   REQUIRE(temporalInputs.IsValid());
   REQUIRE(temporalInputs.motionVectors.IsValid());
+  ScreenSpaceReflectionPassContract ssrContract{};
+  REQUIRE(Renderer::TryGetScreenSpaceReflectionPassContract(&ssrContract, &error));
+  REQUIRE(ssrContract.validationStatus == SsrInputValidationStatus::Valid);
+  REQUIRE((ssrContract.executionStatus == SsrExecutionStatus::Tracing ||
+           ssrContract.executionStatus == SsrExecutionStatus::FallbackOnly));
+  REQUIRE(ssrContract.roughnessMetallic.IsValid());
+  REQUIRE(ssrContract.historySpecular.IsValid());
+  REQUIRE(ssrContract.quality.tier == TemporalQualityTier::Medium);
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);
