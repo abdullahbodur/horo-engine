@@ -1,4 +1,4 @@
-#include "standalone/StandaloneProject.h"
+#include "launcher/StandaloneProject.h"
 
 #include <algorithm>
 #include <cctype>

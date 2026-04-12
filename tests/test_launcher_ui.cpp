@@ -1,3 +1,8 @@
+// Launcher UI tests run headless (no GLFW/GPU): ImGui + StandaloneEditorShell only.
+// Dear ImGui Test Engine still needs ImGuiScreenCaptureFunc; we stub framebuffer pixels
+// (solid black) so CaptureScreenshot writes PNGs and the pipeline is covered. Real UI
+// thumbnails need a windowed app + readback — see imgui_test_engine wiki "Screen & Video Captures".
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
@@ -11,7 +16,7 @@
 #include <imgui_test_engine/imgui_te_engine.h>
 
 #include "core/ProjectPath.h"
-#include "standalone/StandaloneEditorShell.h"
+#include "launcher/StandaloneEditorShell.h"
 
 using namespace Monolith;
 using namespace Monolith::Standalone;
@@ -174,7 +179,8 @@ struct ImGuiContextGuard {
   }
 };
 
-struct StandaloneUiHarness {
+struct LauncherUiHarness {
+  fs::path uiCaptureOutputDir;
   fs::path tempRoot;
   fs::path projectRoot;
   fs::path buildRoot;
@@ -184,8 +190,9 @@ struct StandaloneUiHarness {
   HomeDirGuard homeDirGuard;
   StandaloneEditorShell shell;
 
-  StandaloneUiHarness()
-      : tempRoot(fs::temp_directory_path() / "horo_standalone_ui_tests"),
+  explicit LauncherUiHarness(fs::path captureOutputDir)
+      : uiCaptureOutputDir(std::move(captureOutputDir)),
+        tempRoot(fs::temp_directory_path() / "horo_launcher_ui_tests"),
         projectRoot(tempRoot / "UiSmokeGame"),
         buildRoot(FindBuildTreeRoot()),
         homeRoot(tempRoot / "home"),
@@ -198,12 +205,12 @@ struct StandaloneUiHarness {
     shell.Initialize();
   }
 
-  ~StandaloneUiHarness() {
+  ~LauncherUiHarness() {
     shell.Shutdown();
   }
 };
 
-void RenderStandaloneFrame(StandaloneEditorShell* shell) {
+void RenderLauncherShellFrame(StandaloneEditorShell* shell) {
   REQUIRE(shell != nullptr);
   ImGuiIO& io = ImGui::GetIO();
   io.DisplaySize = ImVec2(1280.0f, 720.0f);
@@ -228,7 +235,40 @@ ImGuiWindow* FindWindowContaining(const char* token) {
   return nullptr;
 }
 
-void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiHarness* state) {
+// Stub framebuffer (see file comment): satisfies test engine capture API.
+static bool LauncherUiScreenCaptureFunc(ImGuiID viewport_id,
+                                        int x,
+                                        int y,
+                                        int w,
+                                        int h,
+                                        unsigned int* pixels,
+                                        void* user_data) {
+  IM_UNUSED(viewport_id);
+  IM_UNUSED(x);
+  IM_UNUSED(y);
+  IM_UNUSED(user_data);
+  if (!pixels || w <= 0 || h <= 0)
+    return false;
+  const int n = w * h;
+  for (int i = 0; i < n; ++i)
+    pixels[i] = 0xFF000000u;
+  return true;
+}
+
+static void SetCaptureOutputFile(ImGuiTestContext* ctx, const fs::path& dir, const char* filename) {
+  IM_CHECK(ctx != nullptr);
+  IM_CHECK(ctx->CaptureArgs != nullptr);
+  const std::string full = (dir / filename).string();
+  IM_CHECK(full.size() < IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+  ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+}
+
+static void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char* filename) {
+  SetCaptureOutputFile(ctx, dir, filename);
+  ctx->CaptureScreenshot(0);
+}
+
+void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, LauncherUiHarness* state) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
 
@@ -243,20 +283,20 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiHarness
   ctx->SetRef(launcherPanel);
   ctx->ItemInputValue("##new-project-name", "UiSmokeGame");
   ctx->ItemInputValue("##new-project-path", state->projectRoot.string().c_str());
-    ctx->ItemClick("Create Project");
-    ctx->Yield(3);
-    IM_CHECK(state->shell.HasActiveProject());
-    ctx->CaptureScreenshot("after_project_creation.png");
-  }
+  ctx->ItemClick("Create Project");
+  ctx->Yield(3);
+  IM_CHECK(state->shell.HasActiveProject());
+  CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "after_project_creation.png");
+}
 
-ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
+ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, LauncherUiHarness* harness) {
   REQUIRE(engine != nullptr);
   REQUIRE(harness != nullptr);
 
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "create_project_from_launcher");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "create_project_from_launcher");
   test->UserData = harness;
   test->TestFunc = [](ImGuiTestContext* ctx) {
-    auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
+    auto* state = static_cast<LauncherUiHarness*>(ctx->Test->UserData);
     IM_CHECK(state != nullptr);
 
     EnsureProjectCreatedFromLauncher(ctx, state);
@@ -269,14 +309,14 @@ ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, Standalo
   return test;
 }
 
-ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
+ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, LauncherUiHarness* harness) {
   REQUIRE(engine != nullptr);
   REQUIRE(harness != nullptr);
 
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "back_to_home_returns_launcher");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "back_to_home_returns_launcher");
   test->UserData = harness;
   test->TestFunc = [](ImGuiTestContext* ctx) {
-    auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
+    auto* state = static_cast<LauncherUiHarness*>(ctx->Test->UserData);
     IM_CHECK(state != nullptr);
 
     EnsureProjectCreatedFromLauncher(ctx, state);
@@ -285,7 +325,7 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
-    ctx->CaptureScreenshot("back_to_home.png");
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "back_to_home.png");
 
     IM_CHECK(!state->shell.HasActiveProject());
     ctx->SetRef("Horo Launcher");
@@ -294,21 +334,20 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    ctx->CaptureScreenshot("recent_project_visible.png");
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "recent_project_visible.png");
   };
 
   return test;
 }
 
-ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
+ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, LauncherUiHarness* harness) {
   REQUIRE(engine != nullptr);
   REQUIRE(harness != nullptr);
 
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "open_project_from_recent_projects");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "open_project_from_recent_projects");
   test->UserData = harness;
   test->TestFunc = [](ImGuiTestContext* ctx) {
-    ctx->CaptureVideo("open_recent_project.gif");
-    auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
+    auto* state = static_cast<LauncherUiHarness*>(ctx->Test->UserData);
     IM_CHECK(state != nullptr);
 
     EnsureProjectCreatedFromLauncher(ctx, state);
@@ -330,6 +369,7 @@ ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, Standal
     IM_CHECK(state->shell.HasActiveProject());
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "open_recent_project_done.png");
   };
 
   return test;
@@ -337,8 +377,18 @@ ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, Standal
 
 }  // namespace
 
-TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[standalone][ui]") {
-  StandaloneUiHarness harness;
+TEST_CASE("Editor launcher smoke flow works through imgui test engine", "[launcher][ui]") {
+  fs::path uiOut = RepoRootFromTestSource() / "ui_test_output";
+  if (const char* env = std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR")) {
+    if (env[0] != '\0')
+      uiOut = env;
+  }
+  {
+    std::error_code ec;
+    fs::create_directories(uiOut, ec);
+  }
+
+  LauncherUiHarness harness(uiOut);
   ImGuiContextGuard imgui;
 
   ImGuiTestEngine* engine = ImGuiTestEngine_CreateContext();
@@ -346,16 +396,16 @@ TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[st
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(engine);
   testIo.ConfigCaptureEnabled = true;
-  testIo.OutputFolder = "ui_test_output";
+  testIo.ScreenCaptureFunc = LauncherUiScreenCaptureFunc;
   testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
   testIo.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
   testIo.ConfigVerboseLevel = ImGuiTestVerboseLevel_Error;
   testIo.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
 
   ImGuiTestEngine_Start(engine, ImGui::GetCurrentContext());
-  ImGuiTest* smokeTest = RegisterStandaloneLauncherSmokeTest(engine, &harness);
-  ImGuiTest* backToHomeTest = RegisterStandaloneBackToHomeTest(engine, &harness);
-  ImGuiTest* recentProjectsTest = RegisterStandaloneRecentProjectsTest(engine, &harness);
+  ImGuiTest* smokeTest = RegisterLauncherSmokeTest(engine, &harness);
+  ImGuiTest* backToHomeTest = RegisterLauncherBackToHomeTest(engine, &harness);
+  ImGuiTest* recentProjectsTest = RegisterLauncherRecentProjectsTest(engine, &harness);
   REQUIRE(smokeTest != nullptr);
   REQUIRE(backToHomeTest != nullptr);
   REQUIRE(recentProjectsTest != nullptr);
@@ -365,7 +415,7 @@ TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[st
 
   int frameCount = 0;
   while ((testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(engine)) && frameCount < 600) {
-    RenderStandaloneFrame(&harness.shell);
+    RenderLauncherShellFrame(&harness.shell);
     ImGuiTestEngine_PostSwap(engine);
     ++frameCount;
   }

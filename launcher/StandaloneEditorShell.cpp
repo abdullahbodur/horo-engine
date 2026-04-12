@@ -1,4 +1,4 @@
-#include "standalone/StandaloneEditorShell.h"
+#include "launcher/StandaloneEditorShell.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,8 +15,8 @@
 #include "scene/Entity.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
-#include "standalone/NativeFolderDialog.h"
-#include "standalone/StandaloneProjectTemplate.h"
+#include "launcher/NativeFolderDialog.h"
+#include "launcher/StandaloneProjectTemplate.h"
 
 namespace Monolith::Standalone {
 

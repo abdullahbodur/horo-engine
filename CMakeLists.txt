@@ -17,7 +17,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     option(MONOLITH_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
     option(MONOLITH_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
-    option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build the standalone HoroEditor executable" ON)
+    option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
 
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
@@ -42,9 +42,9 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/standalone/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
 )
-list(FILTER ENGINE_SOURCES EXCLUDE REGEX "standalone[/\\\\]HoroEditorMain\\.cpp$")
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
 
 add_library(MonolithEngine STATIC ${ENGINE_SOURCES})
 add_library(MonolithEngine::MonolithEngine ALIAS MonolithEngine)
@@ -120,7 +120,7 @@ add_custom_command(TARGET MonolithEngine POST_BUILD
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
-    add_executable(HoroEditor standalone/HoroEditorMain.cpp)
+    add_executable(HoroEditor launcher/HoroEditorMain.cpp)
     target_link_libraries(HoroEditor PRIVATE MonolithEngine)
     target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
@@ -137,11 +137,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
             $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer/shaders
-        COMMENT "Copying standalone editor SDK resources"
+        COMMENT "Copying HoroEditor SDK resources next to launcher binary"
     )
 
     if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET MonolithEngineImGuiTest)
-        add_executable(HoroEditorUiTest standalone/HoroEditorMain.cpp)
+        add_executable(HoroEditorUiTest launcher/HoroEditorMain.cpp)
         target_link_libraries(HoroEditorUiTest PRIVATE MonolithEngineImGuiTest)
         target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
         target_compile_definitions(HoroEditorUiTest PRIVATE MONOLITH_STANDALONE_UI_AUTOMATION=1)
@@ -159,7 +159,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
                 $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer/shaders
-            COMMENT "Copying standalone editor UI test SDK resources"
+            COMMENT "Copying HoroEditor UI test SDK resources"
         )
     endif()
 endif()
@@ -178,7 +178,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         )
     endif()
 
-    install(DIRECTORY core editor input math mcp physics renderer scene standalone
+    install(DIRECTORY core editor input math mcp physics renderer scene launcher
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h"
     )

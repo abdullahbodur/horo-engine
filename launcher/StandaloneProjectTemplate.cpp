@@ -1,4 +1,4 @@
-#include "standalone/StandaloneProjectTemplate.h"
+#include "launcher/StandaloneProjectTemplate.h"
 
 #include <fstream>
 
