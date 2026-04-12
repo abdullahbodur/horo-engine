@@ -64,6 +64,7 @@ class StandaloneEditorShell {
   void RenderProjectToolbar();
   void ExecuteManifestCommand(const StandaloneProjectCommand& command, const std::string& label);
   bool CreateProjectFromLauncher(std::string* outError);
+  std::filesystem::path ResolveCommandSdkRoot() const;
   std::filesystem::path NormalizeProjectRootInput(const std::filesystem::path& rawPath) const;
   std::filesystem::path ResolveAssetPath(const std::string& rawPath) const;
   std::filesystem::path ResolveShaderPath(const char* fileName) const;

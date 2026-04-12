@@ -145,9 +145,17 @@ std::string BuildTemplateMainCpp(const std::string& projectName) {
       "      if (m_referenceRuntime->GetSceneCamera().has_value()) {\n"
       "        const RuntimeSceneCamera& camera = *m_referenceRuntime->GetSceneCamera();\n"
       "        m_camera.position = camera.position;\n"
-      "        m_camera.yaw = camera.yaw;\n"
-      "        m_camera.pitch = camera.pitch;\n"
-      "        m_camera.fov = camera.fovY;\n"
+      "        const float yawRad = ToRadians(camera.yaw);\n"
+      "        const float pitchRad = ToRadians(camera.pitch);\n"
+      "        const Vec3 forward = {\n"
+      "            -Sin(yawRad) * Cos(pitchRad),\n"
+      "            Sin(pitchRad),\n"
+      "            -Cos(yawRad) * Cos(pitchRad),\n"
+      "        };\n"
+      "        m_camera.target = camera.position + forward;\n"
+      "        m_camera.fovY = camera.fovY;\n"
+      "        m_camera.zNear = camera.nearClip;\n"
+      "        m_camera.zFar = camera.farClip;\n"
       "      }\n"
       "    }\n"
       "  }\n"
@@ -191,15 +199,14 @@ std::string BuildTemplateMainCpp(const std::string& projectName) {
       "}\n";
 }
 
-std::string BuildTemplateCMakeLists(const std::string& projectName) {
+std::string BuildTemplateCMakeLists(const std::string& projectName, const std::string& projectId) {
   return
       "cmake_minimum_required(VERSION 3.25)\n"
-      "project(" + projectName + " LANGUAGES CXX C)\n"
+      "project(" + projectId + " LANGUAGES CXX C)\n"
       "\n"
       "set(CMAKE_CXX_STANDARD 20)\n"
       "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n"
       "set(CMAKE_CXX_EXTENSIONS OFF)\n"
-      "set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)\n"
       "\n"
       "if(EXISTS \"${CMAKE_CURRENT_SOURCE_DIR}/engine/CMakeLists.txt\")\n"
       "  add_subdirectory(engine)\n"
@@ -212,18 +219,26 @@ std::string BuildTemplateCMakeLists(const std::string& projectName) {
       "add_executable(${PROJECT_NAME}\n"
       "  src/main.cpp\n"
       ")\n"
+      "set_target_properties(${PROJECT_NAME} PROPERTIES\n"
+      "  OUTPUT_NAME \"" + projectName + "\"\n"
+      "  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin\n"
+      "  RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin\n"
+      "  RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin\n"
+      "  RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin\n"
+      "  RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin\n"
+      ")\n"
       "target_link_libraries(${PROJECT_NAME} PRIVATE ${HORO_ENGINE_TARGET})\n"
       "\n"
       "add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD\n"
       "  COMMAND ${CMAKE_COMMAND} -E copy_directory\n"
       "    ${CMAKE_SOURCE_DIR}/assets\n"
-      "    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets\n"
+      "    $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets\n"
       ")\n"
       "\n"
       "add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD\n"
       "  COMMAND ${CMAKE_COMMAND} -E copy_directory\n"
       "    ${CMAKE_CURRENT_SOURCE_DIR}/shaders\n"
-      "    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders\n"
+      "    $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders\n"
       ")\n";
 }
 
@@ -316,7 +331,9 @@ bool CreateStandaloneProjectTemplate(const StandaloneProjectTemplateRequest& req
 
   if (!WriteTextFile(projectRoot / "src" / "main.cpp", BuildTemplateMainCpp(request.projectName), outError))
     return false;
-  if (!WriteTextFile(projectRoot / "CMakeLists.txt", BuildTemplateCMakeLists(request.projectName), outError))
+  if (!WriteTextFile(projectRoot / "CMakeLists.txt",
+                     BuildTemplateCMakeLists(request.projectName, projectId),
+                     outError))
     return false;
 
   if (!WriteTextFile(projectRoot / "shaders" / "basic.vert",
@@ -341,9 +358,9 @@ bool CreateStandaloneProjectTemplate(const StandaloneProjectTemplateRequest& req
                      "out vec4 FragColor;\n"
                      "uniform vec4 u_color;\n"
                      "uniform sampler2D u_albedoMap;\n"
-                     "uniform int u_hasAlbedoMap;\n"
+                     "uniform int u_hasTexture;\n"
                      "void main() {\n"
-                     "  vec4 base = (u_hasAlbedoMap == 1) ? texture(u_albedoMap, v_uv) : u_color;\n"
+                     "  vec4 base = (u_hasTexture == 1) ? texture(u_albedoMap, v_uv) : u_color;\n"
                      "  FragColor = base;\n"
                      "}\n",
                      outError))

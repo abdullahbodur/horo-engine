@@ -68,6 +68,40 @@ fs::path DefaultBrowseDirectory(const fs::path& rawPath) {
   return fs::current_path();
 }
 
+bool IsInstalledEnginePrefix(const fs::path& candidate) {
+  if (candidate.empty())
+    return false;
+
+  std::error_code ec;
+  return fs::is_regular_file(candidate / "lib" / "cmake" / "MonolithEngine" / "MonolithEngineConfig.cmake",
+                             ec) &&
+         !ec;
+}
+
+bool IsBuildTreeEnginePrefix(const fs::path& candidate) {
+  if (candidate.empty())
+    return false;
+
+  std::error_code ec;
+  const bool hasConfig = fs::is_regular_file(candidate / "MonolithEngineConfig.cmake", ec) && !ec;
+  ec.clear();
+  const bool hasTargets = fs::is_regular_file(candidate / "MonolithEngineTargets.cmake", ec) && !ec;
+  return hasConfig && hasTargets;
+}
+
+fs::path NormalizePathForLookup(const fs::path& rawPath) {
+  if (rawPath.empty())
+    return {};
+
+  std::error_code ec;
+  fs::path normalized = fs::weakly_canonical(rawPath, ec);
+  if (ec)
+    normalized = fs::absolute(rawPath, ec);
+  if (ec)
+    normalized = rawPath;
+  return normalized.lexically_normal();
+}
+
 }  // namespace
 
 void StandaloneEditorShell::Attach(Editor::EditorLayer* editor,
@@ -546,11 +580,8 @@ void StandaloneEditorShell::ExecuteManifestCommand(const StandaloneProjectComman
                                                    const std::string& label) {
   std::string resolveError;
   ResolvedStandaloneCommand resolved;
-  if (!ResolveStandaloneCommand(command,
-                                m_projectRoot,
-                                ProjectPath::SdkRoot(),
-                                &resolved,
-                                &resolveError)) {
+  if (!ResolveStandaloneCommand(
+          command, m_projectRoot, ResolveCommandSdkRoot(), &resolved, &resolveError)) {
     m_launcherError = resolveError;
     return;
   }
@@ -565,12 +596,39 @@ bool StandaloneEditorShell::CreateProjectFromLauncher(std::string* outError) {
   const StandaloneProjectTemplateRequest request{
       .projectRoot = BufferToString(m_newProjectPathInput),
       .projectName = BufferToString(m_newProjectNameInput),
-      .sdkRoot = ProjectPath::SdkRoot(),
+      .sdkRoot = ResolveCommandSdkRoot(),
   };
   if (!CreateStandaloneProjectTemplate(request, &createdProject, outError))
     return false;
 
   return OpenProject(request.projectRoot, outError);
+}
+
+fs::path StandaloneEditorShell::ResolveCommandSdkRoot() const {
+  std::vector<fs::path> candidates;
+  const fs::path assetSdkRoot = NormalizePathForLookup(ProjectPath::SdkRoot());
+  if (!assetSdkRoot.empty()) {
+    candidates.push_back(assetSdkRoot);
+    if (assetSdkRoot.filename() == "sdk")
+      candidates.push_back(assetSdkRoot.parent_path());
+  }
+
+  std::error_code ec;
+  const fs::path exeDir = NormalizePathForLookup(fs::current_path(ec));
+  if (!ec && !exeDir.empty()) {
+    candidates.push_back(exeDir);
+    candidates.push_back(exeDir.parent_path());
+    candidates.push_back(exeDir.parent_path().parent_path());
+  }
+
+  for (const fs::path& candidate : candidates) {
+    if (IsInstalledEnginePrefix(candidate) || IsBuildTreeEnginePrefix(candidate))
+      return candidate;
+  }
+
+  if (!assetSdkRoot.empty() && assetSdkRoot.filename() == "sdk")
+    return assetSdkRoot.parent_path();
+  return assetSdkRoot;
 }
 
 fs::path StandaloneEditorShell::NormalizeProjectRootInput(const fs::path& rawPath) const {

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <mutex>
 #include <thread>
@@ -281,13 +282,49 @@ void ExternalProcessRunner::Stop() {
 
   if (m_status.active) {
 #ifdef _WIN32
+    int exitCode = 1;
     if (m_process->process)
       TerminateProcess(m_process->process, 1);
+    if (m_process->process) {
+      const DWORD waitResult = WaitForSingleObject(m_process->process, 5000);
+      if (waitResult == WAIT_OBJECT_0) {
+        DWORD nativeExitCode = 1;
+        if (GetExitCodeProcess(m_process->process, &nativeExitCode))
+          exitCode = static_cast<int>(nativeExitCode);
+      }
+    }
 #else
-    if (m_process->pid > 0)
+    int exitCode = 1;
+    int status = 0;
+    bool reaped = false;
+    if (m_process->pid > 0) {
       kill(m_process->pid, SIGTERM);
+      for (int attempt = 0; attempt < 50; ++attempt) {
+        const pid_t result = waitpid(m_process->pid, &status, WNOHANG);
+        if (result == m_process->pid) {
+          reaped = true;
+          break;
+        }
+        if (result < 0)
+          break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+
+      if (!reaped) {
+        kill(m_process->pid, SIGKILL);
+        const pid_t result = waitpid(m_process->pid, &status, 0);
+        reaped = result == m_process->pid;
+      }
+      if (reaped) {
+        if (WIFEXITED(status))
+          exitCode = WEXITSTATUS(status);
+        else if (WIFSIGNALED(status))
+          exitCode = 128 + WTERMSIG(status);
+      }
+      m_process->pid = -1;
+    }
 #endif
-    Finish(1, true);
+    Finish(exitCode, true);
   }
 
   if (m_process->readerThread.joinable())

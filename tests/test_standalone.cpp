@@ -33,6 +33,12 @@ std::string NormalizeComparablePath(const std::filesystem::path& path) {
   return normalized.lexically_normal().generic_string();
 }
 
+std::string ReadTextFile(const std::filesystem::path& path) {
+  std::ifstream in(path);
+  REQUIRE(in.is_open());
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
 struct HomeDirGuard {
   std::string previousUserProfile;
   std::string previousHomeDrive;
@@ -182,6 +188,20 @@ TEST_CASE("Standalone project template creates manifest, source, and scene scaff
   REQUIRE(std::filesystem::exists(projectRoot / "assets" / "scenes" / "level.json"));
   REQUIRE(doc.manifest.projectName == "TemplateGame");
   REQUIRE(doc.manifest.defaultScene == "assets/scenes/level.json");
+
+  const std::string mainCpp = ReadTextFile(projectRoot / "src" / "main.cpp");
+  REQUIRE(mainCpp.find("m_camera.target = camera.position + forward;") != std::string::npos);
+  REQUIRE(mainCpp.find("m_camera.fovY = camera.fovY;") != std::string::npos);
+  REQUIRE(mainCpp.find("m_camera.yaw") == std::string::npos);
+
+  const std::string cmakeLists = ReadTextFile(projectRoot / "CMakeLists.txt");
+  REQUIRE(cmakeLists.find("OUTPUT_NAME \"TemplateGame\"") != std::string::npos);
+  REQUIRE(cmakeLists.find("RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin") !=
+          std::string::npos);
+
+  const std::string fragmentShader = ReadTextFile(projectRoot / "shaders" / "basic.frag");
+  REQUIRE(fragmentShader.find("u_hasTexture") != std::string::npos);
+  REQUIRE(fragmentShader.find("u_hasAlbedoMap") == std::string::npos);
 }
 
 TEST_CASE("External process runner starts, completes, and records exit status",
@@ -209,4 +229,29 @@ TEST_CASE("External process runner starts, completes, and records exit status",
   REQUIRE_FALSE(runner.IsActive());
   REQUIRE(runner.GetStatus().finished);
   REQUIRE(runner.GetStatus().exitCode == 0);
+}
+
+TEST_CASE("External process runner stop marks user-terminated commands as finished",
+          "[standalone][process]") {
+  ExternalProcessRunner runner;
+  ResolvedStandaloneCommand command;
+  command.workingDirectory = std::filesystem::temp_directory_path();
+#ifdef _WIN32
+  command.executable = "cmd";
+  command.args = {"/c", "ping -n 6 127.0.0.1 >nul"};
+#else
+  command.executable = "sh";
+  command.args = {"-c", "sleep 5"};
+#endif
+  command.debugString = command.executable.generic_string();
+
+  std::string error;
+  REQUIRE(runner.Start(command, "test-stop-process", &error));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  runner.Stop();
+
+  REQUIRE_FALSE(runner.IsActive());
+  REQUIRE(runner.GetStatus().finished);
+  REQUIRE(runner.GetStatus().terminatedByUser);
 }

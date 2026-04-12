@@ -1,3 +1,4 @@
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
@@ -48,10 +49,19 @@ class HoroEditorApp final : public Application {
 
   void OnInit() override {
     const std::filesystem::path exeDir = std::filesystem::current_path();
-    std::error_code ec;
-    const std::filesystem::path packagedSdk = std::filesystem::weakly_canonical(exeDir.parent_path() / "sdk", ec);
-    if (!ec && std::filesystem::is_directory(packagedSdk))
-      ProjectPath::SetSdkRoot(packagedSdk);
+    const std::array<std::filesystem::path, 3> sdkCandidates = {
+        exeDir.parent_path() / "sdk",
+        exeDir / "sdk",
+        exeDir.parent_path().parent_path() / "sdk",
+    };
+    for (const std::filesystem::path& candidate : sdkCandidates) {
+      std::error_code ec;
+      const std::filesystem::path normalized = std::filesystem::weakly_canonical(candidate, ec);
+      if (!ec && std::filesystem::is_directory(normalized)) {
+        ProjectPath::SetSdkRoot(normalized);
+        break;
+      }
+    }
 
     const RenderBackendInitResult backendInit =
         Renderer::InitializeBackend({.requested = RenderBackendId::OpenGL,

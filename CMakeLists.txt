@@ -113,14 +113,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
     endif()
 
     add_custom_command(TARGET HoroEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/sdk/assets
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
-            ${CMAKE_BINARY_DIR}/sdk/assets/editor_schema.json
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/sdk/renderer
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/editor_schema.json
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
-            ${CMAKE_BINARY_DIR}/sdk/renderer/shaders
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer/shaders
         COMMENT "Copying standalone editor SDK resources"
     )
 endif()
@@ -192,6 +192,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineConfigVersion.cmake
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
+    )
+    export(EXPORT MonolithEngineTargets
+        FILE ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineTargets.cmake
+        NAMESPACE MonolithEngine::
     )
 
     install(EXPORT MonolithEngineTargets
