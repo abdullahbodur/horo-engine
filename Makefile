@@ -55,7 +55,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test release coverage clean clean-all format format-check help
+.PHONY: all configure build test test-ui test\:ui release coverage clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -74,6 +74,13 @@ $(SENTINEL_DBG):
 ## Build + run all 23 engine unit tests (debug)
 test: build
 	$(TEST_CMD)
+
+## Build + run standalone ImGui UI smoke tests (debug)
+test-ui: build
+	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_standalone_ui
+
+## Alias for test-ui (npm-style naming)
+test\:ui: test-ui
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -168,6 +175,8 @@ help:
 	@echo ""
 	@echo "  make              Build debug"
 	@echo "  make test         Build & run all 23 engine tests"
+	@echo "  make test-ui      Build & run standalone UI smoke tests"
+	@echo "  make test:ui      Alias of test-ui"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
