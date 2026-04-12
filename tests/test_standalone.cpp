@@ -23,6 +23,16 @@ std::filesystem::path MakeTempRoot(const std::string& name) {
   return std::filesystem::temp_directory_path() / "horo_standalone_tests" / name;
 }
 
+std::string NormalizeComparablePath(const std::filesystem::path& path) {
+  std::error_code ec;
+  std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+  if (ec)
+    normalized = std::filesystem::absolute(path, ec);
+  if (ec)
+    normalized = path;
+  return normalized.lexically_normal().generic_string();
+}
+
 struct HomeDirGuard {
   std::string previousUserProfile;
   std::string previousHomeDrive;
@@ -121,7 +131,8 @@ TEST_CASE("Editor home settings remember and prune recent projects", "[standalon
   RememberRecentProject(&doc, projectA);
 
   REQUIRE(doc.state.recentProjects.size() == 2);
-  REQUIRE(doc.state.recentProjects.front() == projectA.lexically_normal().generic_string());
+  REQUIRE(doc.state.recentProjects.front() == NormalizeComparablePath(projectA));
+  REQUIRE(doc.state.lastProjectPath == NormalizeComparablePath(projectA));
 
   std::filesystem::remove(projectB / ".horo" / "project.json");
   PruneMissingRecentProjects(&doc);
@@ -132,6 +143,7 @@ TEST_CASE("Editor home settings remember and prune recent projects", "[standalon
   const EditorHomeDocument loaded = LoadEditorHomeDocument();
   REQUIRE_FALSE(loaded.parseError);
   REQUIRE(loaded.state.recentProjects.size() == 1);
+  REQUIRE(loaded.state.recentProjects.front() == NormalizeComparablePath(projectA));
 }
 
 TEST_CASE("Standalone project manifest resolves SDK and project tokens", "[standalone][manifest]") {
