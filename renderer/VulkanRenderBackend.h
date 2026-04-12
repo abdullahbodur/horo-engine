@@ -46,6 +46,18 @@ namespace Monolith
     bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                 bool needsYFlip,
                                                 std::string *outError) override;
+    bool EnsureSceneTextureResources(uint32_t width,
+                                     uint32_t height,
+                                     std::string *outError) override;
+    bool TryGetSceneTextureCatalog(SceneTextureCatalog *outCatalog,
+                                   std::string *outError) const override;
+    bool EnsureGiHistoryResources(uint32_t width,
+                                  uint32_t height,
+                                  std::string *outError) override;
+    bool TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
+                                std::string *outError) const override;
+    bool InvalidateGiHistory(GiHistoryResetReason reason,
+                             std::string *outError) override;
 
     RenderBackendId GetBackendId() const override { return RenderBackendId::Vulkan; }
     RenderBackendCapabilities GetCapabilities() const override;
@@ -143,6 +155,8 @@ namespace Monolith
                                               uint32_t height,
                                               uint64_t previousGeneration);
     void DestroyOffscreenRenderTargetResources(const std::string &targetKey);
+    bool BuildOffscreenResourceHandle(const std::string &targetKey,
+                                      BackendResourceHandle *outHandle) const;
     bool TryRegisterOffscreenTargetImGuiDescriptor(const std::string &targetKey,
                                                    RenderTargetHandle *outHandle,
                                                    bool needsYFlip);
@@ -168,6 +182,8 @@ namespace Monolith
     int m_executedOpaqueIndexedDraws = 0;
     bool m_frameActive = false;
     bool m_passActive = false;
+    SceneTextureCatalog m_sceneTextureCatalog;
+    GiHistoryCatalog m_giHistoryCatalog;
   };
 
 } // namespace Monolith

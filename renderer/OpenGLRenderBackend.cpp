@@ -95,6 +95,46 @@ bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(RenderTargetHan
   return false;
 }
 
+bool OpenGLRenderBackend::EnsureSceneTextureResources(uint32_t,
+                                                      uint32_t,
+                                                      std::string* outError) {
+  if (outError)
+    *outError = "Scene texture abstraction resources are unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::TryGetSceneTextureCatalog(SceneTextureCatalog* outCatalog,
+                                                    std::string* outError) const {
+  if (outCatalog)
+    *outCatalog = {};
+  if (outError)
+    *outError = "Scene texture abstraction catalog is unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::EnsureGiHistoryResources(uint32_t,
+                                                   uint32_t,
+                                                   std::string* outError) {
+  if (outError)
+    *outError = "GI history abstraction resources are unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::TryGetGiHistoryCatalog(GiHistoryCatalog* outCatalog,
+                                                 std::string* outError) const {
+  if (outCatalog)
+    *outCatalog = {};
+  if (outError)
+    *outError = "GI history abstraction catalog is unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string* outError) {
+  if (outError)
+    *outError = "GI history invalidation is unavailable on OpenGL backend.";
+  return false;
+}
+
 void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
   MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
   glEnable(GL_DEPTH_TEST);

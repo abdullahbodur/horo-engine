@@ -35,6 +35,42 @@ namespace Monolith
     constexpr uint32_t kInvalidQueueFamily = std::numeric_limits<uint32_t>::max();
     constexpr VkFormat kOffscreenTargetFormat = VK_FORMAT_R8G8B8A8_UNORM;
     constexpr const char *kEditorViewportTargetKey = "__editor.viewport.scene";
+    constexpr std::array<const char *, static_cast<size_t>(SceneTextureSemantic::Count)> kSceneTextureTargetKeys = {
+        "__scene.color",
+        "__scene.depth",
+        "__scene.normals",
+        "__scene.material",
+        "__scene.emissive",
+        "__scene.velocity"};
+    constexpr std::array<const char *, static_cast<size_t>(GiHistorySemantic::Count)> kGiHistoryTargetKeys = {
+        "__gi.history.diffuse_irradiance",
+        "__gi.history.specular_irradiance",
+        "__gi.history.validation",
+        "__gi.history.moments"};
+
+    uint64_t HashResourceKey(const std::string &key)
+    {
+      constexpr uint64_t kFNVOffset = 14695981039346656037ull;
+      constexpr uint64_t kFNVPrime = 1099511628211ull;
+
+      uint64_t hash = kFNVOffset;
+      for (unsigned char c : key)
+      {
+        hash ^= static_cast<uint64_t>(c);
+        hash *= kFNVPrime;
+      }
+      return hash;
+    }
+
+    const char *SceneTextureTargetKey(SceneTextureSemantic semantic)
+    {
+      return kSceneTextureTargetKeys[static_cast<size_t>(semantic)];
+    }
+
+    const char *GiHistoryTargetKey(GiHistorySemantic semantic)
+    {
+      return kGiHistoryTargetKeys[static_cast<size_t>(semantic)];
+    }
 
     const char *VkResultName(VkResult result)
     {
@@ -755,6 +791,161 @@ namespace Monolith
     return ok;
   }
 
+  bool VulkanRenderBackend::EnsureSceneTextureResources(uint32_t width,
+                                                        uint32_t height,
+                                                        std::string *outError)
+  {
+    m_sceneTextureCatalog = {};
+    if (width == 0 || height == 0)
+    {
+      m_lastError = "Scene texture abstraction dimensions must be non-zero.";
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    for (size_t i = 0; i < static_cast<size_t>(SceneTextureSemantic::Count); ++i)
+    {
+      const auto semantic = static_cast<SceneTextureSemantic>(i);
+      if (!EnsureOffscreenRenderTarget(SceneTextureTargetKey(semantic), width, height))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+
+      BackendResourceHandle handle{};
+      if (!BuildOffscreenResourceHandle(SceneTextureTargetKey(semantic), &handle))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+      m_sceneTextureCatalog.Set(semantic, handle);
+    }
+
+    ++m_sceneTextureCatalog.frameSerial;
+    return true;
+  }
+
+  bool VulkanRenderBackend::TryGetSceneTextureCatalog(SceneTextureCatalog *outCatalog,
+                                                      std::string *outError) const
+  {
+    if (!outCatalog)
+      return false;
+    if (!m_sceneTextureCatalog.Has(SceneTextureSemantic::Color))
+    {
+      *outCatalog = {};
+      if (outError)
+        *outError = "Scene texture abstraction catalog has not been initialized.";
+      return false;
+    }
+
+    *outCatalog = m_sceneTextureCatalog;
+    return true;
+  }
+
+  bool VulkanRenderBackend::EnsureGiHistoryResources(uint32_t width,
+                                                     uint32_t height,
+                                                     std::string *outError)
+  {
+    if (width == 0 || height == 0)
+    {
+      m_lastError = "GI history abstraction dimensions must be non-zero.";
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    for (size_t i = 0; i < static_cast<size_t>(GiHistorySemantic::Count); ++i)
+    {
+      const auto semantic = static_cast<GiHistorySemantic>(i);
+      if (!EnsureOffscreenRenderTarget(GiHistoryTargetKey(semantic), width, height))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+
+      BackendResourceHandle handle{};
+      if (!BuildOffscreenResourceHandle(GiHistoryTargetKey(semantic), &handle))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+      m_giHistoryCatalog.Set(semantic, handle);
+    }
+
+    ++m_giHistoryCatalog.revision;
+    m_giHistoryCatalog.lastResetReason = GiHistoryResetReason::None;
+    return true;
+  }
+
+  bool VulkanRenderBackend::TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
+                                                   std::string *outError) const
+  {
+    if (!outCatalog)
+      return false;
+    if (!m_giHistoryCatalog.Has(GiHistorySemantic::DiffuseIrradiance))
+    {
+      *outCatalog = {};
+      if (outError)
+        *outError = "GI history abstraction catalog has not been initialized.";
+      return false;
+    }
+
+    *outCatalog = m_giHistoryCatalog;
+    return true;
+  }
+
+  bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason reason,
+                                                std::string *outError)
+  {
+    if (!m_giHistoryCatalog.Has(GiHistorySemantic::DiffuseIrradiance))
+    {
+      m_lastError = "GI history abstraction invalidation requires initialized history resources.";
+      if (outError)
+        *outError = m_lastError;
+      return false;
+    }
+
+    for (size_t i = 0; i < static_cast<size_t>(GiHistorySemantic::Count); ++i)
+    {
+      const auto semantic = static_cast<GiHistorySemantic>(i);
+      const char *targetKey = GiHistoryTargetKey(semantic);
+      OffscreenTargetMetadata metadata{};
+      if (!TryGetOffscreenRenderTargetMetadata(targetKey, &metadata))
+      {
+        m_lastError = "GI history abstraction invalidation encountered a missing history surface.";
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+
+      DestroyOffscreenRenderTargetResources(targetKey);
+      if (!CreateOffscreenRenderTargetResources(targetKey, metadata.width, metadata.height, metadata.generation))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+
+      BackendResourceHandle handle{};
+      if (!BuildOffscreenResourceHandle(targetKey, &handle))
+      {
+        if (outError)
+          *outError = m_lastError;
+        return false;
+      }
+      m_giHistoryCatalog.Set(semantic, handle);
+    }
+
+    ++m_giHistoryCatalog.revision;
+    m_giHistoryCatalog.lastResetReason = reason;
+    return true;
+  }
+
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &targetKey,
                                                         uint32_t width,
                                                         uint32_t height)
@@ -837,6 +1028,26 @@ namespace Monolith
   void VulkanRenderBackend::DestroyOffscreenRenderTarget(const std::string &targetKey)
   {
     DestroyOffscreenRenderTargetResources(targetKey);
+  }
+
+  bool VulkanRenderBackend::BuildOffscreenResourceHandle(const std::string &targetKey,
+                                                         BackendResourceHandle *outHandle) const
+  {
+    if (!m_context || !outHandle)
+      return false;
+
+    const auto it = m_context->offscreenTargets.find(targetKey);
+    if (it == m_context->offscreenTargets.end())
+      return false;
+
+    const Context::OffscreenRenderTarget &target = it->second;
+    *outHandle = {
+        RenderBackendId::Vulkan,
+        HashResourceKey(targetKey),
+        target.width,
+        target.height,
+        target.generation};
+    return outHandle->IsValid();
   }
 
   void VulkanRenderBackend::DestroyAllOffscreenRenderTargets()
@@ -1625,6 +1836,8 @@ namespace Monolith
     m_context.reset();
     m_frameActive = false;
     m_passActive = false;
+    m_sceneTextureCatalog = {};
+    m_giHistoryCatalog = {};
   }
 
   void VulkanRenderBackend::DestroySwapchain()
@@ -3694,6 +3907,17 @@ namespace Monolith
   {
     return false;
   }
+  bool VulkanRenderBackend::EnsureSceneTextureResources(uint32_t, uint32_t, std::string *) { return false; }
+  bool VulkanRenderBackend::TryGetSceneTextureCatalog(SceneTextureCatalog *, std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::EnsureGiHistoryResources(uint32_t, uint32_t, std::string *) { return false; }
+  bool VulkanRenderBackend::TryGetGiHistoryCatalog(GiHistoryCatalog *, std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string *) { return false; }
   bool VulkanRenderBackend::EnsureOffscreenRenderTarget(const std::string &, uint32_t, uint32_t) { return false; }
   bool VulkanRenderBackend::TryGetOffscreenRenderTargetHandle(const std::string &,
                                                               RenderTargetHandle *,
@@ -3708,6 +3932,10 @@ namespace Monolith
   }
   void VulkanRenderBackend::DestroyOffscreenRenderTarget(const std::string &) {}
   void VulkanRenderBackend::DestroyAllOffscreenRenderTargets() {}
+  bool VulkanRenderBackend::BuildOffscreenResourceHandle(const std::string &, BackendResourceHandle *) const
+  {
+    return false;
+  }
 
   bool VulkanRenderBackend::Initialize(void *)
   {

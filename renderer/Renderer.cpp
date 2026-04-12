@@ -205,4 +205,36 @@ namespace Monolith
     return ActiveBackend()->TryGetEditorViewportRenderTargetHandle(outHandle, needsYFlip, outError);
   }
 
+  bool Renderer::EnsureSceneTextureResources(uint32_t width,
+                                             uint32_t height,
+                                             std::string *outError)
+  {
+    return ActiveBackend()->EnsureSceneTextureResources(width, height, outError);
+  }
+
+  bool Renderer::TryGetSceneTextureCatalog(SceneTextureCatalog *outCatalog,
+                                           std::string *outError)
+  {
+    return ActiveBackend()->TryGetSceneTextureCatalog(outCatalog, outError);
+  }
+
+  bool Renderer::EnsureGiHistoryResources(uint32_t width,
+                                          uint32_t height,
+                                          std::string *outError)
+  {
+    return ActiveBackend()->EnsureGiHistoryResources(width, height, outError);
+  }
+
+  bool Renderer::TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
+                                        std::string *outError)
+  {
+    return ActiveBackend()->TryGetGiHistoryCatalog(outCatalog, outError);
+  }
+
+  bool Renderer::InvalidateGiHistory(GiHistoryResetReason reason,
+                                     std::string *outError)
+  {
+    return ActiveBackend()->InvalidateGiHistory(reason, outError);
+  }
+
 } // namespace Monolith

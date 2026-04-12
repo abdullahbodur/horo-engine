@@ -29,24 +29,28 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
               .supportsDebugLabels = false,
               .supportsOffscreenTargets = true,
               .supportsNativeTextureHandles = true,
-              .supportsReadback = true,
-              .supportsDepthReadback = true,
-              .supportsDebugHud = true,
-              .supportsComputePasses = false,
-              .supportsGpuTimestamps = false,
-              .supportsBindlessResources = false};
+               .supportsReadback = true,
+               .supportsDepthReadback = true,
+               .supportsDebugHud = true,
+               .supportsComputePasses = false,
+               .supportsGpuTimestamps = false,
+               .supportsBindlessResources = false,
+               .supportsSceneTextureAbstractions = false,
+               .supportsGiHistoryResources = false};
     case RenderBackendId::Vulkan:
       return {.supportsDebugDraw = false,
               .supportsWireframeOverlay = false,
               .supportsDebugLabels = false,
               .supportsOffscreenTargets = true,
               .supportsNativeTextureHandles = true,
-              .supportsReadback = false,
-              .supportsDepthReadback = false,
-              .supportsDebugHud = false,
-              .supportsComputePasses = false,
-              .supportsGpuTimestamps = false,
-              .supportsBindlessResources = false};
+               .supportsReadback = false,
+               .supportsDepthReadback = false,
+               .supportsDebugHud = false,
+               .supportsComputePasses = false,
+               .supportsGpuTimestamps = false,
+               .supportsBindlessResources = false,
+               .supportsSceneTextureAbstractions = true,
+               .supportsGiHistoryResources = true};
   }
 
   return {};

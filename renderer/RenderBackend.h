@@ -22,6 +22,8 @@ struct RenderBackendCapabilities {
   bool supportsComputePasses = false;
   bool supportsGpuTimestamps = false;
   bool supportsBindlessResources = false;
+  bool supportsSceneTextureAbstractions = false;
+  bool supportsGiHistoryResources = false;
 };
 
 struct RenderBackendSelection {

@@ -6,6 +6,7 @@
 #include "renderer/RenderBackend.h"
 #include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
+#include "renderer/SceneTextureResources.h"
 
 namespace Monolith {
 
@@ -39,6 +40,18 @@ class IRenderBackend {
   virtual bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle* outHandle,
                                                       bool needsYFlip,
                                                       std::string* outError) = 0;
+  virtual bool EnsureSceneTextureResources(uint32_t width,
+                                           uint32_t height,
+                                           std::string* outError) = 0;
+  virtual bool TryGetSceneTextureCatalog(SceneTextureCatalog* outCatalog,
+                                         std::string* outError) const = 0;
+  virtual bool EnsureGiHistoryResources(uint32_t width,
+                                        uint32_t height,
+                                        std::string* outError) = 0;
+  virtual bool TryGetGiHistoryCatalog(GiHistoryCatalog* outCatalog,
+                                      std::string* outError) const = 0;
+  virtual bool InvalidateGiHistory(GiHistoryResetReason reason,
+                                   std::string* outError) = 0;
 };
 
 }  // namespace Monolith

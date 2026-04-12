@@ -35,6 +35,17 @@ class OpenGLRenderBackend : public IRenderBackend {
   bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle* outHandle,
                                               bool needsYFlip,
                                               std::string* outError) override;
+  bool EnsureSceneTextureResources(uint32_t width,
+                                   uint32_t height,
+                                   std::string* outError) override;
+  bool TryGetSceneTextureCatalog(SceneTextureCatalog* outCatalog,
+                                 std::string* outError) const override;
+  bool EnsureGiHistoryResources(uint32_t width,
+                                uint32_t height,
+                                std::string* outError) override;
+  bool TryGetGiHistoryCatalog(GiHistoryCatalog* outCatalog,
+                              std::string* outError) const override;
+  bool InvalidateGiHistory(GiHistoryResetReason reason, std::string* outError) override;
 
  private:
   void UploadLights(const Shader& shader);

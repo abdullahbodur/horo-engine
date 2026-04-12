@@ -126,6 +126,97 @@ namespace
         *outError = "fake backend has no viewport target handle";
       return false;
     }
+    bool EnsureSceneTextureResources(uint32_t width,
+                                     uint32_t height,
+                                     std::string *outError) override
+    {
+      if (width == 0 || height == 0)
+      {
+        if (outError)
+          *outError = "invalid scene texture dimensions";
+        return false;
+      }
+
+      sceneTextures = {};
+      for (size_t i = 0; i < static_cast<size_t>(SceneTextureSemantic::Count); ++i)
+      {
+        sceneTextures.Set(static_cast<SceneTextureSemantic>(i),
+                          {RenderBackendId::OpenGL, 100u + i, width, height, 1u});
+      }
+      ++sceneTextures.frameSerial;
+      return true;
+    }
+    bool TryGetSceneTextureCatalog(SceneTextureCatalog *outCatalog,
+                                   std::string *outError) const override
+    {
+      if (!outCatalog)
+        return false;
+      if (!sceneTextures.Has(SceneTextureSemantic::Color))
+      {
+        if (outError)
+          *outError = "fake backend has no scene textures";
+        *outCatalog = {};
+        return false;
+      }
+      *outCatalog = sceneTextures;
+      return true;
+    }
+    bool EnsureGiHistoryResources(uint32_t width,
+                                  uint32_t height,
+                                  std::string *outError) override
+    {
+      if (width == 0 || height == 0)
+      {
+        if (outError)
+          *outError = "invalid gi history dimensions";
+        return false;
+      }
+
+      giHistory = {};
+      for (size_t i = 0; i < static_cast<size_t>(GiHistorySemantic::Count); ++i)
+      {
+        giHistory.Set(static_cast<GiHistorySemantic>(i),
+                      {RenderBackendId::OpenGL, 200u + i, width, height, 1u});
+      }
+      ++giHistory.revision;
+      giHistory.lastResetReason = GiHistoryResetReason::None;
+      return true;
+    }
+    bool TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
+                                std::string *outError) const override
+    {
+      if (!outCatalog)
+        return false;
+      if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
+      {
+        if (outError)
+          *outError = "fake backend has no gi history";
+        *outCatalog = {};
+        return false;
+      }
+      *outCatalog = giHistory;
+      return true;
+    }
+    bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
+    {
+      if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
+      {
+        if (outError)
+          *outError = "fake backend has no gi history to invalidate";
+        return false;
+      }
+
+      for (size_t i = 0; i < static_cast<size_t>(GiHistorySemantic::Count); ++i)
+      {
+        const auto semantic = static_cast<GiHistorySemantic>(i);
+        BackendResourceHandle handle = giHistory.Get(semantic);
+        ++handle.generation;
+        giHistory.Set(semantic, handle);
+      }
+      ++giHistory.revision;
+      giHistory.lastResetReason = reason;
+      return true;
+    }
     std::vector<std::string> events;
     RenderFrameConfig lastFrame;
     RenderPassConfig lastPass;
@@ -133,6 +224,8 @@ namespace
     SkinnedMeshDrawCommand lastSkinned;
     WireframeDrawCommand lastWireframe;
     int drawCalls = 0;
+    SceneTextureCatalog sceneTextures;
+    GiHistoryCatalog giHistory;
   };
 
 #if defined(MONOLITH_HAS_VULKAN)
@@ -233,6 +326,8 @@ TEST_CASE("Renderer initializes the default OpenGL backend through a typed selec
   REQUIRE(caps.supportsDepthReadback);
   REQUIRE(caps.supportsDebugHud);
   REQUIRE_FALSE(caps.supportsComputePasses);
+  REQUIRE_FALSE(caps.supportsSceneTextureAbstractions);
+  REQUIRE_FALSE(caps.supportsGiHistoryResources);
 }
 
 TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend",
@@ -289,6 +384,8 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE(glCaps.supportsReadback);
   REQUIRE(glCaps.supportsDepthReadback);
   REQUIRE(glCaps.supportsDebugHud);
+  REQUIRE_FALSE(glCaps.supportsSceneTextureAbstractions);
+  REQUIRE_FALSE(glCaps.supportsGiHistoryResources);
 
   const RenderBackendCapabilities vkCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
   REQUIRE_FALSE(vkCaps.supportsDebugDraw);
@@ -298,6 +395,8 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE_FALSE(vkCaps.supportsReadback);
   REQUIRE_FALSE(vkCaps.supportsDepthReadback);
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
+  REQUIRE(vkCaps.supportsSceneTextureAbstractions);
+  REQUIRE(vkCaps.supportsGiHistoryResources);
 }
 
 TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
@@ -324,6 +423,62 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
   REQUIRE(vkHandle.height == 0u);
   REQUIRE(vkHandle.generation == 0u);
   REQUIRE_FALSE(vkHandle.needsYFlip);
+}
+
+TEST_CASE("Scene texture and GI history catalogs stay backend-neutral and typed",
+          "[renderer][foundation][abstractions]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Color,
+                    {RenderBackendId::Vulkan, 0xA1u, 1920u, 1080u, 3u});
+  sceneTextures.Set(SceneTextureSemantic::Depth,
+                    {RenderBackendId::Vulkan, 0xA2u, 1920u, 1080u, 3u});
+
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Color));
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Depth));
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).backendId == RenderBackendId::Vulkan);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).resourceId == 0xA1u);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).generation == 3u);
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0xB1u, 960u, 540u, 8u});
+  history.Set(GiHistorySemantic::Validation,
+              {RenderBackendId::Vulkan, 0xB2u, 960u, 540u, 8u});
+  history.lastResetReason = GiHistoryResetReason::CameraCut;
+  history.revision = 42u;
+
+  REQUIRE(history.Has(GiHistorySemantic::DiffuseIrradiance));
+  REQUIRE(history.Get(GiHistorySemantic::DiffuseIrradiance).resourceId == 0xB1u);
+  REQUIRE(history.lastResetReason == GiHistoryResetReason::CameraCut);
+  REQUIRE(history.revision == 42u);
+}
+
+TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
+          "[renderer][foundation][abstractions]")
+{
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+
+  std::string error;
+  REQUIRE(Renderer::EnsureSceneTextureResources(128u, 72u, &error));
+  REQUIRE(Renderer::EnsureGiHistoryResources(64u, 64u, &error));
+
+  SceneTextureCatalog sceneTextures{};
+  REQUIRE(Renderer::TryGetSceneTextureCatalog(&sceneTextures, &error));
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Normals));
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normals).width == 128u);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normals).height == 72u);
+
+  GiHistoryCatalog giHistory{};
+  REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
+  const uint64_t initialGeneration = giHistory.Get(GiHistorySemantic::DiffuseIrradiance).generation;
+  REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
+  REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
+  REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);
+  REQUIRE(giHistory.Get(GiHistorySemantic::DiffuseIrradiance).generation == initialGeneration + 1u);
+
+  Renderer::ResetBackend();
 }
 
 #if defined(MONOLITH_HAS_VULKAN)
