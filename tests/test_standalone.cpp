@@ -106,7 +106,8 @@ TEST_CASE("ProjectPath explicit root switches editor workspace to project-local 
 
   ProjectPath::SetProjectRoot(projectRoot);
   REQUIRE(ProjectPath::HasExplicitProjectRoot());
-  REQUIRE(ResolveEditorWorkspacePath() == projectRoot / ".horo" / "editor_workspace.json");
+  REQUIRE(ResolveEditorWorkspacePath() ==
+          std::filesystem::path(NormalizeComparablePath(projectRoot / ".horo" / "editor_workspace.json")));
 
   ProjectPath::SetProjectRoot({});
   REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
