@@ -34,7 +34,13 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
               .supportsDebugHud = true,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,
-              .supportsBindlessResources = false};
+              .supportsBindlessResources = false,
+              .supportsScreenSpaceReflections = false,
+              .supportsScreenSpaceGlobalIllumination = false,
+              .supportsTemporalGiResolve = false,
+              .supportsGiComposite = false,
+              .maxReflectionQuality = RenderFeatureQualityTier::Off,
+              .maxGlobalIlluminationQuality = RenderFeatureQualityTier::Off};
     case RenderBackendId::Vulkan:
       return {.supportsDebugDraw = false,
               .supportsWireframeOverlay = false,
@@ -46,7 +52,13 @@ RenderBackendCapabilities GetDefaultRenderBackendCapabilities(RenderBackendId ba
               .supportsDebugHud = false,
               .supportsComputePasses = false,
               .supportsGpuTimestamps = false,
-              .supportsBindlessResources = false};
+              .supportsBindlessResources = false,
+              .supportsScreenSpaceReflections = false,
+              .supportsScreenSpaceGlobalIllumination = false,
+              .supportsTemporalGiResolve = false,
+              .supportsGiComposite = false,
+              .maxReflectionQuality = RenderFeatureQualityTier::Off,
+              .maxGlobalIlluminationQuality = RenderFeatureQualityTier::Off};
   }
 
   return {};

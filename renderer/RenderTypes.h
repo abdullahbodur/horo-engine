@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -15,9 +16,21 @@ class Mesh;
 class Shader;
 class SkinnedMesh;
 
+enum class RenderFeatureQualityTier : uint8_t {
+  Off = 0,
+  Low = 1,
+  Medium = 2,
+  High = 3,
+  Ultra = 4,
+};
+
 enum class RenderPassId {
   CompatibilityScene,
   OpaqueScene,
+  ScreenSpaceReflections,
+  ScreenSpaceGlobalIllumination,
+  TemporalGiResolve,
+  GiComposite,
   WireframeOverlay,
   DebugOverlay,
 };
@@ -28,12 +41,23 @@ struct RenderView {
   Vec3 cameraPosition = Vec3::Zero();
 };
 
+struct GiPipelineFrameConfig {
+  bool enableScreenSpaceReflections = false;
+  RenderFeatureQualityTier reflectionQuality = RenderFeatureQualityTier::Off;
+  bool enableScreenSpaceGlobalIllumination = false;
+  RenderFeatureQualityTier globalIlluminationQuality = RenderFeatureQualityTier::Off;
+  bool enableTemporalResolve = false;
+  bool enableComposite = false;
+  bool resetTemporalHistory = false;
+};
+
 struct RenderFrameConfig {
   std::vector<Light> lights;
   std::string debugLabel;
   Vec4 clearColor = {0.1f, 0.1f, 0.15f, 1.0f};
   bool clearColorBuffer = true;
   bool clearDepthBuffer = true;
+  GiPipelineFrameConfig giPipeline;
 };
 
 struct RenderPassConfig {

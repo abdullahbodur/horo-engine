@@ -174,6 +174,13 @@ TEST_CASE("Renderer routes explicit frame and pass commands through backend seam
   REQUIRE(backend.events ==
           std::vector<std::string>{"begin-frame", "begin-pass", "draw-mesh", "end-pass", "end-frame"});
   REQUIRE(backend.lastFrame.lights.size() == 2);
+  REQUIRE_FALSE(backend.lastFrame.giPipeline.enableScreenSpaceReflections);
+  REQUIRE(backend.lastFrame.giPipeline.reflectionQuality == RenderFeatureQualityTier::Off);
+  REQUIRE_FALSE(backend.lastFrame.giPipeline.enableScreenSpaceGlobalIllumination);
+  REQUIRE(backend.lastFrame.giPipeline.globalIlluminationQuality == RenderFeatureQualityTier::Off);
+  REQUIRE_FALSE(backend.lastFrame.giPipeline.enableTemporalResolve);
+  REQUIRE_FALSE(backend.lastFrame.giPipeline.enableComposite);
+  REQUIRE_FALSE(backend.lastFrame.giPipeline.resetTemporalHistory);
   REQUIRE(backend.lastPass.id == RenderPassId::OpaqueScene);
   REQUIRE(backend.lastMesh.mesh == &mesh);
   REQUIRE(backend.lastMesh.material == &material);
@@ -202,7 +209,15 @@ TEST_CASE("Renderer forwards frame output config through the backend seam",
   Renderer::UseBackend(&backend);
 
   const Vec4 clearColor{0.3f, 0.2f, 0.1f, 1.0f};
-  Renderer::BeginFrame(RenderFrameConfig{{}, "frame-output", clearColor, false, true});
+  const GiPipelineFrameConfig giConfig{
+      .enableScreenSpaceReflections = true,
+      .reflectionQuality = RenderFeatureQualityTier::Medium,
+      .enableScreenSpaceGlobalIllumination = true,
+      .globalIlluminationQuality = RenderFeatureQualityTier::Low,
+      .enableTemporalResolve = true,
+      .enableComposite = true,
+      .resetTemporalHistory = true};
+  Renderer::BeginFrame(RenderFrameConfig{{}, "frame-output", clearColor, false, true, giConfig});
   Renderer::EndFrame();
 
   REQUIRE(backend.events == std::vector<std::string>{"begin-frame", "end-frame"});
@@ -210,6 +225,13 @@ TEST_CASE("Renderer forwards frame output config through the backend seam",
   REQUIRE(backend.lastFrame.clearColor == clearColor);
   REQUIRE_FALSE(backend.lastFrame.clearColorBuffer);
   REQUIRE(backend.lastFrame.clearDepthBuffer);
+  REQUIRE(backend.lastFrame.giPipeline.enableScreenSpaceReflections);
+  REQUIRE(backend.lastFrame.giPipeline.reflectionQuality == RenderFeatureQualityTier::Medium);
+  REQUIRE(backend.lastFrame.giPipeline.enableScreenSpaceGlobalIllumination);
+  REQUIRE(backend.lastFrame.giPipeline.globalIlluminationQuality == RenderFeatureQualityTier::Low);
+  REQUIRE(backend.lastFrame.giPipeline.enableTemporalResolve);
+  REQUIRE(backend.lastFrame.giPipeline.enableComposite);
+  REQUIRE(backend.lastFrame.giPipeline.resetTemporalHistory);
 
   Renderer::ResetBackend();
 }
@@ -233,6 +255,12 @@ TEST_CASE("Renderer initializes the default OpenGL backend through a typed selec
   REQUIRE(caps.supportsDepthReadback);
   REQUIRE(caps.supportsDebugHud);
   REQUIRE_FALSE(caps.supportsComputePasses);
+  REQUIRE_FALSE(caps.supportsScreenSpaceReflections);
+  REQUIRE_FALSE(caps.supportsScreenSpaceGlobalIllumination);
+  REQUIRE_FALSE(caps.supportsTemporalGiResolve);
+  REQUIRE_FALSE(caps.supportsGiComposite);
+  REQUIRE(caps.maxReflectionQuality == RenderFeatureQualityTier::Off);
+  REQUIRE(caps.maxGlobalIlluminationQuality == RenderFeatureQualityTier::Off);
 }
 
 TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend",
@@ -289,6 +317,12 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE(glCaps.supportsReadback);
   REQUIRE(glCaps.supportsDepthReadback);
   REQUIRE(glCaps.supportsDebugHud);
+  REQUIRE_FALSE(glCaps.supportsScreenSpaceReflections);
+  REQUIRE_FALSE(glCaps.supportsScreenSpaceGlobalIllumination);
+  REQUIRE_FALSE(glCaps.supportsTemporalGiResolve);
+  REQUIRE_FALSE(glCaps.supportsGiComposite);
+  REQUIRE(glCaps.maxReflectionQuality == RenderFeatureQualityTier::Off);
+  REQUIRE(glCaps.maxGlobalIlluminationQuality == RenderFeatureQualityTier::Off);
 
   const RenderBackendCapabilities vkCaps = GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
   REQUIRE_FALSE(vkCaps.supportsDebugDraw);
@@ -298,6 +332,12 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE_FALSE(vkCaps.supportsReadback);
   REQUIRE_FALSE(vkCaps.supportsDepthReadback);
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
+  REQUIRE_FALSE(vkCaps.supportsScreenSpaceReflections);
+  REQUIRE_FALSE(vkCaps.supportsScreenSpaceGlobalIllumination);
+  REQUIRE_FALSE(vkCaps.supportsTemporalGiResolve);
+  REQUIRE_FALSE(vkCaps.supportsGiComposite);
+  REQUIRE(vkCaps.maxReflectionQuality == RenderFeatureQualityTier::Off);
+  REQUIRE(vkCaps.maxGlobalIlluminationQuality == RenderFeatureQualityTier::Off);
 }
 
 TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
@@ -565,6 +605,74 @@ TEST_CASE("Vulkan backend executes queued overlay callbacks while recording fram
 
   REQUIRE(overlayProbe.invoked);
   REQUIRE(overlayProbe.commandBufferHandle != nullptr);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+TEST_CASE("Vulkan backend gates GI scaffold passes behind frame-level GI configuration",
+          "[renderer][foundation][vulkan][gi]")
+{
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  if (!glfwVulkanSupported())
+  {
+    glfwTerminate();
+    SKIP("GLFW reports Vulkan unsupported on this machine");
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window = glfwCreateWindow(64, 64, "vulkan-gi-scaffold-test", nullptr, nullptr);
+  if (!window)
+  {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for Vulkan GI scaffold test");
+  }
+
+  VulkanRenderBackend backend(window);
+  REQUIRE(backend.IsInitialized());
+
+  const RenderBackendCapabilities caps = backend.GetCapabilities();
+  REQUIRE(caps.supportsComputePasses);
+  REQUIRE(caps.supportsScreenSpaceReflections);
+  REQUIRE(caps.supportsScreenSpaceGlobalIllumination);
+  REQUIRE(caps.supportsTemporalGiResolve);
+  REQUIRE(caps.supportsGiComposite);
+  REQUIRE(caps.maxReflectionQuality == RenderFeatureQualityTier::High);
+  REQUIRE(caps.maxGlobalIlluminationQuality == RenderFeatureQualityTier::High);
+
+  Camera camera;
+  backend.BeginFrame({{}, "vulkan-gi-disabled"});
+  backend.BeginPass({RenderPassId::ScreenSpaceReflections, BuildRenderView(camera), "ssr-disabled"});
+  REQUIRE(backend.GetExecutedGiScaffoldPassCount() == 0);
+  REQUIRE(backend.GetLastError().find("requires explicit frame-level GI enablement") !=
+          std::string::npos);
+  backend.EndFrame();
+
+  RenderFrameConfig giFrame{};
+  giFrame.debugLabel = "vulkan-gi-enabled";
+  giFrame.giPipeline.enableScreenSpaceReflections = true;
+  giFrame.giPipeline.reflectionQuality = RenderFeatureQualityTier::Medium;
+  giFrame.giPipeline.enableScreenSpaceGlobalIllumination = true;
+  giFrame.giPipeline.globalIlluminationQuality = RenderFeatureQualityTier::Low;
+  giFrame.giPipeline.enableTemporalResolve = true;
+  giFrame.giPipeline.enableComposite = true;
+
+  backend.BeginFrame(giFrame);
+  backend.BeginPass({RenderPassId::ScreenSpaceReflections, BuildRenderView(camera), "ssr"});
+  backend.EndPass();
+  backend.BeginPass(
+      {RenderPassId::ScreenSpaceGlobalIllumination, BuildRenderView(camera), "ssgi"});
+  backend.EndPass();
+  backend.BeginPass({RenderPassId::TemporalGiResolve, BuildRenderView(camera), "temporal"});
+  backend.EndPass();
+  backend.BeginPass({RenderPassId::GiComposite, BuildRenderView(camera), "composite"});
+  backend.EndPass();
+  backend.EndFrame();
+
+  REQUIRE(backend.GetExecutedGiScaffoldPassCount() == 4);
 
   glfwDestroyWindow(window);
   glfwTerminate();

@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "renderer/RenderTypes.h"
+
 namespace Monolith {
 
 enum class RenderBackendId {
@@ -22,6 +24,12 @@ struct RenderBackendCapabilities {
   bool supportsComputePasses = false;
   bool supportsGpuTimestamps = false;
   bool supportsBindlessResources = false;
+  bool supportsScreenSpaceReflections = false;
+  bool supportsScreenSpaceGlobalIllumination = false;
+  bool supportsTemporalGiResolve = false;
+  bool supportsGiComposite = false;
+  RenderFeatureQualityTier maxReflectionQuality = RenderFeatureQualityTier::Off;
+  RenderFeatureQualityTier maxGlobalIlluminationQuality = RenderFeatureQualityTier::Off;
 };
 
 struct RenderBackendSelection {

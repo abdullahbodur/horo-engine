@@ -375,6 +375,33 @@ namespace Monolith
       return passId == RenderPassId::OpaqueScene || passId == RenderPassId::CompatibilityScene;
     }
 
+    constexpr bool IsVulkanGiScaffoldPass(const RenderPassId passId)
+    {
+      return passId == RenderPassId::ScreenSpaceReflections ||
+             passId == RenderPassId::ScreenSpaceGlobalIllumination ||
+             passId == RenderPassId::TemporalGiResolve ||
+             passId == RenderPassId::GiComposite;
+    }
+
+    bool IsEnabledGiScaffoldPass(const RenderPassId passId, const GiPipelineFrameConfig &giConfig)
+    {
+      switch (passId)
+      {
+      case RenderPassId::ScreenSpaceReflections:
+        return giConfig.enableScreenSpaceReflections &&
+               giConfig.reflectionQuality != RenderFeatureQualityTier::Off;
+      case RenderPassId::ScreenSpaceGlobalIllumination:
+        return giConfig.enableScreenSpaceGlobalIllumination &&
+               giConfig.globalIlluminationQuality != RenderFeatureQualityTier::Off;
+      case RenderPassId::TemporalGiResolve:
+        return giConfig.enableTemporalResolve;
+      case RenderPassId::GiComposite:
+        return giConfig.enableComposite;
+      default:
+        return false;
+      }
+    }
+
     uint8_t PackOpaquePipelineKey(const VulkanRenderBackend::OpaquePipelineKey &key)
     {
       uint8_t packed = 0u;
@@ -436,9 +463,15 @@ namespace Monolith
     caps.supportsReadback = m_context && m_context->supportsColorReadback;
     caps.supportsDepthReadback = m_context && m_context->supportsDepthReadback;
     caps.supportsDebugHud = false;
-    caps.supportsComputePasses = false;
+    caps.supportsComputePasses = true;
     caps.supportsGpuTimestamps = false;
     caps.supportsBindlessResources = false;
+    caps.supportsScreenSpaceReflections = true;
+    caps.supportsScreenSpaceGlobalIllumination = true;
+    caps.supportsTemporalGiResolve = true;
+    caps.supportsGiComposite = true;
+    caps.maxReflectionQuality = RenderFeatureQualityTier::High;
+    caps.maxGlobalIlluminationQuality = RenderFeatureQualityTier::High;
     return caps;
   }
 
@@ -3516,6 +3549,7 @@ namespace Monolith
     m_context->frameCommandsRecorded = false;
     m_drawCalls = 0;
     m_executedOpaqueIndexedDraws = 0;
+    m_executedGiScaffoldPasses = 0;
     m_frameActive = true;
   }
 
@@ -3598,8 +3632,26 @@ namespace Monolith
     if (!m_frameActive || m_passActive)
       return;
 
+    if (IsVulkanGiScaffoldPass(pass.id))
+    {
+      const RenderBackendCapabilities caps = GetCapabilities();
+      const bool passIsSupported =
+          (pass.id == RenderPassId::ScreenSpaceReflections && caps.supportsScreenSpaceReflections) ||
+          (pass.id == RenderPassId::ScreenSpaceGlobalIllumination &&
+           caps.supportsScreenSpaceGlobalIllumination) ||
+          (pass.id == RenderPassId::TemporalGiResolve && caps.supportsTemporalGiResolve) ||
+          (pass.id == RenderPassId::GiComposite && caps.supportsGiComposite);
+      if (!passIsSupported || !IsEnabledGiScaffoldPass(pass.id, m_activeFrame.giPipeline))
+      {
+        m_lastError = "Vulkan GI scaffold pass requires explicit frame-level GI enablement and capability support.";
+        return;
+      }
+    }
+
     m_activePassId = pass.id;
     m_activeView = pass.view;
+    if (IsVulkanGiScaffoldPass(pass.id))
+      ++m_executedGiScaffoldPasses;
     m_passActive = true;
   }
 

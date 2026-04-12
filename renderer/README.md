@@ -24,6 +24,8 @@
 - `Renderer::EndPass()`
 - `Renderer::EndFrame()`
 
+`RenderFrameConfig` now includes `giPipeline` toggles for scaffolded GI stages (SSR, SSGI, temporal resolve, composite). These stages are disabled by default and require explicit per-frame opt-in.
+
 ## Geometry Sources
 
 - Procedural primitives (`Mesh::CreateSphere`, `CreateBox`, `CreatePlane`, etc.)
@@ -35,3 +37,4 @@
 - `Mesh`/`SkinnedMesh` are move-only RAII wrappers over VAO/VBO/EBO resources.
 - `Material` can use either solid color or optional `albedoMap` texture.
 - Shaders are copied to `build/.../bin/shaders` by CMake post-build command.
+- Vulkan supports GI scaffold pass IDs (`ScreenSpaceReflections`, `ScreenSpaceGlobalIllumination`, `TemporalGiResolve`, `GiComposite`) behind frame-level enable flags.

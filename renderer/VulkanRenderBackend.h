@@ -68,6 +68,7 @@ namespace Monolith
     void QueueOverlayRenderCallback(OverlayRenderCallback callback, void *userData);
     const std::string &GetLastError() const { return m_lastError; }
     int GetExecutedOpaqueIndexedDrawCount() const { return m_executedOpaqueIndexedDraws; }
+    int GetExecutedGiScaffoldPassCount() const { return m_executedGiScaffoldPasses; }
 
     struct OffscreenTargetMetadata
     {
@@ -166,6 +167,7 @@ namespace Monolith
     RenderPassId m_activePassId = RenderPassId::OpaqueScene;
     int m_drawCalls = 0;
     int m_executedOpaqueIndexedDraws = 0;
+    int m_executedGiScaffoldPasses = 0;
     bool m_frameActive = false;
     bool m_passActive = false;
   };
