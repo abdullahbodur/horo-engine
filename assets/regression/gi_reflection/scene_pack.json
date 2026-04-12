@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "packId": "gi-reflection-regression-pack-v1",
+  "description": "Deterministic GI/reflection regression scenarios for contract-tier and temporal-stability gating.",
+  "scenarios": [
+    {
+      "id": "low-camera-cut-warmup",
+      "tier": "Low",
+      "instabilityBias": 0.08,
+      "expectedStability": "unstable",
+      "notes": "Represents aggressive temporal reset behavior at low tier after disruptive camera motion."
+    },
+    {
+      "id": "medium-steady-temporal-resolve",
+      "tier": "Medium",
+      "instabilityBias": -0.03,
+      "expectedStability": "stable",
+      "notes": "Captures medium tier temporal reuse once history is warm."
+    },
+    {
+      "id": "high-steady-accumulation",
+      "tier": "High",
+      "instabilityBias": -0.02,
+      "expectedStability": "stable",
+      "notes": "High tier should remain within strict temporal instability budgets in steady camera conditions."
+    },
+    {
+      "id": "ultra-disocclusion-burst",
+      "tier": "Ultra",
+      "instabilityBias": 0.04,
+      "expectedStability": "unstable",
+      "notes": "Ultra tier disocclusion stress case validating instability gating tolerance."
+    }
+  ]
+}

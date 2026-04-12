@@ -15,6 +15,7 @@ These tests protect backend-neutral engine contracts and should remain green reg
   - Vulkan offscreen target lifecycle + handle metadata + resize generation validation
   - Vulkan editor viewport target provisioning + per-frame stability + resize generation validation
   - Vulkan color/depth readback capability-gated success/failure diagnostics
+  - GI/reflection regression tier baseline contract checks (`test_gi_reflection_regression`)
 - `test_architecture_docs`
   - architecture document discoverability
   - backend-boundary guardrails in higher-level code
@@ -53,8 +54,9 @@ These tests protect backend-neutral engine contracts and should remain green reg
 ### Default build
 
 ```bash
-cmake --build --preset debug-msvc --target test_core test_renderer_foundation test_architecture_docs test_editor
-ctest --test-dir build/debug-msvc -C Debug --output-on-failure -R "test_core|test_renderer_foundation|test_architecture_docs|test_editor"
+python3 scripts/ci/check_gi_reflection_regression.py
+cmake --build --preset debug-msvc --target test_core test_renderer_foundation test_gi_reflection_regression test_architecture_docs test_editor
+ctest --test-dir build/debug-msvc -C Debug --output-on-failure -R "test_core|test_renderer_foundation|test_gi_reflection_regression|test_architecture_docs|test_editor"
 ```
 
 ### Vulkan-enabled build
@@ -68,6 +70,7 @@ ctest --test-dir build/debug-msvc-vulkan-tests -C Debug --output-on-failure -R "
 ## CI Expectations
 
 - default OpenGL contract coverage stays mandatory in hosted CI
+- GI/reflection regression baseline gate (`gi-reflection-regression-gate`) is mandatory before coverage/starter integration
 - starter integration remains the downstream compatibility gate for renderer changes
 - Vulkan-enabled validation remains branch/PR-local for now, but any Vulkan/parity PR must include the command results above in its validation notes
 

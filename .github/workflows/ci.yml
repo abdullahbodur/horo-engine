@@ -12,6 +12,19 @@ concurrency:
 
 jobs:
   # ----------------------------------------------------------------
+  # GI/Reflection regression gate — baseline + pack threshold checks
+  # ----------------------------------------------------------------
+  gi-reflection-regression-gate:
+    name: GI/Reflection Regression Gate
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate GI/reflection regression baseline pack
+        run: python3 scripts/ci/check_gi_reflection_regression.py
+
+  # ----------------------------------------------------------------
   # Build + Test — Linux (GCC, Ninja)
   # ----------------------------------------------------------------
   test-linux:
@@ -120,7 +133,7 @@ jobs:
   coverage:
     name: Coverage · Linux / GCC
     runs-on: ubuntu-24.04
-    needs: [test-linux, test-windows, test-macos]
+    needs: [gi-reflection-regression-gate, test-linux, test-windows, test-macos]
 
     steps:
       - uses: actions/checkout@v4
@@ -217,7 +230,7 @@ jobs:
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [coverage]
+    needs: [coverage, gi-reflection-regression-gate]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}

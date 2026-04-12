@@ -16,6 +16,7 @@
 - Core/runtime utilities
 - Editor logic and asset import flows
 - Animation and gizmo-related functionality
+- GI/reflection tier baseline + temporal instability regression gating
 
 ## Run Tests
 

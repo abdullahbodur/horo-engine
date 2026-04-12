@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "baselineId": "gi-reflection-contract-baseline-v1",
+  "qualityTiers": {
+    "Low": {
+      "ssr": {
+        "maxTraceSteps": 12,
+        "resolveStride": 2,
+        "binaryRefinementSteps": 1,
+        "maxRoughnessForTracing": 0.35,
+        "thickness": 0.2,
+        "missFallbackBlend": 1.0,
+        "enableTemporalAccumulation": false
+      },
+      "ssgi": {
+        "maxTraceSteps": 8,
+        "sampleKernelSize": 4,
+        "resolveStride": 2,
+        "thickness": 0.15,
+        "temporalHistoryBlend": 0.0,
+        "emissiveContributionScale": 0.4,
+        "enableTemporalAccumulation": false,
+        "enableEmissiveContribution": true
+      },
+      "finalGather": {
+        "gatherSamplesPerPixel": 1,
+        "probeUpdateBudget": 96,
+        "raysPerProbe": 4,
+        "expectedMinCacheHitRatio": 0.2,
+        "expectedTemporalReuse": 0.1
+      },
+      "temporal": {
+        "baselineInstabilityIndex": 0.955,
+        "maxTemporalInstabilityIndex": 0.97
+      }
+    },
+    "Medium": {
+      "ssr": {
+        "maxTraceSteps": 24,
+        "resolveStride": 2,
+        "binaryRefinementSteps": 2,
+        "maxRoughnessForTracing": 0.55,
+        "thickness": 0.3,
+        "missFallbackBlend": 0.65,
+        "enableTemporalAccumulation": true
+      },
+      "ssgi": {
+        "maxTraceSteps": 16,
+        "sampleKernelSize": 8,
+        "resolveStride": 2,
+        "thickness": 0.25,
+        "temporalHistoryBlend": 0.55,
+        "emissiveContributionScale": 0.55,
+        "enableTemporalAccumulation": true,
+        "enableEmissiveContribution": true
+      },
+      "finalGather": {
+        "gatherSamplesPerPixel": 2,
+        "probeUpdateBudget": 192,
+        "raysPerProbe": 8,
+        "expectedMinCacheHitRatio": 0.35,
+        "expectedTemporalReuse": 0.3
+      },
+      "temporal": {
+        "baselineInstabilityIndex": 0.6025,
+        "maxTemporalInstabilityIndex": 0.62
+      }
+    },
+    "High": {
+      "ssr": {
+        "maxTraceSteps": 40,
+        "resolveStride": 1,
+        "binaryRefinementSteps": 4,
+        "maxRoughnessForTracing": 0.75,
+        "thickness": 0.4,
+        "missFallbackBlend": 0.35,
+        "enableTemporalAccumulation": true
+      },
+      "ssgi": {
+        "maxTraceSteps": 28,
+        "sampleKernelSize": 12,
+        "resolveStride": 1,
+        "thickness": 0.35,
+        "temporalHistoryBlend": 0.75,
+        "emissiveContributionScale": 0.7,
+        "enableTemporalAccumulation": true,
+        "enableEmissiveContribution": true
+      },
+      "finalGather": {
+        "gatherSamplesPerPixel": 4,
+        "probeUpdateBudget": 320,
+        "raysPerProbe": 12,
+        "expectedMinCacheHitRatio": 0.5,
+        "expectedTemporalReuse": 0.55
+      },
+      "temporal": {
+        "baselineInstabilityIndex": 0.36,
+        "maxTemporalInstabilityIndex": 0.38
+      }
+    },
+    "Ultra": {
+      "ssr": {
+        "maxTraceSteps": 64,
+        "resolveStride": 1,
+        "binaryRefinementSteps": 6,
+        "maxRoughnessForTracing": 0.9,
+        "thickness": 0.5,
+        "missFallbackBlend": 0.2,
+        "enableTemporalAccumulation": true
+      },
+      "ssgi": {
+        "maxTraceSteps": 40,
+        "sampleKernelSize": 16,
+        "resolveStride": 1,
+        "thickness": 0.45,
+        "temporalHistoryBlend": 0.85,
+        "emissiveContributionScale": 0.85,
+        "enableTemporalAccumulation": true,
+        "enableEmissiveContribution": true
+      },
+      "finalGather": {
+        "gatherSamplesPerPixel": 6,
+        "probeUpdateBudget": 512,
+        "raysPerProbe": 16,
+        "expectedMinCacheHitRatio": 0.65,
+        "expectedTemporalReuse": 0.7
+      },
+      "temporal": {
+        "baselineInstabilityIndex": 0.2275,
+        "maxTemporalInstabilityIndex": 0.24
+      }
+    }
+  }
+}

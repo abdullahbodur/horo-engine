@@ -224,3 +224,9 @@ add_executable(test_renderer_foundation test_renderer_foundation.cpp)
 target_link_libraries(test_renderer_foundation PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_renderer_foundation)
 add_test(NAME test_renderer_foundation COMMAND $<TARGET_FILE:test_renderer_foundation>)
+
+# ---- test_gi_reflection_regression ----
+add_executable(test_gi_reflection_regression test_gi_reflection_regression.cpp)
+target_link_libraries(test_gi_reflection_regression PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_gi_reflection_regression)
+add_test(NAME test_gi_reflection_regression COMMAND $<TARGET_FILE:test_gi_reflection_regression>)

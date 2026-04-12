@@ -48,6 +48,12 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_regular_file(devDocsRoot / "backend-parity-validation-matrix.md"));
   REQUIRE(std::filesystem::is_regular_file(
       devDocsRoot / "dynamic-gi-reflections-milestone-plan.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      devDocsRoot / "gi-reflection-regression-pack.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      root / "assets" / "regression" / "gi_reflection" / "scene_pack.json"));
+  REQUIRE(std::filesystem::is_regular_file(
+      root / "assets" / "regression" / "gi_reflection" / "baseline_expectations.json"));
 
   const std::string readme = ReadTextFile(root / "README.md");
   REQUIRE(readme.find("docs/architecture") != std::string::npos);
@@ -96,6 +102,10 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   RequireFileContains(devDocsRoot / "dynamic-gi-reflections-milestone-plan.md", "M1");
   RequireFileContains(devDocsRoot / "dynamic-gi-reflections-milestone-plan.md", "M6");
   RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md", "Vulkan-enabled build");
+  RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md",
+                      "gi-reflection-regression-gate");
+  RequireFileContains(devDocsRoot / "gi-reflection-regression-pack.md",
+                      "scene_pack.json");
 }
 
 TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",
