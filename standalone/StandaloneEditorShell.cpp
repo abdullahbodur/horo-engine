@@ -88,8 +88,6 @@ void StandaloneEditorShell::Initialize() {
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
 
-  if (!m_homeDocument.state.lastProjectPath.empty())
-    CopyToBuffer(&m_openProjectInput, m_homeDocument.state.lastProjectPath);
   CopyToBuffer(&m_newProjectNameInput, "MyHoroGame");
   CopyToBuffer(&m_newProjectPathInput, (fs::current_path() / "MyHoroGame").string());
 
@@ -220,7 +218,6 @@ bool StandaloneEditorShell::OpenProject(const fs::path& projectPath, std::string
   RememberRecentProject(&m_homeDocument, projectRoot);
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
-  CopyToBuffer(&m_openProjectInput, projectRoot.string());
   m_launcherError.clear();
   LOG_INFO("[Standalone] Opened project: %s", projectRoot.string().c_str());
   return true;
@@ -295,6 +292,19 @@ void StandaloneEditorShell::RefreshCameraFromSceneCamera() {
   m_camera->fovY = sceneCamera.fovY;
   m_camera->zNear = sceneCamera.nearClip;
   m_camera->zFar = sceneCamera.farClip;
+}
+
+bool StandaloneEditorShell::OpenProjectFromPicker(std::string* outError) {
+  const fs::path pickedPath =
+      PickFolderPath("Select Horo project folder",
+                     DefaultBrowseDirectory(m_homeDocument.state.lastProjectPath));
+  if (pickedPath.empty()) {
+    if (outError)
+      outError->clear();
+    return false;
+  }
+
+  return OpenProject(pickedPath, outError);
 }
 
 void StandaloneEditorShell::RenderLauncher() {
@@ -393,21 +403,6 @@ void StandaloneEditorShell::RenderLauncher() {
     ImGui::TextDisabled("%s", text);
   };
 
-  const auto browseAndOpenProject = [&]() {
-    const fs::path pickedPath =
-        PickFolderPath("Select Horo project folder",
-                       DefaultBrowseDirectory(BufferToString(m_openProjectInput)));
-    if (pickedPath.empty())
-      return;
-
-    CopyToBuffer(&m_openProjectInput, pickedPath.string());
-    std::string openError;
-    if (!OpenProject(pickedPath, &openError))
-      m_launcherError = openError;
-    else
-      m_launcherError.clear();
-  };
-
   ImGui::SetCursorPos(ImVec2(panelX, outerPadding));
   ImGui::BeginGroup();
 
@@ -425,55 +420,48 @@ void StandaloneEditorShell::RenderLauncher() {
   const float actionGap = 12.0f;
   const float actionWidth = (contentWidth - actionGap) * 0.5f;
   const ImVec2 actionSize(actionWidth, 56.0f);
-  if (modeButton("Open Existing Project", false, actionSize))
-    browseAndOpenProject();
+  if (modeButton("Open Existing Project", false, actionSize)) {
+    std::string openError;
+    if (!OpenProjectFromPicker(&openError) && !openError.empty())
+      m_launcherError = openError;
+  }
   ImGui::SameLine(0.0f, actionGap);
-  if (modeButton("Create New Project", m_launcherPanel == LauncherPanel::CreateNewProject, actionSize))
-    m_launcherPanel = LauncherPanel::CreateNewProject;
+  modeButton("Create New Project", true, actionSize);
 
   ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-  const float panelHeight =
-      m_launcherPanel == LauncherPanel::CreateNewProject ? 252.0f : 132.0f;
+  const float panelHeight = 252.0f;
   ImGui::BeginChild("LauncherPanel",
                     ImVec2(contentWidth, panelHeight),
                     true,
                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-  if (m_launcherPanel == LauncherPanel::CreateNewProject) {
-    ImGui::TextUnformatted("Create New Project");
-    ImGui::TextDisabled("Pick a location and Horo will scaffold a minimal standalone-ready project.");
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+  ImGui::TextUnformatted("Create New Project");
+  ImGui::TextDisabled("Pick a location and Horo will scaffold a minimal standalone-ready project.");
+  ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    labeledInput("Project Name", "##new-project-name", m_newProjectNameInput.data(), m_newProjectNameInput.size());
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    labeledInput("Project Path", "##new-project-path", m_newProjectPathInput.data(), m_newProjectPathInput.size());
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    if (secondaryButton("Browse Location...", ImVec2(-1.0f, 34.0f))) {
-      const fs::path pickedLocation =
-          PickFolderPath("Select project location",
-                         DefaultBrowseDirectory(BufferToString(m_newProjectPathInput)));
-      if (!pickedLocation.empty()) {
-        const std::string projectName = BufferToString(m_newProjectNameInput);
-        fs::path resolvedProjectPath = pickedLocation;
-        if (!projectName.empty() && resolvedProjectPath.filename() != projectName)
-          resolvedProjectPath /= projectName;
-        CopyToBuffer(&m_newProjectPathInput, resolvedProjectPath.lexically_normal().string());
-        m_launcherError.clear();
-      }
+  labeledInput("Project Name", "##new-project-name", m_newProjectNameInput.data(), m_newProjectNameInput.size());
+  ImGui::Dummy(ImVec2(0.0f, 6.0f));
+  labeledInput("Project Path", "##new-project-path", m_newProjectPathInput.data(), m_newProjectPathInput.size());
+  ImGui::Dummy(ImVec2(0.0f, 6.0f));
+  if (secondaryButton("Browse Location...", ImVec2(-1.0f, 34.0f))) {
+    const fs::path pickedLocation =
+        PickFolderPath("Select project location",
+                       DefaultBrowseDirectory(BufferToString(m_newProjectPathInput)));
+    if (!pickedLocation.empty()) {
+      const std::string projectName = BufferToString(m_newProjectNameInput);
+      fs::path resolvedProjectPath = pickedLocation;
+      if (!projectName.empty() && resolvedProjectPath.filename() != projectName)
+        resolvedProjectPath /= projectName;
+      CopyToBuffer(&m_newProjectPathInput, resolvedProjectPath.lexically_normal().string());
+      m_launcherError.clear();
     }
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-    if (primaryButton("Create Project", ImVec2(-1.0f, 40.0f))) {
-      std::string createError;
-      if (!CreateProjectFromLauncher(&createError))
-        m_launcherError = createError;
-    }
-  } else {
-    ImGui::TextUnformatted("Open Existing Project");
-    ImGui::TextDisabled("Choose a project folder and Horo will open it immediately.");
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-    if (primaryButton("Choose Project Folder...", ImVec2(-1.0f, 42.0f)))
-      browseAndOpenProject();
+  }
+  ImGui::Dummy(ImVec2(0.0f, 10.0f));
+  if (primaryButton("Create Project", ImVec2(-1.0f, 40.0f))) {
+    std::string createError;
+    if (!CreateProjectFromLauncher(&createError))
+      m_launcherError = createError;
   }
   ImGui::EndChild();
 
@@ -582,7 +570,6 @@ bool StandaloneEditorShell::CreateProjectFromLauncher(std::string* outError) {
   if (!CreateStandaloneProjectTemplate(request, &createdProject, outError))
     return false;
 
-  CopyToBuffer(&m_openProjectInput, request.projectRoot.string());
   return OpenProject(request.projectRoot, outError);
 }
 

@@ -38,11 +38,6 @@ class StandaloneEditorShell {
   void SetLauncherError(std::string error) { m_launcherError = std::move(error); }
 
  private:
-  enum class LauncherPanel {
-    OpenExistingProject,
-    CreateNewProject,
-  };
-
   Editor::EditorLayer* m_editor = nullptr;
   Scene* m_scene = nullptr;
   SceneReferenceRuntime* m_runtime = nullptr;
@@ -58,14 +53,13 @@ class StandaloneEditorShell {
   std::unordered_map<std::string, std::shared_ptr<Texture>> m_textureCache;
 
   std::string m_launcherError;
-  std::array<char, 512> m_openProjectInput{};
   std::array<char, 256> m_newProjectNameInput{};
   std::array<char, 512> m_newProjectPathInput{};
-  LauncherPanel m_launcherPanel = LauncherPanel::CreateNewProject;
 
   void ConfigureRuntimeCallbacks();
   void HandlePendingSceneReload();
   void RefreshCameraFromSceneCamera();
+  bool OpenProjectFromPicker(std::string* outError);
   void RenderLauncher();
   void RenderProjectToolbar();
   void ExecuteManifestCommand(const StandaloneProjectCommand& command, const std::string& label);
