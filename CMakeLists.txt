@@ -49,50 +49,66 @@ list(FILTER ENGINE_SOURCES EXCLUDE REGEX "standalone[/\\\\]HoroEditorMain\\.cpp$
 add_library(MonolithEngine STATIC ${ENGINE_SOURCES})
 add_library(MonolithEngine::MonolithEngine ALIAS MonolithEngine)
 
-target_include_directories(MonolithEngine
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        $<INSTALL_INTERFACE:include>
-        $<BUILD_INTERFACE:${MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR}>
-        $<INSTALL_INTERFACE:include/vendor/nlohmann>
-)
+function(monolith_configure_engine_target target_name imgui_target)
+    target_include_directories(${target_name}
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+            $<INSTALL_INTERFACE:include>
+            $<BUILD_INTERFACE:${MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR}>
+            $<INSTALL_INTERFACE:include/vendor/nlohmann>
+    )
 
-target_link_libraries(MonolithEngine
-    PUBLIC
-        glfw
-        glad
-        imgui_lib
-    PRIVATE
-        glm
-        stb
-        nlohmann_json
-        tinygltf
-)
+    target_link_libraries(${target_name}
+        PUBLIC
+            glfw
+            glad
+            ${imgui_target}
+        PRIVATE
+            glm
+            stb
+            nlohmann_json
+            tinygltf
+    )
 
-if(MONOLITH_ENGINE_ENABLE_VULKAN)
-    target_link_libraries(MonolithEngine PUBLIC monolith_volk monolith_vulkan_headers)
-    target_compile_definitions(MonolithEngine PUBLIC MONOLITH_HAS_VULKAN=1)
-endif()
+    if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        target_link_libraries(${target_name} PUBLIC monolith_volk monolith_vulkan_headers)
+        target_compile_definitions(${target_name} PUBLIC MONOLITH_HAS_VULKAN=1)
+    endif()
 
-if(APPLE)
-    target_link_libraries(MonolithEngine PUBLIC "-framework OpenGL")
-elseif(WIN32)
-    target_link_libraries(MonolithEngine PUBLIC opengl32 comdlg32 ole32 shell32 ws2_32)
-else()
-    target_link_libraries(MonolithEngine PUBLIC GL)
-endif()
+    if(APPLE)
+        target_link_libraries(${target_name} PUBLIC "-framework OpenGL")
+    elseif(WIN32)
+        target_link_libraries(${target_name} PUBLIC opengl32 comdlg32 ole32 shell32 ws2_32)
+    else()
+        target_link_libraries(${target_name} PUBLIC GL)
+    endif()
 
-target_compile_features(MonolithEngine PUBLIC cxx_std_20)
+    target_compile_features(${target_name} PUBLIC cxx_std_20)
 
-if(WIN32)
-    target_compile_definitions(MonolithEngine PUBLIC NOMINMAX)
-endif()
+    if(WIN32)
+        target_compile_definitions(${target_name} PUBLIC NOMINMAX)
+    endif()
+
+    if(MONOLITH_ENGINE_COVERAGE AND NOT MSVC)
+        target_compile_options(${target_name} PUBLIC --coverage -O0 -g)
+        target_link_options(${target_name} PUBLIC --coverage)
+    endif()
+endfunction()
 
 # Optional gcov/llvm-cov instrumentation (GCC/Clang only).
 option(MONOLITH_ENGINE_COVERAGE "Add coverage flags to MonolithEngine (for reports after ctest)" OFF)
-if(MONOLITH_ENGINE_COVERAGE AND NOT MSVC)
-    target_compile_options(MonolithEngine PUBLIC --coverage -O0 -g)
-    target_link_options(MonolithEngine PUBLIC --coverage)
+
+monolith_configure_engine_target(MonolithEngine imgui_lib)
+
+if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
+    add_library(MonolithEngineImGuiTest STATIC ${ENGINE_SOURCES})
+    target_compile_definitions(MonolithEngineImGuiTest PUBLIC
+        IMGUI_USER_CONFIG=\"imgui_test_engine_config.h\"
+    )
+    target_include_directories(MonolithEngineImGuiTest PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
+    )
+    monolith_configure_engine_target(MonolithEngineImGuiTest imgui_test_lib)
 endif()
 
 # Copy GLSL shaders to bin/shaders alongside the executable

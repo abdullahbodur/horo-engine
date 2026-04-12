@@ -230,3 +230,11 @@ add_executable(test_standalone test_standalone.cpp)
 target_link_libraries(test_standalone PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_standalone)
 add_test(NAME test_standalone COMMAND $<TARGET_FILE:test_standalone>)
+
+if(TARGET MonolithEngineImGuiTest)
+  # ---- test_standalone_ui ----
+  add_executable(test_standalone_ui test_standalone_ui.cpp)
+  target_link_libraries(test_standalone_ui PRIVATE MonolithEngineImGuiTest Catch2::Catch2WithMain)
+  monolith_set_test_output_dir(test_standalone_ui)
+  add_test(NAME test_standalone_ui COMMAND $<TARGET_FILE:test_standalone_ui>)
+endif()
