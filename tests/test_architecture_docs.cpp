@@ -40,10 +40,14 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
       docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
   REQUIRE(std::filesystem::is_regular_file(
       docsRoot / "vulkan-backend-integration-and-backend-parity.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      docsRoot / "dynamic-gi-and-reflections-architecture.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
   REQUIRE(std::filesystem::is_regular_file(devDocsRoot / "backend-parity-validation-matrix.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      devDocsRoot / "dynamic-gi-reflections-milestone-plan.md"));
 
   const std::string readme = ReadTextFile(root / "README.md");
   REQUIRE(readme.find("docs/architecture") != std::string::npos);
@@ -66,6 +70,8 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
           std::string::npos);
   REQUIRE(architectureReadme.find("vulkan-backend-integration-and-backend-parity.md") !=
           std::string::npos);
+  REQUIRE(architectureReadme.find("dynamic-gi-and-reflections-architecture.md") !=
+          std::string::npos);
 
   RequireFileContains(docsRoot / "renderer-foundation.md", "IRenderBackend");
   RequireFileContains(docsRoot / "renderer-foundation.md", "RenderPassConfig");
@@ -81,6 +87,14 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
                       "Current Implemented Foundation State");
   RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
                       "backend-parity-validation-matrix.md");
+  RequireFileContains(docsRoot / "dynamic-gi-and-reflections-architecture.md",
+                      "Pipeline Pass Ordering");
+  RequireFileContains(docsRoot / "dynamic-gi-and-reflections-architecture.md",
+                      "Resource Ownership And Lifetime");
+  RequireFileContains(docsRoot / "dynamic-gi-and-reflections-architecture.md",
+                      "Quality Tiers");
+  RequireFileContains(devDocsRoot / "dynamic-gi-reflections-milestone-plan.md", "M1");
+  RequireFileContains(devDocsRoot / "dynamic-gi-reflections-milestone-plan.md", "M6");
   RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md", "Vulkan-enabled build");
 }
 

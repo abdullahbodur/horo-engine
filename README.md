@@ -221,6 +221,11 @@ The engine architecture guidance lives under [docs/architecture](./docs/architec
 
 Renderer/backend validation notes live under [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md).
 
+Dynamic GI + reflections planning docs live under:
+
+- [docs/architecture/dynamic-gi-and-reflections-architecture.md](./docs/architecture/dynamic-gi-and-reflections-architecture.md)
+- [docs/development/dynamic-gi-reflections-milestone-plan.md](./docs/development/dynamic-gi-reflections-milestone-plan.md)
+
 That doc set defines:
 - module boundaries and allowed dependencies
 - ownership and shutdown rules

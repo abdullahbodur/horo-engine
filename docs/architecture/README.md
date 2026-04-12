@@ -8,6 +8,7 @@ This directory documents the current engine architecture, calls out temporary ex
 - [renderer-foundation.md](./renderer-foundation.md)
 - [backend-agnostic-rendering-foundation-and-runtime-selection.md](./backend-agnostic-rendering-foundation-and-runtime-selection.md)
 - [vulkan-backend-integration-and-backend-parity.md](./vulkan-backend-integration-and-backend-parity.md)
+- [dynamic-gi-and-reflections-architecture.md](./dynamic-gi-and-reflections-architecture.md)
 - [ownership-lifecycle.md](./ownership-lifecycle.md)
 - [error-result-model.md](./error-result-model.md)
 - [threading-and-mutation.md](./threading-and-mutation.md)
