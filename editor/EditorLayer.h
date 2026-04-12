@@ -105,6 +105,9 @@ class EditorLayer {
   // Absolute or empty (disables Project tab tree).
   void SetProjectBrowserRoot(std::filesystem::path root);
   void SetProjectBrowserExtraBlocklist(std::unordered_set<std::string> names);
+  void SetOverlayRenderCallback(std::function<void()> cb) { m_overlayRenderCallback = std::move(cb); }
+  void SaveWorkspaceStateNow() { SaveWorkspaceStateIfNeeded(true); }
+  void ReloadWorkspaceStateFromDisk() { LoadWorkspaceState(); }
 
   bool IsActive() const { return m_active; }
   // Play-in-editor: game sim runs in viewport; chrome (hierarchy, dock) stays.
@@ -381,6 +384,7 @@ class EditorLayer {
   std::unordered_set<std::string> m_projectExtraBlocklist;
   EditorWorkspaceDocument m_workspaceDocument;
   bool m_workspaceStateDirty = false;
+  std::function<void()> m_overlayRenderCallback;
   std::string m_imguiIniPath;
   bool m_hasPersistedDockLayout = false;
   bool m_resetDockLayoutRequested = false;

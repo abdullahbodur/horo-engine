@@ -224,3 +224,9 @@ add_executable(test_renderer_foundation test_renderer_foundation.cpp)
 target_link_libraries(test_renderer_foundation PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_renderer_foundation)
 add_test(NAME test_renderer_foundation COMMAND $<TARGET_FILE:test_renderer_foundation>)
+
+# ---- test_standalone ----
+add_executable(test_standalone test_standalone.cpp)
+target_link_libraries(test_standalone PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_standalone)
+add_test(NAME test_standalone COMMAND $<TARGET_FILE:test_standalone>)

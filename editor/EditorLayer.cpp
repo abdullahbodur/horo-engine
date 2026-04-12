@@ -664,7 +664,11 @@ namespace Monolith
       {
         namespace fs = std::filesystem;
         const fs::path root = ProjectPath::Root();
-        const std::array<fs::path, 4> candidates = {
+        const fs::path sdkRoot = ProjectPath::SdkRoot();
+        const std::array<fs::path, 7> candidates = {
+            sdkRoot / "renderer" / "shaders" / fileName,
+            sdkRoot / "bin" / "shaders" / fileName,
+            sdkRoot / "sdk" / "renderer" / "shaders" / fileName,
             root / "engine" / "renderer" / "shaders" / fileName,
             root.parent_path() / "horo-engine" / "renderer" / "shaders" / fileName,
             root / "horo-engine" / "renderer" / "shaders" / fileName,
@@ -1517,7 +1521,19 @@ namespace Monolith
         LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'", ToString(backendId));
       }
 
-      m_schema.LoadFromFile("assets/editor_schema.json");
+      const std::array<std::filesystem::path, 4> schemaCandidates = {
+          ProjectPath::ResolveSdk("assets/editor_schema.json"),
+          ProjectPath::Root() / "assets" / "editor_schema.json",
+          ProjectPath::Root() / "engine" / "assets" / "editor_schema.json",
+          ProjectPath::Root() / "horo-engine" / "assets" / "editor_schema.json",
+      };
+      for (const auto& candidate : schemaCandidates) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(candidate, ec) && !ec) {
+          m_schema.LoadFromFile(candidate.string());
+          break;
+        }
+      }
 
       // Load wireframe shader
       try
@@ -2398,6 +2414,8 @@ namespace Monolith
             m_gizmo.Draw(cam, screenW, screenH); // queues to DebugDraw
         }
       }
+      if (m_overlayRenderCallback)
+        m_overlayRenderCallback();
       DrawHotReloadOverlay();
       DrawClipboardToast();
       SaveWorkspaceStateIfNeeded(false);
