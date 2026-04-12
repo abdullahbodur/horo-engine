@@ -6,8 +6,10 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include <GLFW/glfw3.h>
+#include <glad/glad.h>
 
 #include "core/Application.h"
 #include "core/EngineLaunchArgs.h"
@@ -21,7 +23,7 @@
 #include "scene/systems/BehaviorSystem.h"
 #include "scene/systems/PhysicsSystem.h"
 #include "scene/systems/RenderSystem.h"
-#include "standalone/StandaloneEditorShell.h"
+#include "launcher/StandaloneEditorShell.h"
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 #include <imgui.h>
@@ -122,7 +124,7 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiAutomat
 }
 
 ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, StandaloneUiAutomationState* state) {
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "create_project_from_launcher");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "create_project_from_launcher");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<StandaloneUiAutomationState*>(ctx->Test->UserData);
@@ -138,7 +140,7 @@ ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, Standalo
 }
 
 ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneUiAutomationState* state) {
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "back_to_home_returns_launcher");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "back_to_home_returns_launcher");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<StandaloneUiAutomationState*>(ctx->Test->UserData);
@@ -162,7 +164,7 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
 }
 
 ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, StandaloneUiAutomationState* state) {
-  ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "open_project_from_recent_projects");
+  ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "open_project_from_recent_projects");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<StandaloneUiAutomationState*>(ctx->Test->UserData);

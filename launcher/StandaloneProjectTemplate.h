@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 
-#include "standalone/StandaloneProject.h"
+#include "launcher/StandaloneProject.h"
 
 namespace Monolith::Standalone {
 

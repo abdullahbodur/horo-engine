@@ -8,10 +8,10 @@
 #include "core/EngineLaunchArgs.h"
 #include "core/ProjectPath.h"
 #include "editor/EditorWorkspaceSettings.h"
-#include "standalone/EditorHomeSettings.h"
-#include "standalone/ExternalProcessRunner.h"
-#include "standalone/StandaloneProject.h"
-#include "standalone/StandaloneProjectTemplate.h"
+#include "launcher/EditorHomeSettings.h"
+#include "launcher/ExternalProcessRunner.h"
+#include "launcher/StandaloneProject.h"
+#include "launcher/StandaloneProjectTemplate.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;

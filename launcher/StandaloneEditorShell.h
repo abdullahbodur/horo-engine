@@ -14,9 +14,9 @@
 #include "renderer/Texture.h"
 #include "scene/Scene.h"
 #include "scene/SceneReferenceRuntime.h"
-#include "standalone/EditorHomeSettings.h"
-#include "standalone/ExternalProcessRunner.h"
-#include "standalone/StandaloneProject.h"
+#include "launcher/EditorHomeSettings.h"
+#include "launcher/ExternalProcessRunner.h"
+#include "launcher/StandaloneProject.h"
 
 namespace Monolith::Standalone {
 

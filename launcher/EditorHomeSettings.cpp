@@ -1,9 +1,9 @@
-#include "standalone/EditorHomeSettings.h"
+#include "launcher/EditorHomeSettings.h"
 
 #include <algorithm>
 #include <fstream>
 
-#include "standalone/StandaloneProject.h"
+#include "launcher/StandaloneProject.h"
 #include "mcp/McpSettings.h"
 
 namespace Monolith::Standalone {

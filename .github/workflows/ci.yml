@@ -43,10 +43,15 @@ jobs:
         run: ctest --preset debug --output-on-failure
 
       - name: Build UI Test
-        run: cmake --build --preset debug --target test_standalone_ui --parallel
+        run: cmake --build --preset debug --target test_launcher_ui --parallel
+
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
 
       - name: Run UI Test
-        run: build/debug/bin/tests/test_standalone_ui
+        run: build/debug/bin/tests/test_launcher_ui
+        env:
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
       - name: Upload UI Test Artifacts
         if: always()
@@ -54,6 +59,7 @@ jobs:
         with:
           name: ui-test-results-macos
           path: ui_test_output/
+          if-no-files-found: ignore
           retention-days: 30
 
   test-windows:
@@ -82,10 +88,16 @@ jobs:
         run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
 
       - name: Build UI Test
-        run: cmake --build build/debug-msvc --config Debug --target test_standalone_ui --parallel
+        run: cmake --build build/debug-msvc --config Debug --target test_launcher_ui --parallel
+
+      - name: Prepare UI test output directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Run UI Test
-        run: build/debug-msvc/bin/tests/Debug/test_standalone_ui.exe
+        run: build/debug-msvc/bin/tests/Debug/test_launcher_ui.exe
+        env:
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
       - name: Upload UI Test Artifacts
         if: always()
@@ -93,6 +105,7 @@ jobs:
         with:
           name: ui-test-results-windows
           path: ui_test_output/
+          if-no-files-found: ignore
           retention-days: 30
 
   test-linux:
@@ -136,10 +149,15 @@ jobs:
         run: ctest --preset debug --output-on-failure
 
       - name: Build UI Test
-        run: cmake --build --preset debug --target test_standalone_ui --parallel
+        run: cmake --build --preset debug --target test_launcher_ui --parallel
+
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
 
       - name: Run UI Test
-        run: build/debug/bin/tests/test_standalone_ui
+        run: build/debug/bin/tests/test_launcher_ui
+        env:
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
       - name: Upload UI Test Artifacts
         if: always()
@@ -147,6 +165,7 @@ jobs:
         with:
           name: ui-test-results-linux
           path: ui_test_output/
+          if-no-files-found: ignore
           retention-days: 30
 
 

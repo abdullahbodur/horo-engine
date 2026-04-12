@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "standalone/StandaloneProject.h"
+#include "launcher/StandaloneProject.h"
 
 namespace Monolith::Standalone {
 
