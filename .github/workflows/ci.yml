@@ -12,8 +12,89 @@ concurrency:
 
 jobs:
   # ----------------------------------------------------------------
-  # Build + Test — Linux (GCC, Ninja)
+  # Build + Test — macOS (Clang, Ninja)
   # ----------------------------------------------------------------
+  test-macos:
+    name: Test · macOS / Clang
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+      - name: Build UI Test
+        run: cmake --build --preset debug --target test_standalone_ui --parallel
+
+      - name: Run UI Test
+        run: build/debug/bin/tests/test_standalone_ui
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-macos
+          path: ui_test_output/
+          retention-days: 30
+
+  test-windows:
+    name: Test · Windows / MSVC
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Configure
+        run: cmake --preset debug-msvc
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build build/debug-msvc --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
+
+      - name: Build UI Test
+        run: cmake --build build/debug-msvc --config Debug --target test_standalone_ui --parallel
+
+      - name: Run UI Test
+        run: build/debug-msvc/bin/tests/Debug/test_standalone_ui.exe
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-windows
+          path: ui_test_output/
+          retention-days: 30
+
   test-linux:
     name: Test · Linux / GCC
     runs-on: ubuntu-24.04
@@ -54,64 +135,20 @@ jobs:
       - name: Test
         run: ctest --preset debug --output-on-failure
 
-  # ----------------------------------------------------------------
-  # Build + Test — Windows (MSVC, Visual Studio 17 2022)
-  # ----------------------------------------------------------------
-  test-windows:
-    name: Test · Windows / MSVC
-    runs-on: windows-latest
+      - name: Build UI Test
+        run: cmake --build --preset debug --target test_standalone_ui --parallel
 
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run UI Test
+        run: build/debug/bin/tests/test_standalone_ui
 
-      - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/.cmake/fetchcontent
-          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-          restore-keys: fetchcontent-windows-
+          name: ui-test-results-linux
+          path: ui_test_output/
+          retention-days: 30
 
-      - name: Configure
-        run: cmake --preset debug-msvc
-        env:
-          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-
-      - name: Build
-        run: cmake --build build/debug-msvc --config Debug --parallel
-
-      - name: Test
-        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
-
-  # ----------------------------------------------------------------
-  # Build + Test — macOS (Clang, Ninja)
-  # ----------------------------------------------------------------
-  test-macos:
-    name: Test · macOS / Clang
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Ninja
-        run: brew install ninja
-
-      - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cmake/fetchcontent
-          key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-          restore-keys: fetchcontent-macos-
-
-      - name: Configure
-        run: cmake --preset debug
-        env:
-          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-
-      - name: Build
-        run: cmake --build --preset debug --parallel
-
-      - name: Test
-        run: ctest --preset debug --output-on-failure
 
   # ----------------------------------------------------------------
   # Coverage — Linux (GCC --coverage + lcov + genhtml)

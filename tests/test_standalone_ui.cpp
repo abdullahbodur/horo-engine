@@ -243,10 +243,11 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiHarness
   ctx->SetRef(launcherPanel);
   ctx->ItemInputValue("##new-project-name", "UiSmokeGame");
   ctx->ItemInputValue("##new-project-path", state->projectRoot.string().c_str());
-  ctx->ItemClick("Create Project");
-  ctx->Yield(3);
-  IM_CHECK(state->shell.HasActiveProject());
-}
+    ctx->ItemClick("Create Project");
+    ctx->Yield(3);
+    IM_CHECK(state->shell.HasActiveProject());
+    ctx->CaptureScreenshot("after_project_creation.png");
+  }
 
 ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, StandaloneUiHarness* harness) {
   REQUIRE(engine != nullptr);
@@ -284,6 +285,7 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
+    ctx->CaptureScreenshot("back_to_home.png");
 
     IM_CHECK(!state->shell.HasActiveProject());
     ctx->SetRef("Horo Launcher");
@@ -292,6 +294,7 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+    ctx->CaptureScreenshot("recent_project_visible.png");
   };
 
   return test;
@@ -304,6 +307,7 @@ ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, Standal
   ImGuiTest* test = IM_REGISTER_TEST(engine, "standalone_ui", "open_project_from_recent_projects");
   test->UserData = harness;
   test->TestFunc = [](ImGuiTestContext* ctx) {
+    ctx->CaptureVideo("open_recent_project.gif");
     auto* state = static_cast<StandaloneUiHarness*>(ctx->Test->UserData);
     IM_CHECK(state != nullptr);
 
@@ -341,7 +345,8 @@ TEST_CASE("Standalone launcher smoke flow works through imgui test engine", "[st
   REQUIRE(engine != nullptr);
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(engine);
-  testIo.ConfigCaptureEnabled = false;
+  testIo.ConfigCaptureEnabled = true;
+  testIo.OutputFolder = "ui_test_output";
   testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
   testIo.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
   testIo.ConfigVerboseLevel = ImGuiTestVerboseLevel_Error;
