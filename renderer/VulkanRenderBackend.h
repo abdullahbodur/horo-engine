@@ -61,6 +61,10 @@ namespace Monolith
     bool TryGetScreenSpaceGlobalIlluminationPassContract(
         ScreenSpaceGlobalIlluminationPassContract *outContract,
         std::string *outError) const override;
+    bool TryGetTemporalGiResolvePassContract(TemporalGiResolvePassContract *outContract,
+                                             std::string *outError) const override;
+    bool TryGetLightingCompositePassContract(LightingCompositePassContract *outContract,
+                                             std::string *outError) const override;
     bool InvalidateGiHistory(GiHistoryResetReason reason,
                              std::string *outError) override;
 
@@ -155,6 +159,8 @@ namespace Monolith
     bool RecordFrameCommands(const RenderFrameConfig &frame);
     void ExecuteScreenSpaceReflectionPass();
     void ExecuteScreenSpaceGlobalIlluminationPass();
+    void ExecuteTemporalGiResolvePass();
+    void ExecuteLightingCompositePass();
     bool EnsureOffscreenRenderPass();
     void DestroyOffscreenRenderPass();
     bool CreateOffscreenRenderTargetResources(const std::string &targetKey,
@@ -193,10 +199,14 @@ namespace Monolith
     GiHistoryCatalog m_giHistoryCatalog;
     ScreenSpaceReflectionPassContract m_lastSsrPassContract;
     ScreenSpaceGlobalIlluminationPassContract m_lastSsgiPassContract;
+    TemporalGiResolvePassContract m_lastTemporalGiResolvePassContract;
+    LightingCompositePassContract m_lastLightingCompositePassContract;
     TemporalHistoryState m_lastTemporalHistoryState;
     bool m_hasTemporalHistoryState = false;
     bool m_hasSsrPassContract = false;
     bool m_hasSsgiPassContract = false;
+    bool m_hasTemporalGiResolvePassContract = false;
+    bool m_hasLightingCompositePassContract = false;
   };
 
 } // namespace Monolith

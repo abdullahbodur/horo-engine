@@ -240,6 +240,40 @@ namespace
           true);
       return true;
     }
+    bool TryGetTemporalGiResolvePassContract(TemporalGiResolvePassContract *outContract,
+                                             std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      ScreenSpaceReflectionPassContract ssr{};
+      ScreenSpaceGlobalIlluminationPassContract ssgi{};
+      if (!TryGetScreenSpaceReflectionPassContract(&ssr, outError) ||
+          !TryGetScreenSpaceGlobalIlluminationPassContract(&ssgi, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildTemporalGiResolvePassContract(ssr, ssgi, giHistory);
+      return true;
+    }
+    bool TryGetLightingCompositePassContract(LightingCompositePassContract *outContract,
+                                             std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      TemporalGiResolvePassContract resolve{};
+      if (!TryGetTemporalGiResolvePassContract(&resolve, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildLightingCompositePassContract(sceneTextures, resolve);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -731,6 +765,128 @@ TEST_CASE("Screen-space global illumination contract maps quality tiers and emis
   REQUIRE(missingEmissive.validationStatus == SsgiInputValidationStatus::MissingEmissive);
 }
 
+TEST_CASE("Temporal GI resolve contract encodes clamp, rejection, and reset behavior",
+          "[renderer][foundation][temporal][gi][resolve]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x51u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x52u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0x53u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x54u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x55u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x56u, 1280u, 720u, 1u});
+  sceneTextures.frameSerial = 64u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0x61u, 1280u, 720u, 9u});
+  history.Set(GiHistorySemantic::SpecularIrradiance,
+              {RenderBackendId::Vulkan, 0x62u, 1280u, 720u, 9u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0x63u, 1280u, 720u, 9u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0x64u, 1280u, 720u, 9u});
+  history.revision = 22u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true,
+      ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  const ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true);
+
+  const TemporalGiResolvePassContract stableResolve =
+      BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  REQUIRE(stableResolve.validationStatus == TemporalGiResolveValidationStatus::Valid);
+  REQUIRE(stableResolve.executionStatus == TemporalGiResolveExecutionStatus::ResolveAndAccumulate);
+  REQUIRE(stableResolve.clampHistoryThisFrame);
+  REQUIRE(stableResolve.clampMode == TemporalHistoryClampMode::NeighborhoodMinMax);
+  REQUIRE_FALSE(stableResolve.rejectHistoryThisFrame);
+  REQUIRE(stableResolve.rejectionMode == TemporalHistoryRejectionMode::RejectOnMotionDisocclusion);
+
+  history.lastResetReason = GiHistoryResetReason::CameraCut;
+  const TemporalGiResolvePassContract resetResolve =
+      BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  REQUIRE(resetResolve.validationStatus == TemporalGiResolveValidationStatus::Valid);
+  REQUIRE(resetResolve.executionStatus == TemporalGiResolveExecutionStatus::ResetAndFallback);
+  REQUIRE(resetResolve.resetHistoryBeforeResolve);
+  REQUIRE(resetResolve.rejectHistoryThisFrame);
+  REQUIRE_FALSE(resetResolve.clampHistoryThisFrame);
+  REQUIRE(resetResolve.rejectionMode == TemporalHistoryRejectionMode::RejectAllHistory);
+}
+
+TEST_CASE("Lighting composite contract remains fallback-aware when temporal resolve degrades",
+          "[renderer][foundation][temporal][gi][composite]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x71u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x72u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0x73u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x74u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x75u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x76u, 960u, 540u, 1u});
+  sceneTextures.frameSerial = 65u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0x81u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::SpecularIrradiance,
+              {RenderBackendId::Vulkan, 0x82u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0x83u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0x84u, 960u, 540u, 2u});
+  history.revision = 30u;
+  history.validForTemporalReuse = true;
+
+  ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true,
+      ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true);
+  TemporalGiResolvePassContract resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+
+  const LightingCompositePassContract stableComposite =
+      BuildLightingCompositePassContract(sceneTextures, resolve);
+  REQUIRE(stableComposite.validationStatus == LightingCompositeValidationStatus::Valid);
+  REQUIRE(stableComposite.executionStatus == LightingCompositeExecutionStatus::CompositeWithIndirect);
+  REQUIRE_FALSE(stableComposite.fallbackToDirectLightingOnly);
+  REQUIRE(stableComposite.temporalStabilityExpected);
+  REQUIRE(stableComposite.includeIndirectDiffuse);
+  REQUIRE(stableComposite.includeIndirectSpecular);
+
+  history.validForTemporalReuse = false;
+  ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true,
+      ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures,
+      history,
+      TemporalQualityTier::High,
+      true);
+  resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  const LightingCompositePassContract fallbackComposite =
+      BuildLightingCompositePassContract(sceneTextures, resolve);
+  REQUIRE(fallbackComposite.validationStatus == LightingCompositeValidationStatus::Valid);
+  REQUIRE(fallbackComposite.executionStatus ==
+          LightingCompositeExecutionStatus::DirectLightingOnlyFallback);
+  REQUIRE(fallbackComposite.fallbackToDirectLightingOnly);
+  REQUIRE_FALSE(fallbackComposite.temporalStabilityExpected);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -775,6 +931,19 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   REQUIRE(ssgiContract.emissive.IsValid());
   REQUIRE(ssgiContract.historyDiffuse.IsValid());
   REQUIRE(ssgiContract.quality.tier == TemporalQualityTier::Medium);
+  TemporalGiResolvePassContract resolveContract{};
+  REQUIRE(Renderer::TryGetTemporalGiResolvePassContract(&resolveContract, &error));
+  REQUIRE(resolveContract.validationStatus == TemporalGiResolveValidationStatus::Valid);
+  REQUIRE((resolveContract.executionStatus == TemporalGiResolveExecutionStatus::ResolveAndAccumulate ||
+           resolveContract.executionStatus == TemporalGiResolveExecutionStatus::FallbackOnly ||
+           resolveContract.executionStatus == TemporalGiResolveExecutionStatus::ResetAndFallback));
+  LightingCompositePassContract compositeContract{};
+  REQUIRE(Renderer::TryGetLightingCompositePassContract(&compositeContract, &error));
+  REQUIRE(compositeContract.validationStatus == LightingCompositeValidationStatus::Valid);
+  REQUIRE((compositeContract.executionStatus ==
+           LightingCompositeExecutionStatus::CompositeWithIndirect ||
+           compositeContract.executionStatus ==
+               LightingCompositeExecutionStatus::DirectLightingOnlyFallback));
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

@@ -147,6 +147,24 @@ bool OpenGLRenderBackend::TryGetScreenSpaceGlobalIlluminationPassContract(
   return false;
 }
 
+bool OpenGLRenderBackend::TryGetTemporalGiResolvePassContract(
+    TemporalGiResolvePassContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "Temporal GI resolve pass contract is unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::TryGetLightingCompositePassContract(
+    LightingCompositePassContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "Lighting composite pass contract is unavailable on OpenGL backend.";
+  return false;
+}
+
 bool OpenGLRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string* outError) {
   if (outError)
     *outError = "GI history invalidation is unavailable on OpenGL backend.";

@@ -244,6 +244,18 @@ namespace Monolith
     return ActiveBackend()->TryGetScreenSpaceGlobalIlluminationPassContract(outContract, outError);
   }
 
+  bool Renderer::TryGetTemporalGiResolvePassContract(TemporalGiResolvePassContract *outContract,
+                                                      std::string *outError)
+  {
+    return ActiveBackend()->TryGetTemporalGiResolvePassContract(outContract, outError);
+  }
+
+  bool Renderer::TryGetLightingCompositePassContract(LightingCompositePassContract *outContract,
+                                                      std::string *outError)
+  {
+    return ActiveBackend()->TryGetLightingCompositePassContract(outContract, outError);
+  }
+
   bool Renderer::TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                           std::string *outError)
   {

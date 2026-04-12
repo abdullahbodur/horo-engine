@@ -54,6 +54,10 @@ class IRenderBackend {
                                                        std::string* outError) const = 0;
   virtual bool TryGetScreenSpaceGlobalIlluminationPassContract(
       ScreenSpaceGlobalIlluminationPassContract* outContract, std::string* outError) const = 0;
+  virtual bool TryGetTemporalGiResolvePassContract(TemporalGiResolvePassContract* outContract,
+                                                   std::string* outError) const = 0;
+  virtual bool TryGetLightingCompositePassContract(LightingCompositePassContract* outContract,
+                                                   std::string* outError) const = 0;
   virtual bool InvalidateGiHistory(GiHistoryResetReason reason,
                                    std::string* outError) = 0;
 };

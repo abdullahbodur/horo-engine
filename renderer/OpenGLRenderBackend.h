@@ -49,6 +49,10 @@ class OpenGLRenderBackend : public IRenderBackend {
                                                std::string* outError) const override;
   bool TryGetScreenSpaceGlobalIlluminationPassContract(
       ScreenSpaceGlobalIlluminationPassContract* outContract, std::string* outError) const override;
+  bool TryGetTemporalGiResolvePassContract(TemporalGiResolvePassContract* outContract,
+                                           std::string* outError) const override;
+  bool TryGetLightingCompositePassContract(LightingCompositePassContract* outContract,
+                                           std::string* outError) const override;
   bool InvalidateGiHistory(GiHistoryResetReason reason, std::string* outError) override;
 
  private:

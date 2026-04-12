@@ -786,4 +786,357 @@ namespace Monolith
     return contract;
   }
 
+  enum class TemporalGiResolveValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingSsrContractInputs,
+    MissingSsgiContractInputs,
+    MissingDiffuseHistory,
+    MissingSpecularHistory,
+    MissingValidationHistory,
+    MissingMomentsHistory,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  inline const char *ToString(TemporalGiResolveValidationStatus status)
+  {
+    switch (status)
+    {
+    case TemporalGiResolveValidationStatus::DisabledBySettings:
+      return "temporal GI resolve disabled by settings";
+    case TemporalGiResolveValidationStatus::Valid:
+      return "valid";
+    case TemporalGiResolveValidationStatus::MissingSsrContractInputs:
+      return "screen-space reflection contract is missing resolve inputs";
+    case TemporalGiResolveValidationStatus::MissingSsgiContractInputs:
+      return "screen-space global illumination contract is missing resolve inputs";
+    case TemporalGiResolveValidationStatus::MissingDiffuseHistory:
+      return "missing diffuse irradiance history input";
+    case TemporalGiResolveValidationStatus::MissingSpecularHistory:
+      return "missing specular irradiance history input";
+    case TemporalGiResolveValidationStatus::MissingValidationHistory:
+      return "missing temporal validation history input";
+    case TemporalGiResolveValidationStatus::MissingMomentsHistory:
+      return "missing temporal moments history input";
+    case TemporalGiResolveValidationStatus::BackendMismatch:
+      return "temporal GI resolve inputs come from mismatched backends";
+    case TemporalGiResolveValidationStatus::DimensionMismatch:
+      return "temporal GI resolve inputs have mismatched dimensions";
+    }
+    return "unknown temporal GI resolve validation status";
+  }
+
+  enum class TemporalGiResolveExecutionStatus : uint8_t
+  {
+    Disabled = 0,
+    MissingInputs,
+    ResetAndFallback,
+    FallbackOnly,
+    ResolveAndAccumulate,
+  };
+
+  enum class TemporalHistoryClampMode : uint8_t
+  {
+    None = 0,
+    NeighborhoodMinMax,
+  };
+
+  enum class TemporalHistoryRejectionMode : uint8_t
+  {
+    None = 0,
+    RejectOnMotionDisocclusion,
+    RejectAllHistory,
+  };
+
+  struct TemporalGiResolvePassContract
+  {
+    ScreenSpaceReflectionPassContract ssr{};
+    ScreenSpaceGlobalIlluminationPassContract ssgi{};
+    BackendResourceHandle historyDiffuse{};
+    BackendResourceHandle historySpecular{};
+    BackendResourceHandle historyValidation{};
+    BackendResourceHandle historyMoments{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    GiHistoryResetReason historyResetReason = GiHistoryResetReason::None;
+    bool historyValidForReuse = false;
+    bool resetHistoryBeforeResolve = false;
+    bool rejectHistoryThisFrame = false;
+    bool clampHistoryThisFrame = false;
+    TemporalHistoryClampMode clampMode = TemporalHistoryClampMode::None;
+    TemporalHistoryRejectionMode rejectionMode = TemporalHistoryRejectionMode::None;
+    bool resolveDiffuseEnabled = false;
+    bool resolveSpecularEnabled = false;
+    TemporalGiResolveExecutionStatus executionStatus = TemporalGiResolveExecutionStatus::Disabled;
+    TemporalGiResolveValidationStatus validationStatus =
+        TemporalGiResolveValidationStatus::DisabledBySettings;
+
+    bool IsValidForResolve() const
+    {
+      return validationStatus == TemporalGiResolveValidationStatus::Valid &&
+             executionStatus == TemporalGiResolveExecutionStatus::ResolveAndAccumulate;
+    }
+  };
+
+  inline TemporalGiResolvePassContract BuildTemporalGiResolvePassContract(
+      const ScreenSpaceReflectionPassContract &ssrContract,
+      const ScreenSpaceGlobalIlluminationPassContract &ssgiContract,
+      const GiHistoryCatalog &history)
+  {
+    TemporalGiResolvePassContract contract{};
+    contract.ssr = ssrContract;
+    contract.ssgi = ssgiContract;
+    contract.sceneFrameSerial = std::max(ssrContract.sceneFrameSerial, ssgiContract.sceneFrameSerial);
+    contract.historyRevision = history.revision;
+    contract.historyResetReason = history.lastResetReason;
+    contract.historyValidForReuse = history.validForTemporalReuse;
+    contract.historyDiffuse = history.Get(GiHistorySemantic::DiffuseIrradiance);
+    contract.historySpecular = history.Get(GiHistorySemantic::SpecularIrradiance);
+    contract.historyValidation = history.Get(GiHistorySemantic::Validation);
+    contract.historyMoments = history.Get(GiHistorySemantic::Moments);
+
+    const bool temporalRequested =
+        ssrContract.quality.enableTemporalAccumulation ||
+        ssgiContract.quality.enableTemporalAccumulation;
+    if (!temporalRequested)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::Disabled;
+      contract.validationStatus = TemporalGiResolveValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    if (ssrContract.validationStatus != SsrInputValidationStatus::Valid)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingSsrContractInputs;
+      return contract;
+    }
+    if (ssgiContract.validationStatus != SsgiInputValidationStatus::Valid)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingSsgiContractInputs;
+      return contract;
+    }
+    if (!contract.historyDiffuse.IsValid())
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingDiffuseHistory;
+      return contract;
+    }
+    if (!contract.historySpecular.IsValid())
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingSpecularHistory;
+      return contract;
+    }
+    if (!contract.historyValidation.IsValid())
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingValidationHistory;
+      return contract;
+    }
+    if (!contract.historyMoments.IsValid())
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::MissingMomentsHistory;
+      return contract;
+    }
+
+    const BackendResourceHandle reference = ssgiContract.depth;
+    const bool backendMismatch =
+        reference.backendId != ssrContract.depth.backendId ||
+        reference.backendId != contract.historyDiffuse.backendId ||
+        reference.backendId != contract.historySpecular.backendId ||
+        reference.backendId != contract.historyValidation.backendId ||
+        reference.backendId != contract.historyMoments.backendId;
+    if (backendMismatch)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::BackendMismatch;
+      return contract;
+    }
+
+    const bool dimensionMismatch =
+        reference.width != ssrContract.depth.width ||
+        reference.height != ssrContract.depth.height ||
+        reference.width != contract.historyDiffuse.width ||
+        reference.height != contract.historyDiffuse.height ||
+        reference.width != contract.historySpecular.width ||
+        reference.height != contract.historySpecular.height ||
+        reference.width != contract.historyValidation.width ||
+        reference.height != contract.historyValidation.height ||
+        reference.width != contract.historyMoments.width ||
+        reference.height != contract.historyMoments.height;
+    if (dimensionMismatch)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::MissingInputs;
+      contract.validationStatus = TemporalGiResolveValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.resolveDiffuseEnabled = ssgiContract.executionStatus != SsgiExecutionStatus::MissingInputs;
+    contract.resolveSpecularEnabled = ssrContract.executionStatus != SsrExecutionStatus::MissingInputs;
+    contract.resetHistoryBeforeResolve =
+        contract.historyResetReason != GiHistoryResetReason::None || !contract.historyValidForReuse;
+    contract.rejectHistoryThisFrame = contract.resetHistoryBeforeResolve;
+    contract.clampHistoryThisFrame = !contract.resetHistoryBeforeResolve;
+    contract.clampMode = contract.clampHistoryThisFrame
+                             ? TemporalHistoryClampMode::NeighborhoodMinMax
+                             : TemporalHistoryClampMode::None;
+    contract.rejectionMode = contract.resetHistoryBeforeResolve
+                                 ? TemporalHistoryRejectionMode::RejectAllHistory
+                                 : TemporalHistoryRejectionMode::RejectOnMotionDisocclusion;
+    contract.validationStatus = TemporalGiResolveValidationStatus::Valid;
+
+    if (contract.resetHistoryBeforeResolve)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::ResetAndFallback;
+      return contract;
+    }
+
+    if (ssrContract.executionStatus == SsrExecutionStatus::FallbackOnly ||
+        ssgiContract.executionStatus == SsgiExecutionStatus::FallbackOnly)
+    {
+      contract.executionStatus = TemporalGiResolveExecutionStatus::FallbackOnly;
+      return contract;
+    }
+
+    contract.executionStatus = TemporalGiResolveExecutionStatus::ResolveAndAccumulate;
+    return contract;
+  }
+
+  enum class LightingCompositeValidationStatus : uint8_t
+  {
+    Valid = 0,
+    MissingBaseColor,
+    MissingEmissive,
+    MissingTemporalResolveInputs,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  inline const char *ToString(LightingCompositeValidationStatus status)
+  {
+    switch (status)
+    {
+    case LightingCompositeValidationStatus::Valid:
+      return "valid";
+    case LightingCompositeValidationStatus::MissingBaseColor:
+      return "missing base color input";
+    case LightingCompositeValidationStatus::MissingEmissive:
+      return "missing emissive input";
+    case LightingCompositeValidationStatus::MissingTemporalResolveInputs:
+      return "temporal resolve pass contract is missing composite inputs";
+    case LightingCompositeValidationStatus::BackendMismatch:
+      return "lighting composite inputs come from mismatched backends";
+    case LightingCompositeValidationStatus::DimensionMismatch:
+      return "lighting composite inputs have mismatched dimensions";
+    }
+    return "unknown lighting composite validation status";
+  }
+
+  enum class LightingCompositeExecutionStatus : uint8_t
+  {
+    MissingInputs = 0,
+    DirectLightingOnlyFallback,
+    CompositeWithIndirect,
+  };
+
+  struct LightingCompositePassContract
+  {
+    BackendResourceHandle baseColor{};
+    BackendResourceHandle emissive{};
+    BackendResourceHandle resolvedDiffuse{};
+    BackendResourceHandle resolvedSpecular{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    bool includeIndirectDiffuse = false;
+    bool includeIndirectSpecular = false;
+    bool fallbackToDirectLightingOnly = true;
+    bool temporalStabilityExpected = false;
+    LightingCompositeExecutionStatus executionStatus = LightingCompositeExecutionStatus::MissingInputs;
+    LightingCompositeValidationStatus validationStatus = LightingCompositeValidationStatus::MissingBaseColor;
+
+    bool IsValidForComposite() const
+    {
+      return validationStatus == LightingCompositeValidationStatus::Valid &&
+             executionStatus == LightingCompositeExecutionStatus::CompositeWithIndirect;
+    }
+  };
+
+  inline LightingCompositePassContract
+  BuildLightingCompositePassContract(const SceneTextureCatalog &sceneTextures,
+                                     const TemporalGiResolvePassContract &resolveContract)
+  {
+    LightingCompositePassContract contract{};
+    contract.baseColor = sceneTextures.Get(SceneTextureSemantic::BaseColor);
+    contract.emissive = sceneTextures.Get(SceneTextureSemantic::Emissive);
+    contract.resolvedDiffuse = resolveContract.historyDiffuse;
+    contract.resolvedSpecular = resolveContract.historySpecular;
+    contract.sceneFrameSerial = sceneTextures.frameSerial;
+    contract.historyRevision = resolveContract.historyRevision;
+
+    if (!contract.baseColor.IsValid())
+    {
+      contract.validationStatus = LightingCompositeValidationStatus::MissingBaseColor;
+      contract.executionStatus = LightingCompositeExecutionStatus::MissingInputs;
+      return contract;
+    }
+    if (!contract.emissive.IsValid())
+    {
+      contract.validationStatus = LightingCompositeValidationStatus::MissingEmissive;
+      contract.executionStatus = LightingCompositeExecutionStatus::MissingInputs;
+      return contract;
+    }
+    if (resolveContract.validationStatus != TemporalGiResolveValidationStatus::Valid)
+    {
+      contract.validationStatus = LightingCompositeValidationStatus::MissingTemporalResolveInputs;
+      contract.executionStatus = LightingCompositeExecutionStatus::DirectLightingOnlyFallback;
+      contract.fallbackToDirectLightingOnly = true;
+      return contract;
+    }
+
+    const bool backendMismatch =
+        contract.baseColor.backendId != contract.emissive.backendId ||
+        contract.baseColor.backendId != contract.resolvedDiffuse.backendId ||
+        contract.baseColor.backendId != contract.resolvedSpecular.backendId;
+    if (backendMismatch)
+    {
+      contract.validationStatus = LightingCompositeValidationStatus::BackendMismatch;
+      contract.executionStatus = LightingCompositeExecutionStatus::MissingInputs;
+      return contract;
+    }
+
+    const bool dimensionMismatch =
+        contract.baseColor.width != contract.emissive.width ||
+        contract.baseColor.height != contract.emissive.height ||
+        contract.baseColor.width != contract.resolvedDiffuse.width ||
+        contract.baseColor.height != contract.resolvedDiffuse.height ||
+        contract.baseColor.width != contract.resolvedSpecular.width ||
+        contract.baseColor.height != contract.resolvedSpecular.height;
+    if (dimensionMismatch)
+    {
+      contract.validationStatus = LightingCompositeValidationStatus::DimensionMismatch;
+      contract.executionStatus = LightingCompositeExecutionStatus::MissingInputs;
+      return contract;
+    }
+
+    contract.validationStatus = LightingCompositeValidationStatus::Valid;
+    contract.includeIndirectDiffuse = resolveContract.resolveDiffuseEnabled;
+    contract.includeIndirectSpecular = resolveContract.resolveSpecularEnabled;
+    contract.fallbackToDirectLightingOnly =
+        resolveContract.executionStatus == TemporalGiResolveExecutionStatus::ResetAndFallback ||
+        resolveContract.executionStatus == TemporalGiResolveExecutionStatus::FallbackOnly;
+    contract.temporalStabilityExpected =
+        resolveContract.executionStatus == TemporalGiResolveExecutionStatus::ResolveAndAccumulate &&
+        resolveContract.clampHistoryThisFrame &&
+        !resolveContract.rejectHistoryThisFrame;
+    contract.executionStatus = contract.fallbackToDirectLightingOnly
+                                   ? LightingCompositeExecutionStatus::DirectLightingOnlyFallback
+                                   : LightingCompositeExecutionStatus::CompositeWithIndirect;
+    return contract;
+  }
+
 } // namespace Monolith
