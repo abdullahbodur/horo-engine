@@ -18,10 +18,7 @@ ifeq ($(OS),Windows_NT)
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     BUILD_UI_HEADLESS = cmake --build build/$(PRESET_DBG) --config Debug --target test_standalone_ui --parallel 1
-    BUILD_UI_AUTOMATION = cmake --build build/$(PRESET_DBG) --config Debug --target HoroEditorUiTest --parallel 1
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
-    EDITOR_EXE  := build/$(PRESET_DBG)/bin/Debug/HoroEditor.exe
-    EDITOR_UI_TEST_EXE := build/$(PRESET_DBG)/bin/Debug/HoroEditorUiTest.exe
 
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
     OPENCOV     := "C:/Program Files/OpenCppCoverage/OpenCppCoverage.exe"
@@ -36,10 +33,7 @@ else
     BUILD_DBG   = cmake --build --preset $(PRESET_DBG)
     BUILD_REL   = cmake --build --preset $(PRESET_REL)
     BUILD_UI_HEADLESS = cmake --build --preset $(PRESET_DBG) --target test_standalone_ui
-    BUILD_UI_AUTOMATION = cmake --build --preset $(PRESET_DBG) --target HoroEditorUiTest
     TEST_CMD    = ctest --preset debug
-    EDITOR_EXE  := build/$(PRESET_DBG)/bin/HoroEditor
-    EDITOR_UI_TEST_EXE := build/$(PRESET_DBG)/bin/HoroEditorUiTest
 
     # Coverage — Linux/macOS: gcov + lcov  (apt: lcov  |  brew: lcov)
     PRESET_COV  ?= coverage
@@ -63,7 +57,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test test-ui test\:ui test-ui-headless test\:ui-headless release coverage clean clean-all format format-check help
+.PHONY: all configure build test ui-test release coverage clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -83,21 +77,10 @@ $(SENTINEL_DBG):
 test: build
 	$(TEST_CMD)
 
-## Build + run standalone ImGui UI smoke tests from terminal (debug)
-test-ui-headless: $(SENTINEL_DBG)
+## Build + run standalone UI tests
+ui-test: $(SENTINEL_DBG)
 	$(BUILD_UI_HEADLESS)
 	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_standalone_ui
-
-## Alias for test-ui-headless (npm-style naming)
-test\:ui-headless: test-ui-headless
-
-## Build + launch standalone editor UI test app (visible window + automated clicks)
-test-ui: $(SENTINEL_DBG)
-	$(BUILD_UI_AUTOMATION)
-	"$(EDITOR_UI_TEST_EXE)" --run-ui-tests
-
-## Alias for test-ui (npm-style naming)
-test\:ui: test-ui
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -192,10 +175,7 @@ help:
 	@echo ""
 	@echo "  make              Build debug"
 	@echo "  make test         Build & run all 23 engine tests"
-	@echo "  make test-ui-headless Build & run standalone UI smoke tests in terminal"
-	@echo "  make test:ui-headless Alias of test-ui-headless"
-	@echo "  make test-ui      Build & run visible standalone UI automation (imgui_test_engine)"
-	@echo "  make test:ui      Alias of test-ui"
+	@echo "  make ui-test      Build & run standalone UI tests"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
