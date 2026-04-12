@@ -8,6 +8,7 @@ struct ImDrawData;
 namespace Monolith::Editor {
 
 bool IsSupportedEditorImGuiBackend(RenderBackendId backendId);
+RenderBackendId ResolveEditorImGuiBackend(RenderBackendId backendId, int glfwClientApi);
 bool InitEditorImGuiBackend(GLFWwindow* window, RenderBackendId backendId);
 void ShutdownEditorImGuiBackend(RenderBackendId backendId);
 void BeginEditorImGuiFrame(RenderBackendId backendId);

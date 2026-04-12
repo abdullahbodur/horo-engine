@@ -14,6 +14,7 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <GLFW/glfw3.h>
 
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
@@ -252,6 +253,29 @@ TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
     REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
 #else
     REQUIRE_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
+#endif
+}
+
+TEST_CASE("EditorImGuiBackend: backend resolution follows GLFW client API",
+          "[editor][imgui][backend]")
+{
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::OpenGL, GLFW_OPENGL_API) ==
+            RenderBackendId::OpenGL);
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::Auto, GLFW_OPENGL_API) ==
+            RenderBackendId::OpenGL);
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::Vulkan, GLFW_OPENGL_API) ==
+            RenderBackendId::Vulkan);
+
+#if defined(MONOLITH_HAS_VULKAN)
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::OpenGL, GLFW_NO_API) ==
+            RenderBackendId::Vulkan);
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::Auto, GLFW_NO_API) ==
+            RenderBackendId::Vulkan);
+#else
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::OpenGL, GLFW_NO_API) ==
+            RenderBackendId::OpenGL);
+    REQUIRE(ResolveEditorImGuiBackend(RenderBackendId::Auto, GLFW_NO_API) ==
+            RenderBackendId::OpenGL);
 #endif
 }
 

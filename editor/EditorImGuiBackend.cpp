@@ -146,6 +146,21 @@ namespace Monolith::Editor
     return false;
   }
 
+  RenderBackendId ResolveEditorImGuiBackend(RenderBackendId backendId, int glfwClientApi)
+  {
+    if (backendId != RenderBackendId::OpenGL && backendId != RenderBackendId::Auto)
+      return backendId;
+
+    if (glfwClientApi != GLFW_NO_API)
+      return RenderBackendId::OpenGL;
+
+#if defined(MONOLITH_HAS_VULKAN)
+    return RenderBackendId::Vulkan;
+#else
+    return RenderBackendId::OpenGL;
+#endif
+  }
+
   bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId)
   {
     if (!window || !IsSupportedEditorImGuiBackend(backendId))
@@ -155,8 +170,14 @@ namespace Monolith::Editor
     {
     case RenderBackendId::Auto:
     case RenderBackendId::OpenGL:
+      if (glfwGetCurrentContext() != window)
+        return false;
       ImGui_ImplGlfw_InitForOpenGL(window, true);
-      ImGui_ImplOpenGL3_Init("#version 410");
+      if (!ImGui_ImplOpenGL3_Init("#version 410"))
+      {
+        ImGui_ImplGlfw_Shutdown();
+        return false;
+      }
       return true;
     case RenderBackendId::Vulkan:
     {

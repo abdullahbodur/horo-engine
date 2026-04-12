@@ -18,6 +18,7 @@
 #include "editor/TransformGizmo.h"
 #include "mcp/McpController.h"
 #include "renderer/Camera.h"
+#include "renderer/RenderBackend.h"
 #include "renderer/Shader.h"
 
 struct GLFWwindow;
@@ -148,6 +149,7 @@ class EditorLayer {
   GLFWwindow* m_window = nullptr;
   bool m_active = false;
   bool m_imguiBackendInitialized = false;
+  RenderBackendId m_imguiBackendId = RenderBackendId::Auto;
   bool m_playMode = false;
   bool m_wantsReload = false;
   bool m_prevMouseL = false;
