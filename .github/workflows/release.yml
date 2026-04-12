@@ -1,0 +1,324 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: Select the semantic version increment
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-24.04
+    outputs:
+      bootstrap_release: ${{ steps.version.outputs.bootstrap_release }}
+      next_tag: ${{ steps.version.outputs.next_tag }}
+      next_version: ${{ steps.version.outputs.next_version }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
+
+    steps:
+      - name: Enforce owner-only release
+        run: |
+          if [ "${GITHUB_ACTOR}" != "${GITHUB_REPOSITORY_OWNER}" ]; then
+            echo "Only the repository owner may publish releases." >&2
+            exit 1
+          fi
+
+      - name: Enforce main-only release
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Releases must be dispatched from the main branch." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release refs
+        run: |
+          git fetch --force origin main
+          git fetch --force --tags origin
+
+      - name: Verify workflow SHA matches origin/main
+        run: |
+          remote_sha="$(git rev-parse origin/main)"
+          if [ "${remote_sha}" != "${GITHUB_SHA}" ]; then
+            echo "Release must run from the latest origin/main commit." >&2
+            echo "origin/main=${remote_sha}" >&2
+            echo "workflow_sha=${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+      - name: Compute next semantic version
+        id: version
+        run: |
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)"
+          previous_tag=""
+          bootstrap_release=false
+
+          if [ -z "${latest_tag}" ]; then
+            current_version="$(sed -nE 's/.*project\(MonolithEngine VERSION ([0-9]+\.[0-9]+\.[0-9]+) LANGUAGES.*/\1/p' CMakeLists.txt | head -n 1)"
+            if [ -z "${current_version}" ]; then
+              echo "Unable to determine bootstrap version from CMakeLists.txt." >&2
+              exit 1
+            fi
+
+            next_version="${current_version}"
+            bootstrap_release=true
+          else
+            if ! printf '%s' "${latest_tag}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Latest tag is not a valid semantic version: ${latest_tag}" >&2
+              exit 1
+            fi
+
+            previous_tag="${latest_tag}"
+            version="${latest_tag#v}"
+            IFS='.' read -r major minor patch <<< "${version}"
+
+            case "${{ inputs.version_bump }}" in
+              patch)
+                patch=$((patch + 1))
+                ;;
+              minor)
+                minor=$((minor + 1))
+                patch=0
+                ;;
+              major)
+                major=$((major + 1))
+                minor=0
+                patch=0
+                ;;
+              *)
+                echo "Unsupported version bump: ${{ inputs.version_bump }}" >&2
+                exit 1
+                ;;
+            esac
+
+            next_version="${major}.${minor}.${patch}"
+          fi
+
+          next_tag="v${next_version}"
+          if git rev-parse "${next_tag}" >/dev/null 2>&1; then
+            echo "Tag ${next_tag} already exists locally." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${next_tag}" >/dev/null 2>&1; then
+            echo "Tag ${next_tag} already exists on origin." >&2
+            exit 1
+          fi
+
+          echo "bootstrap_release=${bootstrap_release}" >> "${GITHUB_OUTPUT}"
+          echo "next_tag=${next_tag}" >> "${GITHUB_OUTPUT}"
+          echo "next_version=${next_version}" >> "${GITHUB_OUTPUT}"
+          echo "previous_tag=${previous_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Summarize release plan
+        run: |
+          {
+            echo "### Release plan"
+            echo "- Actor: \`${GITHUB_ACTOR}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Selected bump: \`${{ inputs.version_bump }}\`"
+            echo "- Previous tag: \`${{ steps.version.outputs.previous_tag || 'none' }}\`"
+            echo "- Next tag: \`${{ steps.version.outputs.next_tag }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${{ steps.version.outputs.bootstrap_release }}" = "true" ]; then
+            echo "- Bootstrap mode: no prior release tag exists, so the workflow will publish the version declared in \`CMakeLists.txt\`." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  test-linux:
+    name: Verify · Linux / GCC
+    runs-on: ubuntu-24.04
+    needs: prepare-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update -qq; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update -qq
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+  test-windows:
+    name: Verify · Windows / MSVC
+    runs-on: windows-latest
+    needs: prepare-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Configure
+        run: cmake --preset debug-msvc
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build build/debug-msvc --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
+
+  test-macos:
+    name: Verify · macOS / Clang
+    runs-on: macos-latest
+    needs: prepare-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+  publish-release:
+    name: Publish Release
+    runs-on: ubuntu-24.04
+    needs: [prepare-release, test-linux, test-windows, test-macos]
+    environment:
+      name: release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release refs
+        run: |
+          git fetch --force origin main
+          git fetch --force --tags origin
+
+      - name: Verify main did not move
+        run: |
+          remote_sha="$(git rev-parse origin/main)"
+          if [ "${remote_sha}" != "${GITHUB_SHA}" ]; then
+            echo "origin/main advanced while the release workflow was verifying the commit." >&2
+            echo "Re-run the workflow from the latest main commit." >&2
+            echo "origin/main=${remote_sha}" >&2
+            echo "workflow_sha=${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+      - name: Create annotated tag
+        env:
+          NEXT_TAG: ${{ needs.prepare-release.outputs.next_tag }}
+        run: |
+          git tag -a "${NEXT_TAG}" "${GITHUB_SHA}" -m "release: ${NEXT_TAG}"
+          git push origin "refs/tags/${NEXT_TAG}"
+
+      - name: Create GitHub release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_TAG: ${{ needs.prepare-release.outputs.next_tag }}
+          NEXT_VERSION: ${{ needs.prepare-release.outputs.next_version }}
+          PREVIOUS_TAG: ${{ needs.prepare-release.outputs.previous_tag }}
+          RELEASE_BUMP: ${{ inputs.version_bump }}
+        run: |
+          notes_file="$(mktemp)"
+          {
+            echo "Release type: \`${RELEASE_BUMP}\`"
+            echo
+            echo "Commit: \`${GITHUB_SHA}\`"
+          } > "${notes_file}"
+
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            gh release create "${NEXT_TAG}" \
+              --verify-tag \
+              --generate-notes \
+              --notes-start-tag "${PREVIOUS_TAG}" \
+              --notes-file "${notes_file}" \
+              --latest \
+              --fail-on-no-commits
+          else
+            gh release create "${NEXT_TAG}" \
+              --verify-tag \
+              --generate-notes \
+              --notes-file "${notes_file}" \
+              --latest
+          fi
+
+          release_url="$(gh release view "${NEXT_TAG}" --json url --jq '.url')"
+          echo "release_url=${release_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Summarize published release
+        env:
+          NEXT_TAG: ${{ needs.prepare-release.outputs.next_tag }}
+          RELEASE_URL: ${{ steps.create_release.outputs.release_url }}
+        run: |
+          {
+            echo "### Published release"
+            echo "- Tag: \`${NEXT_TAG}\`"
+            echo "- Release: ${RELEASE_URL}"
+            echo "- Future binary assets can be uploaded in this job before the release is published."
+          } >> "${GITHUB_STEP_SUMMARY}"
