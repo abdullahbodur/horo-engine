@@ -36,11 +36,11 @@ namespace Monolith
     constexpr VkFormat kOffscreenTargetFormat = VK_FORMAT_R8G8B8A8_UNORM;
     constexpr const char *kEditorViewportTargetKey = "__editor.viewport.scene";
     constexpr std::array<const char *, static_cast<size_t>(SceneTextureSemantic::Count)> kSceneTextureTargetKeys = {
-        "__scene.color",
-        "__scene.depth",
-        "__scene.normals",
-        "__scene.material",
-        "__scene.emissive",
+        "__scene.gbuffer.base_color",
+        "__scene.gbuffer.depth",
+        "__scene.gbuffer.normal",
+        "__scene.gbuffer.roughness_metallic",
+        "__scene.gbuffer.emissive",
         "__scene.velocity"};
     constexpr std::array<const char *, static_cast<size_t>(GiHistorySemantic::Count)> kGiHistoryTargetKeys = {
         "__gi.history.diffuse_irradiance",
@@ -408,7 +408,9 @@ namespace Monolith
 
     constexpr bool IsSupportedVulkanScenePass(const RenderPassId passId)
     {
-      return passId == RenderPassId::OpaqueScene || passId == RenderPassId::CompatibilityScene;
+      return passId == RenderPassId::OpaqueScene ||
+             passId == RenderPassId::DeferredOpaque ||
+             passId == RenderPassId::CompatibilityScene;
     }
 
     uint8_t PackOpaquePipelineKey(const VulkanRenderBackend::OpaquePipelineKey &key)
@@ -833,7 +835,7 @@ namespace Monolith
   {
     if (!outCatalog)
       return false;
-    if (!m_sceneTextureCatalog.Has(SceneTextureSemantic::Color))
+    if (!m_sceneTextureCatalog.HasDeferredGBuffer())
     {
       *outCatalog = {};
       if (outError)

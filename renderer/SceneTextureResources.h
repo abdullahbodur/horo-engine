@@ -11,13 +11,17 @@ namespace Monolith
 
   enum class SceneTextureSemantic : uint8_t
   {
-    Color = 0,
+    BaseColor = 0,
     Depth,
-    Normals,
-    Material,
+    Normal,
+    RoughnessMetallic,
     Emissive,
     Velocity,
     Count,
+    // Compatibility aliases for pre-GBuffer naming.
+    Color = BaseColor,
+    Normals = Normal,
+    Material = RoughnessMetallic,
   };
 
   enum class GiHistorySemantic : uint8_t
@@ -67,7 +71,46 @@ namespace Monolith
     {
       return Get(semantic).IsValid();
     }
+
+    bool HasDeferredGBuffer() const
+    {
+      return Has(SceneTextureSemantic::BaseColor) &&
+             Has(SceneTextureSemantic::Depth) &&
+             Has(SceneTextureSemantic::Normal) &&
+             Has(SceneTextureSemantic::RoughnessMetallic) &&
+             Has(SceneTextureSemantic::Emissive);
+    }
   };
+
+  struct DeferredGBufferCatalog
+  {
+    BackendResourceHandle baseColor{};
+    BackendResourceHandle depth{};
+    BackendResourceHandle normal{};
+    BackendResourceHandle roughnessMetallic{};
+    BackendResourceHandle emissive{};
+    uint64_t frameSerial = 0;
+
+    bool IsComplete() const
+    {
+      return baseColor.IsValid() &&
+             depth.IsValid() &&
+             normal.IsValid() &&
+             roughnessMetallic.IsValid() &&
+             emissive.IsValid();
+    }
+  };
+
+  inline DeferredGBufferCatalog BuildDeferredGBufferCatalog(const SceneTextureCatalog &catalog)
+  {
+    return {
+        catalog.Get(SceneTextureSemantic::BaseColor),
+        catalog.Get(SceneTextureSemantic::Depth),
+        catalog.Get(SceneTextureSemantic::Normal),
+        catalog.Get(SceneTextureSemantic::RoughnessMetallic),
+        catalog.Get(SceneTextureSemantic::Emissive),
+        catalog.frameSerial};
+  }
 
   struct GiHistoryCatalog
   {

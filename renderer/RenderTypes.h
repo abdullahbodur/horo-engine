@@ -18,6 +18,7 @@ class SkinnedMesh;
 enum class RenderPassId {
   CompatibilityScene,
   OpaqueScene,
+  DeferredOpaque,
   WireframeOverlay,
   DebugOverlay,
 };

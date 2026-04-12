@@ -151,7 +151,7 @@ namespace
     {
       if (!outCatalog)
         return false;
-      if (!sceneTextures.Has(SceneTextureSemantic::Color))
+      if (!sceneTextures.HasDeferredGBuffer())
       {
         if (outError)
           *outError = "fake backend has no scene textures";
@@ -429,16 +429,30 @@ TEST_CASE("Scene texture and GI history catalogs stay backend-neutral and typed"
           "[renderer][foundation][abstractions]")
 {
   SceneTextureCatalog sceneTextures{};
-  sceneTextures.Set(SceneTextureSemantic::Color,
+  sceneTextures.Set(SceneTextureSemantic::BaseColor,
                     {RenderBackendId::Vulkan, 0xA1u, 1920u, 1080u, 3u});
+  sceneTextures.Set(SceneTextureSemantic::Normal,
+                    {RenderBackendId::Vulkan, 0xA3u, 1920u, 1080u, 3u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0xA4u, 1920u, 1080u, 3u});
   sceneTextures.Set(SceneTextureSemantic::Depth,
                     {RenderBackendId::Vulkan, 0xA2u, 1920u, 1080u, 3u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive,
+                    {RenderBackendId::Vulkan, 0xA5u, 1920u, 1080u, 3u});
 
-  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Color));
+  REQUIRE(sceneTextures.HasDeferredGBuffer());
   REQUIRE(sceneTextures.Has(SceneTextureSemantic::Depth));
-  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).backendId == RenderBackendId::Vulkan);
-  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).resourceId == 0xA1u);
-  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Color).generation == 3u);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::BaseColor).backendId == RenderBackendId::Vulkan);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::BaseColor).resourceId == 0xA1u);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::BaseColor).generation == 3u);
+
+  const DeferredGBufferCatalog gbuffer = BuildDeferredGBufferCatalog(sceneTextures);
+  REQUIRE(gbuffer.IsComplete());
+  REQUIRE(gbuffer.baseColor.resourceId == 0xA1u);
+  REQUIRE(gbuffer.normal.resourceId == 0xA3u);
+  REQUIRE(gbuffer.roughnessMetallic.resourceId == 0xA4u);
+  REQUIRE(gbuffer.depth.resourceId == 0xA2u);
+  REQUIRE(gbuffer.emissive.resourceId == 0xA5u);
 
   GiHistoryCatalog history{};
   history.Set(GiHistorySemantic::DiffuseIrradiance,
@@ -466,9 +480,11 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
 
   SceneTextureCatalog sceneTextures{};
   REQUIRE(Renderer::TryGetSceneTextureCatalog(&sceneTextures, &error));
-  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Normals));
-  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normals).width == 128u);
-  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normals).height == 72u);
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::Normal));
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::BaseColor));
+  REQUIRE(sceneTextures.Has(SceneTextureSemantic::RoughnessMetallic));
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normal).width == 128u);
+  REQUIRE(sceneTextures.Get(SceneTextureSemantic::Normal).height == 72u);
 
   GiHistoryCatalog giHistory{};
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
@@ -1089,6 +1105,24 @@ TEST_CASE("Renderer supports multiple explicit passes within a single frame",
   REQUIRE(backend.lastPass.id == RenderPassId::WireframeOverlay);
   REQUIRE(backend.lastPass.view.cameraPosition.x == Catch::Approx(4.0f));
   REQUIRE(Renderer::GetDrawCallCount() == 2);
+
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer forwards deferred opaque pass identifiers through backend seam",
+          "[renderer][foundation]")
+{
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+
+  Camera camera;
+  Renderer::BeginFrame(RenderFrameConfig{});
+  Renderer::BeginPass(
+      RenderPassConfig{RenderPassId::DeferredOpaque, BuildRenderView(camera), "deferred-opaque"});
+  Renderer::EndPass();
+  Renderer::EndFrame();
+
+  REQUIRE(backend.lastPass.id == RenderPassId::DeferredOpaque);
 
   Renderer::ResetBackend();
 }
