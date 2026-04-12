@@ -18,6 +18,7 @@ ifeq ($(OS),Windows_NT)
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
+    EDITOR_EXE  := build/$(PRESET_DBG)/bin/Debug/HoroEditor.exe
 
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
     OPENCOV     := "C:/Program Files/OpenCppCoverage/OpenCppCoverage.exe"
@@ -32,6 +33,7 @@ else
     BUILD_DBG   = cmake --build --preset $(PRESET_DBG)
     BUILD_REL   = cmake --build --preset $(PRESET_REL)
     TEST_CMD    = ctest --preset debug
+    EDITOR_EXE  := build/$(PRESET_DBG)/bin/HoroEditor
 
     # Coverage — Linux/macOS: gcov + lcov  (apt: lcov  |  brew: lcov)
     PRESET_COV  ?= coverage
@@ -55,7 +57,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test test-ui test\:ui release coverage clean clean-all format format-check help
+.PHONY: all configure build test test-ui test\:ui run-ui run\:ui release coverage clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -81,6 +83,13 @@ test-ui: build
 
 ## Alias for test-ui (npm-style naming)
 test\:ui: test-ui
+
+## Build + run standalone editor with visible UI window
+run-ui: build
+	"$(EDITOR_EXE)"
+
+## Alias for run-ui (npm-style naming)
+run\:ui: run-ui
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -177,6 +186,8 @@ help:
 	@echo "  make test         Build & run all 23 engine tests"
 	@echo "  make test-ui      Build & run standalone UI smoke tests"
 	@echo "  make test:ui      Alias of test-ui"
+	@echo "  make run-ui       Build & launch standalone editor UI window"
+	@echo "  make run:ui       Alias of run-ui"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
