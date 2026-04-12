@@ -538,4 +538,252 @@ namespace Monolith
     return contract;
   }
 
+  enum class SsgiInputValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingDepth,
+    MissingNormal,
+    MissingBaseColor,
+    MissingEmissive,
+    MissingMotionVectors,
+    MissingDiffuseHistory,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  inline const char *ToString(SsgiInputValidationStatus status)
+  {
+    switch (status)
+    {
+    case SsgiInputValidationStatus::DisabledBySettings:
+      return "screen-space global illumination disabled by settings";
+    case SsgiInputValidationStatus::Valid:
+      return "valid";
+    case SsgiInputValidationStatus::MissingDepth:
+      return "missing depth input";
+    case SsgiInputValidationStatus::MissingNormal:
+      return "missing normal input";
+    case SsgiInputValidationStatus::MissingBaseColor:
+      return "missing base color input";
+    case SsgiInputValidationStatus::MissingEmissive:
+      return "missing emissive input";
+    case SsgiInputValidationStatus::MissingMotionVectors:
+      return "missing motion vector input";
+    case SsgiInputValidationStatus::MissingDiffuseHistory:
+      return "missing diffuse irradiance history input";
+    case SsgiInputValidationStatus::BackendMismatch:
+      return "screen-space global illumination inputs come from mismatched backends";
+    case SsgiInputValidationStatus::DimensionMismatch:
+      return "screen-space global illumination inputs have mismatched dimensions";
+    }
+    return "unknown screen-space global illumination validation status";
+  }
+
+  enum class SsgiExecutionStatus : uint8_t
+  {
+    Disabled = 0,
+    MissingInputs,
+    FallbackOnly,
+    Tracing,
+  };
+
+  struct ScreenSpaceGlobalIlluminationQualityConfig
+  {
+    TemporalQualityTier tier = TemporalQualityTier::Disabled;
+    uint32_t maxTraceSteps = 0;
+    uint32_t sampleKernelSize = 0;
+    uint32_t resolveStride = 1;
+    float thickness = 0.0f;
+    float temporalHistoryBlend = 0.0f;
+    float emissiveContributionScale = 0.0f;
+    bool enableTemporalAccumulation = false;
+    bool enableEmissiveContribution = false;
+  };
+
+  inline ScreenSpaceGlobalIlluminationQualityConfig
+  BuildScreenSpaceGlobalIlluminationQualityConfig(TemporalQualityTier tier)
+  {
+    ScreenSpaceGlobalIlluminationQualityConfig config{};
+    config.tier = tier;
+    switch (tier)
+    {
+    case TemporalQualityTier::Disabled:
+      config.maxTraceSteps = 0;
+      config.sampleKernelSize = 0;
+      config.resolveStride = 1;
+      config.thickness = 0.0f;
+      config.temporalHistoryBlend = 0.0f;
+      config.emissiveContributionScale = 0.0f;
+      config.enableTemporalAccumulation = false;
+      config.enableEmissiveContribution = false;
+      break;
+    case TemporalQualityTier::Low:
+      config.maxTraceSteps = 8;
+      config.sampleKernelSize = 4;
+      config.resolveStride = 2;
+      config.thickness = 0.15f;
+      config.temporalHistoryBlend = 0.0f;
+      config.emissiveContributionScale = 0.40f;
+      config.enableTemporalAccumulation = false;
+      config.enableEmissiveContribution = true;
+      break;
+    case TemporalQualityTier::Medium:
+      config.maxTraceSteps = 16;
+      config.sampleKernelSize = 8;
+      config.resolveStride = 2;
+      config.thickness = 0.25f;
+      config.temporalHistoryBlend = 0.55f;
+      config.emissiveContributionScale = 0.55f;
+      config.enableTemporalAccumulation = true;
+      config.enableEmissiveContribution = true;
+      break;
+    case TemporalQualityTier::High:
+      config.maxTraceSteps = 28;
+      config.sampleKernelSize = 12;
+      config.resolveStride = 1;
+      config.thickness = 0.35f;
+      config.temporalHistoryBlend = 0.75f;
+      config.emissiveContributionScale = 0.70f;
+      config.enableTemporalAccumulation = true;
+      config.enableEmissiveContribution = true;
+      break;
+    case TemporalQualityTier::Ultra:
+      config.maxTraceSteps = 40;
+      config.sampleKernelSize = 16;
+      config.resolveStride = 1;
+      config.thickness = 0.45f;
+      config.temporalHistoryBlend = 0.85f;
+      config.emissiveContributionScale = 0.85f;
+      config.enableTemporalAccumulation = true;
+      config.enableEmissiveContribution = true;
+      break;
+    }
+    return config;
+  }
+
+  struct ScreenSpaceGlobalIlluminationPassContract
+  {
+    ScreenSpaceGlobalIlluminationQualityConfig quality{};
+    BackendResourceHandle depth{};
+    BackendResourceHandle normal{};
+    BackendResourceHandle baseColor{};
+    BackendResourceHandle emissive{};
+    BackendResourceHandle motionVectors{};
+    BackendResourceHandle historyDiffuse{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    GiHistoryResetReason historyResetReason = GiHistoryResetReason::None;
+    bool historyValidForReuse = false;
+    bool diffuseIndirectApproximationEnabled = false;
+    bool emissiveContributionEnabled = false;
+    SsgiExecutionStatus executionStatus = SsgiExecutionStatus::Disabled;
+    SsgiInputValidationStatus validationStatus = SsgiInputValidationStatus::DisabledBySettings;
+
+    bool IsValidForTracing() const
+    {
+      return validationStatus == SsgiInputValidationStatus::Valid &&
+             executionStatus == SsgiExecutionStatus::Tracing;
+    }
+  };
+
+  inline ScreenSpaceGlobalIlluminationPassContract
+  BuildScreenSpaceGlobalIlluminationPassContract(const SceneTextureCatalog &sceneTextures,
+                                                 const GiHistoryCatalog &history,
+                                                 TemporalQualityTier qualityTier,
+                                                 bool enabled)
+  {
+    ScreenSpaceGlobalIlluminationPassContract contract{};
+    contract.quality = BuildScreenSpaceGlobalIlluminationQualityConfig(qualityTier);
+    contract.sceneFrameSerial = sceneTextures.frameSerial;
+    contract.historyRevision = history.revision;
+    contract.historyResetReason = history.lastResetReason;
+    contract.historyValidForReuse = history.validForTemporalReuse;
+    contract.diffuseIndirectApproximationEnabled = enabled;
+    contract.emissiveContributionEnabled = contract.quality.enableEmissiveContribution;
+
+    if (!enabled || qualityTier == TemporalQualityTier::Disabled)
+    {
+      contract.executionStatus = SsgiExecutionStatus::Disabled;
+      contract.validationStatus = SsgiInputValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    contract.depth = sceneTextures.Get(SceneTextureSemantic::Depth);
+    contract.normal = sceneTextures.Get(SceneTextureSemantic::Normal);
+    contract.baseColor = sceneTextures.Get(SceneTextureSemantic::BaseColor);
+    contract.emissive = sceneTextures.Get(SceneTextureSemantic::Emissive);
+    contract.motionVectors = sceneTextures.Get(SceneTextureSemantic::MotionVector);
+    contract.historyDiffuse = history.Get(GiHistorySemantic::DiffuseIrradiance);
+
+    if (!contract.depth.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingDepth;
+      return contract;
+    }
+    if (!contract.normal.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingNormal;
+      return contract;
+    }
+    if (!contract.baseColor.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingBaseColor;
+      return contract;
+    }
+    if (!contract.emissive.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingEmissive;
+      return contract;
+    }
+    if (!contract.motionVectors.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingMotionVectors;
+      return contract;
+    }
+    if (!contract.historyDiffuse.IsValid())
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::MissingDiffuseHistory;
+      return contract;
+    }
+    if (contract.depth.backendId != contract.normal.backendId ||
+        contract.depth.backendId != contract.baseColor.backendId ||
+        contract.depth.backendId != contract.emissive.backendId ||
+        contract.depth.backendId != contract.motionVectors.backendId ||
+        contract.depth.backendId != contract.historyDiffuse.backendId)
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::BackendMismatch;
+      return contract;
+    }
+    if (contract.depth.width != contract.normal.width ||
+        contract.depth.height != contract.normal.height ||
+        contract.depth.width != contract.baseColor.width ||
+        contract.depth.height != contract.baseColor.height ||
+        contract.depth.width != contract.emissive.width ||
+        contract.depth.height != contract.emissive.height ||
+        contract.depth.width != contract.motionVectors.width ||
+        contract.depth.height != contract.motionVectors.height ||
+        contract.depth.width != contract.historyDiffuse.width ||
+        contract.depth.height != contract.historyDiffuse.height)
+    {
+      contract.executionStatus = SsgiExecutionStatus::MissingInputs;
+      contract.validationStatus = SsgiInputValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.validationStatus = SsgiInputValidationStatus::Valid;
+    contract.executionStatus =
+        (contract.quality.enableTemporalAccumulation && !contract.historyValidForReuse)
+            ? SsgiExecutionStatus::FallbackOnly
+            : SsgiExecutionStatus::Tracing;
+    return contract;
+  }
+
 } // namespace Monolith

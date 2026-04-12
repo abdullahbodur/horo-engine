@@ -58,6 +58,9 @@ namespace Monolith
                                 std::string *outError) const override;
     bool TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract *outContract,
                                                  std::string *outError) const override;
+    bool TryGetScreenSpaceGlobalIlluminationPassContract(
+        ScreenSpaceGlobalIlluminationPassContract *outContract,
+        std::string *outError) const override;
     bool InvalidateGiHistory(GiHistoryResetReason reason,
                              std::string *outError) override;
 
@@ -151,6 +154,7 @@ namespace Monolith
     void DestroyOpaqueGraphicsPipelineScaffold();
     bool RecordFrameCommands(const RenderFrameConfig &frame);
     void ExecuteScreenSpaceReflectionPass();
+    void ExecuteScreenSpaceGlobalIlluminationPass();
     bool EnsureOffscreenRenderPass();
     void DestroyOffscreenRenderPass();
     bool CreateOffscreenRenderTargetResources(const std::string &targetKey,
@@ -188,9 +192,11 @@ namespace Monolith
     SceneTextureCatalog m_sceneTextureCatalog;
     GiHistoryCatalog m_giHistoryCatalog;
     ScreenSpaceReflectionPassContract m_lastSsrPassContract;
+    ScreenSpaceGlobalIlluminationPassContract m_lastSsgiPassContract;
     TemporalHistoryState m_lastTemporalHistoryState;
     bool m_hasTemporalHistoryState = false;
     bool m_hasSsrPassContract = false;
+    bool m_hasSsgiPassContract = false;
   };
 
 } // namespace Monolith

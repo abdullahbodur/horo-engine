@@ -219,6 +219,27 @@ namespace
           ScreenSpaceReflectionMissPolicy::ProbeFallback);
       return true;
     }
+    bool TryGetScreenSpaceGlobalIlluminationPassContract(
+        ScreenSpaceGlobalIlluminationPassContract *outContract,
+        std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+      if (!sceneTextures.HasDeferredGBuffer() || !giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
+      {
+        if (outError)
+          *outError = "fake backend has no SSGI contract inputs";
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildScreenSpaceGlobalIlluminationPassContract(
+          sceneTextures,
+          giHistory,
+          TemporalQualityTier::Medium,
+          true);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -652,6 +673,64 @@ TEST_CASE("Screen-space reflection contract maps quality tiers and roughness-awa
   REQUIRE(missingRoughness.validationStatus == SsrInputValidationStatus::MissingRoughnessMetallic);
 }
 
+TEST_CASE("Screen-space global illumination contract maps quality tiers and emissive contribution",
+          "[renderer][foundation][temporal][gi]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x31u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x32u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x33u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x34u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x35u, 1280u, 720u, 1u});
+  sceneTextures.frameSerial = 45u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0x41u, 1280u, 720u, 7u});
+  history.revision = 16u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceGlobalIlluminationPassContract lowContract =
+      BuildScreenSpaceGlobalIlluminationPassContract(sceneTextures,
+                                                     history,
+                                                     TemporalQualityTier::Low,
+                                                     true);
+  const ScreenSpaceGlobalIlluminationPassContract highContract =
+      BuildScreenSpaceGlobalIlluminationPassContract(sceneTextures,
+                                                     history,
+                                                     TemporalQualityTier::High,
+                                                     true);
+  REQUIRE(lowContract.IsValidForTracing());
+  REQUIRE(highContract.IsValidForTracing());
+  REQUIRE(lowContract.diffuseIndirectApproximationEnabled);
+  REQUIRE(lowContract.emissiveContributionEnabled);
+  REQUIRE(highContract.quality.maxTraceSteps > lowContract.quality.maxTraceSteps);
+  REQUIRE(highContract.quality.sampleKernelSize > lowContract.quality.sampleKernelSize);
+  REQUIRE(highContract.quality.resolveStride < lowContract.quality.resolveStride);
+  REQUIRE(highContract.quality.temporalHistoryBlend > lowContract.quality.temporalHistoryBlend);
+  REQUIRE(highContract.quality.enableTemporalAccumulation);
+  REQUIRE_FALSE(lowContract.quality.enableTemporalAccumulation);
+
+  history.validForTemporalReuse = false;
+  const ScreenSpaceGlobalIlluminationPassContract temporalFallback =
+      BuildScreenSpaceGlobalIlluminationPassContract(sceneTextures,
+                                                     history,
+                                                     TemporalQualityTier::High,
+                                                     true);
+  REQUIRE(temporalFallback.validationStatus == SsgiInputValidationStatus::Valid);
+  REQUIRE(temporalFallback.executionStatus == SsgiExecutionStatus::FallbackOnly);
+
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {});
+  const ScreenSpaceGlobalIlluminationPassContract missingEmissive =
+      BuildScreenSpaceGlobalIlluminationPassContract(sceneTextures,
+                                                     history,
+                                                     TemporalQualityTier::High,
+                                                     true);
+  REQUIRE_FALSE(missingEmissive.IsValidForTracing());
+  REQUIRE(missingEmissive.executionStatus == SsgiExecutionStatus::MissingInputs);
+  REQUIRE(missingEmissive.validationStatus == SsgiInputValidationStatus::MissingEmissive);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -685,6 +764,17 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   REQUIRE(ssrContract.roughnessMetallic.IsValid());
   REQUIRE(ssrContract.historySpecular.IsValid());
   REQUIRE(ssrContract.quality.tier == TemporalQualityTier::Medium);
+  ScreenSpaceGlobalIlluminationPassContract ssgiContract{};
+  REQUIRE(Renderer::TryGetScreenSpaceGlobalIlluminationPassContract(&ssgiContract, &error));
+  REQUIRE(ssgiContract.validationStatus == SsgiInputValidationStatus::Valid);
+  REQUIRE((ssgiContract.executionStatus == SsgiExecutionStatus::Tracing ||
+           ssgiContract.executionStatus == SsgiExecutionStatus::FallbackOnly));
+  REQUIRE(ssgiContract.diffuseIndirectApproximationEnabled);
+  REQUIRE(ssgiContract.emissiveContributionEnabled);
+  REQUIRE(ssgiContract.baseColor.IsValid());
+  REQUIRE(ssgiContract.emissive.IsValid());
+  REQUIRE(ssgiContract.historyDiffuse.IsValid());
+  REQUIRE(ssgiContract.quality.tier == TemporalQualityTier::Medium);
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

@@ -82,6 +82,9 @@ namespace Monolith
                                        std::string *outError = nullptr);
     static bool TryGetScreenSpaceReflectionPassContract(ScreenSpaceReflectionPassContract *outContract,
                                                         std::string *outError = nullptr);
+    static bool TryGetScreenSpaceGlobalIlluminationPassContract(
+        ScreenSpaceGlobalIlluminationPassContract *outContract,
+        std::string *outError = nullptr);
     static bool TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                         std::string *outError = nullptr);
     static bool InvalidateGiHistory(GiHistoryResetReason reason,
