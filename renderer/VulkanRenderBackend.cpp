@@ -914,6 +914,10 @@ namespace Monolith
     m_hasSceneTracingRepresentationContract = false;
     m_lastCachedHitLightingRepresentationContract = {};
     m_hasCachedHitLightingRepresentationContract = false;
+    m_lastRadianceCacheFinalGatherContract = {};
+    m_hasRadianceCacheFinalGatherContract = false;
+    m_lastGiReflectionDebugVisualizationContract = {};
+    m_hasGiReflectionDebugVisualizationContract = false;
     return true;
   }
 
@@ -1103,6 +1107,44 @@ namespace Monolith
     return true;
   }
 
+  bool VulkanRenderBackend::TryGetRadianceCacheFinalGatherContract(
+      RadianceCacheFinalGatherContract *outContract,
+      std::string *outError) const
+  {
+    if (!outContract)
+      return false;
+
+    if (!m_hasRadianceCacheFinalGatherContract)
+    {
+      *outContract = {};
+      if (outError)
+        *outError = "Radiance-cache final-gather contract has not been produced for this frame.";
+      return false;
+    }
+
+    *outContract = m_lastRadianceCacheFinalGatherContract;
+    return true;
+  }
+
+  bool VulkanRenderBackend::TryGetGiReflectionDebugVisualizationContract(
+      GiReflectionDebugVisualizationContract *outContract,
+      std::string *outError) const
+  {
+    if (!outContract)
+      return false;
+
+    if (!m_hasGiReflectionDebugVisualizationContract)
+    {
+      *outContract = {};
+      if (outError)
+        *outError = "GI/reflection debug visualization contract has not been produced for this frame.";
+      return false;
+    }
+
+    *outContract = m_lastGiReflectionDebugVisualizationContract;
+    return true;
+  }
+
   bool VulkanRenderBackend::InvalidateGiHistory(GiHistoryResetReason reason,
                                                 std::string *outError)
   {
@@ -1257,6 +1299,20 @@ namespace Monolith
         m_cachedHitLightingInvalidationReason,
         hitLightingEnabled);
     m_hasCachedHitLightingRepresentationContract = true;
+
+    m_lastRadianceCacheFinalGatherContract = BuildRadianceCacheFinalGatherContract(
+        m_lastCachedHitLightingRepresentationContract,
+        m_activeFrame.temporal.jitter.qualityTier,
+        hitLightingEnabled);
+    m_hasRadianceCacheFinalGatherContract = true;
+
+    m_lastGiReflectionDebugVisualizationContract = BuildGiReflectionDebugVisualizationContract(
+        m_lastSceneTracingRepresentationContract,
+        m_lastCachedHitLightingRepresentationContract,
+        m_lastRadianceCacheFinalGatherContract,
+        true);
+    m_hasGiReflectionDebugVisualizationContract = true;
+
     if (m_lastCachedHitLightingRepresentationContract.validationStatus ==
             CachedHitLightingRepresentationValidationStatus::Valid &&
         m_cachedHitLightingInvalidationReason != CachedHitLightingInvalidationReason::None)
@@ -4062,12 +4118,16 @@ namespace Monolith
     m_lastLightingCompositePassContract = {};
     m_lastSceneTracingRepresentationContract = {};
     m_lastCachedHitLightingRepresentationContract = {};
+    m_lastRadianceCacheFinalGatherContract = {};
+    m_lastGiReflectionDebugVisualizationContract = {};
     m_hasSsrPassContract = false;
     m_hasSsgiPassContract = false;
     m_hasTemporalGiResolvePassContract = false;
     m_hasLightingCompositePassContract = false;
     m_hasSceneTracingRepresentationContract = false;
     m_hasCachedHitLightingRepresentationContract = false;
+    m_hasRadianceCacheFinalGatherContract = false;
+    m_hasGiReflectionDebugVisualizationContract = false;
     m_activeView = {};
     if (m_pendingOpaqueDraws.capacity() < 256)
       m_pendingOpaqueDraws.reserve(256);
@@ -4303,6 +4363,18 @@ namespace Monolith
   }
   bool VulkanRenderBackend::TryGetCachedHitLightingRepresentationContract(
       CachedHitLightingRepresentationContract *,
+      std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::TryGetRadianceCacheFinalGatherContract(
+      RadianceCacheFinalGatherContract *,
+      std::string *) const
+  {
+    return false;
+  }
+  bool VulkanRenderBackend::TryGetGiReflectionDebugVisualizationContract(
+      GiReflectionDebugVisualizationContract *,
       std::string *) const
   {
     return false;

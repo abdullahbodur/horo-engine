@@ -183,6 +183,24 @@ bool OpenGLRenderBackend::TryGetCachedHitLightingRepresentationContract(
   return false;
 }
 
+bool OpenGLRenderBackend::TryGetRadianceCacheFinalGatherContract(
+    RadianceCacheFinalGatherContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "Radiance-cache final-gather contract is unavailable on OpenGL backend.";
+  return false;
+}
+
+bool OpenGLRenderBackend::TryGetGiReflectionDebugVisualizationContract(
+    GiReflectionDebugVisualizationContract* outContract, std::string* outError) const {
+  if (outContract)
+    *outContract = {};
+  if (outError)
+    *outError = "GI/reflection debug visualization contract is unavailable on OpenGL backend.";
+  return false;
+}
+
 bool OpenGLRenderBackend::InvalidateGiHistory(GiHistoryResetReason, std::string* outError) {
   if (outError)
     *outError = "GI history invalidation is unavailable on OpenGL backend.";

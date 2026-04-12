@@ -71,6 +71,12 @@ namespace Monolith
     bool TryGetCachedHitLightingRepresentationContract(
         CachedHitLightingRepresentationContract *outContract,
         std::string *outError) const override;
+    bool TryGetRadianceCacheFinalGatherContract(
+        RadianceCacheFinalGatherContract *outContract,
+        std::string *outError) const override;
+    bool TryGetGiReflectionDebugVisualizationContract(
+        GiReflectionDebugVisualizationContract *outContract,
+        std::string *outError) const override;
     bool InvalidateGiHistory(GiHistoryResetReason reason,
                              std::string *outError) override;
 
@@ -211,6 +217,8 @@ namespace Monolith
     GlobalDistanceFieldTracingStructure m_globalDistanceFieldTracingStructure;
     SceneTracingRepresentationContract m_lastSceneTracingRepresentationContract;
     CachedHitLightingRepresentationContract m_lastCachedHitLightingRepresentationContract;
+    RadianceCacheFinalGatherContract m_lastRadianceCacheFinalGatherContract;
+    GiReflectionDebugVisualizationContract m_lastGiReflectionDebugVisualizationContract;
     TemporalHistoryState m_lastTemporalHistoryState;
     BackendResourceHandle m_cachedHitLightingRadianceHandle;
     BackendResourceHandle m_cachedHitLightingMomentsHandle;
@@ -226,6 +234,8 @@ namespace Monolith
     bool m_hasLightingCompositePassContract = false;
     bool m_hasSceneTracingRepresentationContract = false;
     bool m_hasCachedHitLightingRepresentationContract = false;
+    bool m_hasRadianceCacheFinalGatherContract = false;
+    bool m_hasGiReflectionDebugVisualizationContract = false;
   };
 
 } // namespace Monolith

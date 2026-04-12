@@ -58,6 +58,12 @@ class OpenGLRenderBackend : public IRenderBackend {
   bool TryGetCachedHitLightingRepresentationContract(
       CachedHitLightingRepresentationContract* outContract,
       std::string* outError) const override;
+  bool TryGetRadianceCacheFinalGatherContract(
+      RadianceCacheFinalGatherContract* outContract,
+      std::string* outError) const override;
+  bool TryGetGiReflectionDebugVisualizationContract(
+      GiReflectionDebugVisualizationContract* outContract,
+      std::string* outError) const override;
   bool InvalidateGiHistory(GiHistoryResetReason reason, std::string* outError) override;
 
  private:

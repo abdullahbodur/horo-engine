@@ -13,6 +13,7 @@
 #include "renderer/IRenderBackend.h"
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
+#include "renderer/OpenGLRenderBackend.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"
 #include "renderer/RenderTargetHandle.h"
@@ -350,6 +351,51 @@ namespace
           true);
       return true;
     }
+    bool TryGetRadianceCacheFinalGatherContract(
+        RadianceCacheFinalGatherContract *outContract,
+        std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      CachedHitLightingRepresentationContract cachedHitLighting{};
+      if (!TryGetCachedHitLightingRepresentationContract(&cachedHitLighting, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildRadianceCacheFinalGatherContract(
+          cachedHitLighting,
+          TemporalQualityTier::Medium,
+          true);
+      return true;
+    }
+    bool TryGetGiReflectionDebugVisualizationContract(
+        GiReflectionDebugVisualizationContract *outContract,
+        std::string *outError) const override
+    {
+      if (!outContract)
+        return false;
+
+      SceneTracingRepresentationContract tracing{};
+      CachedHitLightingRepresentationContract cachedHitLighting{};
+      RadianceCacheFinalGatherContract finalGather{};
+      if (!TryGetSceneTracingRepresentationContract(&tracing, outError) ||
+          !TryGetCachedHitLightingRepresentationContract(&cachedHitLighting, outError) ||
+          !TryGetRadianceCacheFinalGatherContract(&finalGather, outError))
+      {
+        *outContract = {};
+        return false;
+      }
+
+      *outContract = BuildGiReflectionDebugVisualizationContract(
+          tracing,
+          cachedHitLighting,
+          finalGather,
+          true);
+      return true;
+    }
     bool InvalidateGiHistory(GiHistoryResetReason reason, std::string *outError) override
     {
       if (!giHistory.Has(GiHistorySemantic::DiffuseIrradiance))
@@ -585,6 +631,25 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
   REQUIRE(vkCaps.supportsSceneTextureAbstractions);
   REQUIRE(vkCaps.supportsGiHistoryResources);
+}
+
+TEST_CASE("OpenGL backend reports final-gather and debug-visualization seams as unsupported",
+          "[renderer][foundation][backend][fallback]")
+{
+  OpenGLRenderBackend backend;
+  std::string error;
+  RadianceCacheFinalGatherContract finalGather{};
+  GiReflectionDebugVisualizationContract debugVisualization{};
+
+  REQUIRE_FALSE(backend.TryGetRadianceCacheFinalGatherContract(&finalGather, &error));
+  REQUIRE(error.find("unavailable on OpenGL backend") != std::string::npos);
+  REQUIRE(finalGather.validationStatus == RadianceCacheFinalGatherValidationStatus::DisabledBySettings);
+
+  error.clear();
+  REQUIRE_FALSE(backend.TryGetGiReflectionDebugVisualizationContract(&debugVisualization, &error));
+  REQUIRE(error.find("unavailable on OpenGL backend") != std::string::npos);
+  REQUIRE(debugVisualization.validationStatus ==
+          GiReflectionDebugVisualizationValidationStatus::DisabledBySettings);
 }
 
 TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
@@ -1132,6 +1197,135 @@ TEST_CASE("Cached hit-lighting contract expresses lifecycle and lookup integrati
   REQUIRE(ready.updatePolicy == CachedHitLightingUpdatePolicy::PerFrameBudgeted);
 }
 
+TEST_CASE("Radiance-cache final-gather contract encodes tier expectations and integration points",
+          "[renderer][foundation][temporal][tracing][cache][final-gather]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x111u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x112u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic,
+                    {RenderBackendId::Vulkan, 0x113u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x114u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x115u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x116u, 1280u, 720u, 1u});
+  sceneTextures.frameSerial = 140u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance, {RenderBackendId::Vulkan, 0x121u, 1280u, 720u, 4u});
+  history.Set(GiHistorySemantic::SpecularIrradiance, {RenderBackendId::Vulkan, 0x122u, 1280u, 720u, 4u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0x123u, 1280u, 720u, 4u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0x124u, 1280u, 720u, 4u});
+  history.revision = 33u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true, ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  const ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures, history, TemporalQualityTier::High, true);
+  const TemporalGiResolvePassContract resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  const LightingCompositePassContract composite = BuildLightingCompositePassContract(sceneTextures, resolve);
+  MeshDistanceFieldTracingStructure mesh{};
+  mesh.atlas = {RenderBackendId::Vulkan, 0x131u, 1280u, 720u, 1u};
+  GlobalDistanceFieldTracingStructure global{};
+  global.volume = {RenderBackendId::Vulkan, 0x132u, 1280u, 720u, 1u};
+  const SceneTracingRepresentationContract tracing = BuildSceneTracingRepresentationContract(
+      ssr, ssgi, resolve, mesh, global,
+      SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+      SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+      true);
+  const CachedHitLightingRepresentationContract cached = BuildCachedHitLightingRepresentationContract(
+      tracing,
+      composite,
+      {RenderBackendId::Vulkan, 0x141u, 1280u, 720u, 3u},
+      {RenderBackendId::Vulkan, 0x142u, 1280u, 720u, 3u},
+      3u,
+      8192u,
+      6144u,
+      CachedHitLightingCapturePolicy::ScreenSpaceMissesAndDisocclusions,
+      CachedHitLightingUpdatePolicy::PerFrameBudgeted,
+      CachedHitLightingInvalidationReason::None,
+      true);
+  REQUIRE(cached.validationStatus == CachedHitLightingRepresentationValidationStatus::Valid);
+
+  const RadianceCacheFinalGatherContract low = BuildRadianceCacheFinalGatherContract(
+      cached, TemporalQualityTier::Low, true);
+  const RadianceCacheFinalGatherContract high = BuildRadianceCacheFinalGatherContract(
+      cached, TemporalQualityTier::High, true);
+  REQUIRE(low.validationStatus == RadianceCacheFinalGatherValidationStatus::Valid);
+  REQUIRE(high.validationStatus == RadianceCacheFinalGatherValidationStatus::Valid);
+  REQUIRE(low.qualityExpectation.gatherSamplesPerPixel < high.qualityExpectation.gatherSamplesPerPixel);
+  REQUIRE(low.qualityExpectation.probeUpdateBudget < high.qualityExpectation.probeUpdateBudget);
+  REQUIRE(low.qualityExpectation.expectedMinCacheHitRatio <
+          high.qualityExpectation.expectedMinCacheHitRatio);
+  REQUIRE(high.UsesIntegrationPoint(RadianceCacheFinalGatherIntegrationPoint::LightingComposite));
+  REQUIRE(high.UsesIntegrationPoint(RadianceCacheFinalGatherIntegrationPoint::TemporalResolve));
+  REQUIRE(high.state == RadianceCacheFinalGatherState::Ready);
+  REQUIRE(high.IsValidForFinalGather());
+}
+
+TEST_CASE("GI/reflection debug visualization tracks cache and temporal view availability",
+          "[renderer][foundation][temporal][tracing][cache][debug]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0x211u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0x212u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::RoughnessMetallic, {RenderBackendId::Vulkan, 0x213u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::BaseColor, {RenderBackendId::Vulkan, 0x214u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Emissive, {RenderBackendId::Vulkan, 0x215u, 960u, 540u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0x216u, 960u, 540u, 1u});
+  sceneTextures.frameSerial = 12u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance, {RenderBackendId::Vulkan, 0x221u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::SpecularIrradiance, {RenderBackendId::Vulkan, 0x222u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Validation, {RenderBackendId::Vulkan, 0x223u, 960u, 540u, 2u});
+  history.Set(GiHistorySemantic::Moments, {RenderBackendId::Vulkan, 0x224u, 960u, 540u, 2u});
+  history.revision = 12u;
+  history.validForTemporalReuse = true;
+
+  const ScreenSpaceReflectionPassContract ssr = BuildScreenSpaceReflectionPassContract(
+      sceneTextures, history, TemporalQualityTier::Medium, true, ScreenSpaceReflectionMissPolicy::ProbeFallback);
+  const ScreenSpaceGlobalIlluminationPassContract ssgi = BuildScreenSpaceGlobalIlluminationPassContract(
+      sceneTextures, history, TemporalQualityTier::Medium, true);
+  const TemporalGiResolvePassContract resolve = BuildTemporalGiResolvePassContract(ssr, ssgi, history);
+  const LightingCompositePassContract composite = BuildLightingCompositePassContract(sceneTextures, resolve);
+  MeshDistanceFieldTracingStructure mesh{};
+  mesh.atlas = {RenderBackendId::Vulkan, 0x231u, 960u, 540u, 1u};
+  GlobalDistanceFieldTracingStructure global{};
+  global.volume = {RenderBackendId::Vulkan, 0x232u, 960u, 540u, 1u};
+  const SceneTracingRepresentationContract tracing = BuildSceneTracingRepresentationContract(
+      ssr, ssgi, resolve, mesh, global,
+      SceneTracingRepresentationOwnership::BackendOwnedPersistent,
+      SceneTracingRepresentationUpdatePolicy::PerFrameAndSceneBarrier,
+      true);
+  const CachedHitLightingRepresentationContract cached = BuildCachedHitLightingRepresentationContract(
+      tracing,
+      composite,
+      {RenderBackendId::Vulkan, 0x241u, 960u, 540u, 4u},
+      {RenderBackendId::Vulkan, 0x242u, 960u, 540u, 4u},
+      4u,
+      4096u,
+      3072u,
+      CachedHitLightingCapturePolicy::ScreenSpaceMissesAndDisocclusions,
+      CachedHitLightingUpdatePolicy::PerFrameBudgeted,
+      CachedHitLightingInvalidationReason::None,
+      true);
+  const RadianceCacheFinalGatherContract finalGather = BuildRadianceCacheFinalGatherContract(
+      cached, TemporalQualityTier::Medium, true);
+  const GiReflectionDebugVisualizationContract debug = BuildGiReflectionDebugVisualizationContract(
+      tracing, cached, finalGather, true);
+
+  REQUIRE(debug.validationStatus == GiReflectionDebugVisualizationValidationStatus::Valid);
+  REQUIRE(debug.IsAnyViewAvailable());
+  REQUIRE(debug.state.Supports(GiReflectionDebugView::SceneTracingCoverage));
+  REQUIRE(debug.state.Supports(GiReflectionDebugView::ReflectionHistory));
+  REQUIRE(debug.state.Supports(GiReflectionDebugView::RadianceCacheResidency));
+  REQUIRE(debug.state.Supports(GiReflectionDebugView::TemporalStability));
+  REQUIRE(debug.state.giCacheVisualizationReady);
+  REQUIRE(debug.state.reflectionVisualizationReady);
+  REQUIRE(debug.state.temporalBehaviorVisible);
+}
+
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
           "[renderer][foundation][abstractions]")
 {
@@ -1204,6 +1398,16 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   REQUIRE((cachedHitLightingContract.state == CachedHitLightingRepresentationState::Warmup ||
            cachedHitLightingContract.state == CachedHitLightingRepresentationState::Ready ||
            cachedHitLightingContract.state == CachedHitLightingRepresentationState::Invalidated));
+  RadianceCacheFinalGatherContract finalGatherContract{};
+  REQUIRE(Renderer::TryGetRadianceCacheFinalGatherContract(&finalGatherContract, &error));
+  REQUIRE(finalGatherContract.validationStatus == RadianceCacheFinalGatherValidationStatus::Valid);
+  REQUIRE(finalGatherContract.UsesIntegrationPoint(
+      RadianceCacheFinalGatherIntegrationPoint::LightingComposite));
+  GiReflectionDebugVisualizationContract debugVisualization{};
+  REQUIRE(Renderer::TryGetGiReflectionDebugVisualizationContract(&debugVisualization, &error));
+  REQUIRE(debugVisualization.validationStatus ==
+          GiReflectionDebugVisualizationValidationStatus::Valid);
+  REQUIRE(debugVisualization.IsAnyViewAvailable());
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

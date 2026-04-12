@@ -1618,4 +1618,364 @@ namespace Monolith
     return contract;
   }
 
+  enum class RadianceCacheFinalGatherIntegrationPoint : uint8_t
+  {
+    None = 0,
+    SsrMiss = 1u << 0u,
+    SsgiMiss = 1u << 1u,
+    LightingComposite = 1u << 2u,
+    TemporalResolve = 1u << 3u,
+  };
+
+  inline uint8_t RadianceCacheFinalGatherIntegrationMask(
+      RadianceCacheFinalGatherIntegrationPoint point)
+  {
+    return static_cast<uint8_t>(point);
+  }
+
+  enum class RadianceCacheFinalGatherValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingCachedHitLightingContract,
+    MissingSceneTracingRepresentation,
+    MissingCacheSurface,
+    BackendMismatch,
+    DimensionMismatch,
+  };
+
+  enum class RadianceCacheFinalGatherState : uint8_t
+  {
+    Disabled = 0,
+    Unavailable,
+    Warmup,
+    Ready,
+  };
+
+  struct RadianceCacheFinalGatherTierExpectation
+  {
+    TemporalQualityTier tier = TemporalQualityTier::Disabled;
+    uint32_t gatherSamplesPerPixel = 0;
+    uint32_t probeUpdateBudget = 0;
+    uint32_t raysPerProbe = 0;
+    float expectedMinCacheHitRatio = 0.0f;
+    float expectedTemporalReuse = 0.0f;
+  };
+
+  inline RadianceCacheFinalGatherTierExpectation
+  BuildRadianceCacheFinalGatherTierExpectation(TemporalQualityTier tier)
+  {
+    RadianceCacheFinalGatherTierExpectation expectation{};
+    expectation.tier = tier;
+    switch (tier)
+    {
+    case TemporalQualityTier::Disabled:
+      expectation.gatherSamplesPerPixel = 0;
+      expectation.probeUpdateBudget = 0;
+      expectation.raysPerProbe = 0;
+      expectation.expectedMinCacheHitRatio = 0.0f;
+      expectation.expectedTemporalReuse = 0.0f;
+      break;
+    case TemporalQualityTier::Low:
+      expectation.gatherSamplesPerPixel = 1;
+      expectation.probeUpdateBudget = 96;
+      expectation.raysPerProbe = 4;
+      expectation.expectedMinCacheHitRatio = 0.20f;
+      expectation.expectedTemporalReuse = 0.10f;
+      break;
+    case TemporalQualityTier::Medium:
+      expectation.gatherSamplesPerPixel = 2;
+      expectation.probeUpdateBudget = 192;
+      expectation.raysPerProbe = 8;
+      expectation.expectedMinCacheHitRatio = 0.35f;
+      expectation.expectedTemporalReuse = 0.30f;
+      break;
+    case TemporalQualityTier::High:
+      expectation.gatherSamplesPerPixel = 4;
+      expectation.probeUpdateBudget = 320;
+      expectation.raysPerProbe = 12;
+      expectation.expectedMinCacheHitRatio = 0.50f;
+      expectation.expectedTemporalReuse = 0.55f;
+      break;
+    case TemporalQualityTier::Ultra:
+      expectation.gatherSamplesPerPixel = 6;
+      expectation.probeUpdateBudget = 512;
+      expectation.raysPerProbe = 16;
+      expectation.expectedMinCacheHitRatio = 0.65f;
+      expectation.expectedTemporalReuse = 0.70f;
+      break;
+    }
+    return expectation;
+  }
+
+  struct RadianceCacheFinalGatherDebugState
+  {
+    bool temporalAccumulationActive = false;
+    bool fallbackActive = false;
+    bool finalGatherReady = false;
+    uint32_t captureBudget = 0;
+    uint32_t capturesCommitted = 0;
+    float cacheResidencyRatio = 0.0f;
+    float estimatedHitRatio = 0.0f;
+    GiHistoryResetReason lastGiHistoryResetReason = GiHistoryResetReason::None;
+    CachedHitLightingInvalidationReason lastCacheInvalidationReason =
+        CachedHitLightingInvalidationReason::None;
+    SsrExecutionStatus ssrExecutionStatus = SsrExecutionStatus::Disabled;
+    SsgiExecutionStatus ssgiExecutionStatus = SsgiExecutionStatus::Disabled;
+    TemporalGiResolveExecutionStatus temporalResolveExecutionStatus =
+        TemporalGiResolveExecutionStatus::Disabled;
+  };
+
+  struct RadianceCacheFinalGatherContract
+  {
+    CachedHitLightingRepresentationContract cachedHitLighting{};
+    SceneTracingRepresentationContract sceneTracing{};
+    BackendResourceHandle radianceCache{};
+    BackendResourceHandle momentsCache{};
+    uint64_t sceneFrameSerial = 0;
+    uint64_t historyRevision = 0;
+    uint64_t cacheRevision = 0;
+    uint8_t integrationMask = 0;
+    RadianceCacheFinalGatherTierExpectation qualityExpectation{};
+    RadianceCacheFinalGatherDebugState debug{};
+    RadianceCacheFinalGatherValidationStatus validationStatus =
+        RadianceCacheFinalGatherValidationStatus::DisabledBySettings;
+    RadianceCacheFinalGatherState state = RadianceCacheFinalGatherState::Unavailable;
+
+    bool UsesIntegrationPoint(RadianceCacheFinalGatherIntegrationPoint point) const
+    {
+      return (integrationMask & RadianceCacheFinalGatherIntegrationMask(point)) != 0u;
+    }
+
+    bool IsValidForFinalGather() const
+    {
+      return validationStatus == RadianceCacheFinalGatherValidationStatus::Valid &&
+             state == RadianceCacheFinalGatherState::Ready;
+    }
+  };
+
+  inline RadianceCacheFinalGatherContract BuildRadianceCacheFinalGatherContract(
+      const CachedHitLightingRepresentationContract& cachedHitLightingContract,
+      TemporalQualityTier tier,
+      bool enabled)
+  {
+    RadianceCacheFinalGatherContract contract{};
+    contract.cachedHitLighting = cachedHitLightingContract;
+    contract.sceneTracing = cachedHitLightingContract.sceneTracing;
+    contract.radianceCache = cachedHitLightingContract.radianceCache;
+    contract.momentsCache = cachedHitLightingContract.momentsCache;
+    contract.sceneFrameSerial = cachedHitLightingContract.sceneFrameSerial;
+    contract.historyRevision = cachedHitLightingContract.historyRevision;
+    contract.cacheRevision = cachedHitLightingContract.cacheRevision;
+    contract.qualityExpectation = BuildRadianceCacheFinalGatherTierExpectation(tier);
+    contract.debug.captureBudget = cachedHitLightingContract.debug.captureBudget;
+    contract.debug.capturesCommitted = cachedHitLightingContract.debug.capturesCommitted;
+    contract.debug.estimatedHitRatio = cachedHitLightingContract.debug.estimatedHitRatio;
+    contract.debug.lastCacheInvalidationReason = cachedHitLightingContract.debug.lastInvalidationReason;
+    contract.debug.lastGiHistoryResetReason =
+        cachedHitLightingContract.sceneTracing.debug.lastHistoryResetReason;
+    contract.debug.ssrExecutionStatus = cachedHitLightingContract.sceneTracing.debug.ssrExecutionStatus;
+    contract.debug.ssgiExecutionStatus = cachedHitLightingContract.sceneTracing.debug.ssgiExecutionStatus;
+    contract.debug.temporalResolveExecutionStatus =
+        cachedHitLightingContract.sceneTracing.debug.temporalResolveExecutionStatus;
+    contract.debug.temporalAccumulationActive =
+        cachedHitLightingContract.sceneTracing.temporalResolve.executionStatus ==
+        TemporalGiResolveExecutionStatus::ResolveAndAccumulate;
+    contract.integrationMask =
+        RadianceCacheFinalGatherIntegrationMask(RadianceCacheFinalGatherIntegrationPoint::LightingComposite) |
+        RadianceCacheFinalGatherIntegrationMask(RadianceCacheFinalGatherIntegrationPoint::TemporalResolve);
+    if (cachedHitLightingContract.lookupPolicy.Uses(CachedHitLightingLookupIntegrationPoint::SsrMiss))
+    {
+      contract.integrationMask |=
+          RadianceCacheFinalGatherIntegrationMask(RadianceCacheFinalGatherIntegrationPoint::SsrMiss);
+    }
+    if (cachedHitLightingContract.lookupPolicy.Uses(CachedHitLightingLookupIntegrationPoint::SsgiMiss))
+    {
+      contract.integrationMask |=
+          RadianceCacheFinalGatherIntegrationMask(RadianceCacheFinalGatherIntegrationPoint::SsgiMiss);
+    }
+
+    if (!enabled || tier == TemporalQualityTier::Disabled)
+    {
+      contract.state = RadianceCacheFinalGatherState::Disabled;
+      contract.validationStatus = RadianceCacheFinalGatherValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    if (cachedHitLightingContract.validationStatus !=
+        CachedHitLightingRepresentationValidationStatus::Valid)
+    {
+      contract.state = RadianceCacheFinalGatherState::Unavailable;
+      contract.validationStatus =
+          RadianceCacheFinalGatherValidationStatus::MissingCachedHitLightingContract;
+      return contract;
+    }
+
+    if (!cachedHitLightingContract.sceneTracing.IsValidForOffscreenQueries())
+    {
+      contract.state = RadianceCacheFinalGatherState::Unavailable;
+      contract.validationStatus =
+          RadianceCacheFinalGatherValidationStatus::MissingSceneTracingRepresentation;
+      return contract;
+    }
+
+    if (!contract.radianceCache.IsValid() || !contract.momentsCache.IsValid())
+    {
+      contract.state = RadianceCacheFinalGatherState::Unavailable;
+      contract.validationStatus = RadianceCacheFinalGatherValidationStatus::MissingCacheSurface;
+      return contract;
+    }
+
+    if (contract.sceneTracing.referenceDepth.backendId != contract.radianceCache.backendId ||
+        contract.sceneTracing.referenceDepth.backendId != contract.momentsCache.backendId)
+    {
+      contract.state = RadianceCacheFinalGatherState::Unavailable;
+      contract.validationStatus = RadianceCacheFinalGatherValidationStatus::BackendMismatch;
+      return contract;
+    }
+
+    if (contract.sceneTracing.referenceDepth.width != contract.radianceCache.width ||
+        contract.sceneTracing.referenceDepth.height != contract.radianceCache.height ||
+        contract.sceneTracing.referenceDepth.width != contract.momentsCache.width ||
+        contract.sceneTracing.referenceDepth.height != contract.momentsCache.height)
+    {
+      contract.state = RadianceCacheFinalGatherState::Unavailable;
+      contract.validationStatus = RadianceCacheFinalGatherValidationStatus::DimensionMismatch;
+      return contract;
+    }
+
+    contract.validationStatus = RadianceCacheFinalGatherValidationStatus::Valid;
+    if (cachedHitLightingContract.maxSurfaceCount > 0u)
+    {
+      contract.debug.cacheResidencyRatio =
+          static_cast<float>(cachedHitLightingContract.residentSurfaceCount) /
+          static_cast<float>(cachedHitLightingContract.maxSurfaceCount);
+    }
+    contract.debug.fallbackActive =
+        cachedHitLightingContract.state == CachedHitLightingRepresentationState::Invalidated ||
+        cachedHitLightingContract.state == CachedHitLightingRepresentationState::Warmup;
+    contract.state = contract.debug.fallbackActive
+                         ? RadianceCacheFinalGatherState::Warmup
+                         : RadianceCacheFinalGatherState::Ready;
+    contract.debug.finalGatherReady = contract.state == RadianceCacheFinalGatherState::Ready;
+    return contract;
+  }
+
+  enum class GiReflectionDebugView : uint8_t
+  {
+    None = 0,
+    RadianceCacheResidency = 1u << 0u,
+    ReflectionHistory = 1u << 1u,
+    TemporalStability = 1u << 2u,
+    SceneTracingCoverage = 1u << 3u,
+  };
+
+  inline uint8_t GiReflectionDebugViewMask(GiReflectionDebugView view)
+  {
+    return static_cast<uint8_t>(view);
+  }
+
+  enum class GiReflectionDebugVisualizationValidationStatus : uint8_t
+  {
+    DisabledBySettings = 0,
+    Valid,
+    MissingSceneTracingRepresentation,
+    MissingCachedHitLightingContract,
+  };
+
+  struct GiReflectionDebugVisualizationState
+  {
+    uint8_t availableViews = 0;
+    bool giCacheVisualizationReady = false;
+    bool reflectionVisualizationReady = false;
+    bool temporalBehaviorVisible = false;
+    bool temporalStable = false;
+    CachedHitLightingRepresentationState cacheState = CachedHitLightingRepresentationState::Unavailable;
+    CachedHitLightingInvalidationReason cacheInvalidationReason =
+        CachedHitLightingInvalidationReason::None;
+    GiHistoryResetReason historyResetReason = GiHistoryResetReason::None;
+    SsrExecutionStatus ssrExecutionStatus = SsrExecutionStatus::Disabled;
+    SsgiExecutionStatus ssgiExecutionStatus = SsgiExecutionStatus::Disabled;
+    TemporalGiResolveExecutionStatus temporalResolveExecutionStatus =
+        TemporalGiResolveExecutionStatus::Disabled;
+
+    bool Supports(GiReflectionDebugView view) const
+    {
+      return (availableViews & GiReflectionDebugViewMask(view)) != 0u;
+    }
+  };
+
+  struct GiReflectionDebugVisualizationContract
+  {
+    SceneTracingRepresentationContract sceneTracing{};
+    CachedHitLightingRepresentationContract cachedHitLighting{};
+    RadianceCacheFinalGatherContract finalGather{};
+    GiReflectionDebugVisualizationState state{};
+    GiReflectionDebugVisualizationValidationStatus validationStatus =
+        GiReflectionDebugVisualizationValidationStatus::DisabledBySettings;
+
+    bool IsAnyViewAvailable() const { return state.availableViews != 0u; }
+  };
+
+  inline GiReflectionDebugVisualizationContract BuildGiReflectionDebugVisualizationContract(
+      const SceneTracingRepresentationContract& sceneTracingContract,
+      const CachedHitLightingRepresentationContract& cachedHitLightingContract,
+      const RadianceCacheFinalGatherContract& finalGatherContract,
+      bool enabled)
+  {
+    GiReflectionDebugVisualizationContract contract{};
+    contract.sceneTracing = sceneTracingContract;
+    contract.cachedHitLighting = cachedHitLightingContract;
+    contract.finalGather = finalGatherContract;
+    contract.state.cacheState = cachedHitLightingContract.state;
+    contract.state.cacheInvalidationReason = cachedHitLightingContract.debug.lastInvalidationReason;
+    contract.state.historyResetReason = sceneTracingContract.debug.lastHistoryResetReason;
+    contract.state.ssrExecutionStatus = sceneTracingContract.debug.ssrExecutionStatus;
+    contract.state.ssgiExecutionStatus = sceneTracingContract.debug.ssgiExecutionStatus;
+    contract.state.temporalResolveExecutionStatus =
+        sceneTracingContract.debug.temporalResolveExecutionStatus;
+    contract.state.temporalStable = sceneTracingContract.debug.temporalHistoryStable;
+
+    if (!enabled)
+    {
+      contract.validationStatus = GiReflectionDebugVisualizationValidationStatus::DisabledBySettings;
+      return contract;
+    }
+
+    if (sceneTracingContract.validationStatus != SceneTracingRepresentationValidationStatus::Valid)
+    {
+      contract.validationStatus =
+          GiReflectionDebugVisualizationValidationStatus::MissingSceneTracingRepresentation;
+      return contract;
+    }
+    if (cachedHitLightingContract.validationStatus !=
+        CachedHitLightingRepresentationValidationStatus::Valid)
+    {
+      contract.validationStatus =
+          GiReflectionDebugVisualizationValidationStatus::MissingCachedHitLightingContract;
+      return contract;
+    }
+
+    contract.validationStatus = GiReflectionDebugVisualizationValidationStatus::Valid;
+    contract.state.availableViews =
+        GiReflectionDebugViewMask(GiReflectionDebugView::SceneTracingCoverage) |
+        GiReflectionDebugViewMask(GiReflectionDebugView::ReflectionHistory);
+    if (cachedHitLightingContract.debug.cacheAllocated)
+    {
+      contract.state.availableViews |=
+          GiReflectionDebugViewMask(GiReflectionDebugView::RadianceCacheResidency);
+      contract.state.giCacheVisualizationReady = true;
+    }
+    if (sceneTracingContract.ssr.validationStatus == SsrInputValidationStatus::Valid)
+      contract.state.reflectionVisualizationReady = true;
+    if (sceneTracingContract.temporalResolve.validationStatus ==
+        TemporalGiResolveValidationStatus::Valid)
+    {
+      contract.state.temporalBehaviorVisible = true;
+      contract.state.availableViews |=
+          GiReflectionDebugViewMask(GiReflectionDebugView::TemporalStability);
+    }
+    return contract;
+  }
+
 } // namespace Monolith

@@ -64,6 +64,12 @@ class IRenderBackend {
   virtual bool TryGetCachedHitLightingRepresentationContract(
       CachedHitLightingRepresentationContract* outContract,
       std::string* outError) const = 0;
+  virtual bool TryGetRadianceCacheFinalGatherContract(
+      RadianceCacheFinalGatherContract* outContract,
+      std::string* outError) const = 0;
+  virtual bool TryGetGiReflectionDebugVisualizationContract(
+      GiReflectionDebugVisualizationContract* outContract,
+      std::string* outError) const = 0;
   virtual bool InvalidateGiHistory(GiHistoryResetReason reason,
                                    std::string* outError) = 0;
 };

@@ -270,6 +270,20 @@ namespace Monolith
     return ActiveBackend()->TryGetCachedHitLightingRepresentationContract(outContract, outError);
   }
 
+  bool Renderer::TryGetRadianceCacheFinalGatherContract(
+      RadianceCacheFinalGatherContract *outContract,
+      std::string *outError)
+  {
+    return ActiveBackend()->TryGetRadianceCacheFinalGatherContract(outContract, outError);
+  }
+
+  bool Renderer::TryGetGiReflectionDebugVisualizationContract(
+      GiReflectionDebugVisualizationContract *outContract,
+      std::string *outError)
+  {
+    return ActiveBackend()->TryGetGiReflectionDebugVisualizationContract(outContract, outError);
+  }
+
   bool Renderer::TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
                                                           std::string *outError)
   {
