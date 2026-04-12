@@ -39,8 +39,8 @@ class HoroEditorApp final : public Application {
   static AppSpec BuildSpec() {
     AppSpec spec;
     spec.name = "Horo Editor";
-    spec.width = 1720;
-    spec.height = 980;
+    spec.width = 1440;
+    spec.height = 920;
     spec.vsync = true;
     spec.graphicsApi = WindowGraphicsApi::OpenGL;
     return spec;

@@ -61,7 +61,7 @@ class StandaloneEditorShell {
   std::array<char, 512> m_openProjectInput{};
   std::array<char, 256> m_newProjectNameInput{};
   std::array<char, 512> m_newProjectPathInput{};
-  LauncherPanel m_launcherPanel = LauncherPanel::OpenExistingProject;
+  LauncherPanel m_launcherPanel = LauncherPanel::CreateNewProject;
 
   void ConfigureRuntimeCallbacks();
   void HandlePendingSceneReload();
