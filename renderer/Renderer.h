@@ -80,6 +80,8 @@ namespace Monolith
                                          std::string *outError = nullptr);
     static bool TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
                                        std::string *outError = nullptr);
+    static bool TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
+                                                        std::string *outError = nullptr);
     static bool InvalidateGiHistory(GiHistoryResetReason reason,
                                     std::string *outError = nullptr);
 

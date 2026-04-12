@@ -184,6 +184,8 @@ namespace Monolith
     bool m_passActive = false;
     SceneTextureCatalog m_sceneTextureCatalog;
     GiHistoryCatalog m_giHistoryCatalog;
+    TemporalHistoryState m_lastTemporalHistoryState;
+    bool m_hasTemporalHistoryState = false;
   };
 
 } // namespace Monolith

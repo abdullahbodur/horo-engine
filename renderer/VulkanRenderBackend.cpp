@@ -881,6 +881,8 @@ namespace Monolith
 
     ++m_giHistoryCatalog.revision;
     m_giHistoryCatalog.lastResetReason = GiHistoryResetReason::None;
+    m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
+    m_giHistoryCatalog.validForTemporalReuse = false;
     return true;
   }
 
@@ -945,6 +947,8 @@ namespace Monolith
 
     ++m_giHistoryCatalog.revision;
     m_giHistoryCatalog.lastResetReason = reason;
+    m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
+    m_giHistoryCatalog.validForTemporalReuse = false;
     return true;
   }
 
@@ -1840,6 +1844,8 @@ namespace Monolith
     m_passActive = false;
     m_sceneTextureCatalog = {};
     m_giHistoryCatalog = {};
+    m_lastTemporalHistoryState = {};
+    m_hasTemporalHistoryState = false;
   }
 
   void VulkanRenderBackend::DestroySwapchain()
@@ -3724,6 +3730,19 @@ namespace Monolith
     }
 
     m_activeFrame = frame;
+    const TemporalHistoryState currentTemporalHistoryState = BuildTemporalHistoryState(frame.temporal);
+    if (m_hasTemporalHistoryState)
+    {
+      const GiHistoryResetReason resetReason =
+          DetermineGiHistoryResetReason(m_lastTemporalHistoryState, currentTemporalHistoryState);
+      if (resetReason != GiHistoryResetReason::None &&
+          m_giHistoryCatalog.Has(GiHistorySemantic::DiffuseIrradiance))
+      {
+        InvalidateGiHistory(resetReason, nullptr);
+      }
+    }
+    m_lastTemporalHistoryState = currentTemporalHistoryState;
+    m_hasTemporalHistoryState = true;
     m_activeView = {};
     if (m_pendingOpaqueDraws.capacity() < 256)
       m_pendingOpaqueDraws.reserve(256);
@@ -3804,6 +3823,11 @@ namespace Monolith
     m_pendingOpaqueDraws.clear();
     m_pendingOverlayRenderCallback = nullptr;
     m_pendingOverlayRenderUserData = nullptr;
+    if (m_giHistoryCatalog.Has(GiHistorySemantic::DiffuseIrradiance))
+    {
+      m_giHistoryCatalog.ownerState = m_lastTemporalHistoryState;
+      m_giHistoryCatalog.validForTemporalReuse = m_lastTemporalHistoryState.temporalEnabled;
+    }
   }
 
   void VulkanRenderBackend::BeginPass(const RenderPassConfig &pass)

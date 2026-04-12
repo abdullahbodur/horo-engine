@@ -180,6 +180,7 @@ namespace
       }
       ++giHistory.revision;
       giHistory.lastResetReason = GiHistoryResetReason::None;
+      giHistory.validForTemporalReuse = false;
       return true;
     }
     bool TryGetGiHistoryCatalog(GiHistoryCatalog *outCatalog,
@@ -215,6 +216,7 @@ namespace
       }
       ++giHistory.revision;
       giHistory.lastResetReason = reason;
+      giHistory.validForTemporalReuse = false;
       return true;
     }
     std::vector<std::string> events;
@@ -305,6 +307,33 @@ TEST_CASE("Renderer forwards frame output config through the backend seam",
   REQUIRE(backend.lastFrame.clearDepthBuffer);
 
   Renderer::ResetBackend();
+}
+
+TEST_CASE("Temporal jitter sequence is deterministic and tier-aware",
+          "[renderer][foundation][temporal]")
+{
+  TemporalJitterConfig jitter{};
+  jitter.enabled = true;
+  jitter.qualityTier = TemporalQualityTier::Medium;
+  jitter.sequenceSeed = 7u;
+  jitter.sequenceLength = 8u;
+  jitter.frameIndex = 5u;
+
+  const Vec2 sampleA = BuildTemporalJitterOffset(jitter);
+  const Vec2 sampleB = BuildTemporalJitterOffset(jitter);
+  REQUIRE(sampleA == sampleB);
+
+  TemporalJitterConfig differentFrame = jitter;
+  differentFrame.frameIndex = jitter.frameIndex + 1u;
+  const Vec2 sampleNext = BuildTemporalJitterOffset(differentFrame);
+  REQUIRE(sampleA != sampleNext);
+
+  TemporalJitterConfig disabled = jitter;
+  disabled.enabled = false;
+  REQUIRE(BuildTemporalJitterOffset(disabled) == Vec2::Zero());
+
+  REQUIRE(TemporalJitterSampleCountForTier(TemporalQualityTier::Low) <
+          TemporalJitterSampleCountForTier(TemporalQualityTier::High));
 }
 
 TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection",
@@ -461,11 +490,93 @@ TEST_CASE("Scene texture and GI history catalogs stay backend-neutral and typed"
               {RenderBackendId::Vulkan, 0xB2u, 960u, 540u, 8u});
   history.lastResetReason = GiHistoryResetReason::CameraCut;
   history.revision = 42u;
+  history.validForTemporalReuse = true;
 
   REQUIRE(history.Has(GiHistorySemantic::DiffuseIrradiance));
   REQUIRE(history.Get(GiHistorySemantic::DiffuseIrradiance).resourceId == 0xB1u);
   REQUIRE(history.lastResetReason == GiHistoryResetReason::CameraCut);
   REQUIRE(history.revision == 42u);
+  REQUIRE(history.validForTemporalReuse);
+}
+
+TEST_CASE("Temporal reprojection input contract validates motion and history seams",
+          "[renderer][foundation][temporal]")
+{
+  SceneTextureCatalog sceneTextures{};
+  sceneTextures.Set(SceneTextureSemantic::Depth, {RenderBackendId::Vulkan, 0xD1u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::Normal, {RenderBackendId::Vulkan, 0xD2u, 1280u, 720u, 1u});
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {RenderBackendId::Vulkan, 0xD3u, 1280u, 720u, 1u});
+  sceneTextures.frameSerial = 9u;
+
+  GiHistoryCatalog history{};
+  history.Set(GiHistorySemantic::DiffuseIrradiance,
+              {RenderBackendId::Vulkan, 0xE1u, 1280u, 720u, 4u});
+  history.revision = 10u;
+  history.validForTemporalReuse = true;
+
+  const TemporalReprojectionInputContract valid =
+      BuildTemporalReprojectionInputContract(sceneTextures, history);
+  REQUIRE(valid.IsValid());
+  REQUIRE(valid.validationStatus == TemporalInputValidationStatus::Valid);
+  REQUIRE(valid.motionVectors.resourceId == 0xD3u);
+  REQUIRE(valid.historySurface.resourceId == 0xE1u);
+  REQUIRE(valid.sceneFrameSerial == 9u);
+  REQUIRE(valid.historyRevision == 10u);
+
+  sceneTextures.Set(SceneTextureSemantic::MotionVector, {});
+  const TemporalReprojectionInputContract missingMotion =
+      BuildTemporalReprojectionInputContract(sceneTextures, history);
+  REQUIRE_FALSE(missingMotion.IsValid());
+  REQUIRE(missingMotion.validationStatus == TemporalInputValidationStatus::MissingMotionVectors);
+}
+
+TEST_CASE("Temporal history reset reasons stay deterministic across scene and camera changes",
+          "[renderer][foundation][temporal]")
+{
+  RenderFrameTemporalState baseline{};
+  baseline.enableTemporalReprojection = true;
+  baseline.sceneToken = 11u;
+  baseline.cameraToken = 17u;
+  baseline.renderWidth = 1920u;
+  baseline.renderHeight = 1080u;
+  baseline.jitter.enabled = true;
+  baseline.jitter.qualityTier = TemporalQualityTier::High;
+  baseline.jitter.sequenceSeed = 2u;
+  baseline.jitter.sequenceLength = 16u;
+
+  TemporalHistoryState previous = BuildTemporalHistoryState(baseline);
+  TemporalHistoryState current = BuildTemporalHistoryState(baseline);
+  REQUIRE(DetermineGiHistoryResetReason(previous, current) == GiHistoryResetReason::None);
+
+  RenderFrameTemporalState resized = baseline;
+  resized.renderWidth = 1280u;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(resized)) ==
+          GiHistoryResetReason::ViewportResize);
+
+  RenderFrameTemporalState sceneChanged = baseline;
+  sceneChanged.sceneToken = baseline.sceneToken + 1u;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(sceneChanged)) ==
+          GiHistoryResetReason::SceneBarrier);
+
+  RenderFrameTemporalState cameraChanged = baseline;
+  cameraChanged.cameraToken = baseline.cameraToken + 1u;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(cameraChanged)) ==
+          GiHistoryResetReason::CameraCut);
+
+  RenderFrameTemporalState jitterChanged = baseline;
+  jitterChanged.jitter.sequenceSeed = baseline.jitter.sequenceSeed + 1u;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(jitterChanged)) ==
+          GiHistoryResetReason::CameraJitterSequenceChanged);
+
+  RenderFrameTemporalState disabled = baseline;
+  disabled.enableTemporalReprojection = false;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(disabled)) ==
+          GiHistoryResetReason::TemporalDisabled);
+
+  RenderFrameTemporalState forcedReset = baseline;
+  forcedReset.forceHistoryReset = true;
+  REQUIRE(DetermineGiHistoryResetReason(previous, BuildTemporalHistoryState(forcedReset)) ==
+          GiHistoryResetReason::SceneBarrier);
 }
 
 TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
@@ -476,7 +587,7 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
 
   std::string error;
   REQUIRE(Renderer::EnsureSceneTextureResources(128u, 72u, &error));
-  REQUIRE(Renderer::EnsureGiHistoryResources(64u, 64u, &error));
+  REQUIRE(Renderer::EnsureGiHistoryResources(128u, 72u, &error));
 
   SceneTextureCatalog sceneTextures{};
   REQUIRE(Renderer::TryGetSceneTextureCatalog(&sceneTextures, &error));
@@ -489,6 +600,10 @@ TEST_CASE("Renderer forwards scene texture and GI history abstraction seams",
   GiHistoryCatalog giHistory{};
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   const uint64_t initialGeneration = giHistory.Get(GiHistorySemantic::DiffuseIrradiance).generation;
+  TemporalReprojectionInputContract temporalInputs{};
+  REQUIRE(Renderer::TryGetTemporalReprojectionInputContract(&temporalInputs, &error));
+  REQUIRE(temporalInputs.IsValid());
+  REQUIRE(temporalInputs.motionVectors.IsValid());
   REQUIRE(Renderer::InvalidateGiHistory(GiHistoryResetReason::SceneBarrier, &error));
   REQUIRE(Renderer::TryGetGiHistoryCatalog(&giHistory, &error));
   REQUIRE(giHistory.lastResetReason == GiHistoryResetReason::SceneBarrier);

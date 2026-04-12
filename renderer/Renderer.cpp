@@ -231,6 +231,29 @@ namespace Monolith
     return ActiveBackend()->TryGetGiHistoryCatalog(outCatalog, outError);
   }
 
+  bool Renderer::TryGetTemporalReprojectionInputContract(TemporalReprojectionInputContract *outContract,
+                                                          std::string *outError)
+  {
+    if (!outContract)
+      return false;
+
+    SceneTextureCatalog sceneTextures{};
+    if (!TryGetSceneTextureCatalog(&sceneTextures, outError))
+      return false;
+
+    GiHistoryCatalog history{};
+    if (!TryGetGiHistoryCatalog(&history, outError))
+      return false;
+
+    *outContract = BuildTemporalReprojectionInputContract(sceneTextures, history);
+    if (outContract->IsValid())
+      return true;
+
+    if (outError)
+      *outError = ToString(outContract->validationStatus);
+    return false;
+  }
+
   bool Renderer::InvalidateGiHistory(GiHistoryResetReason reason,
                                      std::string *outError)
   {
