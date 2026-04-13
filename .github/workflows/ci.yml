@@ -48,20 +48,27 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
-      - name: Run UI Automation (no recording)
+      - name: Run UI Automation (headless log mode)
         run: |
           set -o pipefail
           log_file="ui_test_output/horo_ui_test_macos.log"
+          echo "Starting macOS UI automation in non-recording mode (no forced GUI)."
+          (
+            while true; do
+              echo "[macos-ui] still running at $(date -u '+%H:%M:%S')"
+              sleep 30
+            done
+          ) &
+          heartbeat_pid=$!
+          cleanup() {
+            kill "$heartbeat_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
           set +e
           build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
           ui_exit=${PIPESTATUS[0]}
           set -e
           if [ "$ui_exit" -ne 0 ]; then
-            if grep -q "glfwCreateWindow failed" "$log_file"; then
-              echo "::warning::UI automation skipped on macOS runner: unable to create GLFW window in headless environment."
-              echo "Detected glfwCreateWindow failure; treating this as a non-fatal skip."
-              exit 0
-            fi
             echo "UI automation failed on macOS with exit code $ui_exit."
             exit "$ui_exit"
           fi
@@ -101,6 +108,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install FFmpeg
+        shell: pwsh
+        run: choco install ffmpeg -y --no-progress
+
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
@@ -126,17 +137,19 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
 
-      - name: Run UI Automation (stable mode)
+      - name: Run UI Automation (windowed capture + video)
         shell: pwsh
         run: |
-          $env:MONOLITH_UI_TEST_CAPTURE = "0"
-          $env:MONOLITH_UI_TEST_VIDEO = "0"
-          $env:MONOLITH_UI_TEST_RECORDING = "0"
+          $env:MONOLITH_UI_TEST_CAPTURE = "1"
+          $env:MONOLITH_UI_TEST_VIDEO = "1"
+          $env:MONOLITH_UI_TEST_RECORDING = "1"
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_DELAY_MS = "100"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
+          $env:MONOLITH_UI_TEST_FFMPEG_PATH = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
           $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
+          Write-Host "Starting Windows UI automation with capture/video enabled."
           $proc = Start-Process `
             -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
             -ArgumentList "--run-ui-tests" `
@@ -144,23 +157,51 @@ jobs:
             -PassThru `
             -RedirectStandardOutput $stdoutLog `
             -RedirectStandardError $stderrLog
-          if (-not $proc.WaitForExit(240000)) {
-            try { $proc.Kill($true) } catch {}
-            Write-Warning "HoroEditorUiTest timed out after 240s. Treating UI automation as non-blocking on Windows. See $stdoutLog and $stderrLog"
-            Add-Content -Path $env:GITHUB_ENV -Value "UI_AUTOMATION_UNSTABLE_WINDOWS=1"
-            Write-Host "::warning::HoroEditorUiTest timed out after 240s on Windows; continuing without failing the job."
-            exit 0
+          $timeoutSec = 600
+          $pollSec = 15
+          $start = Get-Date
+          while (-not $proc.HasExited) {
+            Start-Sleep -Seconds $pollSec
+            $proc.Refresh()
+            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host "[windows-ui] still running (${elapsedSec}s)"
+            if (Test-Path -LiteralPath $stdoutLog) {
+              Write-Host "=== tail $stdoutLog ==="
+              Get-Content -Path $stdoutLog -Tail 40
+            }
+            if (Test-Path -LiteralPath $stderrLog) {
+              Write-Host "=== tail $stderrLog ==="
+              Get-Content -Path $stderrLog -Tail 40
+            }
+            if ($elapsedSec -ge $timeoutSec) {
+              try { $proc.Kill($true) } catch {}
+              Write-Error "HoroEditorUiTest timed out after ${timeoutSec}s on Windows. See $stdoutLog and $stderrLog"
+              exit 124
+            }
           }
+          $proc.WaitForExit()
+          Write-Host "=== final tail $stdoutLog ==="
+          if (Test-Path -LiteralPath $stdoutLog) { Get-Content -Path $stdoutLog -Tail 120 }
+          Write-Host "=== final tail $stderrLog ==="
+          if (Test-Path -LiteralPath $stderrLog) { Get-Content -Path $stderrLog -Tail 120 }
           if ($proc.ExitCode -ne 0) {
-            Write-Warning "HoroEditorUiTest exited with code $($proc.ExitCode). Treating UI automation as non-blocking on Windows. See $stdoutLog and $stderrLog"
-            Add-Content -Path $env:GITHUB_ENV -Value "UI_AUTOMATION_UNSTABLE_WINDOWS=1"
-            Write-Host "::warning::HoroEditorUiTest exited with code $($proc.ExitCode) on Windows; continuing without failing the job."
-            exit 0
+            Write-Error "HoroEditorUiTest exited with code $($proc.ExitCode). See $stdoutLog and $stderrLog"
+            exit $proc.ExitCode
           }
-          Add-Content -Path $env:GITHUB_ENV -Value "UI_AUTOMATION_UNSTABLE_WINDOWS=0"
+
+      - name: Verify UI video output
+        shell: pwsh
+        run: |
+          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          if (-not $videos) {
+            Write-Error "Expected at least one MP4 artifact in ui_test_output, but none were produced."
+            exit 1
+          }
+          Write-Host "Found UI video artifacts:"
+          $videos | ForEach-Object { Write-Host $_.FullName }
 
       - name: Dump Windows UI automation diagnostics on failure
-        if: failure() || env.UI_AUTOMATION_UNSTABLE_WINDOWS == '1'
+        if: failure()
         shell: pwsh
         run: |
           Write-Host "=== UI automation env ==="
@@ -205,7 +246,7 @@ jobs:
             sudo apt-get update -qq
           fi
           sudo apt-get install -y --no-install-recommends \
-            ninja-build xvfb \
+            ninja-build xvfb ffmpeg \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxi-dev libxext-dev \
@@ -235,38 +276,59 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
-      - name: Run UI Automation (stable mode)
+      - name: Run UI Automation (windowed capture + video)
         run: |
           set -o pipefail
           log_file="ui_test_output/horo_ui_test_linux.log"
+          echo "Starting Linux UI automation with capture/video enabled."
+          (
+            while true; do
+              echo "[linux-ui] still running at $(date -u '+%H:%M:%S')"
+              sleep 30
+            done
+          ) &
+          heartbeat_pid=$!
+          cleanup() {
+            kill "$heartbeat_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
           set +e
-          timeout --signal=TERM 240s env -u WAYLAND_DISPLAY xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+          timeout --signal=TERM --kill-after=30s 600s env -u WAYLAND_DISPLAY xvfb-run -a --server-args="-screen 0 1920x1080x24" \
             build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
           ui_exit=${PIPESTATUS[0]}
           set -e
           if [ "$ui_exit" -ne 0 ]; then
             if [ "$ui_exit" -eq 124 ]; then
-              echo "::warning::HoroEditorUiTest timed out after 240s on Linux; continuing without failing the job."
+              echo "::error::HoroEditorUiTest timed out after 600s on Linux."
             else
-              echo "::warning::HoroEditorUiTest exited with code $ui_exit on Linux; continuing without failing the job."
+              echo "::error::HoroEditorUiTest exited with code $ui_exit on Linux."
             fi
-            echo "UI_AUTOMATION_UNSTABLE_LINUX=1" >> "$GITHUB_ENV"
-            exit 0
+            exit "$ui_exit"
           fi
-          echo "UI_AUTOMATION_UNSTABLE_LINUX=0" >> "$GITHUB_ENV"
         env:
-          MONOLITH_UI_TEST_CAPTURE: "0"
-          MONOLITH_UI_TEST_VIDEO: "0"
-          MONOLITH_UI_TEST_RECORDING: "0"
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
           MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "100"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: llvmpipe
           MONOLITH_GLFW_SAMPLES: "0"
 
+      - name: Verify UI video output
+        run: |
+          if ! ls ui_test_output/*.mp4 >/dev/null 2>&1; then
+            echo "::error::Expected at least one MP4 artifact in ui_test_output, but none were produced."
+            ls -la ui_test_output || true
+            exit 1
+          fi
+          echo "Found UI video artifacts:"
+          ls -la ui_test_output/*.mp4
+
       - name: Dump UI automation diagnostics on failure
-        if: failure() || env.UI_AUTOMATION_UNSTABLE_LINUX == '1'
+        if: failure()
         run: |
           echo "=== UI automation env ==="
           env | sort | awk '/^(MONOLITH_UI_TEST|LIBGL_ALWAYS_SOFTWARE|GALLIUM_DRIVER|WAYLAND_DISPLAY)/ { print }'
