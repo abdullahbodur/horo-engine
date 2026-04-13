@@ -139,7 +139,7 @@ jobs:
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
+        run: cmake --build build/debug-msvc --config Release --target HoroEditorUiTest --parallel
 
       - name: Run UI Automation (windowed capture + video)
         shell: pwsh
@@ -168,7 +168,7 @@ jobs:
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
           Write-Host "Starting Windows UI automation with capture/video enabled."
           $proc = Start-Process `
-            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
+            -FilePath ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe" `
             -ArgumentList "--run-ui-tests" `
             -NoNewWindow `
             -PassThru `
