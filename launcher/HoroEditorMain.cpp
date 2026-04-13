@@ -8,8 +8,8 @@
 #include <system_error>
 #include <vector>
 
-#include <GLFW/glfw3.h>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 #include "core/Application.h"
 #include "core/EngineLaunchArgs.h"
@@ -67,7 +67,13 @@ struct HomeDirGuard {
 #endif
   }
 
-  explicit HomeDirGuard(const fs::path& nextHome)
+  explicit HomeDirGuard(
+#ifdef _WIN32
+      const fs::path& nextHome
+#else
+      const fs::path&
+#endif
+      )
       : previousUserProfile(ReadEnv("USERPROFILE")),
         previousHomeDrive(ReadEnv("HOMEDRIVE")),
         previousHomePath(ReadEnv("HOMEPATH")) {
