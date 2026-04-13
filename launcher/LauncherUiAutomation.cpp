@@ -23,12 +23,20 @@ namespace Monolith::Standalone {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 namespace {
 namespace fs = std::filesystem;
+constexpr const char* kFfmpegVideoParams =
+    "-hide_banner -loglevel error -r $FPS -f rawvideo -pix_fmt rgba -s "
+    "$WIDTHx$HEIGHT -i - -threads 0 -y -preset ultrafast -pix_fmt yuv420p -crf 20 $OUTPUT";
+constexpr const char* kFfmpegGifParams =
+    "-hide_banner -loglevel error -r $FPS -f rawvideo -pix_fmt rgba -s "
+    "$WIDTHx$HEIGHT -i - -threads 0 -y -filter_complex \"split=2 [a] [b]; [a] palettegen [pal]; "
+    "[b] [pal] paletteuse\" $OUTPUT";
 
 struct AutomationState {
   fs::path tempRoot;
   fs::path projectRoot;
   fs::path uiCaptureOutputDir;
   bool captureEnabled = false;
+  bool videoEnabled = false;
   StandaloneEditorShell* shell = nullptr;
 };
 
@@ -137,6 +145,19 @@ void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char*
   ctx->CaptureScreenshot(0);
 }
 
+bool BeginVideoCapture(ImGuiTestContext* ctx, const AutomationState* state, const char* filename) {
+  if (!ctx || !state || !state->videoEnabled || filename == nullptr || state->uiCaptureOutputDir.empty())
+    return false;
+  if (!ctx->CaptureArgs)
+    return false;
+  const std::string full = (state->uiCaptureOutputDir / filename).string();
+  if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile))
+    return false;
+  ctx->CaptureReset();
+  ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+  return ctx->CaptureBeginVideo();
+}
+
 void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, AutomationState* state) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
@@ -168,12 +189,16 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, AutomationState* s
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
+    const bool videoStarted = BeginVideoCapture(
+        ctx, testState, "launcher_ui__create_project_from_launcher__expect_project_created__run.mp4");
     EnsureProjectCreatedFromLauncher(ctx, testState);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
+    if (videoStarted)
+      ctx->CaptureEndVideo();
   };
   return test;
 }
@@ -184,6 +209,8 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
+    const bool videoStarted = BeginVideoCapture(
+        ctx, testState, "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible__run.mp4");
     EnsureProjectCreatedFromLauncher(ctx, testState);
 
     ctx->SetRef("Standalone Project");
@@ -208,6 +235,8 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
+    if (videoStarted)
+      ctx->CaptureEndVideo();
   };
   return test;
 }
@@ -218,6 +247,8 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
+    const bool videoStarted = BeginVideoCapture(
+        ctx, testState, "launcher_ui__open_project_from_recent_projects__expect_project_reopened__run.mp4");
     EnsureProjectCreatedFromLauncher(ctx, testState);
 
     ctx->SetRef("Standalone Project");
@@ -242,6 +273,8 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
+    if (videoStarted)
+      ctx->CaptureEndVideo();
   };
   return test;
 }
@@ -280,6 +313,7 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   m_impl->state.tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
   m_impl->state.projectRoot = m_impl->state.tempRoot / "UiSmokeGame";
   m_impl->state.captureEnabled = ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
+  m_impl->state.videoEnabled = ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
   const int uiDelayMs = ParseNonNegativeIntEnv("MONOLITH_UI_TEST_DELAY_MS", 0);
   m_impl->state.uiCaptureOutputDir =
       m_impl->state.captureEnabled
@@ -302,6 +336,23 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
   testIo.ConfigCaptureEnabled = m_impl->state.captureEnabled;
   testIo.ScreenCaptureFunc = m_impl->state.captureEnabled ? LauncherUiScreenCaptureFunc : nullptr;
+  if (m_impl->state.captureEnabled && m_impl->state.videoEnabled) {
+    const char* ffmpegPath = std::getenv("MONOLITH_UI_TEST_FFMPEG_PATH");
+    const fs::path encoderPath = (ffmpegPath && *ffmpegPath) ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
+    std::error_code ec;
+    if (fs::exists(encoderPath, ec) && !ec) {
+      ImStrncpy(testIo.VideoCaptureEncoderPath, encoderPath.string().c_str(),
+                IM_ARRAYSIZE(testIo.VideoCaptureEncoderPath));
+      ImStrncpy(testIo.VideoCaptureEncoderParams, kFfmpegVideoParams,
+                IM_ARRAYSIZE(testIo.VideoCaptureEncoderParams));
+      ImStrncpy(testIo.GifCaptureEncoderParams, kFfmpegGifParams,
+                IM_ARRAYSIZE(testIo.GifCaptureEncoderParams));
+      ImStrncpy(testIo.VideoCaptureExtension, ".mp4", IM_ARRAYSIZE(testIo.VideoCaptureExtension));
+    } else {
+      m_impl->state.videoEnabled = false;
+      LOG_WARN("UI test video requested but ffmpeg is missing at: %s", encoderPath.string().c_str());
+    }
+  }
   testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
   testIo.ConfigRunSpeed = uiDelayMs > 0 ? ImGuiTestRunSpeed_Normal : ImGuiTestRunSpeed_Fast;
   if (uiDelayMs > 0) {

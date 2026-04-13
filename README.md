@@ -107,6 +107,10 @@ ctest --preset debug --output-on-failure
 - Module docs: `core/`, `editor/`, `scene/`, `renderer/`, `launcher/`, `tests/`
 - Renderer parity tracking: [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md)
 
+Architecture policy reminders:
+- new headers are internal by default
+- every new public type should clearly identify its owning module
+
 ## Built-in MCP
 
 Horo includes an editor-integrated MCP server for AI-assisted tooling workflows.
