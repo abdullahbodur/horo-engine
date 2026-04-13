@@ -42,6 +42,43 @@ jobs:
       - name: Test
         run: ctest --preset debug --output-on-failure
 
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
+
+      - name: Build UI Automation Target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Run UI Automation (no recording)
+        run: |
+          set -o pipefail
+          build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee ui_test_output/horo_ui_test_macos.log
+        env:
+          MONOLITH_UI_TEST_RECORDING: "0"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_DELAY_MS: "100"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+
+      - name: Dump macOS UI automation diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== UI automation env ==="
+          env | sort | awk '/^(MONOLITH_UI_TEST)/ { print }'
+          echo "=== ui_test_output files ==="
+          ls -la ui_test_output || true
+          if [ -f ui_test_output/horo_ui_test_macos.log ]; then
+            echo "=== tail ui_test_output/horo_ui_test_macos.log ==="
+            tail -n 200 ui_test_output/horo_ui_test_macos.log
+          fi
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-macos
+          path: ui_test_output/
+          if-no-files-found: ignore
+          retention-days: 30
+
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
@@ -93,21 +130,22 @@ jobs:
           $env:MONOLITH_UI_TEST_DELAY_MS = "100"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpeg
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $log = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.log"
+          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
+          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
           $proc = Start-Process `
             -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
             -ArgumentList "--run-ui-tests" `
             -NoNewWindow `
             -PassThru `
-            -RedirectStandardOutput $log `
-            -RedirectStandardError $log
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog
           if (-not $proc.WaitForExit(240000)) {
             try { $proc.Kill($true) } catch {}
-            Write-Error "HoroEditorUiTest timed out after 240s. See $log"
+            Write-Error "HoroEditorUiTest timed out after 240s. See $stdoutLog and $stderrLog"
             exit 1
           }
           if ($proc.ExitCode -ne 0) {
-            Write-Error "HoroEditorUiTest exited with code $($proc.ExitCode). See $log"
+            Write-Error "HoroEditorUiTest exited with code $($proc.ExitCode). See $stdoutLog and $stderrLog"
             exit $proc.ExitCode
           }
 
@@ -132,10 +170,15 @@ jobs:
           } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
           Write-Host "=== ui_test_output files ==="
           Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-          $log = "ui_test_output\horo_ui_test_windows.log"
-          if (Test-Path -LiteralPath $log) {
-            Write-Host "=== tail $log ==="
-            Get-Content -Path $log -Tail 200
+          $stdoutLog = "ui_test_output\horo_ui_test_windows.stdout.log"
+          $stderrLog = "ui_test_output\horo_ui_test_windows.stderr.log"
+          if (Test-Path -LiteralPath $stdoutLog) {
+            Write-Host "=== tail $stdoutLog ==="
+            Get-Content -Path $stdoutLog -Tail 200
+          }
+          if (Test-Path -LiteralPath $stderrLog) {
+            Write-Host "=== tail $stderrLog ==="
+            Get-Content -Path $stderrLog -Tail 200
           }
 
       - name: Upload UI Test Artifacts
