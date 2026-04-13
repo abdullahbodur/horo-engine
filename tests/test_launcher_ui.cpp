@@ -25,6 +25,23 @@ namespace {
 
 namespace fs = std::filesystem;
 
+std::string ReadEnvString(const char* name) {
+  if (!name || !*name)
+    return {};
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return {};
+  const std::string out(value);
+  free(value);
+  return out;
+#else
+  const char* value = std::getenv(name);
+  return value ? std::string(value) : std::string();
+#endif
+}
+
 fs::path RepoRootFromTestSource() {
   return fs::path(__FILE__).parent_path().parent_path().lexically_normal();
 }
@@ -379,10 +396,9 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, LauncherU
 
 TEST_CASE("Editor launcher smoke flow works through imgui test engine", "[launcher][ui]") {
   fs::path uiOut = RepoRootFromTestSource() / "ui_test_output";
-  if (const char* env = std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR")) {
-    if (env[0] != '\0')
-      uiOut = env;
-  }
+  const std::string envOut = ReadEnvString("MONOLITH_UI_TEST_OUTPUT_DIR");
+  if (!envOut.empty())
+    uiOut = envOut;
   {
     std::error_code ec;
     fs::create_directories(uiOut, ec);

@@ -255,8 +255,10 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, AutomationState* s
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
-    if (videoStarted)
+    if (videoStarted) {
       ctx->CaptureEndVideo();
+      ctx->CaptureReset();
+    }
   };
   return test;
 }
@@ -293,8 +295,10 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
-    if (videoStarted)
+    if (videoStarted) {
       ctx->CaptureEndVideo();
+      ctx->CaptureReset();
+    }
   };
   return test;
 }
@@ -331,8 +335,10 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
-    if (videoStarted)
+    if (videoStarted) {
       ctx->CaptureEndVideo();
+      ctx->CaptureReset();
+    }
   };
   return test;
 }
@@ -453,7 +459,11 @@ void LauncherUiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
       ImGuiTestEngine_TryAbortEngine(m_impl->engine);
       LOG_ERROR("UI automation timed out after %d frames.", m_impl->frameCount);
     }
-    glfwSetWindowShouldClose(static_cast<GLFWwindow*>(nativeWindowHandle), GLFW_TRUE);
+    if (nativeWindowHandle != nullptr) {
+      glfwSetWindowShouldClose(static_cast<GLFWwindow*>(nativeWindowHandle), GLFW_TRUE);
+    } else {
+      LOG_WARN("UI automation finished but native window handle is null; skipping window close request.");
+    }
   }
 #else
   (void)nativeWindowHandle;
