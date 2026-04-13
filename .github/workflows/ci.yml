@@ -143,6 +143,7 @@ jobs:
 
       - name: Run UI Automation (windowed capture + video)
         shell: pwsh
+        timeout-minutes: 4
         run: |
           $env:MONOLITH_UI_TEST_CAPTURE = "1"
           $env:MONOLITH_UI_TEST_VIDEO = "1"
@@ -151,59 +152,25 @@ jobs:
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
-          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
-          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
+          $logFile = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.log"
           Write-Host "Starting Windows UI automation with capture/video enabled."
-          $proc = Start-Process `
-            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
-            -ArgumentList "--run-ui-tests" `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog
-          $timeoutSec = 240
-          $pollSec = 15
-          $start = Get-Date
-          while (-not $proc.HasExited) {
-            Start-Sleep -Seconds $pollSec
-            $proc.Refresh()
-            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
-            Write-Host "[windows-ui] still running (${elapsedSec}s)"
-            if (Test-Path -LiteralPath $stdoutLog) {
-              Write-Host "=== tail $stdoutLog ==="
-              Get-Content -Path $stdoutLog -Tail 40
-            }
-            if (Test-Path -LiteralPath $stderrLog) {
-              Write-Host "=== tail $stderrLog ==="
-              Get-Content -Path $stderrLog -Tail 40
-            }
-            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-            if ($videos) {
-              Write-Host "=== current video artifacts ==="
-              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
-            }
-            if ($elapsedSec -ge $timeoutSec) {
-              try { $proc.Kill($true) } catch {}
-              if ($videos) {
-                Write-Warning "HoroEditorUiTest timed out after ${timeoutSec}s on Windows, but video artifacts exist. Continuing."
-                break
-              }
-              Write-Error "HoroEditorUiTest timed out after ${timeoutSec}s on Windows. See $stdoutLog and $stderrLog"
-              exit 124
-            }
+          & .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests 2>&1 | Tee-Object -FilePath $logFile
+          $uiExit = $LASTEXITCODE
+          if (Test-Path -LiteralPath $logFile) {
+            Write-Host "=== tail $logFile ==="
+            Get-Content -Path $logFile -Tail 200
           }
-          $proc.WaitForExit()
-          Write-Host "=== final tail $stdoutLog ==="
-          if (Test-Path -LiteralPath $stdoutLog) { Get-Content -Path $stdoutLog -Tail 120 }
-          Write-Host "=== final tail $stderrLog ==="
-          if (Test-Path -LiteralPath $stderrLog) { Get-Content -Path $stderrLog -Tail 120 }
-          if ($proc.ExitCode -ne 0) {
-            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          if ($videos) {
+            Write-Host "=== current video artifacts ==="
+            $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
+          }
+          if ($uiExit -ne 0) {
             if ($videos) {
-              Write-Warning "HoroEditorUiTest exited with code $($proc.ExitCode) on Windows, but video artifacts exist. Continuing."
+              Write-Warning "HoroEditorUiTest exited with code $uiExit on Windows, but video artifacts exist. Continuing."
             } else {
-              Write-Error "HoroEditorUiTest exited with code $($proc.ExitCode). See $stdoutLog and $stderrLog"
-              exit $proc.ExitCode
+              Write-Error "HoroEditorUiTest exited with code $uiExit and no video artifacts were produced."
+              exit $uiExit
             }
           }
 
@@ -228,15 +195,10 @@ jobs:
           } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
           Write-Host "=== ui_test_output files ==="
           Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-          $stdoutLog = "ui_test_output\horo_ui_test_windows.stdout.log"
-          $stderrLog = "ui_test_output\horo_ui_test_windows.stderr.log"
-          if (Test-Path -LiteralPath $stdoutLog) {
-            Write-Host "=== tail $stdoutLog ==="
-            Get-Content -Path $stdoutLog -Tail 200
-          }
-          if (Test-Path -LiteralPath $stderrLog) {
-            Write-Host "=== tail $stderrLog ==="
-            Get-Content -Path $stderrLog -Tail 200
+          $logFile = "ui_test_output\horo_ui_test_windows.log"
+          if (Test-Path -LiteralPath $logFile) {
+            Write-Host "=== tail $logFile ==="
+            Get-Content -Path $logFile -Tail 200
           }
 
       - name: Upload UI Test Artifacts
