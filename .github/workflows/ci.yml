@@ -90,9 +90,26 @@ jobs:
           $env:MONOLITH_UI_TEST_VIDEO = "1"
           $env:MONOLITH_UI_TEST_RECORDING = "1"
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
+          $env:MONOLITH_UI_TEST_DELAY_MS = "100"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpeg
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
+          $log = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.log"
+          $proc = Start-Process `
+            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
+            -ArgumentList "--run-ui-tests" `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $log `
+            -RedirectStandardError $log
+          if (-not $proc.WaitForExit(240000)) {
+            try { $proc.Kill($true) } catch {}
+            Write-Error "HoroEditorUiTest timed out after 240s. See $log"
+            exit 1
+          }
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "HoroEditorUiTest exited with code $($proc.ExitCode). See $log"
+            exit $proc.ExitCode
+          }
 
       - name: Verify UI video output
         shell: pwsh
@@ -104,6 +121,22 @@ jobs:
           }
           Write-Host "Generated UI test videos:"
           $videos | ForEach-Object { Write-Host " - $($_.FullName)" }
+
+      - name: Dump Windows UI capture diagnostics on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== UI capture env ==="
+          Get-ChildItem Env: | Where-Object {
+            $_.Name -like "MONOLITH_UI_TEST*" -or $_.Name -in @("WAYLAND_DISPLAY", "LIBGL_ALWAYS_SOFTWARE", "GALLIUM_DRIVER")
+          } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
+          Write-Host "=== ui_test_output files ==="
+          Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+          $log = "ui_test_output\horo_ui_test_windows.log"
+          if (Test-Path -LiteralPath $log) {
+            Write-Host "=== tail $log ==="
+            Get-Content -Path $log -Tail 200
+          }
 
       - name: Upload UI Test Artifacts
         if: always()
