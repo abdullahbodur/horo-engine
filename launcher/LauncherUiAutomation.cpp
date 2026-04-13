@@ -362,7 +362,6 @@ struct LauncherUiAutomationRunner::Impl {
   int testsRun = 0;
   int testsSucceeded = 0;
   AutomationState state{};
-  std::optional<HomeDirGuard> homeDirGuard;
   ImGuiTestEngine* engine = nullptr;
   ImGuiTest* smokeTest = nullptr;
   ImGuiTest* backToHomeTest = nullptr;
@@ -374,6 +373,25 @@ LauncherUiAutomationRunner::LauncherUiAutomationRunner()
     : m_impl(std::make_unique<Impl>()) {}
 
 LauncherUiAutomationRunner::~LauncherUiAutomationRunner() = default;
+
+void LauncherUiAutomationRunner::PrepareEnvironmentBeforeAppStart(bool runUiAutomation) {
+#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+  if (!runUiAutomation)
+    return;
+
+  // We set environment variables (like HOME) here *before* any background threads
+  // (like Mesa llvmpipe or GLFW) are spawned to prevent data races in getenv/setenv.
+  static std::optional<HomeDirGuard> s_homeGuard;
+  const fs::path tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
+  const fs::path homeRoot = tempRoot / "home";
+  
+  std::error_code ec;
+  fs::create_directories(homeRoot, ec);
+  s_homeGuard.emplace(homeRoot);
+#else
+  (void)runUiAutomation;
+#endif
+}
 
 void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, StandaloneEditorShell* shell) {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
@@ -399,7 +417,6 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   fs::create_directories(m_impl->state.tempRoot / "home", ec);
   if (m_impl->state.captureEnabled)
     fs::create_directories(m_impl->state.uiCaptureOutputDir, ec);
-  m_impl->homeDirGuard.emplace(m_impl->state.tempRoot / "home");
   m_impl->maxFrames = (uiDelayMs > 0 || m_impl->state.videoEnabled) ? Impl::kCapturedUiMaxFrames
                                                                     : Impl::kDefaultUiMaxFrames;
 

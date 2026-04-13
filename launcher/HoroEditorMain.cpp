@@ -201,6 +201,7 @@ int main(int argc, char** argv) {
   const Monolith::EngineLaunchOptions launchOptions = Monolith::ParseEngineLaunchOptions(argc, argv);
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   const bool runUiAutomation = HasArg(argc, argv, "--run-ui-tests");
+  Monolith::Standalone::LauncherUiAutomationRunner::PrepareEnvironmentBeforeAppStart(runUiAutomation);
   HoroEditorApp app(launchOptions, runUiAutomation);
 #else
   HoroEditorApp app(launchOptions);

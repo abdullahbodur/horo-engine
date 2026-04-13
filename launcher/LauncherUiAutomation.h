@@ -7,6 +7,8 @@ class StandaloneEditorShell;
 
 class LauncherUiAutomationRunner {
  public:
+  static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
+
   LauncherUiAutomationRunner();
   ~LauncherUiAutomationRunner();
 
