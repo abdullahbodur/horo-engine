@@ -152,6 +152,7 @@ jobs:
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
+          $env:MONOLITH_GLFW_SAMPLES = "0"
           $logFile = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.log"
           Write-Host "Starting Windows UI automation with capture/video enabled."
           & .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests 2>&1 | Tee-Object -FilePath $logFile
