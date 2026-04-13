@@ -132,7 +132,20 @@ bool LauncherUiScreenCaptureFunc(ImGuiID viewport_id,
   if (!pixels || w <= 0 || h <= 0)
     return false;
   glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  return glGetError() == GL_NO_ERROR;
+  if (glGetError() != GL_NO_ERROR)
+    return false;
+
+  // OpenGL readback is bottom-up; test engine expects top-left origin.
+  for (int row = 0; row < h / 2; ++row) {
+    unsigned int* top = pixels + static_cast<size_t>(row) * static_cast<size_t>(w);
+    unsigned int* bottom = pixels + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w);
+    for (int col = 0; col < w; ++col) {
+      const unsigned int tmp = top[col];
+      top[col] = bottom[col];
+      bottom[col] = tmp;
+    }
+  }
+  return true;
 }
 
 void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char* filename) {
