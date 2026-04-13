@@ -90,7 +90,8 @@ sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-d
 ```bash
 make          # debug build
 make test     # run tests
-make ui-test  # launcher unit tests (Catch2; windowed UI automation: make ui-test-windowed)
+make ui-test  # launcher unit tests (Catch2)
+make ui-test-windowed  # launcher UI automation (HoroEditorUiTest --run-ui-tests, use MONOLITH_UI_TEST_FILTER=launcher/*)
 ```
 
 For direct CMake usage:

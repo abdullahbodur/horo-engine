@@ -10,7 +10,7 @@
 #include "core/EngineLaunchArgs.h"
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
-#include "launcher/LauncherUiAutomation.h"
+#include "launcher/UiAutomationRunner.h"
 #include "launcher/StandaloneEditorShell.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderViewUtils.h"
@@ -49,7 +49,7 @@ class HoroEditorApp final : public Application {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
         ,
         m_runUiAutomation(runUiAutomation),
-        m_uiAutomation(std::make_unique<Standalone::LauncherUiAutomationRunner>())
+        m_uiAutomation(std::make_unique<UiAutomationRunner>())
 #endif
   {
     m_scene.AddSystem(std::make_unique<BehaviorSystem>());
@@ -191,7 +191,7 @@ class HoroEditorApp final : public Application {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   bool m_runUiAutomation = false;
   bool m_uiAutomationPassed = true;
-  std::unique_ptr<Standalone::LauncherUiAutomationRunner> m_uiAutomation;
+  std::unique_ptr<UiAutomationRunner> m_uiAutomation;
 #endif
 };
 
@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
   const Monolith::EngineLaunchOptions launchOptions = Monolith::ParseEngineLaunchOptions(argc, argv);
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   const bool runUiAutomation = HasArg(argc, argv, "--run-ui-tests");
-  Monolith::Standalone::LauncherUiAutomationRunner::PrepareEnvironmentBeforeAppStart(runUiAutomation);
+  Monolith::UiAutomationRunner::PrepareEnvironmentBeforeAppStart(runUiAutomation);
   HoroEditorApp app(launchOptions, runUiAutomation);
 #else
   HoroEditorApp app(launchOptions);

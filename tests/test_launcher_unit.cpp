@@ -1,5 +1,5 @@
 // Launcher-focused unit tests (paths, manifest helpers). End-to-end ImGui UI
-// scenarios run only in HoroEditorUiTest + LauncherUiAutomation.cpp.
+// scenarios run only in HoroEditorUiTest + UiAutomationRunner.cpp.
 
 #include <catch2/catch_test_macros.hpp>
 

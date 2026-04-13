@@ -42,6 +42,19 @@ jobs:
       - name: Test
         run: ctest --preset debug --output-on-failure
 
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
+
+      - name: Build Launcher UI Test Runner
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Run Launcher UI Tests (no recording)
+        run: build/debug/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_RECORDING: "0"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
@@ -92,6 +105,8 @@ jobs:
           }
           $env:MONOLITH_UI_TEST_CAPTURE = "1"
           $env:MONOLITH_UI_TEST_VIDEO = "1"
+          $env:MONOLITH_UI_TEST_RECORDING = "1"
+          $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpeg
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
@@ -167,6 +182,8 @@ jobs:
         env:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           LIBGL_ALWAYS_SOFTWARE: "1"

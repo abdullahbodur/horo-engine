@@ -7,4 +7,12 @@ It is not a separate CMake project; it builds as part of the top-level `Monolith
 - **Executable:** `HoroEditor` (`launcher/HoroEditorMain.cpp`)
 - **Library sources:** other `.cpp` files here are compiled into `MonolithEngine` (entry `HoroEditorMain.cpp` is excluded from the static lib).
 
-**Launcher unit tests** live under `tests/test_launcher_unit.cpp` (Catch2, no GLFW). **End-to-end ImGui Test Engine** scenarios for the launcher run only in the `HoroEditorUiTest` binary (`--run-ui-tests`), implemented in `launcher/LauncherUiAutomation.cpp`. For screen/video capture in CI or locally, set `MONOLITH_UI_TEST_OUTPUT_DIR` to an absolute directory (CI uses the workspace `ui_test_output` folder).
+**Launcher unit tests** live under `tests/test_launcher_unit.cpp` (Catch2, no GLFW).
+
+**Launcher UI automation** runs from the `HoroEditorUiTest` binary (`--run-ui-tests`). The scenario definitions live in `tests/ui_scenarios/` and are registered through `tests/UiTestRegistry.*`, so production launcher code stays test-agnostic.
+
+- **Recording/capture enabled** (Windows/Linux CI): set `MONOLITH_UI_TEST_RECORDING=1`, `MONOLITH_UI_TEST_CAPTURE=1`, optionally `MONOLITH_UI_TEST_VIDEO=1` with `MONOLITH_UI_TEST_FFMPEG_PATH`.
+- **No-recording mode** (macOS CI): set `MONOLITH_UI_TEST_RECORDING=0` to force capture/video off.
+- **Scenario selection**: set `MONOLITH_UI_TEST_FILTER` (examples: `launcher/*`, `editor/*`, `launcher/open_project_from_recent_projects`).
+
+For outputs, set `MONOLITH_UI_TEST_OUTPUT_DIR` to an absolute directory (CI uses the workspace `ui_test_output` folder).
