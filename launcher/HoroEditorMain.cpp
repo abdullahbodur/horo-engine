@@ -42,6 +42,8 @@ namespace fs = std::filesystem;
 struct StandaloneUiAutomationState {
   fs::path tempRoot;
   fs::path projectRoot;
+  fs::path uiCaptureOutputDir;
+  bool captureEnabled = false;
   Standalone::StandaloneEditorShell* shell = nullptr;
 };
 
@@ -107,6 +109,38 @@ ImGuiWindow* FindWindowContaining(const char* token) {
   return nullptr;
 }
 
+static bool ParseBoolEnv(const char* name) {
+  const char* value = std::getenv(name);
+  if (!value || !*value)
+    return false;
+  return std::string(value) != "0";
+}
+
+static bool LauncherUiScreenCaptureFunc(ImGuiID viewport_id,
+                                        int x,
+                                        int y,
+                                        int w,
+                                        int h,
+                                        unsigned int* pixels,
+                                        void* user_data) {
+  IM_UNUSED(viewport_id);
+  IM_UNUSED(user_data);
+  if (!pixels || w <= 0 || h <= 0)
+    return false;
+  glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+  return glGetError() == GL_NO_ERROR;
+}
+
+static void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char* filename) {
+  if (!ctx || !ctx->CaptureArgs || filename == nullptr || dir.empty())
+    return;
+  const std::string full = (dir / filename).string();
+  if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile))
+    return;
+  ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+  ctx->CaptureScreenshot(0);
+}
+
 void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiAutomationState* state) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
@@ -127,6 +161,8 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, StandaloneUiAutomat
   ctx->ItemClick("Create Project");
   ctx->Yield(3);
   IM_CHECK(state->shell->HasActiveProject());
+  if (state->captureEnabled)
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "after_project_creation.png");
 }
 
 ImGuiTest* RegisterStandaloneLauncherSmokeTest(ImGuiTestEngine* engine, StandaloneUiAutomationState* state) {
@@ -158,6 +194,8 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
     IM_CHECK(!testState->shell->HasActiveProject());
+    if (testState->captureEnabled)
+      CaptureScreenshotTo(ctx, testState->uiCaptureOutputDir, "back_to_home.png");
 
     ctx->SetRef("Horo Launcher");
     IM_CHECK(ctx->ItemExists("Create New Project"));
@@ -165,6 +203,8 @@ ImGuiTest* RegisterStandaloneBackToHomeTest(ImGuiTestEngine* engine, StandaloneU
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+    if (testState->captureEnabled)
+      CaptureScreenshotTo(ctx, testState->uiCaptureOutputDir, "recent_project_visible.png");
   };
   return test;
 }
@@ -194,6 +234,8 @@ ImGuiTest* RegisterStandaloneRecentProjectsTest(ImGuiTestEngine* engine, Standal
     IM_CHECK(testState->shell->HasActiveProject());
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
+    if (testState->captureEnabled)
+      CaptureScreenshotTo(ctx, testState->uiCaptureOutputDir, "open_recent_project_done.png");
   };
   return test;
 }
@@ -289,10 +331,19 @@ class HoroEditorApp final : public Application {
     if (m_runUiAutomation) {
       m_uiAutomation.tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
       m_uiAutomation.projectRoot = m_uiAutomation.tempRoot / "UiSmokeGame";
+      m_uiAutomation.captureEnabled = ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
+      m_uiAutomation.uiCaptureOutputDir =
+          m_uiAutomation.captureEnabled
+              ? (std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR")
+                     ? fs::path(std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR"))
+                     : (std::filesystem::current_path() / "ui_test_output"))
+              : fs::path();
       m_uiAutomation.shell = &m_shell;
       std::error_code ec;
       fs::remove_all(m_uiAutomation.tempRoot, ec);
       fs::create_directories(m_uiAutomation.tempRoot / "home", ec);
+      if (m_uiAutomation.captureEnabled)
+        fs::create_directories(m_uiAutomation.uiCaptureOutputDir, ec);
       m_homeDirGuard.emplace(m_uiAutomation.tempRoot / "home");
 
       m_uiTestEngine = ImGuiTestEngine_CreateContext();
@@ -300,7 +351,8 @@ class HoroEditorApp final : public Application {
         throw std::runtime_error("Failed to create ImGui test engine context");
 
       ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_uiTestEngine);
-      testIo.ConfigCaptureEnabled = false;
+      testIo.ConfigCaptureEnabled = m_uiAutomation.captureEnabled;
+      testIo.ScreenCaptureFunc = m_uiAutomation.captureEnabled ? LauncherUiScreenCaptureFunc : nullptr;
       testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
       testIo.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
       testIo.ConfigVerboseLevel = ImGuiTestVerboseLevel_Error;

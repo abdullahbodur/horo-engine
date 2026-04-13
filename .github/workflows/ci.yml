@@ -168,6 +168,53 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  ui-capture-linux:
+    name: UI Capture · Linux / GCC
+    runs-on: ubuntu-24.04
+    needs: test-linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update -qq; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update -qq
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build xvfb \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build UI capture target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Prepare UI capture output directory
+        run: mkdir -p ui_test_output
+
+      - name: Run windowed UI automation capture
+        run: xvfb-run -a build/debug/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+
+      - name: Upload Windowed UI Capture Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-capture-results-linux
+          path: ui_test_output/
+          if-no-files-found: ignore
+          retention-days: 30
+
 
   # ----------------------------------------------------------------
   # Coverage — Linux (GCC --coverage + lcov + genhtml)
