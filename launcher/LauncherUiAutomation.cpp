@@ -103,21 +103,64 @@ ImGuiWindow* FindWindowContaining(const char* token) {
 }
 
 bool ParseBoolEnv(const char* name) {
+  if (!name || !*name)
+    return false;
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return false;
+  const std::string out(value);
+  free(value);
+  return out != "0";
+#else
   const char* value = std::getenv(name);
   if (!value || !*value)
     return false;
   return std::string(value) != "0";
+#endif
 }
 
 int ParseNonNegativeIntEnv(const char* name, int fallback = 0) {
+  if (!name || !*name)
+    return fallback;
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return fallback;
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  const bool valid = (end != value && *end == '\0');
+  free(value);
+#else
   const char* value = std::getenv(name);
   if (!value || !*value)
     return fallback;
   char* end = nullptr;
   const long parsed = std::strtol(value, &end, 10);
-  if (end == value || *end != '\0')
+  const bool valid = (end != value && *end == '\0');
+#endif
+  if (!valid)
     return fallback;
   return parsed > 0 ? static_cast<int>(parsed) : 0;
+}
+
+std::string ReadEnvString(const char* name) {
+  if (!name || !*name)
+    return {};
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return {};
+  const std::string out(value);
+  free(value);
+  return out;
+#else
+  const char* value = std::getenv(name);
+  return value ? std::string(value) : std::string();
+#endif
 }
 
 bool LauncherUiScreenCaptureFunc(ImGuiID viewport_id,
@@ -171,7 +214,9 @@ bool BeginVideoCapture(ImGuiTestContext* ctx, const AutomationState* state, cons
   return ctx->CaptureBeginVideo();
 }
 
-void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, AutomationState* state) {
+void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
+                                      AutomationState* state,
+                                      bool allowScreenshot = true) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
   IM_CHECK(state->shell != nullptr);
@@ -191,7 +236,7 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, AutomationState* st
   ctx->ItemClick("Create Project");
   ctx->Yield(3);
   IM_CHECK(state->shell->HasActiveProject());
-  if (state->captureEnabled)
+  if (state->captureEnabled && allowScreenshot)
     CaptureScreenshotTo(ctx, state->uiCaptureOutputDir,
                         "launcher_ui__create_project_from_launcher__expect_project_created.png");
 }
@@ -204,7 +249,7 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, AutomationState* s
     IM_CHECK(testState != nullptr);
     const bool videoStarted = BeginVideoCapture(
         ctx, testState, "launcher_ui__create_project_from_launcher__expect_project_created__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Configure"));
@@ -224,14 +269,14 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
     IM_CHECK(testState != nullptr);
     const bool videoStarted = BeginVideoCapture(
         ctx, testState, "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
     IM_CHECK(!testState->shell->HasActiveProject());
-    if (testState->captureEnabled)
+    if (testState->captureEnabled && !videoStarted)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
@@ -243,7 +288,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    if (testState->captureEnabled)
+    if (testState->captureEnabled && !videoStarted)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
@@ -262,7 +307,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
     IM_CHECK(testState != nullptr);
     const bool videoStarted = BeginVideoCapture(
         ctx, testState, "launcher_ui__open_project_from_recent_projects__expect_project_reopened__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
@@ -281,7 +326,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
     IM_CHECK(testState->shell->HasActiveProject());
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
-    if (testState->captureEnabled)
+    if (testState->captureEnabled && !videoStarted)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
@@ -328,10 +373,11 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   m_impl->state.captureEnabled = ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled = ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
   const int uiDelayMs = ParseNonNegativeIntEnv("MONOLITH_UI_TEST_DELAY_MS", 0);
+  const std::string outputDirEnv = ReadEnvString("MONOLITH_UI_TEST_OUTPUT_DIR");
   m_impl->state.uiCaptureOutputDir =
       m_impl->state.captureEnabled
-          ? (std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR")
-                 ? fs::path(std::getenv("MONOLITH_UI_TEST_OUTPUT_DIR"))
+          ? (!outputDirEnv.empty()
+                 ? fs::path(outputDirEnv)
                  : (std::filesystem::current_path() / "ui_test_output"))
           : fs::path();
   m_impl->state.shell = shell;
@@ -350,10 +396,10 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   testIo.ConfigCaptureEnabled = m_impl->state.captureEnabled;
   testIo.ScreenCaptureFunc = m_impl->state.captureEnabled ? LauncherUiScreenCaptureFunc : nullptr;
   if (m_impl->state.captureEnabled && m_impl->state.videoEnabled) {
-    const char* ffmpegPath = std::getenv("MONOLITH_UI_TEST_FFMPEG_PATH");
-    const fs::path encoderPath = (ffmpegPath && *ffmpegPath) ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
-    std::error_code ec;
-    if (fs::exists(encoderPath, ec) && !ec) {
+    const std::string ffmpegPath = ReadEnvString("MONOLITH_UI_TEST_FFMPEG_PATH");
+    const fs::path encoderPath = !ffmpegPath.empty() ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
+    std::error_code ffmpegEc;
+    if (fs::exists(encoderPath, ffmpegEc) && !ffmpegEc) {
       ImStrncpy(testIo.VideoCaptureEncoderPath, encoderPath.string().c_str(),
                 IM_ARRAYSIZE(testIo.VideoCaptureEncoderPath));
       ImStrncpy(testIo.VideoCaptureEncoderParams, kFfmpegVideoParams,
