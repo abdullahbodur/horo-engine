@@ -364,12 +364,8 @@ void UiAutomationRunner::Shutdown() {
            ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 1 : 0,
            testIo.ConfigCaptureEnabled ? 1 : 0,
            m_impl->state.videoCaptureOpen ? 1 : 0);
-  if (m_impl->state.videoCaptureOpen) {
-    LOG_WARN("Video capture still marked open during shutdown; disabling further capture callbacks.");
-    m_impl->state.videoCaptureOpen = false;
-  }
-  testIo.ConfigCaptureEnabled = false;
-  testIo.ScreenCaptureFunc = nullptr;
+  if (m_impl->state.videoCaptureOpen)
+    LOG_WARN("Video capture still marked open during shutdown; letting test engine close capture on stop.");
   const bool stillRunning = testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
   if (m_impl->timedOut || stillRunning) {
     m_impl->passed = false;
@@ -379,6 +375,7 @@ void UiAutomationRunner::Shutdown() {
               ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 0 : 1);
     LOG_INFO("UI automation stopping engine after timeout/incomplete run.");
     ImGuiTestEngine_Stop(m_impl->engine);
+    m_impl->active = false;
     return;
   }
 
@@ -389,6 +386,7 @@ void UiAutomationRunner::Shutdown() {
 
   LOG_INFO("UI automation stopping engine after successful completion.");
   ImGuiTestEngine_Stop(m_impl->engine);
+  m_impl->active = false;
 #endif
 }
 
@@ -419,4 +417,3 @@ bool UiAutomationRunner::IsActive() const {
 }
 
 }  // namespace Monolith
-
