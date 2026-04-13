@@ -174,6 +174,14 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id,
   IM_UNUSED(user_data);
   if (!pixels || w <= 0 || h <= 0)
     return false;
+  if (glfwGetCurrentContext() == nullptr)
+    return false;
+  GLint viewport[4] = {0, 0, 0, 0};
+  glGetIntegerv(GL_VIEWPORT, viewport);
+  if (viewport[2] <= 0 || viewport[3] <= 0)
+    return false;
+  if (x < 0 || y < 0 || x + w > viewport[2] || y + h > viewport[3])
+    return false;
   glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
   if (glGetError() != GL_NO_ERROR)
     return false;
@@ -351,6 +359,17 @@ void UiAutomationRunner::Shutdown() {
     return;
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
+  LOG_INFO("UI automation shutdown begin: running=%d, queue_empty=%d, capture_enabled=%d, video_capture_open=%d",
+           testIo.IsRunningTests ? 1 : 0,
+           ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 1 : 0,
+           testIo.ConfigCaptureEnabled ? 1 : 0,
+           m_impl->state.videoCaptureOpen ? 1 : 0);
+  if (m_impl->state.videoCaptureOpen) {
+    LOG_WARN("Video capture still marked open during shutdown; disabling further capture callbacks.");
+    m_impl->state.videoCaptureOpen = false;
+  }
+  testIo.ConfigCaptureEnabled = false;
+  testIo.ScreenCaptureFunc = nullptr;
   const bool stillRunning = testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
   if (m_impl->timedOut || stillRunning) {
     m_impl->passed = false;
@@ -358,6 +377,7 @@ void UiAutomationRunner::Shutdown() {
               m_impl->timedOut ? 1 : 0,
               testIo.IsRunningTests ? 1 : 0,
               ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 0 : 1);
+    LOG_INFO("UI automation stopping engine after timeout/incomplete run.");
     ImGuiTestEngine_Stop(m_impl->engine);
     return;
   }
@@ -367,6 +387,7 @@ void UiAutomationRunner::Shutdown() {
   LOG_INFO("UI automation results: tests_run=%d, tests_succeeded=%d",
            m_impl->testsRun, m_impl->testsSucceeded);
 
+  LOG_INFO("UI automation stopping engine after successful completion.");
   ImGuiTestEngine_Stop(m_impl->engine);
 #endif
 }
@@ -375,6 +396,7 @@ void UiAutomationRunner::DestroyContext() {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
     return;
+  LOG_INFO("Destroying UI automation engine context.");
   ImGuiTestEngine_DestroyContext(m_impl->engine);
   m_impl->engine = nullptr;
 #endif

@@ -83,11 +83,7 @@ jobs:
         run: |
           $ffmpeg = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
           if (-not (Test-Path -LiteralPath $ffmpeg)) {
-            $cmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
-            if ($cmd) { $ffmpeg = $cmd.Source }
-          }
-          if (-not (Test-Path -LiteralPath $ffmpeg)) {
-            Write-Error "ffmpeg not found (expected Chocolatey shim or PATH)."
+            Write-Error "ffmpeg not found at expected Chocolatey shim path: $ffmpeg"
             exit 1
           }
           $env:MONOLITH_UI_TEST_CAPTURE = "1"
@@ -177,6 +173,15 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: llvmpipe
           MONOLITH_GLFW_SAMPLES: "0"
+
+      - name: Dump UI capture diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== UI capture env ==="
+          env | sort | rg '^MONOLITH_UI_TEST|^LIBGL_ALWAYS_SOFTWARE|^GALLIUM_DRIVER|^WAYLAND_DISPLAY'
+          echo "=== ui_test_output files ==="
+          ls -la ui_test_output || true
+          rg "UI automation|Queued|No UI scenarios|timed out|capture|video" ui_test_output -g '*.log' || true
 
       - name: Upload UI Test Artifacts
         if: always()

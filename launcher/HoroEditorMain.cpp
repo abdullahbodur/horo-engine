@@ -155,6 +155,8 @@ class HoroEditorApp final : public Application {
   void OnShutdown() override {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
     if (m_uiAutomation) {
+      // Keep a valid GL context current while Dear ImGui test engine finalizes.
+      glfwMakeContextCurrent(GetWindow().GetNativeHandle());
       m_uiAutomation->Shutdown();
       m_uiAutomationPassed = m_uiAutomation->DidPass();
     }

@@ -59,15 +59,34 @@ bool BeginVideoCapture(ImGuiTestContext* ctx, const UiAutomationRunState* state,
   return ctx->CaptureBeginVideo();
 }
 
-bool BeginSuiteVideoCaptureIfNeeded(ImGuiTestContext* ctx, UiAutomationRunState* state) {
-  if (!ctx || !state || !state->videoEnabled)
+bool BeginTestVideoCaptureIfNeeded(ImGuiTestContext* ctx,
+                                   UiAutomationRunState* state,
+                                   const char* filename) {
+  if (!ctx || !state || !state->videoEnabled || !filename || !*filename)
     return false;
   if (state->videoCaptureOpen)
     return true;
-  const bool started = BeginVideoCapture(ctx, state, "launcher_ui__full_suite__run.mp4");
+  const bool started = BeginVideoCapture(ctx, state, filename);
   state->videoCaptureOpen = started;
   return started;
 }
+
+void EndTestVideoCaptureIfNeeded(ImGuiTestContext* ctx, UiAutomationRunState* state) {
+  if (!ctx || !state || !state->videoCaptureOpen)
+    return;
+  ctx->CaptureEndVideo();
+  ctx->CaptureReset();
+  state->videoCaptureOpen = false;
+}
+
+struct VideoCaptureScope {
+  ImGuiTestContext* ctx = nullptr;
+  UiAutomationRunState* state = nullptr;
+
+  explicit VideoCaptureScope(ImGuiTestContext* inCtx, UiAutomationRunState* inState)
+      : ctx(inCtx), state(inState) {}
+  ~VideoCaptureScope() { EndTestVideoCaptureIfNeeded(ctx, state); }
+};
 
 void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
                                       UiAutomationRunState* state,
@@ -104,7 +123,10 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunSta
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    VideoCaptureScope captureScope(ctx, testState);
+    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+        ctx, testState, "launcher_ui__create_project_from_launcher__run.mp4");
+    (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Launcher Project");
@@ -121,7 +143,10 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    VideoCaptureScope captureScope(ctx, testState);
+    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+        ctx, testState, "launcher_ui__back_to_home_returns_launcher__run.mp4");
+    (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Launcher Project");
@@ -160,7 +185,10 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    VideoCaptureScope captureScope(ctx, testState);
+    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+        ctx, testState, "launcher_ui__open_project_from_recent_projects__run.mp4");
+    (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Launcher Project");
@@ -187,11 +215,6 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
-    }
-    if (testState->videoCaptureOpen) {
-      ctx->CaptureEndVideo();
-      ctx->CaptureReset();
-      testState->videoCaptureOpen = false;
     }
   };
   return test;
