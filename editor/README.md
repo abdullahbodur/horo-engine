@@ -40,4 +40,4 @@
 ## Notes
 
 - Editor code is modularized to keep `EditorLayer` lightweight.
-- The module is designed to run both in embedded game workflows and standalone engine development.
+- The module is designed to run both in embedded game workflows and launcher engine development.

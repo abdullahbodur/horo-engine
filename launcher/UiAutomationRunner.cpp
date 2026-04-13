@@ -9,7 +9,7 @@
 #include <GLFW/glfw3.h>
 
 #include "core/Logger.h"
-#include "launcher/StandaloneEditorShell.h"
+#include "launcher/LauncherEditorShell.h"
 #include "launcher/UiTestHarness.h"
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
@@ -252,6 +252,11 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
                  : (std::filesystem::current_path() / "ui_test_output"))
           : fs::path();
   m_impl->state.shellContext = shellContext;
+  LOG_INFO("UI automation config: filter='%s', recording=%d, capture=%d, video=%d",
+           uiFilter.c_str(),
+           recordingEnabled ? 1 : 0,
+           m_impl->state.captureEnabled ? 1 : 0,
+           m_impl->state.videoEnabled ? 1 : 0);
   std::error_code ec;
   fs::remove_all(m_impl->state.tempRoot, ec);
   fs::create_directories(m_impl->state.tempRoot / "home", ec);
@@ -295,12 +300,14 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
   testIo.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
 
   ImGuiTestEngine_Start(m_impl->engine, ImGui::GetCurrentContext());
-  if (!QueueRegisteredUiScenarios(m_impl->engine, &m_impl->state, uiFilter)) {
+  int queuedCount = 0;
+  if (!QueueRegisteredUiScenarios(m_impl->engine, &m_impl->state, uiFilter, &queuedCount)) {
     m_impl->passed = false;
     LOG_ERROR("No UI scenarios were queued (filter='%s').", uiFilter.c_str());
     ImGuiTestEngine_Stop(m_impl->engine);
     return;
   }
+  LOG_INFO("Queued %d UI scenario(s) with filter '%s'.", queuedCount, uiFilter.c_str());
   LOG_INFO("Running Dear ImGui Test Suite in %s mode (delay=%dms) with full rendering enabled.",
            uiDelayMs > 0 ? "Normal" : "Fast", uiDelayMs);
 #else

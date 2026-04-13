@@ -6,9 +6,9 @@
 #include <filesystem>
 #include <fstream>
 
-#include "launcher/StandaloneProject.h"
+#include "launcher/LauncherProject.h"
 
-using namespace Monolith::Standalone;
+using namespace Monolith::Launcher;
 
 namespace {
 
@@ -28,19 +28,19 @@ TEST_CASE("ResolveProjectManifestPath points at .horo/project.json", "[launcher]
   REQUIRE(ResolveProjectManifestPath(root) == root / ".horo" / "project.json");
 }
 
-TEST_CASE("IsStandaloneProjectRoot is true only when manifest exists", "[launcher][project]") {
+TEST_CASE("IsLauncherProjectRoot is true only when manifest exists", "[launcher][project]") {
   const fs::path root = fs::temp_directory_path() / "horo_launcher_unit_manifest";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
-  REQUIRE_FALSE(IsStandaloneProjectRoot(root));
+  REQUIRE_FALSE(IsLauncherProjectRoot(root));
 
   {
     std::ofstream out(root / ".horo" / "project.json");
     REQUIRE(out.is_open());
     out << R"({"schemaVersion":1,"projectName":"T"})";
   }
-  REQUIRE(IsStandaloneProjectRoot(root));
+  REQUIRE(IsLauncherProjectRoot(root));
 
   fs::remove_all(root, ec);
 }

@@ -19,7 +19,7 @@ class ProjectPath {
   // Fallback: exeDir itself.
   static void Init(const std::filesystem::path& exeDir);
 
-  // Binds the active project root explicitly. Standalone editor sessions use
+  // Binds the active project root explicitly. Launcher editor sessions use
   // this to point project-relative paths at the opened project rather than the
   // engine/source tree. Passing an empty path clears the active root.
   static void SetProjectRoot(const std::filesystem::path& root);
@@ -29,7 +29,7 @@ class ProjectPath {
   static bool HasExplicitProjectRoot();
 
   // Engine/SDK resource root used for bundled editor assets (schema, shaders).
-  // Defaults to the discovered root unless overridden by standalone bootstrap.
+  // Defaults to the discovered root unless overridden by launcher bootstrap.
   static void SetSdkRoot(const std::filesystem::path& sdkRoot);
   static const std::filesystem::path& SdkRoot();
 

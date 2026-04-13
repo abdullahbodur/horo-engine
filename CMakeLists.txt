@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
-# Detect if this is a standalone build or embedded via add_subdirectory()
+# Detect if this is a launcher build or embedded via add_subdirectory()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    # Standalone mode: local dev, CI, tests
+    # Launcher mode: local dev, CI, tests
     project(MonolithEngine VERSION 0.1.0 LANGUAGES CXX C)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
@@ -257,10 +257,10 @@ endif()
 
 # NOTE: The assets/ copy command (${CMAKE_SOURCE_DIR}/assets) is intentionally
 # absent here. Game assets belong to the consumer project (monolith/app/).
-# In standalone mode there are no game assets; in embedded mode app/CMakeLists.txt
-# handles the copy. Keeping it here would break standalone CI with a missing-dir error.
+# In launcher mode there are no game assets; in embedded mode app/CMakeLists.txt
+# handles the copy. Keeping it here would break launcher CI with a missing-dir error.
 
-# ---- Tests (standalone only) ----
+# ---- Tests (launcher only) ----
 if(MONOLITH_ENGINE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)

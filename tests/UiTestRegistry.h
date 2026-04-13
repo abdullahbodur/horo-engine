@@ -17,7 +17,8 @@ void InitializeUiScenarioRegistry();
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
                                 UiAutomationRunState* state,
-                                const std::string& filter);
+                                const std::string& filter,
+                                int* outQueuedCount);
 
 }  // namespace Monolith
 

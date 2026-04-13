@@ -23,10 +23,11 @@ struct UiAutomationRunState {
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
                                 UiAutomationRunState* state,
-                                const std::string& filter);
+                                const std::string& filter,
+                                int* outQueuedCount = nullptr);
 #else
 struct UiAutomationRunState {};
-inline bool QueueRegisteredUiScenarios(void*, UiAutomationRunState*, const std::string&) {
+inline bool QueueRegisteredUiScenarios(void*, UiAutomationRunState*, const std::string&, int* = nullptr) {
   return false;
 }
 #endif

@@ -1,19 +1,19 @@
-#include "launcher/StandaloneProject.h"
+#include "launcher/LauncherProject.h"
 
 #include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <sstream>
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 namespace {
 
-StandaloneProjectCommand ParseCommand(const json& value) {
-  StandaloneProjectCommand out;
+LauncherProjectCommand ParseCommand(const json& value) {
+  LauncherProjectCommand out;
   if (!value.is_object())
     return out;
 
@@ -28,7 +28,7 @@ StandaloneProjectCommand ParseCommand(const json& value) {
   return out;
 }
 
-json SerializeCommand(const StandaloneProjectCommand& command) {
+json SerializeCommand(const LauncherProjectCommand& command) {
   json out = json::object();
   out["executable"] = command.executable;
   out["args"] = command.args;
@@ -57,7 +57,7 @@ std::string ExpandTokens(const std::string& value,
   return expanded;
 }
 
-std::string BuildDebugString(const ResolvedStandaloneCommand& command) {
+std::string BuildDebugString(const ResolvedLauncherCommand& command) {
   std::ostringstream out;
   out << command.executable.generic_string();
   for (const std::string& arg : command.args)
@@ -71,17 +71,17 @@ fs::path ResolveProjectManifestPath(const fs::path& projectRoot) {
   return projectRoot / ".horo" / "project.json";
 }
 
-bool IsStandaloneProjectRoot(const fs::path& projectRoot) {
+bool IsLauncherProjectRoot(const fs::path& projectRoot) {
   std::error_code ec;
   return fs::is_regular_file(ResolveProjectManifestPath(projectRoot), ec) && !ec;
 }
 
-StandaloneProjectDocument LoadProjectManifestDocument(const fs::path& projectRoot) {
-  StandaloneProjectDocument out;
+LauncherProjectDocument LoadProjectManifestDocument(const fs::path& projectRoot) {
+  LauncherProjectDocument out;
   std::ifstream in(ResolveProjectManifestPath(projectRoot));
   if (!in.is_open()) {
     out.parseError = true;
-    out.error = "Standalone project manifest was not found.";
+    out.error = "Launcher project manifest was not found.";
     return out;
   }
 
@@ -98,14 +98,14 @@ StandaloneProjectDocument LoadProjectManifestDocument(const fs::path& projectRoo
   if (!out.rootJson.is_object()) {
     out.rootJson = json::object();
     out.parseError = true;
-    out.error = "Standalone project manifest root must be an object.";
+    out.error = "Launcher project manifest root must be an object.";
     return out;
   }
 
   const json projectJson = out.rootJson.value("project", json::object());
   if (!projectJson.is_object()) {
     out.parseError = true;
-    out.error = "Standalone project manifest missing 'project' object.";
+    out.error = "Launcher project manifest missing 'project' object.";
     return out;
   }
 
@@ -124,20 +124,20 @@ StandaloneProjectDocument LoadProjectManifestDocument(const fs::path& projectRoo
   if (out.manifest.projectId.empty() || out.manifest.projectName.empty() ||
       out.manifest.defaultScene.empty() || out.manifest.schemaVersion < 1) {
     out.parseError = true;
-    out.error = "Standalone project manifest is missing required fields.";
+    out.error = "Launcher project manifest is missing required fields.";
   }
 
   return out;
 }
 
 bool SaveProjectManifestDocument(const fs::path& projectRoot,
-                                 StandaloneProjectDocument* doc,
+                                 LauncherProjectDocument* doc,
                                  std::string* outError) {
   if (outError)
     outError->clear();
   if (!doc) {
     if (outError)
-      *outError = "Standalone project document is null.";
+      *outError = "Launcher project document is null.";
     return false;
   }
 
@@ -168,7 +168,7 @@ bool SaveProjectManifestDocument(const fs::path& projectRoot,
   std::ofstream outFile(ResolveProjectManifestPath(projectRoot));
   if (!outFile.is_open()) {
     if (outError)
-      *outError = "Failed to open standalone project manifest for writing.";
+      *outError = "Failed to open launcher project manifest for writing.";
     return false;
   }
 
@@ -203,10 +203,10 @@ std::string SanitizeProjectId(const std::string& projectName) {
   return out;
 }
 
-bool ResolveStandaloneCommand(const StandaloneProjectCommand& command,
+bool ResolveLauncherCommand(const LauncherProjectCommand& command,
                               const fs::path& projectRoot,
                               const fs::path& sdkRoot,
-                              ResolvedStandaloneCommand* outCommand,
+                              ResolvedLauncherCommand* outCommand,
                               std::string* outError) {
   if (outError)
     outError->clear();
@@ -217,11 +217,11 @@ bool ResolveStandaloneCommand(const StandaloneProjectCommand& command,
   }
   if (command.executable.empty()) {
     if (outError)
-      *outError = "Standalone project command is missing an executable.";
+      *outError = "Launcher project command is missing an executable.";
     return false;
   }
 
-  ResolvedStandaloneCommand resolved;
+  ResolvedLauncherCommand resolved;
   const std::string workingDirRaw = command.workingDirectory.empty()
                                         ? projectRoot.generic_string()
                                         : ExpandTokens(command.workingDirectory, projectRoot, sdkRoot);
@@ -245,4 +245,4 @@ bool ResolveStandaloneCommand(const StandaloneProjectCommand& command,
   return true;
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

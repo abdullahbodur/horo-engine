@@ -9,17 +9,17 @@
 #include <imgui_test_engine/imgui_te_context.h>
 #include <imgui_test_engine/imgui_te_engine.h>
 
-#include "launcher/StandaloneEditorShell.h"
+#include "launcher/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
 namespace Monolith {
 namespace {
 namespace fs = std::filesystem;
 
-Standalone::StandaloneEditorShell* AsLauncherShell(UiAutomationRunState* state) {
+Launcher::LauncherEditorShell* AsLauncherShell(UiAutomationRunState* state) {
   if (!state || !state->shellContext)
     return nullptr;
-  return static_cast<Standalone::StandaloneEditorShell*>(state->shellContext);
+  return static_cast<Launcher::LauncherEditorShell*>(state->shellContext);
 }
 
 ImGuiWindow* FindWindowContaining(const char* token) {
@@ -74,7 +74,7 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
                                       bool allowScreenshot = true) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
-  Standalone::StandaloneEditorShell* shell = AsLauncherShell(state);
+  Launcher::LauncherEditorShell* shell = AsLauncherShell(state);
   IM_CHECK(shell != nullptr);
 
   if (shell->HasActiveProject())
@@ -107,7 +107,7 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunSta
     BeginSuiteVideoCaptureIfNeeded(ctx, testState);
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
-    ctx->SetRef("Standalone Project");
+    ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
@@ -124,11 +124,11 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
     BeginSuiteVideoCaptureIfNeeded(ctx, testState);
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
-    ctx->SetRef("Standalone Project");
+    ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
-    Standalone::StandaloneEditorShell* shell = AsLauncherShell(testState);
+    Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
     IM_CHECK(shell != nullptr);
     IM_CHECK(!shell->HasActiveProject());
     if (testState->captureEnabled && !testState->videoEnabled) {
@@ -163,11 +163,11 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
     BeginSuiteVideoCaptureIfNeeded(ctx, testState);
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
-    ctx->SetRef("Standalone Project");
+    ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
-    Standalone::StandaloneEditorShell* shell = AsLauncherShell(testState);
+    Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
     IM_CHECK(shell != nullptr);
     IM_CHECK(!shell->HasActiveProject());
 
@@ -180,7 +180,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
     ctx->Yield(3);
 
     IM_CHECK(shell->HasActiveProject());
-    ctx->SetRef("Standalone Project");
+    ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
     if (testState->captureEnabled && !testState->videoEnabled) {
       CaptureScreenshotTo(

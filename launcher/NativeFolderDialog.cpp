@@ -11,7 +11,7 @@
 #include <cstdio>
 #endif
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 
@@ -147,4 +147,4 @@ fs::path PickFolderPath(const char* prompt, const fs::path& defaultPath) {
 #endif
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

@@ -11,7 +11,7 @@
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
 #include "launcher/UiAutomationRunner.h"
-#include "launcher/StandaloneEditorShell.h"
+#include "launcher/LauncherEditorShell.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/Renderer.h"
@@ -184,7 +184,7 @@ class HoroEditorApp final : public Application {
   Editor::EditorLayer m_editor;
   Scene m_scene;
   std::unique_ptr<SceneReferenceRuntime> m_runtime;
-  Standalone::StandaloneEditorShell m_shell;
+  Launcher::LauncherEditorShell m_shell;
   Camera m_camera;
   float m_renderAlpha = 0.0f;
 

@@ -10,17 +10,17 @@
 #include "editor/EditorWorkspaceSettings.h"
 #include "launcher/EditorHomeSettings.h"
 #include "launcher/ExternalProcessRunner.h"
-#include "launcher/StandaloneProject.h"
-#include "launcher/StandaloneProjectTemplate.h"
+#include "launcher/LauncherProject.h"
+#include "launcher/LauncherProjectTemplate.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;
-using namespace Monolith::Standalone;
+using namespace Monolith::Launcher;
 
 namespace {
 
 std::filesystem::path MakeTempRoot(const std::string& name) {
-  return std::filesystem::temp_directory_path() / "horo_standalone_tests" / name;
+  return std::filesystem::temp_directory_path() / "horo_launcher_tests" / name;
 }
 
 std::string NormalizeComparablePath(const std::filesystem::path& path) {
@@ -92,7 +92,7 @@ struct HomeDirGuard {
 
 }  // namespace
 
-TEST_CASE("EngineLaunchArgs parses standalone project path", "[standalone][cli]") {
+TEST_CASE("EngineLaunchArgs parses launcher project path", "[launcher][cli]") {
   char arg0[] = "HoroEditor";
   char projectFlag[] = "--project";
   char projectPath[] = "C:/games/demo";
@@ -105,7 +105,7 @@ TEST_CASE("EngineLaunchArgs parses standalone project path", "[standalone][cli]"
 }
 
 TEST_CASE("ProjectPath explicit root switches editor workspace to project-local settings",
-          "[standalone][workspace]") {
+          "[launcher][workspace]") {
   const std::filesystem::path projectRoot = MakeTempRoot("project_workspace");
   std::filesystem::remove_all(projectRoot);
   std::filesystem::create_directories(projectRoot);
@@ -119,7 +119,7 @@ TEST_CASE("ProjectPath explicit root switches editor workspace to project-local 
   REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
 }
 
-TEST_CASE("Editor home settings remember and prune recent projects", "[standalone][home]") {
+TEST_CASE("Editor home settings remember and prune recent projects", "[launcher][home]") {
   const std::filesystem::path tempHome = MakeTempRoot("editor_home");
   std::filesystem::remove_all(tempHome);
   std::filesystem::create_directories(tempHome);
@@ -153,13 +153,13 @@ TEST_CASE("Editor home settings remember and prune recent projects", "[standalon
   REQUIRE(loaded.state.recentProjects.front() == NormalizeComparablePath(projectA));
 }
 
-TEST_CASE("Standalone project manifest resolves SDK and project tokens", "[standalone][manifest]") {
+TEST_CASE("Launcher project manifest resolves SDK and project tokens", "[launcher][manifest]") {
   const std::filesystem::path projectRoot = MakeTempRoot("manifest_project");
   const std::filesystem::path sdkRoot = MakeTempRoot("manifest_sdk");
 
-  ResolvedStandaloneCommand resolved;
+  ResolvedLauncherCommand resolved;
   std::string error;
-  REQUIRE(ResolveStandaloneCommand({"cmake",
+  REQUIRE(ResolveLauncherCommand({"cmake",
                                     {"-S", "${projectDir}", "-B", "${projectDir}/build"},
                                     "${horoSdkRoot}"},
                                    projectRoot,
@@ -171,18 +171,18 @@ TEST_CASE("Standalone project manifest resolves SDK and project tokens", "[stand
   REQUIRE(resolved.workingDirectory == sdkRoot.lexically_normal());
 }
 
-TEST_CASE("Standalone project template creates manifest, source, and scene scaffold",
-          "[standalone][template]") {
+TEST_CASE("Launcher project template creates manifest, source, and scene scaffold",
+          "[launcher][template]") {
   const std::filesystem::path projectRoot = MakeTempRoot("template_project");
   std::filesystem::remove_all(projectRoot);
 
-  StandaloneProjectDocument doc;
+  LauncherProjectDocument doc;
   std::string error;
-  REQUIRE(CreateStandaloneProjectTemplate({projectRoot, "TemplateGame", MakeTempRoot("sdk")},
+  REQUIRE(CreateLauncherProjectTemplate({projectRoot, "TemplateGame", MakeTempRoot("sdk")},
                                           &doc,
                                           &error));
 
-  REQUIRE(IsStandaloneProjectRoot(projectRoot));
+  REQUIRE(IsLauncherProjectRoot(projectRoot));
   REQUIRE(std::filesystem::exists(projectRoot / "src" / "main.cpp"));
   REQUIRE(std::filesystem::exists(projectRoot / "CMakeLists.txt"));
   REQUIRE(std::filesystem::exists(projectRoot / "assets" / "scenes" / "level.json"));
@@ -205,16 +205,16 @@ TEST_CASE("Standalone project template creates manifest, source, and scene scaff
 }
 
 TEST_CASE("External process runner starts, completes, and records exit status",
-          "[standalone][process]") {
+          "[launcher][process]") {
   ExternalProcessRunner runner;
-  ResolvedStandaloneCommand command;
+  ResolvedLauncherCommand command;
   command.workingDirectory = std::filesystem::temp_directory_path();
 #ifdef _WIN32
   command.executable = "cmd";
-  command.args = {"/c", "echo horo-standalone"};
+  command.args = {"/c", "echo horo-launcher"};
 #else
   command.executable = "sh";
-  command.args = {"-c", "printf horo-standalone\\n"};
+  command.args = {"-c", "printf horo-launcher\\n"};
 #endif
   command.debugString = command.executable.generic_string();
 
@@ -232,9 +232,9 @@ TEST_CASE("External process runner starts, completes, and records exit status",
 }
 
 TEST_CASE("External process runner stop marks user-terminated commands as finished",
-          "[standalone][process]") {
+          "[launcher][process]") {
   ExternalProcessRunner runner;
-  ResolvedStandaloneCommand command;
+  ResolvedLauncherCommand command;
   command.workingDirectory = std::filesystem::temp_directory_path();
 #ifdef _WIN32
   command.executable = "cmd";

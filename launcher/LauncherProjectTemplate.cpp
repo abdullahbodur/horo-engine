@@ -1,11 +1,11 @@
-#include "launcher/StandaloneProjectTemplate.h"
+#include "launcher/LauncherProjectTemplate.h"
 
 #include <fstream>
 
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 
@@ -277,8 +277,8 @@ Editor::SceneDocument BuildTemplateScene() {
 
 }  // namespace
 
-bool CreateStandaloneProjectTemplate(const StandaloneProjectTemplateRequest& request,
-                                     StandaloneProjectDocument* outProjectDocument,
+bool CreateLauncherProjectTemplate(const LauncherProjectTemplateRequest& request,
+                                     LauncherProjectDocument* outProjectDocument,
                                      std::string* outError) {
   if (outError)
     outError->clear();
@@ -312,7 +312,7 @@ bool CreateStandaloneProjectTemplate(const StandaloneProjectTemplateRequest& req
       request.projectName;
 #endif
 
-  StandaloneProjectDocument doc;
+  LauncherProjectDocument doc;
   doc.manifest.schemaVersion = 1;
   doc.manifest.projectId = projectId;
   doc.manifest.projectName = request.projectName;
@@ -383,4 +383,4 @@ bool CreateStandaloneProjectTemplate(const StandaloneProjectTemplateRequest& req
   return true;
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

@@ -22,7 +22,7 @@
 #include <unistd.h>
 #endif
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace {
 
@@ -44,7 +44,7 @@ std::wstring Utf8ToWide(const std::string& value) {
   return out;
 }
 
-std::wstring BuildCommandLine(const ResolvedStandaloneCommand& command) {
+std::wstring BuildCommandLine(const ResolvedLauncherCommand& command) {
   auto quote = [](const std::string& part) {
     if (part.find_first_of(" \t\"") == std::string::npos)
       return part;
@@ -92,7 +92,7 @@ ExternalProcessRunner::~ExternalProcessRunner() {
   Stop();
 }
 
-bool ExternalProcessRunner::Start(const ResolvedStandaloneCommand& command,
+bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
                                   const std::string& label,
                                   std::string* outError) {
   if (outError)
@@ -368,4 +368,4 @@ void ExternalProcessRunner::Finish(int exitCode, bool terminatedByUser, std::str
     LOG_INFO("[%s] exited with code %d", m_status.label.c_str(), m_status.exitCode);
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

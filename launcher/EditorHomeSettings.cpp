@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <fstream>
 
-#include "launcher/StandaloneProject.h"
+#include "launcher/LauncherProject.h"
 #include "mcp/McpSettings.h"
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -154,12 +154,12 @@ void PruneMissingRecentProjects(EditorHomeDocument* doc) {
                               [](const std::string& entry) {
                                 if (entry.empty())
                                   return true;
-                                return !IsStandaloneProjectRoot(entry);
+                                return !IsLauncherProjectRoot(entry);
                               }),
                recent.end());
 
-  if (!doc->state.lastProjectPath.empty() && !IsStandaloneProjectRoot(doc->state.lastProjectPath))
+  if (!doc->state.lastProjectPath.empty() && !IsLauncherProjectRoot(doc->state.lastProjectPath))
     doc->state.lastProjectPath.clear();
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

@@ -16,11 +16,11 @@
 #include "scene/SceneReferenceRuntime.h"
 #include "launcher/EditorHomeSettings.h"
 #include "launcher/ExternalProcessRunner.h"
-#include "launcher/StandaloneProject.h"
+#include "launcher/LauncherProject.h"
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
-class StandaloneEditorShell {
+class LauncherEditorShell {
  public:
   void Attach(Editor::EditorLayer* editor,
               Scene* scene,
@@ -44,7 +44,7 @@ class StandaloneEditorShell {
   Camera* m_camera = nullptr;
 
   EditorHomeDocument m_homeDocument;
-  StandaloneProjectDocument m_projectDocument;
+  LauncherProjectDocument m_projectDocument;
   std::filesystem::path m_projectRoot;
   ExternalProcessRunner m_processRunner;
 
@@ -62,7 +62,7 @@ class StandaloneEditorShell {
   bool OpenProjectFromPicker(std::string* outError);
   void RenderLauncher();
   void RenderProjectToolbar();
-  void ExecuteManifestCommand(const StandaloneProjectCommand& command, const std::string& label);
+  void ExecuteManifestCommand(const LauncherProjectCommand& command, const std::string& label);
   bool CreateProjectFromLauncher(std::string* outError);
   std::filesystem::path ResolveCommandSdkRoot() const;
   std::filesystem::path NormalizeProjectRootInput(const std::filesystem::path& rawPath) const;
@@ -73,4 +73,4 @@ class StandaloneEditorShell {
   std::shared_ptr<Texture> LoadTexture(const std::string& rawPath);
 };
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

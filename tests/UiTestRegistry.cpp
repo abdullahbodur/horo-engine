@@ -87,7 +87,8 @@ void InitializeUiScenarioRegistry() {
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
                                 UiAutomationRunState* state,
-                                const std::string& filter) {
+                                const std::string& filter,
+                                int* outQueuedCount) {
   if (!engine || !state)
     return false;
   InitializeUiScenarioRegistry();
@@ -102,6 +103,8 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
       ++queued;
     }
   }
+  if (outQueuedCount)
+    *outQueuedCount = queued;
   return queued > 0;
 }
 

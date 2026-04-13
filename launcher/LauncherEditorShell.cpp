@@ -1,4 +1,4 @@
-#include "launcher/StandaloneEditorShell.h"
+#include "launcher/LauncherEditorShell.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,9 +16,9 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 #include "launcher/NativeFolderDialog.h"
-#include "launcher/StandaloneProjectTemplate.h"
+#include "launcher/LauncherProjectTemplate.h"
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 
@@ -104,7 +104,7 @@ fs::path NormalizePathForLookup(const fs::path& rawPath) {
 
 }  // namespace
 
-void StandaloneEditorShell::Attach(Editor::EditorLayer* editor,
+void LauncherEditorShell::Attach(Editor::EditorLayer* editor,
                                    Scene* scene,
                                    SceneReferenceRuntime* runtime,
                                    Camera* camera) {
@@ -114,10 +114,10 @@ void StandaloneEditorShell::Attach(Editor::EditorLayer* editor,
   m_camera = camera;
 }
 
-void StandaloneEditorShell::Initialize() {
+void LauncherEditorShell::Initialize() {
   m_homeDocument = LoadEditorHomeDocument();
   if (m_homeDocument.parseError)
-    LOG_WARN("[Standalone] Editor home settings load fallback: %s", m_homeDocument.error.c_str());
+    LOG_WARN("[Launcher] Editor home settings load fallback: %s", m_homeDocument.error.c_str());
   PruneMissingRecentProjects(&m_homeDocument);
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
@@ -128,13 +128,13 @@ void StandaloneEditorShell::Initialize() {
   ConfigureRuntimeCallbacks();
 }
 
-void StandaloneEditorShell::Shutdown() {
+void LauncherEditorShell::Shutdown() {
   m_processRunner.Stop();
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
 }
 
-void StandaloneEditorShell::ConfigureRuntimeCallbacks() {
+void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   if (!m_editor || !m_runtime)
     return;
 
@@ -174,12 +174,12 @@ void StandaloneEditorShell::ConfigureRuntimeCallbacks() {
     std::string lightError;
     if (!m_runtime->UpdateLiveLight(object, &lightError) && !lightError.empty() &&
         object.type == Editor::SceneObjectType::Light) {
-      LOG_WARN("[Standalone] Live light update failed: %s", lightError.c_str());
+      LOG_WARN("[Launcher] Live light update failed: %s", lightError.c_str());
     }
   });
 }
 
-bool StandaloneEditorShell::OpenProject(const fs::path& projectPath, std::string* outError) {
+bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* outError) {
   if (outError)
     outError->clear();
 
@@ -189,13 +189,13 @@ bool StandaloneEditorShell::OpenProject(const fs::path& projectPath, std::string
       *outError = "Project path is empty.";
     return false;
   }
-  if (!IsStandaloneProjectRoot(projectRoot)) {
+  if (!IsLauncherProjectRoot(projectRoot)) {
     if (outError)
       *outError = "Project manifest not found at " + ResolveProjectManifestPath(projectRoot).string();
     return false;
   }
 
-  const StandaloneProjectDocument projectDocument = LoadProjectManifestDocument(projectRoot);
+  const LauncherProjectDocument projectDocument = LoadProjectManifestDocument(projectRoot);
   if (projectDocument.parseError) {
     if (outError)
       *outError = projectDocument.error;
@@ -217,7 +217,7 @@ bool StandaloneEditorShell::OpenProject(const fs::path& projectPath, std::string
   if (m_runtime && m_runtime->GetCoordinator().IsActive()) {
     const SceneRuntimeOperationResult unload = m_runtime->Unload();
     if (!unload.ok)
-      LOG_WARN("[Standalone] Runtime unload during project switch failed: %s", unload.error.c_str());
+      LOG_WARN("[Launcher] Runtime unload during project switch failed: %s", unload.error.c_str());
   }
   if (m_scene)
     m_scene->Clear();
@@ -253,17 +253,17 @@ bool StandaloneEditorShell::OpenProject(const fs::path& projectPath, std::string
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
   m_launcherError.clear();
-  LOG_INFO("[Standalone] Opened project: %s", projectRoot.string().c_str());
+  LOG_INFO("[Launcher] Opened project: %s", projectRoot.string().c_str());
   return true;
 }
 
-void StandaloneEditorShell::CloseProject() {
+void LauncherEditorShell::CloseProject() {
   m_processRunner.Stop();
 
   if (m_runtime && m_runtime->GetCoordinator().IsActive()) {
     const SceneRuntimeOperationResult unload = m_runtime->Unload();
     if (!unload.ok)
-      LOG_WARN("[Standalone] Runtime unload failed while closing project: %s", unload.error.c_str());
+      LOG_WARN("[Launcher] Runtime unload failed while closing project: %s", unload.error.c_str());
   }
 
   if (m_editor)
@@ -286,7 +286,7 @@ void StandaloneEditorShell::CloseProject() {
   m_projectRoot.clear();
 }
 
-void StandaloneEditorShell::Update() {
+void LauncherEditorShell::Update() {
   m_processRunner.Poll();
   HandlePendingSceneReload();
 
@@ -294,20 +294,20 @@ void StandaloneEditorShell::Update() {
     CloseProject();
 }
 
-void StandaloneEditorShell::RenderOverlay() {
+void LauncherEditorShell::RenderOverlay() {
   if (!HasActiveProject())
     RenderLauncher();
   else
     RenderProjectToolbar();
 }
 
-void StandaloneEditorShell::HandlePendingSceneReload() {
+void LauncherEditorShell::HandlePendingSceneReload() {
   if (!HasActiveProject() || !m_editor || !m_runtime || !m_editor->WantsSceneReload())
     return;
 
   const SceneRuntimeOperationResult reload = m_runtime->ReloadDocument(m_editor->GetPendingDocument());
   if (!reload.ok)
-    LOG_ERROR("[Standalone] Runtime reload failed: %s", reload.error.c_str());
+    LOG_ERROR("[Launcher] Runtime reload failed: %s", reload.error.c_str());
   else {
     if (m_scene)
       m_editor->SyncRuntimeEntityIds(m_scene->registry);
@@ -316,7 +316,7 @@ void StandaloneEditorShell::HandlePendingSceneReload() {
   m_editor->AcknowledgeReload();
 }
 
-void StandaloneEditorShell::RefreshCameraFromSceneCamera() {
+void LauncherEditorShell::RefreshCameraFromSceneCamera() {
   if (!m_camera || !m_runtime || !m_runtime->GetSceneCamera().has_value())
     return;
 
@@ -328,7 +328,7 @@ void StandaloneEditorShell::RefreshCameraFromSceneCamera() {
   m_camera->zFar = sceneCamera.farClip;
 }
 
-bool StandaloneEditorShell::OpenProjectFromPicker(std::string* outError) {
+bool LauncherEditorShell::OpenProjectFromPicker(std::string* outError) {
   const fs::path pickedPath =
       PickFolderPath("Select Horo project folder",
                      DefaultBrowseDirectory(m_homeDocument.state.lastProjectPath));
@@ -341,7 +341,7 @@ bool StandaloneEditorShell::OpenProjectFromPicker(std::string* outError) {
   return OpenProject(pickedPath, outError);
 }
 
-void StandaloneEditorShell::RenderLauncher() {
+void LauncherEditorShell::RenderLauncher() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   ImGui::SetNextWindowPos(viewport->Pos);
   ImGui::SetNextWindowSize(viewport->Size);
@@ -471,7 +471,7 @@ void StandaloneEditorShell::RenderLauncher() {
                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
   ImGui::TextUnformatted("Create New Project");
-  ImGui::TextDisabled("Pick a location and Horo will scaffold a minimal standalone-ready project.");
+  ImGui::TextDisabled("Pick a location and Horo will scaffold a minimal launcher-ready project.");
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
   labeledInput("Project Name", "##new-project-name", m_newProjectNameInput.data(), m_newProjectNameInput.size());
@@ -501,7 +501,7 @@ void StandaloneEditorShell::RenderLauncher() {
 
   ImGui::Dummy(ImVec2(0.0f, 12.0f));
   ImGui::TextUnformatted("Recent Projects");
-  ImGui::TextDisabled("Resume work from your latest standalone projects.");
+  ImGui::TextDisabled("Resume work from your latest launcher projects.");
   ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
   const float recentHeight =
@@ -528,12 +528,12 @@ void StandaloneEditorShell::RenderLauncher() {
   ImGui::End();
 }
 
-void StandaloneEditorShell::RenderProjectToolbar() {
+void LauncherEditorShell::RenderProjectToolbar() {
   ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(0.92f);
   const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse |
                                  ImGuiWindowFlags_NoSavedSettings;
-  ImGui::Begin("Standalone Project", nullptr, flags);
+  ImGui::Begin("Launcher Project", nullptr, flags);
 
   ImGui::TextUnformatted(m_projectDocument.manifest.projectName.c_str());
   ImGui::TextDisabled("%s", m_projectRoot.string().c_str());
@@ -576,11 +576,11 @@ void StandaloneEditorShell::RenderProjectToolbar() {
   ImGui::End();
 }
 
-void StandaloneEditorShell::ExecuteManifestCommand(const StandaloneProjectCommand& command,
+void LauncherEditorShell::ExecuteManifestCommand(const LauncherProjectCommand& command,
                                                    const std::string& label) {
   std::string resolveError;
-  ResolvedStandaloneCommand resolved;
-  if (!ResolveStandaloneCommand(
+  ResolvedLauncherCommand resolved;
+  if (!ResolveLauncherCommand(
           command, m_projectRoot, ResolveCommandSdkRoot(), &resolved, &resolveError)) {
     m_launcherError = resolveError;
     return;
@@ -591,20 +591,20 @@ void StandaloneEditorShell::ExecuteManifestCommand(const StandaloneProjectComman
     m_launcherError = startError;
 }
 
-bool StandaloneEditorShell::CreateProjectFromLauncher(std::string* outError) {
-  StandaloneProjectDocument createdProject;
-  const StandaloneProjectTemplateRequest request{
+bool LauncherEditorShell::CreateProjectFromLauncher(std::string* outError) {
+  LauncherProjectDocument createdProject;
+  const LauncherProjectTemplateRequest request{
       .projectRoot = BufferToString(m_newProjectPathInput),
       .projectName = BufferToString(m_newProjectNameInput),
       .sdkRoot = ResolveCommandSdkRoot(),
   };
-  if (!CreateStandaloneProjectTemplate(request, &createdProject, outError))
+  if (!CreateLauncherProjectTemplate(request, &createdProject, outError))
     return false;
 
   return OpenProject(request.projectRoot, outError);
 }
 
-fs::path StandaloneEditorShell::ResolveCommandSdkRoot() const {
+fs::path LauncherEditorShell::ResolveCommandSdkRoot() const {
   std::vector<fs::path> candidates;
   const fs::path assetSdkRoot = NormalizePathForLookup(ProjectPath::SdkRoot());
   if (!assetSdkRoot.empty()) {
@@ -631,7 +631,7 @@ fs::path StandaloneEditorShell::ResolveCommandSdkRoot() const {
   return assetSdkRoot;
 }
 
-fs::path StandaloneEditorShell::NormalizeProjectRootInput(const fs::path& rawPath) const {
+fs::path LauncherEditorShell::NormalizeProjectRootInput(const fs::path& rawPath) const {
   if (rawPath.empty())
     return {};
 
@@ -648,7 +648,7 @@ fs::path StandaloneEditorShell::NormalizeProjectRootInput(const fs::path& rawPat
   return normalized.lexically_normal();
 }
 
-fs::path StandaloneEditorShell::ResolveAssetPath(const std::string& rawPath) const {
+fs::path LauncherEditorShell::ResolveAssetPath(const std::string& rawPath) const {
   if (rawPath.empty())
     return {};
 
@@ -658,7 +658,7 @@ fs::path StandaloneEditorShell::ResolveAssetPath(const std::string& rawPath) con
   return ProjectPath::Resolve(rawPath);
 }
 
-fs::path StandaloneEditorShell::ResolveShaderPath(const char* fileName) const {
+fs::path LauncherEditorShell::ResolveShaderPath(const char* fileName) const {
   const std::array<fs::path, 4> candidates = {
       ProjectPath::ResolveSdk(std::string("renderer/shaders/") + fileName),
       ProjectPath::ResolveSdk(std::string("bin/shaders/") + fileName),
@@ -674,7 +674,7 @@ fs::path StandaloneEditorShell::ResolveShaderPath(const char* fileName) const {
   return candidates.front();
 }
 
-std::shared_ptr<Shader> StandaloneEditorShell::EnsureSceneShader() {
+std::shared_ptr<Shader> LauncherEditorShell::EnsureSceneShader() {
   if (!m_sceneShader) {
     m_sceneShader = std::make_shared<Shader>(
         Shader::FromFiles(ResolveShaderPath("basic.vert").string(), ResolveShaderPath("basic.frag").string()));
@@ -682,7 +682,7 @@ std::shared_ptr<Shader> StandaloneEditorShell::EnsureSceneShader() {
   return m_sceneShader;
 }
 
-std::shared_ptr<Mesh> StandaloneEditorShell::LoadMeshForTag(const std::string& meshTag) {
+std::shared_ptr<Mesh> LauncherEditorShell::LoadMeshForTag(const std::string& meshTag) {
   if (meshTag.empty())
     return {};
 
@@ -704,7 +704,7 @@ std::shared_ptr<Mesh> StandaloneEditorShell::LoadMeshForTag(const std::string& m
     else
       *mesh = ObjLoader::Load(ResolveAssetPath(meshTag).string());
   } catch (const std::exception& e) {
-    LOG_WARN("[Standalone] Failed to load mesh '%s': %s", meshTag.c_str(), e.what());
+    LOG_WARN("[Launcher] Failed to load mesh '%s': %s", meshTag.c_str(), e.what());
     return {};
   }
 
@@ -712,7 +712,7 @@ std::shared_ptr<Mesh> StandaloneEditorShell::LoadMeshForTag(const std::string& m
   return mesh;
 }
 
-std::shared_ptr<Texture> StandaloneEditorShell::LoadTexture(const std::string& rawPath) {
+std::shared_ptr<Texture> LauncherEditorShell::LoadTexture(const std::string& rawPath) {
   if (rawPath.empty())
     return {};
 
@@ -726,9 +726,9 @@ std::shared_ptr<Texture> StandaloneEditorShell::LoadTexture(const std::string& r
     m_textureCache[key] = texture;
     return texture;
   } catch (const std::exception& e) {
-    LOG_WARN("[Standalone] Failed to load texture '%s': %s", rawPath.c_str(), e.what());
+    LOG_WARN("[Launcher] Failed to load texture '%s': %s", rawPath.c_str(), e.what());
     return {};
   }
 }
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

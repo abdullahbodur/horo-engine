@@ -6,7 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 struct EditorHomeState {
   std::vector<std::string> recentProjects;
@@ -27,4 +27,4 @@ bool SaveEditorHomeDocument(EditorHomeDocument* doc, std::string* outError);
 void RememberRecentProject(EditorHomeDocument* doc, const std::filesystem::path& projectRoot);
 void PruneMissingRecentProjects(EditorHomeDocument* doc);
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher

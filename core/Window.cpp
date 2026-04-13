@@ -13,12 +13,25 @@
 namespace {
 
 int ReadEnvNonNegativeInt(const char* name, int fallback) {
+  if (!name || !*name)
+    return fallback;
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return fallback;
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  const bool valid = (end != value && *end == '\0');
+  free(value);
+#else
   const char* value = std::getenv(name);
   if (!value || !*value)
     return fallback;
   char* end = nullptr;
   const long parsed = std::strtol(value, &end, 10);
   const bool valid = (end != value && *end == '\0');
+#endif
   if (!valid || parsed < 0 || parsed > 32)
     return fallback;
   return static_cast<int>(parsed);

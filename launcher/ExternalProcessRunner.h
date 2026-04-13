@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "launcher/StandaloneProject.h"
+#include "launcher/LauncherProject.h"
 
-namespace Monolith::Standalone {
+namespace Monolith::Launcher {
 
 struct ExternalProcessStatus {
   bool active = false;
@@ -28,7 +28,7 @@ class ExternalProcessRunner {
   ExternalProcessRunner(const ExternalProcessRunner&) = delete;
   ExternalProcessRunner& operator=(const ExternalProcessRunner&) = delete;
 
-  bool Start(const ResolvedStandaloneCommand& command,
+  bool Start(const ResolvedLauncherCommand& command,
              const std::string& label,
              std::string* outError);
   void Poll();
@@ -45,4 +45,4 @@ class ExternalProcessRunner {
   void Finish(int exitCode, bool terminatedByUser, std::string error = {});
 };
 
-}  // namespace Monolith::Standalone
+}  // namespace Monolith::Launcher
