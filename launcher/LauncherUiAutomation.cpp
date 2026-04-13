@@ -45,6 +45,7 @@ struct HomeDirGuard {
   std::string previousUserProfile;
   std::string previousHomeDrive;
   std::string previousHomePath;
+  std::string previousHome;
 
   static std::string ReadEnv(const char* name) {
     if (!name || !*name)
@@ -63,28 +64,30 @@ struct HomeDirGuard {
 #endif
   }
 
-  explicit HomeDirGuard(
-#ifdef _WIN32
-      const fs::path& nextHome
-#else
-      const fs::path&
-#endif
-      )
+  explicit HomeDirGuard(const fs::path& nextHome)
       : previousUserProfile(ReadEnv("USERPROFILE")),
         previousHomeDrive(ReadEnv("HOMEDRIVE")),
-        previousHomePath(ReadEnv("HOMEPATH")) {
+        previousHomePath(ReadEnv("HOMEPATH")),
+        previousHome(ReadEnv("HOME")) {
 #ifdef _WIN32
-    _putenv_s("USERPROFILE", nextHome.string().c_str());
-    _putenv_s("HOMEDRIVE", "");
-    _putenv_s("HOMEPATH", "");
+     _putenv_s("USERPROFILE", nextHome.string().c_str());
+     _putenv_s("HOMEDRIVE", "");
+     _putenv_s("HOMEPATH", "");
+#else
+    setenv("HOME", nextHome.string().c_str(), 1);
 #endif
-  }
+   }
 
   ~HomeDirGuard() {
 #ifdef _WIN32
     _putenv_s("USERPROFILE", previousUserProfile.c_str());
     _putenv_s("HOMEDRIVE", previousHomeDrive.c_str());
     _putenv_s("HOMEPATH", previousHomePath.c_str());
+#else
+    if (previousHome.empty())
+      unsetenv("HOME");
+    else
+      setenv("HOME", previousHome.c_str(), 1);
 #endif
   }
 };
@@ -349,10 +352,13 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
 
 struct LauncherUiAutomationRunner::Impl {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  static constexpr int kUiMaxFrames = 1200;
+  static constexpr int kDefaultUiMaxFrames = 1200;
+  static constexpr int kCapturedUiMaxFrames = 3600;
   bool active = false;
   bool passed = true;
+  bool timedOut = false;
   int frameCount = 0;
+  int maxFrames = kDefaultUiMaxFrames;
   int testsRun = 0;
   int testsSucceeded = 0;
   AutomationState state{};
@@ -394,6 +400,8 @@ void LauncherUiAutomationRunner::StartIfRequested(bool runUiAutomation, Standalo
   if (m_impl->state.captureEnabled)
     fs::create_directories(m_impl->state.uiCaptureOutputDir, ec);
   m_impl->homeDirGuard.emplace(m_impl->state.tempRoot / "home");
+  m_impl->maxFrames = (uiDelayMs > 0 || m_impl->state.videoEnabled) ? Impl::kCapturedUiMaxFrames
+                                                                    : Impl::kDefaultUiMaxFrames;
 
   m_impl->engine = ImGuiTestEngine_CreateContext();
   if (!m_impl->engine)
@@ -454,9 +462,11 @@ void LauncherUiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
   const bool done = !testIo.IsRunningTests && ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
-  const bool timeout = m_impl->frameCount >= Impl::kUiMaxFrames;
+  const bool timeout = m_impl->frameCount >= m_impl->maxFrames;
   if (done || timeout) {
     if (timeout) {
+      m_impl->timedOut = true;
+      m_impl->passed = false;
       ImGuiTestEngine_TryAbortEngine(m_impl->engine);
       LOG_ERROR("UI automation timed out after %d frames.", m_impl->frameCount);
     }
@@ -475,6 +485,18 @@ void LauncherUiAutomationRunner::Shutdown() {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
     return;
+
+  ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
+  const bool stillRunning = testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
+  if (m_impl->timedOut || stillRunning) {
+    m_impl->passed = false;
+    LOG_ERROR("UI automation did not finish cleanly before shutdown: timed_out=%d, running=%d, queued=%d",
+              m_impl->timedOut ? 1 : 0,
+              testIo.IsRunningTests ? 1 : 0,
+              ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 0 : 1);
+    ImGuiTestEngine_Stop(m_impl->engine);
+    return;
+  }
 
   ImGuiTestEngine_GetResult(m_impl->engine, m_impl->testsRun, m_impl->testsSucceeded);
   const int smokeStatus = m_impl->smokeTest ? static_cast<int>(m_impl->smokeTest->Output.Status) : -1;

@@ -100,7 +100,7 @@ jobs:
 
       - name: Run UI Test
         shell: pwsh
-        run: .\build\debug-msvc\bin\tests\Debug\test_launcher_ui.exe
+        run: .\build\debug-msvc\bin\tests\test_launcher_ui.exe
         env:
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
