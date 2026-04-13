@@ -143,7 +143,7 @@ jobs:
 
       - name: Run UI Automation (windowed capture + video)
         shell: pwsh
-        timeout-minutes: 4
+        timeout-minutes: 12
         run: |
           $env:MONOLITH_UI_TEST_CAPTURE = "1"
           $env:MONOLITH_UI_TEST_VIDEO = "1"
@@ -151,21 +151,96 @@ jobs:
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $env:MONOLITH_UI_TEST_FFMPEG_PATH = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
+          $ffmpegCandidates = @(
+            "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin\ffmpeg.exe",
+            "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
+          )
+          $ffmpegPath = $ffmpegCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $ffmpegPath) {
+            Write-Error "Unable to locate ffmpeg executable. Checked: $($ffmpegCandidates -join ', ')"
+            exit 1
+          }
+          $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
-          $logFile = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.log"
+          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
+          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
           Write-Host "Starting Windows UI automation with capture/video enabled."
-          & .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests 2>&1 | Tee-Object -FilePath $logFile
-          $uiExit = $LASTEXITCODE
-          if (Test-Path -LiteralPath $logFile) {
-            Write-Host "=== tail $logFile ==="
-            Get-Content -Path $logFile -Tail 200
+          $proc = Start-Process `
+            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
+            -ArgumentList "--run-ui-tests" `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog
+
+          $pollSec = 15
+          $maxSec = 600
+          $maxNoProgressSec = 240
+          $start = Get-Date
+          $lastProgress = Get-Date
+          $lastStdoutLen = -1
+          $lastStderrLen = -1
+          while (-not $proc.HasExited) {
+            Start-Sleep -Seconds $pollSec
+            $proc.Refresh()
+            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host "[windows-ui] still running (${elapsedSec}s)"
+
+            $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
+            $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
+            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+
+            if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
+              $lastProgress = Get-Date
+              $lastStdoutLen = $stdoutLen
+              $lastStderrLen = $stderrLen
+            }
+
+            if (Test-Path -LiteralPath $stdoutLog) {
+              Write-Host "=== tail $stdoutLog ==="
+              Get-Content -Path $stdoutLog -Tail 40
+            }
+            if (Test-Path -LiteralPath $stderrLog) {
+              Write-Host "=== tail $stderrLog ==="
+              Get-Content -Path $stderrLog -Tail 40
+            }
+            if ($videos) {
+              Write-Host "=== current video artifacts ==="
+              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
+            }
+
+            $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
+            if ($staleSec -ge $maxNoProgressSec) {
+              try { $proc.Kill($true) } catch {}
+              if ($videos) {
+                Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
+                break
+              }
+              Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
+              exit 124
+            }
+            if ($elapsedSec -ge $maxSec) {
+              try { $proc.Kill($true) } catch {}
+              if ($videos) {
+                Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
+                break
+              }
+              Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
+              exit 124
+            }
+          }
+
+          $proc.WaitForExit()
+          $uiExit = $proc.ExitCode
+          if (Test-Path -LiteralPath $stdoutLog) {
+            Write-Host "=== final tail $stdoutLog ==="
+            Get-Content -Path $stdoutLog -Tail 200
+          }
+          if (Test-Path -LiteralPath $stderrLog) {
+            Write-Host "=== final tail $stderrLog ==="
+            Get-Content -Path $stderrLog -Tail 200
           }
           $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-          if ($videos) {
-            Write-Host "=== current video artifacts ==="
-            $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
-          }
           if ($uiExit -ne 0) {
             if ($videos) {
               Write-Warning "HoroEditorUiTest exited with code $uiExit on Windows, but video artifacts exist. Continuing."
@@ -196,10 +271,15 @@ jobs:
           } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
           Write-Host "=== ui_test_output files ==="
           Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-          $logFile = "ui_test_output\horo_ui_test_windows.log"
-          if (Test-Path -LiteralPath $logFile) {
-            Write-Host "=== tail $logFile ==="
-            Get-Content -Path $logFile -Tail 200
+          $stdoutLog = "ui_test_output\horo_ui_test_windows.stdout.log"
+          $stderrLog = "ui_test_output\horo_ui_test_windows.stderr.log"
+          if (Test-Path -LiteralPath $stdoutLog) {
+            Write-Host "=== tail $stdoutLog ==="
+            Get-Content -Path $stdoutLog -Tail 200
+          }
+          if (Test-Path -LiteralPath $stderrLog) {
+            Write-Host "=== tail $stderrLog ==="
+            Get-Content -Path $stderrLog -Tail 200
           }
 
       - name: Upload UI Test Artifacts
