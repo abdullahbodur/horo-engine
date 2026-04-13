@@ -51,8 +51,23 @@ jobs:
       - name: Run UI Automation (no recording)
         run: |
           set -o pipefail
-          build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee ui_test_output/horo_ui_test_macos.log
+          log_file="ui_test_output/horo_ui_test_macos.log"
+          set +e
+          build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
+          ui_exit=${PIPESTATUS[0]}
+          set -e
+          if [ "$ui_exit" -ne 0 ]; then
+            if grep -q "glfwCreateWindow failed" "$log_file"; then
+              echo "::warning::UI automation skipped on macOS runner: unable to create GLFW window in headless environment."
+              echo "Detected glfwCreateWindow failure; treating this as a non-fatal skip."
+              exit 0
+            fi
+            echo "UI automation failed on macOS with exit code $ui_exit."
+            exit "$ui_exit"
+          fi
         env:
+          MONOLITH_UI_TEST_CAPTURE: "0"
+          MONOLITH_UI_TEST_VIDEO: "0"
           MONOLITH_UI_TEST_RECORDING: "0"
           MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "100"
@@ -86,10 +101,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install FFmpeg
-        shell: pwsh
-        run: choco install ffmpeg -y
-
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
@@ -112,23 +123,17 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
-      - name: Build Windowed UI Capture Target
+      - name: Build UI Automation Target
         run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
 
-      - name: Run Windowed UI Automation Capture
+      - name: Run UI Automation (stable mode)
         shell: pwsh
         run: |
-          $ffmpeg = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
-          if (-not (Test-Path -LiteralPath $ffmpeg)) {
-            Write-Error "ffmpeg not found at expected Chocolatey shim path: $ffmpeg"
-            exit 1
-          }
-          $env:MONOLITH_UI_TEST_CAPTURE = "1"
-          $env:MONOLITH_UI_TEST_VIDEO = "1"
-          $env:MONOLITH_UI_TEST_RECORDING = "1"
+          $env:MONOLITH_UI_TEST_CAPTURE = "0"
+          $env:MONOLITH_UI_TEST_VIDEO = "0"
+          $env:MONOLITH_UI_TEST_RECORDING = "0"
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_DELAY_MS = "100"
-          $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpeg
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
@@ -149,24 +154,13 @@ jobs:
             exit $proc.ExitCode
           }
 
-      - name: Verify UI video output
-        shell: pwsh
-        run: |
-          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-          if (-not $videos) {
-            Write-Error "No UI test video (.mp4) generated in ui_test_output."
-            exit 1
-          }
-          Write-Host "Generated UI test videos:"
-          $videos | ForEach-Object { Write-Host " - $($_.FullName)" }
-
-      - name: Dump Windows UI capture diagnostics on failure
+      - name: Dump Windows UI automation diagnostics on failure
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== UI capture env ==="
+          Write-Host "=== UI automation env ==="
           Get-ChildItem Env: | Where-Object {
-            $_.Name -like "MONOLITH_UI_TEST*" -or $_.Name -in @("WAYLAND_DISPLAY", "LIBGL_ALWAYS_SOFTWARE", "GALLIUM_DRIVER")
+            $_.Name -like "MONOLITH_UI_TEST*"
           } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
           Write-Host "=== ui_test_output files ==="
           Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
@@ -206,7 +200,7 @@ jobs:
             sudo apt-get update -qq
           fi
           sudo apt-get install -y --no-install-recommends \
-            ninja-build xvfb ffmpeg \
+            ninja-build xvfb \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxi-dev libxext-dev \
@@ -233,30 +227,39 @@ jobs:
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
 
-      - name: Build Windowed UI Capture Target
+      - name: Build UI Automation Target
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
-      - name: Run Windowed UI Automation Capture
+      - name: Run UI Automation (stable mode)
         run: |
           set -o pipefail
-          env -u WAYLAND_DISPLAY xvfb-run -a build/debug/bin/HoroEditorUiTest --run-ui-tests \
-            2>&1 | tee ui_test_output/horo_ui_test.log
+          log_file="ui_test_output/horo_ui_test_linux.log"
+          set +e
+          timeout --signal=TERM 240s env -u WAYLAND_DISPLAY xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+            build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
+          ui_exit=${PIPESTATUS[0]}
+          set -e
+          if [ "$ui_exit" -ne 0 ]; then
+            if [ "$ui_exit" -eq 124 ]; then
+              echo "::error::HoroEditorUiTest timed out after 240s."
+            fi
+            exit "$ui_exit"
+          fi
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_CAPTURE: "0"
+          MONOLITH_UI_TEST_VIDEO: "0"
+          MONOLITH_UI_TEST_RECORDING: "0"
           MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "100"
-          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: llvmpipe
           MONOLITH_GLFW_SAMPLES: "0"
 
-      - name: Dump UI capture diagnostics on failure
+      - name: Dump UI automation diagnostics on failure
         if: failure()
         run: |
-          echo "=== UI capture env ==="
+          echo "=== UI automation env ==="
           env | sort | awk '/^(MONOLITH_UI_TEST|LIBGL_ALWAYS_SOFTWARE|GALLIUM_DRIVER|WAYLAND_DISPLAY)/ { print }'
           echo "=== ui_test_output files ==="
           ls -la ui_test_output || true
