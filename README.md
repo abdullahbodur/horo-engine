@@ -90,7 +90,7 @@ sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-d
 ```bash
 make          # debug build
 make test     # run tests
-make ui-test  # headless launcher UI test
+make ui-test  # launcher unit tests (Catch2; windowed UI automation: make ui-test-windowed)
 ```
 
 For direct CMake usage:

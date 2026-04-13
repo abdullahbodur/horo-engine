@@ -7,4 +7,4 @@ It is not a separate CMake project; it builds as part of the top-level `Monolith
 - **Executable:** `HoroEditor` (`launcher/HoroEditorMain.cpp`)
 - **Library sources:** other `.cpp` files here are compiled into `MonolithEngine` (entry `HoroEditorMain.cpp` is excluded from the static lib).
 
-UI automation tests live under `tests/test_launcher_ui.cpp` and use [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine). Set `MONOLITH_UI_TEST_OUTPUT_DIR` to an absolute directory for captures (CI uses the workspace `ui_test_output` folder). If unset, captures go to `ui_test_output/` at the engine repo root (`RepoRootFromTestSource()`), not the build directory.
+**Launcher unit tests** live under `tests/test_launcher_unit.cpp` (Catch2, no GLFW). **End-to-end ImGui Test Engine** scenarios for the launcher run only in the `HoroEditorUiTest` binary (`--run-ui-tests`), implemented in `launcher/LauncherUiAutomation.cpp`. For screen/video capture in CI or locally, set `MONOLITH_UI_TEST_OUTPUT_DIR` to an absolute directory (CI uses the workspace `ui_test_output` folder).

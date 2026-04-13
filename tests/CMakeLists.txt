@@ -231,10 +231,8 @@ target_link_libraries(test_standalone PRIVATE MonolithEngine Catch2::Catch2WithM
 monolith_set_test_output_dir(test_standalone)
 add_test(NAME test_standalone COMMAND $<TARGET_FILE:test_standalone>)
 
-if(TARGET MonolithEngineImGuiTest)
-  # ---- test_launcher_ui ----
-  add_executable(test_launcher_ui test_launcher_ui.cpp)
-  target_link_libraries(test_launcher_ui PRIVATE MonolithEngineImGuiTest Catch2::Catch2WithMain)
-  monolith_set_test_output_dir(test_launcher_ui)
-  add_test(NAME test_launcher_ui COMMAND $<TARGET_FILE:test_launcher_ui>)
-endif()
+# ---- test_launcher_unit ----
+add_executable(test_launcher_unit test_launcher_unit.cpp)
+target_link_libraries(test_launcher_unit PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_launcher_unit)
+add_test(NAME test_launcher_unit COMMAND $<TARGET_FILE:test_launcher_unit>)

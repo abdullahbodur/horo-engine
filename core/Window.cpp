@@ -5,9 +5,26 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
+#include <cstdlib>
 #include <stdexcept>
 
 #include "core/Logger.h"
+
+namespace {
+
+int ReadEnvNonNegativeInt(const char* name, int fallback) {
+  const char* value = std::getenv(name);
+  if (!value || !*value)
+    return fallback;
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  const bool valid = (end != value && *end == '\0');
+  if (!valid || parsed < 0 || parsed > 32)
+    return fallback;
+  return static_cast<int>(parsed);
+}
+
+}  // namespace
 
 namespace Monolith {
 
@@ -51,8 +68,11 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   }
 
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-  if (traits.requestsMsaaSamples)
-    glfwWindowHint(GLFW_SAMPLES, 4);  // 4x MSAA
+  if (traits.requestsMsaaSamples) {
+    // Default 4x MSAA; set MONOLITH_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to avoid driver crashes.
+    const int samples = ReadEnvNonNegativeInt("MONOLITH_GLFW_SAMPLES", 4);
+    glfwWindowHint(GLFW_SAMPLES, samples);
+  }
 
   m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
   if (!m_window) {

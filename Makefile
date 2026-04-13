@@ -17,7 +17,7 @@ ifeq ($(OS),Windows_NT)
     SENTINEL_REL := build/$(PRESET_REL)/MonolithEngine.sln
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
-    BUILD_UI_HEADLESS = cmake --build build/$(PRESET_DBG) --config Debug --target test_launcher_ui --parallel 1
+    BUILD_LAUNCHER_UNIT = cmake --build build/$(PRESET_DBG) --config Debug --target test_launcher_unit --parallel 1
     BUILD_UI_WINDOWED = cmake --build build/$(PRESET_DBG) --config Debug --target HoroEditorUiTest --parallel 1
     RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest.exe --run-ui-tests
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
@@ -34,7 +34,7 @@ else
     SENTINEL_REL := build/$(PRESET_REL)/build.ninja
     BUILD_DBG   = cmake --build --preset $(PRESET_DBG)
     BUILD_REL   = cmake --build --preset $(PRESET_REL)
-    BUILD_UI_HEADLESS = cmake --build --preset $(PRESET_DBG) --target test_launcher_ui
+    BUILD_LAUNCHER_UNIT = cmake --build --preset $(PRESET_DBG) --target test_launcher_unit
     BUILD_UI_WINDOWED = cmake --build --preset $(PRESET_DBG) --target HoroEditorUiTest
     RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest --run-ui-tests
     TEST_CMD    = ctest --preset debug
@@ -85,10 +85,10 @@ $(SENTINEL_DBG):
 test: build
 	$(TEST_CMD)
 
-## Build + run standalone UI tests
+## Build + run launcher unit tests (Catch2; no window)
 ui-test: $(SENTINEL_DBG)
-	$(BUILD_UI_HEADLESS)
-	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_ui
+	$(BUILD_LAUNCHER_UNIT)
+	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_unit
 
 ## Build + run windowed launcher UI automation (optional capture/delay)
 ui-test-windowed: $(SENTINEL_DBG)
