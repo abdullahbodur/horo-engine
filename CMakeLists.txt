@@ -104,6 +104,7 @@ if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
     add_library(MonolithEngineImGuiTest STATIC ${ENGINE_SOURCES})
     target_compile_definitions(MonolithEngineImGuiTest PUBLIC
         IMGUI_USER_CONFIG=\"imgui_test_engine_config.h\"
+        MONOLITH_STANDALONE_UI_AUTOMATION=1
     )
     target_include_directories(MonolithEngineImGuiTest PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>

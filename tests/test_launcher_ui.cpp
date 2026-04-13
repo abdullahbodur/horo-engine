@@ -286,7 +286,7 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx, LauncherUiHarness* 
   ctx->ItemClick("Create Project");
   ctx->Yield(3);
   IM_CHECK(state->shell.HasActiveProject());
-  CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "after_project_creation.png");
+  CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "launcher_ui__create_project_from_launcher__expect_project_created.png");
 }
 
 ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, LauncherUiHarness* harness) {
@@ -325,7 +325,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, LauncherUiHar
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
-    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "back_to_home.png");
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible.png");
 
     IM_CHECK(!state->shell.HasActiveProject());
     ctx->SetRef("Horo Launcher");
@@ -334,7 +334,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, LauncherUiHar
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "recent_project_visible.png");
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
   };
 
   return test;
@@ -369,7 +369,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, LauncherU
     IM_CHECK(state->shell.HasActiveProject());
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
-    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "open_recent_project_done.png");
+    CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
   };
 
   return test;

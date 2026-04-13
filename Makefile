@@ -18,6 +18,8 @@ ifeq ($(OS),Windows_NT)
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     BUILD_UI_HEADLESS = cmake --build build/$(PRESET_DBG) --config Debug --target test_launcher_ui --parallel 1
+    BUILD_UI_WINDOWED = cmake --build build/$(PRESET_DBG) --config Debug --target HoroEditorUiTest --parallel 1
+    RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest.exe --run-ui-tests
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
 
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
@@ -33,6 +35,8 @@ else
     BUILD_DBG   = cmake --build --preset $(PRESET_DBG)
     BUILD_REL   = cmake --build --preset $(PRESET_REL)
     BUILD_UI_HEADLESS = cmake --build --preset $(PRESET_DBG) --target test_launcher_ui
+    BUILD_UI_WINDOWED = cmake --build --preset $(PRESET_DBG) --target HoroEditorUiTest
+    RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest --run-ui-tests
     TEST_CMD    = ctest --preset debug
 
     # Coverage — Linux/macOS: gcov + lcov  (apt: lcov  |  brew: lcov)
@@ -41,6 +45,10 @@ else
     COV_DIR     := build/coverage
     COV_REPORT  := $(COV_DIR)/html/index.html
 endif
+
+UI_TEST_DELAY_MS ?= 0
+UI_TEST_CAPTURE ?= 0
+UI_TEST_OUTPUT_DIR ?= $(CURDIR)/ui_test_output
 
 # Source files to format: all tracked .cpp/.h (excluding vendor/)
 ifeq ($(OS),Windows_NT)
@@ -57,7 +65,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test ui-test release coverage clean clean-all format format-check help
+.PHONY: all configure build test ui-test ui-test-windowed release coverage clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -81,6 +89,12 @@ test: build
 ui-test: $(SENTINEL_DBG)
 	$(BUILD_UI_HEADLESS)
 	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_ui
+
+## Build + run windowed launcher UI automation (optional capture/delay)
+ui-test-windowed: $(SENTINEL_DBG)
+	$(BUILD_UI_WINDOWED)
+	$(MKDIR_P) "$(UI_TEST_OUTPUT_DIR)"
+	MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -175,7 +189,8 @@ help:
 	@echo ""
 	@echo "  make              Build debug"
 	@echo "  make test         Build & run all 23 engine tests"
-	@echo "  make ui-test      Build & run standalone UI tests"
+	@echo "  make ui-test      Build & run headless launcher UI tests"
+	@echo "  make ui-test-windowed Build & run windowed launcher UI automation"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
@@ -183,6 +198,11 @@ help:
 	@echo "  make clean-all    Remove all build dirs (incl. coverage)"
 	@echo "  make format       Format all sources in-place"
 	@echo "  make format-check Check formatting (exits non-zero if changes needed)"
+	@echo ""
+	@echo "UI automation vars:"
+	@echo "  UI_TEST_DELAY_MS=<ms> (default 0)"
+	@echo "  UI_TEST_CAPTURE=0|1 (default 0)"
+	@echo "  UI_TEST_OUTPUT_DIR=<path> (default ./ui_test_output)"
 	@echo ""
 	@echo "CI / coverage:"
 	@echo "  Windows: make coverage  (requires OpenCppCoverage — winget install OpenCppCoverage.OpenCppCoverage)"

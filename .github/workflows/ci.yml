@@ -204,6 +204,7 @@ jobs:
         run: xvfb-run -a build/debug/bin/HoroEditorUiTest --run-ui-tests
         env:
           MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_DELAY_MS: "100"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
       - name: Upload Windowed UI Capture Artifacts
