@@ -161,7 +161,10 @@ jobs:
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
       - name: Run Windowed UI Automation Capture
-        run: env -u WAYLAND_DISPLAY xvfb-run -a build/debug/bin/HoroEditorUiTest --run-ui-tests
+        run: |
+          set -o pipefail
+          env -u WAYLAND_DISPLAY xvfb-run -a build/debug/bin/HoroEditorUiTest --run-ui-tests \
+            2>&1 | tee ui_test_output/horo_ui_test.log
         env:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
@@ -178,10 +181,14 @@ jobs:
         if: failure()
         run: |
           echo "=== UI capture env ==="
-          env | sort | rg '^MONOLITH_UI_TEST|^LIBGL_ALWAYS_SOFTWARE|^GALLIUM_DRIVER|^WAYLAND_DISPLAY'
+          env | sort | awk '/^(MONOLITH_UI_TEST|LIBGL_ALWAYS_SOFTWARE|GALLIUM_DRIVER|WAYLAND_DISPLAY)/ { print }'
           echo "=== ui_test_output files ==="
           ls -la ui_test_output || true
-          rg "UI automation|Queued|No UI scenarios|timed out|capture|video" ui_test_output -g '*.log' || true
+          if ls ui_test_output/*.log >/dev/null 2>&1; then
+            grep -R -E "UI automation|Queued|No UI scenarios|timed out|capture|video|Segmentation fault" ui_test_output/*.log || true
+          else
+            echo "No UI log files found in ui_test_output."
+          fi
 
       - name: Upload UI Test Artifacts
         if: always()
