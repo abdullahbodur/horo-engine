@@ -157,14 +157,11 @@ class HoroEditorApp final : public Application {
     if (m_uiAutomation) {
       m_uiAutomation->Shutdown();
       m_uiAutomationPassed = m_uiAutomation->DidPass();
+      m_uiAutomation->DestroyContext();
     }
 #endif
     m_shell.Shutdown();
     m_editor.Shutdown();
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_uiAutomation)
-      m_uiAutomation->DestroyContext();
-#endif
     if (m_runtime)
       m_runtime->Unload();
   }

@@ -37,6 +37,7 @@ struct AutomationState {
   fs::path uiCaptureOutputDir;
   bool captureEnabled = false;
   bool videoEnabled = false;
+  bool videoCaptureOpen = false;
   StandaloneEditorShell* shell = nullptr;
 };
 
@@ -214,6 +215,16 @@ bool BeginVideoCapture(ImGuiTestContext* ctx, const AutomationState* state, cons
   return ctx->CaptureBeginVideo();
 }
 
+bool BeginSuiteVideoCaptureIfNeeded(ImGuiTestContext* ctx, AutomationState* state) {
+  if (!ctx || !state || !state->videoEnabled)
+    return false;
+  if (state->videoCaptureOpen)
+    return true;
+  const bool started = BeginVideoCapture(ctx, state, "launcher_ui__full_suite__run.mp4");
+  state->videoCaptureOpen = started;
+  return started;
+}
+
 void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
                                       AutomationState* state,
                                       bool allowScreenshot = true) {
@@ -247,18 +258,13 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, AutomationState* s
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    const bool videoStarted = BeginVideoCapture(
-        ctx, testState, "launcher_ui__create_project_from_launcher__expect_project_created__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
+    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
-    if (videoStarted) {
-      ctx->CaptureEndVideo();
-      ctx->CaptureReset();
-    }
   };
   return test;
 }
@@ -269,16 +275,15 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    const bool videoStarted = BeginVideoCapture(
-        ctx, testState, "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
+    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
     IM_CHECK(!testState->shell->HasActiveProject());
-    if (testState->captureEnabled && !videoStarted)
+    if (testState->captureEnabled && !testState->videoEnabled)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
@@ -290,15 +295,11 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, AutomationSta
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    if (testState->captureEnabled && !videoStarted)
+    if (testState->captureEnabled && !testState->videoEnabled)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
-    if (videoStarted) {
-      ctx->CaptureEndVideo();
-      ctx->CaptureReset();
-    }
   };
   return test;
 }
@@ -309,9 +310,8 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
   test->TestFunc = [](ImGuiTestContext* ctx) {
     auto* testState = static_cast<AutomationState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
-    const bool videoStarted = BeginVideoCapture(
-        ctx, testState, "launcher_ui__open_project_from_recent_projects__expect_project_reopened__run.mp4");
-    EnsureProjectCreatedFromLauncher(ctx, testState, !videoStarted);
+    BeginSuiteVideoCaptureIfNeeded(ctx, testState);
+    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
@@ -330,14 +330,15 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, Automatio
     IM_CHECK(testState->shell->HasActiveProject());
     ctx->SetRef("Standalone Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
-    if (testState->captureEnabled && !videoStarted)
+    if (testState->captureEnabled && !testState->videoEnabled)
       CaptureScreenshotTo(
           ctx,
           testState->uiCaptureOutputDir,
           "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
-    if (videoStarted) {
+    if (testState->videoCaptureOpen) {
       ctx->CaptureEndVideo();
       ctx->CaptureReset();
+      testState->videoCaptureOpen = false;
     }
   };
   return test;

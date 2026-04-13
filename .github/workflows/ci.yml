@@ -99,7 +99,8 @@ jobs:
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Run UI Test
-        run: build/debug-msvc/bin/tests/Debug/test_launcher_ui.exe
+        shell: pwsh
+        run: .\build\debug-msvc\bin\tests\Debug\test_launcher_ui.exe
         env:
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
 
@@ -115,7 +116,18 @@ jobs:
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpeg
           $env:MONOLITH_UI_TEST_DELAY_MS = "100"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          build/debug-msvc/bin/Debug/HoroEditorUiTest.exe --run-ui-tests
+          .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
+
+      - name: Verify UI video output
+        shell: pwsh
+        run: |
+          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          if (-not $videos) {
+            Write-Error "No UI test video (.mp4) generated in ui_test_output."
+            exit 1
+          }
+          Write-Host "Generated UI test videos:"
+          $videos | ForEach-Object { Write-Host " - $($_.FullName)" }
 
       - name: Upload UI Test Artifacts
         if: always()
