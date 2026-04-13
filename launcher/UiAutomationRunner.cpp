@@ -265,8 +265,13 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
            recordingEnabled ? 1 : 0,
            m_impl->state.captureEnabled ? 1 : 0,
            m_impl->state.videoEnabled ? 1 : 0);
+  const bool cleanTempRoot = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
   std::error_code ec;
-  fs::remove_all(m_impl->state.tempRoot, ec);
+  if (cleanTempRoot) {
+    fs::remove_all(m_impl->state.tempRoot, ec);
+  } else {
+    LOG_INFO("Skipping UI temp root cleanup for this run: %s", m_impl->state.tempRoot.string().c_str());
+  }
   fs::create_directories(m_impl->state.tempRoot / "home", ec);
   if (m_impl->state.captureEnabled)
     fs::create_directories(m_impl->state.uiCaptureOutputDir, ec);

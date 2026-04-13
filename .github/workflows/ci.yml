@@ -160,8 +160,10 @@ jobs:
             Write-Error "Unable to locate ffmpeg executable. Checked: $($ffmpegCandidates -join ', ')"
             exit 1
           }
+          Write-Host "Using ffmpeg: $ffmpegPath"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
+          $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
           Write-Host "Starting Windows UI automation with capture/video enabled."
