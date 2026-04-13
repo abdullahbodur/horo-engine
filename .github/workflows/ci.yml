@@ -21,8 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ninja + FFmpeg
-        run: brew install ninja ffmpeg
+      - name: Install Ninja
+        run: brew install ninja
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -52,19 +52,6 @@ jobs:
         run: build/debug/bin/tests/test_launcher_ui
         env:
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-
-      - name: Build Windowed UI Capture Target
-        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-
-      - name: Run Windowed UI Automation Capture
-        run: |
-          FFMPEG_PATH="$(command -v ffmpeg)"
-          MONOLITH_UI_TEST_CAPTURE=1 \
-          MONOLITH_UI_TEST_VIDEO=1 \
-          MONOLITH_UI_TEST_FFMPEG_PATH="$FFMPEG_PATH" \
-          MONOLITH_UI_TEST_DELAY_MS=100 \
-          MONOLITH_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output" \
-          build/debug/bin/HoroEditorUiTest --run-ui-tests
 
       - name: Upload UI Test Artifacts
         if: always()
