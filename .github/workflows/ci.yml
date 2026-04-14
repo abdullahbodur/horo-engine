@@ -116,7 +116,6 @@ jobs:
         id: setup-ffmpeg
         with:
           ffmpeg-version: release
-          linking-type: static
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -141,7 +140,7 @@ jobs:
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Release --target HoroEditorUiTest --parallel
+        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
 
       - name: Run UI Automation Smoke (no recording)
         shell: pwsh
@@ -155,7 +154,7 @@ jobs:
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
-          $uiExe = ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe"
+          $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
             Write-Error "UI automation executable not found: $uiExe"
             exit 1
@@ -280,7 +279,7 @@ jobs:
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
-          $uiExe = ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe"
+          $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
             Write-Error "UI automation executable not found: $uiExe"
             exit 1
