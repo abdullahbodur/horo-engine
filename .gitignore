@@ -4,3 +4,4 @@ ui_test_output/
 *.user
 .vs/
 *.log
+.idea

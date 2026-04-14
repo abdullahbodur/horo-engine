@@ -37,6 +37,14 @@ int ReadEnvNonNegativeInt(const char* name, int fallback) {
   return static_cast<int>(parsed);
 }
 
+const char* SafeGlfwErrorString() {
+  const char* description = nullptr;
+  const int code = glfwGetError(&description);
+  if (code == GLFW_NO_ERROR)
+    return "no-error";
+  return description ? description : "unknown-glfw-error";
+}
+
 }  // namespace
 
 namespace Monolith {
@@ -61,8 +69,16 @@ WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi
 }
 
 Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height) {
+  LOG_INFO("Window bootstrap begin: title='%s' size=%dx%d api=%d vsync=%d",
+           spec.title.c_str(),
+           spec.width,
+           spec.height,
+           static_cast<int>(spec.graphicsApi),
+           spec.vsync ? 1 : 0);
+  LOG_INFO("Calling glfwInit...");
   if (!glfwInit())
-    throw std::runtime_error("glfwInit failed");
+    throw std::runtime_error(std::string("glfwInit failed: ") + SafeGlfwErrorString());
+  LOG_INFO("glfwInit succeeded.");
 
   m_graphicsApi = spec.graphicsApi;
   m_vsync = spec.vsync;
@@ -85,22 +101,29 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
     // Default 4x MSAA; set MONOLITH_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to avoid driver crashes.
     const int samples = ReadEnvNonNegativeInt("MONOLITH_GLFW_SAMPLES", 4);
     glfwWindowHint(GLFW_SAMPLES, samples);
+    LOG_INFO("GLFW window hint: samples=%d", samples);
   }
 
+  LOG_INFO("Calling glfwCreateWindow...");
   m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
   if (!m_window) {
     glfwTerminate();
-    throw std::runtime_error("glfwCreateWindow failed");
+    throw std::runtime_error(std::string("glfwCreateWindow failed: ") + SafeGlfwErrorString());
   }
+  LOG_INFO("glfwCreateWindow succeeded: window=%p", m_window);
 
   if (traits.createsClientContext) {
+    LOG_INFO("Making GL context current...");
     glfwMakeContextCurrent(m_window);
+    LOG_INFO("Loading GL via glad...");
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
       glfwDestroyWindow(m_window);
       glfwTerminate();
       throw std::runtime_error("gladLoadGLLoader failed");
     }
+    LOG_INFO("gladLoadGLLoader succeeded.");
     SetVSync(spec.vsync);
+    LOG_INFO("SetVSync complete: enabled=%d", spec.vsync ? 1 : 0);
     LOG_INFO("OpenGL %s — %s", glGetString(GL_VERSION), glGetString(GL_RENDERER));
   } else {
     // Vulkan presentation pacing is backend-owned; the window stores the preference.
