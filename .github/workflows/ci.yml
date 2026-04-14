@@ -111,9 +111,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install FFmpeg
-        shell: pwsh
-        run: choco install ffmpeg -y --no-progress
+      - name: Setup FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        id: setup-ffmpeg
+        with:
+          ffmpeg-version: release
+          linking-type: static
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -138,7 +141,7 @@ jobs:
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Release --target HoroEditorUiTest --parallel
+        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
 
       - name: Run UI Automation (windowed capture + video)
         shell: pwsh
@@ -150,13 +153,9 @@ jobs:
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $ffmpegCandidates = @(
-            "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin\ffmpeg.exe",
-            "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
-          )
-          $ffmpegPath = $ffmpegCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
           if (-not $ffmpegPath) {
-            Write-Error "Unable to locate ffmpeg executable. Checked: $($ffmpegCandidates -join ', ')"
+            Write-Error "Unable to locate ffmpeg executable from setup-ffmpeg output."
             exit 1
           }
           Write-Host "Using ffmpeg: $ffmpegPath"
@@ -165,120 +164,81 @@ jobs:
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
-          $ffmpegStdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_recorder_windows.stdout.log"
-          $ffmpegStderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_recorder_windows.stderr.log"
-          $desktopRecording = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows_desktop.mp4"
-          $ffmpegArgs = @(
-            "-y",
-            "-f", "gdigrab",
-            "-framerate", "15",
-            "-i", "desktop",
-            "-pix_fmt", "yuv420p",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "23",
-            $desktopRecording
-          )
-          Write-Host "Starting FFmpeg desktop recorder..."
-          $ffmpegProc = Start-Process `
-            -FilePath $ffmpegPath `
-            -ArgumentList $ffmpegArgs `
-            -PassThru `
-            -NoNewWindow `
-            -RedirectStandardOutput $ffmpegStdoutLog `
-            -RedirectStandardError $ffmpegStderrLog
-          Start-Sleep -Seconds 2
 
           Write-Host "Starting Windows UI automation with capture/video enabled."
           $uiExit = 0
-          $proc = $null
-          try {
-            $proc = Start-Process `
-              -FilePath ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe" `
-              -ArgumentList "--run-ui-tests" `
-              -NoNewWindow `
-              -PassThru `
-              -RedirectStandardOutput $stdoutLog `
-              -RedirectStandardError $stderrLog
+          $proc = Start-Process `
+            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
+            -ArgumentList "--run-ui-tests" `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog
 
-            $pollSec = 15
-            $maxSec = 600
-            $maxNoProgressSec = 240
-            $start = Get-Date
-            $lastProgress = Get-Date
-            $lastStdoutLen = -1
-            $lastStderrLen = -1
-            while (-not $proc.HasExited) {
-              Start-Sleep -Seconds $pollSec
-              $proc.Refresh()
-              $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
-              Write-Host "[windows-ui] still running (${elapsedSec}s)"
+          $pollSec = 15
+          $maxSec = 600
+          $maxNoProgressSec = 240
+          $start = Get-Date
+          $lastProgress = Get-Date
+          $lastStdoutLen = -1
+          $lastStderrLen = -1
+          while (-not $proc.HasExited) {
+            Start-Sleep -Seconds $pollSec
+            $proc.Refresh()
+            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host "[windows-ui] still running (${elapsedSec}s)"
 
-              $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
-              $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
-              $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+            $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
+            $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
+            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
 
-              if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
-                $lastProgress = Get-Date
-                $lastStdoutLen = $stdoutLen
-                $lastStderrLen = $stderrLen
-              }
+            if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
+              $lastProgress = Get-Date
+              $lastStdoutLen = $stdoutLen
+              $lastStderrLen = $stderrLen
+            }
 
-              if (Test-Path -LiteralPath $stdoutLog) {
-                Write-Host "=== tail $stdoutLog ==="
-                Get-Content -Path $stdoutLog -Tail 40
-              }
-              if (Test-Path -LiteralPath $stderrLog) {
-                Write-Host "=== tail $stderrLog ==="
-                Get-Content -Path $stderrLog -Tail 40
-              }
+            if (Test-Path -LiteralPath $stdoutLog) {
+              Write-Host "=== tail $stdoutLog ==="
+              Get-Content -Path $stdoutLog -Tail 40
+            }
+            if (Test-Path -LiteralPath $stderrLog) {
+              Write-Host "=== tail $stderrLog ==="
+              Get-Content -Path $stderrLog -Tail 40
+            }
+            if ($videos) {
+              Write-Host "=== current video artifacts ==="
+              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
+            }
+
+            $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
+            if ($staleSec -ge $maxNoProgressSec) {
+              try { $proc.Kill($true) } catch {}
               if ($videos) {
-                Write-Host "=== current video artifacts ==="
-                $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
-              }
-
-              $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
-              if ($staleSec -ge $maxNoProgressSec) {
-                try { $proc.Kill($true) } catch {}
-                if ($videos) {
-                  Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
-                  $uiExit = 0
-                  break
-                }
-                Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
-                $uiExit = 124
+                Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
+                $uiExit = 0
                 break
               }
-              if ($elapsedSec -ge $maxSec) {
-                try { $proc.Kill($true) } catch {}
-                if ($videos) {
-                  Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
-                  $uiExit = 0
-                  break
-                }
-                Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
-                $uiExit = 124
+              Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
+              $uiExit = 124
+              break
+            }
+            if ($elapsedSec -ge $maxSec) {
+              try { $proc.Kill($true) } catch {}
+              if ($videos) {
+                Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
+                $uiExit = 0
                 break
               }
+              Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
+              $uiExit = 124
+              break
             }
+          }
 
-            if ($proc) {
-              $proc.WaitForExit()
-              if ($uiExit -eq 0) {
-                $uiExit = $proc.ExitCode
-              }
-            }
-          } finally {
-            if ($ffmpegProc -and -not $ffmpegProc.HasExited) {
-              Write-Host "Stopping FFmpeg desktop recorder..."
-              try {
-                Stop-Process -Id $ffmpegProc.Id
-              } catch {}
-              Start-Sleep -Seconds 2
-              if (-not $ffmpegProc.HasExited) {
-                try { Stop-Process -Id $ffmpegProc.Id -Force } catch {}
-              }
-            }
+          $proc.WaitForExit()
+          if ($uiExit -eq 0) {
+            $uiExit = $proc.ExitCode
           }
 
           if (Test-Path -LiteralPath $stdoutLog) {
@@ -288,10 +248,6 @@ jobs:
           if (Test-Path -LiteralPath $stderrLog) {
             Write-Host "=== final tail $stderrLog ==="
             Get-Content -Path $stderrLog -Tail 200
-          }
-          if (Test-Path -LiteralPath $ffmpegStderrLog) {
-            Write-Host "=== final tail $ffmpegStderrLog ==="
-            Get-Content -Path $ffmpegStderrLog -Tail 80
           }
           $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
           if ($uiExit -ne 0) {
