@@ -160,97 +160,9 @@ jobs:
             exit 1
           }
           Write-Host "Using UI automation executable: $uiExe"
-          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows_smoke.stdout.log"
-          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows_smoke.stderr.log"
-
           Write-Host "Starting Windows UI automation smoke run (recording disabled)."
-          $uiExit = 0
-          $proc = Start-Process `
-            -FilePath $uiExe `
-            -ArgumentList "--run-ui-tests" `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog
-
-          $pollSec = 15
-          $maxSec = 600
-          $maxNoProgressSec = 240
-          $enforceNoProgress = ($env:MONOLITH_UI_TEST_RECORDING -eq "1" -or
-                                $env:MONOLITH_UI_TEST_CAPTURE -eq "1" -or
-                                $env:MONOLITH_UI_TEST_VIDEO -eq "1")
-          $start = Get-Date
-          $lastProgress = Get-Date
-          $lastStdoutLen = -1
-          $lastStderrLen = -1
-          while (-not $proc.HasExited) {
-            Start-Sleep -Seconds $pollSec
-            $proc.Refresh()
-            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
-            Write-Host "[windows-ui] still running (${elapsedSec}s)"
-
-            $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
-            $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
-            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-
-            if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
-              $lastProgress = Get-Date
-              $lastStdoutLen = $stdoutLen
-              $lastStderrLen = $stderrLen
-            }
-
-            if (Test-Path -LiteralPath $stdoutLog) {
-              Write-Host "=== tail $stdoutLog ==="
-              Get-Content -Path $stdoutLog -Tail 40
-            }
-            if (Test-Path -LiteralPath $stderrLog) {
-              Write-Host "=== tail $stderrLog ==="
-              Get-Content -Path $stderrLog -Tail 40
-            }
-            if ($videos) {
-              Write-Host "=== current video artifacts ==="
-              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
-            }
-
-            $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
-            if ($enforceNoProgress -and $staleSec -ge $maxNoProgressSec) {
-              try { $proc.Kill($true) } catch {}
-              if ($videos) {
-                Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
-                $uiExit = 0
-                break
-              }
-              Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
-              $uiExit = 124
-              break
-            }
-            if ($elapsedSec -ge $maxSec) {
-              try { $proc.Kill($true) } catch {}
-              if ($videos) {
-                Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
-                $uiExit = 0
-                break
-              }
-              Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
-              $uiExit = 124
-              break
-            }
-          }
-
-          $proc.WaitForExit()
-          if ($uiExit -eq 0) {
-            $uiExit = $proc.ExitCode
-          }
-
-          if (Test-Path -LiteralPath $stdoutLog) {
-            Write-Host "=== final tail $stdoutLog ==="
-            Get-Content -Path $stdoutLog -Tail 200
-          }
-          if (Test-Path -LiteralPath $stderrLog) {
-            Write-Host "=== final tail $stderrLog ==="
-            Get-Content -Path $stderrLog -Tail 200
-          }
-          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          & $uiExe --run-ui-tests
+          $uiExit = $LASTEXITCODE
           if ($uiExit -ne 0) {
             Write-Error "Smoke run failed with exit code $uiExit."
             exit $uiExit
@@ -288,96 +200,9 @@ jobs:
             exit 1
           }
           Write-Host "Using UI automation executable: $uiExe"
-          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
-          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
-
           Write-Host "Starting Windows UI automation recording run."
-          $uiExit = 0
-          $proc = Start-Process `
-            -FilePath $uiExe `
-            -ArgumentList "--run-ui-tests" `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog
-
-          $pollSec = 15
-          $maxSec = 600
-          $maxNoProgressSec = 240
-          $enforceNoProgress = ($env:MONOLITH_UI_TEST_RECORDING -eq "1" -or
-                                $env:MONOLITH_UI_TEST_CAPTURE -eq "1" -or
-                                $env:MONOLITH_UI_TEST_VIDEO -eq "1")
-          $start = Get-Date
-          $lastProgress = Get-Date
-          $lastStdoutLen = -1
-          $lastStderrLen = -1
-          while (-not $proc.HasExited) {
-            Start-Sleep -Seconds $pollSec
-            $proc.Refresh()
-            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
-            Write-Host "[windows-ui-recording] still running (${elapsedSec}s)"
-
-            $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
-            $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
-            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-
-            if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
-              $lastProgress = Get-Date
-              $lastStdoutLen = $stdoutLen
-              $lastStderrLen = $stderrLen
-            }
-
-            if (Test-Path -LiteralPath $stdoutLog) {
-              Write-Host "=== tail $stdoutLog ==="
-              Get-Content -Path $stdoutLog -Tail 40
-            }
-            if (Test-Path -LiteralPath $stderrLog) {
-              Write-Host "=== tail $stderrLog ==="
-              Get-Content -Path $stderrLog -Tail 40
-            }
-            if ($videos) {
-              Write-Host "=== current video artifacts ==="
-              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
-            }
-
-            $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
-            if ($enforceNoProgress -and $staleSec -ge $maxNoProgressSec) {
-              try { $proc.Kill($true) } catch {}
-              if ($videos) {
-                Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
-                $uiExit = 0
-                break
-              }
-              Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
-              $uiExit = 124
-              break
-            }
-            if ($elapsedSec -ge $maxSec) {
-              try { $proc.Kill($true) } catch {}
-              if ($videos) {
-                Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
-                $uiExit = 0
-                break
-              }
-              Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
-              $uiExit = 124
-              break
-            }
-          }
-
-          $proc.WaitForExit()
-          if ($uiExit -eq 0) {
-            $uiExit = $proc.ExitCode
-          }
-
-          if (Test-Path -LiteralPath $stdoutLog) {
-            Write-Host "=== final tail $stdoutLog ==="
-            Get-Content -Path $stdoutLog -Tail 200
-          }
-          if (Test-Path -LiteralPath $stderrLog) {
-            Write-Host "=== final tail $stderrLog ==="
-            Get-Content -Path $stderrLog -Tail 200
-          }
+          & $uiExe --run-ui-tests
+          $uiExit = $LASTEXITCODE
           $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
           if ($uiExit -ne 0) {
             if ($videos) {
