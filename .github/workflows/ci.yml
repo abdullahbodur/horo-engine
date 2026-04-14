@@ -111,33 +111,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Windows runner diagnostics
-        shell: pwsh
-        run: |
-          Write-Host "=== CPU ==="
-          Get-CimInstance Win32_Processor |
-            Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed |
-            Format-List
-
-          Write-Host "=== Memory ==="
-          Get-CimInstance Win32_OperatingSystem |
-            Select-Object TotalVisibleMemorySize, FreePhysicalMemory |
-            Format-List
-
-          Write-Host "=== Disk speed smoke test (256MB) ==="
-          $diagFile = Join-Path "${{ github.workspace }}" "ui_test_output_speed_probe.bin"
-          $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          $bytes = New-Object byte[] (256MB)
-          [System.IO.File]::WriteAllBytes($diagFile, $bytes)
-          $sw.Stop()
-          Write-Host ("Write 256MB: {0:N2}s" -f $sw.Elapsed.TotalSeconds)
-
-          $sw.Restart()
-          [void][System.IO.File]::ReadAllBytes($diagFile)
-          $sw.Stop()
-          Write-Host ("Read 256MB:  {0:N2}s" -f $sw.Elapsed.TotalSeconds)
-          Remove-Item -LiteralPath $diagFile -Force -ErrorAction SilentlyContinue
-
       - name: Setup FFmpeg
         uses: FedericoCarboni/setup-ffmpeg@v3
         id: setup-ffmpeg
@@ -151,7 +124,7 @@ jobs:
           key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
           restore-keys: fetchcontent-windows-
 
-      - name: Configure
+      - name: Configure 
         run: cmake --preset debug-msvc
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
@@ -180,6 +153,7 @@ jobs:
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $env:MONOLITH_GLFW_SAMPLES = "0"
+          $env:MONOLITH_GLFW_VISIBLE = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
@@ -223,6 +197,7 @@ jobs:
           Write-Host "Using FFmpeg executable: $ffmpegPath"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
+          $env:MONOLITH_GLFW_VISIBLE = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {

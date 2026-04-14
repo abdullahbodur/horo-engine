@@ -280,6 +280,7 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
   LogUiEnvVar("MONOLITH_UI_TEST_FFMPEG_PATH");
   LogUiEnvVar("MONOLITH_UI_TEST_CLEAN_TEMP");
   LogUiEnvVar("MONOLITH_GLFW_SAMPLES");
+  LogUiEnvVar("MONOLITH_GLFW_VISIBLE");
   const bool recordingEnabled = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_RECORDING");
   m_impl->state.captureEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");

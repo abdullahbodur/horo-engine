@@ -37,6 +37,25 @@ int ReadEnvNonNegativeInt(const char* name, int fallback) {
   return static_cast<int>(parsed);
 }
 
+bool ReadEnvBool(const char* name, bool fallback) {
+  if (!name || !*name)
+    return fallback;
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || !value)
+    return fallback;
+  const std::string parsed(value);
+  free(value);
+#else
+  const char* value = std::getenv(name);
+  if (!value || !*value)
+    return fallback;
+  const std::string parsed(value);
+#endif
+  return parsed != "0";
+}
+
 const char* SafeGlfwErrorString() {
   const char* description = nullptr;
   const int code = glfwGetError(&description);
@@ -97,6 +116,9 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   }
 
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+  const bool visible = ReadEnvBool("MONOLITH_GLFW_VISIBLE", true);
+  glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
+  LOG_INFO("GLFW window hint: visible=%d", visible ? 1 : 0);
   if (traits.requestsMsaaSamples) {
     // Default 4x MSAA; set MONOLITH_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to avoid driver crashes.
     const int samples = ReadEnvNonNegativeInt("MONOLITH_GLFW_SAMPLES", 4);
