@@ -24,11 +24,10 @@ Launcher::LauncherEditorShell* AsLauncherShell(UiAutomationRunState* state) {
 }
 
 ImGuiWindow* FindWindowContaining(const char* token) {
-  if (!token || !*token || GImGui == nullptr)
+  if (!*token || GImGui == nullptr)
     return nullptr;
 
-  ImGuiContext& context = *GImGui;
-  for (ImGuiWindow* window : context.Windows) {
+  for (ImGuiContext& context = *GImGui; ImGuiWindow* window : context.Windows) {
     if (!window || !window->Name)
       continue;
     if (std::string(window->Name).find(token) != std::string::npos)
@@ -38,7 +37,7 @@ ImGuiWindow* FindWindowContaining(const char* token) {
 }
 
 void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char* filename) {
-  if (!ctx || !ctx->CaptureArgs || filename == nullptr || dir.empty())
+  if (!ctx || !ctx->CaptureArgs || dir.empty())
     return;
   const std::string full = (dir / filename).string();
   if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile))
@@ -49,7 +48,7 @@ void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char*
 }
 
 bool BeginVideoCapture(ImGuiTestContext* ctx, const UiAutomationRunState* state, const char* filename) {
-  if (!ctx || !state || !state->videoEnabled || filename == nullptr || state->uiCaptureOutputDir.empty())
+  if (state->uiCaptureOutputDir.empty())
     return false;
   if (!ctx->CaptureArgs)
     return false;
@@ -65,7 +64,7 @@ bool BeginVideoCapture(ImGuiTestContext* ctx, const UiAutomationRunState* state,
 bool BeginTestVideoCaptureIfNeeded(ImGuiTestContext* ctx,
                                    UiAutomationRunState* state,
                                    const char* filename) {
-  if (!ctx || !state || !state->videoEnabled || !filename || !*filename)
+  if (!ctx || !state || !state->videoEnabled || !*filename)
     return false;
   if (state->videoCaptureOpen)
     return true;
