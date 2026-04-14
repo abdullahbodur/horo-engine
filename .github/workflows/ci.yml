@@ -143,30 +143,16 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build build/debug-msvc --config Release --target HoroEditorUiTest --parallel
 
-      - name: Run UI Automation (windowed capture + video)
+      - name: Run UI Automation Smoke (no recording)
         shell: pwsh
         timeout-minutes: 12
         run: |
-          $env:MONOLITH_UI_TEST_CAPTURE = "1"
-          $env:MONOLITH_UI_TEST_VIDEO = "1"
-          $env:MONOLITH_UI_TEST_RECORDING = "1"
+          $env:MONOLITH_UI_TEST_CAPTURE = "0"
+          $env:MONOLITH_UI_TEST_VIDEO = "0"
+          $env:MONOLITH_UI_TEST_RECORDING = "0"
           $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
           $env:MONOLITH_UI_TEST_DELAY_MS = "0"
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
-          if (-not $ffmpegPath) {
-            Write-Error "Unable to locate FFmpeg path from setup-ffmpeg output."
-            exit 1
-          }
-          if (Test-Path -LiteralPath $ffmpegPath -PathType Container) {
-            $ffmpegPath = Join-Path $ffmpegPath "ffmpeg.exe"
-          }
-          if (-not (Test-Path -LiteralPath $ffmpegPath -PathType Leaf)) {
-            Write-Error "Resolved FFmpeg executable not found: $ffmpegPath"
-            exit 1
-          }
-          Write-Host "Using FFmpeg executable: $ffmpegPath"
-          $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $uiExe = ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe"
@@ -175,10 +161,10 @@ jobs:
             exit 1
           }
           Write-Host "Using UI automation executable: $uiExe"
-          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
-          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
+          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows_smoke.stdout.log"
+          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows_smoke.stderr.log"
 
-          Write-Host "Starting Windows UI automation with capture/video enabled."
+          Write-Host "Starting Windows UI automation smoke run (recording disabled)."
           $uiExit = 0
           $proc = Start-Process `
             -FilePath $uiExe `
@@ -264,10 +250,135 @@ jobs:
           }
           $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
           if ($uiExit -ne 0) {
+            Write-Error "Smoke run failed with exit code $uiExit."
+            exit $uiExit
+          }
+
+      - name: Run UI Automation Recording (capture + video)
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $env:MONOLITH_UI_TEST_CAPTURE = "1"
+          $env:MONOLITH_UI_TEST_VIDEO = "1"
+          $env:MONOLITH_UI_TEST_RECORDING = "1"
+          $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
+          $env:MONOLITH_UI_TEST_DELAY_MS = "0"
+          $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
+          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
+          if (-not $ffmpegPath) {
+            Write-Error "Unable to locate FFmpeg path from setup-ffmpeg output."
+            exit 1
+          }
+          if (Test-Path -LiteralPath $ffmpegPath -PathType Container) {
+            $ffmpegPath = Join-Path $ffmpegPath "ffmpeg.exe"
+          }
+          if (-not (Test-Path -LiteralPath $ffmpegPath -PathType Leaf)) {
+            Write-Error "Resolved FFmpeg executable not found: $ffmpegPath"
+            exit 1
+          }
+          Write-Host "Using FFmpeg executable: $ffmpegPath"
+          $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
+          $env:MONOLITH_GLFW_SAMPLES = "0"
+          $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
+          $uiExe = ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe"
+          if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
+            Write-Error "UI automation executable not found: $uiExe"
+            exit 1
+          }
+          Write-Host "Using UI automation executable: $uiExe"
+          $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
+          $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
+
+          Write-Host "Starting Windows UI automation recording run."
+          $uiExit = 0
+          $proc = Start-Process `
+            -FilePath $uiExe `
+            -ArgumentList "--run-ui-tests" `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog
+
+          $pollSec = 15
+          $maxSec = 600
+          $maxNoProgressSec = 240
+          $start = Get-Date
+          $lastProgress = Get-Date
+          $lastStdoutLen = -1
+          $lastStderrLen = -1
+          while (-not $proc.HasExited) {
+            Start-Sleep -Seconds $pollSec
+            $proc.Refresh()
+            $elapsedSec = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host "[windows-ui-recording] still running (${elapsedSec}s)"
+
+            $stdoutLen = if (Test-Path -LiteralPath $stdoutLog) { (Get-Item $stdoutLog).Length } else { -1 }
+            $stderrLen = if (Test-Path -LiteralPath $stderrLog) { (Get-Item $stderrLog).Length } else { -1 }
+            $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+
+            if ($stdoutLen -ne $lastStdoutLen -or $stderrLen -ne $lastStderrLen -or $videos) {
+              $lastProgress = Get-Date
+              $lastStdoutLen = $stdoutLen
+              $lastStderrLen = $stderrLen
+            }
+
+            if (Test-Path -LiteralPath $stdoutLog) {
+              Write-Host "=== tail $stdoutLog ==="
+              Get-Content -Path $stdoutLog -Tail 40
+            }
+            if (Test-Path -LiteralPath $stderrLog) {
+              Write-Host "=== tail $stderrLog ==="
+              Get-Content -Path $stderrLog -Tail 40
+            }
+            if ($videos) {
+              Write-Host "=== current video artifacts ==="
+              $videos | ForEach-Object { Write-Host " - $($_.FullName) ($($_.Length) bytes)" }
+            }
+
+            $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
+            if ($staleSec -ge $maxNoProgressSec) {
+              try { $proc.Kill($true) } catch {}
+              if ($videos) {
+                Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
+                $uiExit = 0
+                break
+              }
+              Write-Error "UI automation had no progress for ${maxNoProgressSec}s and produced no videos."
+              $uiExit = 124
+              break
+            }
+            if ($elapsedSec -ge $maxSec) {
+              try { $proc.Kill($true) } catch {}
+              if ($videos) {
+                Write-Warning "UI automation exceeded ${maxSec}s, but video artifacts exist. Continuing."
+                $uiExit = 0
+                break
+              }
+              Write-Error "UI automation exceeded ${maxSec}s and produced no videos."
+              $uiExit = 124
+              break
+            }
+          }
+
+          $proc.WaitForExit()
+          if ($uiExit -eq 0) {
+            $uiExit = $proc.ExitCode
+          }
+
+          if (Test-Path -LiteralPath $stdoutLog) {
+            Write-Host "=== final tail $stdoutLog ==="
+            Get-Content -Path $stdoutLog -Tail 200
+          }
+          if (Test-Path -LiteralPath $stderrLog) {
+            Write-Host "=== final tail $stderrLog ==="
+            Get-Content -Path $stderrLog -Tail 200
+          }
+          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
+          if ($uiExit -ne 0) {
             if ($videos) {
               Write-Warning "HoroEditorUiTest exited with code $uiExit on Windows, but video artifacts exist. Continuing."
             } else {
-              Write-Error "HoroEditorUiTest exited with code $uiExit and no video artifacts were produced."
+              Write-Error "Recording run failed with exit code $uiExit and no video artifacts were produced."
               exit $uiExit
             }
           }
