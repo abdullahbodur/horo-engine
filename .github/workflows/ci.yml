@@ -188,8 +188,11 @@ jobs:
           }
           Write-Host "Using UI automation executable: $uiExe"
           Write-Host "Starting Windows UI automation smoke run (recording disabled)."
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
           & $uiExe --run-ui-tests
+          $sw.Stop()
           $uiExit = $LASTEXITCODE
+          Write-Host ("Windows UI smoke wall time: {0:N2}s" -f $sw.Elapsed.TotalSeconds)
           if ($uiExit -ne 0) {
             Write-Error "Smoke run failed with exit code $uiExit."
             exit $uiExit
@@ -228,8 +231,11 @@ jobs:
           }
           Write-Host "Using UI automation executable: $uiExe"
           Write-Host "Starting Windows UI automation recording run."
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
           & $uiExe --run-ui-tests
+          $sw.Stop()
           $uiExit = $LASTEXITCODE
+          Write-Host ("Windows UI recording wall time: {0:N2}s" -f $sw.Elapsed.TotalSeconds)
           $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
           if ($uiExit -ne 0) {
             if ($videos) {

@@ -9,6 +9,7 @@
 #include <imgui_test_engine/imgui_te_context.h>
 #include <imgui_test_engine/imgui_te_engine.h>
 
+#include "core/Logger.h"
 #include "launcher/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
@@ -42,6 +43,7 @@ void CaptureScreenshotTo(ImGuiTestContext* ctx, const fs::path& dir, const char*
   const std::string full = (dir / filename).string();
   if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile))
     return;
+  LOG_INFO("UI scenario capture screenshot: %s", full.c_str());
   ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
   ctx->CaptureScreenshot(0);
 }
@@ -54,6 +56,7 @@ bool BeginVideoCapture(ImGuiTestContext* ctx, const UiAutomationRunState* state,
   const std::string full = (state->uiCaptureOutputDir / filename).string();
   if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile))
     return false;
+  LOG_INFO("UI scenario begin video capture: %s", full.c_str());
   ctx->CaptureReset();
   ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
   return ctx->CaptureBeginVideo();
@@ -74,6 +77,7 @@ bool BeginTestVideoCaptureIfNeeded(ImGuiTestContext* ctx,
 void EndTestVideoCaptureIfNeeded(ImGuiTestContext* ctx, UiAutomationRunState* state) {
   if (!ctx || !state || !state->videoCaptureOpen)
     return;
+  LOG_INFO("UI scenario end video capture.");
   ctx->CaptureEndVideo();
   ctx->CaptureReset();
   state->videoCaptureOpen = false;
@@ -96,8 +100,10 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
   Launcher::LauncherEditorShell* shell = AsLauncherShell(state);
   IM_CHECK(shell != nullptr);
 
-  if (shell->HasActiveProject())
+  if (shell->HasActiveProject()) {
+    LOG_INFO("UI scenario project already active, skipping launcher creation flow.");
     return;
+  }
 
   ctx->SetRef("Horo Launcher");
   IM_CHECK(ctx->ItemExists("Open Existing Project"));
@@ -108,6 +114,7 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
   ctx->SetRef(launcherPanel);
   ctx->ItemInputValue("##new-project-name", "UiSmokeGame");
   ctx->ItemInputValue("##new-project-path", state->projectRoot.string().c_str());
+  LOG_INFO("UI scenario creating project '%s' at '%s'.", "UiSmokeGame", state->projectRoot.string().c_str());
   ctx->ItemClick("Create Project");
   ctx->Yield(3);
   IM_CHECK(shell->HasActiveProject());
@@ -121,6 +128,7 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunSta
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "create_project_from_launcher");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
+    LOG_INFO("UI scenario start: launcher_ui/create_project_from_launcher");
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
     VideoCaptureScope captureScope(ctx, testState);
@@ -133,6 +141,7 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunSta
     IM_CHECK(ctx->ItemExists("Configure"));
     IM_CHECK(ctx->ItemExists("Build"));
     IM_CHECK(ctx->ItemExists("Run Game"));
+    LOG_INFO("UI scenario done: launcher_ui/create_project_from_launcher");
   };
   return test;
 }
@@ -141,6 +150,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "back_to_home_returns_launcher");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
+    LOG_INFO("UI scenario start: launcher_ui/back_to_home_returns_launcher");
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
     VideoCaptureScope captureScope(ctx, testState);
@@ -151,6 +161,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
 
     ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
+    LOG_INFO("UI scenario action: click 'Back To Home'");
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
     Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
@@ -175,6 +186,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
           testState->uiCaptureOutputDir,
           "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
     }
+    LOG_INFO("UI scenario done: launcher_ui/back_to_home_returns_launcher");
   };
   return test;
 }
@@ -183,6 +195,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "open_project_from_recent_projects");
   test->UserData = state;
   test->TestFunc = [](ImGuiTestContext* ctx) {
+    LOG_INFO("UI scenario start: launcher_ui/open_project_from_recent_projects");
     auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
     IM_CHECK(testState != nullptr);
     VideoCaptureScope captureScope(ctx, testState);
@@ -193,6 +206,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
 
     ctx->SetRef("Launcher Project");
     IM_CHECK(ctx->ItemExists("Back To Home"));
+    LOG_INFO("UI scenario action: click 'Back To Home'");
     ctx->ItemClick("Back To Home");
     ctx->Yield(2);
     Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
@@ -204,6 +218,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
     IM_CHECK(recentProjectsList != nullptr);
     ctx->SetRef(recentProjectsList);
     IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+    LOG_INFO("UI scenario action: click recent project 'UiSmokeGame'");
     ctx->ItemClick("UiSmokeGame");
     ctx->Yield(3);
 
@@ -216,6 +231,7 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
           testState->uiCaptureOutputDir,
           "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
     }
+    LOG_INFO("UI scenario done: launcher_ui/open_project_from_recent_projects");
   };
   return test;
 }

@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "core/Logger.h"
+
 namespace Monolith {
 void RegisterLauncherUiScenarioSet();
 
@@ -83,6 +85,7 @@ void InitializeUiScenarioRegistry() {
     return;
   initialized = true;
   RegisterLauncherUiScenarioSet();
+  LOG_INFO("UI scenario registry initialized with %zu scenario(s).", Registry().size());
 }
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
@@ -95,14 +98,21 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
 
   int queued = 0;
   for (const UiScenarioRegistration& entry : Registry()) {
-    if (!entry.fn || !MatchesFilter(entry.fullName, filter))
+    if (!entry.fn)
       continue;
+    if (!MatchesFilter(entry.fullName, filter)) {
+      LOG_INFO("UI scenario skipped by filter: '%s' (filter='%s')", entry.fullName.c_str(), filter.c_str());
+      continue;
+    }
+    LOG_INFO("UI scenario queued: '%s'", entry.fullName.c_str());
     ImGuiTest* test = entry.fn(engine, state);
     if (test) {
       ImGuiTestEngine_QueueTest(engine, test);
       ++queued;
     }
   }
+  LOG_INFO("UI scenario queue summary: queued=%d, total_registered=%zu, filter='%s'",
+           queued, Registry().size(), filter.c_str());
   if (outQueuedCount)
     *outQueuedCount = queued;
   return queued > 0;

@@ -163,6 +163,11 @@ std::string ReadEnvString(const char* name) {
 #endif
 }
 
+void LogUiEnvVar(const char* name) {
+  const std::string value = ReadEnvString(name);
+  LOG_INFO("UI automation env: %s=%s", name, value.empty() ? "<unset>" : value.c_str());
+}
+
 bool UiScreenCaptureFunc(ImGuiID viewport_id,
                          int x,
                          int y,
@@ -205,6 +210,7 @@ struct UiAutomationRunner::Impl {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   static constexpr int kDefaultUiMaxFrames = 1200;
   static constexpr int kCapturedUiMaxFrames = 3600;
+  static constexpr int kHeartbeatFrameInterval = 30;
   bool active = false;
   bool passed = true;
   bool timedOut = false;
@@ -212,6 +218,10 @@ struct UiAutomationRunner::Impl {
   int maxFrames = kDefaultUiMaxFrames;
   int testsRun = 0;
   int testsSucceeded = 0;
+  bool lastRunningState = false;
+  bool lastQueueEmptyState = true;
+  double startTimeSeconds = 0.0;
+  double lastFrameTimeSeconds = 0.0;
   UiAutomationRunState state{};
   ImGuiTestEngine* engine = nullptr;
 #endif
@@ -230,10 +240,23 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(bool runUiAutomation) 
   static std::optional<HomeDirGuard> s_homeGuard;
   const fs::path tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
   const fs::path homeRoot = tempRoot / "home";
+  LOG_INFO("UI automation pre-start: cwd='%s', temp_root='%s', home_root='%s'",
+           fs::current_path().string().c_str(),
+           tempRoot.string().c_str(),
+           homeRoot.string().c_str());
 
   std::error_code ec;
   fs::create_directories(homeRoot, ec);
+  if (ec) {
+    LOG_WARN("UI automation could not create home root '%s': %s",
+             homeRoot.string().c_str(),
+             ec.message().c_str());
+  }
   s_homeGuard.emplace(homeRoot);
+  LogUiEnvVar("USERPROFILE");
+  LogUiEnvVar("HOME");
+  LogUiEnvVar("HOMEDRIVE");
+  LogUiEnvVar("HOMEPATH");
 #else
   (void)runUiAutomation;
 #endif
@@ -247,6 +270,16 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
   m_impl->active = true;
   m_impl->state.tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
   m_impl->state.projectRoot = m_impl->state.tempRoot / "UiSmokeGame";
+  LOG_INFO("UI automation start requested: shell_context=%p", shellContext);
+  LogUiEnvVar("MONOLITH_UI_TEST_CAPTURE");
+  LogUiEnvVar("MONOLITH_UI_TEST_VIDEO");
+  LogUiEnvVar("MONOLITH_UI_TEST_RECORDING");
+  LogUiEnvVar("MONOLITH_UI_TEST_FILTER");
+  LogUiEnvVar("MONOLITH_UI_TEST_DELAY_MS");
+  LogUiEnvVar("MONOLITH_UI_TEST_OUTPUT_DIR");
+  LogUiEnvVar("MONOLITH_UI_TEST_FFMPEG_PATH");
+  LogUiEnvVar("MONOLITH_UI_TEST_CLEAN_TEMP");
+  LogUiEnvVar("MONOLITH_GLFW_SAMPLES");
   const bool recordingEnabled = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_RECORDING");
   m_impl->state.captureEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
@@ -265,18 +298,47 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
            recordingEnabled ? 1 : 0,
            m_impl->state.captureEnabled ? 1 : 0,
            m_impl->state.videoEnabled ? 1 : 0);
+  LOG_INFO("UI automation paths: temp_root='%s', project_root='%s', output_dir='%s'",
+           m_impl->state.tempRoot.string().c_str(),
+           m_impl->state.projectRoot.string().c_str(),
+           m_impl->state.uiCaptureOutputDir.empty() ? "<disabled>"
+                                                    : m_impl->state.uiCaptureOutputDir.string().c_str());
   const bool cleanTempRoot = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
   std::error_code ec;
   if (cleanTempRoot) {
     fs::remove_all(m_impl->state.tempRoot, ec);
+    if (ec) {
+      LOG_WARN("UI temp root cleanup error for '%s': %s",
+               m_impl->state.tempRoot.string().c_str(),
+               ec.message().c_str());
+      ec.clear();
+    }
   } else {
     LOG_INFO("Skipping UI temp root cleanup for this run: %s", m_impl->state.tempRoot.string().c_str());
   }
   fs::create_directories(m_impl->state.tempRoot / "home", ec);
+  if (ec) {
+    LOG_WARN("UI temp home creation error at '%s': %s",
+             (m_impl->state.tempRoot / "home").string().c_str(),
+             ec.message().c_str());
+    ec.clear();
+  }
   if (m_impl->state.captureEnabled)
     fs::create_directories(m_impl->state.uiCaptureOutputDir, ec);
+  if (ec) {
+    LOG_WARN("UI output directory creation error at '%s': %s",
+             m_impl->state.uiCaptureOutputDir.string().c_str(),
+             ec.message().c_str());
+    ec.clear();
+  }
   m_impl->maxFrames = (uiDelayMs > 0 || m_impl->state.videoEnabled) ? Impl::kCapturedUiMaxFrames
                                                                     : Impl::kDefaultUiMaxFrames;
+  m_impl->frameCount = 0;
+  m_impl->timedOut = false;
+  m_impl->startTimeSeconds = glfwGetTime();
+  m_impl->lastFrameTimeSeconds = m_impl->startTimeSeconds;
+  LOG_INFO("UI automation frame budget: max_frames=%d, heartbeat_interval=%d", m_impl->maxFrames,
+           Impl::kHeartbeatFrameInterval);
 
   m_impl->engine = ImGuiTestEngine_CreateContext();
   if (!m_impl->engine)
@@ -288,6 +350,7 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
   if (m_impl->state.captureEnabled && m_impl->state.videoEnabled) {
     const std::string ffmpegPath = ReadEnvString("MONOLITH_UI_TEST_FFMPEG_PATH");
     const fs::path encoderPath = !ffmpegPath.empty() ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
+    LOG_INFO("UI video encoder candidate path: '%s'", encoderPath.string().c_str());
     std::error_code ffmpegEc;
     if (fs::exists(encoderPath, ffmpegEc) && !ffmpegEc) {
       ImStrncpy(testIo.VideoCaptureEncoderPath, encoderPath.string().c_str(),
@@ -311,8 +374,21 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellConte
   }
   testIo.ConfigVerboseLevel = ImGuiTestVerboseLevel_Error;
   testIo.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
+  LOG_INFO("UI engine IO config: capture=%d run_speed=%d fixed_dt=%.4f delay_short=%.3f delay_std=%.3f verbose=%d verbose_on_error=%d",
+           testIo.ConfigCaptureEnabled ? 1 : 0,
+           static_cast<int>(testIo.ConfigRunSpeed),
+           testIo.ConfigFixedDeltaTime,
+           testIo.ActionDelayShort,
+           testIo.ActionDelayStandard,
+           static_cast<int>(testIo.ConfigVerboseLevel),
+           static_cast<int>(testIo.ConfigVerboseLevelOnError));
 
   ImGuiTestEngine_Start(m_impl->engine, ImGui::GetCurrentContext());
+  m_impl->lastRunningState = testIo.IsRunningTests;
+  m_impl->lastQueueEmptyState = ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
+  LOG_INFO("UI automation engine started: is_running=%d, queue_empty=%d",
+           m_impl->lastRunningState ? 1 : 0,
+           m_impl->lastQueueEmptyState ? 1 : 0);
   int queuedCount = 0;
   if (!QueueRegisteredUiScenarios(m_impl->engine, &m_impl->state, uiFilter, &queuedCount)) {
     m_impl->passed = false;
@@ -338,16 +414,63 @@ void UiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
   ++m_impl->frameCount;
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
-  const bool done = !testIo.IsRunningTests && ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
+  const bool running = testIo.IsRunningTests;
+  const bool queueEmpty = ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
+  const bool done = !running && queueEmpty;
   const bool timeout = m_impl->frameCount >= m_impl->maxFrames;
+  const double nowSec = glfwGetTime();
+  const double elapsedSec = nowSec - m_impl->startTimeSeconds;
+  const double frameDeltaSec = nowSec - m_impl->lastFrameTimeSeconds;
+  m_impl->lastFrameTimeSeconds = nowSec;
+  if (running != m_impl->lastRunningState || queueEmpty != m_impl->lastQueueEmptyState) {
+    LOG_INFO("UI automation state change: frame=%d elapsed=%.2fs running=%d queue_empty=%d",
+             m_impl->frameCount, elapsedSec, running ? 1 : 0, queueEmpty ? 1 : 0);
+    m_impl->lastRunningState = running;
+    m_impl->lastQueueEmptyState = queueEmpty;
+  }
+  if (m_impl->frameCount == 1 || (m_impl->frameCount % Impl::kHeartbeatFrameInterval) == 0) {
+    auto* window = static_cast<GLFWwindow*>(nativeWindowHandle);
+    int focused = -1;
+    int iconified = -1;
+    int visible = -1;
+    int shouldClose = -1;
+    if (window) {
+      focused = glfwGetWindowAttrib(window, GLFW_FOCUSED);
+      iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED);
+      visible = glfwGetWindowAttrib(window, GLFW_VISIBLE);
+      shouldClose = glfwWindowShouldClose(window);
+    }
+    LOG_INFO(
+        "UI automation heartbeat: frame=%d/%d elapsed=%.2fs frame_dt=%.4fs avg_fps=%.2f running=%d queue_empty=%d focused=%d iconified=%d visible=%d should_close=%d",
+        m_impl->frameCount,
+        m_impl->maxFrames,
+        elapsedSec,
+        frameDeltaSec,
+        elapsedSec > 0.0 ? static_cast<double>(m_impl->frameCount) / elapsedSec : 0.0,
+        running ? 1 : 0,
+        queueEmpty ? 1 : 0,
+        focused,
+        iconified,
+        visible,
+        shouldClose);
+    if (frameDeltaSec > 1.0) {
+      LOG_WARN("UI automation large frame delta detected: frame=%d frame_dt=%.3fs",
+               m_impl->frameCount, frameDeltaSec);
+    }
+  }
   if (done || timeout) {
     if (timeout) {
       m_impl->timedOut = true;
       m_impl->passed = false;
       ImGuiTestEngine_TryAbortEngine(m_impl->engine);
-      LOG_ERROR("UI automation timed out after %d frames.", m_impl->frameCount);
+      LOG_ERROR("UI automation timed out after %d frames (elapsed=%.2fs).", m_impl->frameCount, elapsedSec);
     }
     if (nativeWindowHandle != nullptr) {
+      LOG_INFO("UI automation requesting window close: done=%d timeout=%d frame=%d elapsed=%.2fs",
+               done ? 1 : 0,
+               timeout ? 1 : 0,
+               m_impl->frameCount,
+               elapsedSec);
       glfwSetWindowShouldClose(static_cast<GLFWwindow*>(nativeWindowHandle), GLFW_TRUE);
     } else {
       LOG_WARN("UI automation finished but native window handle is null; skipping window close request.");
@@ -364,11 +487,15 @@ void UiAutomationRunner::Shutdown() {
     return;
 
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
-  LOG_INFO("UI automation shutdown begin: running=%d, queue_empty=%d, capture_enabled=%d, video_capture_open=%d",
+  const double elapsedSec = glfwGetTime() - m_impl->startTimeSeconds;
+  LOG_INFO("UI automation shutdown begin: running=%d, queue_empty=%d, capture_enabled=%d, video_capture_open=%d, frame=%d/%d, elapsed=%.2fs",
            testIo.IsRunningTests ? 1 : 0,
            ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 1 : 0,
            testIo.ConfigCaptureEnabled ? 1 : 0,
-           m_impl->state.videoCaptureOpen ? 1 : 0);
+           m_impl->state.videoCaptureOpen ? 1 : 0,
+           m_impl->frameCount,
+           m_impl->maxFrames,
+           elapsedSec);
   if (m_impl->state.videoCaptureOpen)
     LOG_WARN("Video capture still marked open during shutdown; letting test engine close capture on stop.");
   const bool stillRunning = testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);

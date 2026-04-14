@@ -8,6 +8,7 @@
 
 #include "core/Application.h"
 #include "core/EngineLaunchArgs.h"
+#include "core/Logger.h"
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
 #include "launcher/UiAutomationRunner.h"
@@ -69,6 +70,7 @@ class HoroEditorApp final : public Application {
   }
 
   void OnInit() override {
+    LOG_INFO("HoroEditorApp::OnInit begin");
     const std::filesystem::path exeDir = std::filesystem::current_path();
     const std::array<std::filesystem::path, 3> sdkCandidates = {
         exeDir.parent_path() / "sdk",
@@ -117,11 +119,13 @@ class HoroEditorApp final : public Application {
       // CI runners may heavily throttle vsynced, unfocused windows and make
       // frame-based UI tests appear stalled. Disable vsync for automation.
       GetWindow().SetVSync(false);
+      LOG_INFO("UI automation mode: vsync disabled for test run.");
     }
     if (m_runUiAutomation) {
       m_uiAutomation->StartIfRequested(m_runUiAutomation, &m_shell);
     }
 #endif
+    LOG_INFO("HoroEditorApp::OnInit end");
   }
 
   void OnUpdate(float dt) override {
@@ -135,6 +139,7 @@ class HoroEditorApp final : public Application {
   }
 
   void OnRender(float alpha) override {
+    ++m_renderFrameCount;
     m_renderAlpha = alpha;
     RenderFrameConfig frameConfig;
     frameConfig.debugLabel = "horo-editor-frame";
@@ -153,17 +158,26 @@ class HoroEditorApp final : public Application {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
     if (m_runUiAutomation && m_uiAutomation)
       m_uiAutomation->PostRenderFrame(GetWindow().GetNativeHandle());
+    if (m_runUiAutomation && (m_renderFrameCount == 1 || (m_renderFrameCount % 60) == 0)) {
+      LOG_INFO("HoroEditorApp render heartbeat: frame=%d width=%d height=%d active_project=%d",
+               m_renderFrameCount,
+               GetWindow().GetWidth(),
+               GetWindow().GetHeight(),
+               m_shell.HasActiveProject() ? 1 : 0);
+    }
 #endif
     Renderer::EndFrame();
   }
 
   void OnShutdown() override {
+    LOG_INFO("HoroEditorApp::OnShutdown begin");
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
     if (m_uiAutomation) {
       // Keep a valid GL context current while Dear ImGui test engine finalizes.
       glfwMakeContextCurrent(GetWindow().GetNativeHandle());
       m_uiAutomation->Shutdown();
       m_uiAutomationPassed = m_uiAutomation->DidPass();
+      LOG_INFO("UI automation pass state at shutdown: %d", m_uiAutomationPassed ? 1 : 0);
     }
 #endif
     m_shell.Shutdown();
@@ -177,6 +191,7 @@ class HoroEditorApp final : public Application {
 
     if (m_runtime)
       m_runtime->Unload();
+    LOG_INFO("HoroEditorApp::OnShutdown end");
   }
 
  public:
@@ -195,6 +210,7 @@ class HoroEditorApp final : public Application {
   Launcher::LauncherEditorShell m_shell;
   Camera m_camera;
   float m_renderAlpha = 0.0f;
+  int m_renderFrameCount = 0;
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   bool m_runUiAutomation = false;
