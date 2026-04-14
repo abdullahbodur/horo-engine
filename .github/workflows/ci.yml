@@ -141,7 +141,7 @@ jobs:
         run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
 
       - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
+        run: cmake --build build/debug-msvc --config Release --target HoroEditorUiTest --parallel
 
       - name: Run UI Automation (windowed capture + video)
         shell: pwsh
@@ -155,20 +155,33 @@ jobs:
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
           if (-not $ffmpegPath) {
-            Write-Error "Unable to locate ffmpeg executable from setup-ffmpeg output."
+            Write-Error "Unable to locate FFmpeg path from setup-ffmpeg output."
             exit 1
           }
-          Write-Host "Using ffmpeg: $ffmpegPath"
+          if (Test-Path -LiteralPath $ffmpegPath -PathType Container) {
+            $ffmpegPath = Join-Path $ffmpegPath "ffmpeg.exe"
+          }
+          if (-not (Test-Path -LiteralPath $ffmpegPath -PathType Leaf)) {
+            Write-Error "Resolved FFmpeg executable not found: $ffmpegPath"
+            exit 1
+          }
+          Write-Host "Using FFmpeg executable: $ffmpegPath"
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
+          $uiExe = ".\build\debug-msvc\bin\Release\HoroEditorUiTest.exe"
+          if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
+            Write-Error "UI automation executable not found: $uiExe"
+            exit 1
+          }
+          Write-Host "Using UI automation executable: $uiExe"
           $stdoutLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stdout.log"
           $stderrLog = Join-Path "${{ github.workspace }}" "ui_test_output\horo_ui_test_windows.stderr.log"
 
           Write-Host "Starting Windows UI automation with capture/video enabled."
           $uiExit = 0
           $proc = Start-Process `
-            -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
+            -FilePath $uiExe `
             -ArgumentList "--run-ui-tests" `
             -NoNewWindow `
             -PassThru `
