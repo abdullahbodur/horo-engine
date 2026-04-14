@@ -114,6 +114,11 @@ class HoroEditorApp final : public Application {
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
     if (m_runUiAutomation) {
+      // CI runners may heavily throttle vsynced, unfocused windows and make
+      // frame-based UI tests appear stalled. Disable vsync for automation.
+      GetWindow().SetVSync(false);
+    }
+    if (m_runUiAutomation) {
       m_uiAutomation->StartIfRequested(m_runUiAutomation, &m_shell);
     }
 #endif
