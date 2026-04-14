@@ -176,6 +176,9 @@ jobs:
           $pollSec = 15
           $maxSec = 600
           $maxNoProgressSec = 240
+          $enforceNoProgress = ($env:MONOLITH_UI_TEST_RECORDING -eq "1" -or
+                                $env:MONOLITH_UI_TEST_CAPTURE -eq "1" -or
+                                $env:MONOLITH_UI_TEST_VIDEO -eq "1")
           $start = Get-Date
           $lastProgress = Get-Date
           $lastStdoutLen = -1
@@ -210,7 +213,7 @@ jobs:
             }
 
             $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
-            if ($staleSec -ge $maxNoProgressSec) {
+            if ($enforceNoProgress -and $staleSec -ge $maxNoProgressSec) {
               try { $proc.Kill($true) } catch {}
               if ($videos) {
                 Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
@@ -301,6 +304,9 @@ jobs:
           $pollSec = 15
           $maxSec = 600
           $maxNoProgressSec = 240
+          $enforceNoProgress = ($env:MONOLITH_UI_TEST_RECORDING -eq "1" -or
+                                $env:MONOLITH_UI_TEST_CAPTURE -eq "1" -or
+                                $env:MONOLITH_UI_TEST_VIDEO -eq "1")
           $start = Get-Date
           $lastProgress = Get-Date
           $lastStdoutLen = -1
@@ -335,7 +341,7 @@ jobs:
             }
 
             $staleSec = [int]((Get-Date) - $lastProgress).TotalSeconds
-            if ($staleSec -ge $maxNoProgressSec) {
+            if ($enforceNoProgress -and $staleSec -ge $maxNoProgressSec) {
               try { $proc.Kill($true) } catch {}
               if ($videos) {
                 Write-Warning "UI automation had no progress for ${maxNoProgressSec}s, but video artifacts exist. Continuing."
