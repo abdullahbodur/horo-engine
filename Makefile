@@ -19,7 +19,7 @@ ifeq ($(OS),Windows_NT)
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     BUILD_LAUNCHER_UNIT = cmake --build build/$(PRESET_DBG) --config Debug --target test_launcher_unit --parallel 1
     BUILD_UI_WINDOWED = cmake --build build/$(PRESET_DBG) --config Debug --target HoroEditorUiTest --parallel 1
-    RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest.exe --run-ui-tests
+    RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/Debug/HoroEditorUiTest.exe --run-ui-tests
     TEST_CMD    = ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure
 
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
@@ -94,7 +94,7 @@ ui-test: $(SENTINEL_DBG)
 ui-test-windowed: $(SENTINEL_DBG)
 	$(BUILD_UI_WINDOWED)
 	$(MKDIR_P) "$(UI_TEST_OUTPUT_DIR)"
-	MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
+	$(CMAKE_E) env MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
 
 ## Build release library
 release: $(SENTINEL_REL)
