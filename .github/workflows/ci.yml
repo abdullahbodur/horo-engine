@@ -129,6 +129,18 @@ jobs:
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Keep runner alive
+        shell: pwsh
+        run: |
+          Write-Host "Holding runner for 6 hours..."
+          for ($i = 1; $i -le 360; $i++) {
+            Write-Host "minute $i/360"
+            Start-Sleep -Seconds 60
+          }
+
       - name: Build
         run: cmake --build build/debug-msvc --config Debug --parallel
 
@@ -154,6 +166,7 @@ jobs:
           $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_GLFW_VISIBLE = "0"
+          $env:MONOLITH_UI_TEST_ISOLATE_HOME = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
@@ -198,6 +211,7 @@ jobs:
           $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
           $env:MONOLITH_GLFW_SAMPLES = "0"
           $env:MONOLITH_GLFW_VISIBLE = "0"
+          $env:MONOLITH_UI_TEST_ISOLATE_HOME = "0"
           $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
           $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
           if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
