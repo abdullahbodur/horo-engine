@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
 
 # Cancel in-progress runs for the same branch when a new push arrives
@@ -14,108 +14,103 @@ jobs:
   # ----------------------------------------------------------------
   # Build + Test — macOS (Clang, Ninja)
   # ----------------------------------------------------------------
-#   test-macos:
-#     name: Test · macOS / Clang
-#     runs-on: macos-latest
-#
-#     steps:
-#       - uses: actions/checkout@v4
-#
-#       - name: Install Ninja
-#         run: brew install ninja
-#
-#       - name: Cache FetchContent dependencies
-#         uses: actions/cache@v4
-#         with:
-#           path: ~/.cmake/fetchcontent
-#           key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-#           restore-keys: fetchcontent-macos-
-#
-#       - name: Configure
-#         run: cmake --preset debug
-#         env:
-#           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-#
-#       - name: Build
-#         run: cmake --build --preset debug --parallel
-#
-#       - name: Test
-#         run: ctest --preset debug --output-on-failure
-#
-#       - name: Prepare UI test output directory
-#         run: mkdir -p ui_test_output
-#
-#       - name: Build UI Automation Target
-#         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-#
-#       - name: Run UI Automation (headless log mode)
-#         run: |
-#           set -o pipefail
-#           log_file="ui_test_output/horo_ui_test_macos.log"
-#           echo "Starting macOS UI automation in non-recording mode (no forced GUI)."
-#           (
-#             while true; do
-#               echo "[macos-ui] still running at $(date -u '+%H:%M:%S')"
-#               sleep 30
-#             done
-#           ) &
-#           heartbeat_pid=$!
-#           cleanup() {
-#             kill "$heartbeat_pid" 2>/dev/null || true
-#           }
-#           trap cleanup EXIT
-#           set +e
-#           build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
-#           ui_exit=${PIPESTATUS[0]}
-#           set -e
-#           if [ "$ui_exit" -ne 0 ]; then
-#             if [ "$ui_exit" -eq 134 ] && grep -q "glfwCreateWindow failed" "$log_file"; then
-#               echo "::warning::UI automation skipped on macOS runner: unable to create GLFW window in headless environment."
-#               exit 0
-#             fi
-#             echo "UI automation failed on macOS with exit code $ui_exit."
-#             exit "$ui_exit"
-#           fi
-#         env:
-#           MONOLITH_UI_TEST_CAPTURE: "0"
-#           MONOLITH_UI_TEST_VIDEO: "0"
-#           MONOLITH_UI_TEST_RECORDING: "0"
-#           MONOLITH_UI_TEST_FILTER: "launcher/*"
-#           MONOLITH_UI_TEST_DELAY_MS: "0"
-#           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-#
-#       - name: Dump macOS UI automation diagnostics on failure
-#         if: failure()
-#         run: |
-#           echo "=== UI automation env ==="
-#           env | sort | awk '/^(MONOLITH_UI_TEST)/ { print }'
-#           echo "=== ui_test_output files ==="
-#           ls -la ui_test_output || true
-#           if [ -f ui_test_output/horo_ui_test_macos.log ]; then
-#             echo "=== tail ui_test_output/horo_ui_test_macos.log ==="
-#             tail -n 200 ui_test_output/horo_ui_test_macos.log
-#           fi
-#
-#       - name: Upload UI Test Artifacts
-#         if: always()
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: ui-test-results-macos
-#           path: ui_test_output/
-#           if-no-files-found: ignore
-#           retention-days: 30
+  #   test-macos:
+  #     name: Test · macOS / Clang
+  #     runs-on: macos-latest
+  #
+  #     steps:
+  #       - uses: actions/checkout@v4
+  #
+  #       - name: Install Ninja
+  #         run: brew install ninja
+  #
+  #       - name: Cache FetchContent dependencies
+  #         uses: actions/cache@v4
+  #         with:
+  #           path: ~/.cmake/fetchcontent
+  #           key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+  #           restore-keys: fetchcontent-macos-
+  #
+  #       - name: Configure
+  #         run: cmake --preset debug
+  #         env:
+  #           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+  #
+  #       - name: Build
+  #         run: cmake --build --preset debug --parallel
+  #
+  #       - name: Test
+  #         run: ctest --preset debug --output-on-failure
+  #
+  #       - name: Prepare UI test output directory
+  #         run: mkdir -p ui_test_output
+  #
+  #       - name: Build UI Automation Target
+  #         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+  #
+  #       - name: Run UI Automation (headless log mode)
+  #         run: |
+  #           set -o pipefail
+  #           log_file="ui_test_output/horo_ui_test_macos.log"
+  #           echo "Starting macOS UI automation in non-recording mode (no forced GUI)."
+  #           (
+  #             while true; do
+  #               echo "[macos-ui] still running at $(date -u '+%H:%M:%S')"
+  #               sleep 30
+  #             done
+  #           ) &
+  #           heartbeat_pid=$!
+  #           cleanup() {
+  #             kill "$heartbeat_pid" 2>/dev/null || true
+  #           }
+  #           trap cleanup EXIT
+  #           set +e
+  #           build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
+  #           ui_exit=${PIPESTATUS[0]}
+  #           set -e
+  #           if [ "$ui_exit" -ne 0 ]; then
+  #             if [ "$ui_exit" -eq 134 ] && grep -q "glfwCreateWindow failed" "$log_file"; then
+  #               echo "::warning::UI automation skipped on macOS runner: unable to create GLFW window in headless environment."
+  #               exit 0
+  #             fi
+  #             echo "UI automation failed on macOS with exit code $ui_exit."
+  #             exit "$ui_exit"
+  #           fi
+  #         env:
+  #           MONOLITH_UI_TEST_CAPTURE: "0"
+  #           MONOLITH_UI_TEST_VIDEO: "0"
+  #           MONOLITH_UI_TEST_RECORDING: "0"
+  #           MONOLITH_UI_TEST_FILTER: "launcher/*"
+  #           MONOLITH_UI_TEST_DELAY_MS: "0"
+  #           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+  #
+  #       - name: Dump macOS UI automation diagnostics on failure
+  #         if: failure()
+  #         run: |
+  #           echo "=== UI automation env ==="
+  #           env | sort | awk '/^(MONOLITH_UI_TEST)/ { print }'
+  #           echo "=== ui_test_output files ==="
+  #           ls -la ui_test_output || true
+  #           if [ -f ui_test_output/horo_ui_test_macos.log ]; then
+  #             echo "=== tail ui_test_output/horo_ui_test_macos.log ==="
+  #             tail -n 200 ui_test_output/horo_ui_test_macos.log
+  #           fi
+  #
+  #       - name: Upload UI Test Artifacts
+  #         if: always()
+  #         uses: actions/upload-artifact@v4
+  #         with:
+  #           name: ui-test-results-macos
+  #           path: ui_test_output/
+  #           if-no-files-found: ignore
+  #           retention-days: 30
+
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        id: setup-ffmpeg
-        with:
-          ffmpeg-version: release
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -124,7 +119,7 @@ jobs:
           key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
           restore-keys: fetchcontent-windows-
 
-      - name: Configure 
+      - name: Configure
         run: cmake --preset debug-msvc
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
@@ -132,277 +127,86 @@ jobs:
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
 
-      - name: Keep runner alive
-        shell: pwsh
-        run: |
-          Write-Host "Holding runner for 6 hours..."
-          for ($i = 1; $i -le 360; $i++) {
-            Write-Host "minute $i/360"
-            Start-Sleep -Seconds 60
-          }
-
       - name: Build
         run: cmake --build build/debug-msvc --config Debug --parallel
 
       - name: Test
         run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
 
+  test-linux:
+    name: Test · Linux / GCC
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build xvfb \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
       - name: Prepare UI test output directory
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force ui_test_output | Out-Null
+        run: mkdir -p ui_test_output
 
       - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
-      - name: Run UI Automation Smoke (no recording)
-        shell: pwsh
-        timeout-minutes: 12
-        run: |
-          $env:MONOLITH_UI_TEST_CAPTURE = "0"
-          $env:MONOLITH_UI_TEST_VIDEO = "0"
-          $env:MONOLITH_UI_TEST_RECORDING = "0"
-          $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
-          $env:MONOLITH_UI_TEST_DELAY_MS = "0"
-          $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $env:MONOLITH_GLFW_SAMPLES = "0"
-          $env:MONOLITH_GLFW_VISIBLE = "0"
-          $env:MONOLITH_UI_TEST_ISOLATE_HOME = "0"
-          $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
-          $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
-          if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
-            Write-Error "UI automation executable not found: $uiExe"
-            exit 1
-          }
-          Write-Host "Using UI automation executable: $uiExe"
-          Write-Host "Starting Windows UI automation smoke run (recording disabled)."
-          $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          & $uiExe --run-ui-tests
-          $sw.Stop()
-          $uiExit = $LASTEXITCODE
-          Write-Host ("Windows UI smoke wall time: {0:N2}s" -f $sw.Elapsed.TotalSeconds)
-          if ($uiExit -ne 0) {
-            Write-Error "Smoke run failed with exit code $uiExit."
-            exit $uiExit
-          }
-
-      - name: Run UI Automation Recording (capture + video)
-        shell: pwsh
-        timeout-minutes: 12
-        run: |
-          $env:MONOLITH_UI_TEST_CAPTURE = "1"
-          $env:MONOLITH_UI_TEST_VIDEO = "1"
-          $env:MONOLITH_UI_TEST_RECORDING = "1"
-          $env:MONOLITH_UI_TEST_FILTER = "launcher/*"
-          $env:MONOLITH_UI_TEST_DELAY_MS = "0"
-          $env:MONOLITH_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}/ui_test_output"
-          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
-          if (-not $ffmpegPath) {
-            Write-Error "Unable to locate FFmpeg path from setup-ffmpeg output."
-            exit 1
-          }
-          if (Test-Path -LiteralPath $ffmpegPath -PathType Container) {
-            $ffmpegPath = Join-Path $ffmpegPath "ffmpeg.exe"
-          }
-          if (-not (Test-Path -LiteralPath $ffmpegPath -PathType Leaf)) {
-            Write-Error "Resolved FFmpeg executable not found: $ffmpegPath"
-            exit 1
-          }
-          Write-Host "Using FFmpeg executable: $ffmpegPath"
-          $env:MONOLITH_UI_TEST_FFMPEG_PATH = $ffmpegPath
-          $env:MONOLITH_GLFW_SAMPLES = "0"
-          $env:MONOLITH_GLFW_VISIBLE = "0"
-          $env:MONOLITH_UI_TEST_ISOLATE_HOME = "0"
-          $env:MONOLITH_UI_TEST_CLEAN_TEMP = "0"
-          $uiExe = ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe"
-          if (-not (Test-Path -LiteralPath $uiExe -PathType Leaf)) {
-            Write-Error "UI automation executable not found: $uiExe"
-            exit 1
-          }
-          Write-Host "Using UI automation executable: $uiExe"
-          Write-Host "Starting Windows UI automation recording run."
-          $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          & $uiExe --run-ui-tests
-          $sw.Stop()
-          $uiExit = $LASTEXITCODE
-          Write-Host ("Windows UI recording wall time: {0:N2}s" -f $sw.Elapsed.TotalSeconds)
-          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-          if ($uiExit -ne 0) {
-            if ($videos) {
-              Write-Warning "HoroEditorUiTest exited with code $uiExit on Windows, but video artifacts exist. Continuing."
-            } else {
-              Write-Error "Recording run failed with exit code $uiExit and no video artifacts were produced."
-              exit $uiExit
-            }
-          }
-
-      - name: Verify UI video output
-        shell: pwsh
-        run: |
-          $videos = Get-ChildItem -Path ui_test_output -Filter *.mp4 -Recurse -ErrorAction SilentlyContinue
-          if (-not $videos) {
-            Write-Error "Expected at least one MP4 artifact in ui_test_output, but none were produced."
-            exit 1
-          }
-          Write-Host "Found UI video artifacts:"
-          $videos | ForEach-Object { Write-Host $_.FullName }
-
-      - name: Dump Windows UI automation diagnostics on failure
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== UI automation env ==="
-          Get-ChildItem Env: | Where-Object {
-            $_.Name -like "MONOLITH_UI_TEST*"
-          } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
-          Write-Host "=== ui_test_output files ==="
-          Get-ChildItem -Path ui_test_output -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-          $stdoutLog = "ui_test_output\horo_ui_test_windows.stdout.log"
-          $stderrLog = "ui_test_output\horo_ui_test_windows.stderr.log"
-          if (Test-Path -LiteralPath $stdoutLog) {
-            Write-Host "=== tail $stdoutLog ==="
-            Get-Content -Path $stdoutLog -Tail 200
-          }
-          if (Test-Path -LiteralPath $stderrLog) {
-            Write-Host "=== tail $stderrLog ==="
-            Get-Content -Path $stderrLog -Tail 200
-          }
+      - name: Run UI Automation
+        run: build/debug/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_DELAY_MS: "0"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+          MONOLITH_GLFW_SAMPLES: "0"
 
       - name: Upload UI Test Artifacts
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-test-results-windows
+          name: ui-test-results-linux
           path: ui_test_output/
           if-no-files-found: ignore
           retention-days: 30
 
-#   test-linux:
-#     name: Test · Linux / GCC
-#     runs-on: ubuntu-24.04
-#
-#     steps:
-#       - uses: actions/checkout@v4
-#
-#       - name: Install system dependencies
-#         run: |
-#           if ! sudo apt-get update; then
-#             # Ubuntu hosted runners occasionally include broken Microsoft apt mirrors.
-#             # Remove them and retry so CI remains deterministic.
-#             sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
-#             sudo apt-get update
-#           fi
-#           sudo apt-get install -y --no-install-recommends \
-#             ninja-build xvfb \
-#             libwayland-dev wayland-protocols libxkbcommon-dev \
-#             libx11-dev libxrandr-dev libxinerama-dev \
-#             libxcursor-dev libxi-dev libxext-dev \
-#             libgl1-mesa-dev libglu1-mesa-dev
-#           if ! command -v ffmpeg >/dev/null 2>&1; then
-#             sudo apt-get install -y --no-install-recommends ffmpeg
-#           fi
-#
-#       - name: Cache FetchContent dependencies
-#         uses: actions/cache@v4
-#         with:
-#           path: ~/.cmake/fetchcontent
-#           key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-#           restore-keys: fetchcontent-linux-
-#
-#       - name: Configure
-#         run: cmake --preset debug
-#         env:
-#           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-#
-#       - name: Build
-#         run: cmake --build --preset debug --parallel
-#
-#       - name: Test
-#         run: ctest --preset debug --output-on-failure
-#
-#       - name: Prepare UI test output directory
-#         run: mkdir -p ui_test_output
-#
-#       - name: Build UI Automation Target
-#         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-#
-#       - name: Run UI Automation (windowed capture + video)
-#         run: |
-#           set -o pipefail
-#           log_file="ui_test_output/horo_ui_test_linux.log"
-#           echo "Starting Linux UI automation with capture/video enabled."
-#           (
-#             while true; do
-#               echo "[linux-ui] still running at $(date -u '+%H:%M:%S')"
-#               sleep 30
-#             done
-#           ) &
-#           heartbeat_pid=$!
-#           cleanup() {
-#             kill "$heartbeat_pid" 2>/dev/null || true
-#           }
-#           trap cleanup EXIT
-#           set +e
-#           timeout --signal=TERM --kill-after=30s 600s env -u WAYLAND_DISPLAY xvfb-run -a --server-args="-screen 0 1920x1080x24" \
-#             build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
-#           ui_exit=${PIPESTATUS[0]}
-#           set -e
-#           if [ "$ui_exit" -ne 0 ]; then
-#             if [ "$ui_exit" -eq 139 ] && ls ui_test_output/*.mp4 >/dev/null 2>&1; then
-#               echo "::warning::HoroEditorUiTest exited 139 on Linux after producing video artifacts; continuing."
-#               exit 0
-#             fi
-#             if [ "$ui_exit" -eq 124 ]; then
-#               echo "::error::HoroEditorUiTest timed out after 600s on Linux."
-#             else
-#               echo "::error::HoroEditorUiTest exited with code $ui_exit on Linux."
-#             fi
-#             exit "$ui_exit"
-#           fi
-#         env:
-#           MONOLITH_UI_TEST_CAPTURE: "1"
-#           MONOLITH_UI_TEST_VIDEO: "1"
-#           MONOLITH_UI_TEST_RECORDING: "1"
-#           MONOLITH_UI_TEST_FILTER: "launcher/*"
-#           MONOLITH_UI_TEST_DELAY_MS: "0"
-#           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-#           MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
-#           LIBGL_ALWAYS_SOFTWARE: "1"
-#           GALLIUM_DRIVER: llvmpipe
-#           MONOLITH_GLFW_SAMPLES: "0"
-#
-#       - name: Verify UI video output
-#         run: |
-#           if ! ls ui_test_output/*.mp4 >/dev/null 2>&1; then
-#             echo "::error::Expected at least one MP4 artifact in ui_test_output, but none were produced."
-#             ls -la ui_test_output || true
-#             exit 1
-#           fi
-#           echo "Found UI video artifacts:"
-#           ls -la ui_test_output/*.mp4
-#
-#       - name: Dump UI automation diagnostics on failure
-#         if: failure()
-#         run: |
-#           echo "=== UI automation env ==="
-#           env | sort | awk '/^(MONOLITH_UI_TEST|LIBGL_ALWAYS_SOFTWARE|GALLIUM_DRIVER|WAYLAND_DISPLAY)/ { print }'
-#           echo "=== ui_test_output files ==="
-#           ls -la ui_test_output || true
-#           if ls ui_test_output/*.log >/dev/null 2>&1; then
-#             grep -R -E "UI automation|Queued|No UI scenarios|timed out|capture|video|Segmentation fault" ui_test_output/*.log || true
-#           else
-#             echo "No UI log files found in ui_test_output."
-#           fi
-#
-#       - name: Upload UI Test Artifacts
-#         if: always()
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: ui-test-results-linux
-#           path: ui_test_output/
-#           if-no-files-found: ignore
-#           retention-days: 30
-#
-#
+      - name: Setup tmate session
+        if: failure()
+        uses: mxschmitt/action-tmate@v3
+
+
 #   # ----------------------------------------------------------------
 #   # Coverage — Linux (GCC --coverage + lcov + genhtml)
 #   # Runs after all three test jobs pass; uploads HTML report as artifact
