@@ -146,19 +146,25 @@ jobs:
             sudo apt-get update
           fi
           sudo apt-get install -y --no-install-recommends \
-            ninja-build xvfb \
-            libwayland-dev wayland-protocols libxkbcommon-dev \
-            libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev \
-            libgl1-mesa-dev libglu1-mesa-dev
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get install -y --no-install-recommends ffmpeg
-          fi
+            ninja-build \
+            xvfb \
+            ffmpeg \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
-          path: ~/.cmake/fetchcontent
+          path: ${{ github.workspace }}/.cmake/fetchcontent
           key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
           restore-keys: fetchcontent-linux-
 
@@ -180,7 +186,9 @@ jobs:
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
       - name: Run UI Automation
-        run: build/debug/bin/HoroEditorUiTest --run-ui-tests
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            build/debug/bin/HoroEditorUiTest --run-ui-tests
         env:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
@@ -190,8 +198,12 @@ jobs:
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
           LIBGL_ALWAYS_SOFTWARE: "1"
-          GALLIUM_DRIVER: llvmpipe
+          GALLIUM_DRIVER: "llvmpipe"
           MONOLITH_GLFW_SAMPLES: "0"
+
+      - name: Setup tmate session on failure
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: mxschmitt/action-tmate@v3
 
       - name: Upload UI Test Artifacts
         if: always()
@@ -201,11 +213,6 @@ jobs:
           path: ui_test_output/
           if-no-files-found: ignore
           retention-days: 30
-
-      - name: Setup tmate session
-        if: failure()
-        uses: mxschmitt/action-tmate@v3
-
 
 #   # ----------------------------------------------------------------
 #   # Coverage — Linux (GCC --coverage + lcov + genhtml)
