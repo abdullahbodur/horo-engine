@@ -66,6 +66,29 @@ const char* SafeGlfwErrorString() {
 
 }  // namespace
 
+namespace {
+
+class GlfwContext {
+public:
+  static void Init() {
+    if (s_refCount++ == 0) {
+      if (!glfwInit())
+        throw std::runtime_error("glfwInit failed");
+    }
+  }
+
+  static void Shutdown() {
+    if (--s_refCount == 0) {
+      glfwTerminate();
+    }
+  }
+
+private:
+  static inline int s_refCount = 0;
+};
+
+}  // namespace
+
 namespace Monolith {
 
 WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi) {
@@ -95,8 +118,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
            static_cast<int>(spec.graphicsApi),
            spec.vsync ? 1 : 0);
   LOG_INFO("Calling glfwInit...");
-  if (!glfwInit())
-    throw std::runtime_error(std::string("glfwInit failed: ") + SafeGlfwErrorString());
+  GlfwContext::Init();
   LOG_INFO("glfwInit succeeded.");
 
   m_graphicsApi = spec.graphicsApi;
@@ -129,7 +151,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   LOG_INFO("Calling glfwCreateWindow...");
   m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
   if (!m_window) {
-    glfwTerminate();
+    GlfwContext::Shutdown();
     throw std::runtime_error(std::string("glfwCreateWindow failed: ") + SafeGlfwErrorString());
   }
   LOG_INFO("glfwCreateWindow succeeded: window=%p", m_window);
@@ -140,7 +162,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
     LOG_INFO("Loading GL via glad...");
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
       glfwDestroyWindow(m_window);
-      glfwTerminate();
+      GlfwContext::Shutdown();
       throw std::runtime_error("gladLoadGLLoader failed");
     }
     LOG_INFO("gladLoadGLLoader succeeded.");
@@ -160,9 +182,20 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
 }
 
 Window::~Window() {
-  if (m_window)
+  if (m_window) {
+    glfwSetWindowUserPointer(m_window, nullptr);
+    glfwSetFramebufferSizeCallback(m_window, nullptr);
+    glfwSetWindowCloseCallback(m_window, nullptr);
+    glfwSetDropCallback(m_window, nullptr);
+
+    if (glfwGetCurrentContext() == m_window) {
+      glfwMakeContextCurrent(nullptr);
+    }
+
     glfwDestroyWindow(m_window);
-  glfwTerminate();
+    m_window = nullptr;
+  }
+  GlfwContext::Shutdown();
 }
 
 void Window::PollEvents() {
