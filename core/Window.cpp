@@ -195,7 +195,9 @@ Window::~Window() {
     glfwDestroyWindow(m_window);
     m_window = nullptr;
   }
-  GlfwContext::Shutdown();
+  // todo: delete this line
+  // NOT calling GlfwContext::Shutdown() here - GLFW termination
+  // should only happen once at application exit, not per-window.
 }
 
 void Window::PollEvents() {
