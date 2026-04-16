@@ -177,16 +177,13 @@ class HoroEditorApp final : public Application {
       m_uiAutomation->Shutdown();
       m_uiAutomationPassed = m_uiAutomation->DidPass();
       LOG_INFO("UI automation pass state at shutdown: %d", m_uiAutomationPassed ? 1 : 0);
+      // Tear down test engine before editor/imgui teardown to avoid late shutdown crashes.
+      m_uiAutomation->DestroyContext();
+      m_uiAutomation.reset();
     }
 #endif
     m_shell.Shutdown();
     m_editor.Shutdown();
-
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_uiAutomation) {
-      m_uiAutomation->DestroyContext();
-    }
-#endif
 
     if (m_runtime)
       m_runtime->Unload();
