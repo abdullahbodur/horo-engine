@@ -80,6 +80,10 @@
       "configurePreset": "release"
     },
     {
+      "name": "coverage",
+      "configurePreset": "coverage"
+    },
+    {
       "name": "debug-msvc",
       "configurePreset": "debug-msvc"
     },
@@ -92,6 +96,11 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
       "output": { "outputOnFailure": true }
     },
     {
