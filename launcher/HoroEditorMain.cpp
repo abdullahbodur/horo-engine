@@ -1,4 +1,6 @@
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
@@ -233,5 +235,13 @@ int main(int argc, char** argv) {
 #endif
   app.ParseArgs(argc, argv);
   app.Run();
-  return app.DidUiAutomationPass() ? 0 : 1;
+  const int exitCode = app.DidUiAutomationPass() ? 0 : 1;
+#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+  if (runUiAutomation) {
+    // CI UI automation mode: avoid late process-teardown crashes from external teardown chains.
+    std::fflush(nullptr);
+    std::_Exit(exitCode);
+  }
+#endif
+  return exitCode;
 }
