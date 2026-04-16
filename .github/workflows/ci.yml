@@ -46,9 +46,6 @@ jobs:
       - name: Test
         run: ctest --preset debug --output-on-failure
 
-      - name: Prepare UI test output directory
-        run: mkdir -p ui_test_output
-
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
@@ -169,7 +166,7 @@ jobs:
     name: Coverage · Linux / GCC
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [ test-linux, test-windows ]
+    needs: [ test-linux, test-windows, test-macos ]
 
     steps:
       - uses: actions/checkout@v4
