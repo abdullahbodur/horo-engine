@@ -74,7 +74,7 @@ std::wstring BuildCommandLine(const ResolvedLauncherCommand& command) {
 }  // namespace
 
 struct ExternalProcessRunner::ProcessHandle {
-  std::jthread readerThread;
+  std::thread readerThread;
   std::mutex readerMutex;
   std::atomic<bool> readerDone{false};
 #ifdef _WIN32
@@ -160,7 +160,7 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   process->process = info.hProcess;
   process->thread = info.hThread;
 
-  process->readerThread = std::jthread([handle = process.get(), label]() {
+  process->readerThread = std::thread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     DWORD bytesRead = 0;
@@ -224,7 +224,7 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   close(pipes[1]);
   process->pid = pid;
   process->stdoutRead = pipes[0];
-  process->readerThread = std::jthread([handle = process.get(), label]() {
+  process->readerThread = std::thread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     ssize_t bytesRead = 0;
@@ -327,6 +327,9 @@ void ExternalProcessRunner::Stop() {
 #endif
     Finish(exitCode, true);
   }
+
+  if (m_process->readerThread.joinable())
+    m_process->readerThread.join();
 
 #ifdef _WIN32
   if (m_process->stdoutRead)

@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
+#include <memory>
 #include <string>
 
 #include <glad/glad.h>
@@ -350,7 +350,7 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(bool runUiAutomation) 
   if (!runUiAutomation)
     return;
 
-  static std::optional<HomeDirGuard> s_homeGuard;
+  static HomeDirGuard* s_homeGuard = nullptr;
   const fs::path tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
   const fs::path homeRoot = tempRoot / "home";
   LOG_INFO("UI automation pre-start: cwd='%s', temp_root='%s', home_root='%s'",
@@ -365,7 +365,8 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(bool runUiAutomation) 
              homeRoot.string().c_str(),
              ec.message().c_str());
   }
-  s_homeGuard.emplace(homeRoot);
+  if (s_homeGuard == nullptr)
+    s_homeGuard = new HomeDirGuard(homeRoot);
   LogUiEnvVar("USERPROFILE");
   LogUiEnvVar("HOME");
   LogUiEnvVar("HOMEDRIVE");
@@ -568,7 +569,7 @@ void UiAutomationRunner::DestroyContext() {
 
 bool UiAutomationRunner::DidPass() const {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  return !m_impl->active || m_impl->passed;
+  return m_impl->passed;
 #else
   return true;
 #endif
