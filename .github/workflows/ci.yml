@@ -15,99 +15,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ----------------------------------------------------------------
-  # Build + Test — macOS (Clang, Ninja)
-  # ----------------------------------------------------------------
-  #   test-macos:
-  #     name: Test · macOS / Clang
-  #     runs-on: macos-latest
-  #
-  #     steps:
-  #       - uses: actions/checkout@v4
-  #
-  #       - name: Install Ninja
-  #         run: brew install ninja
-  #
-  #       - name: Cache FetchContent dependencies
-  #         uses: actions/cache@v4
-  #         with:
-  #           path: ~/.cmake/fetchcontent
-  #           key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-  #           restore-keys: fetchcontent-macos-
-  #
-  #       - name: Configure
-  #         run: cmake --preset debug
-  #         env:
-  #           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-  #
-  #       - name: Build
-  #         run: cmake --build --preset debug --parallel
-  #
-  #       - name: Test
-  #         run: ctest --preset debug --output-on-failure
-  #
-  #       - name: Prepare UI test output directory
-  #         run: mkdir -p ui_test_output
-  #
-  #       - name: Build UI Automation Target
-  #         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-  #
-  #       - name: Run UI Automation (headless log mode)
-  #         run: |
-  #           set -o pipefail
-  #           log_file="ui_test_output/horo_ui_test_macos.log"
-  #           echo "Starting macOS UI automation in non-recording mode (no forced GUI)."
-  #           (
-  #             while true; do
-  #               echo "[macos-ui] still running at $(date -u '+%H:%M:%S')"
-  #               sleep 30
-  #             done
-  #           ) &
-  #           heartbeat_pid=$!
-  #           cleanup() {
-  #             kill "$heartbeat_pid" 2>/dev/null || true
-  #           }
-  #           trap cleanup EXIT
-  #           set +e
-  #           build/debug/bin/HoroEditorUiTest --run-ui-tests 2>&1 | tee "$log_file"
-  #           ui_exit=${PIPESTATUS[0]}
-  #           set -e
-  #           if [ "$ui_exit" -ne 0 ]; then
-  #             if [ "$ui_exit" -eq 134 ] && grep -q "glfwCreateWindow failed" "$log_file"; then
-  #               echo "::warning::UI automation skipped on macOS runner: unable to create GLFW window in headless environment."
-  #               exit 0
-  #             fi
-  #             echo "UI automation failed on macOS with exit code $ui_exit."
-  #             exit "$ui_exit"
-  #           fi
-  #         env:
-  #           MONOLITH_UI_TEST_CAPTURE: "0"
-  #           MONOLITH_UI_TEST_VIDEO: "0"
-  #           MONOLITH_UI_TEST_RECORDING: "0"
-  #           MONOLITH_UI_TEST_FILTER: "launcher/*"
-  #           MONOLITH_UI_TEST_DELAY_MS: "0"
-  #           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-  #
-  #       - name: Dump macOS UI automation diagnostics on failure
-  #         if: failure()
-  #         run: |
-  #           echo "=== UI automation env ==="
-  #           env | sort | awk '/^(MONOLITH_UI_TEST)/ { print }'
-  #           echo "=== ui_test_output files ==="
-  #           ls -la ui_test_output || true
-  #           if [ -f ui_test_output/horo_ui_test_macos.log ]; then
-  #             echo "=== tail ui_test_output/horo_ui_test_macos.log ==="
-  #             tail -n 200 ui_test_output/horo_ui_test_macos.log
-  #           fi
-  #
-  #       - name: Upload UI Test Artifacts
-  #         if: always()
-  #         uses: actions/upload-artifact@v4
-  #         with:
-  #           name: ui-test-results-macos
-  #           path: ui_test_output/
-  #           if-no-files-found: ignore
-  #           retention-days: 30
+  #   ----------------------------------------------------------------
+  #   Build + Test — macOS (Clang, Ninja)
+  #   ----------------------------------------------------------------
+  test-macos:
+    name: Test · macOS / Clang
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure
+        run: cmake --preset debug
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset debug --parallel
+
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
 
   test-windows:
     name: Test · Windows / MSVC
