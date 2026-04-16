@@ -110,7 +110,7 @@ WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi
   return {};
 }
 
-Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height) {
+Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height), m_graphicsApi(spec.graphicsApi), m_vsync(spec.vsync) {
   LOG_INFO("Window bootstrap begin: title='%s' size=%dx%d api=%d vsync=%d",
            spec.title.c_str(),
            spec.width,
@@ -121,8 +121,6 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   GlfwContext::Init();
   LOG_INFO("glfwInit succeeded.");
 
-  m_graphicsApi = spec.graphicsApi;
-  m_vsync = spec.vsync;
   const WindowGraphicsApiTraits traits = GetGraphicsApiTraits();
 
   if (traits.createsClientContext) {
@@ -152,7 +150,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
   if (!m_window) {
     GlfwContext::Shutdown();
-    throw std::runtime_error(std::string("glfwCreateWindow failed: ") + SafeGlfwErrorString());
+    throw WindowInitException(std::string("glfwCreateWindow failed: ") + SafeGlfwErrorString());
   }
   LOG_INFO("glfwCreateWindow succeeded: window=%p", m_window);
 
@@ -163,7 +161,7 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
       glfwDestroyWindow(m_window);
       GlfwContext::Shutdown();
-      throw std::runtime_error("gladLoadGLLoader failed");
+      throw WindowInitException("gladLoadGLLoader failed");
     }
     LOG_INFO("gladLoadGLLoader succeeded.");
     SetVSync(spec.vsync);

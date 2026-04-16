@@ -2,7 +2,9 @@
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 
+#include <algorithm>
 #include <string>
+#include <string_view>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -20,17 +22,20 @@ namespace fs = std::filesystem;
 Launcher::LauncherEditorShell* AsLauncherShell(UiAutomationRunState* state) {
   if (!state || !state->shellContext)
     return nullptr;
-  return static_cast<Launcher::LauncherEditorShell*>(state->shellContext);
+  return state->shellContext;
 }
 
 ImGuiWindow* FindWindowContaining(const char* token) {
   if (!*token || GImGui == nullptr)
     return nullptr;
 
-  for (ImGuiContext& context = *GImGui; ImGuiWindow* window : context.Windows) {
+  const ImGuiContext& context = *GImGui;
+  for (ImGuiWindow* window : context.Windows) {
     if (!window || !window->Name)
       continue;
-    if (std::string(window->Name).find(token) != std::string::npos)
+    const std::string_view windowName(window->Name);
+    const std::string_view tokenView(token);
+    if (!std::ranges::search(windowName, tokenView).empty())
       return window;
   }
   return nullptr;
@@ -93,6 +98,109 @@ struct VideoCaptureScope {
 
 void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
                                       UiAutomationRunState* state,
+                                      bool allowScreenshot);
+void ReturnToLauncherFromEditor(ImGuiTestContext* ctx, UiAutomationRunState* state);
+
+UiAutomationRunState* GetTestState(ImGuiTestContext* ctx, const char* scenarioName) {
+  LOG_INFO("UI scenario start: %s", scenarioName);
+  if (ctx == nullptr || ctx->Test == nullptr)
+    return nullptr;
+  return static_cast<UiAutomationRunState*>(ctx->Test->UserData);
+}
+
+UiAutomationRunState* RequireTestState(ImGuiTestContext* ctx, const char* scenarioName) {
+  return GetTestState(ctx, scenarioName);
+}
+
+void CaptureIfEnabled(ImGuiTestContext* ctx,
+                      const UiAutomationRunState* state,
+                      const char* filename) {
+  if (!state->captureEnabled || state->videoEnabled)
+    return;
+  CaptureScreenshotTo(ctx, state->uiCaptureOutputDir, filename);
+}
+
+void AssertLauncherHomeVisible(ImGuiTestContext* ctx) {
+  ctx->SetRef("Horo Launcher");
+  IM_CHECK(ctx->ItemExists("Create New Project"));
+}
+
+void AssertRecentProjectListed(ImGuiTestContext* ctx) {
+  ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
+  IM_CHECK(recentProjectsList != nullptr);
+  ctx->SetRef(recentProjectsList);
+  IM_CHECK(ctx->ItemExists("UiSmokeGame"));
+}
+
+void ReopenProjectFromRecentProjects(ImGuiTestContext* ctx) {
+  AssertLauncherHomeVisible(ctx);
+  AssertRecentProjectListed(ctx);
+  LOG_INFO("UI scenario action: click recent project 'UiSmokeGame'");
+  ctx->ItemClick("UiSmokeGame");
+  ctx->Yield(3);
+}
+
+void RunLauncherSmokeTest(ImGuiTestContext* ctx) {
+  UiAutomationRunState* testState = RequireTestState(ctx, "launcher_ui/create_project_from_launcher");
+  IM_CHECK(testState != nullptr);
+  if (testState == nullptr)
+    return;
+  VideoCaptureScope captureScope(ctx, testState);
+  const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+      ctx, testState, "launcher_ui__create_project_from_launcher__run.mp4");
+  (void)captureStarted;
+  EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
+
+  ctx->SetRef("##toolbar");
+  IM_CHECK(ctx->ItemExists("File"));
+  IM_CHECK(ctx->ItemExists("Add"));
+  IM_CHECK(ctx->ItemExists("Edit"));
+  LOG_INFO("UI scenario done: launcher_ui/create_project_from_launcher");
+}
+
+void RunLauncherBackToHomeTest(ImGuiTestContext* ctx) {
+  UiAutomationRunState* testState = RequireTestState(ctx, "launcher_ui/back_to_home_returns_launcher");
+  IM_CHECK(testState != nullptr);
+  if (testState == nullptr)
+    return;
+  VideoCaptureScope captureScope(ctx, testState);
+  const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+      ctx, testState, "launcher_ui__back_to_home_returns_launcher__run.mp4");
+  (void)captureStarted;
+  EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
+  ReturnToLauncherFromEditor(ctx, testState);
+  CaptureIfEnabled(ctx, testState, "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible.png");
+  AssertLauncherHomeVisible(ctx);
+  AssertRecentProjectListed(ctx);
+  CaptureIfEnabled(ctx, testState, "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
+  LOG_INFO("UI scenario done: launcher_ui/back_to_home_returns_launcher");
+}
+
+void RunLauncherRecentProjectsTest(ImGuiTestContext* ctx) {
+  UiAutomationRunState* testState =
+      RequireTestState(ctx, "launcher_ui/open_project_from_recent_projects");
+  IM_CHECK(testState != nullptr);
+  if (testState == nullptr)
+    return;
+  VideoCaptureScope captureScope(ctx, testState);
+  const bool captureStarted = BeginTestVideoCaptureIfNeeded(
+      ctx, testState, "launcher_ui__open_project_from_recent_projects__run.mp4");
+  (void)captureStarted;
+  EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
+  ReturnToLauncherFromEditor(ctx, testState);
+  Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
+  IM_CHECK(shell != nullptr);
+
+  ReopenProjectFromRecentProjects(ctx);
+  IM_CHECK(shell->HasActiveProject());
+  ctx->SetRef("##toolbar");
+  IM_CHECK(ctx->ItemExists("File"));
+  CaptureIfEnabled(ctx, testState, "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
+  LOG_INFO("UI scenario done: launcher_ui/open_project_from_recent_projects");
+}
+
+void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
+                                      UiAutomationRunState* state,
                                       bool allowScreenshot = true) {
   IM_CHECK(ctx != nullptr);
   IM_CHECK(state != nullptr);
@@ -144,98 +252,21 @@ void ReturnToLauncherFromEditor(ImGuiTestContext* ctx, UiAutomationRunState* sta
 ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunState* state) {
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "create_project_from_launcher");
   test->UserData = state;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
-    LOG_INFO("UI scenario start: launcher_ui/create_project_from_launcher");
-    auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
-    IM_CHECK(testState != nullptr);
-    VideoCaptureScope captureScope(ctx, testState);
-    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
-        ctx, testState, "launcher_ui__create_project_from_launcher__run.mp4");
-    (void)captureStarted;
-    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
-
-    ctx->SetRef("##toolbar");
-    IM_CHECK(ctx->ItemExists("File"));
-    IM_CHECK(ctx->ItemExists("Add"));
-    IM_CHECK(ctx->ItemExists("Edit"));
-    LOG_INFO("UI scenario done: launcher_ui/create_project_from_launcher");
-  };
+  test->TestFunc = &RunLauncherSmokeTest;
   return test;
 }
 
 ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationRunState* state) {
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "back_to_home_returns_launcher");
   test->UserData = state;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
-    LOG_INFO("UI scenario start: launcher_ui/back_to_home_returns_launcher");
-    auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
-    IM_CHECK(testState != nullptr);
-    VideoCaptureScope captureScope(ctx, testState);
-    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
-        ctx, testState, "launcher_ui__back_to_home_returns_launcher__run.mp4");
-    (void)captureStarted;
-    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
-    ReturnToLauncherFromEditor(ctx, testState);
-    if (testState->captureEnabled && !testState->videoEnabled) {
-      CaptureScreenshotTo(
-          ctx,
-          testState->uiCaptureOutputDir,
-          "launcher_ui__back_to_home_returns_launcher__expect_launcher_home_visible.png");
-    }
-
-    ctx->SetRef("Horo Launcher");
-    IM_CHECK(ctx->ItemExists("Create New Project"));
-    ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
-    IM_CHECK(recentProjectsList != nullptr);
-    ctx->SetRef(recentProjectsList);
-    IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    if (testState->captureEnabled && !testState->videoEnabled) {
-      CaptureScreenshotTo(
-          ctx,
-          testState->uiCaptureOutputDir,
-          "launcher_ui__back_to_home_returns_launcher__expect_recent_project_listed.png");
-    }
-    LOG_INFO("UI scenario done: launcher_ui/back_to_home_returns_launcher");
-  };
+  test->TestFunc = &RunLauncherBackToHomeTest;
   return test;
 }
 
 ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomationRunState* state) {
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "open_project_from_recent_projects");
   test->UserData = state;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
-    LOG_INFO("UI scenario start: launcher_ui/open_project_from_recent_projects");
-    auto* testState = static_cast<UiAutomationRunState*>(ctx->Test->UserData);
-    IM_CHECK(testState != nullptr);
-    VideoCaptureScope captureScope(ctx, testState);
-    const bool captureStarted = BeginTestVideoCaptureIfNeeded(
-        ctx, testState, "launcher_ui__open_project_from_recent_projects__run.mp4");
-    (void)captureStarted;
-    EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
-    ReturnToLauncherFromEditor(ctx, testState);
-    Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
-    IM_CHECK(shell != nullptr);
-
-    ctx->SetRef("Horo Launcher");
-    ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
-    IM_CHECK(recentProjectsList != nullptr);
-    ctx->SetRef(recentProjectsList);
-    IM_CHECK(ctx->ItemExists("UiSmokeGame"));
-    LOG_INFO("UI scenario action: click recent project 'UiSmokeGame'");
-    ctx->ItemClick("UiSmokeGame");
-    ctx->Yield(3);
-
-    IM_CHECK(shell->HasActiveProject());
-    ctx->SetRef("##toolbar");
-    IM_CHECK(ctx->ItemExists("File"));
-    if (testState->captureEnabled && !testState->videoEnabled) {
-      CaptureScreenshotTo(
-          ctx,
-          testState->uiCaptureOutputDir,
-          "launcher_ui__open_project_from_recent_projects__expect_project_reopened.png");
-    }
-    LOG_INFO("UI scenario done: launcher_ui/open_project_from_recent_projects");
-  };
+  test->TestFunc = &RunLauncherRecentProjectsTest;
   return test;
 }
 

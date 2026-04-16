@@ -21,10 +21,13 @@ std::string NormalizeRecentProjectPath(const fs::path& path) {
 
   std::error_code ec;
   fs::path normalized = fs::weakly_canonical(path, ec);
-  if (ec)
-    normalized = fs::absolute(path, ec);
-  if (ec)
-    normalized = path;
+  if (ec) {
+    fs::path absPath = fs::absolute(path, ec);
+    if (!ec)
+      normalized = absPath;
+  }
+  if (normalized.empty())
+    return {};
   return normalized.lexically_normal().generic_string();
 }
 
@@ -137,7 +140,7 @@ void RememberRecentProject(EditorHomeDocument* doc, const fs::path& projectRoot)
     return;
 
   auto& recent = doc->state.recentProjects;
-  recent.erase(std::remove(recent.begin(), recent.end(), normalized), recent.end());
+  std::erase(recent, normalized);
   recent.insert(recent.begin(), normalized);
   if (recent.size() > kMaxRecentProjects)
     recent.resize(kMaxRecentProjects);
@@ -149,14 +152,9 @@ void PruneMissingRecentProjects(EditorHomeDocument* doc) {
     return;
 
   auto& recent = doc->state.recentProjects;
-  recent.erase(std::remove_if(recent.begin(),
-                              recent.end(),
-                              [](const std::string& entry) {
-                                if (entry.empty())
-                                  return true;
-                                return !IsLauncherProjectRoot(entry);
-                              }),
-               recent.end());
+  std::erase_if(recent, [](const std::string& entry) {
+    return entry.empty() || !IsLauncherProjectRoot(entry);
+  });
 
   if (!doc->state.lastProjectPath.empty() && !IsLauncherProjectRoot(doc->state.lastProjectPath))
     doc->state.lastProjectPath.clear();

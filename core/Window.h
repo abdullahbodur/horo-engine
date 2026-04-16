@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <stdexcept>
 #include <string>
 
 struct GLFWwindow;
@@ -36,6 +37,12 @@ struct WindowSpec {
   int height = 720;
   bool vsync = true;
   WindowGraphicsApi graphicsApi = WindowGraphicsApi::OpenGL;
+};
+
+class WindowInitException : public std::runtime_error {
+public:
+  explicit WindowInitException(const char* message) : std::runtime_error(message) {}
+  explicit WindowInitException(const std::string& message) : std::runtime_error(message) {}
 };
 
 class Window {

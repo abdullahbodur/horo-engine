@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <ranges>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/Logger.h"
@@ -25,25 +27,25 @@ std::vector<UiScenarioRegistration>& Registry() {
 
 std::string Trim(std::string value) {
   auto isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), [&](char ch) {
+  value.erase(value.begin(), std::ranges::find_if(value, [&](char ch) {
                 return !isSpace(static_cast<unsigned char>(ch));
               }));
-  value.erase(std::find_if(value.rbegin(), value.rend(), [&](char ch) {
+  value.erase(std::ranges::find_if(std::views::reverse(value), [&](char ch) {
                 return !isSpace(static_cast<unsigned char>(ch));
               }).base(),
               value.end());
   return value;
 }
 
-bool MatchesPattern(const std::string& value, const std::string& pattern) {
+bool MatchesPattern(std::string_view value, std::string_view pattern) {
   if (pattern.empty() || pattern == "*")
     return true;
   const size_t wildcard = pattern.find('*');
   if (wildcard == std::string::npos)
     return value == pattern;
 
-  const std::string prefix = pattern.substr(0, wildcard);
-  const std::string suffix = pattern.substr(wildcard + 1);
+  const std::string_view prefix = pattern.substr(0, wildcard);
+  const std::string_view suffix = pattern.substr(wildcard + 1);
   if (!prefix.empty() && value.rfind(prefix, 0) != 0)
     return false;
   if (!suffix.empty() && (value.size() < suffix.size() ||
@@ -53,17 +55,19 @@ bool MatchesPattern(const std::string& value, const std::string& pattern) {
   return value.size() >= prefix.size() + suffix.size();
 }
 
-bool MatchesFilter(const std::string& scenarioName, const std::string& rawFilter) {
-  const std::string filter = Trim(rawFilter);
+bool MatchesFilter(std::string_view scenarioName, std::string_view rawFilter) {
+  const std::string filter = Trim(std::string(rawFilter));
   if (filter.empty())
     return true;
 
   size_t start = 0;
   while (start <= filter.size()) {
     const size_t end = filter.find(',', start);
-    const std::string token = Trim(filter.substr(start, end == std::string::npos ? std::string::npos : end - start));
-    if (!token.empty() && MatchesPattern(scenarioName, token))
+    if (const std::string token =
+            Trim(filter.substr(start, end == std::string::npos ? std::string::npos : end - start));
+        !token.empty() && MatchesPattern(scenarioName, token)) {
       return true;
+    }
     if (end == std::string::npos)
       break;
     start = end + 1;

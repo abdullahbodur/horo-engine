@@ -14,7 +14,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
+#include <Windows.h>
 #else
 #include <csignal>
 #include <sys/types.h>
@@ -131,19 +131,18 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   startup.hStdError = process->stdoutWrite;
 
   PROCESS_INFORMATION info{};
-  std::wstring commandLine = BuildCommandLine(command);
+std::wstring commandLine = BuildCommandLine(command);
   std::wstring workdir = Utf8ToWide(command.workingDirectory.generic_string());
-  const BOOL created = CreateProcessW(nullptr,
-                                      commandLine.data(),
-                                      nullptr,
-                                      nullptr,
-                                      TRUE,
-                                      CREATE_NO_WINDOW,
-                                      nullptr,
-                                      workdir.empty() ? nullptr : workdir.c_str(),
-                                      &startup,
-                                      &info);
-  if (!created) {
+  if (const BOOL created = CreateProcessW(nullptr,
+                                       commandLine.data(),
+                                       nullptr,
+                                       nullptr,
+                                       TRUE,
+                                       CREATE_NO_WINDOW,
+                                       nullptr,
+                                       workdir.empty() ? nullptr : workdir.c_str(),
+                                       &startup,
+                                       &info); !created) {
     CloseHandle(process->stdoutRead);
     CloseHandle(process->stdoutWrite);
     process->stdoutRead = nullptr;
@@ -254,8 +253,7 @@ void ExternalProcessRunner::Poll() {
     return;
 
 #ifdef _WIN32
-  const DWORD waitResult = WaitForSingleObject(m_process->process, 0);
-  if (waitResult != WAIT_OBJECT_0)
+  if (const DWORD waitResult = WaitForSingleObject(m_process->process, 0); waitResult != WAIT_OBJECT_0)
     return;
 
   DWORD exitCode = 0;

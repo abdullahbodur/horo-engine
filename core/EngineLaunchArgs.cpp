@@ -19,7 +19,7 @@ EngineLaunchOptions ParseEngineLaunchOptions(int argc, char** argv) {
         out.projectPath = argv[i + 1];
         ++i;
       }
-    } else if (a.substr(0, 10) == "--project=") {
+    } else if (a.starts_with("--project=")) {
       out.projectPath = std::string(a.substr(10));
     }
   }

@@ -33,10 +33,15 @@ constexpr const char* kFfmpegGifParams =
     "[b] [pal] paletteuse\" $OUTPUT";
 
 struct HomeDirGuard {
-  std::string previousUserProfile;
-  std::string previousHomeDrive;
-  std::string previousHomePath;
-  std::string previousHome;
+  std::string previousUserProfile = {};
+  std::string previousHomeDrive = {};
+  std::string previousHomePath = {};
+  std::string previousHome = {};
+
+  HomeDirGuard(const HomeDirGuard&) = delete;
+  HomeDirGuard& operator=(const HomeDirGuard&) = delete;
+  HomeDirGuard(HomeDirGuard&&) = default;
+  HomeDirGuard& operator=(HomeDirGuard&&) = default;
 
   static std::string ReadEnv(const char* name) {
     if (!name || !*name)
@@ -55,11 +60,11 @@ struct HomeDirGuard {
 #endif
   }
 
-  explicit HomeDirGuard(const fs::path& nextHome)
-      : previousUserProfile(ReadEnv("USERPROFILE")),
-        previousHomeDrive(ReadEnv("HOMEDRIVE")),
-        previousHomePath(ReadEnv("HOMEPATH")),
-        previousHome(ReadEnv("HOME")) {
+  explicit HomeDirGuard(const fs::path& nextHome) {
+    previousUserProfile = ReadEnv("USERPROFILE");
+    previousHomeDrive = ReadEnv("HOMEDRIVE");
+    previousHomePath = ReadEnv("HOMEPATH");
+    previousHome = ReadEnv("HOME");
 #ifdef _WIN32
     _putenv_s("USERPROFILE", nextHome.string().c_str());
     _putenv_s("HOMEDRIVE", "");
@@ -262,7 +267,7 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(bool runUiAutomation) 
 #endif
 }
 
-void UiAutomationRunner::StartIfRequested(bool runUiAutomation, void* shellContext) {
+void UiAutomationRunner::StartIfRequested(bool runUiAutomation, Launcher::LauncherEditorShell* shellContext) {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   if (!runUiAutomation)
     return;

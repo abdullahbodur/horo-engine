@@ -114,8 +114,7 @@ LauncherProjectDocument LoadProjectManifestDocument(const fs::path& projectRoot)
   out.manifest.projectName = projectJson.value("projectName", out.manifest.projectName);
   out.manifest.defaultScene = projectJson.value("defaultScene", out.manifest.defaultScene);
 
-  const json commandsJson = projectJson.value("commands", json::object());
-  if (commandsJson.is_object()) {
+  if (const json commandsJson = projectJson.value("commands", json::object()); commandsJson.is_object()) {
     out.manifest.configureCommand = ParseCommand(commandsJson.value("configure", json::object()));
     out.manifest.buildCommand = ParseCommand(commandsJson.value("build", json::object()));
     out.manifest.runCommand = ParseCommand(commandsJson.value("run", json::object()));
@@ -230,11 +229,11 @@ bool ResolveLauncherCommand(const LauncherProjectCommand& command,
     resolved.workingDirectory = projectRoot / resolved.workingDirectory;
   resolved.workingDirectory = resolved.workingDirectory.lexically_normal();
 
-  const std::string executableRaw = ExpandTokens(command.executable, projectRoot, sdkRoot);
+  fs::path executableRaw = fs::path(ExpandTokens(command.executable, projectRoot, sdkRoot));
   fs::path executablePath = executableRaw;
   if (!executablePath.empty() && executablePath.has_parent_path() && executablePath.is_relative())
     executablePath = resolved.workingDirectory / executablePath;
-  resolved.executable = executablePath.empty() ? fs::path(executableRaw) : executablePath.lexically_normal();
+  resolved.executable = executablePath.empty() ? executableRaw : executablePath.lexically_normal();
 
   resolved.args.reserve(command.args.size());
   for (const std::string& arg : command.args)

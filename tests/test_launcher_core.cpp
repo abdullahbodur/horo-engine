@@ -1,8 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <thread>
 
 #include "core/EngineLaunchArgs.h"
@@ -40,10 +43,15 @@ std::string ReadTextFile(const std::filesystem::path& path) {
 }
 
 struct HomeDirGuard {
-  std::string previousUserProfile;
-  std::string previousHomeDrive;
-  std::string previousHomePath;
-  std::string previousHome;
+  std::string previousUserProfile = {};
+  std::string previousHomeDrive = {};
+  std::string previousHomePath = {};
+  std::string previousHome = {};
+
+  HomeDirGuard(const HomeDirGuard&) = delete;
+  HomeDirGuard& operator=(const HomeDirGuard&) = delete;
+  HomeDirGuard(HomeDirGuard&&) = delete;
+  HomeDirGuard& operator=(HomeDirGuard&&) = delete;
 
   static std::string ReadEnv(const char* name) {
     if (!name || !*name)
@@ -62,11 +70,11 @@ struct HomeDirGuard {
 #endif
   }
 
-  explicit HomeDirGuard(const std::filesystem::path& nextHome)
-      : previousUserProfile(ReadEnv("USERPROFILE")),
-        previousHomeDrive(ReadEnv("HOMEDRIVE")),
-        previousHomePath(ReadEnv("HOMEPATH")),
-        previousHome(ReadEnv("HOME")) {
+  explicit HomeDirGuard(const std::filesystem::path& nextHome) {
+    previousUserProfile = ReadEnv("USERPROFILE");
+    previousHomeDrive = ReadEnv("HOMEDRIVE");
+    previousHomePath = ReadEnv("HOMEPATH");
+    previousHome = ReadEnv("HOME");
 #ifdef _WIN32
     _putenv_s("USERPROFILE", nextHome.string().c_str());
     _putenv_s("HOMEDRIVE", "");
@@ -93,12 +101,12 @@ struct HomeDirGuard {
 }  // namespace
 
 TEST_CASE("EngineLaunchArgs parses launcher project path", "[launcher][cli]") {
-  char arg0[] = "HoroEditor";
-  char projectFlag[] = "--project";
-  char projectPath[] = "C:/games/demo";
-  char* argv[] = {arg0, projectFlag, projectPath};
+  std::string arg0 = "HoroEditor";
+  std::string projectFlag = "--project";
+  std::string projectPath = "C:/games/demo";
+  std::array<char*, 3> argv = {arg0.data(), projectFlag.data(), projectPath.data()};
 
-  const EngineLaunchOptions options = ParseEngineLaunchOptions(3, argv);
+  const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
 
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
   REQUIRE(options.projectPath == std::filesystem::path(projectPath));

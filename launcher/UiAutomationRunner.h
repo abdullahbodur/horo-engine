@@ -2,6 +2,10 @@
 
 #include <memory>
 
+namespace Monolith::Launcher {
+class LauncherEditorShell;
+}
+
 namespace Monolith {
 class UiAutomationRunner {
  public:
@@ -13,7 +17,7 @@ class UiAutomationRunner {
   UiAutomationRunner(const UiAutomationRunner&) = delete;
   UiAutomationRunner& operator=(const UiAutomationRunner&) = delete;
 
-  void StartIfRequested(bool runUiAutomation, void* shellContext);
+  void StartIfRequested(bool runUiAutomation, Launcher::LauncherEditorShell* shellContext);
   void PostRenderFrame(void* nativeWindowHandle);
   void Shutdown();
   void DestroyContext();

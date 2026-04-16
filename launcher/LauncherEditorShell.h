@@ -20,6 +20,12 @@
 
 namespace Monolith::Launcher {
 
+struct StringHash {
+  using is_transparent = void;
+  size_t operator()(std::string_view sv) const noexcept { return std::hash<std::string_view>{}(sv); }
+  size_t operator()(const std::string& s) const noexcept { return std::hash<std::string>{}(s); }
+};
+
 class LauncherEditorShell {
  public:
   void Attach(Editor::EditorLayer* editor,
@@ -49,8 +55,8 @@ class LauncherEditorShell {
   ExternalProcessRunner m_processRunner;
 
   std::shared_ptr<Shader> m_sceneShader;
-  std::unordered_map<std::string, std::shared_ptr<Mesh>> m_meshCache;
-  std::unordered_map<std::string, std::shared_ptr<Texture>> m_textureCache;
+  std::unordered_map<std::string, std::shared_ptr<Mesh>, StringHash, std::equal_to<>> m_meshCache;
+  std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash, std::equal_to<>> m_textureCache;
 
   std::string m_launcherError;
   std::array<char, 256> m_newProjectNameInput{};

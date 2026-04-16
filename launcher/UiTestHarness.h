@@ -3,6 +3,10 @@
 #include <filesystem>
 #include <string>
 
+namespace Monolith::Launcher {
+class LauncherEditorShell;
+}
+
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 #include <imgui_test_engine/imgui_te_engine.h>
 #endif
@@ -18,7 +22,7 @@ struct UiAutomationRunState {
   bool videoEnabled = false;
   bool videoCaptureOpen = false;
 
-  void* shellContext = nullptr;
+  Launcher::LauncherEditorShell* shellContext = nullptr;
 };
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
