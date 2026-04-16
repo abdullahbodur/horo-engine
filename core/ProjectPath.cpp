@@ -33,12 +33,6 @@ void ProjectPath::Init(const fs::path& exeDir) {
         s_sdkRoot = s_root;
       return;
     }
-    if (IsProjectRoot(cur / "monolith")) {
-      s_root = cur / "monolith";
-      if (s_sdkRoot.empty())
-        s_sdkRoot = s_root;
-      return;
-    }
     auto parent = cur.parent_path();
     if (parent == cur) break;
     cur = parent;

@@ -15,7 +15,6 @@ namespace Monolith {
 class ProjectPath {
  public:
   // Called by Application constructor. Walks upward from exeDir.
-  // Also checks one level deeper for monolith/ sub-repo layout.
   // Fallback: exeDir itself.
   static void Init(const std::filesystem::path& exeDir);
 
