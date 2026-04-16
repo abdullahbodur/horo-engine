@@ -4,6 +4,7 @@
 #include <cctype>
 #include <fstream>
 #include <sstream>
+#include <string_view>
 
 namespace Monolith::Launcher {
 
@@ -36,7 +37,7 @@ json SerializeCommand(const LauncherProjectCommand& command) {
   return out;
 }
 
-std::string ReplaceAll(std::string value, const std::string& needle, const std::string& replacement) {
+std::string ReplaceAll(std::string value, std::string_view needle, std::string_view replacement) {
   if (needle.empty())
     return value;
 
@@ -48,10 +49,10 @@ std::string ReplaceAll(std::string value, const std::string& needle, const std::
   return value;
 }
 
-std::string ExpandTokens(const std::string& value,
+std::string ExpandTokens(std::string_view value,
                          const fs::path& projectRoot,
                          const fs::path& sdkRoot) {
-  std::string expanded = value;
+  std::string expanded(value);
   expanded = ReplaceAll(expanded, "${projectDir}", projectRoot.generic_string());
   expanded = ReplaceAll(expanded, "${horoSdkRoot}", sdkRoot.generic_string());
   return expanded;
@@ -229,7 +230,7 @@ bool ResolveLauncherCommand(const LauncherProjectCommand& command,
     resolved.workingDirectory = projectRoot / resolved.workingDirectory;
   resolved.workingDirectory = resolved.workingDirectory.lexically_normal();
 
-  fs::path executableRaw = fs::path(ExpandTokens(command.executable, projectRoot, sdkRoot));
+  auto executableRaw = fs::path(ExpandTokens(command.executable, projectRoot, sdkRoot));
   fs::path executablePath = executableRaw;
   if (!executablePath.empty() && executablePath.has_parent_path() && executablePath.is_relative())
     executablePath = resolved.workingDirectory / executablePath;

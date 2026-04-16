@@ -15,6 +15,7 @@ namespace Monolith::Launcher {
 
 namespace fs = std::filesystem;
 
+#if defined(_WIN32) || defined(__APPLE__)
 namespace {
 
 #ifdef _WIN32
@@ -81,6 +82,7 @@ std::string ReadPathFromOsascript(const std::string& command) {
 #endif
 
 }  // namespace
+#endif
 
 fs::path PickFolderPath(const char* prompt, const fs::path& defaultPath) {
 #ifdef _WIN32

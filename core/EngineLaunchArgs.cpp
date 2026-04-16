@@ -6,8 +6,9 @@ namespace Monolith {
 
 EngineLaunchOptions ParseEngineLaunchOptions(int argc, char** argv) {
   EngineLaunchOptions out;
-  for (int i = 1; i < argc; ++i) {
+  for (int i = 1; i < argc;) {
     if (!argv[i]) {
+      ++i;
       continue;
     }
     const std::string_view a(argv[i]);
@@ -18,11 +19,13 @@ EngineLaunchOptions ParseEngineLaunchOptions(int argc, char** argv) {
     else if (a == "--project") {
       if ((i + 1) < argc && argv[i + 1]) {
         out.projectPath = argv[i + 1];
-        ++i;
+        i += 2;
+        continue;
       }
     } else if (a.starts_with("--project=")) {
       out.projectPath = std::string(a.substr(10));
     }
+    ++i;
   }
   return out;
 }

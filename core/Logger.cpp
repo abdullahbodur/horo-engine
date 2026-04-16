@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstdarg>
 #include <cstdio>
+#include <ranges>
 #include <string>
 
 namespace Monolith {
@@ -25,7 +26,7 @@ LogLevel ParseLogLevelFromEnv() {
     return LogLevel::Info;
   std::string level(raw);
 #endif
-  std::transform(level.begin(), level.end(), level.begin(), [](unsigned char ch) {
+  std::ranges::transform(level, level.begin(), [](unsigned char ch) {
     return static_cast<char>(std::tolower(ch));
   });
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 #include <stdexcept>
 #include <system_error>
 
@@ -34,7 +35,7 @@ std::string BufferToString(const std::array<char, 256>& buffer) {
 }
 
 template <size_t N>
-void CopyToBuffer(std::array<char, N>* buffer, const std::string& value) {
+void CopyToBuffer(std::array<char, N>* buffer, std::string_view value) {
   if (!buffer)
     return;
   buffer->fill('\0');
@@ -103,6 +104,36 @@ fs::path NormalizePathForLookup(const fs::path& rawPath) {
   return normalized.lexically_normal();
 }
 
+void ApplyTransformUpdateFromObject(Scene* scene, const Editor::SceneObject& object) {
+  if (!scene)
+    return;
+  if (const auto runtimeEntityIt = object.props.find("_eid"); runtimeEntityIt != object.props.end()) {
+    try {
+      const auto entity = static_cast<Entity>(std::stoul(runtimeEntityIt->second));
+      if (scene->registry.IsAlive(entity) && scene->registry.Has<TransformComponent>(entity)) {
+        auto& transform = scene->registry.Get<TransformComponent>(entity);
+        transform.current.position = object.position;
+        transform.previous.position = object.position;
+        transform.current.scale = object.scale;
+        transform.previous.scale = object.scale;
+        transform.current.rotation = Quaternion::FromEuler(
+            ToRadians(object.pitch), ToRadians(object.yaw), ToRadians(object.roll));
+        transform.previous.rotation = transform.current.rotation;
+      }
+    } catch (const std::invalid_argument& e) {
+      // UI state may still reference transient runtime ids while scene reload is in progress.
+      LOG_DEBUG("[Launcher] Ignoring invalid runtime entity id '%s': %s",
+                runtimeEntityIt->second.c_str(),
+                e.what());
+    } catch (const std::out_of_range& e) {
+      // Ignore malformed runtime ids coming from stale serialized props.
+      LOG_DEBUG("[Launcher] Ignoring out-of-range runtime entity id '%s': %s",
+                runtimeEntityIt->second.c_str(),
+                e.what());
+    }
+  }
+}
+
 }  // namespace
 
 void LauncherEditorShell::Attach(Editor::EditorLayer* editor,
@@ -157,26 +188,7 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
         sceneRef.registry.Add<MeshComponent>(entity, std::move(component));
       });
   m_editor->SetTransformCallback([this](const Editor::SceneObject& object) {
-    if (!m_scene)
-      return;
-
-    if (const auto runtimeEntityIt = object.props.find("_eid"); runtimeEntityIt != object.props.end()) {
-      try {
-        const Entity entity = static_cast<Entity>(std::stoul(runtimeEntityIt->second));
-        if (m_scene->registry.IsAlive(entity) && m_scene->registry.Has<TransformComponent>(entity)) {
-          auto& transform = m_scene->registry.Get<TransformComponent>(entity);
-          transform.current.position = object.position;
-          transform.previous.position = object.position;
-          transform.current.scale = object.scale;
-          transform.previous.scale = object.scale;
-          transform.current.rotation = Quaternion::FromEuler(
-              ToRadians(object.pitch), ToRadians(object.yaw), ToRadians(object.roll));
-          transform.previous.rotation = transform.current.rotation;
-        }
-      } catch (const std::invalid_argument&) {
-      } catch (const std::out_of_range&) {
-      }
-    }
+    ApplyTransformUpdateFromObject(m_scene, object);
 
     std::string lightError;
     if (!m_runtime->UpdateLiveLight(object, &lightError) && !lightError.empty() &&
@@ -311,10 +323,10 @@ void LauncherEditorShell::HandlePendingSceneReload() {
   if (!HasActiveProject() || !m_editor || !m_runtime || !m_editor->WantsSceneReload())
     return;
 
-  const SceneRuntimeOperationResult reload = m_runtime->ReloadDocument(m_editor->GetPendingDocument());
-  if (!reload.ok)
+  if (const SceneRuntimeOperationResult reload = m_runtime->ReloadDocument(m_editor->GetPendingDocument());
+      !reload.ok) {
     LOG_ERROR("[Launcher] Runtime reload failed: %s", reload.error.c_str());
-  else {
+  } else {
     if (m_scene)
       m_editor->SyncRuntimeEntityIds(m_scene->registry);
     RefreshCameraFromSceneCamera();
@@ -515,8 +527,8 @@ void LauncherEditorShell::RenderLauncher() {
   } else {
     for (const std::string& recentPath : m_homeDocument.state.recentProjects) {
       const fs::path path(recentPath);
-      const std::string title = path.filename().empty() ? recentPath : path.filename().string();
-      if (recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
+      if (const std::string title = path.filename().empty() ? recentPath : path.filename().string();
+          recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
         std::string openError;
         if (!OpenProject(path, &openError))
           m_launcherError = openError;
@@ -560,8 +572,7 @@ void LauncherEditorShell::RenderProjectToolbar() {
   if (ImGui::Button("Back To Home"))
     CloseProject();
 
-  const ExternalProcessStatus& status = m_processRunner.GetStatus();
-  if (!status.label.empty()) {
+  if (const ExternalProcessStatus& status = m_processRunner.GetStatus(); !status.label.empty()) {
     ImGui::Separator();
     ImGui::Text("Last command: %s", status.label.c_str());
     if (!status.commandLine.empty())

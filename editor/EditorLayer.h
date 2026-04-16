@@ -175,7 +175,7 @@ class EditorLayer {
   bool m_prevTab = false;
   ViewSnap m_pendingViewSnap = ViewSnap::None;
 
-  void ToggleFlyMode(Camera& cam);
+  void ToggleFlyMode(const Camera& cam);
   void UpdateFlyCamera(float dt, Camera& cam);
 
   TransformGizmo m_gizmo;
@@ -204,15 +204,15 @@ class EditorLayer {
   void DrawDockspace();
   void DrawViewportPanel(const Camera& cam, int screenW, int screenH);
   void DrawViewGimbal(const Camera& cam);
-  void DrawHotReloadOverlay();
-  void DrawClipboardToast();
+  void DrawHotReloadOverlay() const;
+  void DrawClipboardToast() const;
   void DrawObjectList();
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
   void DrawCommandPalettePopup();
   void DrawQuickOpenPopup();
-  void DrawStatusBar();
+  void DrawStatusBar() const;
   void DrawBottomDock();
   void DrawMcpTab();
   void DrawProjectTreeRecursive(const std::filesystem::path& absPath,

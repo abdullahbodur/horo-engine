@@ -92,8 +92,12 @@ jobs:
     name: Test · Linux / GCC
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Restore compiler cache
         uses: hendrikmuhs/ccache-action@v1.2.22
@@ -108,6 +112,7 @@ jobs:
           fi
           sudo apt-get install -y --no-install-recommends \
             ninja-build \
+            gcovr \
             xvfb \
             ffmpeg \
             libwayland-dev \
@@ -181,52 +186,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  sonarcloud:
-    name: SonarCloud Security + Coverage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    needs: [ test-linux, test-windows, test-macos ]
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Restore compiler cache
-        uses: hendrikmuhs/ccache-action@v1.2.22
-        with:
-          key: ${{ github.job }}-${{ runner.os }}
-
-      - name: Install system dependencies
-        run: |
-          if ! sudo apt-get update -qq; then
-            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
-            sudo apt-get update -qq
-          fi
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build gcovr \
-            libwayland-dev wayland-protocols libxkbcommon-dev \
-            libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev \
-            libgl1-mesa-dev libglu1-mesa-dev
-
-      - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.cmake/fetchcontent
-          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-          restore-keys: fetchcontent-linux-
-
       - name: Install Build Wrapper
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
 
       - name: Configure (coverage instrumentation)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: >
           cmake --preset coverage
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
@@ -235,17 +200,20 @@ jobs:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
       - name: Build (wrapped + coverage)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           build-wrapper-linux-x86-64 \
             --out-dir bw-output \
             cmake --build --preset coverage --parallel
 
       - name: Run tests (coverage build)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: ctest --preset coverage
         env:
           MONOLITH_LOG_LEVEL: "debug"
 
       - name: Generate Sonar coverage report
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           gcovr build/coverage \
             --root "${{ github.workspace }}" \
@@ -257,7 +225,7 @@ jobs:
             --exclude '.*/tests/.*'
 
       - name: SonarCloud scan
-        if: ${{ env.SONAR_TOKEN != '' }}
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: SonarSource/sonarqube-scan-action@v7.1.0
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
@@ -275,7 +243,7 @@ jobs:
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [ sonarcloud ]
+    needs: [ test-linux, test-windows, test-macos ]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}

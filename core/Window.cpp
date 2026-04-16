@@ -32,17 +32,17 @@ int ReadEnvNonNegativeInt(const char* name, int fallback) {
     return fallback;
   char* end = nullptr;
   const long parsed = std::strtol(value.c_str(), &end, 10);
-  const bool valid = (end != value.c_str() && *end == '\0');
+  if (const bool valid = (end != value.c_str() && *end == '\0'); !valid || parsed < 0 || parsed > 32)
+    return fallback;
 #else
   const char* value = std::getenv(name);
   if (!value || !*value)
     return fallback;
   char* end = nullptr;
   const long parsed = std::strtol(value, &end, 10);
-  const bool valid = (end != value && *end == '\0');
-#endif
-  if (!valid || parsed < 0 || parsed > 32)
+  if (const bool valid = (end != value && *end == '\0'); !valid || parsed < 0 || parsed > 32)
     return fallback;
+#endif
   return static_cast<int>(parsed);
 }
 
@@ -64,8 +64,7 @@ bool ReadEnvBool(const char* name, bool fallback) {
 
 const char* SafeGlfwErrorString() {
   const char* description = nullptr;
-  const int code = glfwGetError(&description);
-  if (code == GLFW_NO_ERROR)
+  if (const int code = glfwGetError(&description); code == GLFW_NO_ERROR)
     return "no-error";
   return description ? description : "unknown-glfw-error";
 }
@@ -203,7 +202,7 @@ Window::~Window() {
   GlfwContext::Shutdown();
 }
 
-void Window::PollEvents() {
+void Window::PollEvents() const {
   glfwPollEvents();
 }
 
@@ -223,7 +222,7 @@ void Window::SetVSync(bool enabled) {
 }
 
 float Window::GetAspect() const {
-  return m_height > 0 ? static_cast<float>(m_width) / m_height : 1.0f;
+  return m_height > 0 ? static_cast<float>(m_width) / static_cast<float>(m_height) : 1.0f;
 }
 
 WindowGraphicsApiTraits Window::GetGraphicsApiTraits() const {
@@ -265,13 +264,13 @@ void Window::FramebufferSizeCallback(GLFWwindow* win, int w, int h) {
 }
 
 void Window::WindowCloseCallback(GLFWwindow* win) {
-  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
+  const auto* self = static_cast<const Window*>(glfwGetWindowUserPointer(win));
   if (self->m_closeCb)
     self->m_closeCb();
 }
 
 void Window::DropPathsThunk(GLFWwindow* win, int count, const char** paths) {
-  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
+  const auto* self = static_cast<const Window*>(glfwGetWindowUserPointer(win));
   if (self->m_fileDropCb)
     self->m_fileDropCb(count, paths);
 }

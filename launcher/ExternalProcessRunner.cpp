@@ -71,6 +71,54 @@ std::wstring BuildCommandLine(const ResolvedLauncherCommand& command) {
 }
 #endif
 
+#ifndef _WIN32
+int DecodePosixExitCode(int status, int fallback = 1) {
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status);
+  if (WIFSIGNALED(status))
+    return 128 + WTERMSIG(status);
+  return fallback;
+}
+
+bool TryWaitForPid(pid_t pid, int* status, int options, bool* outReaped) {
+  if (!status || !outReaped)
+    return false;
+  const pid_t result = waitpid(pid, status, options);
+  if (result == pid) {
+    *outReaped = true;
+    return true;
+  }
+  if (result < 0)
+    return false;
+  *outReaped = false;
+  return true;
+}
+
+int StopPosixProcess(pid_t* pid) {
+  if (!pid || *pid <= 0)
+    return 1;
+
+  int status = 0;
+  bool reaped = false;
+  kill(*pid, SIGTERM);
+  for (int attempt = 0; attempt < 50; ++attempt) {
+    if (!TryWaitForPid(*pid, &status, WNOHANG, &reaped))
+      break;
+    if (reaped)
+      break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+
+  if (!reaped) {
+    kill(*pid, SIGKILL);
+    const pid_t result = waitpid(*pid, &status, 0);
+    reaped = result == *pid;
+  }
+  *pid = -1;
+  return reaped ? DecodePosixExitCode(status) : 1;
+}
+#endif
+
 }  // namespace
 
 struct ExternalProcessRunner::ProcessHandle {
@@ -181,8 +229,8 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
     handle->readerDone = true;
   });
 #else
-  int pipes[2] = {-1, -1};
-  if (pipe(pipes) != 0) {
+  std::array<int, 2> pipes{-1, -1};
+  if (pipe(pipes.data()) != 0) {
     if (outError)
       *outError = "pipe() failed.";
     return false;
@@ -202,8 +250,10 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
     dup2(pipes[1], STDERR_FILENO);
     close(pipes[0]);
     close(pipes[1]);
-    if (!command.workingDirectory.empty())
-      chdir(command.workingDirectory.string().c_str());
+    if (!command.workingDirectory.empty() &&
+        chdir(command.workingDirectory.string().c_str()) != 0) {
+      _exit(126);
+    }
 
     std::vector<std::string> ownedArgs;
     ownedArgs.reserve(command.args.size() + 1);
@@ -264,8 +314,7 @@ void ExternalProcessRunner::Poll() {
   Finish(static_cast<int>(exitCode), false);
 #else
   int status = 0;
-  const pid_t result = waitpid(m_process->pid, &status, WNOHANG);
-  if (result <= 0)
+  if (const pid_t result = waitpid(m_process->pid, &status, WNOHANG); result <= 0)
     return;
 
   int exitCode = 0;
@@ -295,35 +344,7 @@ void ExternalProcessRunner::Stop() {
       }
     }
 #else
-    int exitCode = 1;
-    int status = 0;
-    bool reaped = false;
-    if (m_process->pid > 0) {
-      kill(m_process->pid, SIGTERM);
-      for (int attempt = 0; attempt < 50; ++attempt) {
-        const pid_t result = waitpid(m_process->pid, &status, WNOHANG);
-        if (result == m_process->pid) {
-          reaped = true;
-          break;
-        }
-        if (result < 0)
-          break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      }
-
-      if (!reaped) {
-        kill(m_process->pid, SIGKILL);
-        const pid_t result = waitpid(m_process->pid, &status, 0);
-        reaped = result == m_process->pid;
-      }
-      if (reaped) {
-        if (WIFEXITED(status))
-          exitCode = WEXITSTATUS(status);
-        else if (WIFSIGNALED(status))
-          exitCode = 128 + WTERMSIG(status);
-      }
-      m_process->pid = -1;
-    }
+    const int exitCode = StopPosixProcess(&m_process->pid);
 #endif
     Finish(exitCode, true);
   }

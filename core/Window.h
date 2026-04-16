@@ -56,7 +56,7 @@ class Window {
   Window(const Window&) = delete;
   Window& operator=(const Window&) = delete;
 
-  void PollEvents();
+  void PollEvents() const;
   void SwapBuffers();
   bool ShouldClose() const;
   void SetVSync(bool enabled);

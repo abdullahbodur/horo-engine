@@ -29,9 +29,11 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -73,10 +75,8 @@
 #include "scene/components/PlayerTagComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith
+namespace Monolith::Editor
 {
-  namespace Editor
-  {
 
     namespace
     {
@@ -110,6 +110,15 @@ namespace Monolith
       std::string BuildIssueSeverityText(RuntimeSceneBuildIssue::Severity severity)
       {
         return severity == RuntimeSceneBuildIssue::Severity::Error ? "error" : "warning";
+      }
+
+      void DrawUnavailableTextureDialogButton(const char* buttonId)
+      {
+        ImGui::BeginDisabled();
+        ImGui::Button(buttonId, ImVec2(-1.0f, 0.0f));
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+          ImGui::SetTooltip("Texture file dialog is not available on this platform.");
       }
 
       Mcp::McpBuildSnapshot BuildMcpBuildSnapshot(const SceneDocument &document)
@@ -235,7 +244,7 @@ namespace Monolith
         typeNames.reserve(schema.TypeSchemas().size());
         for (const auto &entry : schema.TypeSchemas())
           typeNames.push_back(entry.first);
-        std::sort(typeNames.begin(), typeNames.end());
+        std::ranges::sort(typeNames);
         for (const std::string &typeName : typeNames)
           snapshot.objectTypes.push_back(BuildMcpSchemaEntrySnapshot(schema.TypeSchemas().at(typeName)));
 
@@ -243,7 +252,7 @@ namespace Monolith
         componentTypes.reserve(schema.ComponentSchemas().size());
         for (const auto &entry : schema.ComponentSchemas())
           componentTypes.push_back(entry.first);
-        std::sort(componentTypes.begin(), componentTypes.end());
+        std::ranges::sort(componentTypes);
         for (const std::string &componentType : componentTypes)
           snapshot.components.push_back(BuildMcpSchemaEntrySnapshot(schema.ComponentSchemas().at(componentType)));
 
@@ -273,8 +282,8 @@ namespace Monolith
         }
         auto normalize = [](std::string value)
         {
-          std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
-                         { return static_cast<char>(std::tolower(c)); });
+          std::ranges::transform(value, value.begin(), [](unsigned char c)
+                                 { return static_cast<char>(std::tolower(c)); });
           return value;
         };
         for (const std::string &entry : appliesTo)
@@ -599,9 +608,8 @@ namespace Monolith
         while (std::fgets(buf, sizeof(buf), pipe) != nullptr)
           out += buf;
         pclose(pipe);
-        out.erase(std::remove_if(out.begin(), out.end(), [](char c)
-                                 { return c == '\n' || c == '\r'; }),
-                  out.end());
+        const auto outTail = std::ranges::remove_if(out, [](char c) { return c == '\n' || c == '\r'; });
+        out.erase(outTail.begin(), outTail.end());
         return out;
       }
 #endif
@@ -636,16 +644,16 @@ namespace Monolith
           return false;
         namespace fs = std::filesystem;
         std::string ext = fs::path(path).extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
+        std::ranges::transform(ext, ext.begin(), [](unsigned char c)
+                               { return static_cast<char>(std::tolower(c)); });
         return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga" ||
                ext == ".webp" || ext == ".hdr";
       }
 
       static std::string ToLowerAscii(std::string s)
       {
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
+        std::ranges::transform(s, s.begin(), [](unsigned char c)
+                               { return static_cast<char>(std::tolower(c)); });
         return s;
       }
 
@@ -706,8 +714,8 @@ namespace Monolith
         if (!outType)
           return false;
         std::string value = raw;
-        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
+        std::ranges::transform(value, value.begin(), [](unsigned char c)
+                               { return static_cast<char>(std::tolower(c)); });
         if (value == "panel")
         {
           *outType = SceneObjectType::Panel;
@@ -1065,7 +1073,7 @@ namespace Monolith
             return nullptr;
           }
         }
-        catch (const std::exception &e)
+        catch (const std::runtime_error &e)
         {
           LOG_WARN("[Thumbnail] Failed to load mesh for preview: %s (error: %s)", cacheKey.c_str(), e.what());
           renderer.noPreviewKeys.insert(cacheKey);
@@ -1542,7 +1550,7 @@ namespace Monolith
         const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
         m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
       }
-      catch (const std::exception &e)
+      catch (const std::runtime_error &e)
       {
         LOG_WARN("[Editor] Failed to load wireframe shader: %s", e.what());
       }
@@ -1880,7 +1888,7 @@ namespace Monolith
           continue;
         meshEntities.push_back(e);
       }
-      std::sort(meshEntities.begin(), meshEntities.end());
+      std::ranges::sort(meshEntities);
 
       const size_t propN = propIndices.size();
       const size_t meshN = meshEntities.size();
@@ -2030,17 +2038,14 @@ namespace Monolith
           // Ctrl/Cmd + Shift + C copies selected object reference code to clipboard.
           bool currCopyRef = accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_C) == GLFW_PRESS;
           const int idx = PrimaryIdx();
-          const bool hasPrimarySelection = idx >= 0 && idx < static_cast<int>(m_document.objects.size());
-          if (ShouldCopySelectionRef(currCopyRef, m_prevCopyRef, io.WantTextInput,
+          if (const bool hasPrimarySelection = idx >= 0 && idx < static_cast<int>(m_document.objects.size());
+              ShouldCopySelectionRef(currCopyRef, m_prevCopyRef, io.WantTextInput,
                                      ImGui::IsAnyItemActive(), hasPrimarySelection))
           {
-            if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
-            {
-              const std::string code = BuildSelectionRefCode(m_document.objects[idx], idx);
-              glfwSetClipboardString(m_window, code.c_str());
-              m_clipboardToastLabel = "Reference copied";
-              m_clipboardToastTime = 1.6f;
-            }
+            const std::string code = BuildSelectionRefCode(m_document.objects[idx], idx);
+            glfwSetClipboardString(m_window, code.c_str());
+            m_clipboardToastLabel = "Reference copied";
+            m_clipboardToastTime = 1.6f;
           }
           m_prevCopyRef = currCopyRef;
 
@@ -2209,8 +2214,11 @@ namespace Monolith
 
             // Detect any non-trivial delta
             float dRotXYZSq = dRot.x * dRot.x + dRot.y * dRot.y + dRot.z * dRot.z;
-            bool anyDelta = dPos.LengthSq() > 1e-10f || dRotXYZSq > 1e-8f || std::abs(dScale.x - 1.0f) > 1e-6f || std::abs(dScale.y - 1.0f) > 1e-6f || std::abs(dScale.z - 1.0f) > 1e-6f;
-            if (anyDelta)
+            if (const bool anyDelta = dPos.LengthSq() > 1e-10f || dRotXYZSq > 1e-8f ||
+                                      std::abs(dScale.x - 1.0f) > 1e-6f ||
+                                      std::abs(dScale.y - 1.0f) > 1e-6f ||
+                                      std::abs(dScale.z - 1.0f) > 1e-6f;
+                anyDelta)
             {
               if (!m_gizmoHistoryPending)
               {
@@ -2596,7 +2604,7 @@ namespace Monolith
       ImGui::PopStyleVar();
     }
 
-    void EditorLayer::DrawClipboardToast()
+    void EditorLayer::DrawClipboardToast() const
     {
       if (m_clipboardToastTime <= 0.0f)
         return;
@@ -2614,7 +2622,7 @@ namespace Monolith
       draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 9.0f), IM_COL32(220, 235, 255, 255), label);
     }
 
-    void EditorLayer::DrawHotReloadOverlay()
+    void EditorLayer::DrawHotReloadOverlay() const
     {
       if (!m_hotReloadOverlayActive)
         return;
@@ -2874,7 +2882,7 @@ namespace Monolith
       ImGui::End();
     }
 
-    void EditorLayer::DrawStatusBar()
+    void EditorLayer::DrawStatusBar() const
     {
       ImGuiIO &io = ImGui::GetIO();
       const EditorStatusText status = BuildEditorStatusText(
@@ -2939,8 +2947,8 @@ namespace Monolith
           continue;
         sorted.emplace_back(ent.path(), isDir && !typEc);
       }
-      std::sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b)
-                {
+      std::ranges::sort(sorted, [](const auto &a, const auto &b)
+                        {
     if (a.second != b.second)
       return a.second > b.second;
     return a.first.filename() < b.first.filename(); });
@@ -3255,10 +3263,11 @@ namespace Monolith
     void EditorLayer::DrawMcpTab()
     {
       const Mcp::McpStatusSnapshot status = m_mcpController.GetStatusSnapshot();
-      auto copyToClipboard = [&](const std::string &label, const std::string &text)
+      auto copyToClipboard = [&](std::string_view label, std::string_view text)
       {
-        glfwSetClipboardString(m_window, text.c_str());
-        m_clipboardToastLabel = label;
+        const std::string textCopy(text);
+        glfwSetClipboardString(m_window, textCopy.c_str());
+        m_clipboardToastLabel = std::string(label);
         m_clipboardToastTime = 1.5f;
       };
 
@@ -3393,8 +3402,8 @@ namespace Monolith
           ImGui::TableNextRow();
           ImGui::TableSetColumnIndex(0);
           const bool selected = i == m_mcpSelectedActivityIndex;
-          const std::string selectableLabel = entry.timeText + "##mcp_req_" + std::to_string(i);
-          if (ImGui::Selectable(selectableLabel.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+          if (const std::string selectableLabel = entry.timeText + "##mcp_req_" + std::to_string(i);
+              ImGui::Selectable(selectableLabel.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
             m_mcpSelectedActivityIndex = i;
           ImGui::TableSetColumnIndex(1);
           ImGui::TextUnformatted(entry.target.c_str());
@@ -3524,7 +3533,7 @@ namespace Monolith
 
     void EditorLayer::DrawViewGimbal(const Camera &cam)
     {
-      ImGuiIO &io = ImGui::GetIO();
+      const ImGuiIO &io = ImGui::GetIO();
       const EditorViewGimbalMetrics &metrics = GetEditorViewGimbalMetrics();
       const bool supportsWireframeOverlay = Renderer::GetBackendCapabilities().supportsWireframeOverlay;
       if (!supportsWireframeOverlay)
@@ -4417,7 +4426,7 @@ namespace Monolith
       assetIds.reserve(m_document.assets.size());
       for (const auto &[assetId, _] : m_document.assets)
         assetIds.push_back(assetId);
-      std::sort(assetIds.begin(), assetIds.end());
+      std::ranges::sort(assetIds);
 
       if (m_assetSearchOpen)
       {
@@ -4755,7 +4764,7 @@ namespace Monolith
         return;
       const std::span<const ShortcutRow> shortcuts = GetEditorShortcuts();
 
-      ImGuiIO &io = ImGui::GetIO();
+      const ImGuiIO &io = ImGui::GetIO();
       ImGui::SetNextWindowSize(ImVec2(620.0f, 420.0f), ImGuiCond_FirstUseEver);
       ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - 620.0f) * 0.5f, (io.DisplaySize.y - 420.0f) * 0.5f),
                               ImGuiCond_FirstUseEver);
@@ -5146,7 +5155,7 @@ namespace Monolith
 
     void EditorLayer::DrawPropertiesPanel()
     {
-      ImGuiIO &io = ImGui::GetIO();
+      const ImGuiIO &io = ImGui::GetIO();
       const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
       const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
       const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
@@ -5207,7 +5216,7 @@ namespace Monolith
         assetIds.reserve(m_document.assets.size());
         for (const auto &[assetId, _] : m_document.assets)
           assetIds.push_back(assetId);
-        std::sort(assetIds.begin(), assetIds.end());
+        std::ranges::sort(assetIds);
         for (const std::string &assetId : assetIds)
           assetItems.push_back(assetId.c_str());
 
@@ -5434,11 +5443,7 @@ namespace Monolith
             if (ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(-1.0f, 0.0f)))
               m_deferredFilePick = DeferredFilePick::SelectedAssetAlbedo;
 #else
-            ImGui::BeginDisabled();
-            ImGui::Button("Browse texture...##alb_pick_asset", ImVec2(-1.0f, 0.0f));
-            ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-              ImGui::SetTooltip("Texture file dialog is not available on this platform.");
+            DrawUnavailableTextureDialogButton("Browse texture...##alb_pick_asset");
 #endif
 
             const float gap = ImGui::GetStyle().ItemSpacing.x;
@@ -5962,14 +5967,15 @@ namespace Monolith
             std::vector<std::string> options;
             if (m_scriptBehaviorOptionsCb)
               options = m_scriptBehaviorOptionsCb();
-            options.erase(std::remove_if(options.begin(), options.end(), [](const std::string &s)
-                                         { return s.empty(); }),
-                          options.end());
-            std::sort(options.begin(), options.end());
-            options.erase(std::unique(options.begin(), options.end()), options.end());
+            const auto optionsWithoutEmpty = std::ranges::remove_if(options, [](const std::string &s)
+                                                                    { return s.empty(); });
+            options.erase(optionsWithoutEmpty.begin(), optionsWithoutEmpty.end());
+            std::ranges::sort(options);
+            const auto optionsUniqueTail = std::ranges::unique(options);
+            options.erase(optionsUniqueTail.begin(), optionsUniqueTail.end());
 
             std::string current = comp.props["behaviorTag"];
-            if (!current.empty() && std::find(options.begin(), options.end(), current) == options.end())
+            if (!current.empty() && std::ranges::find(options, current) == options.end())
               options.push_back(current);
 
             std::vector<const char *> labels;
@@ -6014,9 +6020,9 @@ namespace Monolith
           if (SchemaAppliesToObjectType(entry.second.appliesTo, obj.type))
             componentSchemas.push_back(&entry.second);
         }
-        std::sort(componentSchemas.begin(), componentSchemas.end(),
-                  [](const ComponentSchema *lhs, const ComponentSchema *rhs)
-                  {
+        std::ranges::sort(componentSchemas,
+                          [](const ComponentSchema *lhs, const ComponentSchema *rhs)
+                          {
                     const std::string lhsLabel = lhs ? lhs->label : std::string();
                     const std::string rhsLabel = rhs ? rhs->label : std::string();
                     if (lhsLabel != rhsLabel)
@@ -6115,9 +6121,9 @@ namespace Monolith
         return;
       const ImGuiIO &io = ImGui::GetIO();
       const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
-      const EditorViewGimbalLayout viewGimbalLayout =
-          BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
-      if (viewGimbalLayout.pickRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
+      if (const EditorViewGimbalLayout viewGimbalLayout =
+              BuildEditorViewGimbalLayout(m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
+          viewGimbalLayout.pickRect.Contains(static_cast<float>(mx), static_cast<float>(my)))
         return;
       if (m_viewGizmoPickRect.valid &&
           m_viewGizmoPickRect.Contains(static_cast<float>(mx), static_cast<float>(my), 2.0f))
@@ -6281,8 +6287,7 @@ namespace Monolith
 
     bool EditorLayer::IsSelected(int i) const
     {
-      return std::find(m_selectedIndices.begin(), m_selectedIndices.end(), i) !=
-             m_selectedIndices.end();
+      return std::ranges::find(m_selectedIndices, i) != m_selectedIndices.end();
     }
 
     int EditorLayer::PrimaryIdx() const
@@ -6292,7 +6297,7 @@ namespace Monolith
 
     void EditorLayer::ToggleSelect(int i)
     {
-      auto it = std::find(m_selectedIndices.begin(), m_selectedIndices.end(), i);
+      auto it = std::ranges::find(m_selectedIndices, i);
       if (it != m_selectedIndices.end())
         m_selectedIndices.erase(it);
       else
@@ -6559,7 +6564,7 @@ namespace Monolith
       assetIds.reserve(m_document.assets.size());
       for (const auto &entry : m_document.assets)
         assetIds.push_back(entry.first);
-      std::sort(assetIds.begin(), assetIds.end());
+      std::ranges::sort(assetIds);
       for (const std::string &assetId : assetIds)
       {
         const AssetDef &asset = m_document.assets.at(assetId);
@@ -6971,8 +6976,9 @@ namespace Monolith
         if (sourceIndices.empty())
           return Mcp::McpCommandResult{false, json::object(), "Object not found."};
 
-        std::sort(sourceIndices.begin(), sourceIndices.end());
-        sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+        std::ranges::sort(sourceIndices);
+        const auto sourceIndicesUniqueTail = std::ranges::unique(sourceIndices);
+        sourceIndices.erase(sourceIndicesUniqueTail.begin(), sourceIndicesUniqueTail.end());
 
         const int count =
             (sourceIndices.size() == 1) ? std::max(1, std::min(8, arguments.value("count", 1))) : 1;
@@ -7021,8 +7027,9 @@ namespace Monolith
         if (indices.empty())
           return Mcp::McpCommandResult{false, json::object(), "No matching objects to delete."};
 
-        std::sort(indices.begin(), indices.end());
-        indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+        std::ranges::sort(indices);
+        const auto indicesUniqueTail = std::ranges::unique(indices);
+        indices.erase(indicesUniqueTail.begin(), indicesUniqueTail.end());
         std::sort(indices.rbegin(), indices.rend());
         for (int idx : indices)
           m_document.objects.erase(m_document.objects.begin() + idx);
@@ -7608,8 +7615,9 @@ namespace Monolith
       const EditorHistorySnapshot before = CaptureHistorySnapshot();
 
       std::vector<int> sourceIndices = m_selectedIndices;
-      std::sort(sourceIndices.begin(), sourceIndices.end());
-      sourceIndices.erase(std::unique(sourceIndices.begin(), sourceIndices.end()), sourceIndices.end());
+      std::ranges::sort(sourceIndices);
+      const auto sourceIndicesUniqueTail = std::ranges::unique(sourceIndices);
+      sourceIndices.erase(sourceIndicesUniqueTail.begin(), sourceIndicesUniqueTail.end());
 
       std::vector<int> duplicatedIndices;
       duplicatedIndices.reserve(sourceIndices.size());
@@ -7740,7 +7748,7 @@ namespace Monolith
 
     // ---- Fly camera --------------------------------------------------------------
 
-    void EditorLayer::ToggleFlyMode(Camera &cam)
+    void EditorLayer::ToggleFlyMode(const Camera &cam)
     {
       m_flyMode = !m_flyMode;
       m_flyCamInitialized = false;
@@ -7759,8 +7767,8 @@ namespace Monolith
       if (!m_flyCamInitialized)
       {
         Vec3 dir = cam.target - cam.position;
-        float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-        if (len > 0.001f)
+        if (const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+            len > 0.001f)
         {
           dir.x /= len;
           dir.y /= len;
@@ -7770,8 +7778,7 @@ namespace Monolith
 
         // If the camera is nearly vertical (Top/Bottom snap), yaw is ill-defined.
         // Keep previous yaw to avoid sudden axis flips when entering fly mode.
-        const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
-        if (horizLen > 0.0001f)
+        if (const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z); horizLen > 0.0001f)
           m_flyYaw = -std::atan2(dir.x, -dir.z) * (180.0f / PI);
 
         m_flyCamInitialized = true;
@@ -7799,8 +7806,8 @@ namespace Monolith
       Vec3 forward = {-std::sin(yawRad) * std::cos(pitchRad), std::sin(pitchRad),
                       -std::cos(yawRad) * std::cos(pitchRad)};
       Vec3 right = Vec3::Cross(forward, {0.0f, 1.0f, 0.0f});
-      float rLen = std::sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
-      if (rLen > 0.001f)
+      if (const float rLen = std::sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
+          rLen > 0.001f)
       {
         right.x /= rLen;
         right.y /= rLen;
@@ -7819,8 +7826,8 @@ namespace Monolith
       if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
         move = {move.x + right.x, move.y + right.y, move.z + right.z};
 
-      float mLen = std::sqrt(move.x * move.x + move.y * move.y + move.z * move.z);
-      if (mLen > 0.001f)
+      if (const float mLen = std::sqrt(move.x * move.x + move.y * move.y + move.z * move.z);
+          mLen > 0.001f)
       {
         cam.position.x += (move.x / mLen) * FLY_SPEED * dt;
         cam.position.y += (move.y / mLen) * FLY_SPEED * dt;
@@ -7894,5 +7901,4 @@ namespace Monolith
         Renderer::EndFrame();
     }
 
-  } // namespace Editor
-} // namespace Monolith
+} // namespace Monolith::Editor

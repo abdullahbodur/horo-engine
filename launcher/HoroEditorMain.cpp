@@ -38,6 +38,12 @@ bool HasArg(int argc, char** argv, const char* expected) {
   return false;
 }
 #endif
+
+class RendererBackendInitException final : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 class HoroEditorApp final : public Application {
  public:
   explicit HoroEditorApp(const EngineLaunchOptions& launchOptions
@@ -87,11 +93,12 @@ class HoroEditorApp final : public Application {
       }
     }
 
-    const RenderBackendInitResult backendInit =
-        Renderer::InitializeBackend({.requested = RenderBackendId::OpenGL,
-                                     .nativeWindowHandle = GetWindow().GetNativeHandle()});
-    if (!backendInit.ok)
-      throw std::runtime_error("Failed to initialize renderer backend: " + backendInit.error);
+    if (const RenderBackendInitResult backendInit =
+            Renderer::InitializeBackend({.requested = RenderBackendId::OpenGL,
+                                         .nativeWindowHandle = GetWindow().GetNativeHandle()});
+        !backendInit.ok) {
+      throw RendererBackendInitException("Failed to initialize renderer backend: " + backendInit.error);
+    }
 
     DebugDraw::Init();
 
