@@ -49,6 +49,7 @@ endif
 UI_TEST_DELAY_MS ?= 0
 UI_TEST_CAPTURE ?= 0
 UI_TEST_OUTPUT_DIR ?= $(CURDIR)/ui_test_output
+TEST_LOG_LEVEL ?= debug
 
 # Source files to format: all tracked .cpp/.h (excluding vendor/)
 ifeq ($(OS),Windows_NT)
@@ -83,18 +84,18 @@ $(SENTINEL_DBG):
 
 ## Build + run all 23 engine unit tests (debug)
 test: build
-	$(TEST_CMD)
+	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) $(TEST_CMD)
 
 ## Build + run launcher unit tests (Catch2; no window)
 ui-test: $(SENTINEL_DBG)
 	$(BUILD_LAUNCHER_UNIT)
-	ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_unit
+	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_unit
 
 ## Build + run windowed launcher UI automation (optional capture/delay)
 ui-test-windowed: $(SENTINEL_DBG)
 	$(BUILD_UI_WINDOWED)
 	$(MKDIR_P) "$(UI_TEST_OUTPUT_DIR)"
-	$(CMAKE_E) env MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
+	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -203,6 +204,7 @@ help:
 	@echo "  UI_TEST_DELAY_MS=<ms> (default 0)"
 	@echo "  UI_TEST_CAPTURE=0|1 (default 0)"
 	@echo "  UI_TEST_OUTPUT_DIR=<path> (default ./ui_test_output)"
+	@echo "  TEST_LOG_LEVEL=debug|info|warn|error (default debug)"
 	@echo ""
 	@echo "CI / coverage:"
 	@echo "  Windows: make coverage  (requires OpenCppCoverage — winget install OpenCppCoverage.OpenCppCoverage)"

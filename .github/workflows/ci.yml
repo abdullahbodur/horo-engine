@@ -53,6 +53,8 @@ jobs:
 
       - name: Test
         run: ctest --preset debug --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
   test-windows:
     name: Test · Windows / MSVC
@@ -83,6 +85,8 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
   test-linux:
     name: Test · Linux / GCC
@@ -138,6 +142,8 @@ jobs:
 
       - name: Test
         run: ctest --preset debug --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
@@ -157,6 +163,7 @@ jobs:
           MONOLITH_UI_TEST_DELAY_MS: "0"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          MONOLITH_LOG_LEVEL: "debug"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
           MONOLITH_GLFW_SAMPLES: "0"
@@ -235,6 +242,8 @@ jobs:
 
       - name: Run tests (coverage build)
         run: ctest --preset coverage
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
       - name: Generate Sonar coverage report
         run: |

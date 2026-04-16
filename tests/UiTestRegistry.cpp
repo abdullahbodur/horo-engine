@@ -89,7 +89,7 @@ void InitializeUiScenarioRegistry() {
     return;
   initialized = true;
   RegisterLauncherUiScenarioSet();
-  LOG_INFO("UI scenario registry initialized with %zu scenario(s).", Registry().size());
+  LOG_DEBUG("UI scenario registry initialized with %zu scenario(s).", Registry().size());
 }
 
 bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
@@ -105,10 +105,10 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
     if (!entry.fn)
       continue;
     if (!MatchesFilter(entry.fullName, filter)) {
-      LOG_INFO("UI scenario skipped by filter: '%s' (filter='%s')", entry.fullName.c_str(), filter.c_str());
+      LOG_DEBUG("UI scenario skipped by filter: '%s' (filter='%s')", entry.fullName.c_str(), filter.c_str());
       continue;
     }
-    LOG_INFO("UI scenario queued: '%s'", entry.fullName.c_str());
+    LOG_DEBUG("UI scenario queued: '%s'", entry.fullName.c_str());
     ImGuiTest* test = entry.fn(engine, state);
     if (test) {
       ImGuiTestEngine_QueueTest(engine, test);
