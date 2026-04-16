@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -47,7 +48,7 @@ LauncherProjectDocument LoadProjectManifestDocument(const std::filesystem::path&
 bool SaveProjectManifestDocument(const std::filesystem::path& projectRoot,
                                  LauncherProjectDocument* doc,
                                  std::string* outError);
-std::string SanitizeProjectId(const std::string& projectName);
+std::string SanitizeProjectId(std::string_view projectName);
 bool ResolveLauncherCommand(const LauncherProjectCommand& command,
                               const std::filesystem::path& projectRoot,
                               const std::filesystem::path& sdkRoot,

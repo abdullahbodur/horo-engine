@@ -2,6 +2,8 @@
 
 #include <memory>
 
+struct GLFWwindow;
+
 namespace Monolith::Launcher {
 class LauncherEditorShell;
 }
@@ -18,7 +20,7 @@ class UiAutomationRunner {
   UiAutomationRunner& operator=(const UiAutomationRunner&) = delete;
 
   void StartIfRequested(bool runUiAutomation, Launcher::LauncherEditorShell* shellContext);
-  void PostRenderFrame(void* nativeWindowHandle);
+  void PostRenderFrame(GLFWwindow* nativeWindowHandle);
   void Shutdown();
   void DestroyContext();
 

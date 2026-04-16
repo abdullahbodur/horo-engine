@@ -3,13 +3,13 @@
 #include <filesystem>
 #include <string>
 
-namespace Monolith::Launcher {
-class LauncherEditorShell;
-}
-
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 #include <imgui_test_engine/imgui_te_engine.h>
 #endif
+
+namespace Monolith::Launcher {
+class LauncherEditorShell;
+}
 
 namespace Monolith {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION

@@ -118,7 +118,7 @@ bool SaveEditorHomeDocument(EditorHomeDocument* doc, std::string* outError) {
 
   try {
     outFile << root.dump(2);
-  } catch (const std::exception& e) {
+  } catch (const json::exception& e) {
     if (outError)
       *outError = e.what();
     return false;

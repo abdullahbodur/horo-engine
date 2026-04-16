@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <system_error>
 
 #include <imgui.h>
@@ -159,8 +160,7 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
     if (!m_scene)
       return;
 
-    const auto runtimeEntityIt = object.props.find("_eid");
-    if (runtimeEntityIt != object.props.end()) {
+    if (const auto runtimeEntityIt = object.props.find("_eid"); runtimeEntityIt != object.props.end()) {
       try {
         const Entity entity = static_cast<Entity>(std::stoul(runtimeEntityIt->second));
         if (m_scene->registry.IsAlive(entity) && m_scene->registry.Has<TransformComponent>(entity)) {
@@ -173,7 +173,8 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
               ToRadians(object.pitch), ToRadians(object.yaw), ToRadians(object.roll));
           transform.previous.rotation = transform.current.rotation;
         }
-      } catch (...) {
+      } catch (const std::invalid_argument&) {
+      } catch (const std::out_of_range&) {
       }
     }
 
@@ -213,7 +214,7 @@ bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* 
     const fs::path scenePath = ResolveAssetPath(
         (projectRoot / projectDocument.manifest.defaultScene).lexically_normal().generic_string());
     sceneDocument = Editor::SceneSerializer::LoadFromFile(scenePath.string());
-  } catch (const std::exception& e) {
+  } catch (const std::runtime_error& e) {
     if (outError)
       *outError = e.what();
     return false;
@@ -360,14 +361,13 @@ void LauncherEditorShell::RenderLauncher() {
 
   const auto centerText = [&](const char* text, const float scale = 1.0f) {
     ImGui::SetWindowFontScale(scale);
-    const float textWidth = ImGui::CalcTextSize(text).x;
-    if (textWidth < contentWidth)
+    if (const float textWidth = ImGui::CalcTextSize(text).x; textWidth < contentWidth)
       ImGui::SetCursorPosX(panelX + (contentWidth - textWidth) * 0.5f);
     ImGui::TextUnformatted(text);
     ImGui::SetWindowFontScale(1.0f);
   };
 
-  const auto modeButton = [&](const char* title, const bool selected, const ImVec2& size) -> bool {
+  const auto modeButton = [&](const char* title, const bool selected, const ImVec2& size) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0f, 18.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     if (selected) {
@@ -386,7 +386,7 @@ void LauncherEditorShell::RenderLauncher() {
     return pressed;
   };
 
-  const auto primaryButton = [&](const char* label, const ImVec2& size) -> bool {
+  const auto primaryButton = [&](const char* label, const ImVec2& size) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0f, 16.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.41f, 0.68f, 1.0f));
@@ -399,7 +399,7 @@ void LauncherEditorShell::RenderLauncher() {
     return pressed;
   };
 
-  const auto secondaryButton = [&](const char* label, const ImVec2& size) -> bool {
+  const auto secondaryButton = [&](const char* label, const ImVec2& size) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 12.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
@@ -412,7 +412,7 @@ void LauncherEditorShell::RenderLauncher() {
     return pressed;
   };
 
-  const auto recentProjectButton = [&](const char* title, const ImVec2& size) -> bool {
+  const auto recentProjectButton = [&](const char* title, const ImVec2& size) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 14.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
@@ -432,12 +432,10 @@ void LauncherEditorShell::RenderLauncher() {
   };
 
   const auto centeredEmptyState = [](const char* text) {
-    const float regionHeight = ImGui::GetContentRegionAvail().y;
-    if (regionHeight > 40.0f)
+    if (const float regionHeight = ImGui::GetContentRegionAvail().y; regionHeight > 40.0f)
       ImGui::SetCursorPosY(ImGui::GetCursorPosY() + regionHeight * 0.25f);
-    const float textWidth = ImGui::CalcTextSize(text).x;
     const float availableWidth = ImGui::GetContentRegionAvail().x;
-    if (textWidth < availableWidth)
+    if (const float textWidth = ImGui::CalcTextSize(text).x; textWidth < availableWidth)
       ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availableWidth - textWidth) * 0.5f);
     ImGui::TextDisabled("%s", text);
   };
@@ -619,8 +617,7 @@ fs::path LauncherEditorShell::ResolveCommandSdkRoot() const {
   }
 
   std::error_code ec;
-  const fs::path exeDir = NormalizePathForLookup(fs::current_path(ec));
-  if (!ec && !exeDir.empty()) {
+  if (const fs::path exeDir = NormalizePathForLookup(fs::current_path(ec)); !ec && !exeDir.empty()) {
     candidates.push_back(exeDir);
     candidates.push_back(exeDir.parent_path());
     candidates.push_back(exeDir.parent_path().parent_path());
@@ -657,8 +654,7 @@ fs::path LauncherEditorShell::ResolveAssetPath(const std::string& rawPath) const
   if (rawPath.empty())
     return {};
 
-  fs::path path(rawPath);
-  if (path.is_absolute())
+  if (fs::path path(rawPath); path.is_absolute())
     return path;
   return ProjectPath::Resolve(rawPath);
 }
@@ -708,7 +704,7 @@ std::shared_ptr<Mesh> LauncherEditorShell::LoadMeshForTag(const std::string& mes
       *mesh = Mesh::CreatePlane();
     else
       *mesh = ObjLoader::Load(ResolveAssetPath(meshTag).string());
-  } catch (const std::exception& e) {
+  } catch (const std::runtime_error& e) {
     LOG_WARN("[Launcher] Failed to load mesh '%s': %s", meshTag.c_str(), e.what());
     return {};
   }
@@ -730,7 +726,7 @@ std::shared_ptr<Texture> LauncherEditorShell::LoadTexture(const std::string& raw
     auto texture = std::make_shared<Texture>(Texture::FromFile(path.string()));
     m_textureCache[key] = texture;
     return texture;
-  } catch (const std::exception& e) {
+  } catch (const std::runtime_error& e) {
     LOG_WARN("[Launcher] Failed to load texture '%s': %s", rawPath.c_str(), e.what());
     return {};
   }

@@ -60,7 +60,7 @@ std::string ExpandTokens(const std::string& value,
 std::string BuildDebugString(const ResolvedLauncherCommand& command) {
   std::ostringstream out;
   out << command.executable.generic_string();
-  for (const std::string& arg : command.args)
+  for (const auto& arg : command.args)
     out << ' ' << arg;
   return out.str();
 }
@@ -173,7 +173,7 @@ bool SaveProjectManifestDocument(const fs::path& projectRoot,
 
   try {
     outFile << root.dump(2);
-  } catch (const std::exception& e) {
+  } catch (const json::exception& e) {
     if (outError)
       *outError = e.what();
     return false;
@@ -186,7 +186,7 @@ bool SaveProjectManifestDocument(const fs::path& projectRoot,
   return true;
 }
 
-std::string SanitizeProjectId(const std::string& projectName) {
+std::string SanitizeProjectId(std::string_view projectName) {
   std::string out;
   out.reserve(projectName.size());
   for (char c : projectName) {
@@ -236,7 +236,7 @@ bool ResolveLauncherCommand(const LauncherProjectCommand& command,
   resolved.executable = executablePath.empty() ? executableRaw : executablePath.lexically_normal();
 
   resolved.args.reserve(command.args.size());
-  for (const std::string& arg : command.args)
+  for (const auto& arg : command.args)
     resolved.args.push_back(ExpandTokens(arg, projectRoot, sdkRoot));
 
   resolved.debugString = BuildDebugString(resolved);

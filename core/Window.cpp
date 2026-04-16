@@ -6,24 +6,33 @@
 // clang-format on
 
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 
 #include "core/Logger.h"
 
 namespace {
 
+#ifdef _WIN32
+std::string ReadWin32EnvString(const char* name) {
+  char* rawValue = nullptr;
+  if (size_t len = 0; _dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+    return {};
+  std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
+  return std::string(value.get());
+}
+#endif
+
 int ReadEnvNonNegativeInt(const char* name, int fallback) {
   if (!name || !*name)
     return fallback;
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
+  const std::string value = ReadWin32EnvString(name);
+  if (value.empty())
     return fallback;
   char* end = nullptr;
-  const long parsed = std::strtol(value, &end, 10);
-  const bool valid = (end != value && *end == '\0');
-  free(value);
+  const long parsed = std::strtol(value.c_str(), &end, 10);
+  const bool valid = (end != value.c_str() && *end == '\0');
 #else
   const char* value = std::getenv(name);
   if (!value || !*value)
@@ -41,12 +50,9 @@ bool ReadEnvBool(const char* name, bool fallback) {
   if (!name || !*name)
     return fallback;
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
+  const std::string parsed = ReadWin32EnvString(name);
+  if (parsed.empty())
     return fallback;
-  const std::string parsed(value);
-  free(value);
 #else
   const char* value = std::getenv(name);
   if (!value || !*value)
@@ -110,7 +116,8 @@ WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi
   return {};
 }
 
-Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height), m_graphicsApi(spec.graphicsApi), m_vsync(spec.vsync) {
+Window::Window(const WindowSpec& spec)
+    : m_width(spec.width), m_height(spec.height), m_vsync(spec.vsync), m_graphicsApi(spec.graphicsApi) {
   LOG_INFO("Window bootstrap begin: title='%s' size=%dx%d api=%d vsync=%d",
            spec.title.c_str(),
            spec.width,
@@ -193,9 +200,7 @@ Window::~Window() {
     glfwDestroyWindow(m_window);
     m_window = nullptr;
   }
-  // todo: delete this line
-  // NOT calling GlfwContext::Shutdown() here - GLFW termination
-  // should only happen once at application exit, not per-window.
+  GlfwContext::Shutdown();
 }
 
 void Window::PollEvents() {

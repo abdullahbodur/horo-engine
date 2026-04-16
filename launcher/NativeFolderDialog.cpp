@@ -27,16 +27,17 @@ std::wstring Utf8ToWide(const std::string& value) {
     return {};
 
   std::wstring wide(static_cast<size_t>(required), L'\0');
-  const int converted = MultiByteToWideChar(
-      CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), wide.data(), required);
-  if (converted <= 0)
+  if (const int converted = MultiByteToWideChar(
+          CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), wide.data(), required);
+      converted <= 0) {
     return {};
+  }
   return wide;
 }
 
 class ScopedComInit {
  public:
-  ScopedComInit() : m_result(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)) {}
+  ScopedComInit() = default;
 
   ~ScopedComInit() {
     if (SUCCEEDED(m_result))
@@ -46,7 +47,7 @@ class ScopedComInit {
   bool Ready() const { return SUCCEEDED(m_result) || m_result == RPC_E_CHANGED_MODE; }
 
  private:
-  HRESULT m_result;
+  HRESULT m_result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 };
 #elif defined(__APPLE__)
 std::string EscapeAppleScriptString(const std::string& value) {
@@ -83,15 +84,15 @@ std::string ReadPathFromOsascript(const std::string& command) {
 
 fs::path PickFolderPath(const char* prompt, const fs::path& defaultPath) {
 #ifdef _WIN32
-  ScopedComInit comInit;
-  if (!comInit.Ready())
+  if (ScopedComInit comInit; !comInit.Ready())
     return {};
 
   IFileOpenDialog* dialog = nullptr;
-  const HRESULT createResult =
-      CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
-  if (FAILED(createResult) || !dialog)
+  if (const HRESULT createResult =
+          CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+      FAILED(createResult) || !dialog) {
     return {};
+  }
 
   DWORD options = 0;
   if (SUCCEEDED(dialog->GetOptions(&options))) {
@@ -106,9 +107,9 @@ fs::path PickFolderPath(const char* prompt, const fs::path& defaultPath) {
   }
 
   std::error_code ec;
-  const fs::path initialPath =
-      defaultPath.empty() ? fs::path() : fs::weakly_canonical(defaultPath, ec);
-  if (!ec && !initialPath.empty() && fs::is_directory(initialPath)) {
+  if (const fs::path initialPath =
+          defaultPath.empty() ? fs::path() : fs::weakly_canonical(defaultPath, ec);
+      !ec && !initialPath.empty() && fs::is_directory(initialPath)) {
     IShellItem* initialFolder = nullptr;
     if (SUCCEEDED(SHCreateItemFromParsingName(initialPath.c_str(), nullptr, IID_PPV_ARGS(&initialFolder))) &&
         initialFolder) {

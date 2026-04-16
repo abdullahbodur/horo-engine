@@ -40,9 +40,8 @@ struct WindowSpec {
 };
 
 class WindowInitException : public std::runtime_error {
-public:
-  explicit WindowInitException(const char* message) : std::runtime_error(message) {}
-  explicit WindowInitException(const std::string& message) : std::runtime_error(message) {}
+ public:
+  using std::runtime_error::runtime_error;
 };
 
 class Window {

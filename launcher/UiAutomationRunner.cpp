@@ -40,20 +40,25 @@ struct HomeDirGuard {
 
   HomeDirGuard(const HomeDirGuard&) = delete;
   HomeDirGuard& operator=(const HomeDirGuard&) = delete;
-  HomeDirGuard(HomeDirGuard&&) = default;
-  HomeDirGuard& operator=(HomeDirGuard&&) = default;
+  HomeDirGuard(HomeDirGuard&&) = delete;
+  HomeDirGuard& operator=(HomeDirGuard&&) = delete;
+
+#ifdef _WIN32
+  static std::string ReadWin32EnvString(const char* name) {
+    char* rawValue = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+      return {};
+    std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
+    return std::string(value.get());
+  }
+#endif
 
   static std::string ReadEnv(const char* name) {
     if (!name || !*name)
       return {};
 #ifdef _WIN32
-    char* value = nullptr;
-    size_t len = 0;
-    if (_dupenv_s(&value, &len, name) != 0 || !value)
-      return {};
-    std::string out(value);
-    free(value);
-    return out;
+    return ReadWin32EnvString(name);
 #else
     const char* value = std::getenv(name);
     return value ? std::string(value) : std::string();
@@ -92,12 +97,9 @@ bool ParseBoolEnv(const char* name) {
   if (!name || !*name)
     return false;
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
+  const std::string out = HomeDirGuard::ReadWin32EnvString(name);
+  if (out.empty())
     return false;
-  const std::string out(value);
-  free(value);
   return out != "0";
 #else
   const char* value = std::getenv(name);
@@ -111,12 +113,9 @@ bool ParseBoolEnvDefaultTrue(const char* name) {
   if (!name || !*name)
     return true;
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
+  const std::string out = HomeDirGuard::ReadWin32EnvString(name);
+  if (out.empty())
     return true;
-  const std::string out(value);
-  free(value);
   return out != "0";
 #else
   const char* value = std::getenv(name);
@@ -130,14 +129,12 @@ int ParseNonNegativeIntEnv(const char* name, int fallback = 0) {
   if (!name || !*name)
     return fallback;
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
+  const std::string value = HomeDirGuard::ReadWin32EnvString(name);
+  if (value.empty())
     return fallback;
   char* end = nullptr;
-  const long parsed = std::strtol(value, &end, 10);
-  const bool valid = (end != value && *end == '\0');
-  free(value);
+  const long parsed = std::strtol(value.c_str(), &end, 10);
+  const bool valid = (end != value.c_str() && *end == '\0');
 #else
   const char* value = std::getenv(name);
   if (!value || !*value)
@@ -155,17 +152,128 @@ std::string ReadEnvString(const char* name) {
   if (!name || !*name)
     return {};
 #ifdef _WIN32
-  char* value = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&value, &len, name) != 0 || !value)
-    return {};
-  const std::string out(value);
-  free(value);
-  return out;
+  return HomeDirGuard::ReadWin32EnvString(name);
 #else
   const char* value = std::getenv(name);
   return value ? std::string(value) : std::string();
 #endif
+}
+
+void LogUiEnvVar(const char* name);
+
+void LogUiAutomationEnv() {
+  static constexpr const char* kEnvVars[] = {
+      "MONOLITH_UI_TEST_CAPTURE",  "MONOLITH_UI_TEST_VIDEO",   "MONOLITH_UI_TEST_RECORDING",
+      "MONOLITH_UI_TEST_FILTER",   "MONOLITH_UI_TEST_DELAY_MS","MONOLITH_UI_TEST_OUTPUT_DIR",
+      "MONOLITH_UI_TEST_FFMPEG_PATH","MONOLITH_UI_TEST_CLEAN_TEMP","MONOLITH_GLFW_SAMPLES",
+      "MONOLITH_GLFW_VISIBLE",
+  };
+  for (const char* name : kEnvVars)
+    LogUiEnvVar(name);
+}
+
+fs::path ResolveCaptureOutputDir(bool captureEnabled, const std::string& outputDirEnv) {
+  if (!captureEnabled)
+    return {};
+  if (!outputDirEnv.empty())
+    return fs::path(outputDirEnv);
+  return fs::current_path() / "ui_test_output";
+}
+
+void PrepareUiAutomationDirectories(UiAutomationRunState* state) {
+  if (!state)
+    return;
+  const bool cleanTempRoot = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
+  std::error_code ec;
+  if (cleanTempRoot) {
+    fs::remove_all(state->tempRoot, ec);
+    if (ec) {
+      LOG_WARN("UI temp root cleanup error for '%s': %s",
+               state->tempRoot.string().c_str(),
+               ec.message().c_str());
+      ec.clear();
+    }
+  } else {
+    LOG_INFO("Skipping UI temp root cleanup for this run: %s", state->tempRoot.string().c_str());
+  }
+
+  const fs::path homePath = state->tempRoot / "home";
+  fs::create_directories(homePath, ec);
+  if (ec) {
+    LOG_WARN("UI temp home creation error at '%s': %s", homePath.string().c_str(), ec.message().c_str());
+    ec.clear();
+  }
+
+  if (state->captureEnabled)
+    fs::create_directories(state->uiCaptureOutputDir, ec);
+  if (ec) {
+    LOG_WARN("UI output directory creation error at '%s': %s",
+             state->uiCaptureOutputDir.string().c_str(),
+             ec.message().c_str());
+  }
+}
+
+void ConfigureUiVideoCapture(UiAutomationRunState* state, ImGuiTestEngineIO* testIo) {
+  if (!state || !testIo || !state->captureEnabled || !state->videoEnabled)
+    return;
+
+  const std::string ffmpegPath = ReadEnvString("MONOLITH_UI_TEST_FFMPEG_PATH");
+  const fs::path encoderPath = !ffmpegPath.empty() ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
+  LOG_INFO("UI video encoder candidate path: '%s'", encoderPath.string().c_str());
+  std::error_code ffmpegEc;
+  if (!fs::exists(encoderPath, ffmpegEc) || ffmpegEc) {
+    state->videoEnabled = false;
+    LOG_WARN("UI test video requested but ffmpeg is missing at: %s", encoderPath.string().c_str());
+    return;
+  }
+
+  ImStrncpy(testIo->VideoCaptureEncoderPath, encoderPath.string().c_str(),
+            IM_ARRAYSIZE(testIo->VideoCaptureEncoderPath));
+  ImStrncpy(testIo->VideoCaptureEncoderParams, kFfmpegVideoParams,
+            IM_ARRAYSIZE(testIo->VideoCaptureEncoderParams));
+  ImStrncpy(testIo->GifCaptureEncoderParams, kFfmpegGifParams,
+            IM_ARRAYSIZE(testIo->GifCaptureEncoderParams));
+  ImStrncpy(testIo->VideoCaptureExtension, ".mp4", IM_ARRAYSIZE(testIo->VideoCaptureExtension));
+}
+
+void LogUiHeartbeat(int frameCount,
+                    int maxFrames,
+                    int heartbeatInterval,
+                    GLFWwindow* nativeWindowHandle,
+                    double elapsedSec,
+                    double frameDeltaSec,
+                    bool running,
+                    bool queueEmpty) {
+  if (frameCount != 1 && (frameCount % heartbeatInterval) != 0)
+    return;
+
+  int focused = -1;
+  int iconified = -1;
+  int visible = -1;
+  int shouldClose = -1;
+  if (nativeWindowHandle) {
+    focused = glfwGetWindowAttrib(nativeWindowHandle, GLFW_FOCUSED);
+    iconified = glfwGetWindowAttrib(nativeWindowHandle, GLFW_ICONIFIED);
+    visible = glfwGetWindowAttrib(nativeWindowHandle, GLFW_VISIBLE);
+    shouldClose = glfwWindowShouldClose(nativeWindowHandle);
+  }
+  LOG_INFO(
+      "UI automation heartbeat: frame=%d/%d elapsed=%.2fs frame_dt=%.4fs avg_fps=%.2f running=%d queue_empty=%d focused=%d iconified=%d visible=%d should_close=%d",
+      frameCount,
+      maxFrames,
+      elapsedSec,
+      frameDeltaSec,
+      elapsedSec > 0.0 ? static_cast<double>(frameCount) / elapsedSec : 0.0,
+      running ? 1 : 0,
+      queueEmpty ? 1 : 0,
+      focused,
+      iconified,
+      visible,
+      shouldClose);
+  if (frameDeltaSec > 1.0) {
+    LOG_WARN("UI automation large frame delta detected: frame=%d frame_dt=%.3fs",
+             frameCount, frameDeltaSec);
+  }
 }
 
 void LogUiEnvVar(const char* name) {
@@ -276,28 +384,14 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, Launcher::Launch
   m_impl->state.tempRoot = fs::temp_directory_path() / "horo_editor_ui_automation";
   m_impl->state.projectRoot = m_impl->state.tempRoot / "UiSmokeGame";
   LOG_INFO("UI automation start requested: shell_context=%p", shellContext);
-  LogUiEnvVar("MONOLITH_UI_TEST_CAPTURE");
-  LogUiEnvVar("MONOLITH_UI_TEST_VIDEO");
-  LogUiEnvVar("MONOLITH_UI_TEST_RECORDING");
-  LogUiEnvVar("MONOLITH_UI_TEST_FILTER");
-  LogUiEnvVar("MONOLITH_UI_TEST_DELAY_MS");
-  LogUiEnvVar("MONOLITH_UI_TEST_OUTPUT_DIR");
-  LogUiEnvVar("MONOLITH_UI_TEST_FFMPEG_PATH");
-  LogUiEnvVar("MONOLITH_UI_TEST_CLEAN_TEMP");
-  LogUiEnvVar("MONOLITH_GLFW_SAMPLES");
-  LogUiEnvVar("MONOLITH_GLFW_VISIBLE");
+  LogUiAutomationEnv();
   const bool recordingEnabled = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_RECORDING");
   m_impl->state.captureEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled = recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
   const std::string uiFilter = ReadEnvString("MONOLITH_UI_TEST_FILTER");
   const int uiDelayMs = ParseNonNegativeIntEnv("MONOLITH_UI_TEST_DELAY_MS", 0);
   const std::string outputDirEnv = ReadEnvString("MONOLITH_UI_TEST_OUTPUT_DIR");
-  m_impl->state.uiCaptureOutputDir =
-      m_impl->state.captureEnabled
-          ? (!outputDirEnv.empty()
-                 ? fs::path(outputDirEnv)
-                 : (std::filesystem::current_path() / "ui_test_output"))
-          : fs::path();
+  m_impl->state.uiCaptureOutputDir = ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
   m_impl->state.shellContext = shellContext;
   LOG_INFO("UI automation config: filter='%s', recording=%d, capture=%d, video=%d",
            uiFilter.c_str(),
@@ -309,34 +403,7 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, Launcher::Launch
            m_impl->state.projectRoot.string().c_str(),
            m_impl->state.uiCaptureOutputDir.empty() ? "<disabled>"
                                                     : m_impl->state.uiCaptureOutputDir.string().c_str());
-  const bool cleanTempRoot = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
-  std::error_code ec;
-  if (cleanTempRoot) {
-    fs::remove_all(m_impl->state.tempRoot, ec);
-    if (ec) {
-      LOG_WARN("UI temp root cleanup error for '%s': %s",
-               m_impl->state.tempRoot.string().c_str(),
-               ec.message().c_str());
-      ec.clear();
-    }
-  } else {
-    LOG_INFO("Skipping UI temp root cleanup for this run: %s", m_impl->state.tempRoot.string().c_str());
-  }
-  fs::create_directories(m_impl->state.tempRoot / "home", ec);
-  if (ec) {
-    LOG_WARN("UI temp home creation error at '%s': %s",
-             (m_impl->state.tempRoot / "home").string().c_str(),
-             ec.message().c_str());
-    ec.clear();
-  }
-  if (m_impl->state.captureEnabled)
-    fs::create_directories(m_impl->state.uiCaptureOutputDir, ec);
-  if (ec) {
-    LOG_WARN("UI output directory creation error at '%s': %s",
-             m_impl->state.uiCaptureOutputDir.string().c_str(),
-             ec.message().c_str());
-    ec.clear();
-  }
+  PrepareUiAutomationDirectories(&m_impl->state);
   m_impl->maxFrames = (uiDelayMs > 0 || m_impl->state.videoEnabled) ? Impl::kCapturedUiMaxFrames
                                                                     : Impl::kDefaultUiMaxFrames;
   m_impl->frameCount = 0;
@@ -353,24 +420,7 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, Launcher::Launch
   ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(m_impl->engine);
   testIo.ConfigCaptureEnabled = m_impl->state.captureEnabled;
   testIo.ScreenCaptureFunc = m_impl->state.captureEnabled ? UiScreenCaptureFunc : nullptr;
-  if (m_impl->state.captureEnabled && m_impl->state.videoEnabled) {
-    const std::string ffmpegPath = ReadEnvString("MONOLITH_UI_TEST_FFMPEG_PATH");
-    const fs::path encoderPath = !ffmpegPath.empty() ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
-    LOG_INFO("UI video encoder candidate path: '%s'", encoderPath.string().c_str());
-    std::error_code ffmpegEc;
-    if (fs::exists(encoderPath, ffmpegEc) && !ffmpegEc) {
-      ImStrncpy(testIo.VideoCaptureEncoderPath, encoderPath.string().c_str(),
-                IM_ARRAYSIZE(testIo.VideoCaptureEncoderPath));
-      ImStrncpy(testIo.VideoCaptureEncoderParams, kFfmpegVideoParams,
-                IM_ARRAYSIZE(testIo.VideoCaptureEncoderParams));
-      ImStrncpy(testIo.GifCaptureEncoderParams, kFfmpegGifParams,
-                IM_ARRAYSIZE(testIo.GifCaptureEncoderParams));
-      ImStrncpy(testIo.VideoCaptureExtension, ".mp4", IM_ARRAYSIZE(testIo.VideoCaptureExtension));
-    } else {
-      m_impl->state.videoEnabled = false;
-      LOG_WARN("UI test video requested but ffmpeg is missing at: %s", encoderPath.string().c_str());
-    }
-  }
+  ConfigureUiVideoCapture(&m_impl->state, &testIo);
   testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
   testIo.ConfigRunSpeed = uiDelayMs > 0 ? ImGuiTestRunSpeed_Normal : ImGuiTestRunSpeed_Fast;
   if (uiDelayMs > 0) {
@@ -411,7 +461,7 @@ void UiAutomationRunner::StartIfRequested(bool runUiAutomation, Launcher::Launch
 #endif
 }
 
-void UiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
+void UiAutomationRunner::PostRenderFrame(GLFWwindow* nativeWindowHandle) {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   if (!m_impl->active || m_impl->engine == nullptr)
     return;
@@ -434,36 +484,14 @@ void UiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
     m_impl->lastRunningState = running;
     m_impl->lastQueueEmptyState = queueEmpty;
   }
-  if (m_impl->frameCount == 1 || (m_impl->frameCount % Impl::kHeartbeatFrameInterval) == 0) {
-    auto* window = static_cast<GLFWwindow*>(nativeWindowHandle);
-    int focused = -1;
-    int iconified = -1;
-    int visible = -1;
-    int shouldClose = -1;
-    if (window) {
-      focused = glfwGetWindowAttrib(window, GLFW_FOCUSED);
-      iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED);
-      visible = glfwGetWindowAttrib(window, GLFW_VISIBLE);
-      shouldClose = glfwWindowShouldClose(window);
-    }
-    LOG_INFO(
-        "UI automation heartbeat: frame=%d/%d elapsed=%.2fs frame_dt=%.4fs avg_fps=%.2f running=%d queue_empty=%d focused=%d iconified=%d visible=%d should_close=%d",
-        m_impl->frameCount,
-        m_impl->maxFrames,
-        elapsedSec,
-        frameDeltaSec,
-        elapsedSec > 0.0 ? static_cast<double>(m_impl->frameCount) / elapsedSec : 0.0,
-        running ? 1 : 0,
-        queueEmpty ? 1 : 0,
-        focused,
-        iconified,
-        visible,
-        shouldClose);
-    if (frameDeltaSec > 1.0) {
-      LOG_WARN("UI automation large frame delta detected: frame=%d frame_dt=%.3fs",
-               m_impl->frameCount, frameDeltaSec);
-    }
-  }
+  LogUiHeartbeat(m_impl->frameCount,
+                 m_impl->maxFrames,
+                 Impl::kHeartbeatFrameInterval,
+                 nativeWindowHandle,
+                 elapsedSec,
+                 frameDeltaSec,
+                 running,
+                 queueEmpty);
   if (done || timeout) {
     if (timeout) {
       m_impl->timedOut = true;
@@ -477,7 +505,7 @@ void UiAutomationRunner::PostRenderFrame(void* nativeWindowHandle) {
                timeout ? 1 : 0,
                m_impl->frameCount,
                elapsedSec);
-      glfwSetWindowShouldClose(static_cast<GLFWwindow*>(nativeWindowHandle), GLFW_TRUE);
+      glfwSetWindowShouldClose(nativeWindowHandle, GLFW_TRUE);
     } else {
       LOG_WARN("UI automation finished but native window handle is null; skipping window close request.");
     }

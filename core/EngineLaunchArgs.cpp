@@ -7,8 +7,9 @@ namespace Monolith {
 EngineLaunchOptions ParseEngineLaunchOptions(int argc, char** argv) {
   EngineLaunchOptions out;
   for (int i = 1; i < argc; ++i) {
-    if (!argv[i])
+    if (!argv[i]) {
       continue;
+    }
     const std::string_view a(argv[i]);
     if (a == "--play")
       out.editorStartup = EditorStartupCli::ForcePlay;

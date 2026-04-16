@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -57,13 +58,12 @@ struct HomeDirGuard {
     if (!name || !*name)
       return {};
 #ifdef _WIN32
-    char* value = nullptr;
+    char* rawValue = nullptr;
     size_t len = 0;
-    if (_dupenv_s(&value, &len, name) != 0 || !value)
+    if (_dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
       return {};
-    std::string out(value);
-    free(value);
-    return out;
+    std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
+    return std::string(value.get());
 #else
     const char* value = std::getenv(name);
     return value ? std::string(value) : std::string();
@@ -103,13 +103,14 @@ struct HomeDirGuard {
 TEST_CASE("EngineLaunchArgs parses launcher project path", "[launcher][cli]") {
   std::string arg0 = "HoroEditor";
   std::string projectFlag = "--project";
-  std::string projectPath = "C:/games/demo";
-  std::array<char*, 3> argv = {arg0.data(), projectFlag.data(), projectPath.data()};
+  const std::filesystem::path projectPath = "C:/games/demo";
+  std::string projectPathArg = projectPath.generic_string();
+  std::array<char*, 3> argv = {arg0.data(), projectFlag.data(), projectPathArg.data()};
 
   const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
 
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
-  REQUIRE(options.projectPath == std::filesystem::path(projectPath));
+  REQUIRE(options.projectPath == projectPath);
 }
 
 TEST_CASE("ProjectPath explicit root switches editor workspace to project-local settings",

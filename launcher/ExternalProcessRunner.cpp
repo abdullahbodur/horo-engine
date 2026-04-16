@@ -46,8 +46,11 @@ std::wstring Utf8ToWide(const std::string& value) {
 
 std::wstring BuildCommandLine(const ResolvedLauncherCommand& command) {
   auto quote = [](const std::string& part) {
-    if (part.find_first_of(" \t\"") == std::string::npos)
+    if (part.find(' ') == std::string::npos &&
+        part.find('\t') == std::string::npos &&
+        part.find('"') == std::string::npos) {
       return part;
+    }
     std::string quoted = "\"";
     for (char c : part) {
       if (c == '"')
@@ -71,7 +74,7 @@ std::wstring BuildCommandLine(const ResolvedLauncherCommand& command) {
 }  // namespace
 
 struct ExternalProcessRunner::ProcessHandle {
-  std::thread readerThread;
+  std::jthread readerThread;
   std::mutex readerMutex;
   std::atomic<bool> readerDone{false};
 #ifdef _WIN32
@@ -131,7 +134,7 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   startup.hStdError = process->stdoutWrite;
 
   PROCESS_INFORMATION info{};
-std::wstring commandLine = BuildCommandLine(command);
+  std::wstring commandLine = BuildCommandLine(command);
   std::wstring workdir = Utf8ToWide(command.workingDirectory.generic_string());
   if (const BOOL created = CreateProcessW(nullptr,
                                        commandLine.data(),
@@ -157,7 +160,7 @@ std::wstring commandLine = BuildCommandLine(command);
   process->process = info.hProcess;
   process->thread = info.hThread;
 
-  process->readerThread = std::thread([handle = process.get(), label]() {
+  process->readerThread = std::jthread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     DWORD bytesRead = 0;
@@ -221,7 +224,7 @@ std::wstring commandLine = BuildCommandLine(command);
   close(pipes[1]);
   process->pid = pid;
   process->stdoutRead = pipes[0];
-  process->readerThread = std::thread([handle = process.get(), label]() {
+  process->readerThread = std::jthread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     ssize_t bytesRead = 0;
@@ -324,9 +327,6 @@ void ExternalProcessRunner::Stop() {
 #endif
     Finish(exitCode, true);
   }
-
-  if (m_process->readerThread.joinable())
-    m_process->readerThread.join();
 
 #ifdef _WIN32
   if (m_process->stdoutRead)

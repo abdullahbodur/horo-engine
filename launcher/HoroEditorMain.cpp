@@ -49,8 +49,7 @@ class HoroEditorApp final : public Application {
         m_runtime(std::make_unique<SceneReferenceRuntime>(&m_scene))
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
         ,
-        m_runUiAutomation(runUiAutomation),
-        m_uiAutomation(std::make_unique<UiAutomationRunner>())
+        m_runUiAutomation(runUiAutomation)
 #endif
   {
     m_scene.AddSystem(std::make_unique<BehaviorSystem>());
@@ -215,7 +214,7 @@ class HoroEditorApp final : public Application {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   bool m_runUiAutomation = false;
   bool m_uiAutomationPassed = true;
-  std::unique_ptr<UiAutomationRunner> m_uiAutomation;
+  std::unique_ptr<UiAutomationRunner> m_uiAutomation = std::make_unique<UiAutomationRunner>();
 #endif
 };
 
