@@ -138,6 +138,12 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   if (!m_editor || !m_runtime)
     return;
 
+  m_editor->SetFileMenuRenderCallback([this]() {
+    if (!HasActiveProject())
+      return;
+    if (ImGui::MenuItem("Close Project"))
+      CloseProject();
+  });
   m_editor->SetOverlayRenderCallback([this]() { RenderOverlay(); });
   m_runtime->SetPropEntityCreatedCallback(
       [this](const RuntimeSceneProp& prop, Entity entity, Scene& sceneRef) {
@@ -272,6 +278,7 @@ void LauncherEditorShell::CloseProject() {
   if (m_editor) {
     if (m_editor->IsActive())
       m_editor->Toggle();
+    m_editor->SetCursorVisible(true);
   }
 
   if (m_scene)
@@ -297,8 +304,6 @@ void LauncherEditorShell::Update() {
 void LauncherEditorShell::RenderOverlay() {
   if (!HasActiveProject())
     RenderLauncher();
-  else
-    RenderProjectToolbar();
 }
 
 void LauncherEditorShell::HandlePendingSceneReload() {

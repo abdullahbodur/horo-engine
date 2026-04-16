@@ -1585,6 +1585,13 @@ namespace Monolith
       m_mcpController.SetEditorActive(m_active);
     }
 
+    void EditorLayer::SetCursorVisible(bool visible)
+    {
+      if (!m_window)
+        return;
+      glfwSetInputMode(m_window, GLFW_CURSOR, visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+    }
+
     void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root)
     {
       InvalidateProjectBrowserCache();
@@ -2686,6 +2693,11 @@ namespace Monolith
           m_settingsOpen = true;
           m_mcpSettingsDraft = m_mcpController.GetSettings();
           m_mcpSettingsError.clear();
+        }
+        if (m_fileMenuRenderCallback)
+        {
+          ImGui::Separator();
+          m_fileMenuRenderCallback();
         }
         ImGui::EndPopup();
       }

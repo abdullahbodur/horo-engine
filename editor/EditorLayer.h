@@ -67,6 +67,7 @@ class EditorLayer {
 
   // Toggle editor mode and update cursor accordingly.
   void Toggle();
+  void SetCursorVisible(bool visible);
 
   // Process input / picking for this frame.
   // In fly mode the camera position/target are updated directly.
@@ -105,6 +106,7 @@ class EditorLayer {
   // Absolute or empty (disables Project tab tree).
   void SetProjectBrowserRoot(std::filesystem::path root);
   void SetProjectBrowserExtraBlocklist(std::unordered_set<std::string> names);
+  void SetFileMenuRenderCallback(std::function<void()> cb) { m_fileMenuRenderCallback = std::move(cb); }
   void SetOverlayRenderCallback(std::function<void()> cb) { m_overlayRenderCallback = std::move(cb); }
   void SaveWorkspaceStateNow() { SaveWorkspaceStateIfNeeded(true); }
   void ReloadWorkspaceStateFromDisk() { LoadWorkspaceState(); }
@@ -384,6 +386,7 @@ class EditorLayer {
   std::unordered_set<std::string> m_projectExtraBlocklist;
   EditorWorkspaceDocument m_workspaceDocument;
   bool m_workspaceStateDirty = false;
+  std::function<void()> m_fileMenuRenderCallback;
   std::function<void()> m_overlayRenderCallback;
   std::string m_imguiIniPath;
   bool m_hasPersistedDockLayout = false;

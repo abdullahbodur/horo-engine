@@ -123,6 +123,24 @@ void EnsureProjectCreatedFromLauncher(ImGuiTestContext* ctx,
   }
 }
 
+void ReturnToLauncherFromEditor(ImGuiTestContext* ctx, UiAutomationRunState* state) {
+  IM_CHECK(ctx != nullptr);
+  IM_CHECK(state != nullptr);
+  Launcher::LauncherEditorShell* shell = AsLauncherShell(state);
+  IM_CHECK(shell != nullptr);
+  IM_CHECK(shell->HasActiveProject());
+
+  ctx->SetRef("##toolbar");
+  IM_CHECK(ctx->ItemExists("File"));
+  ctx->ItemClick("File");
+  ctx->Yield(1);
+  IM_CHECK(ctx->ItemExists("Close Project"));
+  LOG_INFO("UI scenario action: click 'Close Project' from File menu");
+  ctx->ItemClick("Close Project");
+  ctx->Yield(2);
+  IM_CHECK(!shell->HasActiveProject());
+}
+
 ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunState* state) {
   ImGuiTest* test = IM_REGISTER_TEST(engine, "launcher_ui", "create_project_from_launcher");
   test->UserData = state;
@@ -136,10 +154,10 @@ ImGuiTest* RegisterLauncherSmokeTest(ImGuiTestEngine* engine, UiAutomationRunSta
     (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
 
-    ctx->SetRef("Launcher Project");
-    IM_CHECK(ctx->ItemExists("Configure"));
-    IM_CHECK(ctx->ItemExists("Build"));
-    IM_CHECK(ctx->ItemExists("Run Game"));
+    ctx->SetRef("##toolbar");
+    IM_CHECK(ctx->ItemExists("File"));
+    IM_CHECK(ctx->ItemExists("Add"));
+    IM_CHECK(ctx->ItemExists("Edit"));
     LOG_INFO("UI scenario done: launcher_ui/create_project_from_launcher");
   };
   return test;
@@ -157,15 +175,7 @@ ImGuiTest* RegisterLauncherBackToHomeTest(ImGuiTestEngine* engine, UiAutomationR
         ctx, testState, "launcher_ui__back_to_home_returns_launcher__run.mp4");
     (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
-
-    ctx->SetRef("Launcher Project");
-    IM_CHECK(ctx->ItemExists("Back To Home"));
-    LOG_INFO("UI scenario action: click 'Back To Home'");
-    ctx->ItemClick("Back To Home");
-    ctx->Yield(2);
-    Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
-    IM_CHECK(shell != nullptr);
-    IM_CHECK(!shell->HasActiveProject());
+    ReturnToLauncherFromEditor(ctx, testState);
     if (testState->captureEnabled && !testState->videoEnabled) {
       CaptureScreenshotTo(
           ctx,
@@ -202,15 +212,9 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
         ctx, testState, "launcher_ui__open_project_from_recent_projects__run.mp4");
     (void)captureStarted;
     EnsureProjectCreatedFromLauncher(ctx, testState, !testState->videoEnabled);
-
-    ctx->SetRef("Launcher Project");
-    IM_CHECK(ctx->ItemExists("Back To Home"));
-    LOG_INFO("UI scenario action: click 'Back To Home'");
-    ctx->ItemClick("Back To Home");
-    ctx->Yield(2);
+    ReturnToLauncherFromEditor(ctx, testState);
     Launcher::LauncherEditorShell* shell = AsLauncherShell(testState);
     IM_CHECK(shell != nullptr);
-    IM_CHECK(!shell->HasActiveProject());
 
     ctx->SetRef("Horo Launcher");
     ImGuiWindow* recentProjectsList = FindWindowContaining("RecentProjectsList");
@@ -222,8 +226,8 @@ ImGuiTest* RegisterLauncherRecentProjectsTest(ImGuiTestEngine* engine, UiAutomat
     ctx->Yield(3);
 
     IM_CHECK(shell->HasActiveProject());
-    ctx->SetRef("Launcher Project");
-    IM_CHECK(ctx->ItemExists("Back To Home"));
+    ctx->SetRef("##toolbar");
+    IM_CHECK(ctx->ItemExists("File"));
     if (testState->captureEnabled && !testState->videoEnabled) {
       CaptureScreenshotTo(
           ctx,
