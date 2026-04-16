@@ -25,6 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ${{ github.job }}-${{ runner.os }}
+
       - name: Install Ninja
         run: brew install ninja
 
@@ -36,7 +41,10 @@ jobs:
           restore-keys: fetchcontent-macos-
 
       - name: Configure
-        run: cmake --preset debug
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
@@ -83,6 +91,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ${{ github.job }}-${{ runner.os }}
+
       - name: Install system dependencies
         run: |
           if ! sudo apt-get update; then
@@ -113,7 +126,10 @@ jobs:
           restore-keys: fetchcontent-linux-
 
       - name: Configure
-        run: cmake --preset debug
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
@@ -175,6 +191,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ${{ github.job }}-${{ runner.os }}
+
       - name: Install system dependencies
         run: |
           if ! sudo apt-get update -qq; then
@@ -199,7 +220,10 @@ jobs:
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
 
       - name: Configure (coverage instrumentation)
-        run: cmake --preset coverage
+        run: >
+          cmake --preset coverage
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
