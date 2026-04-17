@@ -76,10 +76,8 @@ namespace {
 class GlfwContext {
 public:
   static void Init() {
-    if (s_refCount++ == 0) {
-      if (!glfwInit())
-        throw std::runtime_error("glfwInit failed");
-    }
+    if (s_refCount++ == 0 && !glfwInit())
+      throw std::runtime_error("glfwInit failed");
   }
 
   static void Shutdown() {

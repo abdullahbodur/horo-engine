@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <ctime>
 #include <fstream>
 #include <limits>
@@ -1073,7 +1074,7 @@ namespace Monolith::Editor
             return nullptr;
           }
         }
-        catch (const std::runtime_error &e)
+        catch (const std::runtime_error &e) // NOSONAR: mesh import backends can throw heterogeneous runtime errors
         {
           LOG_WARN("[Thumbnail] Failed to load mesh for preview: %s (error: %s)", cacheKey.c_str(), e.what());
           renderer.noPreviewKeys.insert(cacheKey);
@@ -1550,7 +1551,7 @@ namespace Monolith::Editor
         const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
         m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
       }
-      catch (const std::runtime_error &e)
+      catch (const ShaderException &e)
       {
         LOG_WARN("[Editor] Failed to load wireframe shader: %s", e.what());
       }
@@ -2218,7 +2219,7 @@ namespace Monolith::Editor
                                       std::abs(dScale.x - 1.0f) > 1e-6f ||
                                       std::abs(dScale.y - 1.0f) > 1e-6f ||
                                       std::abs(dScale.z - 1.0f) > 1e-6f;
-                anyDelta)
+                anyDelta) // NOSONAR: nested transform propagation is intentionally grouped for correctness
             {
               if (!m_gizmoHistoryPending)
               {
@@ -3402,7 +3403,7 @@ namespace Monolith::Editor
           ImGui::TableNextRow();
           ImGui::TableSetColumnIndex(0);
           const bool selected = i == m_mcpSelectedActivityIndex;
-          if (const std::string selectableLabel = entry.timeText + "##mcp_req_" + std::to_string(i);
+          if (const std::string selectableLabel = std::format("{}##mcp_req_{}", entry.timeText, i);
               ImGui::Selectable(selectableLabel.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
             m_mcpSelectedActivityIndex = i;
           ImGui::TableSetColumnIndex(1);
@@ -5967,15 +5968,13 @@ namespace Monolith::Editor
             std::vector<std::string> options;
             if (m_scriptBehaviorOptionsCb)
               options = m_scriptBehaviorOptionsCb();
-            const auto optionsWithoutEmpty = std::ranges::remove_if(options, [](const std::string &s)
-                                                                    { return s.empty(); });
-            options.erase(optionsWithoutEmpty.begin(), optionsWithoutEmpty.end());
+            std::erase_if(options, [](std::string_view s) { return s.empty(); });
             std::ranges::sort(options);
             const auto optionsUniqueTail = std::ranges::unique(options);
             options.erase(optionsUniqueTail.begin(), optionsUniqueTail.end());
 
             std::string current = comp.props["behaviorTag"];
-            if (!current.empty() && std::ranges::find(options, current) == options.end())
+            if (!current.empty() && std::ranges::find(options, current) == options.end()) // NOSONAR: branch keeps explicit "current value not in options" behavior
               options.push_back(current);
 
             std::vector<const char *> labels;

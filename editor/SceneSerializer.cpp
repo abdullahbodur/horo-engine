@@ -40,13 +40,13 @@ static const char* TypeToString(SceneObjectType t) {
 SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
   std::ifstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("SceneSerializer: cannot open '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: cannot open '" + path + "'");
 
   json j;
   try {
     f >> j;
   } catch (const json::exception& e) {
-    throw std::runtime_error("SceneSerializer: JSON parse error in '" + path + "': " + e.what());
+    throw SceneSerializerException("SceneSerializer: JSON parse error in '" + path + "': " + e.what());
   }
 
   SceneDocument doc;
@@ -81,7 +81,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
 
   // ---- Objects ----
   if (!j.contains("objects") || !j["objects"].is_array())
-    throw std::runtime_error("SceneSerializer: missing or invalid 'objects' array in '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: missing or invalid 'objects' array in '" + path + "'");
   for (auto& obj : j["objects"]) {
     SceneObject so;
     so.id = obj.value("id", "");
@@ -265,7 +265,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
 
   std::ofstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("SceneSerializer: cannot write '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: cannot write '" + path + "'");
   f << j.dump(2);
 }
 

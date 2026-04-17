@@ -198,7 +198,7 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   });
 }
 
-bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* outError) {
+bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* outError) {  // NOSONAR: validates and wires project/runtime/editor state transitions
   if (outError)
     outError->clear();
 
@@ -226,7 +226,7 @@ bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* 
     const fs::path scenePath = ResolveAssetPath(
         (projectRoot / projectDocument.manifest.defaultScene).lexically_normal().generic_string());
     sceneDocument = Editor::SceneSerializer::LoadFromFile(scenePath.string());
-  } catch (const std::runtime_error& e) {
+  } catch (const Editor::SceneSerializerException& e) {
     if (outError)
       *outError = e.what();
     return false;
@@ -359,7 +359,7 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string* outError) {
   return OpenProject(pickedPath, outError);
 }
 
-void LauncherEditorShell::RenderLauncher() {
+void LauncherEditorShell::RenderLauncher() {  // NOSONAR: UI composition intentionally keeps layout/readability local
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   ImGui::SetNextWindowPos(viewport->Pos);
   ImGui::SetNextWindowSize(viewport->Size);
@@ -527,12 +527,15 @@ void LauncherEditorShell::RenderLauncher() {
   } else {
     for (const std::string& recentPath : m_homeDocument.state.recentProjects) {
       const fs::path path(recentPath);
-      if (const std::string title = path.filename().empty() ? recentPath : path.filename().string();
-          recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
-        std::string openError;
-        if (!OpenProject(path, &openError))
-          m_launcherError = openError;
+      const std::string title = path.filename().empty() ? recentPath : path.filename().string();
+      if (!recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
+        ImGui::TextDisabled("%s", recentPath.c_str());
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        continue;
       }
+      std::string openError;
+      if (!OpenProject(path, &openError))
+        m_launcherError = openError;
       ImGui::TextDisabled("%s", recentPath.c_str());
       ImGui::Dummy(ImVec2(0.0f, 8.0f));
     }
@@ -715,7 +718,7 @@ std::shared_ptr<Mesh> LauncherEditorShell::LoadMeshForTag(const std::string& mes
       *mesh = Mesh::CreatePlane();
     else
       *mesh = ObjLoader::Load(ResolveAssetPath(meshTag).string());
-  } catch (const std::runtime_error& e) {
+  } catch (const ObjLoader::ObjLoaderException& e) {
     LOG_WARN("[Launcher] Failed to load mesh '%s': %s", meshTag.c_str(), e.what());
     return {};
   }
@@ -733,14 +736,11 @@ std::shared_ptr<Texture> LauncherEditorShell::LoadTexture(const std::string& raw
   if (const auto it = m_textureCache.find(key); it != m_textureCache.end())
     return it->second;
 
-  try {
-    auto texture = std::make_shared<Texture>(Texture::FromFile(path.string()));
-    m_textureCache[key] = texture;
-    return texture;
-  } catch (const std::runtime_error& e) {
-    LOG_WARN("[Launcher] Failed to load texture '%s': %s", rawPath.c_str(), e.what());
+  auto texture = std::make_shared<Texture>(Texture::FromFile(path.string()));
+  if (!texture || !texture->IsValid())
     return {};
-  }
+  m_textureCache[key] = texture;
+  return texture;
 }
 
 }  // namespace Monolith::Launcher

@@ -101,12 +101,11 @@ int StopPosixProcess(pid_t* pid) {
   int status = 0;
   bool reaped = false;
   kill(*pid, SIGTERM);
-  for (int attempt = 0; attempt < 50; ++attempt) {
+  for (int attempt = 0; attempt < 50 && !reaped; ++attempt) {
     if (!TryWaitForPid(*pid, &status, WNOHANG, &reaped))
       break;
-    if (reaped)
-      break;
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    if (!reaped)
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   if (!reaped) {
@@ -119,10 +118,16 @@ int StopPosixProcess(pid_t* pid) {
 }
 #endif
 
+#if defined(__cpp_lib_jthread) && __cpp_lib_jthread >= 201911L
+using ReaderThread = std::jthread;
+#else
+using ReaderThread = std::thread; // NOSONAR: C++17 fallback when std::jthread is unavailable
+#endif
+
 }  // namespace
 
 struct ExternalProcessRunner::ProcessHandle {
-  std::thread readerThread;
+  ReaderThread readerThread;
   std::mutex readerMutex;
   std::atomic<bool> readerDone{false};
 #ifdef _WIN32
@@ -143,7 +148,7 @@ ExternalProcessRunner::~ExternalProcessRunner() {
   Stop();
 }
 
-bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
+bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,  // NOSONAR: function orchestrates platform-specific process startup
                                   const std::string& label,
                                   std::string* outError) {
   if (outError)
@@ -208,7 +213,7 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   process->process = info.hProcess;
   process->thread = info.hThread;
 
-  process->readerThread = std::thread([handle = process.get(), label]() {
+  process->readerThread = ReaderThread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     DWORD bytesRead = 0;
@@ -246,8 +251,8 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   }
 
   if (pid == 0) {
-    dup2(pipes[1], STDOUT_FILENO);
-    dup2(pipes[1], STDERR_FILENO);
+    if (pipes[1] < 0 || dup2(pipes[1], STDOUT_FILENO) < 0 || dup2(pipes[1], STDERR_FILENO) < 0)
+      _exit(127);
     close(pipes[0]);
     close(pipes[1]);
     if (!command.workingDirectory.empty() &&
@@ -274,7 +279,7 @@ bool ExternalProcessRunner::Start(const ResolvedLauncherCommand& command,
   close(pipes[1]);
   process->pid = pid;
   process->stdoutRead = pipes[0];
-  process->readerThread = std::thread([handle = process.get(), label]() {
+  process->readerThread = ReaderThread([handle = process.get(), label]() {
     std::array<char, 512> buffer{};
     std::string pending;
     ssize_t bytesRead = 0;

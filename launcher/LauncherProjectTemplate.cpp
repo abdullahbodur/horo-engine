@@ -370,7 +370,7 @@ bool CreateLauncherProjectTemplate(const LauncherProjectTemplateRequest& request
   try {
     Editor::SceneSerializer::SaveToFile(BuildTemplateScene(),
                                         (projectRoot / "assets" / "scenes" / "level.json").string());
-  } catch (const std::runtime_error& e) {
+  } catch (const Editor::SceneSerializerException& e) {
     if (outError)
       *outError = e.what();
     return false;

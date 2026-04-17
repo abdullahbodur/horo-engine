@@ -19,7 +19,7 @@ namespace ObjLoader {
 Mesh Load(const std::string& path) {
   std::ifstream file(path);
   if (!file.is_open())
-    throw std::runtime_error("ObjLoader: cannot open '" + path + "'");
+    throw ObjLoaderException("ObjLoader: cannot open '" + path + "'");
 
   std::vector<Vec3> positions;
   std::vector<Vec3> normals;
@@ -127,7 +127,7 @@ Mesh Load(const std::string& path) {
   }
 
   if (vertices.empty())
-    throw std::runtime_error("ObjLoader: no geometry in '" + path + "'");
+    throw ObjLoaderException("ObjLoader: no geometry in '" + path + "'");
 
   Mesh mesh;
   mesh.SetData(vertices, indices);

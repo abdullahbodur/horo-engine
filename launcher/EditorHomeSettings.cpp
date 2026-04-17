@@ -66,11 +66,12 @@ EditorHomeDocument LoadEditorHomeDocument() {
 
   if (const json recentJson = homeJson.value("recentProjects", json::array()); recentJson.is_array()) {
     for (const json& entry : recentJson) {
-      if (entry.is_string()) {
-        const std::string value = NormalizeRecentProjectPath(entry.get<std::string>());
-        if (!value.empty())
-          out.state.recentProjects.push_back(value);
-      }
+      if (!entry.is_string())
+        continue;
+      const std::string value = NormalizeRecentProjectPath(entry.get<std::string>());
+      if (value.empty())
+        continue;
+      out.state.recentProjects.push_back(value);
     }
   }
   out.state.lastProjectPath =

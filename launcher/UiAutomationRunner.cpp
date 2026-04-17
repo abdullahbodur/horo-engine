@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <chrono>
 #include <filesystem>
+#include <format>
 #include <memory>
-#include <random>
 #include <string>
 
 #include <glad/glad.h>
@@ -20,6 +20,12 @@
 #include <imgui_internal.h>
 #include <imgui_test_engine/imgui_te_context.h>
 #include <imgui_test_engine/imgui_te_engine.h>
+#endif
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace Monolith {
@@ -170,15 +176,21 @@ class UiAutomationInitException final : public std::runtime_error {
 };
 
 fs::path BuildUiAutomationTempRoot() {
-  std::error_code ec;
-  const fs::path tempBase = fs::temp_directory_path(ec);
-  if (ec || tempBase.empty())
-    return fs::current_path() / ".horo_editor_ui_automation";
-
+  const std::string homePath = HomeDirGuard::ReadEnv("HOME");
+#ifdef _WIN32
+  const std::string userProfilePath = HomeDirGuard::ReadEnv("USERPROFILE");
+  const fs::path baseDir =
+      !userProfilePath.empty() ? fs::path(userProfilePath) : (!homePath.empty() ? fs::path(homePath) : fs::current_path());
+#else
+  const fs::path baseDir = !homePath.empty() ? fs::path(homePath) : fs::current_path();
+#endif
   const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-  std::mt19937_64 rng(std::random_device{}());
-  const uint64_t nonce = rng();
-  return tempBase / ("horo_editor_ui_automation_" + std::to_string(now) + "_" + std::to_string(nonce));
+#ifdef _WIN32
+  const int pid = _getpid();
+#else
+  const int pid = static_cast<int>(getpid());
+#endif
+  return baseDir / std::format(".horo_editor_ui_automation_{}_{}", now, pid);
 }
 
 const fs::path& UiAutomationTempRoot() {
@@ -205,7 +217,7 @@ fs::path ResolveCaptureOutputDir(bool captureEnabled, const std::string& outputD
   return fs::current_path() / "ui_test_output";
 }
 
-void PrepareUiAutomationDirectories(UiAutomationRunState* state) {
+void PrepareUiAutomationDirectories(const UiAutomationRunState* state) {
   if (!state)
     return;
   const bool cleanTempRoot = ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
@@ -345,7 +357,7 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id,
                          int w,
                          int h,
                          unsigned int* pixels,
-                         void* user_data) {
+                         void* user_data) { // NOSONAR: callback signature required by ImGui test engine API
   IM_UNUSED(viewport_id);
   IM_UNUSED(user_data);
   if (!pixels || w <= 0 || h <= 0)

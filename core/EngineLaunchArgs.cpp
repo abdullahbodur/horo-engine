@@ -11,8 +11,7 @@ EngineLaunchOptions ParseEngineLaunchOptions(int argc, char** argv) {
       ++i;
       continue;
     }
-    const std::string_view a(argv[i]);
-    if (a == "--play")
+    if (const std::string_view a(argv[i]); a == "--play")
       out.editorStartup = EditorStartupCli::ForcePlay;
     else if (a == "--editor")
       out.editorStartup = EditorStartupCli::ForceEditor;

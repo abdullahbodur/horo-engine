@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "math/Mat3.h"
@@ -8,6 +9,11 @@
 #include "math/Vec4.h"
 
 namespace Monolith {
+
+class ShaderException : public std::runtime_error {
+ public:
+  explicit ShaderException(const std::string& message) : std::runtime_error(message) {}
+};
 
 class Shader {
  public:
