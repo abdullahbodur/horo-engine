@@ -239,7 +239,9 @@ TEST_CASE("Launcher manifest load reports structured parse failures", "[launcher
     {
       std::ofstream out(manifestPath);
       REQUIRE(out.is_open());
-      out << R"({"schemaVersion":1})";
+      // Loader treats absent "project" as defaults; to validate this error path,
+      // provide an explicit non-object project node.
+      out << R"({"project":42})";
     }
     const LauncherProjectDocument doc = LoadProjectManifestDocument(projectRoot);
     REQUIRE(doc.parseError);
