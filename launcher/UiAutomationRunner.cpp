@@ -167,7 +167,7 @@ fs::path BuildUiAutomationTempRoot() {
 #ifdef _WIN32
   const int pid = _getpid();
 #else
-  const int pid = static_cast<int>(getpid());
+  const auto pid = static_cast<int>(getpid());
 #endif
   return baseDir / std::format(".horo_editor_ui_automation_{}_{}", now, pid);
 }

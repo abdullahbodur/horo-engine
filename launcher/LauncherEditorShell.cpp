@@ -527,14 +527,13 @@ void LauncherEditorShell::RenderLauncher() {  // NOSONAR: UI composition intenti
   } else {
     for (const std::string& recentPath : m_homeDocument.state.recentProjects) {
       const fs::path path(recentPath);
-      const std::string title = path.filename().empty() ? recentPath : path.filename().string();
-      if (!recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
+      if (const std::string title = path.filename().empty() ? recentPath : path.filename().string();
+          !recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
         ImGui::TextDisabled("%s", recentPath.c_str());
         ImGui::Dummy(ImVec2(0.0f, 8.0f));
         continue;
       }
-      std::string openError;
-      if (!OpenProject(path, &openError))
+      if (std::string openError; !OpenProject(path, &openError))
         m_launcherError = openError;
       ImGui::TextDisabled("%s", recentPath.c_str());
       ImGui::Dummy(ImVec2(0.0f, 8.0f));

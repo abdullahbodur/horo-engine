@@ -2221,47 +2221,7 @@ namespace Monolith::Editor
                                       std::abs(dScale.z - 1.0f) > 1e-6f;
                 anyDelta) // NOSONAR: nested transform propagation is intentionally grouped for correctness
             {
-              if (!m_gizmoHistoryPending)
-              {
-                BeginHistoryTransaction(CaptureHistorySnapshot());
-                m_gizmoHistoryPending = true;
-              }
-              for (int si : m_selectedIndices)
-              {
-                if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
-                  continue;
-                auto &applyObj = m_document.objects[si];
-
-                // Capture pre-delta state so we can propagate to children below.
-                const Vec3 oldObjPos = applyObj.position;
-                const Quaternion oldObjRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
-                                                                   ToRadians(applyObj.yaw),
-                                                                   ToRadians(applyObj.roll));
-
-                applyObj.position = applyObj.position + dPos;
-                applyObj.scale.x *= dScale.x;
-                applyObj.scale.y *= dScale.y;
-                applyObj.scale.z *= dScale.z;
-                Quaternion nextRot = oldObjRot;
-                if (dRotXYZSq > 1e-8f)
-                {
-                  nextRot = (dRot * oldObjRot).Normalized();
-                  Vec3 euler = nextRot.ToEuler();
-                  applyObj.pitch = ToDegrees(euler.x);
-                  applyObj.yaw = ToDegrees(euler.y);
-                  applyObj.roll = ToDegrees(euler.z);
-                }
-                m_document.dirty = true;
-                if (m_transformCb)
-                  m_transformCb(applyObj);
-
-                // Propagate the same delta to all hierarchy children of this object,
-                // skipping any children that are themselves directly selected (they
-                // already receive the delta above and must not be moved twice).
-                PropagateHierarchyTransformDelta(
-                    m_document, si, oldObjPos, oldObjRot,
-                    applyObj.position, nextRot, m_transformCb, m_selectedIndices);
-              }
+              ApplyGizmoDeltaToSelection(dPos, dScale, dRot, dRotXYZSq);
             }
             if (m_gizmoHistoryPending && m_gizmo.GetDragAxis() == GizmoAxis::None)
             {
@@ -6426,6 +6386,58 @@ namespace Monolith::Editor
       m_undoHistory.push_back(before);
       TrimHistory(&m_undoHistory);
       m_redoHistory.clear();
+    }
+
+    void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
+                                                 const Vec3 &dScale,
+                                                 const Quaternion &dRot,
+                                                 float dRotXYZSq)
+    {
+      if (!m_gizmoHistoryPending)
+      {
+        BeginHistoryTransaction(CaptureHistorySnapshot());
+        m_gizmoHistoryPending = true;
+      }
+
+      for (int si : m_selectedIndices)
+      {
+        if (si < 0 || si >= static_cast<int>(m_document.objects.size()))
+          continue;
+
+        auto &applyObj = m_document.objects[si];
+
+        // Capture pre-delta state so we can propagate to children below.
+        const Vec3 oldObjPos = applyObj.position;
+        const Quaternion oldObjRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                                           ToRadians(applyObj.yaw),
+                                                           ToRadians(applyObj.roll));
+
+        applyObj.position = applyObj.position + dPos;
+        applyObj.scale.x *= dScale.x;
+        applyObj.scale.y *= dScale.y;
+        applyObj.scale.z *= dScale.z;
+
+        Quaternion nextRot = oldObjRot;
+        if (dRotXYZSq > 1e-8f)
+        {
+          nextRot = (dRot * oldObjRot).Normalized();
+          const Vec3 euler = nextRot.ToEuler();
+          applyObj.pitch = ToDegrees(euler.x);
+          applyObj.yaw = ToDegrees(euler.y);
+          applyObj.roll = ToDegrees(euler.z);
+        }
+
+        m_document.dirty = true;
+        if (m_transformCb)
+          m_transformCb(applyObj);
+
+        // Propagate the same delta to all hierarchy children of this object,
+        // skipping any children that are themselves directly selected (they
+        // already receive the delta above and must not be moved twice).
+        PropagateHierarchyTransformDelta(
+            m_document, si, oldObjPos, oldObjRot,
+            applyObj.position, nextRot, m_transformCb, m_selectedIndices);
+      }
     }
 
     void EditorLayer::BeginHistoryTransaction(const EditorHistorySnapshot &before)

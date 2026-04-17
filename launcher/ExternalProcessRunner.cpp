@@ -101,11 +101,12 @@ int StopPosixProcess(pid_t* pid) {
   int status = 0;
   bool reaped = false;
   kill(*pid, SIGTERM);
-  for (int attempt = 0; attempt < 50 && !reaped; ++attempt) {
+  for (int attempt = 0; attempt < 50; ++attempt) {
     if (!TryWaitForPid(*pid, &status, WNOHANG, &reaped))
       break;
-    if (!reaped)
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    if (reaped)
+      break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   if (!reaped) {

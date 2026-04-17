@@ -9,7 +9,7 @@ namespace Monolith {
 namespace ObjLoader {
 class ObjLoaderException : public std::runtime_error {
  public:
-  explicit ObjLoaderException(const std::string& message) : std::runtime_error(message) {}
+  using std::runtime_error::runtime_error;
 };
 
 // Load a triangulated .obj file (v/vt/vn lines, triangulated f lines).

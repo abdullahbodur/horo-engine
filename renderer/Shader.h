@@ -12,7 +12,7 @@ namespace Monolith {
 
 class ShaderException : public std::runtime_error {
  public:
-  explicit ShaderException(const std::string& message) : std::runtime_error(message) {}
+  using std::runtime_error::runtime_error;
 };
 
 class Shader {

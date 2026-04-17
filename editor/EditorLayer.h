@@ -271,6 +271,10 @@ class EditorLayer {
   EditorHistorySnapshot CaptureHistorySnapshot() const;
   void RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot);
   void CommitHistoryChange(const EditorHistorySnapshot& before);
+  void ApplyGizmoDeltaToSelection(const Vec3& dPos,
+                                  const Vec3& dScale,
+                                  const Quaternion& dRot,
+                                  float dRotXYZSq);
   void BeginHistoryTransaction(const EditorHistorySnapshot& before);
   void FinalizeHistoryTransaction();
   void ClearHistory();
