@@ -113,6 +113,30 @@ TEST_CASE("EngineLaunchArgs parses launcher project path", "[launcher][cli]") {
   REQUIRE(options.projectPath == projectPath);
 }
 
+TEST_CASE("EngineLaunchArgs handles inline project path and startup overrides", "[launcher][cli]") {
+  std::string arg0 = "HoroEditor";
+  std::string editorArg = "--editor";
+  std::string playArg = "--play";
+  std::string inlineProject = "--project=./Games/TestProject";
+  std::array<char*, 4> argv = {arg0.data(), editorArg.data(), inlineProject.data(), playArg.data()};
+
+  const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+
+  REQUIRE(options.projectPath == std::filesystem::path("./Games/TestProject"));
+  // Last startup flag wins.
+  REQUIRE(options.editorStartup == EditorStartupCli::ForcePlay);
+}
+
+TEST_CASE("EngineLaunchArgs ignores null argv entries", "[launcher][cli]") {
+  std::string arg0 = "HoroEditor";
+  std::string projectFlag = "--project";
+  std::string projectPathArg = "./SomeProject";
+  std::array<char*, 5> argv = {arg0.data(), nullptr, projectFlag.data(), projectPathArg.data(), nullptr};
+
+  const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+  REQUIRE(options.projectPath == std::filesystem::path("./SomeProject"));
+}
+
 TEST_CASE("ProjectPath explicit root switches editor workspace to project-local settings",
           "[launcher][workspace]") {
   const std::filesystem::path projectRoot = MakeTempRoot("project_workspace");
@@ -178,6 +202,95 @@ TEST_CASE("Launcher project manifest resolves SDK and project tokens", "[launche
   REQUIRE(resolved.executable == std::filesystem::path("cmake"));
   REQUIRE(resolved.args[1] == projectRoot.generic_string());
   REQUIRE(resolved.workingDirectory == sdkRoot.lexically_normal());
+}
+
+TEST_CASE("Launcher manifest load reports structured parse failures", "[launcher][manifest]") {
+  const std::filesystem::path projectRoot = MakeTempRoot("manifest_parse_failures");
+  std::error_code ec;
+  std::filesystem::remove_all(projectRoot, ec);
+  std::filesystem::create_directories(projectRoot / ".horo", ec);
+
+  const std::filesystem::path manifestPath = ResolveProjectManifestPath(projectRoot);
+
+  SECTION("invalid JSON") {
+    {
+      std::ofstream out(manifestPath);
+      REQUIRE(out.is_open());
+      out << "{ invalid json";
+    }
+    const LauncherProjectDocument doc = LoadProjectManifestDocument(projectRoot);
+    REQUIRE(doc.parseError);
+    REQUIRE(doc.loadedFromDisk);
+    REQUIRE_FALSE(doc.error.empty());
+  }
+
+  SECTION("root is not object") {
+    {
+      std::ofstream out(manifestPath);
+      REQUIRE(out.is_open());
+      out << R"([1,2,3])";
+    }
+    const LauncherProjectDocument doc = LoadProjectManifestDocument(projectRoot);
+    REQUIRE(doc.parseError);
+    REQUIRE(doc.error.find("root must be an object") != std::string::npos);
+  }
+
+  SECTION("missing project object") {
+    {
+      std::ofstream out(manifestPath);
+      REQUIRE(out.is_open());
+      out << R"({"schemaVersion":1})";
+    }
+    const LauncherProjectDocument doc = LoadProjectManifestDocument(projectRoot);
+    REQUIRE(doc.parseError);
+    REQUIRE(doc.error.find("missing 'project' object") != std::string::npos);
+  }
+
+  std::filesystem::remove_all(projectRoot, ec);
+}
+
+TEST_CASE("Launcher manifest save validates inputs", "[launcher][manifest]") {
+  std::string error;
+  REQUIRE_FALSE(SaveProjectManifestDocument(std::filesystem::temp_directory_path() / "unused", nullptr, &error));
+  REQUIRE(error.find("document is null") != std::string::npos);
+}
+
+TEST_CASE("ResolveLauncherCommand validates required fields", "[launcher][manifest]") {
+  const std::filesystem::path projectRoot = MakeTempRoot("resolve_command_validation_project");
+  const std::filesystem::path sdkRoot = MakeTempRoot("resolve_command_validation_sdk");
+  std::string error;
+
+  SECTION("null output command") {
+    REQUIRE_FALSE(ResolveLauncherCommand({"cmake", {}, ""}, projectRoot, sdkRoot, nullptr, &error));
+    REQUIRE(error.find("output is null") != std::string::npos);
+  }
+
+  SECTION("missing executable") {
+    ResolvedLauncherCommand resolved;
+    REQUIRE_FALSE(ResolveLauncherCommand({"", {}, ""}, projectRoot, sdkRoot, &resolved, &error));
+    REQUIRE(error.find("missing an executable") != std::string::npos);
+  }
+}
+
+TEST_CASE("ResolveLauncherCommand normalizes relative executable against working directory",
+          "[launcher][manifest]") {
+  const std::filesystem::path projectRoot = MakeTempRoot("resolve_command_paths_project");
+  const std::filesystem::path sdkRoot = MakeTempRoot("resolve_command_paths_sdk");
+
+  ResolvedLauncherCommand resolved;
+  std::string error;
+  REQUIRE(ResolveLauncherCommand({"tools/run-game", {"--map", "${projectDir}/maps/demo.json"}, "build"},
+                                 projectRoot,
+                                 sdkRoot,
+                                 &resolved,
+                                 &error));
+
+  const std::filesystem::path expectedWorkingDir = (projectRoot / "build").lexically_normal();
+  REQUIRE(resolved.workingDirectory == expectedWorkingDir);
+  REQUIRE(resolved.executable == (expectedWorkingDir / "tools/run-game").lexically_normal());
+  REQUIRE(resolved.args.size() == 2);
+  REQUIRE(resolved.args[1] == (projectRoot / "maps" / "demo.json").generic_string());
+  REQUIRE_FALSE(resolved.debugString.empty());
 }
 
 TEST_CASE("Launcher project template creates manifest, source, and scene scaffold",

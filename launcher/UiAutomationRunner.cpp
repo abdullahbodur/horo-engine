@@ -13,6 +13,7 @@
 
 #include "core/Logger.h"
 #include "launcher/LauncherEditorShell.h"
+#include "launcher/UiAutomationConfig.h"
 #include "launcher/UiTestHarness.h"
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
@@ -106,15 +107,10 @@ bool ParseBoolEnv(const char* name) {
   if (!name || !*name)
     return false;
 #ifdef _WIN32
-  const std::string out = HomeDirGuard::ReadWin32EnvString(name);
-  if (out.empty())
-    return false;
-  return out != "0";
+  return ParseUiAutomationBoolValue(HomeDirGuard::ReadWin32EnvString(name), false);
 #else
   const char* value = std::getenv(name);
-  if (!value || !*value)
-    return false;
-  return std::string(value) != "0";
+  return ParseUiAutomationBoolValue(value ? std::string_view(value) : std::string_view(), false);
 #endif
 }
 
@@ -122,15 +118,10 @@ bool ParseBoolEnvDefaultTrue(const char* name) {
   if (!name || !*name)
     return true;
 #ifdef _WIN32
-  const std::string out = HomeDirGuard::ReadWin32EnvString(name);
-  if (out.empty())
-    return true;
-  return out != "0";
+  return ParseUiAutomationBoolValue(HomeDirGuard::ReadWin32EnvString(name), true);
 #else
   const char* value = std::getenv(name);
-  if (!value || !*value)
-    return true;
-  return std::string(value) != "0";
+  return ParseUiAutomationBoolValue(value ? std::string_view(value) : std::string_view(), true);
 #endif
 }
 
@@ -139,22 +130,11 @@ int ParseNonNegativeIntEnv(const char* name, int fallback = 0) {
     return fallback;
 #ifdef _WIN32
   const std::string value = HomeDirGuard::ReadWin32EnvString(name);
-  if (value.empty())
-    return fallback;
-  char* end = nullptr;
-  const long parsed = std::strtol(value.c_str(), &end, 10);
-  if (const bool valid = (end != value.c_str() && *end == '\0'); !valid)
-    return fallback;
+  return ParseUiAutomationNonNegativeIntValue(value, fallback);
 #else
   const char* value = std::getenv(name);
-  if (!value || !*value)
-    return fallback;
-  char* end = nullptr;
-  const long parsed = std::strtol(value, &end, 10);
-  if (const bool valid = (end != value && *end == '\0'); !valid)
-    return fallback;
+  return ParseUiAutomationNonNegativeIntValue(value ? std::string_view(value) : std::string_view(), fallback);
 #endif
-  return parsed > 0 ? static_cast<int>(parsed) : 0;
 }
 
 std::string ReadEnvString(const char* name) {
@@ -179,10 +159,9 @@ fs::path BuildUiAutomationTempRoot() {
   const std::string homePath = HomeDirGuard::ReadEnv("HOME");
 #ifdef _WIN32
   const std::string userProfilePath = HomeDirGuard::ReadEnv("USERPROFILE");
-  const fs::path baseDir =
-      !userProfilePath.empty() ? fs::path(userProfilePath) : (!homePath.empty() ? fs::path(homePath) : fs::current_path());
+  const fs::path baseDir = SelectUiAutomationBaseDir(homePath, userProfilePath, fs::current_path(), true);
 #else
-  const fs::path baseDir = !homePath.empty() ? fs::path(homePath) : fs::current_path();
+  const fs::path baseDir = SelectUiAutomationBaseDir(homePath, {}, fs::current_path(), false);
 #endif
   const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 #ifdef _WIN32
@@ -210,11 +189,7 @@ void LogUiAutomationEnv() {
 }
 
 fs::path ResolveCaptureOutputDir(bool captureEnabled, const std::string& outputDirEnv) {
-  if (!captureEnabled)
-    return {};
-  if (!outputDirEnv.empty())
-    return fs::path(outputDirEnv);
-  return fs::current_path() / "ui_test_output";
+  return ResolveUiCaptureOutputDir(captureEnabled, outputDirEnv, fs::current_path());
 }
 
 void PrepareUiAutomationDirectories(const UiAutomationRunState* state) {

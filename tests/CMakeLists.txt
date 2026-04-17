@@ -236,3 +236,9 @@ add_executable(test_launcher_unit test_launcher_unit.cpp)
 target_link_libraries(test_launcher_unit PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_launcher_unit)
 add_test(NAME test_launcher_unit COMMAND $<TARGET_FILE:test_launcher_unit>)
+
+# ---- test_ui_automation_config ----
+add_executable(test_ui_automation_config test_ui_automation_config.cpp)
+target_link_libraries(test_ui_automation_config PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_ui_automation_config)
+add_test(NAME test_ui_automation_config COMMAND $<TARGET_FILE:test_ui_automation_config>)
