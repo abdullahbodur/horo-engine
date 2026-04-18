@@ -161,8 +161,22 @@ jobs:
           echo "FFMPEG_PATH=$ffmpeg" >> $env:GITHUB_ENV
         shell: pwsh
 
+      - name: Install Mesa3D (software OpenGL for headless CI)
+        shell: pwsh
+        run: |
+          # mesa-dist-win provides a software OpenGL 4.5 renderer (llvmpipe).
+          # Dropping opengl32.dll next to the exe overrides the system driver
+          # (Microsoft Basic Display Adapter supports only OpenGL 1.1) so that
+          # glfwCreateWindow can succeed without a hardware GPU.
+          $ver = "24.3.3"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
+          Invoke-WebRequest -Uri $url -OutFile mesa3d.7z -UseBasicParsing
+          7z x mesa3d.7z -omesa3d -y | Out-Null
+          Copy-Item "mesa3d\x64\opengl32.dll" "build\debug-msvc\bin\Debug\opengl32.dll" -Force
+
       - name: Run UI Automation
         shell: pwsh
+        timeout-minutes: 10
         run: |
           .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
         env:
@@ -175,6 +189,7 @@ jobs:
           MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
           MONOLITH_LOG_LEVEL: "debug"
           MONOLITH_GLFW_SAMPLES: "0"
+          GALLIUM_DRIVER: "llvmpipe"
 
       - name: Setup tmate session
         if: failure() && github.event_name == 'workflow_dispatch'
