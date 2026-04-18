@@ -164,7 +164,7 @@ jobs:
       - name: Run UI Automation
         shell: pwsh
         run: |
-          .\build\debug-msvc\Debug\HoroEditorUiTest.exe --run-ui-tests
+          .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
         env:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
