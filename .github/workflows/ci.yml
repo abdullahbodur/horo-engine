@@ -21,6 +21,7 @@ jobs:
   test-macos:
     name: Test · macOS / Clang
     runs-on: macos-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +33,9 @@ jobs:
 
       - name: Install Ninja
         run: brew install ninja
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -56,10 +60,48 @@ jobs:
         env:
           MONOLITH_LOG_LEVEL: "debug"
 
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
+
+      - name: Build UI Automation Target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Resolve ffmpeg path
+        shell: bash
+        run: echo "FFMPEG_PATH=$(which ffmpeg)" >> $GITHUB_ENV
+
+      - name: Run UI Automation
+        shell: bash
+        run: |
+          build/debug/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_DELAY_MS: "0"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          MONOLITH_LOG_LEVEL: "debug"
+          MONOLITH_GLFW_SAMPLES: "0"
+
+      - name: Setup tmate session
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-macos
+          path: ui_test_output/
+          if-no-files-found: ignore
+          retention-days: 30
+
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
 
@@ -94,10 +136,6 @@ jobs:
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
-      - name: Setup tmate session
-        if: failure() && github.event_name == 'workflow_dispatch'
-        uses: mxschmitt/action-tmate@v3
-
       - name: Build
         run: cmake --build build/debug-msvc --config Debug --parallel
 
@@ -105,6 +143,51 @@ jobs:
         run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+
+      - name: Prepare UI test output directory
+        run: New-Item -ItemType Directory -Force -Path ui_test_output
+        shell: pwsh
+
+      - name: Build UI Automation Target
+        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
+
+      - name: Resolve ffmpeg path
+        run: |
+          $ffmpeg = (Get-Command ffmpeg).Source
+          echo "FFMPEG_PATH=$ffmpeg" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Run UI Automation
+        shell: pwsh
+        run: |
+          build\debug-msvc\Debug\HoroEditorUiTest.exe --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_DELAY_MS: "0"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
+          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          MONOLITH_LOG_LEVEL: "debug"
+          MONOLITH_GLFW_SAMPLES: "0"
+
+      - name: Setup tmate session
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-windows
+          path: ui_test_output\
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Show sccache stats
         if: always()
