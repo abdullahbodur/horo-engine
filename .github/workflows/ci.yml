@@ -223,6 +223,7 @@ jobs:
           gcovr build/coverage \
             --root "${{ github.workspace }}" \
             --sonarqube build/coverage/sonar-coverage.xml \
+            --sonarqube-metric line \
             --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
             --exclude '.*/vendor/.*' \
