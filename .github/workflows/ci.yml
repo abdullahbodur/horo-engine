@@ -208,9 +208,14 @@ jobs:
 
       - name: Run tests (coverage build)
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        run: ctest --preset coverage
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            ctest --preset coverage --output-on-failure
         env:
           MONOLITH_LOG_LEVEL: "debug"
+          MONOLITH_GLFW_SAMPLES: "0"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
 
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}

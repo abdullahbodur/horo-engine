@@ -4,12 +4,14 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 
 #include "core/Application.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
 #include "core/Window.h"
 #include "math/MathUtils.h"
+#include "renderer/Shader.h"
 
 using namespace Monolith;
 using Catch::Approx;
@@ -71,6 +73,69 @@ TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
     REQUIRE(ProjectPath::Root().empty());
 }
 
+TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    auto normalizePath = [](const fs::path& value) {
+        std::error_code ec;
+        fs::path normalized = fs::weakly_canonical(value, ec);
+        if (ec)
+            normalized = fs::absolute(value, ec);
+        if (ec)
+            normalized = value;
+        return normalized.lexically_normal();
+    };
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_explicit";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "project" / "assets", ec);
+    fs::create_directories(tempRoot / "sdk", ec);
+
+    ProjectPath::SetProjectRoot({});
+    REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
+
+    ProjectPath::SetProjectRoot(tempRoot / "project" / "." / "subdir" / "..");
+    REQUIRE(ProjectPath::HasExplicitProjectRoot());
+    REQUIRE(normalizePath(ProjectPath::Root()) == normalizePath(tempRoot / "project"));
+
+    ProjectPath::SetSdkRoot({});
+    REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
+
+    ProjectPath::SetSdkRoot(tempRoot / "sdk" / ".");
+    REQUIRE(normalizePath(ProjectPath::SdkRoot()) == normalizePath(tempRoot / "sdk"));
+    REQUIRE(normalizePath(ProjectPath::Resolve("assets/models/crate.obj")) ==
+            normalizePath(tempRoot / "project" / "assets/models/crate.obj"));
+    REQUIRE(normalizePath(ProjectPath::ResolveSdk("assets/shaders/base.vert")) ==
+            normalizePath(tempRoot / "sdk" / "assets/shaders/base.vert"));
+
+    ProjectPath::SetProjectRoot({});
+    REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
+}
+
+TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_init";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "repo" / "assets", ec);
+    fs::create_directories(tempRoot / "repo" / "bin" / "nested", ec);
+
+    {
+        std::ofstream presets(tempRoot / "repo" / "CMakePresets.json");
+        REQUIRE(presets.is_open());
+        presets << "{}";
+    }
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot({});
+    ProjectPath::Init(tempRoot / "repo" / "bin" / "nested");
+
+    REQUIRE(ProjectPath::Root() == fs::absolute(tempRoot / "repo"));
+    REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
+}
+
 TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior",
           "[core][window]") {
     const WindowGraphicsApiTraits traits = GetWindowGraphicsApiTraits(WindowGraphicsApi::OpenGL);
@@ -99,6 +164,11 @@ TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility", "[
     REQUIRE(spec.name == "Compat App");
     REQUIRE(spec.defaultSceneFile == "assets/scenes/starter_world.json");
     REQUIRE(spec.graphicsApi == WindowGraphicsApi::OpenGL);
+}
+
+TEST_CASE("Shader: FromFiles throws ShaderException for missing files", "[core][shader]") {
+    REQUIRE_THROWS_AS(Shader::FromFiles("/no/such/vertex_shader.vert", "/no/such/fragment_shader.frag"),
+                      ShaderException);
 }
 
 // ===========================================================================
