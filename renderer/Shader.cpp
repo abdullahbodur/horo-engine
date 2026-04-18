@@ -47,7 +47,7 @@ unsigned int Shader::GetProgramID() const {
 static std::string ReadFile(const std::string& path) {
   std::ifstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("Cannot open shader file: " + path);
+    throw ShaderException("Cannot open shader file: " + path);
   std::ostringstream ss;
   ss << f.rdbuf();
   return ss.str();

@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <stdexcept>
 #include <string>
 
 struct GLFWwindow;
@@ -38,6 +39,11 @@ struct WindowSpec {
   WindowGraphicsApi graphicsApi = WindowGraphicsApi::OpenGL;
 };
 
+class WindowInitException : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 class Window {
  public:
   using ResizeCallback = std::function<void(int w, int h)>;
@@ -50,7 +56,7 @@ class Window {
   Window(const Window&) = delete;
   Window& operator=(const Window&) = delete;
 
-  void PollEvents();
+  void PollEvents() const;
   void SwapBuffers();
   bool ShouldClose() const;
   void SetVSync(bool enabled);

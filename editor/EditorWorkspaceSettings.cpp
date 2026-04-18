@@ -2,6 +2,7 @@
 
 #include <fstream>
 
+#include "core/ProjectPath.h"
 #include "mcp/McpSettings.h"
 
 namespace Monolith {
@@ -23,6 +24,8 @@ fs::path ResolveEditorLayoutPath() {
 }
 
 fs::path ResolveEditorWorkspacePath() {
+  if (ProjectPath::HasExplicitProjectRoot())
+    return ProjectPath::Root() / ".horo" / "editor_workspace.json";
   return ResolveEditorSettingsDirectory() / "editor_workspace.json";
 }
 

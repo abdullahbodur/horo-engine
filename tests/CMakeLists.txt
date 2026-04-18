@@ -165,6 +165,41 @@ target_link_libraries(test_core PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_core)
 add_test(NAME test_core COMMAND $<TARGET_FILE:test_core>)
 
+# ---- test_window ----
+add_executable(test_window test_window.cpp)
+target_link_libraries(test_window PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_window)
+add_test(NAME test_window COMMAND $<TARGET_FILE:test_window>)
+add_test(NAME test_window_logfilter COMMAND $<TARGET_FILE:test_window> "[core][window][logfilter]")
+set_tests_properties(test_window_logfilter PROPERTIES
+  ENVIRONMENT "MONOLITH_LOG_LEVEL=error;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
+add_test(NAME test_window_glfw_init_fail COMMAND $<TARGET_FILE:test_window> "[core][window][glfw-init-fail]")
+set_tests_properties(test_window_glfw_init_fail PROPERTIES
+  ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
+
+# ---- test_logger_env ----
+add_executable(test_logger_env test_logger_env.cpp)
+target_link_libraries(test_logger_env PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_logger_env)
+add_test(NAME test_logger_env_warn COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][warn]")
+set_tests_properties(test_logger_env_warn PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=warning")
+add_test(NAME test_logger_env_error COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][error]")
+set_tests_properties(test_logger_env_error PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=error")
+add_test(NAME test_logger_env_invalid COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][invalid]")
+set_tests_properties(test_logger_env_invalid PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=verbose")
+add_test(NAME test_logger_env_debug COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][debug]")
+set_tests_properties(test_logger_env_debug PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=debug")
+add_test(NAME test_logger_env_empty COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][empty]")
+set_tests_properties(test_logger_env_empty PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=")
+add_test(NAME test_logger_env_mixed_debug COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][mixed_debug]")
+set_tests_properties(test_logger_env_mixed_debug PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=DeBuG")
+add_test(NAME test_logger_env_warn_alias COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][warn_alias]")
+set_tests_properties(test_logger_env_warn_alias PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=warn")
+add_test(NAME test_logger_env_unknown_level COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][unknown_level]")
+set_tests_properties(test_logger_env_unknown_level PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=info")
+add_test(NAME test_logger_env_unset COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][unset]")
+set_tests_properties(test_logger_env_unset PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=debug")
+
 # ---- test_scene_systems ----
 add_executable(test_scene_systems test_scene_systems.cpp)
 target_link_libraries(test_scene_systems PRIVATE MonolithEngine Catch2::Catch2WithMain)
@@ -224,3 +259,21 @@ add_executable(test_renderer_foundation test_renderer_foundation.cpp)
 target_link_libraries(test_renderer_foundation PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_renderer_foundation)
 add_test(NAME test_renderer_foundation COMMAND $<TARGET_FILE:test_renderer_foundation>)
+
+# ---- test_launcher_core ----
+add_executable(test_launcher_core test_launcher_core.cpp)
+target_link_libraries(test_launcher_core PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_launcher_core)
+add_test(NAME test_launcher_core COMMAND $<TARGET_FILE:test_launcher_core>)
+
+# ---- test_launcher_unit ----
+add_executable(test_launcher_unit test_launcher_unit.cpp)
+target_link_libraries(test_launcher_unit PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_launcher_unit)
+add_test(NAME test_launcher_unit COMMAND $<TARGET_FILE:test_launcher_unit>)
+
+# ---- test_ui_automation_config ----
+add_executable(test_ui_automation_config test_ui_automation_config.cpp)
+target_link_libraries(test_ui_automation_config PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_ui_automation_config)
+add_test(NAME test_ui_automation_config COMMAND $<TARGET_FILE:test_ui_automation_config>)

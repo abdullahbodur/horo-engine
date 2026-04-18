@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 # Cancel in-progress runs for the same branch when a new push arrives
 concurrency:
@@ -11,86 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ----------------------------------------------------------------
-  # Build + Test — Linux (GCC, Ninja)
-  # ----------------------------------------------------------------
-  test-linux:
-    name: Test · Linux / GCC
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          if ! sudo apt-get update -qq; then
-            # Ubuntu hosted runners occasionally include broken Microsoft apt mirrors.
-            # Remove them and retry so CI remains deterministic.
-            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
-            sudo apt-get update -qq
-          fi
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build \
-            libwayland-dev wayland-protocols libxkbcommon-dev \
-            libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev \
-            libgl1-mesa-dev libglu1-mesa-dev
-
-      - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cmake/fetchcontent
-          key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-          restore-keys: fetchcontent-linux-
-
-      - name: Configure
-        run: cmake --preset debug
-        env:
-          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-
-      - name: Build
-        run: cmake --build --preset debug --parallel
-
-      - name: Test
-        run: ctest --preset debug --output-on-failure
-
-  # ----------------------------------------------------------------
-  # Build + Test — Windows (MSVC, Visual Studio 17 2022)
-  # ----------------------------------------------------------------
-  test-windows:
-    name: Test · Windows / MSVC
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache FetchContent dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.cmake/fetchcontent
-          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
-          restore-keys: fetchcontent-windows-
-
-      - name: Configure
-        run: cmake --preset debug-msvc
-        env:
-          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
-
-      - name: Build
-        run: cmake --build build/debug-msvc --config Debug --parallel
-
-      - name: Test
-        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure
-
-  # ----------------------------------------------------------------
-  # Build + Test — macOS (Clang, Ninja)
-  # ----------------------------------------------------------------
+  #   ----------------------------------------------------------------
+  #   Build + Test — macOS (Clang, Ninja)
+  #   ----------------------------------------------------------------
   test-macos:
     name: Test · macOS / Clang
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ${{ github.job }}-${{ runner.os }}
 
       - name: Install Ninja
         run: brew install ninja
@@ -103,7 +41,10 @@ jobs:
           restore-keys: fetchcontent-macos-
 
       - name: Configure
-        run: cmake --preset debug
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
@@ -112,103 +53,220 @@ jobs:
 
       - name: Test
         run: ctest --preset debug --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
-  # ----------------------------------------------------------------
-  # Coverage — Linux (GCC --coverage + lcov + genhtml)
-  # Runs after all three test jobs pass; uploads HTML report as artifact
-  # ----------------------------------------------------------------
-  coverage:
-    name: Coverage · Linux / GCC
-    runs-on: ubuntu-24.04
-    needs: [test-linux, test-windows, test-macos]
+  test-windows:
+    name: Test · Windows / MSVC
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          if ! sudo apt-get update -qq; then
-            # Ubuntu hosted runners occasionally include broken Microsoft apt mirrors.
-            # Remove them and retry so CI remains deterministic.
-            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
-            sudo apt-get update -qq
-          fi
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build lcov \
-            libwayland-dev wayland-protocols libxkbcommon-dev \
-            libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev \
-            libgl1-mesa-dev libglu1-mesa-dev
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: sccache-windows-
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
-          path: ~/.cmake/fetchcontent
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Configure
+        run: >
+          cmake --preset debug-msvc
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_EXE_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+          -DCMAKE_SHARED_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+          -DCMAKE_MODULE_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Setup tmate session
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Build
+        run: cmake --build build/debug-msvc --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats
+
+  test-linux:
+    name: Test · Linux / GCC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ${{ github.job }}-${{ runner.os }}
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            gcovr \
+            xvfb \
+            ffmpeg \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      - name: Install modern gcovr
+        run: python3 -m pip install --user "gcovr>=8.3,<9"
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
           key: fetchcontent-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
           restore-keys: fetchcontent-linux-
 
-      - name: Configure (coverage instrumentation)
-        run: cmake --preset coverage
+      - name: Configure
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
       - name: Build
-        run: cmake --build build/coverage --parallel
+        run: cmake --build --preset debug --parallel
 
-      - name: Run tests
-        run: ctest --test-dir build/coverage --output-on-failure
+      - name: Test
+        run: ctest --preset debug --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
 
-      - name: Collect coverage data
+      - name: Prepare UI test output directory
+        run: mkdir -p ui_test_output
+
+      - name: Build UI Automation Target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Run UI Automation
         run: |
-          geninfo build/coverage \
-            --output-filename build/coverage/raw.info \
-            --ignore-errors mismatch,source \
-            --branch-coverage
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            build/debug/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_UI_TEST_CAPTURE: "1"
+          MONOLITH_UI_TEST_VIDEO: "1"
+          MONOLITH_UI_TEST_RECORDING: "1"
+          MONOLITH_UI_TEST_FILTER: "launcher/*"
+          MONOLITH_UI_TEST_DELAY_MS: "0"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          MONOLITH_LOG_LEVEL: "debug"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
+          MONOLITH_GLFW_SAMPLES: "0"
 
-      - name: Filter out third-party and test code
-        run: |
-          lcov \
-            --remove build/coverage/raw.info \
-              '*/vendor/*' \
-              '*/_deps/*' \
-              '*/tests/*' \
-              '/usr/*' \
-              '*/catch2/*' \
-              'catch2/*' \
-              '*/Catch2/*' \
-            --output-file build/coverage/filtered.info \
-            --ignore-errors mismatch,unused \
-            --branch-coverage
+      - name: Setup tmate session on failure
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: mxschmitt/action-tmate@v3
 
-      - name: Generate HTML report
-        run: |
-          genhtml build/coverage/filtered.info \
-            --output-directory build/coverage/html \
-            --branch-coverage \
-            --ignore-errors mismatch,source \
-            --synthesize-missing \
-            --title "MonolithEngine — ${{ github.ref_name }} @ ${{ github.sha }}"
-
-      - name: Print summary
-        run: |
-          echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          lcov --summary build/coverage/filtered.info >> $GITHUB_STEP_SUMMARY 2>&1
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Print per-file coverage table
-        run: |
-          echo "### Per-File Coverage" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          lcov --list build/coverage/filtered.info 2>&1 >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload HTML coverage report
+      - name: Upload UI Test Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report-${{ github.sha }}
-          path: build/coverage/html
+          name: ui-test-results-linux
+          path: ui_test_output/
+          if-no-files-found: ignore
           retention-days: 30
+
+      - name: Install Build Wrapper
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
+
+      - name: Configure (coverage instrumentation)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: >
+          cmake --preset coverage
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build (wrapped + coverage)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          build-wrapper-linux-x86-64 \
+            --out-dir bw-output \
+            cmake --build --preset coverage --parallel
+
+      - name: Run tests (coverage build)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            ctest --preset coverage --output-on-failure
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
+          MONOLITH_GLFW_SAMPLES: "0"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
+
+      - name: Generate Sonar coverage report
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          python3 -m gcovr build/coverage \
+            --root "${{ github.workspace }}" \
+            --sonarqube build/coverage/sonar-coverage.xml \
+            --sonarqube-metric line \
+            --merge-mode-functions=merge-use-line-min \
+            --exclude-directories '.*/_deps($|/.*)' \
+            --exclude '.*/vendor/.*' \
+            --exclude '.*/_deps/.*' \
+            --exclude '.*/tests/.*'
+
+      - name: SonarCloud scan
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: SonarSource/sonarqube-scan-action@v7.1.0
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.coverage.exclusions=editor/**,launcher/**,core/Logger.h
+            -Dsonar.qualitygate.wait=true
 
   # ----------------------------------------------------------------
   # Starter integration — final PR gate.
@@ -217,7 +275,7 @@ jobs:
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [coverage]
+    needs: [ test-linux, test-windows, test-macos ]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}

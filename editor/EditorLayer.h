@@ -67,6 +67,7 @@ class EditorLayer {
 
   // Toggle editor mode and update cursor accordingly.
   void Toggle();
+  void SetCursorVisible(bool visible);
 
   // Process input / picking for this frame.
   // In fly mode the camera position/target are updated directly.
@@ -105,6 +106,10 @@ class EditorLayer {
   // Absolute or empty (disables Project tab tree).
   void SetProjectBrowserRoot(std::filesystem::path root);
   void SetProjectBrowserExtraBlocklist(std::unordered_set<std::string> names);
+  void SetFileMenuRenderCallback(std::function<void()> cb) { m_fileMenuRenderCallback = std::move(cb); }
+  void SetOverlayRenderCallback(std::function<void()> cb) { m_overlayRenderCallback = std::move(cb); }
+  void SaveWorkspaceStateNow() { SaveWorkspaceStateIfNeeded(true); }
+  void ReloadWorkspaceStateFromDisk() { LoadWorkspaceState(); }
 
   bool IsActive() const { return m_active; }
   // Play-in-editor: game sim runs in viewport; chrome (hierarchy, dock) stays.
@@ -170,7 +175,7 @@ class EditorLayer {
   bool m_prevTab = false;
   ViewSnap m_pendingViewSnap = ViewSnap::None;
 
-  void ToggleFlyMode(Camera& cam);
+  void ToggleFlyMode(const Camera& cam);
   void UpdateFlyCamera(float dt, Camera& cam);
 
   TransformGizmo m_gizmo;
@@ -199,15 +204,15 @@ class EditorLayer {
   void DrawDockspace();
   void DrawViewportPanel(const Camera& cam, int screenW, int screenH);
   void DrawViewGimbal(const Camera& cam);
-  void DrawHotReloadOverlay();
-  void DrawClipboardToast();
+  void DrawHotReloadOverlay() const;
+  void DrawClipboardToast() const;
   void DrawObjectList();
   void DrawAssetsPanel();
   void DrawPropertiesPanel();
   void DrawHelpPopup();
   void DrawCommandPalettePopup();
   void DrawQuickOpenPopup();
-  void DrawStatusBar();
+  void DrawStatusBar() const;
   void DrawBottomDock();
   void DrawMcpTab();
   void DrawProjectTreeRecursive(const std::filesystem::path& absPath,
@@ -266,6 +271,10 @@ class EditorLayer {
   EditorHistorySnapshot CaptureHistorySnapshot() const;
   void RestoreHistorySnapshot(const EditorHistorySnapshot& snapshot);
   void CommitHistoryChange(const EditorHistorySnapshot& before);
+  void ApplyGizmoDeltaToSelection(const Vec3& dPos,
+                                  const Vec3& dScale,
+                                  const Quaternion& dRot,
+                                  float dRotXYZSq);
   void BeginHistoryTransaction(const EditorHistorySnapshot& before);
   void FinalizeHistoryTransaction();
   void ClearHistory();
@@ -381,6 +390,8 @@ class EditorLayer {
   std::unordered_set<std::string> m_projectExtraBlocklist;
   EditorWorkspaceDocument m_workspaceDocument;
   bool m_workspaceStateDirty = false;
+  std::function<void()> m_fileMenuRenderCallback;
+  std::function<void()> m_overlayRenderCallback;
   std::string m_imguiIniPath;
   bool m_hasPersistedDockLayout = false;
   bool m_resetDockLayoutRequested = false;

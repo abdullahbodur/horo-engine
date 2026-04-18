@@ -1,15 +1,19 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 
 #include "core/Application.h"
+#include "core/EngineLaunchArgs.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
 #include "core/Window.h"
 #include "math/MathUtils.h"
+#include "renderer/Shader.h"
 
 using namespace Monolith;
 using Catch::Approx;
@@ -71,6 +75,177 @@ TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
     REQUIRE(ProjectPath::Root().empty());
 }
 
+TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    auto normalizePath = [](const fs::path& value) {
+        std::error_code ec;
+        fs::path normalized = fs::weakly_canonical(value, ec);
+        if (ec)
+            normalized = fs::absolute(value, ec);
+        if (ec)
+            normalized = value;
+        return normalized.lexically_normal();
+    };
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_explicit";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "project" / "assets", ec);
+    fs::create_directories(tempRoot / "sdk", ec);
+
+    ProjectPath::SetProjectRoot({});
+    REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
+
+    ProjectPath::SetProjectRoot(tempRoot / "project" / "." / "subdir" / "..");
+    REQUIRE(ProjectPath::HasExplicitProjectRoot());
+    REQUIRE(normalizePath(ProjectPath::Root()) == normalizePath(tempRoot / "project"));
+
+    ProjectPath::SetSdkRoot({});
+    REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
+
+    ProjectPath::SetSdkRoot(tempRoot / "sdk" / ".");
+    REQUIRE(normalizePath(ProjectPath::SdkRoot()) == normalizePath(tempRoot / "sdk"));
+    REQUIRE(normalizePath(ProjectPath::Resolve("assets/models/crate.obj")) ==
+            normalizePath(tempRoot / "project" / "assets/models/crate.obj"));
+    REQUIRE(normalizePath(ProjectPath::ResolveSdk("assets/shaders/base.vert")) ==
+            normalizePath(tempRoot / "sdk" / "assets/shaders/base.vert"));
+
+    ProjectPath::SetProjectRoot({});
+    REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
+}
+
+TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_init";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "repo" / "assets", ec);
+    fs::create_directories(tempRoot / "repo" / "bin" / "nested", ec);
+
+    {
+        std::ofstream presets(tempRoot / "repo" / "CMakePresets.json");
+        REQUIRE(presets.is_open());
+        presets << "{}";
+    }
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot({});
+    ProjectPath::Init(tempRoot / "repo" / "bin" / "nested");
+
+    REQUIRE(ProjectPath::Root() == fs::absolute(tempRoot / "repo"));
+    REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
+}
+
+TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    auto normalizePath = [](const fs::path& value) {
+        std::error_code ec;
+        fs::path normalized = fs::weakly_canonical(value, ec);
+        if (ec)
+            normalized = fs::absolute(value, ec);
+        if (ec)
+            normalized = value;
+        return normalized.lexically_normal();
+    };
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_fallback";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "bin" / "nested", ec);
+    fs::create_directories(tempRoot / "sdk_root", ec);
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot(tempRoot / "sdk_root");
+    ProjectPath::Init(tempRoot / "bin" / "nested");
+
+    REQUIRE(normalizePath(ProjectPath::Root()) == normalizePath(tempRoot / "bin" / "nested"));
+    REQUIRE(normalizePath(ProjectPath::SdkRoot()) == normalizePath(tempRoot / "sdk_root"));
+}
+
+TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exist", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    auto normalizePath = [](const fs::path& value) {
+        std::error_code ec;
+        fs::path normalized = fs::weakly_canonical(value, ec);
+        if (ec)
+            normalized = fs::absolute(value, ec);
+        if (ec)
+            normalized = value;
+        return normalized.lexically_normal();
+    };
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_no_markers";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "bin" / "nested", ec);
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot({});
+    ProjectPath::Init(tempRoot / "bin" / "nested");
+
+    REQUIRE(normalizePath(ProjectPath::Root()) == normalizePath(tempRoot / "bin" / "nested"));
+    REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
+    REQUIRE(normalizePath(ProjectPath::Resolve("")) == normalizePath(ProjectPath::Root()));
+    REQUIRE(normalizePath(ProjectPath::ResolveSdk("")) == normalizePath(ProjectPath::SdkRoot()));
+}
+
+TEST_CASE("ProjectPath: root setters fall back to original path on canonicalization errors", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    const std::string longName(5000, 'x');
+    const fs::path longRelativePath = fs::path(longName) / "child";
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot({});
+
+    ProjectPath::SetProjectRoot(longRelativePath);
+    ProjectPath::SetSdkRoot(longRelativePath);
+
+    const std::filesystem::path normalizedRoot = ProjectPath::Root().lexically_normal();
+    const std::filesystem::path normalizedSdkRoot = ProjectPath::SdkRoot().lexically_normal();
+    REQUIRE(normalizedRoot.filename() == "child");
+    REQUIRE(normalizedSdkRoot.filename() == "child");
+    REQUIRE(normalizedRoot.string().find(longName) != std::string::npos);
+    REQUIRE(normalizedSdkRoot.string().find(longName) != std::string::npos);
+}
+
+#ifndef _WIN32
+TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    const fs::path savedCwd = fs::current_path();
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_projectpath_deleted_cwd";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+    REQUIRE_FALSE(ec);
+
+    fs::current_path(tempRoot, ec);
+    REQUIRE_FALSE(ec);
+
+    fs::remove_all(tempRoot, ec);
+    if (ec) {
+        fs::current_path(savedCwd, ec);
+        REQUIRE_FALSE(ec);
+        SUCCEED("Current directory could not be removed on this runner");
+        return;
+    }
+
+    ProjectPath::SetProjectRoot("relative/project/root");
+    ProjectPath::SetSdkRoot("relative/sdk/root");
+
+    fs::current_path(savedCwd, ec);
+    REQUIRE_FALSE(ec);
+
+    REQUIRE(ProjectPath::Root() == fs::path("relative/project/root"));
+    REQUIRE(ProjectPath::SdkRoot() == fs::path("relative/sdk/root"));
+}
+#endif
+
 TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior",
           "[core][window]") {
     const WindowGraphicsApiTraits traits = GetWindowGraphicsApiTraits(WindowGraphicsApi::OpenGL);
@@ -99,6 +274,110 @@ TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility", "[
     REQUIRE(spec.name == "Compat App");
     REQUIRE(spec.defaultSceneFile == "assets/scenes/starter_world.json");
     REQUIRE(spec.graphicsApi == WindowGraphicsApi::OpenGL);
+}
+
+TEST_CASE("Shader: FromFiles throws ShaderException for missing files", "[core][shader]") {
+    REQUIRE_THROWS_AS(Shader::FromFiles("/no/such/vertex_shader.vert", "/no/such/fragment_shader.frag"),
+                      ShaderException);
+}
+
+TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core][shader]") {
+    namespace fs = std::filesystem;
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_shader_io";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+
+    const fs::path vertexPath = tempRoot / "test.vert";
+    {
+        std::ofstream vertex(vertexPath);
+        REQUIRE(vertex.is_open());
+        vertex << "#version 410 core\nvoid main(){ gl_Position = vec4(0.0); }\n";
+    }
+
+    REQUIRE_THROWS_AS(Shader::FromFiles(vertexPath.string(), (tempRoot / "missing.frag").string()),
+                      ShaderException);
+}
+
+TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][shader]") {
+    namespace fs = std::filesystem;
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_shader_io_first_missing";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+
+    const fs::path fragmentPath = tempRoot / "test.frag";
+    {
+        std::ofstream fragment(fragmentPath);
+        REQUIRE(fragment.is_open());
+        fragment << "#version 410 core\nout vec4 c; void main(){ c = vec4(1.0); }\n";
+    }
+
+    REQUIRE_THROWS_AS(Shader::FromFiles((tempRoot / "missing.vert").string(), fragmentPath.string()),
+                      ShaderException);
+}
+
+TEST_CASE("EngineLaunchArgs: keeps previous project path when --project has no value", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectInline = "--project=./Playable";
+    std::string projectFlag = "--project";
+    std::array<char*, 4> argv = {arg0.data(), projectInline.data(), projectFlag.data(), nullptr};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath == std::filesystem::path("./Playable"));
+}
+
+TEST_CASE("EngineLaunchArgs: supports empty inline project value", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectInline = "--project=";
+    std::array<char*, 2> argv = {arg0.data(), projectInline.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+}
+
+TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option parsing", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string editorArg = "--editor";
+    std::string playArg = "--play";
+    std::array<char*, 4> argv = {arg0.data(), nullptr, editorArg.data(), playArg.data()};
+
+    REQUIRE(ParseEditorStartupCli(static_cast<int>(argv.size()), argv.data()) ==
+            EditorStartupCli::ForcePlay);
+}
+
+TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectFlag = "--project";
+    std::string unknown = "--ignored";
+    std::array<char*, 4> argv = {arg0.data(), projectFlag.data(), nullptr, unknown.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+    REQUIRE(options.editorStartup == EditorStartupCli::Default);
+}
+
+TEST_CASE("EngineLaunchArgs: trailing --project token is ignored", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectFlag = "--project";
+    std::array<char*, 2> argv = {arg0.data(), projectFlag.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+    REQUIRE(options.editorStartup == EditorStartupCli::Default);
+}
+
+TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume the next flag", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectFlag = "--project";
+    std::string editorFlag = "--editor";
+    std::array<char*, 4> argv = {arg0.data(), projectFlag.data(), nullptr, editorFlag.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+    REQUIRE(options.editorStartup == EditorStartupCli::ForceEditor);
 }
 
 // ===========================================================================

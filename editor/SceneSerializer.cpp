@@ -40,13 +40,13 @@ static const char* TypeToString(SceneObjectType t) {
 SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
   std::ifstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("SceneSerializer: cannot open '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: cannot open '" + path + "'");
 
   json j;
   try {
     f >> j;
   } catch (const json::exception& e) {
-    throw std::runtime_error("SceneSerializer: JSON parse error in '" + path + "': " + e.what());
+    throw SceneSerializerException("SceneSerializer: JSON parse error in '" + path + "': " + e.what());
   }
 
   SceneDocument doc;
@@ -81,7 +81,7 @@ SceneDocument SceneSerializer::LoadFromFile(const std::string& path) {
 
   // ---- Objects ----
   if (!j.contains("objects") || !j["objects"].is_array())
-    throw std::runtime_error("SceneSerializer: missing or invalid 'objects' array in '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: missing or invalid 'objects' array in '" + path + "'");
   for (auto& obj : j["objects"]) {
     SceneObject so;
     so.id = obj.value("id", "");
@@ -166,7 +166,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     keys.reserve(docToSave.settings.size());
     for (const auto& kv : docToSave.settings)
       keys.push_back(kv.first);
-    std::sort(keys.begin(), keys.end());
+    std::ranges::sort(keys);
     for (const auto& k : keys)
       settings[k] = docToSave.settings.at(k);
   }
@@ -178,7 +178,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
   assetIds.reserve(docToSave.assets.size());
   for (const auto& kv : docToSave.assets)
     assetIds.push_back(kv.first);
-  std::sort(assetIds.begin(), assetIds.end());
+  std::ranges::sort(assetIds);
 
   for (const auto& id : assetIds) {
     const auto& def = docToSave.assets.at(id);
@@ -223,7 +223,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
     propKeys.reserve(so.props.size());
     for (const auto& kv : so.props)
       propKeys.push_back(kv.first);
-    std::sort(propKeys.begin(), propKeys.end());
+    std::ranges::sort(propKeys);
 
     for (const auto& k : propKeys) {
       if (k == "_eid")
@@ -246,7 +246,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
         cpropKeys.reserve(cd.props.size());
         for (const auto& kv : cd.props)
           cpropKeys.push_back(kv.first);
-        std::sort(cpropKeys.begin(), cpropKeys.end());
+        std::ranges::sort(cpropKeys);
         for (const auto& k : cpropKeys)
           cprops[k] = cd.props.at(k);
         c["props"] = cprops;
@@ -265,7 +265,7 @@ void SceneSerializer::SaveToFile(const SceneDocument& doc, const std::string& pa
 
   std::ofstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("SceneSerializer: cannot write '" + path + "'");
+    throw SceneSerializerException("SceneSerializer: cannot write '" + path + "'");
   f << j.dump(2);
 }
 

@@ -13,6 +13,11 @@ if(NOT TARGET glfw)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(glfw)
+    target_include_directories(glfw PUBLIC
+        $<BUILD_INTERFACE:${glfw_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include/vendor/glfw>
+    )
+    set(MONOLITH_VENDOR_GLFW_INCLUDE_DIR "${glfw_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
 endif()
 
 # ---- Optional Vulkan headers + loader scaffolding ----
@@ -60,13 +65,19 @@ endif()
 # ---- GLM (header-only reference) ----
 if(NOT TARGET glm)
     add_library(glm INTERFACE)
-    target_include_directories(glm INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/glm)
+    target_include_directories(glm INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/glm>
+        $<INSTALL_INTERFACE:include/vendor/glm>
+    )
 endif()
 
 # ---- stb_image (header-only, compiled in renderer) ----
 if(NOT TARGET stb)
     add_library(stb INTERFACE)
-    target_include_directories(stb INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/stb)
+    target_include_directories(stb INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/stb>
+        $<INSTALL_INTERFACE:include/vendor/stb>
+    )
 endif()
 
 # ---- Dear ImGui ----
@@ -94,23 +105,95 @@ if(NOT TARGET imgui_lib)
         )
     endif()
 
-    add_library(imgui_lib STATIC ${MONOLITH_IMGUI_SOURCES})
-    target_include_directories(imgui_lib PUBLIC
-        ${imgui_SOURCE_DIR}
-        ${imgui_SOURCE_DIR}/backends
-    )
-    target_link_libraries(imgui_lib PUBLIC glfw glad)
+    function(monolith_add_imgui_target target_name)
+        set(options ENABLE_TEST_ENGINE)
+        set(oneValueArgs USER_CONFIG_DIR USER_CONFIG_HEADER)
+        cmake_parse_arguments(MONOLITH_IMGUI "${options}" "${oneValueArgs}" "" ${ARGN})
 
-    if(MONOLITH_ENGINE_ENABLE_VULKAN)
-        target_compile_definitions(imgui_lib PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
-        target_link_libraries(imgui_lib PUBLIC monolith_volk monolith_vulkan_headers)
+        add_library(${target_name} STATIC ${MONOLITH_IMGUI_SOURCES})
+        target_include_directories(${target_name} PUBLIC
+            $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
+            $<BUILD_INTERFACE:${imgui_SOURCE_DIR}/backends>
+            $<INSTALL_INTERFACE:include/vendor/imgui>
+            $<INSTALL_INTERFACE:include/vendor/imgui/backends>
+        )
+        target_link_libraries(${target_name} PUBLIC glfw glad)
+
+        if(MONOLITH_ENGINE_ENABLE_VULKAN)
+            target_compile_definitions(${target_name} PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
+            target_link_libraries(${target_name} PUBLIC monolith_volk monolith_vulkan_headers)
+        endif()
+
+        if(MONOLITH_IMGUI_ENABLE_TEST_ENGINE)
+            if(NOT MONOLITH_IMGUI_USER_CONFIG_DIR OR NOT MONOLITH_IMGUI_USER_CONFIG_HEADER)
+                message(FATAL_ERROR "monolith_add_imgui_target(... ENABLE_TEST_ENGINE ...) requires USER_CONFIG_DIR and USER_CONFIG_HEADER")
+            endif()
+
+            if(NOT TARGET monolith_imgui_test_engine)
+                FetchContent_Declare(
+                    imgui_test_engine
+                    GIT_REPOSITORY https://github.com/ocornut/imgui_test_engine.git
+                    GIT_TAG        v1.91.6
+                    GIT_SHALLOW    TRUE
+                )
+                FetchContent_MakeAvailable(imgui_test_engine)
+                find_package(Threads REQUIRED)
+
+                add_library(monolith_imgui_test_engine STATIC
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_capture_tool.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_context.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_coroutine.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_engine.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_exporters.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_perftool.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_ui.cpp
+                    ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_utils.cpp
+                )
+                target_include_directories(monolith_imgui_test_engine PUBLIC
+                    $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
+                    $<BUILD_INTERFACE:${imgui_test_engine_SOURCE_DIR}>
+                )
+                target_link_libraries(monolith_imgui_test_engine PUBLIC Threads::Threads)
+                target_compile_definitions(monolith_imgui_test_engine PUBLIC
+                    IMGUI_USER_CONFIG=\"${MONOLITH_IMGUI_USER_CONFIG_HEADER}\"
+                )
+                target_include_directories(monolith_imgui_test_engine PUBLIC
+                    $<BUILD_INTERFACE:${MONOLITH_IMGUI_USER_CONFIG_DIR}>
+                )
+                target_compile_options(monolith_imgui_test_engine PRIVATE
+                    $<$<CXX_COMPILER_ID:MSVC>:/W0>
+                    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+                )
+                set(MONOLITH_VENDOR_IMGUI_TEST_ENGINE_INCLUDE_DIR "${imgui_test_engine_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
+            endif()
+
+            target_compile_definitions(${target_name} PUBLIC
+                IMGUI_USER_CONFIG=\"${MONOLITH_IMGUI_USER_CONFIG_HEADER}\"
+            )
+            target_include_directories(${target_name} PUBLIC
+                $<BUILD_INTERFACE:${MONOLITH_IMGUI_USER_CONFIG_DIR}>
+            )
+            target_link_libraries(${target_name} PUBLIC monolith_imgui_test_engine)
+        endif()
+
+        # Suppress vendor warnings (MSVC -WX, GCC/Clang -Werror)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/W0>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+        )
+    endfunction()
+
+    monolith_add_imgui_target(imgui_lib)
+    set(MONOLITH_VENDOR_IMGUI_INCLUDE_DIR "${imgui_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
+
+    if(MONOLITH_ENGINE_BUILD_TESTS AND NOT TARGET imgui_test_lib)
+        monolith_add_imgui_target(
+            imgui_test_lib
+            ENABLE_TEST_ENGINE
+            USER_CONFIG_DIR "${CMAKE_CURRENT_LIST_DIR}/../tests"
+            USER_CONFIG_HEADER "imgui_test_engine_config.h"
+        )
     endif()
-
-    # Suppress vendor warnings (MSVC -WX, GCC/Clang -Werror)
-    target_compile_options(imgui_lib PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/W0>
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
-    )
 endif()
 
 # ---- nlohmann/json (header-only) ----
@@ -124,6 +207,14 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
     set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
     set(JSON_Install    OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(nlohmann_json)
+    if(TARGET nlohmann_json)
+        target_include_directories(nlohmann_json INTERFACE
+            $<BUILD_INTERFACE:${nlohmann_json_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include/vendor/nlohmann>
+        )
+        set_property(TARGET nlohmann_json PROPERTY SOURCES "")
+    endif()
+    set(MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR "${nlohmann_json_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
 endif()
 
 # ---- tinygltf (header-only glTF 2.0 / GLB loader) ----
@@ -147,9 +238,17 @@ if(NOT TARGET tinygltf)
         TINYGLTF_NO_STB_IMAGE
         TINYGLTF_NO_STB_IMAGE_WRITE
     )
-    target_link_libraries(tinygltf INTERFACE nlohmann_json::nlohmann_json stb)
+    target_link_libraries(tinygltf INTERFACE nlohmann_json stb)
     # Suppress vendor warnings
     target_compile_options(tinygltf INTERFACE
         $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
     )
+    target_include_directories(tinygltf INTERFACE
+        $<BUILD_INTERFACE:${tinygltf_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:include/vendor/tinygltf>
+    )
+    set(MONOLITH_VENDOR_TINYGLTF_INCLUDE_DIR "${tinygltf_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
 endif()
+
+set(MONOLITH_VENDOR_GLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm" CACHE INTERNAL "" FORCE)
+set(MONOLITH_VENDOR_STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb" CACHE INTERNAL "" FORCE)

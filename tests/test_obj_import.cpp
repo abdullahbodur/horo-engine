@@ -48,6 +48,58 @@ TEST_CASE("ObjLoader::ComputeAABB returns invalid for nonexistent file", "[objlo
     REQUIRE_FALSE(result.valid);
 }
 
+TEST_CASE("ObjLoader::Load throws typed exception for missing OBJ", "[objloader][load]")
+{
+    REQUIRE_THROWS_AS(ObjLoader::Load("/nonexistent/path/no_such_file.obj"), ObjLoaderException);
+}
+
+TEST_CASE("ObjLoader::Load throws typed exception for OBJ without geometry", "[objloader][load]")
+{
+    const std::string path = TmpPath("obj_no_geometry.obj");
+    WriteFile(path,
+              "# comment only\n"
+              "vt 0.0 1.0\n"
+              "vn 0.0 1.0 0.0\n");
+
+    REQUIRE_THROWS_AS(ObjLoader::Load(path), ObjLoaderException);
+}
+
+TEST_CASE("ObjLoader::Load parses a valid triangle and returns CPU mesh data", "[objloader][load]")
+{
+    const std::string path = TmpPath("obj_valid_triangle.obj");
+    WriteFile(path,
+              "v 0.0 0.0 0.0\n"
+              "v 1.0 0.0 0.0\n"
+              "v 0.0 1.0 0.0\n"
+              "vt 0.0 0.0\n"
+              "vt 1.0 0.0\n"
+              "vt 0.0 1.0\n"
+              "vn 0.0 0.0 1.0\n"
+              "f 1/1/1 2/2/1 3/3/1\n");
+
+    Mesh mesh;
+    REQUIRE_NOTHROW(mesh = ObjLoader::Load(path));
+    REQUIRE(mesh.GetIndexCount() == 3);
+    REQUIRE(mesh.GetVertices().size() == 3);
+    REQUIRE(mesh.GetIndices().size() == 3);
+}
+
+TEST_CASE("ObjLoader::Load auto-generates normals when OBJ has no vn lines", "[objloader][load]")
+{
+    const std::string path = TmpPath("obj_auto_normals.obj");
+    WriteFile(path,
+              "v 0.0 0.0 0.0\n"
+              "v 1.0 0.0 0.0\n"
+              "v 0.0 1.0 0.0\n"
+              "f 1 2 3\n");
+
+    const Mesh mesh = ObjLoader::Load(path);
+    REQUIRE(mesh.GetVertices().size() == 3);
+    for (const Vertex& vertex : mesh.GetVertices()) {
+        REQUIRE(vertex.normal.z == Approx(1.0f).epsilon(0.001f));
+    }
+}
+
 TEST_CASE("ObjLoader::ComputeAABB computes correct bounds for simple triangle", "[objloader][aabb]")
 {
     const std::string path = TmpPath("aabb_triangle.obj");

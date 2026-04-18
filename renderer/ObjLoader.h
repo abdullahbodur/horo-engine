@@ -1,4 +1,5 @@
 #pragma once
+#include <stdexcept>
 #include <string>
 
 #include "renderer/Mesh.h"
@@ -6,8 +7,13 @@
 namespace Monolith {
 
 namespace ObjLoader {
+class ObjLoaderException : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 // Load a triangulated .obj file (v/vt/vn lines, triangulated f lines).
-// Throws std::runtime_error on failure.
+// Throws ObjLoaderException on failure.
 Mesh Load(const std::string& path);
 
 struct ObjAABB

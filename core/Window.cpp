@@ -5,9 +5,92 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
+#include <cstdlib>
+#include <memory>
 #include <stdexcept>
 
 #include "core/Logger.h"
+
+namespace {
+
+#ifdef _WIN32
+std::string ReadWin32EnvString(const char* name) {
+  char* rawValue = nullptr;
+  if (size_t len = 0; _dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+    return {};
+  std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
+  return std::string(value.get());
+}
+#endif
+
+int ReadEnvNonNegativeInt(const char* name, int fallback) {
+  if (!name || !*name)
+    return fallback;
+#ifdef _WIN32
+  const std::string value = ReadWin32EnvString(name);
+  if (value.empty())
+    return fallback;
+  char* end = nullptr;
+  const long parsed = std::strtol(value.c_str(), &end, 10);
+  if (const bool valid = (end != value.c_str() && *end == '\0'); !valid || parsed < 0 || parsed > 32)
+    return fallback;
+#else
+  const char* value = std::getenv(name);
+  if (!value || !*value)
+    return fallback;
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  if (const bool valid = (end != value && *end == '\0'); !valid || parsed < 0 || parsed > 32)
+    return fallback;
+#endif
+  return static_cast<int>(parsed);
+}
+
+bool ReadEnvBool(const char* name, bool fallback) {
+  if (!name || !*name)
+    return fallback;
+#ifdef _WIN32
+  const std::string parsed = ReadWin32EnvString(name);
+  if (parsed.empty())
+    return fallback;
+#else
+  const char* value = std::getenv(name);
+  if (!value || !*value)
+    return fallback;
+  const std::string parsed(value);
+#endif
+  return parsed != "0";
+}
+
+const char* SafeGlfwErrorString() {
+  const char* description = nullptr;
+  if (const int code = glfwGetError(&description); code == GLFW_NO_ERROR)
+    return "no-error";
+  return description ? description : "unknown-glfw-error";
+}
+
+}  // namespace
+
+namespace {
+
+class GlfwContext {
+public:
+  static void Init() {
+    if (s_refCount++ == 0 && !glfwInit())
+      throw std::runtime_error("glfwInit failed");
+  }
+
+  static void Shutdown() {
+    if (--s_refCount == 0) {
+      glfwTerminate();
+    }
+  }
+
+private:
+  static inline int s_refCount = 0;
+};
+
+}  // namespace
 
 namespace Monolith {
 
@@ -30,12 +113,18 @@ WindowGraphicsApiTraits GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi
   return {};
 }
 
-Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.height) {
-  if (!glfwInit())
-    throw std::runtime_error("glfwInit failed");
+Window::Window(const WindowSpec& spec)
+    : m_width(spec.width), m_height(spec.height), m_vsync(spec.vsync), m_graphicsApi(spec.graphicsApi) {
+  LOG_INFO("Window bootstrap begin: title='%s' size=%dx%d api=%d vsync=%d",
+           spec.title.c_str(),
+           spec.width,
+           spec.height,
+           static_cast<int>(spec.graphicsApi),
+           spec.vsync ? 1 : 0);
+  LOG_INFO("Calling glfwInit...");
+  GlfwContext::Init();
+  LOG_INFO("glfwInit succeeded.");
 
-  m_graphicsApi = spec.graphicsApi;
-  m_vsync = spec.vsync;
   const WindowGraphicsApiTraits traits = GetGraphicsApiTraits();
 
   if (traits.createsClientContext) {
@@ -51,23 +140,36 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
   }
 
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-  if (traits.requestsMsaaSamples)
-    glfwWindowHint(GLFW_SAMPLES, 4);  // 4x MSAA
-
-  m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
-  if (!m_window) {
-    glfwTerminate();
-    throw std::runtime_error("glfwCreateWindow failed");
+  const bool visible = ReadEnvBool("MONOLITH_GLFW_VISIBLE", true);
+  glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
+  LOG_INFO("GLFW window hint: visible=%d", visible ? 1 : 0);
+  if (traits.requestsMsaaSamples) {
+    // Default 4x MSAA; set MONOLITH_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to avoid driver crashes.
+    const int samples = ReadEnvNonNegativeInt("MONOLITH_GLFW_SAMPLES", 4);
+    glfwWindowHint(GLFW_SAMPLES, samples);
+    LOG_INFO("GLFW window hint: samples=%d", samples);
   }
 
+  LOG_INFO("Calling glfwCreateWindow...");
+  m_window = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr);
+  if (!m_window) {
+    GlfwContext::Shutdown();
+    throw WindowInitException(std::string("glfwCreateWindow failed: ") + SafeGlfwErrorString());
+  }
+  LOG_INFO("glfwCreateWindow succeeded: window=%p", m_window);
+
   if (traits.createsClientContext) {
+    LOG_INFO("Making GL context current...");
     glfwMakeContextCurrent(m_window);
+    LOG_INFO("Loading GL via glad...");
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
       glfwDestroyWindow(m_window);
-      glfwTerminate();
-      throw std::runtime_error("gladLoadGLLoader failed");
+      GlfwContext::Shutdown();
+      throw WindowInitException("gladLoadGLLoader failed");
     }
+    LOG_INFO("gladLoadGLLoader succeeded.");
     SetVSync(spec.vsync);
+    LOG_INFO("SetVSync complete: enabled=%d", spec.vsync ? 1 : 0);
     LOG_INFO("OpenGL %s — %s", glGetString(GL_VERSION), glGetString(GL_RENDERER));
   } else {
     // Vulkan presentation pacing is backend-owned; the window stores the preference.
@@ -82,12 +184,23 @@ Window::Window(const WindowSpec& spec) : m_width(spec.width), m_height(spec.heig
 }
 
 Window::~Window() {
-  if (m_window)
+  if (m_window) {
+    glfwSetWindowUserPointer(m_window, nullptr);
+    glfwSetFramebufferSizeCallback(m_window, nullptr);
+    glfwSetWindowCloseCallback(m_window, nullptr);
+    glfwSetDropCallback(m_window, nullptr);
+
+    if (glfwGetCurrentContext() == m_window) {
+      glfwMakeContextCurrent(nullptr);
+    }
+
     glfwDestroyWindow(m_window);
-  glfwTerminate();
+    m_window = nullptr;
+  }
+  GlfwContext::Shutdown();
 }
 
-void Window::PollEvents() {
+void Window::PollEvents() const {
   glfwPollEvents();
 }
 
@@ -107,7 +220,7 @@ void Window::SetVSync(bool enabled) {
 }
 
 float Window::GetAspect() const {
-  return m_height > 0 ? static_cast<float>(m_width) / m_height : 1.0f;
+  return m_height > 0 ? static_cast<float>(m_width) / static_cast<float>(m_height) : 1.0f;
 }
 
 WindowGraphicsApiTraits Window::GetGraphicsApiTraits() const {
@@ -149,13 +262,13 @@ void Window::FramebufferSizeCallback(GLFWwindow* win, int w, int h) {
 }
 
 void Window::WindowCloseCallback(GLFWwindow* win) {
-  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
+  const auto* self = static_cast<const Window*>(glfwGetWindowUserPointer(win));
   if (self->m_closeCb)
     self->m_closeCb();
 }
 
 void Window::DropPathsThunk(GLFWwindow* win, int count, const char** paths) {
-  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(win));
+  const auto* self = static_cast<const Window*>(glfwGetWindowUserPointer(win));
   if (self->m_fileDropCb)
     self->m_fileDropCb(count, paths);
 }
