@@ -168,7 +168,7 @@ jobs:
           # that requires hardware GPU / D3D12 WARP and hangs on CI runners.
           # mesa-dist-win 21.x opengl32.dll is the full ~50 MB gallium/llvmpipe
           # self-contained software renderer with no GPU requirement at all.
-          $ver = "21.3.8"
+          $ver = "21.3.7"
           $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
           Invoke-WebRequest -Uri $url -OutFile mesa3d.7z -UseBasicParsing
           7z x mesa3d.7z -omesa3d -y | Out-Null
