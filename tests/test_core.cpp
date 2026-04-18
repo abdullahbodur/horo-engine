@@ -193,6 +193,22 @@ TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exi
     REQUIRE(normalizePath(ProjectPath::ResolveSdk("")) == normalizePath(ProjectPath::SdkRoot()));
 }
 
+TEST_CASE("ProjectPath: root setters fall back to original path on canonicalization errors", "[core][projectpath]") {
+    namespace fs = std::filesystem;
+
+    const std::string longName(5000, 'x');
+    const fs::path longRelativePath = fs::path(longName) / "child";
+
+    ProjectPath::SetProjectRoot({});
+    ProjectPath::SetSdkRoot({});
+
+    ProjectPath::SetProjectRoot(longRelativePath);
+    ProjectPath::SetSdkRoot(longRelativePath);
+
+    REQUIRE(ProjectPath::Root().lexically_normal() == longRelativePath.lexically_normal());
+    REQUIRE(ProjectPath::SdkRoot().lexically_normal() == longRelativePath.lexically_normal());
+}
+
 #ifndef _WIN32
 TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[core][projectpath]") {
     namespace fs = std::filesystem;
@@ -280,6 +296,25 @@ TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core]
                       ShaderException);
 }
 
+TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][shader]") {
+    namespace fs = std::filesystem;
+
+    const fs::path tempRoot = fs::temp_directory_path() / "horo_shader_io_first_missing";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot, ec);
+
+    const fs::path fragmentPath = tempRoot / "test.frag";
+    {
+        std::ofstream fragment(fragmentPath);
+        REQUIRE(fragment.is_open());
+        fragment << "#version 410 core\nout vec4 c; void main(){ c = vec4(1.0); }\n";
+    }
+
+    REQUIRE_THROWS_AS(Shader::FromFiles((tempRoot / "missing.vert").string(), fragmentPath.string()),
+                      ShaderException);
+}
+
 TEST_CASE("EngineLaunchArgs: keeps previous project path when --project has no value", "[core][cli]") {
     std::string arg0 = "horo";
     std::string projectInline = "--project=./Playable";
@@ -318,6 +353,27 @@ TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults", "[c
     const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
     REQUIRE(options.projectPath.empty());
     REQUIRE(options.editorStartup == EditorStartupCli::Default);
+}
+
+TEST_CASE("EngineLaunchArgs: trailing --project token is ignored", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectFlag = "--project";
+    std::array<char*, 2> argv = {arg0.data(), projectFlag.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+    REQUIRE(options.editorStartup == EditorStartupCli::Default);
+}
+
+TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume the next flag", "[core][cli]") {
+    std::string arg0 = "horo";
+    std::string projectFlag = "--project";
+    std::string editorFlag = "--editor";
+    std::array<char*, 4> argv = {arg0.data(), projectFlag.data(), nullptr, editorFlag.data()};
+
+    const EngineLaunchOptions options = ParseEngineLaunchOptions(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(options.projectPath.empty());
+    REQUIRE(options.editorStartup == EditorStartupCli::ForceEditor);
 }
 
 // ===========================================================================

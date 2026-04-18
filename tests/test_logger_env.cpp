@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "core/LogBuffer.h"
@@ -8,6 +11,60 @@
 using namespace Monolith;
 
 namespace {
+
+std::string ReadEnvValue(const char* name) {
+  if (!name || !*name)
+    return {};
+#ifdef _WIN32
+  char* rawValue = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+    return {};
+  std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
+  return std::string(value.get());
+#else
+  const char* value = std::getenv(name);
+  return value ? std::string(value) : std::string();
+#endif
+}
+
+class ScopedEnvVar {
+ public:
+  ScopedEnvVar(const char* name, const char* value)
+      : m_name(name ? name : ""), m_previous(ReadEnvValue(name)), m_hadPrevious(!m_previous.empty()) {
+    if (m_name.empty())
+      return;
+#ifdef _WIN32
+    _putenv_s(m_name.c_str(), value ? value : "");
+#else
+    if (value)
+      setenv(m_name.c_str(), value, 1);
+    else
+      unsetenv(m_name.c_str());
+#endif
+  }
+
+  ~ScopedEnvVar() {
+    if (m_name.empty())
+      return;
+#ifdef _WIN32
+    if (m_hadPrevious)
+      _putenv_s(m_name.c_str(), m_previous.c_str());
+    else
+      _putenv_s(m_name.c_str(), "");
+#else
+    if (m_hadPrevious)
+      setenv(m_name.c_str(), m_previous.c_str(), 1);
+    else
+      unsetenv(m_name.c_str());
+#endif
+  }
+
+ private:
+  std::string m_name;
+  std::string m_previous;
+  bool m_hadPrevious = false;
+};
 
 std::vector<LogLine> SnapshotLogLines() {
   std::vector<LogLine> lines;
@@ -116,4 +173,16 @@ TEST_CASE("Logger default level label handles unknown enum values", "[logger][en
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
   REQUIRE(lines[0].message == "unknown-level-message");
+}
+
+TEST_CASE("Logger unset env falls back to info", "[logger][env][unset]") {
+  const ScopedEnvVar unsetLevel("MONOLITH_LOG_LEVEL", nullptr);
+  LogBuffer::Instance().Clear();
+
+  LOG_DEBUG("debug is filtered when env is absent");
+  LOG_INFO("info is kept when env is absent");
+
+  const std::vector<LogLine> lines = SnapshotLogLines();
+  REQUIRE(lines.size() == 1);
+  REQUIRE(lines[0].level == LogLevel::Info);
 }

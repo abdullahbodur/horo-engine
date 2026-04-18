@@ -197,6 +197,8 @@ add_test(NAME test_logger_env_warn_alias COMMAND $<TARGET_FILE:test_logger_env> 
 set_tests_properties(test_logger_env_warn_alias PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=warn")
 add_test(NAME test_logger_env_unknown_level COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][unknown_level]")
 set_tests_properties(test_logger_env_unknown_level PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=info")
+add_test(NAME test_logger_env_unset COMMAND $<TARGET_FILE:test_logger_env> "[logger][env][unset]")
+set_tests_properties(test_logger_env_unset PROPERTIES ENVIRONMENT "MONOLITH_LOG_LEVEL=debug")
 
 # ---- test_scene_systems ----
 add_executable(test_scene_systems test_scene_systems.cpp)

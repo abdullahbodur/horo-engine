@@ -212,6 +212,25 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   REQUIRE(dropCb != nullptr);
   glfwSetDropCallback(window->GetNativeHandle(), dropCb);
 
+  // Exercise callback thunk paths when no user callback is registered.
+  window->SetResizeCallback({});
+  window->SetCloseCallback({});
+  window->SetFileDropCallback({});
+  framebufferCb(window->GetNativeHandle(), 320, 180);
+  closeCb(window->GetNativeHandle());
+  const char* noDropPaths[] = {"assets/ignore.me"};
+  dropCb(window->GetNativeHandle(), 1, noDropPaths);
+
+  window->SetResizeCallback([&](int w, int h) {
+    resizedW = w;
+    resizedH = h;
+  });
+  window->SetCloseCallback([&]() { ++closeCount; });
+  window->SetFileDropCallback([&](int pathCount, const char**) {
+    ++dropCount;
+    droppedPathCount = pathCount;
+  });
+
   framebufferCb(window->GetNativeHandle(), 640, 0);
   REQUIRE(window->GetWidth() == 640);
   REQUIRE(window->GetHeight() == 0);
@@ -225,6 +244,25 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   REQUIRE(closeCount == 1);
   REQUIRE(dropCount == 1);
   REQUIRE(droppedPathCount == 1);
+}
+
+TEST_CASE("Window env parsing falls back when variables are unset", "[core][window][env_unset]") {
+  const ScopedEnvVar unsetVisible("MONOLITH_GLFW_VISIBLE", nullptr);
+  const ScopedEnvVar unsetSamples("MONOLITH_GLFW_SAMPLES", nullptr);
+
+  WindowSpec spec;
+  spec.title = "window-env-unset-test";
+  spec.width = 96;
+  spec.height = 72;
+  spec.graphicsApi = WindowGraphicsApi::OpenGL;
+
+  auto window = CreateWindowIfAvailable(spec);
+  if (!window) {
+    SUCCEED("Window initialization is unavailable on this machine");
+    return;
+  }
+
+  REQUIRE(window->GetNativeHandle() != nullptr);
 }
 
 TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core][window][env]") {
