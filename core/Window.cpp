@@ -133,6 +133,11 @@ Window::Window(const WindowSpec& spec)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+    // Allow the system to fall back to a software (offline) renderer when no
+    // hardware-accelerated OpenGL is available, e.g. on headless CI runners.
+    // NSOpenGLPFAAllowOfflineRenderers is set via this hint; the GPU is still
+    // preferred when present.
+    glfwWindowHint(GLFW_COCOA_GRAPHICS_SWITCHING, GLFW_TRUE);
 #endif
   } else {
     // Vulkan path: no client graphics context should be created by GLFW.
