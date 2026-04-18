@@ -13,6 +13,52 @@ if(NOT TARGET glfw)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(glfw)
+
+    # ---- macOS: patch nsgl_context.m so hardware acceleration is not required
+    #      when GLFW_COCOA_GRAPHICS_SWITCHING is enabled.
+    #
+    # By default GLFW unconditionally adds NSOpenGLPFAAccelerated to the pixel
+    # format attribute list, which requires a hardware-backed renderer.  On
+    # headless CI runners (GitHub Actions macOS) there is no display connection
+    # that satisfies NSOpenGL's hardware requirement, causing glfwCreateWindow
+    # to throw "NSGL: Failed to find a suitable pixel format".
+    #
+    # GLFW already gates NSOpenGLPFAAllowOfflineRenderers on ctxconfig->nsgl.offline
+    # (set via GLFW_COCOA_GRAPHICS_SWITCHING = GLFW_TRUE).  We extend that guard to
+    # also skip NSOpenGLPFAAccelerated in offline mode so any available renderer
+    # (hardware or software) is accepted.  Hardware is still preferred on machines
+    # that expose a GPU; this only adds a fallback path.
+    if(APPLE)
+        set(_glfw_nsgl "${glfw_SOURCE_DIR}/src/nsgl_context.m")
+        if(EXISTS "${_glfw_nsgl}")
+            execute_process(
+                COMMAND python3 -c
+                    "import sys\n\
+path = sys.argv[1]\n\
+with open(path) as f:\n\
+    src = f.read()\n\
+old = '    ADD_ATTRIB(NSOpenGLPFAAccelerated);'\n\
+new = '    if (!ctxconfig->nsgl.offline)\\n        ADD_ATTRIB(NSOpenGLPFAAccelerated);'\n\
+patched = src.replace(old, new, 1)\n\
+if patched != src:\n\
+    with open(path, 'w') as f:\n\
+        f.write(patched)\n\
+    print('GLFW nsgl_context.m: patched NSOpenGLPFAAccelerated guard')\n\
+else:\n\
+    print('GLFW nsgl_context.m: already patched or pattern not found')"
+                    "${_glfw_nsgl}"
+                OUTPUT_VARIABLE _glfw_patch_out
+                ERROR_VARIABLE  _glfw_patch_err
+                RESULT_VARIABLE _glfw_patch_result
+            )
+            if(_glfw_patch_result EQUAL 0)
+                message(STATUS "${_glfw_patch_out}")
+            else()
+                message(WARNING "GLFW nsgl patch failed: ${_glfw_patch_err}")
+            endif()
+        endif()
+    endif()
+
     target_include_directories(glfw PUBLIC
         $<BUILD_INTERFACE:${glfw_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include/vendor/glfw>
