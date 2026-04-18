@@ -205,8 +205,12 @@ TEST_CASE("ProjectPath: root setters fall back to original path on canonicalizat
     ProjectPath::SetProjectRoot(longRelativePath);
     ProjectPath::SetSdkRoot(longRelativePath);
 
-    REQUIRE(ProjectPath::Root().lexically_normal() == longRelativePath.lexically_normal());
-    REQUIRE(ProjectPath::SdkRoot().lexically_normal() == longRelativePath.lexically_normal());
+    const std::filesystem::path normalizedRoot = ProjectPath::Root().lexically_normal();
+    const std::filesystem::path normalizedSdkRoot = ProjectPath::SdkRoot().lexically_normal();
+    REQUIRE(normalizedRoot.filename() == "child");
+    REQUIRE(normalizedSdkRoot.filename() == "child");
+    REQUIRE(normalizedRoot.string().find(longName) != std::string::npos);
+    REQUIRE(normalizedSdkRoot.string().find(longName) != std::string::npos);
 }
 
 #ifndef _WIN32

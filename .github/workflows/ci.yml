@@ -149,6 +149,9 @@ jobs:
             libgl1-mesa-dev \
             libglu1-mesa-dev
 
+      - name: Install modern gcovr
+        run: python3 -m pip install --user "gcovr>=8.3,<9"
+
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
@@ -242,9 +245,10 @@ jobs:
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
-          gcovr build/coverage \
+          python3 -m gcovr build/coverage \
             --root "${{ github.workspace }}" \
             --sonarqube build/coverage/sonar-coverage.xml \
+            --sonarqube-metric line \
             --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
             --exclude '.*/vendor/.*' \
