@@ -164,11 +164,11 @@ jobs:
       - name: Install Mesa3D (software OpenGL for headless CI)
         shell: pwsh
         run: |
-          # mesa-dist-win provides a software OpenGL 4.5 renderer.
-          # We copy ALL x64 DLLs next to the exe so that opengl32.dll can find
-          # its dependencies (libgallium_wgl.dll etc.).  Missing deps cause a
-          # blocking Windows Error Reporting dialog — the silent 10-min hang.
-          $ver = "24.3.3"
+          # mesa-dist-win 24.x changed opengl32.dll to a 134 KB D3D12 stub —
+          # that requires hardware GPU / D3D12 WARP and hangs on CI runners.
+          # mesa-dist-win 21.x opengl32.dll is the full ~50 MB gallium/llvmpipe
+          # self-contained software renderer with no GPU requirement at all.
+          $ver = "21.3.8"
           $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
           Invoke-WebRequest -Uri $url -OutFile mesa3d.7z -UseBasicParsing
           7z x mesa3d.7z -omesa3d -y | Out-Null
