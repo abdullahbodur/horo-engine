@@ -16,7 +16,8 @@ using Catch::Approx;
 // ===========================================================================
 
 TEST_CASE("Quaternion::LookRotation: looking along -Z", "[quaternion]") {
-    Quaternion q = Quaternion::LookRotation({0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f});
+    Quaternion q =
+            Quaternion::LookRotation({0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f});
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
     // Looking along -Z with default orientation should give near-identity
     Vec3 fwd = q * Vec3::Forward();
@@ -24,20 +25,23 @@ TEST_CASE("Quaternion::LookRotation: looking along -Z", "[quaternion]") {
 }
 
 TEST_CASE("Quaternion::LookRotation: looking along +X", "[quaternion]") {
-    Quaternion q = Quaternion::LookRotation({1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+    Quaternion q =
+            Quaternion::LookRotation({1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
     // Result should be a valid rotation
-    Vec3 fwd = q * Vec3::Forward();  // should now point along +X
+    Vec3 fwd = q * Vec3::Forward(); // should now point along +X
     REQUIRE(fwd.x == Approx(1.0f).epsilon(1e-4f));
 }
 
 TEST_CASE("Quaternion::LookRotation: looking along +Y (up)", "[quaternion]") {
-    Quaternion q = Quaternion::LookRotation({0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+    Quaternion q =
+            Quaternion::LookRotation({0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
 TEST_CASE("Quaternion::LookRotation: looking along +Z", "[quaternion]") {
-    Quaternion q = Quaternion::LookRotation({0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f});
+    Quaternion q =
+            Quaternion::LookRotation({0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f});
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
@@ -47,8 +51,9 @@ TEST_CASE("Quaternion::LookRotation: diagonal direction", "[quaternion]") {
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion::LookRotation: rotates forward to match direction", "[quaternion]") {
-    Vec3 dir = Vec3{1.0f, 0.0f, 0.0f};
+TEST_CASE("Quaternion::LookRotation: rotates forward to match direction",
+          "[quaternion]") {
+    auto dir = Vec3{1.0f, 0.0f, 0.0f};
     Quaternion q = Quaternion::LookRotation(dir, {0.0f, 1.0f, 0.0f});
     Vec3 result = q * Vec3::Forward();
     // q*forward should give dir
@@ -94,13 +99,16 @@ TEST_CASE("Quaternion::Slerp: result is normalized", "[quaternion]") {
     Quaternion a = Quaternion::FromAxisAngle({1.0f, 0.0f, 0.0f}, 0.3f);
     Quaternion b = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, 0.7f);
 
-    for (float t = 0.0f; t <= 1.0f; t += 0.1f) {
+    for (int step = 0; step <= 10; ++step) {
+        const float t = static_cast<float>(step) / 10.0f;
         Quaternion r = Quaternion::Slerp(a, b, t);
         REQUIRE(r.Length() == Approx(1.0f).epsilon(1e-5f));
     }
 }
 
-TEST_CASE("Quaternion::Slerp: handles nearly identical quaternions (Lerp fallback)", "[quaternion]") {
+TEST_CASE(
+    "Quaternion::Slerp: handles nearly identical quaternions (Lerp fallback)",
+    "[quaternion]") {
     Quaternion a = Quaternion::Identity();
     Quaternion b = Quaternion::Identity();
 
@@ -109,7 +117,8 @@ TEST_CASE("Quaternion::Slerp: handles nearly identical quaternions (Lerp fallbac
     REQUIRE(r.w == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion::Slerp: shortest path (handles antipodal quaternions)", "[quaternion]") {
+TEST_CASE("Quaternion::Slerp: shortest path (handles antipodal quaternions)",
+          "[quaternion]") {
     Quaternion a = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, 0.1f);
     Quaternion b = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, -PI + 0.1f);
 
@@ -150,19 +159,22 @@ TEST_CASE("Quaternion::ToEuler: identity gives zero angles", "[quaternion]") {
     REQUIRE(e.z == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Quaternion::ToEuler: 90 degree rotation around X gives pitch=~PI/2", "[quaternion]") {
+TEST_CASE("Quaternion::ToEuler: 90 degree rotation around X gives pitch=~PI/2",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({1.0f, 0.0f, 0.0f}, PI * 0.5f);
     Vec3 e = q.ToEuler();
     REQUIRE(e.x == Approx(PI * 0.5f).epsilon(1e-3f));
 }
 
-TEST_CASE("Quaternion::ToEuler: 90 degree rotation around Z gives roll=~PI/2", "[quaternion]") {
+TEST_CASE("Quaternion::ToEuler: 90 degree rotation around Z gives roll=~PI/2",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({0.0f, 0.0f, 1.0f}, PI * 0.5f);
     Vec3 e = q.ToEuler();
     REQUIRE(e.z == Approx(PI * 0.5f).epsilon(1e-3f));
 }
 
-TEST_CASE("Quaternion::ToEuler: 90 degree rotation around Y stays finite", "[quaternion]") {
+TEST_CASE("Quaternion::ToEuler: 90 degree rotation around Y stays finite",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
     Vec3 e = q.ToEuler();
     REQUIRE(std::isfinite(e.x));
@@ -170,7 +182,8 @@ TEST_CASE("Quaternion::ToEuler: 90 degree rotation around Y stays finite", "[qua
     REQUIRE(std::isfinite(e.z));
 }
 
-TEST_CASE("Quaternion::ToEuler: -90 degree rotation around Y stays finite", "[quaternion]") {
+TEST_CASE("Quaternion::ToEuler: -90 degree rotation around Y stays finite",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, -PI * 0.5f);
     Vec3 e = q.ToEuler();
     REQUIRE(std::isfinite(e.x));
@@ -182,7 +195,8 @@ TEST_CASE("Quaternion::ToEuler: -90 degree rotation around Y stays finite", "[qu
 // Quaternion — ToMat3
 // ===========================================================================
 
-TEST_CASE("Quaternion::ToMat3: identity gives identity matrix", "[quaternion]") {
+TEST_CASE("Quaternion::ToMat3: identity gives identity matrix",
+          "[quaternion]") {
     Quaternion q = Quaternion::Identity();
     Mat3 m = q.ToMat3();
     REQUIRE(m.m[0][0] == Approx(1.0f).epsilon(1e-5f));
@@ -213,7 +227,8 @@ TEST_CASE("Quaternion::Conjugate negates xyz", "[quaternion]") {
     REQUIRE(c.w == Approx(0.9f));
 }
 
-TEST_CASE("Quaternion::Inverse of unit quaternion equals conjugate", "[quaternion]") {
+TEST_CASE("Quaternion::Inverse of unit quaternion equals conjugate",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, 0.5f);
     Quaternion inv = q.Inverse();
     Quaternion conj = q.Conjugate();
@@ -226,7 +241,8 @@ TEST_CASE("Quaternion::Inverse of unit quaternion equals conjugate", "[quaternio
 }
 
 TEST_CASE("Quaternion: q * q.Inverse == Identity", "[quaternion]") {
-    Quaternion q = Quaternion::FromAxisAngle({1.0f, 1.0f, 0.0f}, 1.3f).Normalized();
+    Quaternion q =
+            Quaternion::FromAxisAngle({1.0f, 1.0f, 0.0f}, 1.3f).Normalized();
     Quaternion inv = q.Inverse();
     Quaternion result = q * inv;
     REQUIRE(result.w == Approx(1.0f).epsilon(1e-5f));
@@ -235,7 +251,8 @@ TEST_CASE("Quaternion: q * q.Inverse == Identity", "[quaternion]") {
     REQUIRE(result.z == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Quaternion::Inverse of zero quaternion returns identity", "[quaternion]") {
+TEST_CASE("Quaternion::Inverse of zero quaternion returns identity",
+          "[quaternion]") {
     Quaternion q{0.0f, 0.0f, 0.0f, 0.0f};
     Quaternion inv = q.Inverse();
     REQUIRE(inv.w == Approx(1.0f));
@@ -250,7 +267,8 @@ TEST_CASE("Quaternion::Dot: identity with itself is 1", "[quaternion]") {
     REQUIRE(Quaternion::Dot(a, a) == Approx(1.0f));
 }
 
-TEST_CASE("Quaternion::Dot: opposite quaternions have dot = -1", "[quaternion]") {
+TEST_CASE("Quaternion::Dot: opposite quaternions have dot = -1",
+          "[quaternion]") {
     Quaternion a = Quaternion::Identity();
     Quaternion b{0.0f, 0.0f, 0.0f, -1.0f};
     REQUIRE(Quaternion::Dot(a, b) == Approx(-1.0f));
@@ -270,7 +288,8 @@ TEST_CASE("Quaternion: composing with inverse gives identity", "[quaternion]") {
     REQUIRE(rotated.z == Approx(v.z).epsilon(1e-4f));
 }
 
-TEST_CASE("Quaternion: chained 90-degree rotations around Y give 180 degrees", "[quaternion]") {
+TEST_CASE("Quaternion: chained 90-degree rotations around Y give 180 degrees",
+          "[quaternion]") {
     Quaternion q90 = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
     Quaternion q180 = q90 * q90;
 
@@ -314,7 +333,8 @@ TEST_CASE("Quaternion::FromEuler: result is normalized", "[quaternion]") {
     REQUIRE(q.Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion::FromAxisAngle: zero angle gives identity-like result", "[quaternion]") {
+TEST_CASE("Quaternion::FromAxisAngle: zero angle gives identity-like result",
+          "[quaternion]") {
     Quaternion q = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, 0.0f);
     REQUIRE(q.w == Approx(1.0f).epsilon(1e-5f));
     REQUIRE(std::abs(q.y) < 1e-5f);

@@ -1,8 +1,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "math/MathUtils.h"
 #include "math/Mat4.h"
+#include "math/MathUtils.h"
 #include "math/Quaternion.h"
 #include "math/Transform.h"
 #include "math/Vec3.h"
@@ -69,7 +69,8 @@ TEST_CASE("Transform: full constructor sets all fields", "[transform]") {
 // Transform — ToMatrix
 // ===========================================================================
 
-TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix", "[transform]") {
+TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix",
+          "[transform]") {
     Transform t = Transform::Identity();
     Mat4 m = t.ToMatrix();
 
@@ -87,7 +88,8 @@ TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix", "[tra
     REQUIRE(m(2, 3) == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Transform::ToMatrix: translation is embedded in last column", "[transform]") {
+TEST_CASE("Transform::ToMatrix: translation is embedded in last column",
+          "[transform]") {
     Transform t;
     t.position = {3.0f, -1.0f, 5.0f};
     Mat4 m = t.ToMatrix();
@@ -97,7 +99,8 @@ TEST_CASE("Transform::ToMatrix: translation is embedded in last column", "[trans
     REQUIRE(m.GetTranslation().z == Approx(5.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix", "[transform]") {
+TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix",
+          "[transform]") {
     Transform t;
     t.scale = {3.0f, 3.0f, 3.0f};
     Mat4 m = t.ToMatrix();
@@ -107,13 +110,15 @@ TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix", "[transform]"
     REQUIRE(scaled.Length() == Approx(3.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z", "[transform]") {
+TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z",
+          "[transform]") {
     Transform t;
     t.rotation = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
     Mat4 m = t.ToMatrix();
 
     Vec3 rotated = m.TransformVector({1.0f, 0.0f, 0.0f});
-    // Rotating X by 90° around Y → should point toward +Z (right-hand rule: X cross Y = -Z, so rotate X by +90 around Y gives Z)
+    // Rotating X by 90° around Y → should point toward +Z (right-hand rule: X
+    // cross Y = -Z, so rotate X by +90 around Y gives Z)
     REQUIRE(std::abs(rotated.x) < 1e-4f);
     REQUIRE(std::abs(rotated.y) < 1e-4f);
     REQUIRE(std::abs(rotated.z) > 0.9f);
@@ -123,7 +128,8 @@ TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z", "[transfor
 // Transform — TransformPoint
 // ===========================================================================
 
-TEST_CASE("Transform::TransformPoint: identity leaves point unchanged", "[transform]") {
+TEST_CASE("Transform::TransformPoint: identity leaves point unchanged",
+          "[transform]") {
     Transform t = Transform::Identity();
     Vec3 pt{1.0f, 2.0f, 3.0f};
     Vec3 result = t.TransformPoint(pt);
@@ -162,7 +168,7 @@ TEST_CASE("Transform::TransformPoint: rotation rotates point", "[transform]") {
 TEST_CASE("Transform::TransformPoint: combined TRS", "[transform]") {
     Transform t;
     t.position = {1.0f, 0.0f, 0.0f};
-    t.scale    = {2.0f, 2.0f, 2.0f};
+    t.scale = {2.0f, 2.0f, 2.0f};
     // No rotation
     Vec3 result = t.TransformPoint({1.0f, 0.0f, 0.0f});
     // scale(1,0,0) → (2,0,0) then translate +1 → (3,0,0)
@@ -173,7 +179,8 @@ TEST_CASE("Transform::TransformPoint: combined TRS", "[transform]") {
 // Transform — Forward / Up / Right
 // ===========================================================================
 
-TEST_CASE("Transform::Forward: identity points in default forward (-Z)", "[transform]") {
+TEST_CASE("Transform::Forward: identity points in default forward (-Z)",
+          "[transform]") {
     Transform t = Transform::Identity();
     Vec3 fwd = t.Forward();
     REQUIRE(fwd.x == Approx(0.0f).margin(1e-5f));
@@ -197,28 +204,31 @@ TEST_CASE("Transform::Right: identity points in +X", "[transform]") {
     REQUIRE(right.z == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Transform::Forward: 90° Y rotation changes forward direction", "[transform]") {
+TEST_CASE("Transform::Forward: 90° Y rotation changes forward direction",
+          "[transform]") {
     Transform t;
     // Rotating 90° around Y: Forward (-Z) becomes (-X) rotated
     t.rotation = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
     Vec3 fwd = t.Forward();
     REQUIRE(fwd.Length() == Approx(1.0f).epsilon(1e-5f));
-    // After 90° CCW around Y, forward (-Z) rotates to (+X direction... check engine convention)
-    // just verify it's a unit vector and has changed from default
-    REQUIRE(!(fwd.z == Approx(-1.0f).epsilon(0.1f)));  // no longer -Z
+    // After 90° CCW around Y, forward (-Z) rotates to (+X direction... check
+    // engine convention) just verify it's a unit vector and has changed from
+    // default
+    REQUIRE(!(fwd.z == Approx(-1.0f).epsilon(0.1f))); // no longer -Z
 }
 
-TEST_CASE("Transform direction vectors are mutually perpendicular", "[transform]") {
+TEST_CASE("Transform direction vectors are mutually perpendicular",
+          "[transform]") {
     Transform t;
     t.rotation = Quaternion::FromEuler(0.2f, 0.5f, 0.1f);
 
-    Vec3 fwd   = t.Forward();
-    Vec3 up    = t.Up();
+    Vec3 fwd = t.Forward();
+    Vec3 up = t.Up();
     Vec3 right = t.Right();
 
-    REQUIRE(Vec3::Dot(fwd, up)    == Approx(0.0f).margin(1e-4f));
+    REQUIRE(Vec3::Dot(fwd, up) == Approx(0.0f).margin(1e-4f));
     REQUIRE(Vec3::Dot(fwd, right) == Approx(0.0f).margin(1e-4f));
-    REQUIRE(Vec3::Dot(up, right)  == Approx(0.0f).margin(1e-4f));
+    REQUIRE(Vec3::Dot(up, right) == Approx(0.0f).margin(1e-4f));
 }
 
 TEST_CASE("Transform direction vectors are normalized", "[transform]") {
@@ -226,8 +236,8 @@ TEST_CASE("Transform direction vectors are normalized", "[transform]") {
     t.rotation = Quaternion::FromAxisAngle({1.0f, 1.0f, 0.0f}, 1.2f);
 
     REQUIRE(t.Forward().Length() == Approx(1.0f).epsilon(1e-5f));
-    REQUIRE(t.Up().Length()      == Approx(1.0f).epsilon(1e-5f));
-    REQUIRE(t.Right().Length()   == Approx(1.0f).epsilon(1e-5f));
+    REQUIRE(t.Up().Length() == Approx(1.0f).epsilon(1e-5f));
+    REQUIRE(t.Right().Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
 // ===========================================================================
@@ -237,12 +247,12 @@ TEST_CASE("Transform direction vectors are normalized", "[transform]") {
 TEST_CASE("Transform::ToMatrix and TransformPoint agree", "[transform]") {
     Transform t;
     t.position = {1.0f, 2.0f, -3.0f};
-    t.scale    = {2.0f, 0.5f, 1.5f};
+    t.scale = {2.0f, 0.5f, 1.5f};
     t.rotation = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, 0.7f);
 
     Vec3 localPt{1.0f, 1.0f, 1.0f};
 
-    Vec3 matResult  = t.ToMatrix().TransformPoint(localPt);
+    Vec3 matResult = t.ToMatrix().TransformPoint(localPt);
     Vec3 funcResult = t.TransformPoint(localPt);
 
     REQUIRE(matResult.x == Approx(funcResult.x).epsilon(1e-4f));
@@ -253,7 +263,8 @@ TEST_CASE("Transform::ToMatrix and TransformPoint agree", "[transform]") {
 TEST_CASE("WorldAabbFromLocalBox: translated unit cube", "[transform][aabb]") {
     Transform t;
     t.position = {10.0f, 0.0f, -5.0f};
-    Vec3 wc, wh;
+    Vec3 wc;
+    Vec3 wh;
     WorldAabbFromLocalBox(Vec3::Zero(), {0.5f, 0.5f, 0.5f}, t, wc, wh);
     REQUIRE(wc.x == Approx(10.0f));
     REQUIRE(wc.y == Approx(0.0f));
@@ -263,10 +274,12 @@ TEST_CASE("WorldAabbFromLocalBox: translated unit cube", "[transform][aabb]") {
     REQUIRE(wh.z == Approx(0.5f));
 }
 
-TEST_CASE("WorldAabbFromLocalBox: offset local center expands world AABB", "[transform][aabb]") {
+TEST_CASE("WorldAabbFromLocalBox: offset local center expands world AABB",
+          "[transform][aabb]") {
     Transform t;
     t.position = {0.0f, 0.0f, 0.0f};
-    Vec3 wc, wh;
+    Vec3 wc;
+    Vec3 wh;
     // Local box [0,1]^3 → center 0.5, half 0.5
     WorldAabbFromLocalBox({0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, t, wc, wh);
     REQUIRE(wc.x == Approx(0.5f));

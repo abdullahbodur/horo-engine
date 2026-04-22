@@ -13,10 +13,21 @@ using namespace Monolith;
 // ---------------------------------------------------------------------------
 // Test components
 // ---------------------------------------------------------------------------
-struct Health { float value = 100.0f; };
-struct Mana   { float value = 50.0f; };
-struct Tag    { std::string name; };
-struct Counter { int n = 0; };
+struct Health {
+    float value = 100.0f;
+};
+
+struct Mana {
+    float value = 50.0f;
+};
+
+struct Tag {
+    std::string name;
+};
+
+struct Counter {
+    int n = 0;
+};
 
 // ===========================================================================
 // Registry — entity lifecycle
@@ -50,7 +61,7 @@ TEST_CASE("Registry: Destroyed ID is recycled", "[registry]") {
     Entity a = reg.Create();
     reg.Destroy(a);
     Entity b = reg.Create();
-    REQUIRE(b == a);  // ID should be recycled from free list
+    REQUIRE(b == a); // ID should be recycled from free list
 }
 
 TEST_CASE("Registry: multiple creates, multiple destroys", "[registry]") {
@@ -87,7 +98,8 @@ TEST_CASE("Registry: entity can have multiple component types", "[registry]") {
     REQUIRE(reg.Get<Mana>(e).value == Catch::Approx(30.0f));
 }
 
-TEST_CASE("Registry: different entities have independent components", "[registry]") {
+TEST_CASE("Registry: different entities have independent components",
+          "[registry]") {
     Registry reg;
     Entity a = reg.Create();
     Entity b = reg.Create();
@@ -102,7 +114,8 @@ TEST_CASE("Registry: different entities have independent components", "[registry
     REQUIRE(reg.Get<Health>(b).value == Catch::Approx(50.0f));
 }
 
-TEST_CASE("Registry: Remove<T> removes only that component type", "[registry]") {
+TEST_CASE("Registry: Remove<T> removes only that component type",
+          "[registry]") {
     Registry reg;
     Entity e = reg.Create();
     reg.Add<Health>(e, {100.0f});
@@ -120,7 +133,8 @@ TEST_CASE("Registry: Remove on non-existent component is safe", "[registry]") {
     REQUIRE_NOTHROW(reg.Remove<Health>(e));
 }
 
-TEST_CASE("Registry: Destroy removes all components from entity", "[registry]") {
+TEST_CASE("Registry: Destroy removes all components from entity",
+          "[registry]") {
     Registry reg;
     Entity e = reg.Create();
     reg.Add<Health>(e);
@@ -138,7 +152,8 @@ TEST_CASE("Registry: Destroy removes all components from entity", "[registry]") 
 // Registry — GetEntities iteration
 // ===========================================================================
 
-TEST_CASE("Registry::GetEntities: returns all entities with component", "[registry]") {
+TEST_CASE("Registry::GetEntities: returns all entities with component",
+          "[registry]") {
     Registry reg;
     Entity a = reg.Create();
     Entity b = reg.Create();
@@ -147,22 +162,26 @@ TEST_CASE("Registry::GetEntities: returns all entities with component", "[regist
     reg.Add<Health>(b);
     // third entity has no Health
 
-    const auto& entities = reg.GetEntities<Health>();
+    const auto &entities = reg.GetEntities<Health>();
     REQUIRE(entities.size() == 2);
-    bool hasA = false, hasB = false;
-    for (Entity e : entities) {
-        if (e == a) hasA = true;
-        if (e == b) hasB = true;
+    bool hasA = false;
+    bool hasB = false;
+    for (Entity e: entities) {
+        if (e == a)
+            hasA = true;
+        if (e == b)
+            hasB = true;
     }
     REQUIRE(hasA);
     REQUIRE(hasB);
 }
 
-TEST_CASE("Registry::GetEntities: empty if no component ever added", "[registry]") {
+TEST_CASE("Registry::GetEntities: empty if no component ever added",
+          "[registry]") {
     Registry reg;
     reg.Create();
     reg.Create();
-    const auto& entities = reg.GetEntities<Mana>();
+    const auto &entities = reg.GetEntities<Mana>();
     REQUIRE(entities.empty());
 }
 
@@ -206,7 +225,8 @@ TEST_CASE("Registry::Clear: no entities remain alive", "[registry]") {
     REQUIRE_FALSE(reg.IsAlive(b));
 }
 
-TEST_CASE("Registry::Clear: component pools are empty after clear", "[registry]") {
+TEST_CASE("Registry::Clear: component pools are empty after clear",
+          "[registry]") {
     Registry reg;
     Entity e = reg.Create();
     reg.Add<Health>(e);
@@ -217,7 +237,9 @@ TEST_CASE("Registry::Clear: component pools are empty after clear", "[registry]"
 
 TEST_CASE("Registry::Clear: ID sequence restarts from 0", "[registry]") {
     Registry reg;
-    reg.Create(); reg.Create(); reg.Create();
+    reg.Create();
+    reg.Create();
+    reg.Create();
     reg.Clear();
     Entity first = reg.Create();
     REQUIRE(first == 0);
@@ -240,9 +262,12 @@ TEST_CASE("Registry::Clear then repopulate works correctly", "[registry]") {
 // ComponentPool — dense packing after Remove
 // ===========================================================================
 
-TEST_CASE("ComponentPool: Remove from middle keeps others intact", "[registry][pool]") {
+TEST_CASE("ComponentPool: Remove from middle keeps others intact",
+          "[registry][pool]") {
     ComponentPool<Health> pool;
-    Entity a = 0, b = 1, c = 2;
+    Entity a = 0;
+    Entity b = 1;
+    Entity c = 2;
     pool.Add(a, {10.0f});
     pool.Add(b, {20.0f});
     pool.Add(c, {30.0f});
@@ -259,7 +284,8 @@ TEST_CASE("ComponentPool: Remove from middle keeps others intact", "[registry][p
 
 TEST_CASE("ComponentPool: Remove last element", "[registry][pool]") {
     ComponentPool<Health> pool;
-    Entity a = 0, b = 1;
+    Entity a = 0;
+    Entity b = 1;
     pool.Add(a, {10.0f});
     pool.Add(b, {20.0f});
 
@@ -272,7 +298,9 @@ TEST_CASE("ComponentPool: Remove last element", "[registry][pool]") {
 
 TEST_CASE("ComponentPool: Remove first element", "[registry][pool]") {
     ComponentPool<Health> pool;
-    Entity a = 0, b = 1, c = 2;
+    Entity a = 0;
+    Entity b = 1;
+    Entity c = 2;
     pool.Add(a, {10.0f});
     pool.Add(b, {20.0f});
     pool.Add(c, {30.0f});
@@ -307,7 +335,7 @@ TEST_CASE("ComponentPool: GetAll returns dense array", "[registry][pool]") {
     pool.Add(1, {2});
     pool.Add(2, {3});
 
-    const auto& all = pool.GetAll();
+    const auto &all = pool.GetAll();
     REQUIRE(all.size() == 3);
 }
 

@@ -4,13 +4,13 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith {
-namespace Editor {
+namespace Monolith::Editor {
+    std::string GenerateAssetGuid();
 
-std::string GenerateAssetGuid();
-std::string MakeAssetDisplayName(const std::string& assetId, const AssetDef& asset);
-void EnsureAssetIdentity(const std::string& assetId, AssetDef* asset);
-void EnsureAssetIdentity(SceneDocument* doc);
+    std::string MakeAssetDisplayName(const std::string &assetId,
+                                     const AssetDef &asset);
 
-}  // namespace Editor
-}  // namespace Monolith
+    void EnsureAssetIdentity(const std::string &assetId, AssetDef *asset);
+
+    void EnsureAssetIdentity(SceneDocument *doc);
+} // namespace Monolith::Editor

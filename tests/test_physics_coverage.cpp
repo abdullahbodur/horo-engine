@@ -1,10 +1,10 @@
 //  test_physics_coverage.cpp
 //  Targets remaining uncovered paths in physics module:
 //    SAT: edge-edge contact, FaceB path, GenerateFaceContacts clipping
-//    GJK: box support function path via box-box (currently returns empty, just coverage)
-//    PhysicsWorld: gravity off, step-then-clear, multiple sphere-sphere interactions
-//    RigidBody: AddForceAtPoint cross-product, multiple-force accumulation
-//    ContactManifold: clear / reset behavior
+//    GJK: box support function path via box-box (currently returns empty, just
+//    coverage) PhysicsWorld: gravity off, step-then-clear, multiple
+//    sphere-sphere interactions RigidBody: AddForceAtPoint cross-product,
+//    multiple-force accumulation ContactManifold: clear / reset behavior
 //    BruteForce: body-without-collider pair skip
 
 #include <catch2/catch_approx.hpp>
@@ -12,15 +12,15 @@
 #include <memory>
 #include <vector>
 
-#include "math/Vec3.h"
 #include "math/MathUtils.h"
+#include "math/Vec3.h"
 #include "physics/BoxCollider.h"
 #include "physics/PhysicsWorld.h"
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 #include "physics/broadphase/BruteForce.h"
-#include "physics/constraints/ContactConstraint.h"
 #include "physics/constraints/ConstraintSolver.h"
+#include "physics/constraints/ContactConstraint.h"
 #include "physics/integration/SemiImplicitEuler.h"
 #include "physics/narrowphase/ContactManifold.h"
 #include "physics/narrowphase/GJK.h"
@@ -33,8 +33,8 @@ using Catch::Approx;
 // SAT — FaceB axis path and edge-edge path
 // ============================================================
 
-TEST_CASE("SAT::TestBoxBox: FaceB contact (B larger than A)", "[physics][sat]")
-{
+TEST_CASE("SAT::TestBoxBox: FaceB contact (B larger than A)",
+          "[physics][sat]") {
     // Make B much larger so FaceB axis wins
     RigidBody a = RigidBody::MakeBox({0.2f, 0.2f, 0.2f}, 1.0f);
     RigidBody b = RigidBody::MakeBox({2.0f, 2.0f, 2.0f}, 1.0f);
@@ -47,8 +47,7 @@ TEST_CASE("SAT::TestBoxBox: FaceB contact (B larger than A)", "[physics][sat]")
     REQUIRE(m.contacts[0].penetration > 0.0f);
 }
 
-TEST_CASE("SAT::TestBoxBox: boxes overlapping along Y axis", "[physics][sat]")
-{
+TEST_CASE("SAT::TestBoxBox: boxes overlapping along Y axis", "[physics][sat]") {
     RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
     RigidBody b = RigidBody::MakeStatic();
     b.collider = std::make_shared<BoxCollider>(Vec3{0.5f, 0.5f, 0.5f});
@@ -61,8 +60,7 @@ TEST_CASE("SAT::TestBoxBox: boxes overlapping along Y axis", "[physics][sat]")
     REQUIRE(m.contacts[0].penetration > 0.0f);
 }
 
-TEST_CASE("SAT::TestBoxBox: no collider on A returns empty", "[physics][sat]")
-{
+TEST_CASE("SAT::TestBoxBox: no collider on A returns empty", "[physics][sat]") {
     RigidBody a = RigidBody::MakeStatic(); // no collider
     RigidBody b = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
     a.position = {0, 0, 0};
@@ -71,8 +69,7 @@ TEST_CASE("SAT::TestBoxBox: no collider on A returns empty", "[physics][sat]")
     REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: non-box collider returns empty", "[physics][sat]")
-{
+TEST_CASE("SAT::TestBoxBox: non-box collider returns empty", "[physics][sat]") {
     RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
     RigidBody b = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
     a.position = {0, 0, 0};
@@ -81,8 +78,7 @@ TEST_CASE("SAT::TestBoxBox: non-box collider returns empty", "[physics][sat]")
     REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: deeply overlapping boxes", "[physics][sat]")
-{
+TEST_CASE("SAT::TestBoxBox: deeply overlapping boxes", "[physics][sat]") {
     RigidBody a = RigidBody::MakeBox({1.0f, 1.0f, 1.0f}, 1.0f);
     RigidBody b = RigidBody::MakeBox({1.0f, 1.0f, 1.0f}, 1.0f);
     a.position = {0, 0, 0};
@@ -97,8 +93,7 @@ TEST_CASE("SAT::TestBoxBox: deeply overlapping boxes", "[physics][sat]")
 // GJK — box support function coverage
 // ============================================================
 
-TEST_CASE("GJK: box vs sphere returns no contact (stub)", "[gjk][box]")
-{
+TEST_CASE("GJK: box vs sphere returns no contact (stub)", "[gjk][box]") {
     // Exercises the box support function path in GJK even though
     // the stub doesn't handle box-sphere yet
     RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
@@ -114,39 +109,37 @@ TEST_CASE("GJK: box vs sphere returns no contact (stub)", "[gjk][box]")
 // BruteForce — pair skip when no collider
 // ============================================================
 
-TEST_CASE("BruteForce: body without collider is skipped in pair check", "[broadphase]")
-{
+TEST_CASE("BruteForce: body without collider is skipped in pair check",
+          "[broadphase]") {
     RigidBody a = RigidBody::MakeStatic(); // no collider
     RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
     a.position = {0, 0, 0};
     b.position = {0.5f, 0, 0};
 
-    std::vector<RigidBody*> bodies{&a, &b};
+    std::vector<RigidBody *> bodies{&a, &b};
     auto pairs = BruteForce::FindOverlappingPairs(bodies);
     // a has no collider → pair should be skipped
     REQUIRE(pairs.empty());
 }
 
-TEST_CASE("BruteForce: box vs sphere AABB overlap", "[broadphase]")
-{
+TEST_CASE("BruteForce: box vs sphere AABB overlap", "[broadphase]") {
     RigidBody a = RigidBody::MakeBox({1.0f, 1.0f, 1.0f}, 1.0f);
     RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
     a.position = {0, 0, 0};
     b.position = {1.2f, 0, 0}; // overlapping AABB (1.0 + 0.5 = 1.5 > 1.2)
 
-    std::vector<RigidBody*> bodies{&a, &b};
+    std::vector<RigidBody *> bodies{&a, &b};
     auto pairs = BruteForce::FindOverlappingPairs(bodies);
     REQUIRE(pairs.size() == 1);
 }
 
-TEST_CASE("BruteForce: box vs sphere AABB no overlap", "[broadphase]")
-{
+TEST_CASE("BruteForce: box vs sphere AABB no overlap", "[broadphase]") {
     RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
     RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
     a.position = {0, 0, 0};
     b.position = {5.0f, 0, 0}; // far apart
 
-    std::vector<RigidBody*> bodies{&a, &b};
+    std::vector<RigidBody *> bodies{&a, &b};
     auto pairs = BruteForce::FindOverlappingPairs(bodies);
     REQUIRE(pairs.empty());
 }
@@ -155,8 +148,8 @@ TEST_CASE("BruteForce: box vs sphere AABB no overlap", "[broadphase]")
 // RigidBody — AddForceAtPoint torque verification
 // ============================================================
 
-TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque", "[rigidbody]")
-{
+TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque",
+          "[rigidbody]") {
     auto b = RigidBody::MakeSphere(1.0f, 1.0f);
     b.position = {5, 5, 5};
     // Force at center (worldPoint == position) → r = 0 → torque = 0
@@ -167,18 +160,17 @@ TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque", "[rigid
     REQUIRE(b.torqueAccum.z == Approx(0).margin(1e-5f));
 }
 
-TEST_CASE("RigidBody AddForceAtPoint: force at offset creates torque", "[rigidbody]")
-{
+TEST_CASE("RigidBody AddForceAtPoint: force at offset creates torque",
+          "[rigidbody]") {
     auto b = RigidBody::MakeSphere(1.0f, 1.0f);
     b.position = {0, 0, 0};
-    // Force (0,0,1) at point (1,0,0): torque = r × f = (1,0,0)×(0,0,1) = (0*1-0*0, 0*0-1*1, 1*0-0*0) = (0,-1,0)
+    // A forward force applied at +X should rotate negatively around Y.
     b.AddForceAtPoint({0, 0, 1}, {1, 0, 0});
     REQUIRE(b.forceAccum.z == Approx(1.0f));
     REQUIRE(b.torqueAccum.y == Approx(-1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("RigidBody multiple AddForce accumulate correctly", "[rigidbody]")
-{
+TEST_CASE("RigidBody multiple AddForce accumulate correctly", "[rigidbody]") {
     auto b = RigidBody::MakeSphere(1.0f, 1.0f);
     b.AddForce({1, 0, 0});
     b.AddForce({0, 2, 0});
@@ -192,11 +184,11 @@ TEST_CASE("RigidBody multiple AddForce accumulate correctly", "[rigidbody]")
 // PhysicsWorld — extended scenarios
 // ============================================================
 
-TEST_CASE("PhysicsWorld: zero gravity world does not accelerate bodies", "[world]")
-{
+TEST_CASE("PhysicsWorld: zero gravity world does not accelerate bodies",
+          "[world]") {
     PhysicsWorld world;
-    world.gravity = Vec3::Zero();
-    RigidBody* b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
+    world.SetGravity(Vec3::Zero());
+    RigidBody *b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
     b->position = {0, 10, 0};
     b->velocity = Vec3::Zero();
     b->linearDamping = 0.0f;
@@ -208,8 +200,7 @@ TEST_CASE("PhysicsWorld: zero gravity world does not accelerate bodies", "[world
     REQUIRE(b->position.y == Approx(10.0f).margin(1e-4f));
 }
 
-TEST_CASE("PhysicsWorld: Step then Clear leaves world empty", "[world]")
-{
+TEST_CASE("PhysicsWorld: Step then Clear leaves world empty", "[world]") {
     PhysicsWorld world;
     world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
     world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
@@ -218,11 +209,11 @@ TEST_CASE("PhysicsWorld: Step then Clear leaves world empty", "[world]")
     REQUIRE(world.GetBodies().empty());
 }
 
-TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction", "[world]")
-{
+TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction",
+          "[world]") {
     PhysicsWorld world;
-    world.gravity = {1.0f, 0.0f, 0.0f}; // gravity pointing +X only
-    RigidBody* b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
+    world.SetGravity({1.0f, 0.0f, 0.0f}); // gravity pointing +X only
+    RigidBody *b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
     b->position = {0, 10, 0}; // high up, no floor interaction
     b->velocity = Vec3::Zero();
     b->linearDamping = 0.0f;
@@ -232,12 +223,12 @@ TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction", "[worl
     REQUIRE(b->velocity.y == Approx(0.0f).margin(1e-4f)); // no Y gravity
 }
 
-TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies", "[world]")
-{
+TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies",
+          "[world]") {
     PhysicsWorld world;
-    world.gravity = Vec3::Zero(); // no gravity so they don't fall
-    RigidBody* a = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
-    RigidBody* b = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
+    world.SetGravity(Vec3::Zero()); // no gravity so they don't fall
+    RigidBody *a = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
+    RigidBody *b = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
     a->position = {0, 5, 0};
     b->position = {1.5f, 5, 0}; // overlapping (sum radii=2, dist=1.5)
     a->velocity = {1, 0, 0};
@@ -248,10 +239,10 @@ TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies", "[
         REQUIRE_NOTHROW(world.Step(1.0f / 60.0f));
 }
 
-TEST_CASE("PhysicsWorld: static body added and stepped does not move", "[world]")
-{
+TEST_CASE("PhysicsWorld: static body added and stepped does not move",
+          "[world]") {
     PhysicsWorld world;
-    RigidBody* s = world.AddBody(RigidBody::MakeStatic());
+    RigidBody *s = world.AddBody(RigidBody::MakeStatic());
     s->position = {0, 0, 0};
 
     for (int i = 0; i < 10; ++i)
@@ -266,8 +257,7 @@ TEST_CASE("PhysicsWorld: static body added and stepped does not move", "[world]"
 // SemiImplicitEuler — damping clamping and zero-dt
 // ============================================================
 
-TEST_CASE("SemiImplicitEuler: zero dt does not change state", "[integration]")
-{
+TEST_CASE("SemiImplicitEuler: zero dt does not change state", "[integration]") {
     RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
     b.position = {1, 2, 3};
     b.velocity = {4, 5, 6};
@@ -280,8 +270,7 @@ TEST_CASE("SemiImplicitEuler: zero dt does not change state", "[integration]")
     REQUIRE(b.position.z == Approx(3.0f));
 }
 
-TEST_CASE("SemiImplicitEuler: large dt does not crash", "[integration]")
-{
+TEST_CASE("SemiImplicitEuler: large dt does not crash", "[integration]") {
     RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
     b.position = {0, 10, 0};
     b.velocity = Vec3::Zero();
@@ -293,26 +282,36 @@ TEST_CASE("SemiImplicitEuler: large dt does not crash", "[integration]")
 // ConstraintSolver — default iteration count
 // ============================================================
 
-TEST_CASE("ConstraintSolver: uses 15 iterations by default", "[solver]")
-{
+TEST_CASE("ConstraintSolver: uses 15 iterations by default", "[solver]") {
     // Just verify DEFAULT_ITERATIONS value is accessible and correct
     REQUIRE(ConstraintSolver::DEFAULT_ITERATIONS == 15);
 }
 
-TEST_CASE("ConstraintSolver: multiple constraints in one pass", "[solver]")
-{
+TEST_CASE("ConstraintSolver: multiple constraints in one pass", "[solver]") {
     RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
     RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
     RigidBody c = RigidBody::MakeSphere(1.0f, 1.0f);
 
-    a.position = {0, 5, 0}; b.position = {1.5f, 5, 0}; c.position = {3.0f, 5, 0};
-    a.velocity = {1, 0, 0}; b.velocity = {0, 0, 0};    c.velocity = {-1, 0, 0};
+    a.position = {0, 5, 0};
+    b.position = {1.5f, 5, 0};
+    c.position = {3.0f, 5, 0};
+    a.velocity = {1, 0, 0};
+    b.velocity = {0, 0, 0};
+    c.velocity = {-1, 0, 0};
 
-    ContactManifold mab; mab.AddContact({0.75f, 5, 0}, Vec3::Right(), 0.5f);
-    ContactManifold mbc; mbc.AddContact({2.25f, 5, 0}, Vec3::Right(), 0.5f);
+    ContactManifold mab;
+    mab.AddContact({0.75f, 5, 0}, Vec3::Right(), 0.5f);
+    ContactManifold mbc;
+    mbc.AddContact({2.25f, 5, 0}, Vec3::Right(), 0.5f);
 
-    ContactConstraint cab; cab.bodyA = &a; cab.bodyB = &b; cab.manifold = mab;
-    ContactConstraint cbc; cbc.bodyA = &b; cbc.bodyB = &c; cbc.manifold = mbc;
+    ContactConstraint cab;
+    cab.bodyA = &a;
+    cab.bodyB = &b;
+    cab.manifold = mab;
+    ContactConstraint cbc;
+    cbc.bodyA = &b;
+    cbc.bodyB = &c;
+    cbc.manifold = mbc;
 
     std::vector<ContactConstraint> constraints{cab, cbc};
     ConstraintSolver solver;

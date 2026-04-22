@@ -33,16 +33,16 @@ add_subdirectory(vendor)
 
 # ---- MonolithEngine static library ----
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
 )
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
 

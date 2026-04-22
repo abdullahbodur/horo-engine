@@ -1,4 +1,0 @@
-[mcp_servers.sonarqube]
-command = "docker"
-args = ["run", "--rm", "-i", "--init", "--pull=always", "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_ORG", "mcp/sonarqube"]
-env = { "SONARQUBE_TOKEN" = "352e6b31c7cf2a264b19091fe0449dd6fe0324f7", "SONARQUBE_ORG" = "docktail" }

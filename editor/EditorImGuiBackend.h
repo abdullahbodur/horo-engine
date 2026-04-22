@@ -6,11 +6,13 @@ struct GLFWwindow;
 struct ImDrawData;
 
 namespace Monolith::Editor {
+    bool IsSupportedEditorImGuiBackend(RenderBackendId backendId);
 
-bool IsSupportedEditorImGuiBackend(RenderBackendId backendId);
-bool InitEditorImGuiBackend(GLFWwindow* window, RenderBackendId backendId);
-void ShutdownEditorImGuiBackend(RenderBackendId backendId);
-void BeginEditorImGuiFrame(RenderBackendId backendId);
-void RenderEditorImGuiDrawData(RenderBackendId backendId, ImDrawData* drawData);
+    bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId);
 
-}  // namespace Monolith::Editor
+    void ShutdownEditorImGuiBackend(RenderBackendId backendId);
+
+    void BeginEditorImGuiFrame(RenderBackendId backendId);
+
+    void RenderEditorImGuiDrawData(RenderBackendId backendId, ImDrawData *drawData);
+} // namespace Monolith::Editor

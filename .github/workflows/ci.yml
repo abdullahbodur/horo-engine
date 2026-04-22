@@ -31,9 +31,6 @@ jobs:
         with:
           key: ${{ github.job }}-${{ runner.os }}
 
-      - name: Install Ninja
-        run: brew install ninja
-
       - name: Install ffmpeg
         run: brew install ffmpeg
 
@@ -391,7 +388,6 @@ jobs:
           args: >
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-            -Dsonar.coverage.exclusions=editor/**,launcher/**,core/Logger.h
             -Dsonar.qualitygate.wait=true
 
   # ----------------------------------------------------------------

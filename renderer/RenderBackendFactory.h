@@ -7,13 +7,12 @@
 #include "renderer/RenderBackend.h"
 
 namespace Monolith {
+    struct RenderBackendCreateResult {
+        std::unique_ptr<IRenderBackend> backend;
+        RenderBackendId selected = RenderBackendId::Auto;
+        std::string error;
+    };
 
-struct RenderBackendCreateResult {
-  std::unique_ptr<IRenderBackend> backend;
-  RenderBackendId selected = RenderBackendId::Auto;
-  std::string error;
-};
-
-RenderBackendCreateResult CreateRenderBackend(const RenderBackendSelection& selection);
-
-}  // namespace Monolith
+    RenderBackendCreateResult
+    CreateRenderBackend(const RenderBackendSelection &selection);
+} // namespace Monolith

@@ -125,9 +125,10 @@ See [docs/mcp.md](./docs/mcp.md) for setup and usage.
 ## Contributing
 
 1. Fork and create a feature branch
-2. Run `make test`
-3. Run `make format-check`
-4. Open a pull request
+2. Install git hooks: `pre-commit install`
+3. Run `make test`
+4. Run `make format-check`
+5. Open a pull request
 
 ## License
 

@@ -13,3 +13,12 @@ repos:
     hooks:
       - id: clang-format
         files: \.(c|cc|cpp|cxx|h|hh|hpp|hxx)$
+
+  - repo: local
+    hooks:
+      - id: horo-engine-build-and-tests
+        name: horo-engine build + unit/ui tests gate
+        entry: bash scripts/precommit-gate.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

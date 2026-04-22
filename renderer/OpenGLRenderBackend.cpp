@@ -1,6 +1,7 @@
 #include "renderer/OpenGLRenderBackend.h"
 
 #include <algorithm>
+#include <format>
 #include <string>
 
 #include <glad/glad.h>
@@ -12,233 +13,244 @@
 #include "renderer/SkinnedMesh.h"
 
 namespace Monolith {
+    namespace {
+        constexpr float kWireframeOverlayLineWidth = 1.5f;
 
-namespace {
+        Shader *ResolveMaterialShader(const Material &material) {
+            return material.shader && material.shader->IsValid()
+                       ? material.shader.get()
+                       : nullptr;
+        }
 
-constexpr float kWireframeOverlayLineWidth = 1.5f;
+        void BindMaterial(const Material &material) {
+            const Shader *shader = ResolveMaterialShader(material);
+            if (!shader)
+                return;
 
-static Shader* ResolveMaterialShader(const Material& material) {
-  return material.shader && material.shader->IsValid() ? material.shader.get() : nullptr;
-}
+            shader->Bind();
+            shader->SetVec4("u_color", material.color);
+            shader->SetFloat("u_roughness", material.roughness);
+            shader->SetFloat("u_metallic", material.metallic);
+            shader->SetInt("u_albedoMap", 0);
+            shader->SetFloat("u_uvScale", material.uvScale);
 
-static void BindMaterial(const Material& material) {
-  Shader* shader = ResolveMaterialShader(material);
-  if (!shader)
-    return;
+            const bool hasTexture = material.albedoMap && material.albedoMap->IsValid();
+            if (hasTexture)
+                material.albedoMap->Bind(0);
+            shader->SetInt("u_hasTexture", hasTexture ? 1 : 0);
+        }
+    } // namespace
 
-  shader->Bind();
-  shader->SetVec4("u_color", material.color);
-  shader->SetFloat("u_roughness", material.roughness);
-  shader->SetFloat("u_metallic", material.metallic);
-  shader->SetInt("u_albedoMap", 0);
-  shader->SetFloat("u_uvScale", material.uvScale);
+    RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
+        return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+    }
 
-  const bool hasTexture = material.albedoMap && material.albedoMap->IsValid();
-  if (hasTexture)
-    material.albedoMap->Bind(0);
-  shader->SetInt("u_hasTexture", hasTexture ? 1 : 0);
-}
+    bool OpenGLRenderBackend::ReadbackColorBgr8(int width, int height,
+                                                std::vector<uint8_t> &outPixels,
+                                                std::string *outError) {
+        if (width <= 0 || height <= 0) {
+            if (outError)
+                *outError = "OpenGL color readback requires positive dimensions.";
+            return false;
+        }
 
-}  // namespace
+        outPixels.resize(static_cast<std::vector<uint8_t>::size_type>(width) *
+                         static_cast<std::vector<uint8_t>::size_type>(height) * 3u);
+        glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, outPixels.data());
+        return true;
+    }
 
-RenderBackendCapabilities OpenGLRenderBackend::GetCapabilities() const {
-  return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
-}
+    bool OpenGLRenderBackend::ReadbackDepth32F(int width, int height,
+                                               std::vector<float> &outDepth,
+                                               std::string *outError) {
+        if (width <= 0 || height <= 0) {
+            if (outError)
+                *outError = "OpenGL depth readback requires positive dimensions.";
+            return false;
+        }
 
-bool OpenGLRenderBackend::ReadbackColorBgr8(int width,
-                                            int height,
-                                            std::vector<uint8_t>& outPixels,
-                                            std::string* outError) {
-  if (width <= 0 || height <= 0) {
-    if (outError)
-      *outError = "OpenGL color readback requires positive dimensions.";
-    return false;
-  }
+        outDepth.resize(static_cast<std::vector<float>::size_type>(width) *
+                        static_cast<std::vector<float>::size_type>(height));
+        glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT,
+                     outDepth.data());
+        return true;
+    }
 
-  outPixels.resize(static_cast<std::vector<uint8_t>::size_type>(width) *
-                   static_cast<std::vector<uint8_t>::size_type>(height) * 3u);
-  glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, outPixels.data());
-  return true;
-}
+    bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(
+        uint32_t, uint32_t, std::string *outError) {
+        if (outError)
+            *outError = "Editor viewport render-target provisioning is unavailable on "
+                    "OpenGL backend.";
+        return false;
+    }
 
-bool OpenGLRenderBackend::ReadbackDepth32F(int width,
-                                           int height,
-                                           std::vector<float>& outDepth,
-                                           std::string* outError) {
-  if (width <= 0 || height <= 0) {
-    if (outError)
-      *outError = "OpenGL depth readback requires positive dimensions.";
-    return false;
-  }
+    bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(
+        RenderTargetHandle *outHandle, bool, std::string *outError) {
+        if (outHandle)
+            *outHandle = {};
+        if (outError)
+            *outError = "Editor viewport render-target handle is unavailable on OpenGL "
+                    "backend.";
+        return false;
+    }
 
-  outDepth.resize(static_cast<std::vector<float>::size_type>(width) *
-                  static_cast<std::vector<float>::size_type>(height));
-  glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, outDepth.data());
-  return true;
-}
+    void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig &frame) {
+        MONOLITH_ASSERT(
+            !m_frameActive,
+            "OpenGLRenderBackend::BeginFrame called while a frame is active");
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
+        glEnable(GL_MULTISAMPLE);
 
-bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(uint32_t,
-                                                           uint32_t,
-                                                           std::string* outError) {
-  if (outError)
-    *outError = "Editor viewport render-target provisioning is unavailable on OpenGL backend.";
-  return false;
-}
+        GLbitfield clearMask = 0;
+        if (frame.clearColorBuffer) {
+            glClearColor(frame.clearColor.x, frame.clearColor.y, frame.clearColor.z,
+                         frame.clearColor.w);
+            clearMask |= GL_COLOR_BUFFER_BIT;
+        }
+        if (frame.clearDepthBuffer)
+            clearMask |= GL_DEPTH_BUFFER_BIT;
+        if (clearMask != 0)
+            glClear(clearMask);
 
-bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(RenderTargetHandle* outHandle,
-                                                                 bool,
-                                                                 std::string* outError) {
-  if (outHandle)
-    *outHandle = {};
-  if (outError)
-    *outError = "Editor viewport render-target handle is unavailable on OpenGL backend.";
-  return false;
-}
+        m_lights = frame.lights;
+        if (m_lights.size() > 8)
+            m_lights.resize(8);
+        m_drawCalls = 0;
+        m_lastLightProgram = 0;
+        m_frameActive = true;
+    }
 
-void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig& frame) {
-  MONOLITH_ASSERT(!m_frameActive, "OpenGLRenderBackend::BeginFrame called while a frame is active");
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
-  glFrontFace(GL_CCW);
-  glEnable(GL_MULTISAMPLE);
+    void OpenGLRenderBackend::EndFrame() {
+        if (m_passActive)
+            EndPass();
+        m_frameActive = false;
+        m_lastLightProgram = 0;
+    }
 
-  GLbitfield clearMask = 0;
-  if (frame.clearColorBuffer) {
-    glClearColor(frame.clearColor.x, frame.clearColor.y, frame.clearColor.z, frame.clearColor.w);
-    clearMask |= GL_COLOR_BUFFER_BIT;
-  }
-  if (frame.clearDepthBuffer)
-    clearMask |= GL_DEPTH_BUFFER_BIT;
-  if (clearMask != 0)
-    glClear(clearMask);
+    void OpenGLRenderBackend::BeginPass(const RenderPassConfig &pass) {
+        MONOLITH_ASSERT(
+            m_frameActive,
+            "OpenGLRenderBackend::BeginPass called without an active frame");
+        MONOLITH_ASSERT(
+            !m_passActive,
+            "OpenGLRenderBackend::BeginPass called while a pass is active");
+        if (!m_frameActive || m_passActive)
+            return;
 
-  m_lights = frame.lights;
-  if (m_lights.size() > 8)
-    m_lights.resize(8);
-  m_drawCalls = 0;
-  m_lastLightProgram = 0;
-  m_frameActive = true;
-}
+        m_activeView = pass.view;
+        m_activePassId = pass.id;
+        m_passActive = true;
+        m_lastLightProgram = 0;
 
-void OpenGLRenderBackend::EndFrame() {
-  if (m_passActive)
-    EndPass();
-  m_frameActive = false;
-  m_lastLightProgram = 0;
-}
+        if (pass.id == RenderPassId::WireframeOverlay) {
+            m_previousDepthTestEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
+            glDisable(GL_DEPTH_TEST);
+            glLineWidth(kWireframeOverlayLineWidth);
+            m_hasPassStateOverride = true;
+        }
+    }
 
-void OpenGLRenderBackend::BeginPass(const RenderPassConfig& pass) {
-  MONOLITH_ASSERT(m_frameActive, "OpenGLRenderBackend::BeginPass called without an active frame");
-  MONOLITH_ASSERT(!m_passActive, "OpenGLRenderBackend::BeginPass called while a pass is active");
-  if (!m_frameActive || m_passActive)
-    return;
+    void OpenGLRenderBackend::EndPass() {
+        if (m_hasPassStateOverride &&
+            m_activePassId == RenderPassId::WireframeOverlay) {
+            if (m_previousDepthTestEnabled)
+                glEnable(GL_DEPTH_TEST);
+            else
+                glDisable(GL_DEPTH_TEST);
+            glLineWidth(1.0f);
+            m_hasPassStateOverride = false;
+        }
 
-  m_activeView = pass.view;
-  m_activePassId = pass.id;
-  m_passActive = true;
-  m_lastLightProgram = 0;
+        m_passActive = false;
+        m_lastLightProgram = 0;
+    }
 
-  if (pass.id == RenderPassId::WireframeOverlay) {
-    m_previousDepthTestEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
-    glDisable(GL_DEPTH_TEST);
-    glLineWidth(kWireframeOverlayLineWidth);
-    m_hasPassStateOverride = true;
-  }
-}
+    void OpenGLRenderBackend::UploadLights(const Shader &shader) {
+        const unsigned int programId = shader.GetProgramID();
+        if (programId == m_lastLightProgram)
+            return;
 
-void OpenGLRenderBackend::EndPass() {
-  if (m_hasPassStateOverride && m_activePassId == RenderPassId::WireframeOverlay) {
-    if (m_previousDepthTestEnabled)
-      glEnable(GL_DEPTH_TEST);
-    else
-      glDisable(GL_DEPTH_TEST);
-    glLineWidth(1.0f);
-    m_hasPassStateOverride = false;
-  }
+        const auto lightCount = static_cast<int>(m_lights.size());
+        shader.SetInt("u_lightCount", lightCount);
+        for (int i = 0; i < lightCount; ++i) {
+            const std::string base = std::format("u_lights[{}].", i);
+            shader.SetInt(base + "type",
+                          static_cast<int>(m_lights[static_cast<size_t>(i)].type));
+            shader.SetVec3(base + "position",
+                           m_lights[static_cast<size_t>(i)].position);
+            shader.SetVec3(base + "direction",
+                           m_lights[static_cast<size_t>(i)].direction);
+            shader.SetVec3(base + "color",
+                           m_lights[static_cast<size_t>(i)].color *
+                           m_lights[static_cast<size_t>(i)].intensity);
+            shader.SetFloat(base + "radius", m_lights[static_cast<size_t>(i)].radius);
+        }
+        m_lastLightProgram = programId;
+    }
 
-  m_passActive = false;
-  m_lastLightProgram = 0;
-}
+    void OpenGLRenderBackend::DrawMesh(const MeshDrawCommand &command) {
+        if (!m_passActive || !command.mesh || !command.material)
+            return;
 
-void OpenGLRenderBackend::UploadLights(const Shader& shader) {
-  const unsigned int programId = shader.GetProgramID();
-  if (programId == m_lastLightProgram)
-    return;
+        BindMaterial(*command.material);
+        const Shader *shader = ResolveMaterialShader(*command.material);
+        if (!shader)
+            return;
 
-  const int lightCount = static_cast<int>(m_lights.size());
-  shader.SetInt("u_lightCount", lightCount);
-  for (int i = 0; i < lightCount; ++i) {
-    const std::string base = "u_lights[" + std::to_string(i) + "].";
-    shader.SetInt(base + "type", static_cast<int>(m_lights[static_cast<size_t>(i)].type));
-    shader.SetVec3(base + "position", m_lights[static_cast<size_t>(i)].position);
-    shader.SetVec3(base + "direction", m_lights[static_cast<size_t>(i)].direction);
-    shader.SetVec3(base + "color",
-                   m_lights[static_cast<size_t>(i)].color *
-                       m_lights[static_cast<size_t>(i)].intensity);
-    shader.SetFloat(base + "radius", m_lights[static_cast<size_t>(i)].radius);
-  }
-  m_lastLightProgram = programId;
-}
+        shader->SetMat4("u_model", command.modelMatrix);
+        shader->SetMat4("u_view", m_activeView.view);
+        shader->SetMat4("u_projection", m_activeView.projection);
+        shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
+        UploadLights(*shader);
 
-void OpenGLRenderBackend::DrawMesh(const MeshDrawCommand& command) {
-  if (!m_passActive || !command.mesh || !command.material)
-    return;
+        command.mesh->Draw();
+        ++m_drawCalls;
+    }
 
-  BindMaterial(*command.material);
-  Shader* shader = ResolveMaterialShader(*command.material);
-  if (!shader)
-    return;
+    void OpenGLRenderBackend::DrawSkinnedMesh(
+        const SkinnedMeshDrawCommand &command) {
+        if (!m_passActive || !command.mesh || !command.material)
+            return;
 
-  shader->SetMat4("u_model", command.modelMatrix);
-  shader->SetMat4("u_view", m_activeView.view);
-  shader->SetMat4("u_projection", m_activeView.projection);
-  shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
-  UploadLights(*shader);
+        BindMaterial(*command.material);
+        const Shader *shader = ResolveMaterialShader(*command.material);
+        if (!shader)
+            return;
 
-  command.mesh->Draw();
-  ++m_drawCalls;
-}
+        shader->SetMat4("u_model", command.modelMatrix);
+        shader->SetMat4("u_view", m_activeView.view);
+        shader->SetMat4("u_projection", m_activeView.projection);
+        shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
 
-void OpenGLRenderBackend::DrawSkinnedMesh(const SkinnedMeshDrawCommand& command) {
-  if (!m_passActive || !command.mesh || !command.material)
-    return;
+        const std::vector<Mat4> *boneMatrices = command.boneMatrices;
+        if (const int boneCount =
+                    boneMatrices ? std::min(static_cast<int>(boneMatrices->size()), 64) : 0;
+            boneCount > 0)
+            shader->SetMat4Array("u_boneMatrices", boneCount,
+                                 (*boneMatrices)[0].Data());
 
-  BindMaterial(*command.material);
-  Shader* shader = ResolveMaterialShader(*command.material);
-  if (!shader)
-    return;
+        UploadLights(*shader);
 
-  shader->SetMat4("u_model", command.modelMatrix);
-  shader->SetMat4("u_view", m_activeView.view);
-  shader->SetMat4("u_projection", m_activeView.projection);
-  shader->SetVec3("u_cameraPos", m_activeView.cameraPosition);
+        command.mesh->Draw();
+        ++m_drawCalls;
+    }
 
-  const std::vector<Mat4>* boneMatrices = command.boneMatrices;
-  const int boneCount =
-      boneMatrices ? std::min(static_cast<int>(boneMatrices->size()), 64) : 0;
-  if (boneCount > 0)
-    shader->SetMat4Array("u_boneMatrices", boneCount, (*boneMatrices)[0].Data());
+    void OpenGLRenderBackend::DrawWireframe(const WireframeDrawCommand &command) {
+        if (!m_passActive || !command.mesh || !command.shader ||
+            !command.shader->IsValid())
+            return;
 
-  UploadLights(*shader);
+        command.shader->Bind();
+        command.shader->SetMat4("u_model", command.modelMatrix);
+        command.shader->SetMat4("u_view", m_activeView.view);
+        command.shader->SetMat4("u_projection", m_activeView.projection);
+        command.shader->SetVec4("u_color", command.color);
 
-  command.mesh->Draw();
-  ++m_drawCalls;
-}
-
-void OpenGLRenderBackend::DrawWireframe(const WireframeDrawCommand& command) {
-  if (!m_passActive || !command.mesh || !command.shader || !command.shader->IsValid())
-    return;
-
-  command.shader->Bind();
-  command.shader->SetMat4("u_model", command.modelMatrix);
-  command.shader->SetMat4("u_view", m_activeView.view);
-  command.shader->SetMat4("u_projection", m_activeView.projection);
-  command.shader->SetVec4("u_color", command.color);
-
-  command.mesh->DrawWireframe();
-  ++m_drawCalls;
-}
-
-}  // namespace Monolith
+        command.mesh->DrawWireframe();
+        ++m_drawCalls;
+    }
+} // namespace Monolith

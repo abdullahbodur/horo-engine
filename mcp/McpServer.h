@@ -8,32 +8,31 @@
 
 #include "mcp/McpProtocol.h"
 
-namespace Monolith {
-namespace Mcp {
+namespace Monolith::Mcp {
+    struct McpServerStartResult {
+        bool ok = false;
+        std::string error;
+    };
 
-struct McpServerStartResult {
-  bool ok = false;
-  std::string error;
-};
+    class McpHttpServer {
+    public:
+        McpHttpServer();
 
-class McpHttpServer {
- public:
-  McpHttpServer();
-  ~McpHttpServer();
+        ~McpHttpServer();
 
-  McpServerStartResult Start(const std::string& host,
-                             int port,
-                             std::function<McpHttpResponse(const McpHttpRequest&)> handler,
-                             std::function<void()> onRequestBegin,
-                             std::function<void()> onRequestEnd);
-  void Stop();
-  bool IsRunning() const { return m_running.load(); }
+        McpServerStartResult
+        Start(const std::string &host, int port,
+              std::function<McpHttpResponse(const McpHttpRequest &)> handler,
+              std::function<void()> onRequestBegin,
+              std::function<void()> onRequestEnd);
 
- private:
-  struct Impl;
-  std::unique_ptr<Impl> m_impl;
-  std::atomic<bool> m_running{false};
-};
+        void Stop();
 
-}  // namespace Mcp
-}  // namespace Monolith
+        bool IsRunning() const { return m_running.load(); }
+
+    private:
+        struct Impl;
+        std::unique_ptr<Impl> m_impl;
+        std::atomic<bool> m_running{false};
+    };
+} // namespace Monolith::Mcp

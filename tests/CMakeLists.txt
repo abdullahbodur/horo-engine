@@ -2,10 +2,10 @@ include(FetchContent)
 
 # ---- Catch2 (header-only test framework) ----
 FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG        v3.6.0
-    GIT_SHALLOW    TRUE
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG v3.6.0
+        GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(Catch2)
 
@@ -13,12 +13,12 @@ FetchContent_MakeAvailable(Catch2)
 set(MONOLITH_TEST_BIN_DIR "${CMAKE_BINARY_DIR}/bin/tests")
 file(MAKE_DIRECTORY "${MONOLITH_TEST_BIN_DIR}")
 function(monolith_set_test_output_dir target_name)
-  set_target_properties(${target_name} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${MONOLITH_TEST_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${MONOLITH_TEST_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${MONOLITH_TEST_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${MONOLITH_TEST_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${MONOLITH_TEST_BIN_DIR}")
+    set_target_properties(${target_name} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${MONOLITH_TEST_BIN_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_DEBUG "${MONOLITH_TEST_BIN_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${MONOLITH_TEST_BIN_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${MONOLITH_TEST_BIN_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${MONOLITH_TEST_BIN_DIR}")
 endfunction()
 
 # ---- test_math ----
@@ -172,10 +172,10 @@ monolith_set_test_output_dir(test_window)
 add_test(NAME test_window COMMAND $<TARGET_FILE:test_window>)
 add_test(NAME test_window_logfilter COMMAND $<TARGET_FILE:test_window> "[core][window][logfilter]")
 set_tests_properties(test_window_logfilter PROPERTIES
-  ENVIRONMENT "MONOLITH_LOG_LEVEL=error;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
+        ENVIRONMENT "MONOLITH_LOG_LEVEL=error;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
 add_test(NAME test_window_glfw_init_fail COMMAND $<TARGET_FILE:test_window> "[core][window][glfw-init-fail]")
 set_tests_properties(test_window_glfw_init_fail PROPERTIES
-  ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
+        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=;MONOLITH_GLFW_VISIBLE=0;MONOLITH_GLFW_SAMPLES=0")
 
 # ---- test_logger_env ----
 add_executable(test_logger_env test_logger_env.cpp)
@@ -277,3 +277,27 @@ add_executable(test_ui_automation_config test_ui_automation_config.cpp)
 target_link_libraries(test_ui_automation_config PRIVATE MonolithEngine Catch2::Catch2WithMain)
 monolith_set_test_output_dir(test_ui_automation_config)
 add_test(NAME test_ui_automation_config COMMAND $<TARGET_FILE:test_ui_automation_config>)
+
+# ---- test_input ----
+add_executable(test_input test_input.cpp)
+target_link_libraries(test_input PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_input)
+add_test(NAME test_input COMMAND $<TARGET_FILE:test_input>)
+
+# ---- test_mesh_cache ----
+add_executable(test_mesh_cache test_mesh_cache.cpp)
+target_link_libraries(test_mesh_cache PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_mesh_cache)
+add_test(NAME test_mesh_cache COMMAND $<TARGET_FILE:test_mesh_cache>)
+
+# ---- test_editor_unit ----
+add_executable(test_editor_unit test_editor_unit.cpp)
+target_link_libraries(test_editor_unit PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_editor_unit)
+add_test(NAME test_editor_unit COMMAND $<TARGET_FILE:test_editor_unit>)
+
+# ---- test_renderer_unit ----
+add_executable(test_renderer_unit test_renderer_unit.cpp)
+target_link_libraries(test_renderer_unit PRIVATE MonolithEngine Catch2::Catch2WithMain)
+monolith_set_test_output_dir(test_renderer_unit)
+add_test(NAME test_renderer_unit COMMAND $<TARGET_FILE:test_renderer_unit>)

@@ -1,28 +1,32 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <memory>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <tuple>
 #include <unordered_set>
-#include <algorithm>
-#include <cctype>
-#include <cstring>
+#include <vector>
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 #include "core/ProjectPath.h"
-#include "editor/EditorLayer.h"
-#include "editor/AssetMetadata.h"
 #include "editor/AssetImportService.h"
 #include "editor/AssetImporterRegistry.h"
-#include "editor/EditorSchema.h"
+#include "editor/AssetMetadata.h"
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorImGuiBackend.h"
+#include "editor/EditorLayer.h"
+#include "editor/EditorSchema.h"
 #include "editor/EditorSearch.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/EditorWorkspaceSettings.h"
@@ -32,118 +36,127 @@
 #include "editor/SceneRuntimeBridge.h"
 #include "editor/SceneSerializer.h"
 #include "renderer/Camera.h"
+#include "tests/TestTempPaths.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;
 
-namespace
-{
-    Monolith::Editor::SceneObject MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument &, const std::string &assetId)
-    {
+namespace {
+    Monolith::Editor::SceneObject
+    MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument &,
+                               std::string_view assetId) {
         Monolith::Editor::SceneObject obj;
         obj.id = "generated";
         obj.type = Monolith::Editor::SceneObjectType::Prop;
-        obj.assetId = assetId;
+        obj.assetId = std::string(assetId);
         return obj;
     }
 
-    Monolith::Editor::SceneObject DuplicateObjectForTest(const Monolith::Editor::SceneDocument &doc, const Monolith::Editor::SceneObject &src)
-    {
+    Monolith::Editor::SceneObject
+    DuplicateObjectForTest(const Monolith::Editor::SceneDocument &doc,
+                           const Monolith::Editor::SceneObject &src) {
         Monolith::Editor::SceneObject clone = src;
-        clone.id = "copy_" + std::to_string(doc.objects.size());
+        clone.id = std::format("copy_{}", doc.objects.size());
         clone.props.erase("_eid");
         return clone;
     }
-
-}
+} // namespace
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-static std::string TmpPath(const std::string &name)
-{
-    return (std::filesystem::temp_directory_path() / name).string();
+static std::string TmpPath(const std::string &name) {
+    return (Monolith::Tests::SecureTempBase() / name).string();
 }
 
-static std::filesystem::path RepoRootFromTestSource()
-{
-    return std::filesystem::path(__FILE__).parent_path().parent_path().lexically_normal();
+static std::filesystem::path RepoRootFromTestSource() {
+    return std::filesystem::path(std::source_location::current().file_name())
+            .parent_path()
+            .parent_path()
+            .lexically_normal();
 }
 
-static void WriteFile(const std::string &path, const std::string &content)
-{
+static void WriteFile(const std::string &path, const std::string &content) {
     std::ofstream f(path);
     f << content;
 }
 
-static std::filesystem::path NormalizePathForComparison(const std::filesystem::path &path)
-{
+static std::filesystem::path
+NormalizePathForComparison(const std::filesystem::path &path) {
     if (path.empty())
         return path;
     std::error_code ec;
-    const std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+    const std::filesystem::path normalized =
+            std::filesystem::weakly_canonical(path, ec);
     if (!ec)
         return normalized;
     ec.clear();
-    const std::filesystem::path parent = path.parent_path();
-    if (!parent.empty())
-    {
-        const std::filesystem::path normalizedParent = std::filesystem::weakly_canonical(parent, ec);
+    if (const std::filesystem::path parent = path.parent_path();
+        !parent.empty()) {
+        const std::filesystem::path normalizedParent =
+                std::filesystem::weakly_canonical(parent, ec);
         if (!ec)
             return (normalizedParent / path.filename()).lexically_normal();
     }
     return path.lexically_normal();
 }
 
-struct ProjectPathGuard
-{
-    std::filesystem::path previousRoot;
+struct ProjectPathGuard {
+    std::filesystem::path previousRoot = Monolith::ProjectPath::Root();
 
-    explicit ProjectPathGuard(const std::filesystem::path &nextRoot)
-        : previousRoot(Monolith::ProjectPath::Root())
-    {
+    ProjectPathGuard(const ProjectPathGuard &) = delete;
+
+    ProjectPathGuard &operator=(const ProjectPathGuard &) = delete;
+
+    ProjectPathGuard(ProjectPathGuard &&) = delete;
+
+    ProjectPathGuard &operator=(ProjectPathGuard &&) = delete;
+
+    explicit ProjectPathGuard(const std::filesystem::path &nextRoot) {
         Monolith::ProjectPath::Init(nextRoot);
     }
 
-    ~ProjectPathGuard()
-    {
-        Monolith::ProjectPath::Init(previousRoot);
-    }
+    ~ProjectPathGuard() { Monolith::ProjectPath::Init(previousRoot); }
 };
 
-struct HomeDirGuard
-{
+struct HomeDirGuard {
     std::string previousUserProfile;
     std::string previousHomeDrive;
     std::string previousHomePath;
     std::string previousHome;
 
-    static std::string ReadEnv(const char *name)
-    {
+    HomeDirGuard(const HomeDirGuard &) = delete;
+
+    HomeDirGuard &operator=(const HomeDirGuard &) = delete;
+
+    HomeDirGuard(HomeDirGuard &&) = delete;
+
+    HomeDirGuard &operator=(HomeDirGuard &&) = delete;
+
+    static std::string ReadEnv(const char *name) {
         if (!name || !*name)
             return {};
 #ifdef _WIN32
-        char *value = nullptr;
         size_t len = 0;
-        if (_dupenv_s(&value, &len, name) != 0 || !value)
+        if (getenv_s(&len, nullptr, 0, name) != 0 || len <= 1)
             return {};
-        std::string out(value);
-        free(value);
-        return out;
+        std::vector<char> value(len);
+        if (getenv_s(&len, value.data(), value.size(), name) != 0 || len <= 1)
+            return {};
+        return std::string(value.data());
 #else
         const char *value = std::getenv(name);
         return value ? std::string(value) : std::string();
 #endif
     }
 
-    explicit HomeDirGuard(const std::filesystem::path &nextHome)
-        : previousUserProfile(ReadEnv("USERPROFILE")),
-          previousHomeDrive(ReadEnv("HOMEDRIVE")),
-          previousHomePath(ReadEnv("HOMEPATH")),
-          previousHome(ReadEnv("HOME"))
-    {
+    explicit HomeDirGuard(const std::filesystem::path &nextHome) {
+        previousUserProfile = ReadEnv("USERPROFILE");
+        previousHomeDrive = ReadEnv("HOMEDRIVE");
+        previousHomePath = ReadEnv("HOMEPATH");
+        previousHome = ReadEnv("HOME");
 #ifdef _WIN32
         _putenv_s("USERPROFILE", nextHome.string().c_str());
         _putenv_s("HOMEDRIVE", "");
@@ -153,8 +166,7 @@ struct HomeDirGuard
 #endif
     }
 
-    ~HomeDirGuard()
-    {
+    ~HomeDirGuard() {
 #ifdef _WIN32
         _putenv_s("USERPROFILE", previousUserProfile.c_str());
         _putenv_s("HOMEDRIVE", previousHomeDrive.c_str());
@@ -168,10 +180,16 @@ struct HomeDirGuard
     }
 };
 
-struct ImGuiContextGuard
-{
-    ImGuiContextGuard()
-    {
+struct ImGuiContextGuard {
+    ImGuiContextGuard(const ImGuiContextGuard &) = delete;
+
+    ImGuiContextGuard &operator=(const ImGuiContextGuard &) = delete;
+
+    ImGuiContextGuard(ImGuiContextGuard &&) = delete;
+
+    ImGuiContextGuard &operator=(ImGuiContextGuard &&) = delete;
+
+    ImGuiContextGuard() {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
@@ -185,21 +203,19 @@ struct ImGuiContextGuard
         io.MouseDown[0] = false;
     }
 
-    ~ImGuiContextGuard()
-    {
-        ImGui::DestroyContext();
-    }
+    ~ImGuiContextGuard() { ImGui::DestroyContext(); }
 };
 
-static void SeedExternalAssetDragPayload(const char *assetId)
-{
+static void SeedExternalAssetDragPayload(const char *assetId) {
     REQUIRE(assetId != nullptr);
+    static std::string payloadStorage;
+    payloadStorage = assetId;
     ImGuiContext &g = *ImGui::GetCurrentContext();
     ImGuiPayload &payload = g.DragDropPayload;
     payload.Clear();
     payload.SourceId = 1;
-    payload.Data = const_cast<char *>(assetId);
-    payload.DataSize = static_cast<int>(std::strlen(assetId)) + 1;
+    payload.Data = payloadStorage.data();
+    payload.DataSize = static_cast<int>(payloadStorage.size()) + 1;
     payload.DataFrameCount = g.FrameCount;
     payload.Delivery = false;
     payload.Preview = false;
@@ -219,23 +235,22 @@ static void SeedExternalAssetDragPayload(const char *assetId)
 // EditorSchema
 // ===========================================================================
 
-TEST_CASE("EditorSchema: missing file is silently ignored", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: missing file is silently ignored",
+          "[editor][schema]") {
     EditorSchema schema;
     REQUIRE_NOTHROW(schema.LoadFromFile("/nonexistent/path/schema.json"));
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema]") {
     WriteFile(TmpPath("schema_empty.json"), "{}");
     EditorSchema schema;
     REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_empty.json")));
     REQUIRE(schema.GetSchema(SceneObjectType::Panel) == nullptr);
 }
 
-TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: malformed JSON is silently ignored",
+          "[editor][schema]") {
     WriteFile(TmpPath("schema_bad.json"), "{ this is not valid json !!!}");
     EditorSchema schema;
     REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
@@ -243,8 +258,7 @@ TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]"
 }
 
 TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
-          "[editor][imgui][backend]")
-{
+          "[editor][imgui][backend]") {
     REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
     REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
 
@@ -255,8 +269,7 @@ TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
 #endif
 }
 
-TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -291,8 +304,8 @@ TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]")
     REQUIRE(ts->fields[0].options[3] == "pyramid");
 }
 
-TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum",
+          "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -315,8 +328,8 @@ TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum", "[ed
     REQUIRE_FALSE(ts->fields[0].options.empty());
 }
 
-TEST_CASE("EditorSchema: ignores deprecated Prop isLight field", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: ignores deprecated Prop isLight field",
+          "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -338,8 +351,7 @@ TEST_CASE("EditorSchema: ignores deprecated Prop isLight field", "[editor][schem
     REQUIRE(ts->fields[0].key == "mesh");
 }
 
-TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Light": {
@@ -361,8 +373,7 @@ TEST_CASE("EditorSchema: loads float field with min/max", "[editor][schema]")
     REQUIRE(ts->fields[0].maxVal == Approx(10.0f));
 }
 
-TEST_CASE("EditorSchema: loads bool field", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads bool field", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -382,8 +393,7 @@ TEST_CASE("EditorSchema: loads bool field", "[editor][schema]")
     REQUIRE(ts->fields[0].widget == FieldDef::Widget::Bool);
 }
 
-TEST_CASE("EditorSchema: loads enum field with options", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads enum field with options", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Panel": {
@@ -413,8 +423,7 @@ TEST_CASE("EditorSchema: loads enum field with options", "[editor][schema]")
     REQUIRE(ts->fields[0].options[2] == "stone");
 }
 
-TEST_CASE("EditorSchema: loads color3 field", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads color3 field", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Light": {
@@ -434,8 +443,8 @@ TEST_CASE("EditorSchema: loads color3 field", "[editor][schema]")
     REQUIRE(ts->fields[0].widget == FieldDef::Widget::Color3);
 }
 
-TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type",
+          "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -453,8 +462,7 @@ TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type", "[edi
     REQUIRE(schema.GetSchema(SceneObjectType::Panel) == nullptr);
 }
 
-TEST_CASE("EditorSchema: loads multiple types", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads multiple types", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -486,8 +494,7 @@ TEST_CASE("EditorSchema: loads multiple types", "[editor][schema]")
     REQUIRE(schema.GetSchema(SceneObjectType::Panel)->fields.size() == 1);
 }
 
-TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {}
@@ -501,8 +508,8 @@ TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]")
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: loads component schema metadata and lookups", "[editor][schema]")
-{
+TEST_CASE("EditorSchema: loads component schema metadata and lookups",
+          "[editor][schema]") {
     const std::string json = R"({
         "types": {
             "Prop": {
@@ -566,9 +573,10 @@ TEST_CASE("EditorSchema: loads component schema metadata and lookups", "[editor]
     REQUIRE(lightSchema->fields[1].options.size() == 2);
 }
 
-TEST_CASE("EditorSchema: bundled schema exposes shared component definitions", "[editor][schema]")
-{
-    const std::filesystem::path schemaPath = RepoRootFromTestSource() / "assets" / "editor_schema.json";
+TEST_CASE("EditorSchema: bundled schema exposes shared component definitions",
+          "[editor][schema]") {
+    const std::filesystem::path schemaPath =
+            RepoRootFromTestSource() / "assets" / "editor_schema.json";
     REQUIRE(std::filesystem::exists(schemaPath));
 
     EditorSchema schema;
@@ -595,23 +603,20 @@ TEST_CASE("EditorSchema: bundled schema exposes shared component definitions", "
 // SceneSerializer
 // ===========================================================================
 
-TEST_CASE("SceneSerializer: LoadFromFile throws on missing file", "[editor][serializer]")
-{
-    REQUIRE_THROWS_AS(
-        SceneSerializer::LoadFromFile("/nonexistent/scene.json"),
-        std::runtime_error);
+TEST_CASE("SceneSerializer: LoadFromFile throws on missing file",
+          "[editor][serializer]") {
+    REQUIRE_THROWS_AS(SceneSerializer::LoadFromFile("/nonexistent/scene.json"),
+                      std::runtime_error);
 }
 
-TEST_CASE("SceneSerializer: LoadFromFile throws on invalid JSON", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: LoadFromFile throws on invalid JSON",
+          "[editor][serializer]") {
     WriteFile(TmpPath("bad_scene.json"), "{ not json!!! }");
-    REQUIRE_THROWS_AS(
-        SceneSerializer::LoadFromFile(TmpPath("bad_scene.json")),
-        std::runtime_error);
+    REQUIRE_THROWS_AS(SceneSerializer::LoadFromFile(TmpPath("bad_scene.json")),
+                      std::runtime_error);
 }
 
-TEST_CASE("SceneSerializer: round-trip empty scene", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: round-trip empty scene", "[editor][serializer]") {
     SceneDocument doc;
     doc.filePath = "test.json";
 
@@ -624,8 +629,8 @@ TEST_CASE("SceneSerializer: round-trip empty scene", "[editor][serializer]")
     REQUIRE(loaded.assets.empty());
 }
 
-TEST_CASE("SceneSerializer: round-trip single Panel object", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: round-trip single Panel object",
+          "[editor][serializer]") {
     SceneDocument doc;
 
     SceneObject obj;
@@ -653,8 +658,8 @@ TEST_CASE("SceneSerializer: round-trip single Panel object", "[editor][serialize
     REQUIRE(o.props.at("texture") == "wood.png");
 }
 
-TEST_CASE("SceneSerializer: round-trip Prop and Light types", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: round-trip Prop and Light types",
+          "[editor][serializer]") {
     SceneDocument doc;
 
     SceneObject prop;
@@ -674,16 +679,14 @@ TEST_CASE("SceneSerializer: round-trip Prop and Light types", "[editor][serializ
     SceneDocument loaded = SceneSerializer::LoadFromFile(path);
 
     REQUIRE(loaded.objects.size() == 2);
-    bool foundProp = false, foundLight = false;
-    for (const auto &o : loaded.objects)
-    {
-        if (o.id == "prop_a")
-        {
+    bool foundProp = false;
+    bool foundLight = false;
+    for (const auto &o: loaded.objects) {
+        if (o.id == "prop_a") {
             foundProp = true;
             REQUIRE(o.type == SceneObjectType::Prop);
         }
-        if (o.id == "light_1")
-        {
+        if (o.id == "light_1") {
             foundLight = true;
             REQUIRE(o.type == SceneObjectType::Light);
         }
@@ -692,8 +695,8 @@ TEST_CASE("SceneSerializer: round-trip Prop and Light types", "[editor][serializ
     REQUIRE(foundLight);
 }
 
-TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: round-trip asset registry",
+          "[editor][serializer]") {
     SceneDocument doc;
 
     AssetDef asset;
@@ -716,15 +719,16 @@ TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]")
 
     REQUIRE(loaded.assets.count("stone_asset") == 1);
     REQUIRE(loaded.assets.at("stone_asset").mesh == "stone.obj");
-    REQUIRE(loaded.assets.at("stone_asset").renderScale == "2.0000,2.0000,2.0000");
+    REQUIRE(loaded.assets.at("stone_asset").renderScale ==
+        "2.0000,2.0000,2.0000");
     REQUIRE(loaded.assets.at("stone_asset").guid == "guid_stone");
     REQUIRE(loaded.assets.at("stone_asset").displayName == "Stone Asset");
     REQUIRE(loaded.objects[0].assetId == "stone_asset");
 }
 
-TEST_CASE("SceneSerializer: legacy asset entries gain guid and display name on load",
-          "[editor][serializer]")
-{
+TEST_CASE(
+    "SceneSerializer: legacy asset entries gain guid and display name on load",
+    "[editor][serializer]") {
     const std::string path = TmpPath("legacy_asset_identity_scene.json");
     const std::string json = R"({
       "version": 1,
@@ -746,9 +750,9 @@ TEST_CASE("SceneSerializer: legacy asset entries gain guid and display name on l
 }
 
 TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
-          "[editor][asset-metadata]")
-{
-    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_metadata_case";
+          "[editor][asset-metadata]") {
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_asset_metadata_case";
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -756,11 +760,11 @@ TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
     ProjectPathGuard guard(root);
 
     SceneDocument doc;
-    doc.assets["crate"] = AssetDef{"assets/models/crate_guid/crate.obj",
-                                   "1.0000,1.0000,1.0000",
-                                   "assets/models/crate_guid/crate.png",
-                                   "crate_guid",
-                                   "Crate"};
+    doc.assets["crate"] =
+            AssetDef{
+                "assets/models/crate_guid/crate.obj", "1.0000,1.0000,1.0000",
+                "assets/models/crate_guid/crate.png", "crate_guid", "Crate"
+            };
 
     std::string error;
     REQUIRE(EnsureAssetMetadataForDocument(&doc, &error));
@@ -774,9 +778,9 @@ TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
     REQUIRE(metadata.producedFiles.size() == 2);
 }
 
-TEST_CASE("AssetImporterRegistry: built-in importers resolve by extension and id",
-          "[editor][asset-import]")
-{
+TEST_CASE(
+    "AssetImporterRegistry: built-in importers resolve by extension and id",
+    "[editor][asset-import]") {
     AssetImporterRegistry registry;
     const AssetImporter *objImporter = registry.FindByExtension("mesh.OBJ");
     REQUIRE(objImporter != nullptr);
@@ -794,9 +798,9 @@ TEST_CASE("AssetImporterRegistry: built-in importers resolve by extension and id
 }
 
 TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
-          "[editor][asset-import]")
-{
-    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_import_obj";
+          "[editor][asset-import]") {
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_asset_import_obj";
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -804,20 +808,21 @@ TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
     ProjectPathGuard guard(root);
 
     const std::filesystem::path sourceObj = root / "crate.obj";
-    WriteFile(sourceObj.string(),
-              "v 0 0 0\n"
+    WriteFile(sourceObj.string(), "v 0 0 0\n"
               "v 0 1 0\n"
               "v 1 0 0\n"
               "f 1 2 3\n");
 
     AssetImportService service;
-    AssetImportResult result = service.ImportAssetFromSource(
-        sourceObj.string(), "crate", "guid_crate", "Crate", {{"preset", "default"}});
+    AssetImportResult result =
+            service.ImportAssetFromSource(sourceObj.string(), "crate", "guid_crate",
+                                          "Crate", {{"preset", "default"}});
 
     REQUIRE(result.ok);
     REQUIRE(result.asset.guid == "guid_crate");
     REQUIRE(result.asset.displayName == "Crate");
-    REQUIRE(result.asset.mesh.find("assets/models/guid_crate/") != std::string::npos);
+    REQUIRE(result.asset.mesh.find("assets/models/guid_crate/") !=
+        std::string::npos);
 
     AssetMetadata metadata;
     std::string error;
@@ -828,12 +833,12 @@ TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
     REQUIRE(metadata.diagnostics.empty());
 }
 
-TEST_CASE("AssetImportService: unsupported source yields structured diagnostics",
-          "[editor][asset-import][diagnostics]")
-{
+TEST_CASE(
+    "AssetImportService: unsupported source yields structured diagnostics",
+    "[editor][asset-import][diagnostics]") {
     AssetImportService service;
-    AssetImportResult result =
-        service.ImportAssetFromSource("C:/tmp/unsupported.txt", "broken", "guid_broken", "Broken");
+    AssetImportResult result = service.ImportAssetFromSource(
+        "C:/tmp/unsupported.txt", "broken", "guid_broken", "Broken");
 
     REQUIRE_FALSE(result.ok);
     REQUIRE(result.diagnostics.size() == 1);
@@ -842,25 +847,21 @@ TEST_CASE("AssetImportService: unsupported source yields structured diagnostics"
     REQUIRE(result.diagnostics[0].assetGuid == "guid_broken");
 }
 
-TEST_CASE("AssetImportService: reimport propagation follows deterministic topological order",
-          "[editor][asset-import][reimport]")
-{
-    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_reimport_graph";
+TEST_CASE("AssetImportService: reimport propagation follows deterministic "
+          "topological order",
+          "[editor][asset-import][reimport]") {
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_asset_reimport_graph";
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "assets" / "models", ec);
     WriteFile((root / "CMakePresets.json").string(), "{}");
     ProjectPathGuard guard(root);
 
-    auto writeObj = [](const std::filesystem::path &path, float xOffset)
-    {
+    auto writeObj = [](const std::filesystem::path &path, float xOffset) {
         WriteFile(path.string(),
-                  "v " + std::to_string(xOffset) + " 0 0\n"
-                                                   "v " +
-                      std::to_string(xOffset) + " 1 0\n"
-                                                "v " +
-                      std::to_string(xOffset + 1.0f) + " 0 0\n"
-                                                       "f 1 2 3\n");
+                  std::format("v {} 0 0\nv {} 1 0\nv {} 0 0\nf 1 2 3\n", xOffset,
+                              xOffset, xOffset + 1.0f));
     };
 
     writeObj(root / "root.obj", 0.0f);
@@ -870,25 +871,26 @@ TEST_CASE("AssetImportService: reimport propagation follows deterministic topolo
 
     AssetImportService service;
     SceneDocument doc;
-    for (const auto &spec : std::vector<std::tuple<std::string, std::string, std::string>>{
+    for (const auto &[name, guid, file]:
+         std::vector<std::tuple<std::string, std::string, std::string> >{
              {"root", "guid_root", "root.obj"},
              {"alpha", "guid_alpha", "alpha.obj"},
              {"beta", "guid_beta", "beta.obj"},
              {"gamma", "guid_gamma", "gamma.obj"},
-         })
-    {
+         }) {
         AssetImportResult result = service.ImportAssetFromSource(
-            (root / std::get<2>(spec)).string(), std::get<0>(spec), std::get<1>(spec), std::get<0>(spec));
+            (root / file).string(), name, guid, name);
         REQUIRE(result.ok);
-        doc.assets[std::get<0>(spec)] = result.asset;
+        doc.assets[name] = result.asset;
     }
 
-    auto addDependency = [](const std::string &guid, const std::string &dependsOnGuid)
-    {
+    auto addDependency = [](const std::string &guid,
+                            const std::string &dependsOnGuid) {
         AssetMetadata metadata;
         std::string error;
         REQUIRE(LoadAssetMetadata(guid, &metadata, &error));
-        metadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, dependsOnGuid});
+        metadata.dependencies.emplace_back(AssetDependencyKind::DownstreamAsset,
+                                           dependsOnGuid);
         REQUIRE(SaveAssetMetadata(metadata, &error));
     };
 
@@ -896,11 +898,12 @@ TEST_CASE("AssetImportService: reimport propagation follows deterministic topolo
     addDependency("guid_beta", "guid_root");
     addDependency("guid_gamma", "guid_beta");
 
-    AssetReimportResult reimportResult =
-        service.ReimportAssetWithDependents(&doc, "guid_root", "Source changed on root");
+    AssetReimportResult reimportResult = service.ReimportAssetWithDependents(
+        &doc, "guid_root", "Source changed on root");
     REQUIRE(reimportResult.ok);
     REQUIRE(reimportResult.order ==
-            std::vector<std::string>{"guid_root", "guid_alpha", "guid_beta", "guid_gamma"});
+            std::vector<std::string>{"guid_root", "guid_alpha", "guid_beta",
+            "guid_gamma"});
 
     AssetMetadata gammaMetadata;
     std::string error;
@@ -908,10 +911,11 @@ TEST_CASE("AssetImportService: reimport propagation follows deterministic topolo
     REQUIRE(gammaMetadata.lastImportReason == "Dependency changed: guid_beta");
 }
 
-TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable error",
-          "[editor][asset-import][reimport]")
-{
-    const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo_asset_reimport_cycle";
+TEST_CASE("AssetImportService: cyclic dependencies fail reimport with "
+          "actionable error",
+          "[editor][asset-import][reimport]") {
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_asset_reimport_cycle";
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -923,8 +927,10 @@ TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable
 
     AssetImportService service;
     SceneDocument doc;
-    AssetImportResult a = service.ImportAssetFromSource((root / "a.obj").string(), "a", "guid_a", "A");
-    AssetImportResult b = service.ImportAssetFromSource((root / "b.obj").string(), "b", "guid_b", "B");
+    AssetImportResult a = service.ImportAssetFromSource((root / "a.obj").string(),
+                                                        "a", "guid_a", "A");
+    AssetImportResult b = service.ImportAssetFromSource((root / "b.obj").string(),
+                                                        "b", "guid_b", "B");
     REQUIRE(a.ok);
     REQUIRE(b.ok);
     doc.assets["a"] = a.asset;
@@ -935,13 +941,15 @@ TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable
     std::string error;
     REQUIRE(LoadAssetMetadata("guid_a", &aMetadata, &error));
     REQUIRE(LoadAssetMetadata("guid_b", &bMetadata, &error));
-    aMetadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, "guid_b"});
-    bMetadata.dependencies.push_back({AssetDependencyKind::DownstreamAsset, "guid_a"});
+    aMetadata.dependencies.emplace_back(AssetDependencyKind::DownstreamAsset,
+                                        "guid_b");
+    bMetadata.dependencies.emplace_back(AssetDependencyKind::DownstreamAsset,
+                                        "guid_a");
     REQUIRE(SaveAssetMetadata(aMetadata, &error));
     REQUIRE(SaveAssetMetadata(bMetadata, &error));
 
     AssetReimportResult reimportResult =
-        service.ReimportAssetWithDependents(&doc, "guid_a", "Cycle validation");
+            service.ReimportAssetWithDependents(&doc, "guid_a", "Cycle validation");
     REQUIRE_FALSE(reimportResult.ok);
     REQUIRE(ContainsCaseInsensitive(reimportResult.error, "cycle"));
 
@@ -952,8 +960,8 @@ TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable
     REQUIRE(aReloaded.diagnostics[0].code == "asset.reimport.dependency_cycle");
 }
 
-TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: asset albedoMap round-trip",
+          "[editor][serializer]") {
     SceneDocument doc;
     AssetDef asset;
     asset.mesh = "prop.obj";
@@ -971,11 +979,12 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
     SceneSerializer::SaveToFile(doc, path);
     SceneDocument loaded = SceneSerializer::LoadFromFile(path);
 
-    REQUIRE(loaded.assets.at("tex_asset").albedoMap == "assets/models/custom_Albedo.png");
+    REQUIRE(loaded.assets.at("tex_asset").albedoMap ==
+        "assets/models/custom_Albedo.png");
 }
 
-TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: empty albedoMap not written to JSON",
+          "[editor][serializer]") {
     SceneDocument doc;
     AssetDef asset;
     asset.mesh = "x.obj";
@@ -986,12 +995,13 @@ TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][seri
     SceneSerializer::SaveToFile(doc, path);
     std::ifstream in(path);
     REQUIRE(in.is_open());
-    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string saved((std::istreambuf_iterator<char>(in)),
+                      std::istreambuf_iterator<char>());
     REQUIRE(saved.find("albedoMap") == std::string::npos);
 }
 
-TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: asset-backed objects omit inline props block",
+          "[editor][serializer]") {
     SceneDocument doc;
 
     AssetDef asset;
@@ -1012,7 +1022,8 @@ TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[edi
 
     std::ifstream in(path);
     REQUIRE(in.is_open());
-    std::string saved((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string saved((std::istreambuf_iterator<char>(in)),
+                      std::istreambuf_iterator<char>());
     REQUIRE(saved.find("\"asset\": \"crate\"") != std::string::npos);
     REQUIRE(saved.find("should_not_be_saved.obj") == std::string::npos);
     REQUIRE(saved.find("\"props\"") == std::string::npos);
@@ -1022,8 +1033,9 @@ TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[edi
     REQUIRE(loaded.objects[0].assetId == "crate");
 }
 
-TEST_CASE("SceneSerializer: inline props survive when object has no asset reference", "[editor][serializer]")
-{
+TEST_CASE(
+    "SceneSerializer: inline props survive when object has no asset reference",
+    "[editor][serializer]") {
     SceneDocument doc;
 
     SceneObject obj;
@@ -1043,15 +1055,16 @@ TEST_CASE("SceneSerializer: inline props survive when object has no asset refere
     REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
 }
 
-TEST_CASE("SceneSerializer: prefab instance metadata round-trips", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: prefab instance metadata round-trips",
+          "[editor][serializer]") {
     SceneDocument doc;
 
     SceneObject obj;
     obj.id = "crate_instance";
     obj.type = SceneObjectType::Prop;
     obj.position = {4.0f, 1.0f, 2.0f};
-    obj.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    obj.prefabInstance =
+            ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
     doc.objects.push_back(obj);
 
     const std::string path = TmpPath("prefab_instance_roundtrip.horo");
@@ -1061,11 +1074,12 @@ TEST_CASE("SceneSerializer: prefab instance metadata round-trips", "[editor][ser
     REQUIRE(loaded.objects.size() == 1);
     REQUIRE(loaded.objects[0].prefabInstance.has_value());
     REQUIRE(loaded.objects[0].prefabInstance->prefabId == "crate_prefab");
-    REQUIRE(loaded.objects[0].prefabInstance->sourcePath == "assets/prefabs/crate_prefab.horo");
+    REQUIRE(loaded.objects[0].prefabInstance->sourcePath ==
+        "assets/prefabs/crate_prefab.horo");
 }
 
-TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]")
-{
+TEST_CASE("Editor helpers: duplicating an object clears runtime entity id",
+          "[editor]") {
     SceneDocument doc;
     SceneObject src;
     src.id = "prop_001";
@@ -1082,8 +1096,8 @@ TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[ed
     REQUIRE(clone.props.at("mesh") == "crate.obj");
 }
 
-TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[editor]")
-{
+TEST_CASE("Editor helpers: asset-backed object stores selected asset id",
+          "[editor]") {
     SceneDocument doc;
     AssetDef asset;
     asset.mesh = "torch.obj";
@@ -1095,8 +1109,7 @@ TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[edit
     REQUIRE(created.assetId == "torch");
 }
 
-TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]")
-{
+TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]") {
     SceneObject obj;
     obj.id = "prop_007";
     obj.type = SceneObjectType::Prop;
@@ -1108,8 +1121,8 @@ TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]")
     REQUIRE_FALSE(ObjectMatchesQuickOpenQuery(obj, "torch"));
 }
 
-TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[editor]")
-{
+TEST_CASE("Editor helpers: shortcut query matches category command and keys",
+          "[editor]") {
     ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
     REQUIRE(MatchesShortcutQuery(row, "editor"));
     REQUIRE(MatchesShortcutQuery(row, "quick"));
@@ -1117,8 +1130,8 @@ TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[
     REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
 }
 
-TEST_CASE("Editor helpers: command palette query matches command and shortcut", "[editor]")
-{
+TEST_CASE("Editor helpers: command palette query matches command and shortcut",
+          "[editor]") {
     CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
     REQUIRE(MatchesCommandPaletteQuery(row, "save"));
     REQUIRE(MatchesCommandPaletteQuery(row, "toolbar"));
@@ -1126,16 +1139,16 @@ TEST_CASE("Editor helpers: command palette query matches command and shortcut", 
     REQUIRE_FALSE(MatchesCommandPaletteQuery(row, "delete"));
 }
 
-TEST_CASE("Editor helpers: object type labels are stable", "[editor]")
-{
+TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
     REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Prop)) == "prop");
     REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Light)) == "light");
     REQUIRE(std::string(ObjectTypeLabel(SceneObjectType::Panel)) == "board");
-    REQUIRE(std::string(ObjectTypeLabel(static_cast<SceneObjectType>(999))) == "unknown");
+    REQUIRE(std::string(ObjectTypeLabel(static_cast<SceneObjectType>(999))) ==
+        "unknown");
 }
 
-TEST_CASE("Editor helpers: generic search helpers handle empty query", "[editor]")
-{
+TEST_CASE("Editor helpers: generic search helpers handle empty query",
+          "[editor]") {
     ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
     REQUIRE(MatchesShortcutQuery(row, ""));
     REQUIRE(ContainsCaseInsensitive("Any Text", ""));
@@ -1152,8 +1165,8 @@ TEST_CASE("Editor helpers: generic search helpers handle empty query", "[editor]
     REQUIRE(AssetMatchesQuickOpenQuery("crate_asset", asset, ""));
 }
 
-TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor]")
-{
+TEST_CASE("Editor helpers: asset quick-open query matches id and mesh",
+          "[editor]") {
     AssetDef asset;
     asset.mesh = "assets/models/torch.obj";
     REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "torch"));
@@ -1161,55 +1174,58 @@ TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor
     REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
 }
 
-TEST_CASE("Editor helpers: filtered list state handles empty and no-match cases", "[editor]")
-{
+TEST_CASE(
+    "Editor helpers: filtered list state handles empty and no-match cases",
+    "[editor]") {
     REQUIRE(EvaluateFilteredListState(3, 1, "") == FilteredListState::None);
     REQUIRE(EvaluateFilteredListState(0, 0, "") == FilteredListState::EmptyData);
-    REQUIRE(EvaluateFilteredListState(4, 0, "torch") == FilteredListState::NoMatches);
+    REQUIRE(EvaluateFilteredListState(4, 0, "torch") ==
+        FilteredListState::NoMatches);
     REQUIRE(EvaluateFilteredListState(4, 0, "") == FilteredListState::None);
 }
 
-TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]")
-{
+TEST_CASE("Editor helpers: shortcut table includes required entries",
+          "[editor]") {
     const auto rows = GetEditorShortcuts();
     REQUIRE_FALSE(rows.empty());
 
-    auto hasCommandWithKeys = [&](const char *command, const char *keys)
-    {
-        return std::any_of(rows.begin(), rows.end(), [&](const ShortcutRow &row)
-                           { return std::string(row.command) == command && std::string(row.keys) == keys; });
+    auto hasCommandWithKeys = [&](const char *command, const char *keys) {
+        return std::ranges::any_of(rows, [&](const ShortcutRow &row) {
+            return std::string(row.command) == command &&
+                   std::string(row.keys) == keys;
+        });
     };
 
-    REQUIRE(hasCommandWithKeys("Run or stop game in viewport", "Toolbar: Play / Stop"));
+    REQUIRE(hasCommandWithKeys("Run or stop game in viewport",
+        "Toolbar: Play / Stop"));
     REQUIRE(hasCommandWithKeys("Toggle shortcuts help", "? or F1"));
     REQUIRE(hasCommandWithKeys("Quick open", "Ctrl/Cmd + P"));
     REQUIRE(hasCommandWithKeys("Command palette", "Ctrl/Cmd + Shift + P"));
     REQUIRE(hasCommandWithKeys("Undo last scene change", "Ctrl/Cmd + Z"));
-    REQUIRE(hasCommandWithKeys("Redo last scene change", "Ctrl/Cmd + Shift + Z / Ctrl+Y"));
+    REQUIRE(hasCommandWithKeys("Redo last scene change",
+        "Ctrl/Cmd + Shift + Z / Ctrl+Y"));
 }
 
-TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]")
-{
+TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
     const auto rows = GetEditorShortcuts();
-    std::unordered_set<std::string> commandSet;
+    std::unordered_set<std::string, StringHash, std::equal_to<> > commandSet;
 
-    for (const auto &row : rows)
-    {
-        const auto [_, inserted] = commandSet.insert(row.command);
+    for (const auto &row: rows) {
+        const auto [_, inserted] = commandSet.emplace(row.command);
         REQUIRE(inserted);
     }
 }
 
-TEST_CASE("Editor asset import: validates obj extension case-insensitively", "[editor]")
-{
-    REQUIRE(IsObjFilePath("/tmp/mesh.obj"));
-    REQUIRE(IsObjFilePath("/tmp/MESH.OBJ"));
-    REQUIRE_FALSE(IsObjFilePath("/tmp/mesh.fbx"));
+TEST_CASE("Editor asset import: validates obj extension case-insensitively",
+          "[editor]") {
+    REQUIRE(IsObjFilePath("sandbox/mesh.obj"));
+    REQUIRE(IsObjFilePath("sandbox/MESH.OBJ"));
+    REQUIRE_FALSE(IsObjFilePath("sandbox/mesh.fbx"));
     REQUIRE_FALSE(IsObjFilePath(""));
 }
 
-TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[editor]")
-{
+TEST_CASE("Editor asset import: derives asset id and mesh tag from path",
+          "[editor]") {
     const std::string path = "/Users/bodur/Downloads/torch_model.obj";
     REQUIRE(AssetIdFromImportedPath(path) == "torch_model");
     REQUIRE(MeshTagFromImportedPath(path) == "assets/models/torch_model.obj");
@@ -1218,20 +1234,28 @@ TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[edit
     REQUIRE(MeshTagFromImportedPath("").empty());
 }
 
-TEST_CASE("Editor MCP delete_asset removes managed imported asset folders", "[editor][mcp][filesystem]")
-{
+TEST_CASE("Editor MCP delete_asset removes managed imported asset folders",
+          "[editor][mcp][filesystem]") {
     namespace fs = std::filesystem;
 
-    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_delete_asset_managed";
+    const fs::path projectRoot =
+            Monolith::Tests::SecureTempBase() / "horo_editor_delete_asset_managed";
     fs::remove_all(projectRoot);
     fs::create_directories(projectRoot / "assets" / "models" / "crate");
-    WriteFile((projectRoot / "assets" / "models" / "crate" / "crate.obj").string(), "o crate\n");
-    WriteFile((projectRoot / "assets" / "models" / "crate" / "crate.png").string(), "png");
+    WriteFile(
+        (projectRoot / "assets" / "models" / "crate" / "crate.obj").string(),
+        "o crate\n");
+    WriteFile(
+        (projectRoot / "assets" / "models" / "crate" / "crate.png").string(),
+        "png");
 
     ProjectPathGuard projectPath(projectRoot);
 
     SceneDocument doc;
-    doc.assets["crate"] = AssetDef{"assets/models/crate/crate.obj", "1,1,1", "assets/models/crate/crate.png"};
+    doc.assets["crate"] = AssetDef{
+        "assets/models/crate/crate.obj", "1,1,1",
+        "assets/models/crate/crate.png"
+    };
     SceneObject obj;
     obj.id = "prop_1";
     obj.type = SceneObjectType::Prop;
@@ -1241,26 +1265,32 @@ TEST_CASE("Editor MCP delete_asset removes managed imported asset folders", "[ed
     EditorLayer editor;
     editor.LoadDocument(doc);
 
-    const auto result = editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "crate"}});
+    const auto result = editor.ExecuteMcpCommand("editor.delete_asset",
+                                                 nlohmann::json{{"id", "crate"}});
     REQUIRE(result.ok);
     REQUIRE(result.data["deletedManagedFiles"].get<bool>());
     REQUIRE(result.data["clearedObjectReferences"] == 1);
-    REQUIRE(NormalizePathForComparison(result.data["deletedAssetDirectory"].get<std::string>()) ==
-            NormalizePathForComparison(projectRoot / "assets" / "models" / "crate"));
-    REQUIRE(editor.GetDocument().assets.find("crate") == editor.GetDocument().assets.end());
+    REQUIRE(
+        NormalizePathForComparison(
+            result.data["deletedAssetDirectory"].get<std::string>()) ==
+        NormalizePathForComparison(projectRoot / "assets" / "models" / "crate"));
+    REQUIRE(editor.GetDocument().assets.find("crate") ==
+        editor.GetDocument().assets.end());
     REQUIRE(editor.GetDocument().objects[0].assetId.empty());
     REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "crate"));
 }
 
-TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only registry entry",
-          "[editor][mcp][filesystem]")
-{
+TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only "
+          "registry entry",
+          "[editor][mcp][filesystem]") {
     namespace fs = std::filesystem;
 
-    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_delete_asset_manual";
+    const fs::path projectRoot =
+            Monolith::Tests::SecureTempBase() / "horo_editor_delete_asset_manual";
     fs::remove_all(projectRoot);
     fs::create_directories(projectRoot / "assets" / "models");
-    WriteFile((projectRoot / "assets" / "models" / "crate.obj").string(), "o crate\n");
+    WriteFile((projectRoot / "assets" / "models" / "crate.obj").string(),
+              "o crate\n");
 
     ProjectPathGuard projectPath(projectRoot);
 
@@ -1270,7 +1300,8 @@ TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only reg
     EditorLayer editor;
     editor.LoadDocument(doc);
 
-    const auto result = editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "crate"}});
+    const auto result = editor.ExecuteMcpCommand("editor.delete_asset",
+                                                 nlohmann::json{{"id", "crate"}});
     REQUIRE(result.ok);
     REQUIRE_FALSE(result.data["deletedManagedFiles"].get<bool>());
     REQUIRE_FALSE(result.data.contains("deletedAssetDirectory"));
@@ -1278,10 +1309,11 @@ TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only reg
     REQUIRE(fs::exists(projectRoot / "assets" / "models" / "crate.obj"));
 }
 
-TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "[editor][mcp][assets]")
-{
+TEST_CASE("Editor create_object_from_asset shares parent-aware creation path",
+          "[editor][mcp][assets]") {
     SceneDocument doc;
-    doc.assets["crate"] = AssetDef{"assets/models/crate/crate.obj", "1.0000,2.0000,3.0000", ""};
+    doc.assets["crate"] =
+            AssetDef{"assets/models/crate/crate.obj", "1.0000,2.0000,3.0000", ""};
 
     SceneObject parent;
     parent.id = "parent_panel";
@@ -1291,24 +1323,33 @@ TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "
     EditorLayer editor;
     editor.LoadDocument(doc);
 
-    const auto childResult = editor.ExecuteMcpCommand(
-        "editor.create_object_from_asset",
-        nlohmann::json{{"assetId", "crate"}, {"parentId", "parent_panel"}, {"id", "child_prop"}});
+    const auto childResult =
+            editor.ExecuteMcpCommand("editor.create_object_from_asset",
+                                     nlohmann::json{
+                                         {"assetId", "crate"},
+                                         {"parentId", "parent_panel"},
+                                         {"id", "child_prop"}
+                                     });
     REQUIRE(childResult.ok);
     REQUIRE(childResult.data["created"]["id"] == "child_prop");
     REQUIRE(childResult.data["created"]["parentId"] == "parent_panel");
 
     const auto rootResult = editor.ExecuteMcpCommand(
         "editor.create_object_from_asset",
-        nlohmann::json{{"assetId", "crate"},
-                       {"id", "root_prop"},
-                       {"position", nlohmann::json::array({4.0f, 5.0f, 6.0f})}});
+        nlohmann::json{
+            {"assetId", "crate"},
+            {"id", "root_prop"},
+            {"position", nlohmann::json::array({4.0f, 5.0f, 6.0f})}
+        });
     REQUIRE(rootResult.ok);
     REQUIRE(rootResult.data["created"]["id"] == "root_prop");
     REQUIRE_FALSE(rootResult.data["created"].contains("parentId"));
-    REQUIRE(rootResult.data["created"]["position"][0].get<float>() == Approx(4.0f));
-    REQUIRE(rootResult.data["created"]["position"][1].get<float>() == Approx(5.0f));
-    REQUIRE(rootResult.data["created"]["position"][2].get<float>() == Approx(6.0f));
+    REQUIRE(rootResult.data["created"]["position"][0].get<float>() ==
+        Approx(4.0f));
+    REQUIRE(rootResult.data["created"]["position"][1].get<float>() ==
+        Approx(5.0f));
+    REQUIRE(rootResult.data["created"]["position"][2].get<float>() ==
+        Approx(6.0f));
 
     const SceneDocument &updated = editor.GetDocument();
     REQUIRE(updated.objects.size() == 3);
@@ -1318,8 +1359,8 @@ TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "
     REQUIRE(updated.objects[2].position.z == Approx(6.0f));
 }
 
-TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor][mcp][selection]")
-{
+TEST_CASE("Editor MCP duplicate duplicates each selected object once",
+          "[editor][mcp][selection]") {
     SceneDocument doc;
 
     SceneObject first;
@@ -1345,7 +1386,10 @@ TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor]
 
     const auto result = editor.ExecuteMcpCommand(
         "editor.duplicate",
-        nlohmann::json{{"ids", nlohmann::json::array({"light_c", "panel_a", "panel_a"})}, {"count", 4}});
+        nlohmann::json{
+            {"ids", nlohmann::json::array({"light_c", "panel_a", "panel_a"})},
+            {"count", 4}
+        });
     REQUIRE(result.ok);
     REQUIRE(result.data["duplicates"].is_array());
     REQUIRE(result.data["duplicates"].size() == 2);
@@ -1374,8 +1418,8 @@ TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor]
     REQUIRE(selectedIds[1] == lightClone.id);
 }
 
-TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[editor][mcp][selection]")
-{
+TEST_CASE("Editor MCP duplicate preserves single-object count behavior",
+          "[editor][mcp][selection]") {
     SceneDocument doc;
 
     SceneObject source;
@@ -1388,18 +1432,16 @@ TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[edito
     editor.LoadDocument(doc);
 
     const auto result = editor.ExecuteMcpCommand(
-        "editor.duplicate",
-        nlohmann::json{{"id", "camera_main"}, {"count", 3}});
+        "editor.duplicate", nlohmann::json{{"id", "camera_main"}, {"count", 3}});
     REQUIRE(result.ok);
     REQUIRE(result.data["duplicates"].size() == 3);
 
     const SceneDocument &updated = editor.GetDocument();
     REQUIRE(updated.objects.size() == 4);
 
-    for (size_t i = 1; i < updated.objects.size(); ++i)
-    {
+    for (size_t i = 1; i < updated.objects.size(); ++i) {
         const SceneObject &clone = updated.objects[i];
-        const float expectedOffset = static_cast<float>(i);
+        const auto expectedOffset = static_cast<float>(i);
         REQUIRE(clone.id != "camera_main");
         REQUIRE(clone.position.x == Approx(10.0f + expectedOffset));
         REQUIRE(clone.position.y == Approx(2.0f));
@@ -1413,8 +1455,8 @@ TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[edito
     REQUIRE(selectedIds[2] == updated.objects[3].id);
 }
 
-TEST_CASE("Editor MCP undo and redo restore created object selection", "[editor][mcp][history]")
-{
+TEST_CASE("Editor MCP undo and redo restore created object selection",
+          "[editor][mcp][history]") {
     EditorLayer editor;
     editor.LoadDocument(SceneDocument{});
 
@@ -1424,26 +1466,31 @@ TEST_CASE("Editor MCP undo and redo restore created object selection", "[editor]
     REQUIRE(createResult.ok);
     REQUIRE(editor.GetDocument().objects.size() == 1);
     REQUIRE(editor.GetDocument().dirty);
-    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+    REQUIRE(editor.GetSelectedObjectIds() ==
+        std::vector<std::string>{"panel_created"});
 
-    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    const auto undoResult =
+            editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
     REQUIRE(undoResult.data["undone"].get<bool>());
     REQUIRE(editor.GetDocument().objects.empty());
     REQUIRE_FALSE(editor.GetDocument().dirty);
     REQUIRE(editor.GetSelectedObjectIds().empty());
 
-    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    const auto redoResult =
+            editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
     REQUIRE(redoResult.ok);
     REQUIRE(redoResult.data["redone"].get<bool>());
     REQUIRE(editor.GetDocument().objects.size() == 1);
     REQUIRE(editor.GetDocument().objects[0].id == "panel_created");
     REQUIRE(editor.GetDocument().dirty);
-    REQUIRE(editor.GetSelectedObjectIds() == std::vector<std::string>{"panel_created"});
+    REQUIRE(editor.GetSelectedObjectIds() ==
+        std::vector<std::string>{"panel_created"});
 }
 
-TEST_CASE("Editor MCP undo and redo restore duplicate selection and dirty state", "[editor][mcp][history]")
-{
+TEST_CASE(
+    "Editor MCP undo and redo restore duplicate selection and dirty state",
+    "[editor][mcp][history]") {
     SceneDocument doc;
 
     SceneObject first;
@@ -1464,25 +1511,28 @@ TEST_CASE("Editor MCP undo and redo restore duplicate selection and dirty state"
         nlohmann::json{{"ids", nlohmann::json::array({"prop_a", "prop_b"})}});
     REQUIRE(duplicateResult.ok);
     REQUIRE(editor.GetDocument().objects.size() == 4);
-    const std::vector<std::string> duplicatedSelection = editor.GetSelectedObjectIds();
+    const std::vector<std::string> duplicatedSelection =
+            editor.GetSelectedObjectIds();
     REQUIRE(duplicatedSelection.size() == 2);
     REQUIRE(editor.GetDocument().dirty);
 
-    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    const auto undoResult =
+            editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
     REQUIRE(editor.GetDocument().objects.size() == 2);
     REQUIRE_FALSE(editor.GetDocument().dirty);
     REQUIRE(editor.GetSelectedObjectIds().empty());
 
-    const auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    const auto redoResult =
+            editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
     REQUIRE(redoResult.ok);
     REQUIRE(editor.GetDocument().objects.size() == 4);
     REQUIRE(editor.GetDocument().dirty);
     REQUIRE(editor.GetSelectedObjectIds() == duplicatedSelection);
 }
 
-TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][mcp][history]")
-{
+TEST_CASE("Editor MCP undo restores previous scene after new_scene",
+          "[editor][mcp][history]") {
     SceneDocument doc;
     doc.sceneId = "forest";
     doc.sceneName = "Forest";
@@ -1504,7 +1554,8 @@ TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][m
     REQUIRE(editor.GetDocument().sceneName == "Empty Scene");
     REQUIRE(editor.GetDocument().objects.empty());
 
-    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    const auto undoResult =
+            editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
     REQUIRE(editor.GetDocument().sceneId == "forest");
     REQUIRE(editor.GetDocument().sceneName == "Forest");
@@ -1512,43 +1563,56 @@ TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][m
     REQUIRE_FALSE(editor.GetDocument().dirty);
 }
 
-TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][mcp][history]")
-{
+TEST_CASE("Editor MCP undo restores asset edits and selected asset",
+          "[editor][mcp][history]") {
     SceneDocument doc;
     doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1,1,1", ""};
 
     EditorLayer editor;
     editor.LoadDocument(doc);
-    REQUIRE(editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "crate"}}).ok);
-    const std::string previousDisplayName = editor.GetDocument().assets.at("crate").displayName;
+    REQUIRE(editor
+        .ExecuteMcpCommand("editor.select_asset",
+            nlohmann::json{{"id", "crate"}})
+        .ok);
+    const std::string previousDisplayName =
+            editor.GetDocument().assets.at("crate").displayName;
 
     const auto updateResult = editor.ExecuteMcpCommand(
         "editor.update_asset",
-        nlohmann::json{{"id", "crate"}, {"displayName", "Crate Large"}, {"albedoMap", "assets/models/crate.png"}});
+        nlohmann::json{
+            {"id", "crate"},
+            {"displayName", "Crate Large"},
+            {"albedoMap", "assets/models/crate.png"}
+        });
     REQUIRE(updateResult.ok);
     REQUIRE(editor.GetDocument().assets.at("crate").displayName == "Crate Large");
     REQUIRE(editor.GetSelectedAssetId() == "crate");
 
-    const auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    const auto undoResult =
+            editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
     REQUIRE(undoResult.ok);
-    REQUIRE(editor.GetDocument().assets.at("crate").displayName == previousDisplayName);
+    REQUIRE(editor.GetDocument().assets.at("crate").displayName ==
+        previousDisplayName);
     REQUIRE(editor.GetDocument().assets.at("crate").albedoMap.empty());
     REQUIRE(editor.GetSelectedAssetId() == "crate");
     REQUIRE_FALSE(editor.GetDocument().dirty);
 }
 
-TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instance", "[editor][mcp][prefab]")
-{
+TEST_CASE(
+    "Editor MCP create_prefab writes prefab file and links selected instance",
+    "[editor][mcp][prefab]") {
     namespace fs = std::filesystem;
 
-    const fs::path projectRoot = fs::temp_directory_path() / "horo_editor_create_prefab";
+    const fs::path projectRoot =
+            Monolith::Tests::SecureTempBase() / "horo_editor_create_prefab";
     fs::remove_all(projectRoot);
     fs::create_directories(projectRoot / "assets" / "prefabs");
 
     ProjectPathGuard projectPath(projectRoot);
 
     SceneDocument doc;
-    doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1.0000,2.0000,3.0000", ""};
+    doc.assets["crate"] =
+            AssetDef{"assets/models/crate.obj", "1.0000,2.0000,3.0000", ""};
 
     SceneObject obj;
     obj.id = "crate_prop";
@@ -1560,11 +1624,13 @@ TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instan
     EditorLayer editor;
     editor.LoadDocument(doc);
 
-    const auto result = editor.ExecuteMcpCommand("editor.create_prefab", nlohmann::json{{"id", "crate_prop"}});
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_prefab", nlohmann::json{{"id", "crate_prop"}});
     REQUIRE(result.ok);
     REQUIRE(result.data["prefabPath"].is_string());
 
-    const fs::path prefabPath = projectRoot / result.data["prefabPath"].get<std::string>();
+    const fs::path prefabPath =
+            projectRoot / result.data["prefabPath"].get<std::string>();
     REQUIRE(fs::exists(prefabPath));
 
     SceneDocument prefabDoc = SceneSerializer::LoadFromFile(prefabPath.string());
@@ -1574,24 +1640,28 @@ TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instan
 
     const SceneObject &updated = editor.GetDocument().objects[0];
     REQUIRE(updated.prefabInstance.has_value());
-    REQUIRE(updated.prefabInstance->sourcePath == result.data["prefabPath"].get<std::string>());
+    REQUIRE(updated.prefabInstance->sourcePath ==
+        result.data["prefabPath"].get<std::string>());
     REQUIRE(updated.prefabInstance->prefabId == prefabPath.stem().string());
     REQUIRE(editor.GetDocument().dirty);
 }
 
-TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "[editor][prefab][runtime]")
-{
+TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props",
+          "[editor][prefab][runtime]") {
     namespace fs = std::filesystem;
 
-    const fs::path projectRoot = fs::temp_directory_path() / "horo_runtime_prefab_instance";
+    const fs::path projectRoot =
+            Monolith::Tests::SecureTempBase() / "horo_runtime_prefab_instance";
     fs::remove_all(projectRoot);
     fs::create_directories(projectRoot / "assets" / "prefabs");
 
     ProjectPathGuard projectPath(projectRoot);
 
     SceneDocument prefabDoc;
-    prefabDoc.filePath = (projectRoot / "assets" / "prefabs" / "crate_prefab.horo").string();
-    prefabDoc.assets["crate"] = AssetDef{"assets/models/crate.obj", "2.0000,3.0000,4.0000", ""};
+    prefabDoc.filePath =
+            (projectRoot / "assets" / "prefabs" / "crate_prefab.horo").string();
+    prefabDoc.assets["crate"] =
+            AssetDef{"assets/models/crate.obj", "2.0000,3.0000,4.0000", ""};
 
     SceneObject prefabObject;
     prefabObject.id = "crate_template";
@@ -1608,7 +1678,8 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "
     instance.type = SceneObjectType::Prop;
     instance.position = {8.0f, 0.0f, 6.0f};
     instance.scale = {0.5f, 2.0f, 1.0f};
-    instance.prefabInstance = ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
+    instance.prefabInstance =
+            ScenePrefabInstance{"crate_prefab", "assets/prefabs/crate_prefab.horo"};
     doc.objects.push_back(instance);
 
     const SceneProjectModel model = BuildSceneProjectModel(doc);
@@ -1617,7 +1688,8 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "
     REQUIRE(model.scene.nodes[0].assetId == "crate");
     REQUIRE(model.scene.nodes[0].prefabInstance.has_value());
 
-    const RuntimeSceneBuildResult runtime = Monolith::Editor::BuildRuntimeSceneDefinition(doc);
+    const RuntimeSceneBuildResult runtime =
+            Monolith::Editor::BuildRuntimeSceneDefinition(doc);
     REQUIRE(runtime.issues.empty());
     REQUIRE(runtime.definition.rooms.size() == 1);
     REQUIRE(runtime.definition.rooms[0].props.size() == 1);
@@ -1632,16 +1704,16 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "
     REQUIRE(prop.scale.z == Approx(4.0f));
 }
 
-TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]")
-{
+TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge",
+          "[editor]") {
     REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, true, false));
     REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
 }
 
-TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]")
-{
+TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input",
+          "[editor]") {
     REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
@@ -1649,15 +1721,15 @@ TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "
     REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
 }
 
-TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]")
-{
+TEST_CASE("Editor helpers: command palette table includes scene actions",
+          "[editor]") {
     const auto rows = GetEditorCommands();
     REQUIRE_FALSE(rows.empty());
 
-    auto hasCommand = [&](const char *id, const char *command)
-    {
-        return std::any_of(rows.begin(), rows.end(), [&](const CommandPaletteRow &row)
-                           { return std::string(row.id) == id && std::string(row.command) == command; });
+    auto hasCommand = [&](const char *id, const char *command) {
+        return std::ranges::any_of(rows, [&](const CommandPaletteRow &row) {
+            return std::string(row.id) == id && std::string(row.command) == command;
+        });
     };
 
     REQUIRE(hasCommand("new_scene", "New Scene"));
@@ -1668,16 +1740,16 @@ TEST_CASE("Editor helpers: command palette table includes scene actions", "[edit
     REQUIRE(hasCommand("redo", "Redo"));
 }
 
-TEST_CASE("Editor UI logic: command palette shares quick-open gating", "[editor]")
-{
+TEST_CASE("Editor UI logic: command palette shares quick-open gating",
+          "[editor]") {
     REQUIRE(ShouldOpenCommandPalette(true, false, false, false, false));
     REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, true, false, false));
     REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, false, true, false));
     REQUIRE_FALSE(ShouldOpenCommandPalette(true, true, false, false, false));
 }
 
-TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]")
-{
+TEST_CASE("Editor UI logic: copy and delete actions gate correctly",
+          "[editor]") {
     REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
     REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
     REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
@@ -1686,8 +1758,8 @@ TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]")
     REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
 }
 
-TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[editor]")
-{
+TEST_CASE("Editor UI logic: escape handling respects modal and input gates",
+          "[editor]") {
     REQUIRE(ShouldHandleEditorEscape(true, false, false, false, false));
     REQUIRE_FALSE(ShouldHandleEditorEscape(true, true, false, false, false));
     REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, true, false, false));
@@ -1695,22 +1767,24 @@ TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[e
     REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, false, false, true));
 }
 
-TEST_CASE("Editor UI logic: exit decision reflects unsaved state", "[editor]")
-{
-    REQUIRE(ResolveEditorExitDecision(false) == EditorExitDecision::ExitImmediately);
-    REQUIRE(ResolveEditorExitDecision(true) == EditorExitDecision::PromptUnsavedConfirm);
+TEST_CASE("Editor UI logic: exit decision reflects unsaved state", "[editor]") {
+    REQUIRE(ResolveEditorExitDecision(false) ==
+        EditorExitDecision::ExitImmediately);
+    REQUIRE(ResolveEditorExitDecision(true) ==
+        EditorExitDecision::PromptUnsavedConfirm);
 }
 
-TEST_CASE("Editor UI logic: close finalization waits for pending reload", "[editor]")
-{
+TEST_CASE("Editor UI logic: close finalization waits for pending reload",
+          "[editor]") {
     REQUIRE_FALSE(ShouldFinalizeEditorClose(false, false));
     REQUIRE_FALSE(ShouldFinalizeEditorClose(true, true));
     REQUIRE(ShouldFinalizeEditorClose(true, false));
 }
 
-TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]")
-{
-    EditorStatusText status = BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
+TEST_CASE("Editor UI logic: status text is stable and clamps selection",
+          "[editor]") {
+    EditorStatusText status =
+            BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
     REQUIRE(status.selectionCount == 0);
     REQUIRE(std::string(status.dirtyText) == "yes");
     REQUIRE(std::string(status.flyText) == "off");
@@ -1723,8 +1797,8 @@ TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[edito
     REQUIRE(std::string(status.reloadText) == "idle");
 }
 
-TEST_CASE("Editor UI logic: edit menu enables only for single valid selection", "[editor]")
-{
+TEST_CASE("Editor UI logic: edit menu enables only for single valid selection",
+          "[editor]") {
     REQUIRE(CanEditSingleSelection(1, 0, 1));
     REQUIRE(CanEditSingleSelection(1, 2, 5));
 
@@ -1734,8 +1808,8 @@ TEST_CASE("Editor UI logic: edit menu enables only for single valid selection", 
     REQUIRE_FALSE(CanEditSingleSelection(1, 5, 5));
 }
 
-TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: _eid prop is stripped on save",
+          "[editor][serializer]") {
     SceneDocument doc;
     SceneObject obj;
     obj.id = "obj1";
@@ -1753,8 +1827,8 @@ TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer
     REQUIRE(loaded.objects[0].props.count("visible") == 1);
 }
 
-TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component",
+          "[editor][serializer]") {
     const std::string path = TmpPath("legacy_islight_true.json");
     const std::string json = R"({
       "version": 1,
@@ -1779,8 +1853,9 @@ TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component", "[
     REQUIRE(loaded.objects[0].components[0].type == "light");
 }
 
-TEST_CASE("SceneSerializer: legacy isLight=false is tolerated but not persisted", "[editor][serializer]")
-{
+TEST_CASE(
+    "SceneSerializer: legacy isLight=false is tolerated but not persisted",
+    "[editor][serializer]") {
     const std::string path = TmpPath("legacy_islight_false.json");
     const std::string json = R"({
       "version": 1,
@@ -1810,23 +1885,24 @@ TEST_CASE("SceneSerializer: legacy isLight=false is tolerated but not persisted"
     REQUIRE(roundTrip.objects[0].props.count("isLight") == 0);
 }
 
-TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path",
+          "[editor][serializer]") {
     SceneDocument doc;
     // Unix: true root path — mkdir/open fail without privileges.
-    // Windows: a leading "/" is *not* filesystem root; it resolves under the current drive
-    // (e.g. C:\nonexistent\...) and is often writable in CI. Use a drive letter that is
-    // virtually never mounted on runners.
+    // Windows: a leading "/" is *not* filesystem root; it resolves under the
+    // current drive (e.g. C:\nonexistent\...) and is often writable in CI. Use a
+    // drive letter that is virtually never mounted on runners.
 #ifdef _WIN32
     const std::string badPath = R"(Z:\.__horo_engine_ci_unwritable__\scene.json)";
 #else
     const std::string badPath = "/nonexistent/dir/scene.json";
 #endif
-    REQUIRE_THROWS_AS(SceneSerializer::SaveToFile(doc, badPath), std::runtime_error);
+    REQUIRE_THROWS_AS(SceneSerializer::SaveToFile(doc, badPath),
+                      std::runtime_error);
 }
 
-TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: filePath is set after load",
+          "[editor][serializer]") {
     SceneDocument doc;
     const std::string path = TmpPath("filepath_test.json");
     SceneSerializer::SaveToFile(doc, path);
@@ -1835,8 +1911,8 @@ TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]")
     REQUIRE(loaded.filePath == path);
 }
 
-TEST_CASE("SceneSerializer: multiple props round-trip", "[editor][serializer]")
-{
+TEST_CASE("SceneSerializer: multiple props round-trip",
+          "[editor][serializer]") {
     SceneDocument doc;
     SceneObject obj;
     obj.id = "multi_prop";
@@ -1859,8 +1935,7 @@ TEST_CASE("SceneSerializer: multiple props round-trip", "[editor][serializer]")
 // Raycaster — RayVsAABB
 // ===========================================================================
 
-TEST_CASE("RayVsAABB: direct hit along +X axis", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: direct hit along +X axis", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {-5.0f, 0.0f, 0.0f};
     ray.direction = {1.0f, 0.0f, 0.0f};
@@ -1870,11 +1945,11 @@ TEST_CASE("RayVsAABB: direct hit along +X axis", "[editor][raycaster]")
 
     float t = RayVsAABB(ray, center, half);
     REQUIRE(t >= 0.0f);
-    REQUIRE(t == Approx(4.0f).epsilon(1e-4f)); // ray travels 4 units before hitting near face
+    REQUIRE(t == Approx(4.0f).epsilon(
+        1e-4f)); // ray travels 4 units before hitting near face
 }
 
-TEST_CASE("RayVsAABB: miss — ray passes above the box", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: miss — ray passes above the box", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {-5.0f, 3.0f, 0.0f}; // y=3, above a box with half=1
     ray.direction = {1.0f, 0.0f, 0.0f};
@@ -1886,8 +1961,7 @@ TEST_CASE("RayVsAABB: miss — ray passes above the box", "[editor][raycaster]")
     REQUIRE(t < 0.0f);
 }
 
-TEST_CASE("RayVsAABB: ray origin inside box returns 0", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: ray origin inside box returns 0", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {0.0f, 0.0f, 0.0f}; // inside the box
     ray.direction = {1.0f, 0.0f, 0.0f};
@@ -1900,10 +1974,10 @@ TEST_CASE("RayVsAABB: ray origin inside box returns 0", "[editor][raycaster]")
     REQUIRE(t == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("RayVsAABB: parallel ray outside slab misses", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: parallel ray outside slab misses",
+          "[editor][raycaster]") {
     Ray ray;
-    ray.origin = {5.0f, 5.0f, 0.0f};    // outside x-slab of box centered at origin
+    ray.origin = {5.0f, 5.0f, 0.0f}; // outside x-slab of box centered at origin
     ray.direction = {0.0f, 0.0f, 1.0f}; // moves in Z only — parallel to Y slab
 
     Vec3 center = {0.0f, 0.0f, 0.0f};
@@ -1913,8 +1987,7 @@ TEST_CASE("RayVsAABB: parallel ray outside slab misses", "[editor][raycaster]")
     REQUIRE(t < 0.0f);
 }
 
-TEST_CASE("RayVsAABB: parallel ray inside slab hits", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: parallel ray inside slab hits", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {-5.0f, 0.0f, 0.0f};
     ray.direction = {0.0f, 0.0f, 1.0f}; // moves in Z, inside x and y slabs
@@ -1927,8 +2000,7 @@ TEST_CASE("RayVsAABB: parallel ray inside slab hits", "[editor][raycaster]")
     REQUIRE(t < 0.0f);
 }
 
-TEST_CASE("RayVsAABB: hit along -Z axis", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: hit along -Z axis", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {0.0f, 0.0f, 10.0f};
     ray.direction = {0.0f, 0.0f, -1.0f};
@@ -1941,8 +2013,7 @@ TEST_CASE("RayVsAABB: hit along -Z axis", "[editor][raycaster]")
     REQUIRE(t == Approx(9.5f).epsilon(1e-4f));
 }
 
-TEST_CASE("RayVsAABB: hit along +Y axis", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: hit along +Y axis", "[editor][raycaster]") {
     Ray ray;
     ray.origin = {0.0f, -5.0f, 0.0f};
     ray.direction = {0.0f, 1.0f, 0.0f};
@@ -1955,8 +2026,8 @@ TEST_CASE("RayVsAABB: hit along +Y axis", "[editor][raycaster]")
     REQUIRE(t == Approx(6.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("RayVsAABB: ray pointing away from box misses", "[editor][raycaster]")
-{
+TEST_CASE("RayVsAABB: ray pointing away from box misses",
+          "[editor][raycaster]") {
     Ray ray;
     ray.origin = {10.0f, 0.0f, 0.0f};
     ray.direction = {1.0f, 0.0f, 0.0f}; // pointing away from origin box
@@ -1972,8 +2043,8 @@ TEST_CASE("RayVsAABB: ray pointing away from box misses", "[editor][raycaster]")
 // Raycaster — ScreenToRay
 // ===========================================================================
 
-TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[editor][raycaster]")
-{
+TEST_CASE("ScreenToRay: center of screen produces ray through view center",
+          "[editor][raycaster]") {
     Camera cam;
     cam.position = {0.0f, 0.0f, 5.0f};
     cam.target = {0.0f, 0.0f, 0.0f};
@@ -1983,16 +2054,17 @@ TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[ed
     cam.zNear = 0.1f;
     cam.zFar = 100.0f;
 
-    int W = 800, H = 800;
-    Ray ray = ScreenToRay(W / 2.0f, H / 2.0f, W, H, cam);
+    int W = 800;
+    int H = 800;
+    Ray ray = ScreenToRay(static_cast<float>(W) / 2.0f,
+                          static_cast<float>(H) / 2.0f, W, H, cam);
 
     REQUIRE(ray.direction.x == Approx(0.0f).margin(1e-3f));
     REQUIRE(ray.direction.y == Approx(0.0f).margin(1e-3f));
     REQUIRE(ray.direction.z < 0.0f); // pointing toward -Z (into the scene)
 }
 
-TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]")
-{
+TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]") {
     Camera cam;
     cam.position = {0.0f, 0.0f, 5.0f};
     cam.target = {0.0f, 0.0f, 0.0f};
@@ -2003,16 +2075,20 @@ TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]")
     cam.zFar = 100.0f;
 
     // Test multiple screen positions
-    for (auto [mx, my] : std::initializer_list<std::pair<float, float>>{
-             {0.0f, 0.0f}, {200.0f, 150.0f}, {400.0f, 300.0f}, {799.0f, 449.0f}})
-    {
+    for (auto [mx, my]:
+         std::initializer_list<std::pair<float, float> >{
+             {0.0f, 0.0f},
+             {200.0f, 150.0f},
+             {400.0f, 300.0f},
+             {799.0f, 449.0f}
+         }) {
         Ray r = ScreenToRay(mx, my, 800, 450, cam);
         REQUIRE(r.direction.Length() == Approx(1.0f).epsilon(1e-4f));
     }
 }
 
-TEST_CASE("ScreenToRay: origin is at/near camera position", "[editor][raycaster]")
-{
+TEST_CASE("ScreenToRay: origin is at/near camera position",
+          "[editor][raycaster]") {
     Camera cam;
     cam.position = {3.0f, 2.0f, 7.0f};
     cam.target = {0.0f, 0.0f, 0.0f};
@@ -2035,34 +2111,26 @@ TEST_CASE("ScreenToRay: origin is at/near camera position", "[editor][raycaster]
 
 // Mirror of the selection logic in EditorLayer::DrawObjectsTree.
 static void ApplyHierarchyClick(std::vector<int> &sel, int &lastIdx,
-                                int clicked, bool shift, bool ctrl)
-{
-    if (shift && lastIdx >= 0)
-    {
+                                int clicked, bool shift, bool ctrl) {
+    if (shift && lastIdx >= 0) {
         const int lo = std::min(lastIdx, clicked);
         const int hi = std::max(lastIdx, clicked);
         sel.clear();
         for (int i = lo; i <= hi; ++i)
             sel.push_back(i);
-    }
-    else if (ctrl)
-    {
-        auto it = std::find(sel.begin(), sel.end(), clicked);
-        if (it != sel.end())
+    } else if (ctrl) {
+        if (const auto it = std::ranges::find(sel, clicked); it != sel.end())
             sel.erase(it);
         else
             sel.push_back(clicked);
         lastIdx = clicked;
-    }
-    else
-    {
+    } else {
         sel = {clicked};
         lastIdx = clicked;
     }
 }
 
-TEST_CASE("Hierarchy plain click replaces selection", "[editor][hierarchy]")
-{
+TEST_CASE("Hierarchy plain click replaces selection", "[editor][hierarchy]") {
     std::vector<int> sel;
     int last = -1;
 
@@ -2077,8 +2145,8 @@ TEST_CASE("Hierarchy plain click replaces selection", "[editor][hierarchy]")
     REQUIRE(last == 7);
 }
 
-TEST_CASE("Hierarchy range select fills contiguous range", "[editor][hierarchy]")
-{
+TEST_CASE("Hierarchy range select fills contiguous range",
+          "[editor][hierarchy]") {
     std::vector<int> sel;
     int last = -1;
 
@@ -2099,8 +2167,9 @@ TEST_CASE("Hierarchy range select fills contiguous range", "[editor][hierarchy]"
     REQUIRE(sel[2] == 2);
 }
 
-TEST_CASE("Hierarchy shift-click with no prior anchor falls back to single select", "[editor][hierarchy]")
-{
+TEST_CASE(
+    "Hierarchy shift-click with no prior anchor falls back to single select",
+    "[editor][hierarchy]") {
     std::vector<int> sel;
     int last = -1;
 
@@ -2112,8 +2181,8 @@ TEST_CASE("Hierarchy shift-click with no prior anchor falls back to single selec
     REQUIRE(last == 4);
 }
 
-TEST_CASE("Hierarchy ctrl-click toggles individual items", "[editor][hierarchy]")
-{
+TEST_CASE("Hierarchy ctrl-click toggles individual items",
+          "[editor][hierarchy]") {
     std::vector<int> sel;
     int last = -1;
 
@@ -2131,17 +2200,18 @@ TEST_CASE("Hierarchy ctrl-click toggles individual items", "[editor][hierarchy]"
 // Drag-drop ray-floor intersection math
 // ===========================================================================
 
-TEST_CASE("Drop ray hits y=0 plane correctly", "[editor][dragdrop]")
-{
+TEST_CASE("Drop ray hits y=0 plane correctly", "[editor][dragdrop]") {
     // Ray from above looking straight down
     Ray r;
     r.origin = {0.0f, 5.0f, 0.0f};
     r.direction = {0.0f, -1.0f, 0.0f};
 
     const float t = -r.origin.y / r.direction.y; // = 5
-    const Vec3 hit = {r.origin.x + r.direction.x * t,
-                      r.origin.y + r.direction.y * t,
-                      r.origin.z + r.direction.z * t};
+    const Vec3 hit = {
+        r.origin.x + r.direction.x * t,
+        r.origin.y + r.direction.y * t,
+        r.origin.z + r.direction.z * t
+    };
 
     REQUIRE(hit.y == Approx(0.0f));
     REQUIRE(hit.x == Approx(0.0f));
@@ -2154,8 +2224,7 @@ TEST_CASE("Drop ray hits y=0 plane correctly", "[editor][dragdrop]")
     REQUIRE(helperHit.z == Approx(0.0f));
 }
 
-TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]")
-{
+TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]") {
     // Ray from (3, 4, 1) pointing down-forward
     Ray r;
     r.origin = {3.0f, 4.0f, 1.0f};
@@ -2164,16 +2233,18 @@ TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]")
     r.direction = {0.0f, -4.0f / len, 1.0f / len};
 
     const float t = -r.origin.y / r.direction.y;
-    const Vec3 hit = {r.origin.x + r.direction.x * t,
-                      r.origin.y + r.direction.y * t,
-                      r.origin.z + r.direction.z * t};
+    const Vec3 hit = {
+        r.origin.x + r.direction.x * t,
+        r.origin.y + r.direction.y * t,
+        r.origin.z + r.direction.z * t
+    };
 
     REQUIRE(hit.y == Approx(0.0f).margin(1e-4f));
     REQUIRE(hit.x == Approx(3.0f).margin(1e-4f)); // no x-component in direction
 }
 
-TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]")
-{
+TEST_CASE("Drop ray parallel to ground plane is rejected",
+          "[editor][dragdrop]") {
     Ray r;
     r.origin = {2.0f, 3.0f, 4.0f};
     r.direction = {1.0f, 0.0f, 0.0f};
@@ -2182,8 +2253,8 @@ TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]")
     REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
 }
 
-TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdrop]")
-{
+TEST_CASE("RayVsAABBHit reports top-face hit point and normal",
+          "[editor][dragdrop]") {
     Ray ray;
     ray.origin = {0.0f, 5.0f, 0.0f};
     ray.direction = {0.0f, -1.0f, 0.0f};
@@ -2199,8 +2270,8 @@ TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdr
     REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
-TEST_CASE("RayVsAABBHit reports side-face hit point and normal", "[editor][dragdrop]")
-{
+TEST_CASE("RayVsAABBHit reports side-face hit point and normal",
+          "[editor][dragdrop]") {
     Ray ray;
     ray.origin = {-5.0f, 0.25f, 0.0f};
     ray.direction = {1.0f, 0.0f, 0.0f};
@@ -2216,10 +2287,9 @@ TEST_CASE("RayVsAABBHit reports side-face hit point and normal", "[editor][dragd
     REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
-TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]")
-{
-    const EditorViewportRect rect =
-        BuildEditorViewportRect(1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
+TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
+    const EditorViewportRect rect = BuildEditorViewportRect(
+        1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
 
     REQUIRE(rect.minX == Approx(308.0f));
     REQUIRE(rect.minY == Approx(36.0f));
@@ -2231,12 +2301,13 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]")
     REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
 }
 
-TEST_CASE("Editor view gimbal layout reserves wire button and combined pick rect", "[editor][ui]")
-{
-    const EditorViewportRect viewport =
-        BuildEditorViewportRect(1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
+TEST_CASE(
+    "Editor view gimbal layout reserves wire button and combined pick rect",
+    "[editor][ui]") {
+    const EditorViewportRect viewport = BuildEditorViewportRect(
+        1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
     const EditorViewGimbalLayout layout =
-        BuildEditorViewGimbalLayout(viewport, 1600.0f, 280.0f, 36.0f);
+            BuildEditorViewGimbalLayout(viewport, 1600.0f, 280.0f, 36.0f);
 
     REQUIRE(layout.gimbalRect.maxX == Approx(viewport.maxX - 10.0f));
     REQUIRE(layout.gimbalRect.minY == Approx(viewport.minY + 10.0f));
@@ -2245,12 +2316,14 @@ TEST_CASE("Editor view gimbal layout reserves wire button and combined pick rect
     REQUIRE(layout.pickRect.maxX == Approx(layout.gimbalRect.maxX));
     REQUIRE(layout.pickRect.minY == Approx(layout.gimbalRect.minY));
     REQUIRE(layout.pickRect.maxY == Approx(layout.gimbalRect.maxY));
-    REQUIRE(layout.pickRect.Contains(layout.wireButtonRect.minX + 4.0f, layout.wireButtonRect.minY + 4.0f));
-    REQUIRE(layout.pickRect.Contains(layout.gimbalRect.maxX - 4.0f, layout.gimbalRect.maxY - 4.0f));
+    REQUIRE(layout.pickRect.Contains(layout.wireButtonRect.minX + 4.0f,
+        layout.wireButtonRect.minY + 4.0f));
+    REQUIRE(layout.pickRect.Contains(layout.gimbalRect.maxX - 4.0f,
+        layout.gimbalRect.maxY - 4.0f));
 }
 
-TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui]")
-{
+TEST_CASE("Editor layout helpers clamp dock widths and workspace height",
+          "[editor][ui]") {
     REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
     REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
 
@@ -2261,8 +2334,9 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[edit
     REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
 }
 
-TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]")
-{
+TEST_CASE(
+    "Editor viewport asset drop target matches active asset payload inline",
+    "[editor][ui][dragdrop]") {
     ImGuiContextGuard imgui;
     bool callbackInvoked = false;
 
@@ -2280,14 +2354,9 @@ TEST_CASE("Editor viewport asset drop target matches active asset payload inline
     SeedExternalAssetDragPayload("crate");
 
     const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
-        false,
-        220.0f,
-        140.0f,
-        &callbackInvoked,
-        [](void *userData, const char *assetId)
-        {
-            auto *invoked = static_cast<bool *>(userData);
-            *invoked = true;
+        false, 220.0f, 140.0f, nullptr,
+        [&callbackInvoked](auto *, const char *assetId) {
+            callbackInvoked = true;
             return assetId && std::string(assetId) == "crate";
         });
 
@@ -2301,8 +2370,8 @@ TEST_CASE("Editor viewport asset drop target matches active asset payload inline
     REQUIRE_FALSE(callbackInvoked);
 }
 
-TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]")
-{
+TEST_CASE("Editor viewport asset drop target stays inactive during play mode",
+          "[editor][ui][dragdrop]") {
     ImGuiContextGuard imgui;
     bool callbackInvoked = false;
 
@@ -2320,14 +2389,9 @@ TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "
     SeedExternalAssetDragPayload("crate");
 
     const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
-        true,
-        220.0f,
-        140.0f,
-        &callbackInvoked,
-        [](void *userData, const char *)
-        {
-            auto *invoked = static_cast<bool *>(userData);
-            *invoked = true;
+        true, 220.0f, 140.0f, nullptr,
+        [&callbackInvoked](auto *, const char *) {
+            callbackInvoked = true;
             return true;
         });
 
@@ -2341,10 +2405,11 @@ TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "
     REQUIRE_FALSE(callbackInvoked);
 }
 
-TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]")
-{
+TEST_CASE("Editor workspace settings: missing file falls back to defaults",
+          "[editor][workspace]") {
     namespace fs = std::filesystem;
-    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_missing";
+    const fs::path tempHome =
+            Monolith::Tests::SecureTempBase() / "horo_editor_workspace_missing";
     fs::remove_all(tempHome);
     fs::create_directories(tempHome);
     HomeDirGuard homeGuard(tempHome);
@@ -2356,19 +2421,23 @@ TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[ed
     REQUIRE(loaded.state.consoleShowWarn);
     REQUIRE(loaded.state.consoleShowError);
     REQUIRE(loaded.state.projectBrowserCwd.empty());
-    REQUIRE(ResolveEditorLayoutPath() == tempHome / ".horo" / "editor_layout.ini");
-    REQUIRE(ResolveEditorWorkspacePath() == tempHome / ".horo" / "editor_workspace.json");
+    REQUIRE(ResolveEditorLayoutPath() ==
+        tempHome / ".horo" / "editor_layout.ini");
+    REQUIRE(ResolveEditorWorkspacePath() ==
+        tempHome / ".horo" / "editor_workspace.json");
 }
 
-TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[editor][workspace]")
-{
+TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback",
+          "[editor][workspace]") {
     namespace fs = std::filesystem;
-    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_invalid";
+    const fs::path tempHome =
+            Monolith::Tests::SecureTempBase() / "horo_editor_workspace_invalid";
     fs::remove_all(tempHome);
     fs::create_directories(tempHome / ".horo");
     HomeDirGuard homeGuard(tempHome);
 
-    WriteFile((tempHome / ".horo" / "editor_workspace.json").string(), "{ invalid json");
+    WriteFile((tempHome / ".horo" / "editor_workspace.json").string(),
+              "{ invalid json");
     const EditorWorkspaceDocument loaded = LoadEditorWorkspaceDocument();
     REQUIRE(loaded.loadedFromDisk);
     REQUIRE(loaded.parseError);
@@ -2376,10 +2445,11 @@ TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[ed
     REQUIRE(loaded.state.consoleShowInfo);
 }
 
-TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[editor][workspace]")
-{
+TEST_CASE("Editor workspace settings: round-trip console filters and cwd",
+          "[editor][workspace]") {
     namespace fs = std::filesystem;
-    const fs::path tempHome = fs::temp_directory_path() / "horo_editor_workspace_roundtrip";
+    const fs::path tempHome =
+            Monolith::Tests::SecureTempBase() / "horo_editor_workspace_roundtrip";
     fs::remove_all(tempHome);
     fs::create_directories(tempHome);
     HomeDirGuard homeGuard(tempHome);
@@ -2404,8 +2474,7 @@ TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[edi
     REQUIRE(loaded.state.projectBrowserCwd == "C:/project/assets");
 }
 
-TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]")
-{
+TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {
     Vec3 parsed = Vec3::Zero();
     REQUIRE(TryParseVec3Csv("1.5000, 2.0000,0.7500", &parsed));
     REQUIRE(parsed.x == Approx(1.5f));

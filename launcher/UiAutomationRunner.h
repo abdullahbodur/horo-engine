@@ -5,32 +5,38 @@
 struct GLFWwindow;
 
 namespace Monolith::Launcher {
-class LauncherEditorShell;
+    class LauncherEditorShell;
 }
 
 namespace Monolith {
-class UiAutomationRunner {
- public:
-  static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
+    class UiAutomationRunner {
+    public:
+        static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
 
-  UiAutomationRunner();
-  ~UiAutomationRunner();
+        UiAutomationRunner();
 
-  UiAutomationRunner(const UiAutomationRunner&) = delete;
-  UiAutomationRunner& operator=(const UiAutomationRunner&) = delete;
+        ~UiAutomationRunner();
 
-  void StartIfRequested(bool runUiAutomation, Launcher::LauncherEditorShell* shellContext);
-  void PostRenderFrame(GLFWwindow* nativeWindowHandle);
-  void Shutdown();
-  void DestroyContext();
+        UiAutomationRunner(const UiAutomationRunner &) = delete;
 
-  bool DidPass() const;
-  bool IsActive() const;
+        UiAutomationRunner &operator=(const UiAutomationRunner &) = delete;
 
- private:
-  struct Impl;
-  std::unique_ptr<Impl> m_impl;
-};
+        void StartIfRequested(
+            bool runUiAutomation,
+            Launcher::LauncherEditorShell *shellContext) const;
 
-}  // namespace Monolith
+        void PostRenderFrame(GLFWwindow *nativeWindowHandle) const;
 
+        void Shutdown() const;
+
+        void DestroyContext() const;
+
+        bool DidPass() const;
+
+        bool IsActive() const;
+
+    private:
+        struct Impl;
+        std::unique_ptr<Impl> m_impl;
+    };
+} // namespace Monolith

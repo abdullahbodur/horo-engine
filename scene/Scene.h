@@ -7,29 +7,33 @@
 #include "scene/System.h"
 
 namespace Monolith {
+    class Scene {
+    public:
+        Registry &GetRegistry() { return m_registry; }
+        const Registry &GetRegistry() const { return m_registry; }
+        PhysicsWorld &GetPhysics() { return m_physics; }
+        const PhysicsWorld &GetPhysics() const { return m_physics; }
 
-class Scene {
- public:
-  Registry registry;
-  PhysicsWorld physics;
+        void AddSystem(std::unique_ptr<System> system);
 
-  void AddSystem(std::unique_ptr<System> system);
-  void UpdateSystems(float dt);
+        void UpdateSystems(float dt);
 
-  // Render systems are updated separately (variable-rate, with alpha)
-  void AddRenderSystem(std::unique_ptr<System> system);
-  void RenderSystems(float alpha);
+        // Render systems are updated separately (variable-rate, with alpha)
+        void AddRenderSystem(std::unique_ptr<System> system);
 
-  // Convenience: creates entity, adds TransformComponent at position
-  Entity CreateEntity(const Vec3& position = Vec3::Zero());
+        void RenderSystems(float alpha);
 
-  // Destroy all entities, physics bodies, and component data.
-  // Registered systems are preserved.
-  void Clear();
+        // Convenience: creates entity, adds TransformComponent at position
+        Entity CreateEntity(const Vec3 &position = Vec3::Zero());
 
- private:
-  std::vector<std::unique_ptr<System>> m_systems;
-  std::vector<std::unique_ptr<System>> m_renderSystems;
-};
+        // Destroy all entities, physics bodies, and component data.
+        // Registered systems are preserved.
+        void Clear();
 
-}  // namespace Monolith
+    private:
+        Registry m_registry;
+        PhysicsWorld m_physics;
+        std::vector<std::unique_ptr<System> > m_systems;
+        std::vector<std::unique_ptr<System> > m_renderSystems;
+    };
+} // namespace Monolith

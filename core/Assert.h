@@ -22,10 +22,7 @@
     if (!(expr)) {                                                             \
       std::fprintf(stderr,                                                     \
                    "ASSERT FAILED: %s\n  Message: %s\n  File: %s  Line: %d\n", \
-                   #expr,                                                      \
-                   msg,                                                        \
-                   __FILE__,                                                   \
-                   __LINE__);                                                  \
+                   #expr, msg, __FILE__, __LINE__);                            \
       MONOLITH_DEBUG_TRAP();                                                   \
       std::abort();                                                            \
     }                                                                          \
