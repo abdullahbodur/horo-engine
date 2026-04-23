@@ -49,7 +49,7 @@
     "start:dev": "theia start --port 3000",
     "package": "electron-builder --config electron-builder.json",
     "watch": "theia build --watch --mode development",
-    "setup:native": "electron-rebuild -f && node node_modules/@vscode/ripgrep/lib/postinstall.js",
+    "setup:native": "electron-rebuild -f && node node_modules/@vscode/ripgrep/lib/postinstall.js"
   },
   "theia-extension": "horo-studio",
   "keywords": [],
