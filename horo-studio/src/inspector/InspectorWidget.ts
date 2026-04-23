@@ -83,68 +83,123 @@ export class InspectorWidget extends BaseWidget {
   private renderObject(obj: McpObject | null): void {
     if (!obj) { this.renderEmpty(); return; }
 
-    const fields: Array<{ label: string; key: string; value: string }> = [
-      { label: 'ID', key: 'id', value: obj.id },
-      { label: 'Name', key: 'name', value: obj.name },
-      { label: 'Type', key: 'type', value: obj.type },
-    ];
+    const p = obj.position ?? { x: 0, y: 0, z: 0 };
+    const r = obj.rotation ?? { x: 0, y: 0, z: 0 };
+    const s = obj.scale ?? { x: 1, y: 1, z: 1 };
 
-    if (obj.position) {
-      fields.push(
-        { label: 'X', key: 'position.x', value: String(obj.position.x) },
-        { label: 'Y', key: 'position.y', value: String(obj.position.y) },
-        { label: 'Z', key: 'position.z', value: String(obj.position.z) },
-      );
-    }
+    const sectionHeader = (title: string) =>
+      `<div style="color: var(--theia-settings-headerForeground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 4px;">${title}</div>`;
 
-    const sectionHtml = (title: string, rows: typeof fields) => `
-      <div style="font-weight: 600; margin: 10px 0 4px; color: var(--theia-settings-headerForeground);">${title}</div>
-      <table style="width:100%; border-collapse: collapse;">
-        ${rows.map((f) => `
-          <tr>
-            <td style="padding: 2px 6px 2px 0; color: var(--theia-descriptionForeground); width: 80px;">${f.label}</td>
-            <td><input
-              data-key="${f.key}"
-              style="width:100%; background: var(--theia-input-background); color: var(--theia-input-foreground); border: 1px solid var(--theia-input-border); padding: 2px 4px; font-size: 12px;"
-              value="${this.escape(f.value)}"
-              ${f.key === 'id' || f.key === 'type' ? 'readonly' : ''}
-            /></td>
-          </tr>`).join('')}
-      </table>`;
+    const vec3Row = (prefix: string, x: number, y: number, z: number) => {
+      const inp = (axis: string, val: number) =>
+        `<div style="flex: 1; min-width: 0;">
+          <div style="color: var(--theia-descriptionForeground); font-size: 10px; margin-bottom: 1px;">${axis}</div>
+          <input data-key="${prefix}.${axis.toLowerCase()}"
+            style="background: var(--theia-input-background); color: var(--theia-input-foreground); border: 1px solid var(--theia-input-border); padding: 2px 4px; width: 100%; box-sizing: border-box; font-size: 12px;"
+            type="number" step="any" value="${val}" />
+        </div>`;
+      return `<div style="display: flex; gap: 4px;">${inp('X', x)}${inp('Y', y)}${inp('Z', z)}</div>`;
+    };
+
+    const componentsHtml = (): string => {
+      if (!obj.components || Object.keys(obj.components).length === 0) return '';
+      let html = sectionHeader('Components');
+      for (const [compName, compData] of Object.entries(obj.components)) {
+        html += `<div style="margin-bottom: 8px;">
+          <div style="color: var(--theia-foreground); font-weight: 600; font-size: 11px; margin: 4px 0 2px; padding: 2px 4px; background: var(--theia-sideBar-background);">${this.escape(compName)}</div>`;
+        if (compData && typeof compData === 'object') {
+          html += `<table style="width:100%; border-collapse: collapse;">`;
+          for (const [propKey, propVal] of Object.entries(compData as Record<string, unknown>)) {
+            html += `<tr>
+              <td style="padding: 2px 6px 2px 0; color: var(--theia-descriptionForeground); width: 80px; vertical-align: middle;">${this.escape(propKey)}</td>
+              <td><input
+                data-key="component.${this.escape(compName)}.${this.escape(propKey)}"
+                style="width:100%; background: var(--theia-input-background); color: var(--theia-input-foreground); border: 1px solid var(--theia-input-border); padding: 2px 4px; font-size: 12px; box-sizing: border-box;"
+                value="${this.escape(String(propVal))}"
+                readonly
+              /></td>
+            </tr>`;
+          }
+          html += `</table>`;
+        }
+        html += `</div>`;
+      }
+      return html;
+    };
 
     this.node.innerHTML = `
-      <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px;">${this.escape(obj.name)}</div>
-      ${sectionHtml('Transform', fields.filter((f) => f.key !== 'id'))}
-      <div style="margin-top: 10px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <div>
+          <span style="font-weight: 700; font-size: 13px;">${this.escape(obj.name)}</span>
+          <span style="margin-left: 6px; background: var(--theia-badge-background); color: var(--theia-badge-foreground); border-radius: 3px; padding: 1px 5px; font-size: 10px;">${this.escape(obj.type)}</span>
+        </div>
+        <button id="horo-inspector-refresh"
+          style="background: var(--theia-button-secondaryBackground); color: var(--theia-button-secondaryForeground); border: 1px solid var(--theia-button-border, transparent); padding: 2px 8px; cursor: pointer; font-size: 11px;">
+          ↻ Refresh
+        </button>
+      </div>
+
+      ${sectionHeader('Position')}
+      ${vec3Row('position', p.x, p.y, p.z)}
+
+      ${sectionHeader('Rotation')}
+      ${vec3Row('rotation', r.x, r.y, r.z)}
+
+      ${sectionHeader('Scale')}
+      ${vec3Row('scale', s.x, s.y, s.z)}
+
+      ${componentsHtml()}
+
+      <div style="margin-top: 16px;">
         <button id="horo-inspector-apply"
-          style="background: var(--theia-button-background); color: var(--theia-button-foreground); border: none; padding: 4px 12px; cursor: pointer;">
+          style="background: var(--theia-button-background); color: var(--theia-button-foreground); border: none; padding: 4px 14px; cursor: pointer; font-size: 12px;">
           Apply
         </button>
       </div>`;
 
-    const applyBtn = this.node.querySelector<HTMLButtonElement>('#horo-inspector-apply');
-    applyBtn?.addEventListener('click', () => this.applyChanges());
+    this.node.querySelector<HTMLButtonElement>('#horo-inspector-apply')
+      ?.addEventListener('click', () => this.applyChanges());
+
+    this.node.querySelector<HTMLButtonElement>('#horo-inspector-refresh')
+      ?.addEventListener('click', () => {
+        if (this.currentObject) this.showObject(this.currentObject.id);
+      });
   }
 
   private async applyChanges(): Promise<void> {
     if (!this.currentObject) return;
 
-    const inputs = this.node.querySelectorAll<HTMLInputElement>('input[data-key]');
-    const patch: Partial<McpObject> = {};
+    const get = (key: string): number => {
+      const el = this.node.querySelector<HTMLInputElement>(`input[data-key="${key}"]`);
+      return parseFloat(el?.value ?? '0');
+    };
 
-    inputs.forEach((input) => {
-      const key = input.dataset['key'] ?? '';
-      const val = input.value;
-      if (key === 'name') patch.name = val;
-      else if (key === 'position.x' && this.currentObject?.position)
-        patch.position = { ...this.currentObject.position, x: parseFloat(val) };
-      else if (key === 'position.y' && this.currentObject?.position)
-        patch.position = { ...this.currentObject.position, y: parseFloat(val) };
-      else if (key === 'position.z' && this.currentObject?.position)
-        patch.position = { ...this.currentObject.position, z: parseFloat(val) };
-    });
+    const patch: Partial<McpObject> = {
+      position: { x: get('position.x'), y: get('position.y'), z: get('position.z') },
+      rotation: { x: get('rotation.x'), y: get('rotation.y'), z: get('rotation.z') },
+      scale:    { x: get('scale.x'),    y: get('scale.y'),    z: get('scale.z') },
+    };
 
-    await this.mcp.updateObject(this.currentObject.id, patch);
+    const applyBtn = this.node.querySelector<HTMLButtonElement>('#horo-inspector-apply');
+
+    const flash = (text: string, bg: string) => {
+      if (!applyBtn) return;
+      applyBtn.textContent = text;
+      applyBtn.style.background = bg;
+      applyBtn.style.color = '#fff';
+      setTimeout(() => {
+        applyBtn.textContent = 'Apply';
+        applyBtn.style.background = 'var(--theia-button-background)';
+        applyBtn.style.color = 'var(--theia-button-foreground)';
+      }, 1500);
+    };
+
+    try {
+      await this.mcp.updateObject(this.currentObject.id, patch);
+      flash('✓ Applied', 'var(--theia-notificationsSuccessIcon-foreground, #73c991)');
+    } catch {
+      flash('✗ Failed', 'var(--theia-editorError-foreground, #f14c4c)');
+    }
   }
 
   private escape(s: string): string {

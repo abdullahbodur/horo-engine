@@ -1,9 +1,9 @@
 import { injectable } from '@theia/core/shared/inversify';
-import { AbstractViewContribution } from '@theia/core/lib/browser';
+import { AbstractViewContribution, FrontendApplicationContribution } from '@theia/core/lib/browser';
 import { InspectorWidget } from './InspectorWidget';
 
 @injectable()
-export class InspectorContribution extends AbstractViewContribution<InspectorWidget> {
+export class InspectorContribution extends AbstractViewContribution<InspectorWidget> implements FrontendApplicationContribution {
   constructor() {
     super({
       widgetId: InspectorWidget.ID,
@@ -11,5 +11,9 @@ export class InspectorContribution extends AbstractViewContribution<InspectorWid
       defaultWidgetOptions: { area: 'right' },
       toggleCommandId: 'horo.inspector.toggle',
     });
+  }
+
+  async onStart(): Promise<void> {
+    this.openView({ activate: false });
   }
 }

@@ -3,10 +3,13 @@ import {
   bindViewContribution,
   FrontendApplicationContribution,
   WidgetFactory,
+  KeybindingContribution,
 } from '@theia/core/lib/browser';
+import { CommandContribution, MenuContribution } from '@theia/core';
 
 import { McpClient } from './mcp/McpClient';
 import { HoroSelectionService } from './common/HoroSelectionService';
+import { HoroCommandsContribution } from './toolbar/HoroCommandsContribution';
 
 import { GameViewWidget } from './gameView/GameViewWidget';
 import { GameViewContribution } from './gameView/GameViewContribution';
@@ -20,10 +23,19 @@ import { InspectorContribution } from './inspector/InspectorContribution';
 import { AssetBrowserWidget } from './assetBrowser/AssetBrowserWidget';
 import { AssetBrowserContribution } from './assetBrowser/AssetBrowserContribution';
 
+import { ConsoleWidget } from './console/ConsoleWidget';
+import { ConsoleContribution } from './console/ConsoleContribution';
+
 export default new ContainerModule((bind) => {
   // Shared singletons
   bind(McpClient).toSelf().inSingletonScope();
   bind(HoroSelectionService).toSelf().inSingletonScope();
+
+  // ---- Commands, menus, keybindings ----------------------------------------
+  bind(HoroCommandsContribution).toSelf().inSingletonScope();
+  bind(CommandContribution).toService(HoroCommandsContribution);
+  bind(MenuContribution).toService(HoroCommandsContribution);
+  bind(KeybindingContribution).toService(HoroCommandsContribution);
 
   // ---- Game View -----------------------------------------------------------
   bind(GameViewWidget).toSelf();
@@ -45,6 +57,7 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, SceneHierarchyContribution);
+  bind(FrontendApplicationContribution).toService(SceneHierarchyContribution);
 
   // ---- Inspector -----------------------------------------------------------
   bind(InspectorWidget).toSelf();
@@ -55,6 +68,7 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, InspectorContribution);
+  bind(FrontendApplicationContribution).toService(InspectorContribution);
 
   // ---- Asset Browser -------------------------------------------------------
   bind(AssetBrowserWidget).toSelf();
@@ -65,4 +79,16 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, AssetBrowserContribution);
+  bind(FrontendApplicationContribution).toService(AssetBrowserContribution);
+
+  // ---- Console -------------------------------------------------------------
+  bind(ConsoleWidget).toSelf();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ConsoleWidget.ID,
+      createWidget: () => ctx.container.get(ConsoleWidget),
+    }))
+    .inSingletonScope();
+  bindViewContribution(bind, ConsoleContribution);
+  bind(FrontendApplicationContribution).toService(ConsoleContribution);
 });

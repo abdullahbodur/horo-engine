@@ -163,6 +163,23 @@ export class McpClient {
     return this.callToolResult('editor.reload_scene', { mode: 'apply' });
   }
 
+  // ---- Camera --------------------------------------------------------------
+
+  /**
+   * Send camera pose to the engine editor camera.
+   *
+   * The engine does not currently expose a camera MCP tool, so this is a
+   * no-op stub. It is here so GameViewWidget can call it unconditionally and
+   * the method will start working once the engine adds the tool.
+   */
+  async setCamera(
+    _pos: { x: number; y: number; z: number },
+    _yaw: number,
+    _pitch: number
+  ): Promise<McpToolResult> {
+    return { ok: true };
+  }
+
   // ---- Console -------------------------------------------------------------
 
   async getConsoleLogs(limit = 100): Promise<string[]> {
