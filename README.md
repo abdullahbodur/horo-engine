@@ -149,7 +149,7 @@ Or use the helper script:
 
 ```bash
 cd horo-studio
-./start.sh --setup   # installs, rebuilds native modules, then launches
+./start.sh --setup   # rebuild native modules for Node.js + webpack build (first time only)
 ```
 
 ### Start the studio
@@ -161,6 +161,7 @@ cd horo-studio
 # Terminal 2 — start Horo Studio
 cd horo-studio
 ./start.sh
+# Then open http://localhost:3000 in your browser
 ```
 
 ### WebSocket framebuffer streaming
