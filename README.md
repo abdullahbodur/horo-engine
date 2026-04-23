@@ -37,11 +37,12 @@ Horo may not be the best choice if you need:
 
 ## High-Level Features
 
-- Runtime engine + in-repo editor workflow
+- Runtime engine + in-repo editor workflow (Horo Studio — Eclipse Theia shell)
 - ECS-based scene/runtime architecture
 - Asset import + scene serialization pipeline
-- Built-in test suite (unit + launcher UI automation)
-- Built-in MCP endpoint for editor automation workflows
+- Built-in test suite (unit + UI automation)
+- Built-in MCP endpoint for AI-assisted editor tooling
+- WebSocket framebuffer streaming for browser/IDE-embedded viewports
 
 ## Current Renderer Status
 
@@ -105,7 +106,7 @@ ctest --preset debug --output-on-failure
 ## Docs
 
 - Architecture: [docs/architecture/README.md](./docs/architecture/README.md)
-- Module docs: `core/`, `editor/`, `scene/`, `renderer/`, `launcher/`, `tests/`
+- Module docs: `core/`, `studio/`, `scene/`, `renderer/`, `tests/`
 - Renderer parity tracking: [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md)
 
 Architecture policy reminders:
@@ -121,6 +122,69 @@ Horo includes an editor-integrated MCP server for AI-assisted tooling workflows.
 - Settings file: `~/.horo/settings.json` (Windows: `%USERPROFILE%\\.horo\\settings.json`)
 
 See [docs/mcp.md](./docs/mcp.md) for setup and usage.
+
+## Horo Studio
+
+Horo Studio is an Eclipse Theia-based IDE shell that wraps the engine as a modern desktop editor.
+It communicates with the running engine via the MCP HTTP server (port 39281) and optionally receives
+live 3D viewport frames via a WebSocket framebuffer stream (port 39282).
+
+### Prerequisites
+
+- Node.js 18+ and Yarn 1.22+
+- Python 3 (for native module builds)
+- Xcode Command Line Tools (macOS) / build-essential (Linux)
+
+### First-time setup
+
+```bash
+cd horo-studio
+yarn install --ignore-scripts
+yarn theia build
+node_modules/.bin/electron-rebuild -f
+node node_modules/@vscode/ripgrep/lib/postinstall.js
+```
+
+Or use the helper script:
+
+```bash
+cd horo-studio
+./start.sh --setup   # installs, rebuilds native modules, then launches
+```
+
+### Start the studio
+
+```bash
+# Terminal 1 — start the engine (must be running for MCP + frame stream)
+./build/debug/bin/HoroEditor
+
+# Terminal 2 — start Horo Studio
+cd horo-studio
+./start.sh
+```
+
+### WebSocket framebuffer streaming
+
+Enable live viewport streaming by building the engine with the CMake flag:
+
+```bash
+cmake --preset debug -DMONOLITH_FRAMEBUFFER_STREAM=ON
+```
+
+The engine then accepts WebSocket connections on `ws://127.0.0.1:39282` and pushes
+JPEG frames at up to 30 fps. The **Game View** panel in Horo Studio connects automatically.
+
+### Studio module layout
+
+| Path | Purpose |
+|------|---------|
+| `studio/` | C++ engine + editor + launcher combined module |
+| `horo-studio/src/mcp/` | Typed MCP JSON-RPC 2.0 client |
+| `horo-studio/src/gameView/` | Canvas widget — WebSocket JPEG streaming |
+| `horo-studio/src/sceneHierarchy/` | Scene entity tree, polls engine every 2 s |
+| `horo-studio/src/inspector/` | HTML form inspector for selected entity |
+| `horo-studio/src/assetBrowser/` | Asset tree grouped by type |
+| `horo-studio/src/common/` | `HoroSelectionService` selection event bus |
 
 ## Contributing
 
