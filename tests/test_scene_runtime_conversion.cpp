@@ -4,9 +4,9 @@
 #include <memory>
 #include <string>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
-#include "editor/SceneRuntimeBridge.h"
+#include "studio/SceneDocument.h"
+#include "studio/SceneProjectBridge.h"
+#include "studio/SceneRuntimeBridge.h"
 #include "scene/RuntimeSceneDefinition.h"
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeConversion.h"

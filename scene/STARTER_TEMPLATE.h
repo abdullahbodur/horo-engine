@@ -22,7 +22,7 @@
  */
 
 #include "core/Application.h"
-#include "editor/SceneSerializer.h"
+#include "studio/SceneSerializer.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/Renderer.h"

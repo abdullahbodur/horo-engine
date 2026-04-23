@@ -126,11 +126,11 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   REQUIRE(starterTemplate.find("RenderContext::BeginFrame") == std::string::npos);
   REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
 
-  const std::string editorLayer = ReadTextFile(root / "editor" / "EditorLayer.cpp");
+  const std::string editorLayer = ReadTextFile(root / "studio" / "EditorLayer.cpp");
   REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
   REQUIRE(editorLayer.find("ImGui_ImplOpenGL3_") == std::string::npos);
 
-  const std::string editorImGuiBackend = ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
+  const std::string editorImGuiBackend = ReadTextFile(root / "studio" / "EditorImGuiBackend.cpp");
   REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") != std::string::npos);
 
   const std::string debugDraw = ReadTextFile(root / "renderer" / "DebugDraw.cpp");

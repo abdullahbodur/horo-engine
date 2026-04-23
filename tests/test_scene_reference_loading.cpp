@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <string>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneSerializer.h"
+#include "studio/SceneDocument.h"
+#include "studio/SceneSerializer.h"
 #include "scene/SceneReferenceRuntime.h"
 #include "scene/components/BehaviorComponent.h"
 #include "scene/components/MeshComponent.h"

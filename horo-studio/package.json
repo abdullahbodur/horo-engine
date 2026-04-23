@@ -1,0 +1,58 @@
+{
+  "private": true,
+  "name": "horo-studio",
+  "version": "0.1.0",
+  "description": "Horo Studio — IDE shell for Horo Engine, built on Eclipse Theia",
+  "theia": {
+    "frontend": {
+      "config": {
+        "applicationName": "Horo Studio",
+        "defaultTheme": "dark",
+        "defaultIconTheme": "vs-seti"
+      }
+    }
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/horoFrontendModule"
+    }
+  ],
+  "dependencies": {
+    "horo-studio": "file:.",
+    "@theia/core": "1.56.0",
+    "@theia/editor": "1.56.0",
+    "@theia/electron": "1.56.0",
+    "@theia/filesystem": "1.56.0",
+    "@theia/messages": "1.56.0",
+    "@theia/monaco": "1.56.0",
+    "@theia/navigator": "1.56.0",
+    "@theia/outline-view": "1.56.0",
+    "@theia/output": "1.56.0",
+    "@theia/search-in-workspace": "1.56.0",
+    "@theia/terminal": "1.56.0",
+    "@theia/workspace": "1.56.0",
+    "@vscode/ripgrep": "^1.17.1",
+    "electron": "30.1.2",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@theia/cli": "1.56.0",
+    "electron-builder": "^24.0.0",
+    "typescript": "^5.3.0"
+  },
+  "scripts": {
+    "prepare": "theia build --mode development",
+    "build": "theia build",
+    "build:prod": "theia build --mode production",
+    "start": "theia start --plugins=local-dir:plugins",
+    "start:electron": "electron .",
+    "start:dev": "theia start --port 3000",
+    "package": "electron-builder --config electron-builder.json",
+    "watch": "theia build --watch --mode development",
+    "setup:native": "electron-rebuild -f && node node_modules/@vscode/ripgrep/lib/postinstall.js",
+  },
+  "theia-extension": "horo-studio",
+  "keywords": [],
+  "author": "Horo Engine",
+  "license": "MIT"
+}

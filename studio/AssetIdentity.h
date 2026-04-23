@@ -1,0 +1,16 @@
+#pragma once
+
+#include <string>
+
+#include "SceneDocument.h"
+
+namespace Monolith {
+namespace Editor {
+
+std::string GenerateAssetGuid();
+std::string MakeAssetDisplayName(const std::string& assetId, const AssetDef& asset);
+void EnsureAssetIdentity(const std::string& assetId, AssetDef* asset);
+void EnsureAssetIdentity(SceneDocument* doc);
+
+}  // namespace Editor
+}  // namespace Monolith

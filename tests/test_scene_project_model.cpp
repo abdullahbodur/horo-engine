@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <string>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
+#include "studio/SceneDocument.h"
+#include "studio/SceneProjectBridge.h"
 #include "scene/SceneProjectModel.h"
 
 using namespace Monolith;

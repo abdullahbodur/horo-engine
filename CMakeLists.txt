@@ -18,6 +18,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     option(MONOLITH_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
     option(MONOLITH_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
     option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
+    option(MONOLITH_FRAMEBUFFER_STREAM "Enable WebSocket framebuffer streaming for Theia/browser editor (port 39282)" OFF)
 
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
@@ -36,15 +37,13 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/studio/*.cpp"
 )
-list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX "studio[/\\\\]HoroEditorMain\\.cpp$")
 
 add_library(MonolithEngine STATIC ${ENGINE_SOURCES})
 add_library(MonolithEngine::MonolithEngine ALIAS MonolithEngine)
@@ -100,6 +99,10 @@ option(MONOLITH_ENGINE_COVERAGE "Add coverage flags to MonolithEngine (for repor
 
 monolith_configure_engine_target(MonolithEngine imgui_lib)
 
+if(MONOLITH_FRAMEBUFFER_STREAM)
+    target_compile_definitions(MonolithEngine PUBLIC MONOLITH_FRAMEBUFFER_STREAM=1)
+endif()
+
 if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
     set(MONOLITH_UI_TEST_SOURCES
         tests/UiTestRegistry.cpp
@@ -126,7 +129,7 @@ add_custom_command(TARGET MonolithEngine POST_BUILD
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
-    add_executable(HoroEditor launcher/HoroEditorMain.cpp)
+    add_executable(HoroEditor studio/HoroEditorMain.cpp)
     target_link_libraries(HoroEditor PRIVATE MonolithEngine)
     target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
@@ -147,7 +150,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
     )
 
     if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET MonolithEngineImGuiTest)
-        add_executable(HoroEditorUiTest launcher/HoroEditorMain.cpp)
+        add_executable(HoroEditorUiTest studio/HoroEditorMain.cpp)
         target_link_libraries(HoroEditorUiTest PRIVATE MonolithEngineImGuiTest)
         target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
         target_compile_definitions(HoroEditorUiTest PRIVATE MONOLITH_STANDALONE_UI_AUTOMATION=1)
@@ -184,7 +187,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         )
     endif()
 
-    install(DIRECTORY core editor input math mcp physics renderer scene launcher
+    install(DIRECTORY core studio input math mcp physics renderer scene
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h"
     )

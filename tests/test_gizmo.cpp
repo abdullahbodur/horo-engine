@@ -3,8 +3,8 @@
 
 #include <cmath>
 
-#include "editor/Raycaster.h"
-#include "editor/TransformGizmo.h"
+#include "studio/Raycaster.h"
+#include "studio/TransformGizmo.h"
 #include "math/MathUtils.h"
 #include "math/Quaternion.h"
 #include "math/Vec3.h"

@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <fstream>
 
-#include "launcher/LauncherProject.h"
+#include "studio/LauncherProject.h"
 
 using namespace Monolith::Launcher;
 

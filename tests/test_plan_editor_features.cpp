@@ -5,7 +5,7 @@
 
 #include "core/EngineLaunchArgs.h"
 #include "core/LogBuffer.h"
-#include "editor/ProjectEntryFilter.h"
+#include "studio/ProjectEntryFilter.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;

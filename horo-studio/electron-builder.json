@@ -1,0 +1,26 @@
+{
+  "appId": "com.horoengine.studio",
+  "productName": "Horo Studio",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "lib/**/*",
+    "src-gen/**/*",
+    "node_modules/**/*",
+    "media/**/*",
+    "package.json"
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "icon": "media/icons/horo-studio.icns"
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "media/icons/horo-studio.ico"
+  },
+  "linux": {
+    "target": "AppImage",
+    "icon": "media/icons/horo-studio.png"
+  }
+}

@@ -1,4 +1,4 @@
-#include "launcher/UiTestHarness.h"
+#include "studio/UiTestHarness.h"
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 
@@ -12,7 +12,7 @@
 #include <imgui_test_engine/imgui_te_engine.h>
 
 #include "core/Logger.h"
-#include "launcher/LauncherEditorShell.h"
+#include "studio/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
 namespace Monolith {

@@ -6,7 +6,7 @@
 
 #include <imgui_test_engine/imgui_te_engine.h>
 
-#include "launcher/UiTestHarness.h"
+#include "studio/UiTestHarness.h"
 
 namespace Monolith {
 

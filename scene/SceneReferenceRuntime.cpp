@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "editor/EditorUiLogic.h"
+#include "studio/EditorUiLogic.h"
 #include "math/MathUtils.h"
 #include "physics/BoxCollider.h"
 #include "scene/components/BehaviorComponent.h"

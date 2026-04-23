@@ -11,11 +11,11 @@
 
 #include "core/EngineLaunchArgs.h"
 #include "core/ProjectPath.h"
-#include "editor/EditorWorkspaceSettings.h"
-#include "launcher/EditorHomeSettings.h"
-#include "launcher/ExternalProcessRunner.h"
-#include "launcher/LauncherProject.h"
-#include "launcher/LauncherProjectTemplate.h"
+#include "studio/EditorWorkspaceSettings.h"
+#include "studio/EditorHomeSettings.h"
+#include "studio/ExternalProcessRunner.h"
+#include "studio/LauncherProject.h"
+#include "studio/LauncherProjectTemplate.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;

@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-#include "launcher/UiAutomationConfig.h"
+#include "studio/UiAutomationConfig.h"
 
 using namespace Monolith;
 

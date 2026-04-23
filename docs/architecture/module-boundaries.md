@@ -2,7 +2,7 @@
 
 ## Current Reality on `main`
 
-- The repo is organized into module-shaped directories: `core`, `math`, `scene`, `renderer`, `physics`, `input`, `editor`, and `mcp`.
+- The repo is organized into module-shaped directories: `core`, `math`, `scene`, `renderer`, `physics`, `input`, `studio`, and `mcp`.
 - The build currently compiles those directories into a single `MonolithEngine` target.
 - The repo root is exported as a public include root, so cross-module includes are easy and are not yet strongly enforced by the build.
 - Because of that, this document is the canonical review policy for boundaries until deeper build-time enforcement is added later.

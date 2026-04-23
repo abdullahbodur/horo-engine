@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "editor/EditorAssetImport.h"
+#include "studio/EditorAssetImport.h"
 #include "renderer/ObjLoader.h"
 
 using namespace Monolith;

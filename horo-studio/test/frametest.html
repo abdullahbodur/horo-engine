@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Horo Engine — Framebuffer PoC</title>
+  <style>
+    body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+    h2 { color: #ccc; font-family: monospace; margin: 12px 0 8px; }
+    #status { color: #888; font-family: monospace; font-size: 13px; margin-bottom: 8px; }
+    canvas { border: 1px solid #444; max-width: 95vw; max-height: 80vh; }
+    #stats { color: #666; font-family: monospace; font-size: 11px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h2>Horo Engine — Framebuffer Stream PoC</h2>
+  <div id="status">Connecting to ws://127.0.0.1:39282 …</div>
+  <canvas id="c" width="1280" height="720"></canvas>
+  <div id="stats">frames: 0 | fps: — | last frame: —</div>
+
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const statsEl = document.getElementById('stats');
+
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+    let fps = 0;
+
+    function connect() {
+      statusEl.textContent = 'Connecting to ws://127.0.0.1:39282 …';
+      const ws = new WebSocket('ws://127.0.0.1:39282');
+      ws.binaryType = 'blob';
+
+      ws.onopen = () => {
+        statusEl.textContent = '✓ Connected — waiting for frames';
+      };
+
+      ws.onmessage = (event) => {
+        if (!(event.data instanceof Blob)) return;
+        createImageBitmap(event.data).then((bitmap) => {
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
+
+          frameCount++;
+          const now = performance.now();
+          const elapsed = now - lastFpsTime;
+          if (elapsed >= 1000) {
+            fps = Math.round(frameCount * 1000 / elapsed);
+            frameCount = 0;
+            lastFpsTime = now;
+          }
+          statsEl.textContent = `frames: ${frameCount} | fps: ${fps} | last frame: ${new Date().toLocaleTimeString()}`;
+        });
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = '✗ Disconnected — retrying in 2s …';
+        setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => ws.close();
+    }
+
+    connect();
+  </script>
+</body>
+</html>

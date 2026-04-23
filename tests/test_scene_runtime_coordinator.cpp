@@ -3,8 +3,8 @@
 
 #include <string>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneRuntimeCoordinatorBridge.h"
+#include "studio/SceneDocument.h"
+#include "studio/SceneRuntimeCoordinatorBridge.h"
 #include "scene/SceneRuntimeCoordinator.h"
 #include "scene/RuntimeSceneDefinition.h"
 
