@@ -14,6 +14,10 @@ export class InspectorContribution extends AbstractViewContribution<InspectorWid
   }
 
   async onStart(): Promise<void> {
-    this.openView({ activate: false });
+    await this.openView({ activate: false, reveal: true });
+  }
+
+  async onDidInitializeLayout(): Promise<void> {
+    await this.openView({ activate: false, reveal: true });
   }
 }

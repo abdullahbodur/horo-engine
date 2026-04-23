@@ -39,7 +39,10 @@ export class GameViewContribution
   }
 
   async onStart(): Promise<void> {
-    // Auto-open game view on startup
-    this.openView({ activate: false });
+    await this.openView({ activate: false, reveal: true });
+  }
+
+  async onDidInitializeLayout(): Promise<void> {
+    await this.openView({ activate: false, reveal: true });
   }
 }

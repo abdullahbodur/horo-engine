@@ -5,6 +5,8 @@
  * The engine's MCP surface is documented in mcp/README.md.
  */
 
+import { injectable } from '@theia/core/shared/inversify';
+
 export interface McpObject {
   id: string;
   name: string;
@@ -41,12 +43,11 @@ export interface McpToolResult {
   data?: unknown;
 }
 
+@injectable()
 export class McpClient {
-  private endpoint: string;
+  private readonly endpoint = 'http://127.0.0.1:39281/mcp';
 
-  constructor(endpoint = 'http://127.0.0.1:39281/mcp') {
-    this.endpoint = endpoint;
-  }
+  constructor() {}
 
   // ---- Connectivity --------------------------------------------------------
 
