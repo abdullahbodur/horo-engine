@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdio>
 
+#include <imgui.h>
+
 namespace Monolith {
 namespace Editor {
 

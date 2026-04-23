@@ -6,10 +6,20 @@
   },
   "files": [
     "lib/**/*",
+    "scripts/**/*",
     "src-gen/**/*",
     "node_modules/**/*",
     "media/**/*",
     "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "engine-runtime",
+      "to": "engine-runtime",
+      "filter": [
+        "**/*"
+      ]
+    }
   ],
   "mac": {
     "category": "public.app-category.developer-tools",
@@ -17,7 +27,8 @@
   },
   "win": {
     "target": "nsis",
-    "icon": "media/icons/horo-studio.ico"
+    "icon": "media/icons/horo-studio.ico",
+    "signAndEditExecutable": false
   },
   "linux": {
     "target": "AppImage",

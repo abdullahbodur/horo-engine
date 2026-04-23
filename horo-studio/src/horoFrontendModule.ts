@@ -25,8 +25,10 @@ import { AssetBrowserContribution } from './assetBrowser/AssetBrowserContributio
 
 import { ConsoleWidget } from './console/ConsoleWidget';
 import { ConsoleContribution } from './console/ConsoleContribution';
+import { HoroLayoutContribution } from './layout/HoroLayoutContribution';
 
 export default new ContainerModule((bind) => {
+  console.info('[horo-module] registering horo frontend module');
   // Shared singletons
   bind(McpClient).toSelf().inSingletonScope();
   bind(HoroSelectionService).toSelf().inSingletonScope();
@@ -46,7 +48,6 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, GameViewContribution);
-  bind(FrontendApplicationContribution).toService(GameViewContribution);
 
   // ---- Scene Hierarchy -----------------------------------------------------
   bind(SceneHierarchyWidget).toSelf();
@@ -57,7 +58,6 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, SceneHierarchyContribution);
-  bind(FrontendApplicationContribution).toService(SceneHierarchyContribution);
 
   // ---- Inspector -----------------------------------------------------------
   bind(InspectorWidget).toSelf();
@@ -68,7 +68,6 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, InspectorContribution);
-  bind(FrontendApplicationContribution).toService(InspectorContribution);
 
   // ---- Asset Browser -------------------------------------------------------
   bind(AssetBrowserWidget).toSelf();
@@ -79,7 +78,6 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, AssetBrowserContribution);
-  bind(FrontendApplicationContribution).toService(AssetBrowserContribution);
 
   // ---- Console -------------------------------------------------------------
   bind(ConsoleWidget).toSelf();
@@ -90,5 +88,8 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, ConsoleContribution);
-  bind(FrontendApplicationContribution).toService(ConsoleContribution);
+
+  // ---- Deterministic startup layout ---------------------------------------
+  bind(HoroLayoutContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(HoroLayoutContribution);
 });

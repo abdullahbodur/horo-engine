@@ -1,14 +1,12 @@
 import { injectable } from '@theia/core/shared/inversify';
 import {
   AbstractViewContribution,
-  FrontendApplicationContribution,
 } from '@theia/core/lib/browser';
 import { ConsoleWidget } from './ConsoleWidget';
 
 @injectable()
 export class ConsoleContribution
   extends AbstractViewContribution<ConsoleWidget>
-  implements FrontendApplicationContribution
 {
   constructor() {
     super({
@@ -17,13 +15,5 @@ export class ConsoleContribution
       defaultWidgetOptions: { area: 'bottom' },
       toggleCommandId: 'horo.console.toggle',
     });
-  }
-
-  async onStart(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
-  }
-
-  async onDidInitializeLayout(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
   }
 }

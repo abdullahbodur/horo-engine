@@ -1,8 +1,6 @@
-import { injectable, inject } from '@theia/core/shared/inversify';
+import { injectable } from '@theia/core/shared/inversify';
 import {
   AbstractViewContribution,
-  FrontendApplicationContribution,
-  Widget,
 } from '@theia/core/lib/browser';
 import { Command, CommandRegistry, MenuModelRegistry } from '@theia/core';
 import { GameViewWidget } from './GameViewWidget';
@@ -16,7 +14,6 @@ export const GAME_VIEW_TOGGLE_COMMAND: Command = {
 @injectable()
 export class GameViewContribution
   extends AbstractViewContribution<GameViewWidget>
-  implements FrontendApplicationContribution
 {
   constructor() {
     super({
@@ -29,20 +26,9 @@ export class GameViewContribution
 
   override async registerCommands(registry: CommandRegistry): Promise<void> {
     super.registerCommands(registry);
-    registry.registerCommand(GAME_VIEW_TOGGLE_COMMAND, {
-      execute: () => this.openView({ activate: true }),
-    });
   }
 
   override async registerMenus(menus: MenuModelRegistry): Promise<void> {
     super.registerMenus(menus);
-  }
-
-  async onStart(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
-  }
-
-  async onDidInitializeLayout(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
   }
 }

@@ -24,9 +24,21 @@ void FramebufferStream::BroadcastFrame(int, int) {}
 
 #else  // MONOLITH_FRAMEBUFFER_STREAM
 
+#ifdef _MSC_VER
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBIW_ASSERT(x) ((void)(x))
 #include <stb_image_write.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include <algorithm>
 #include <array>

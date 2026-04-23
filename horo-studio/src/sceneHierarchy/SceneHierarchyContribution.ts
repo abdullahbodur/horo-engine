@@ -1,5 +1,5 @@
-import { injectable, inject } from '@theia/core/shared/inversify';
-import { AbstractViewContribution, FrontendApplicationContribution } from '@theia/core/lib/browser';
+import { injectable } from '@theia/core/shared/inversify';
+import { AbstractViewContribution } from '@theia/core/lib/browser';
 import { Command, CommandRegistry } from '@theia/core';
 import { SceneHierarchyWidget } from './SceneHierarchyWidget';
 
@@ -10,7 +10,7 @@ export const SCENE_REFRESH_COMMAND: Command = {
 };
 
 @injectable()
-export class SceneHierarchyContribution extends AbstractViewContribution<SceneHierarchyWidget> implements FrontendApplicationContribution {
+export class SceneHierarchyContribution extends AbstractViewContribution<SceneHierarchyWidget> {
   constructor() {
     super({
       widgetId: SceneHierarchyWidget.ID,
@@ -18,14 +18,6 @@ export class SceneHierarchyContribution extends AbstractViewContribution<SceneHi
       defaultWidgetOptions: { area: 'left' },
       toggleCommandId: 'horo.scene.toggle',
     });
-  }
-
-  async onStart(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
-  }
-
-  async onDidInitializeLayout(): Promise<void> {
-    await this.openView({ activate: false, reveal: true });
   }
 
   override async registerCommands(registry: CommandRegistry): Promise<void> {

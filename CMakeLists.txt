@@ -17,8 +17,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     option(MONOLITH_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
     option(MONOLITH_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
-    option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
-    option(MONOLITH_FRAMEBUFFER_STREAM "Enable WebSocket framebuffer streaming for Theia/browser editor (port 39282)" OFF)
+    option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build standalone engine/editor executables" ON)
+    option(MONOLITH_ENGINE_BUILD_LEGACY_IMGUI_EDITOR "Build legacy ImGui launcher executable (HoroEditor)" OFF)
+    option(MONOLITH_FRAMEBUFFER_STREAM "Enable WebSocket framebuffer streaming for Theia/browser editor (port 39282)" ON)
 
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
@@ -129,47 +130,70 @@ add_custom_command(TARGET MonolithEngine POST_BUILD
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
-    add_executable(HoroEditor studio/HoroEditorMain.cpp)
-    target_link_libraries(HoroEditor PRIVATE MonolithEngine)
-    target_compile_features(HoroEditor PRIVATE cxx_std_20)
+    add_executable(HoroEngine studio/HoroEditorMain.cpp)
+    target_link_libraries(HoroEngine PRIVATE MonolithEngine)
+    target_compile_features(HoroEngine PRIVATE cxx_std_20)
+    target_compile_definitions(HoroEngine PRIVATE MONOLITH_BACKEND_PROCESS=1)
 
     if(WIN32)
-        target_compile_definitions(HoroEditor PRIVATE NOMINMAX)
+        target_compile_definitions(HoroEngine PRIVATE NOMINMAX)
     endif()
 
-    add_custom_command(TARGET HoroEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets
+    add_custom_command(TARGET HoroEngine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEngine>/../sdk/assets
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
-            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/editor_schema.json
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer
+            $<TARGET_FILE_DIR:HoroEngine>/../sdk/assets/editor_schema.json
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEngine>/../sdk/renderer
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
-            $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer/shaders
-        COMMENT "Copying HoroEditor SDK resources next to launcher binary"
+            $<TARGET_FILE_DIR:HoroEngine>/../sdk/renderer/shaders
+        COMMENT "Copying HoroEngine SDK resources next to backend binary"
     )
 
-    if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET MonolithEngineImGuiTest)
-        add_executable(HoroEditorUiTest studio/HoroEditorMain.cpp)
-        target_link_libraries(HoroEditorUiTest PRIVATE MonolithEngineImGuiTest)
-        target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
-        target_compile_definitions(HoroEditorUiTest PRIVATE MONOLITH_STANDALONE_UI_AUTOMATION=1)
+    if(MONOLITH_ENGINE_BUILD_LEGACY_IMGUI_EDITOR)
+        add_executable(HoroEditor studio/HoroEditorMain.cpp)
+        target_link_libraries(HoroEditor PRIVATE MonolithEngine)
+        target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
         if(WIN32)
-            target_compile_definitions(HoroEditorUiTest PRIVATE NOMINMAX)
+            target_compile_definitions(HoroEditor PRIVATE NOMINMAX)
         endif()
 
-        add_custom_command(TARGET HoroEditorUiTest POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets
+        add_custom_command(TARGET HoroEditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
-                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/editor_schema.json
-            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer
+                $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/editor_schema.json
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
-                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer/shaders
-            COMMENT "Copying HoroEditor UI test SDK resources"
+                $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer/shaders
+            COMMENT "Copying HoroEditor SDK resources next to launcher binary"
         )
+
+        if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET MonolithEngineImGuiTest)
+            add_executable(HoroEditorUiTest studio/HoroEditorMain.cpp)
+            target_link_libraries(HoroEditorUiTest PRIVATE MonolithEngineImGuiTest)
+            target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
+            target_compile_definitions(HoroEditorUiTest PRIVATE MONOLITH_STANDALONE_UI_AUTOMATION=1)
+
+            if(WIN32)
+                target_compile_definitions(HoroEditorUiTest PRIVATE NOMINMAX)
+            endif()
+
+            add_custom_command(TARGET HoroEditorUiTest POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
+                    $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/editor_schema.json
+                COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
+                    $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer/shaders
+                COMMENT "Copying HoroEditor UI test SDK resources"
+            )
+        endif()
     endif()
 endif()
 
@@ -182,9 +206,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     )
 
     if(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
-        install(TARGETS HoroEditor
+        install(TARGETS HoroEngine
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
+        if(MONOLITH_ENGINE_BUILD_LEGACY_IMGUI_EDITOR)
+            install(TARGETS HoroEditor
+                RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            )
+        endif()
     endif()
 
     install(DIRECTORY core studio input math mcp physics renderer scene

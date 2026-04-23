@@ -2,8 +2,6 @@
 
 #include <string>
 
-#include <imgui.h>
-
 #include "math/Vec3.h"
 
 namespace Monolith {

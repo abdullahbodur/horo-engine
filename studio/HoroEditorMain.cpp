@@ -69,7 +69,11 @@ class HoroEditorApp final : public Application {
  private:
   static AppSpec BuildSpec() {
     AppSpec spec;
+#ifdef MONOLITH_BACKEND_PROCESS
+    spec.name = "Horo Engine Backend";
+#else
     spec.name = "Horo Editor";
+#endif
     spec.width = 1440;
     spec.height = 920;
     spec.vsync = true;
@@ -103,6 +107,9 @@ class HoroEditorApp final : public Application {
 
     DebugDraw::Init();
 
+#ifdef MONOLITH_BACKEND_PROCESS
+    m_editor.SetUiEnabled(false);
+#endif
     m_editor.Init(GetWindow().GetNativeHandle());
     m_editor.SetLiveRegistry(&m_scene.registry);
     m_shell.Attach(&m_editor, &m_scene, m_runtime.get(), &m_camera);
@@ -160,13 +167,22 @@ class HoroEditorApp final : public Application {
       frameConfig.lights = m_runtime->GetLights();
 
     Renderer::BeginFrame(frameConfig);
-    if (m_shell.HasActiveProject()) {
+    const bool hasActiveScene =
+#ifdef MONOLITH_BACKEND_PROCESS
+        m_runtime && m_runtime->GetCoordinator().IsActive();
+#else
+        m_shell.HasActiveProject();
+#endif
+
+    if (hasActiveScene) {
       Renderer::BeginPass(
           {RenderPassId::OpaqueScene, BuildRenderView(m_camera), "horo-editor-scene"});
       m_scene.RenderSystems(alpha);
       Renderer::EndPass();
     }
+#ifndef MONOLITH_BACKEND_PROCESS
     m_editor.Render(m_camera, GetWindow().GetWidth(), GetWindow().GetHeight());
+#endif
 
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
     if (m_runUiAutomation && m_uiAutomation)
@@ -245,7 +261,28 @@ class HoroEditorApp final : public Application {
 
 }  // namespace
 
+#ifdef MONOLITH_BACKEND_PROCESS
+void ConfigureBackendProcessEnvironment() {
+#ifdef _WIN32
+  char* rawValue = nullptr;
+  size_t valueLen = 0;
+  const errno_t envResult = _dupenv_s(&rawValue, &valueLen, "MONOLITH_GLFW_VISIBLE");
+  const bool hasValue = (envResult == 0 && rawValue && rawValue[0] != '\0');
+  if (!hasValue)
+    _putenv_s("MONOLITH_GLFW_VISIBLE", "0");
+  if (rawValue)
+    std::free(rawValue);
+#else
+  if (const char* existing = std::getenv("MONOLITH_GLFW_VISIBLE"); !existing || !*existing)
+    setenv("MONOLITH_GLFW_VISIBLE", "0", 0);
+#endif
+}
+#endif
+
 int main(int argc, char** argv) {
+#ifdef MONOLITH_BACKEND_PROCESS
+  ConfigureBackendProcessEnvironment();
+#endif
   const Monolith::EngineLaunchOptions launchOptions = Monolith::ParseEngineLaunchOptions(argc, argv);
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
   const bool runUiAutomation = HasArg(argc, argv, "--run-ui-tests");

@@ -6,7 +6,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 #include "core/LogBuffer.h"
@@ -62,6 +61,9 @@ namespace Editor {
 //   if (editor.WantsSceneReload()) { reload from editor.GetPendingDocument(); }
 class EditorLayer {
  public:
+  void SetUiEnabled(bool enabled) { m_uiEnabled = enabled; }
+  bool IsUiEnabled() const { return m_uiEnabled; }
+
   void Init(GLFWwindow* window);
   void Shutdown();
 
@@ -151,6 +153,7 @@ class EditorLayer {
   void ProcessPendingPathDrops();
 
   GLFWwindow* m_window = nullptr;
+  bool m_uiEnabled = true;
   bool m_active = false;
   bool m_imguiBackendInitialized = false;
   bool m_playMode = false;

@@ -26,6 +26,7 @@ export class AssetBrowserWidget extends BaseWidget {
   async refresh(): Promise<void> {
     try {
       const assets = await this.mcp.listAssets();
+      console.info(`[horo-assets] refresh: received ${assets.length} assets`);
       const byType: Record<string, McpAsset[]> = {};
       for (const a of assets) {
         (byType[a.type] ??= []).push(a);
@@ -62,6 +63,7 @@ export class AssetBrowserWidget extends BaseWidget {
         }
       }
     } catch {
+      console.warn('[horo-assets] refresh failed: MCP engine not connected');
       this.node.innerHTML =
         '<div style="padding:8px;color:#f88;font-size:12px;">⚠ Engine not connected</div>';
     }

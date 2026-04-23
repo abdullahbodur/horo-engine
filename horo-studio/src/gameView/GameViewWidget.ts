@@ -1,4 +1,4 @@
-import { injectable, inject, postConstruct, preDestroy } from '@theia/core/shared/inversify';
+import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import { BaseWidget, Message } from '@theia/core/lib/browser';
 import { McpClient } from '../mcp/McpClient';
 
@@ -83,8 +83,7 @@ export class GameViewWidget extends BaseWidget {
     this.scheduleRender();
   }
 
-  @preDestroy()
-  protected onBeforeDetach(msg: Message): void {
+  protected override onBeforeDetach(msg: Message): void {
     super.onBeforeDetach(msg);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);

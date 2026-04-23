@@ -3,7 +3,7 @@
   "name": "horo-studio",
   "version": "0.1.0",
   "description": "Horo Studio — IDE shell for Horo Engine, built on Eclipse Theia",
-  "main": "lib/backend/electron-main.js",
+  "main": "scripts/electron-main-wrapper.js",
   "theia": {
     "target": "electron",
     "frontend": {
@@ -37,26 +37,37 @@
     "@vscode/ripgrep": "^1.17.1",
     "node-pty": "^1.1.0"
   },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
   "devDependencies": {
-    "horo-studio": "file:.",
     "@theia/cli": "1.56.0",
     "electron": "30.1.2",
     "electron-builder": "^26.8.1",
     "typescript": "^5.3.0"
   },
   "scripts": {
-    "prepare": "theia build --mode development",
+    "prepare": "tsc -p tsconfig.json",
+    "build:ext": "tsc -p tsconfig.json",
     "build": "theia build",
     "build:prod": "theia build --mode production",
     "build:electron": "theia build --app-target=electron --mode development",
-    "start": "theia start --plugins=local-dir:plugins",
+    "start": "node scripts/studio-cli.js",
     "start:dev": "theia start --port 3000",
-    "start:electron": "open dist/mac-unpacked/HoroStudio.app",
-    "start:electron:win": "dist\\win-unpacked\\HoroStudio.exe",
-    "start:electron:linux": "dist/linux-unpacked/horo-studio",
-    "package:dir": "electron-builder --dir",
-    "package": "electron-builder --config electron-builder.json",
-    "watch": "theia build --watch --mode development",
+    "start:electron": "node scripts/studio-cli.js --electron",
+    "start:electron:keep-layout": "node scripts/studio-cli.js --electron --keep-layout",
+    "start:electron:win": "node scripts/studio-cli.js --electron",
+    "start:electron:linux": "node scripts/studio-cli.js --electron",
+    "studio": "node scripts/studio-cli.js",
+    "studio:setup": "node scripts/studio-cli.js --setup",
+    "studio:setup-electron": "node scripts/studio-cli.js --setup-electron",
+    "studio:setup-electron:auto": "node scripts/studio-cli.js --setup-electron --auto-install-spectre",
+    "studio:electron": "node scripts/studio-cli.js --electron",
+    "studio:electron:debug": "node scripts/studio-cli.js --electron --debug-logs",
+    "package:dir": "node scripts/stage-engine-runtime.js && electron-builder --dir",
+    "package": "node scripts/stage-engine-runtime.js && electron-builder --config electron-builder.json",
+    "watch": "tsc -p tsconfig.json && theia build --watch --mode development",
     "setup:native": "electron-rebuild -f && node node_modules/@vscode/ripgrep/lib/postinstall.js"
   },
   "theia-extension": "horo-studio",

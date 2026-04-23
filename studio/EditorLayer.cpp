@@ -1503,31 +1503,39 @@ namespace Monolith::Editor
       if (m_mcpController.SettingsDocument().parseError)
         LOG_WARN("[MCP] Settings load fallback: %s", m_mcpController.SettingsDocument().error.c_str());
 
-      IMGUI_CHECKVERSION();
-      ImGui::CreateContext();
-      ImGui::StyleColorsDark();
-      ImGuiIO &io = ImGui::GetIO();
-      m_imguiIniPath = ResolveEditorLayoutPath().string();
-      std::error_code settingsEc;
-      std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(), settingsEc);
-      if (settingsEc)
+      if (m_uiEnabled)
       {
-        LOG_WARN("[Editor] Failed to ensure editor settings directory: %s", settingsEc.message().c_str());
-        m_imguiIniPath.clear();
-        io.IniFilename = nullptr;
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGui::StyleColorsDark();
+        ImGuiIO &io = ImGui::GetIO();
+        m_imguiIniPath = ResolveEditorLayoutPath().string();
+        std::error_code settingsEc;
+        std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(), settingsEc);
+        if (settingsEc)
+        {
+          LOG_WARN("[Editor] Failed to ensure editor settings directory: %s", settingsEc.message().c_str());
+          m_imguiIniPath.clear();
+          io.IniFilename = nullptr;
+        }
+        else
+        {
+          m_hasPersistedDockLayout = std::filesystem::exists(ResolveEditorLayoutPath());
+          io.IniFilename = m_imguiIniPath.c_str();
+        }
+        LoadWorkspaceState();
+
+        const RenderBackendId backendId = Renderer::GetBackendId();
+        m_imguiBackendInitialized = InitEditorImGuiBackend(window, backendId);
+        if (!m_imguiBackendInitialized)
+        {
+          LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'", ToString(backendId));
+        }
       }
       else
       {
-        m_hasPersistedDockLayout = std::filesystem::exists(ResolveEditorLayoutPath());
-        io.IniFilename = m_imguiIniPath.c_str();
-      }
-      LoadWorkspaceState();
-
-      const RenderBackendId backendId = Renderer::GetBackendId();
-      m_imguiBackendInitialized = InitEditorImGuiBackend(window, backendId);
-      if (!m_imguiBackendInitialized)
-      {
-        LOG_WARN("[Editor] No supported ImGui backend for renderer backend '%s'", ToString(backendId));
+        m_active = true;
+        m_mcpController.SetEditorActive(true);
       }
 
       const std::array<std::filesystem::path, 4> schemaCandidates = {
@@ -1565,18 +1573,24 @@ namespace Monolith::Editor
 
     void EditorLayer::Shutdown()
     {
-      SaveWorkspaceStateIfNeeded(true);
-      if (!m_imguiIniPath.empty())
-        ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
+      if (m_uiEnabled)
+      {
+        SaveWorkspaceStateIfNeeded(true);
+        if (!m_imguiIniPath.empty())
+          ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
+      }
       m_mcpController.Shutdown();
       if (m_imguiBackendInitialized)
         ShutdownEditorImGuiBackend(Renderer::GetBackendId());
       m_imguiBackendInitialized = false;
-      ImGui::DestroyContext();
+      if (m_uiEnabled)
+        ImGui::DestroyContext();
     }
 
     void EditorLayer::Toggle()
     {
+      if (!m_uiEnabled)
+        return;
       m_active = !m_active;
       if (!m_active)
         m_playMode = false;
@@ -1914,6 +1928,13 @@ namespace Monolith::Editor
 
     bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH)
     {
+      if (!m_uiEnabled)
+      {
+        ProcessMcpCommands();
+        PublishMcpSnapshot();
+        return false;
+      }
+
       if (m_clipboardToastTime > 0.0f)
         m_clipboardToastTime = std::max(0.0f, m_clipboardToastTime - dt);
 
@@ -2347,6 +2368,9 @@ namespace Monolith::Editor
 
     void EditorLayer::Render(const Camera &cam, int screenW, int screenH)
     {
+      if (!m_uiEnabled)
+        return;
+
       ProcessDeferredFilePicks();
       if (!m_active)
       {

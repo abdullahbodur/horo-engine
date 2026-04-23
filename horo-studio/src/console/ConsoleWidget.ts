@@ -1,5 +1,5 @@
-import { injectable, inject, postConstruct, preDestroy } from '@theia/core/shared/inversify';
-import { BaseWidget } from '@theia/core/lib/browser';
+import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
+import { BaseWidget, Message } from '@theia/core/lib/browser';
 import { McpClient } from '../mcp/McpClient';
 
 @injectable()
@@ -69,9 +69,10 @@ export class ConsoleWidget extends BaseWidget {
     this.poll();
   }
 
-  @preDestroy()
-  protected cleanup(): void {
+  protected override onBeforeDetach(msg: Message): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
+    super.onBeforeDetach(msg);
   }
 
   private async poll(): Promise<void> {
