@@ -12,9 +12,6 @@
 #include <cctype>
 #include <cstring>
 
-#include <imgui.h>
-#include <imgui_internal.h>
-
 #include "core/ProjectPath.h"
 #include "studio/EditorLayer.h"
 #include "studio/AssetMetadata.h"
@@ -22,7 +19,6 @@
 #include "studio/AssetImporterRegistry.h"
 #include "studio/EditorSchema.h"
 #include "studio/EditorAssetImport.h"
-#include "studio/EditorImGuiBackend.h"
 #include "studio/EditorSearch.h"
 #include "studio/EditorUiLogic.h"
 #include "studio/EditorWorkspaceSettings.h"
@@ -168,53 +164,6 @@ struct HomeDirGuard
     }
 };
 
-struct ImGuiContextGuard
-{
-    ImGuiContextGuard()
-    {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO &io = ImGui::GetIO();
-        unsigned char *fontPixels = nullptr;
-        int fontWidth = 0;
-        int fontHeight = 0;
-        io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontWidth, &fontHeight);
-        io.DisplaySize = ImVec2(1280.0f, 720.0f);
-        io.DeltaTime = 1.0f / 60.0f;
-        io.MousePos = ImVec2(32.0f, 32.0f);
-        io.MouseDown[0] = false;
-    }
-
-    ~ImGuiContextGuard()
-    {
-        ImGui::DestroyContext();
-    }
-};
-
-static void SeedExternalAssetDragPayload(const char *assetId)
-{
-    REQUIRE(assetId != nullptr);
-    ImGuiContext &g = *ImGui::GetCurrentContext();
-    ImGuiPayload &payload = g.DragDropPayload;
-    payload.Clear();
-    payload.SourceId = 1;
-    payload.Data = const_cast<char *>(assetId);
-    payload.DataSize = static_cast<int>(std::strlen(assetId)) + 1;
-    payload.DataFrameCount = g.FrameCount;
-    payload.Delivery = false;
-    payload.Preview = false;
-    ImStrncpy(payload.DataType, "ASSET_ID", IM_ARRAYSIZE(payload.DataType));
-
-    g.DragDropActive = true;
-    g.DragDropSourceFlags = ImGuiDragDropFlags_SourceExtern;
-    g.DragDropSourceFrameCount = g.FrameCount - 1;
-    g.DragDropMouseButton = -1;
-    g.DragDropAcceptFlags = ImGuiDragDropFlags_None;
-    g.DragDropAcceptIdCurr = 0;
-    g.DragDropAcceptIdPrev = 0;
-    g.DragDropAcceptFrameCount = -1;
-}
-
 // ===========================================================================
 // EditorSchema
 // ===========================================================================
@@ -240,19 +189,6 @@ TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema]"
     EditorSchema schema;
     REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
     REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
-}
-
-TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
-          "[editor][imgui][backend]")
-{
-    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
-    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
-
-#if defined(MONOLITH_HAS_VULKAN)
-    REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
-#else
-    REQUIRE_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
-#endif
 }
 
 TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]")
@@ -2261,24 +2197,10 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[edit
     REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
 }
 
-TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]")
+TEST_CASE("Editor viewport asset drop target returns empty result in MCP mode", "[editor][ui][dragdrop]")
 {
-    ImGuiContextGuard imgui;
+    // DrawViewportAssetDropTarget is stubbed out in MCP backend-only mode (no ImGui).
     bool callbackInvoked = false;
-
-    ImGuiIO &io = ImGui::GetIO();
-    io.MousePos = ImVec2(48.0f, 48.0f);
-
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
-    ImGui::Begin("ViewportTest");
-
-    ImGuiContext &g = *ImGui::GetCurrentContext();
-    g.HoveredWindow = ImGui::GetCurrentWindow();
-    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
-    SeedExternalAssetDragPayload("crate");
-
     const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
         false,
         220.0f,
@@ -2291,11 +2213,8 @@ TEST_CASE("Editor viewport asset drop target matches active asset payload inline
             return assetId && std::string(assetId) == "crate";
         });
 
-    ImGui::End();
-    ImGui::EndFrame();
-
-    REQUIRE(result.targetVisible);
-    REQUIRE(result.payloadMatched);
+    REQUIRE_FALSE(result.targetVisible);
+    REQUIRE_FALSE(result.payloadMatched);
     REQUIRE_FALSE(result.delivered);
     REQUIRE_FALSE(result.accepted);
     REQUIRE_FALSE(callbackInvoked);
@@ -2303,22 +2222,8 @@ TEST_CASE("Editor viewport asset drop target matches active asset payload inline
 
 TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]")
 {
-    ImGuiContextGuard imgui;
+    // Stub always returns empty result regardless of playMode flag.
     bool callbackInvoked = false;
-
-    ImGuiIO &io = ImGui::GetIO();
-    io.MousePos = ImVec2(48.0f, 48.0f);
-
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(320.0f, 240.0f), ImGuiCond_Always);
-    ImGui::Begin("ViewportPlayModeTest");
-
-    ImGuiContext &g = *ImGui::GetCurrentContext();
-    g.HoveredWindow = ImGui::GetCurrentWindow();
-    g.HoveredWindowUnderMovingWindow = ImGui::GetCurrentWindow();
-    SeedExternalAssetDragPayload("crate");
-
     const EditorViewportAssetDropResult result = DrawViewportAssetDropTarget(
         true,
         220.0f,
@@ -2330,9 +2235,6 @@ TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "
             *invoked = true;
             return true;
         });
-
-    ImGui::End();
-    ImGui::EndFrame();
 
     REQUIRE_FALSE(result.targetVisible);
     REQUIRE_FALSE(result.payloadMatched);

@@ -129,9 +129,8 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string editorLayer = ReadTextFile(root / "studio" / "EditorLayer.cpp");
   REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
   REQUIRE(editorLayer.find("ImGui_ImplOpenGL3_") == std::string::npos);
-
-  const std::string editorImGuiBackend = ReadTextFile(root / "studio" / "EditorImGuiBackend.cpp");
-  REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") != std::string::npos);
+  // EditorImGuiBackend.cpp removed: project is in MCP backend-only mode with no ImGui.
+  REQUIRE(editorLayer.find("#include <imgui.h>") == std::string::npos);
 
   const std::string debugDraw = ReadTextFile(root / "renderer" / "DebugDraw.cpp");
   REQUIRE(debugDraw.find("supportsDebugDraw") != std::string::npos);

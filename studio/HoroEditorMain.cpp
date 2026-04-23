@@ -1,5 +1,10 @@
+// HoroEditorMain.cpp
+//
+// Backend engine process: renders via OpenGL, streams frames over WebSocket
+// (port 39282), and serves MCP commands (port 39281).
+// All editor UI is handled by horo-studio via MCP + WebSocket.
+
 #include <array>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -14,7 +19,6 @@
 #include "core/ProjectPath.h"
 #include "EditorLayer.h"
 #include "FramebufferStream.h"
-#include "UiAutomationRunner.h"
 #include "LauncherEditorShell.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderViewUtils.h"
@@ -28,18 +32,6 @@
 namespace {
 using namespace Monolith;
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-bool HasArg(int argc, char** argv, const char* expected) {
-  if (!expected || !*expected)
-    return false;
-  for (int i = 1; i < argc; ++i) {
-    if (argv[i] && std::string(argv[i]) == expected)
-      return true;
-  }
-  return false;
-}
-#endif
-
 class RendererBackendInitException final : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
@@ -47,20 +39,10 @@ class RendererBackendInitException final : public std::runtime_error {
 
 class HoroEditorApp final : public Application {
  public:
-  explicit HoroEditorApp(const EngineLaunchOptions& launchOptions
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-                         ,
-                         const bool runUiAutomation
-#endif
-                         )
+  explicit HoroEditorApp(const EngineLaunchOptions& launchOptions)
       : Application(BuildSpec()),
         m_launchOptions(launchOptions),
-        m_runtime(std::make_unique<SceneReferenceRuntime>(&m_scene))
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-        ,
-        m_runUiAutomation(runUiAutomation)
-#endif
-  {
+        m_runtime(std::make_unique<SceneReferenceRuntime>(&m_scene)) {
     m_scene.AddSystem(std::make_unique<BehaviorSystem>());
     m_scene.AddSystem(std::make_unique<PhysicsSystem>(m_scene.physics));
     m_scene.AddRenderSystem(std::make_unique<RenderSystem>(m_camera, m_renderAlpha));
@@ -69,11 +51,7 @@ class HoroEditorApp final : public Application {
  private:
   static AppSpec BuildSpec() {
     AppSpec spec;
-#ifdef MONOLITH_BACKEND_PROCESS
     spec.name = "Horo Engine Backend";
-#else
-    spec.name = "Horo Editor";
-#endif
     spec.width = 1440;
     spec.height = 920;
     spec.vsync = true;
@@ -107,9 +85,6 @@ class HoroEditorApp final : public Application {
 
     DebugDraw::Init();
 
-#ifdef MONOLITH_BACKEND_PROCESS
-    m_editor.SetUiEnabled(false);
-#endif
     m_editor.Init(GetWindow().GetNativeHandle());
     m_editor.SetLiveRegistry(&m_scene.registry);
     m_shell.Attach(&m_editor, &m_scene, m_runtime.get(), &m_camera);
@@ -119,14 +94,6 @@ class HoroEditorApp final : public Application {
     m_framebufferStream.Start(39282);
     LOG_INFO("FramebufferStream started on ws://127.0.0.1:39282");
 #endif
-    GetWindow().SetFileDropCallback([this](int pathCount, const char** utf8Paths) {
-      if (!m_editor.IsActive() || !utf8Paths)
-        return;
-      double dropX = 0.0;
-      double dropY = 0.0;
-      glfwGetCursorPos(GetWindow().GetNativeHandle(), &dropX, &dropY);
-      m_editor.OnPathsDropped(pathCount, utf8Paths, static_cast<float>(dropX), static_cast<float>(dropY));
-    });
 
     if (!m_launchOptions.projectPath.empty()) {
       std::string openError;
@@ -134,17 +101,6 @@ class HoroEditorApp final : public Application {
         m_shell.SetLauncherError(openError);
     }
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_runUiAutomation) {
-      // CI runners may heavily throttle vsynced, unfocused windows and make
-      // frame-based UI tests appear stalled. Disable vsync for automation.
-      GetWindow().SetVSync(false);
-      LOG_INFO("UI automation mode: vsync disabled for test run.");
-    }
-    if (m_runUiAutomation) {
-      m_uiAutomation->StartIfRequested(m_runUiAutomation, &m_shell);
-    }
-#endif
     LOG_INFO("HoroEditorApp::OnInit end");
   }
 
@@ -154,48 +110,29 @@ class HoroEditorApp final : public Application {
   }
 
   void OnFixedUpdate(float dt) override {
-    if (!m_editor.IsActive() || m_editor.IsPlayMode())
+    // Always update systems when a project is loaded.
+    if (m_shell.HasActiveProject())
       m_scene.UpdateSystems(dt);
   }
 
   void OnRender(float alpha) override {
-    ++m_renderFrameCount;
     m_renderAlpha = alpha;
     RenderFrameConfig frameConfig;
-    frameConfig.debugLabel = "horo-editor-frame";
+    frameConfig.debugLabel = "horo-engine-frame";
     if (m_shell.HasActiveProject())
       frameConfig.lights = m_runtime->GetLights();
 
     Renderer::BeginFrame(frameConfig);
-    const bool hasActiveScene =
-#ifdef MONOLITH_BACKEND_PROCESS
-        m_runtime && m_runtime->GetCoordinator().IsActive();
-#else
-        m_shell.HasActiveProject();
-#endif
 
-    if (hasActiveScene) {
+    if (m_runtime && m_runtime->GetCoordinator().IsActive()) {
       Renderer::BeginPass(
-          {RenderPassId::OpaqueScene, BuildRenderView(m_camera), "horo-editor-scene"});
+          {RenderPassId::OpaqueScene, BuildRenderView(m_camera), "horo-engine-scene"});
       m_scene.RenderSystems(alpha);
       Renderer::EndPass();
     }
-#ifndef MONOLITH_BACKEND_PROCESS
-    m_editor.Render(m_camera, GetWindow().GetWidth(), GetWindow().GetHeight());
-#endif
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_runUiAutomation && m_uiAutomation)
-      m_uiAutomation->PostRenderFrame(GetWindow().GetNativeHandle());
-    if (m_runUiAutomation && (m_renderFrameCount == 1 || (m_renderFrameCount % 60) == 0)) {
-      LOG_INFO("HoroEditorApp render heartbeat: frame=%d width=%d height=%d active_project=%d",
-               m_renderFrameCount,
-               GetWindow().GetWidth(),
-               GetWindow().GetHeight(),
-               m_shell.HasActiveProject() ? 1 : 0);
-    }
-#endif
     Renderer::EndFrame();
+
 #ifdef MONOLITH_FRAMEBUFFER_STREAM
     m_framebufferStream.BroadcastFrame(GetWindow().GetWidth(), GetWindow().GetHeight());
 #endif
@@ -203,43 +140,17 @@ class HoroEditorApp final : public Application {
 
   void OnShutdown() override {
     LOG_INFO("HoroEditorApp::OnShutdown begin");
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_uiAutomation) {
-      // Keep a valid GL context current while Dear ImGui test engine finalizes.
-      glfwMakeContextCurrent(GetWindow().GetNativeHandle());
-      m_uiAutomation->Shutdown();
-      m_uiAutomationPassed = m_uiAutomation->DidPass();
-      LOG_INFO("UI automation pass state at shutdown: %d", m_uiAutomationPassed ? 1 : 0);
-    }
-#endif
     m_shell.Shutdown();
 #ifdef MONOLITH_FRAMEBUFFER_STREAM
     m_framebufferStream.Stop();
 #endif
     m_editor.Shutdown();
-
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    if (m_uiAutomation) {
-      // ImGui test engine expects ImGui context to be destroyed first.
-      m_uiAutomation->DestroyContext();
-      m_uiAutomation.reset();
-    }
-#endif
-
     if (m_runtime)
       m_runtime->Unload();
     LOG_INFO("HoroEditorApp::OnShutdown end");
   }
 
  public:
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  bool DidUiAutomationPass() const {
-    return !m_runUiAutomation || m_uiAutomationPassed;
-  }
-#else
-  bool DidUiAutomationPass() const { return true; }
-#endif
-
   EngineLaunchOptions m_launchOptions;
   Editor::EditorLayer m_editor;
   Scene m_scene;
@@ -247,22 +158,16 @@ class HoroEditorApp final : public Application {
   Launcher::LauncherEditorShell m_shell;
   Camera m_camera;
   float m_renderAlpha = 0.0f;
-  int m_renderFrameCount = 0;
 #ifdef MONOLITH_FRAMEBUFFER_STREAM
   FramebufferStream m_framebufferStream;
-#endif
-
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  bool m_runUiAutomation = false;
-  bool m_uiAutomationPassed = true;
-  std::unique_ptr<UiAutomationRunner> m_uiAutomation = std::make_unique<UiAutomationRunner>();
 #endif
 };
 
 }  // namespace
 
-#ifdef MONOLITH_BACKEND_PROCESS
-void ConfigureBackendProcessEnvironment() {
+// Hide the GLFW window so the backend runs headless (horo-studio shows the
+// rendered output via WebSocket). Respects MONOLITH_GLFW_VISIBLE=1 override.
+static void ConfigureBackendProcessEnvironment() {
 #ifdef _WIN32
   char* rawValue = nullptr;
   size_t valueLen = 0;
@@ -277,29 +182,12 @@ void ConfigureBackendProcessEnvironment() {
     setenv("MONOLITH_GLFW_VISIBLE", "0", 0);
 #endif
 }
-#endif
 
 int main(int argc, char** argv) {
-#ifdef MONOLITH_BACKEND_PROCESS
   ConfigureBackendProcessEnvironment();
-#endif
   const Monolith::EngineLaunchOptions launchOptions = Monolith::ParseEngineLaunchOptions(argc, argv);
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  const bool runUiAutomation = HasArg(argc, argv, "--run-ui-tests");
-  Monolith::UiAutomationRunner::PrepareEnvironmentBeforeAppStart(runUiAutomation);
-  HoroEditorApp app(launchOptions, runUiAutomation);
-#else
   HoroEditorApp app(launchOptions);
-#endif
   app.ParseArgs(argc, argv);
   app.Run();
-  const int exitCode = app.DidUiAutomationPass() ? 0 : 1;
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  if (runUiAutomation) {
-    // CI UI automation mode: avoid late process-teardown crashes from external teardown chains.
-    std::fflush(nullptr);
-    std::_Exit(exitCode);
-  }
-#endif
-  return exitCode;
+  return 0;
 }

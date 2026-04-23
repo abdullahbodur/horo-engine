@@ -6,8 +6,6 @@
 #include <stdexcept>
 #include <system_error>
 
-#include <imgui.h>
-
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
 #include "SceneSerializer.h"
@@ -170,13 +168,6 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   if (!m_editor || !m_runtime)
     return;
 
-  m_editor->SetFileMenuRenderCallback([this]() {
-    if (!HasActiveProject())
-      return;
-    if (ImGui::MenuItem("Close Project"))
-      CloseProject();
-  });
-  m_editor->SetOverlayRenderCallback([this]() { RenderOverlay(); });
   m_runtime->SetPropEntityCreatedCallback(
       [this](const RuntimeSceneProp& prop, Entity entity, Scene& sceneRef) {
         MeshComponent component;
@@ -241,18 +232,13 @@ bool LauncherEditorShell::OpenProject(const fs::path& projectPath, std::string* 
   if (m_scene)
     m_scene->Clear();
 
-  if (m_editor)
-    m_editor->SaveWorkspaceStateNow();
   m_projectRoot = projectRoot;
   m_projectDocument = projectDocument;
   ProjectPath::SetProjectRoot(projectRoot);
 
   if (m_editor) {
-    m_editor->ReloadWorkspaceStateFromDisk();
     m_editor->SetProjectBrowserRoot(projectRoot);
     m_editor->LoadDocument(sceneDocument);
-    if (!m_editor->IsActive())
-      m_editor->Toggle();
   }
 
   if (m_runtime) {
@@ -285,21 +271,11 @@ void LauncherEditorShell::CloseProject() {
       LOG_WARN("[Launcher] Runtime unload failed while closing project: %s", unload.error.c_str());
   }
 
-  if (m_editor)
-    m_editor->SaveWorkspaceStateNow();
-
-  if (m_editor) {
-    if (m_editor->IsActive())
-      m_editor->Toggle();
-    m_editor->SetCursorVisible(true);
-  }
-
   if (m_scene)
     m_scene->Clear();
 
   ProjectPath::SetProjectRoot({});
   if (m_editor) {
-    m_editor->ReloadWorkspaceStateFromDisk();
     m_editor->SetProjectBrowserRoot({});
   }
   m_projectDocument = {};
@@ -309,9 +285,6 @@ void LauncherEditorShell::CloseProject() {
 void LauncherEditorShell::Update() {
   m_processRunner.Poll();
   HandlePendingSceneReload();
-
-  if (HasActiveProject() && m_editor && !m_editor->IsActive())
-    CloseProject();
 }
 
 void LauncherEditorShell::RenderOverlay() {
@@ -359,237 +332,13 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string* outError) {
   return OpenProject(pickedPath, outError);
 }
 
-void LauncherEditorShell::RenderLauncher() {  // NOSONAR: UI composition intentionally keeps layout/readability local
-  const ImGuiViewport* viewport = ImGui::GetMainViewport();
-  ImGui::SetNextWindowPos(viewport->Pos);
-  ImGui::SetNextWindowSize(viewport->Size);
-  const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
-  ImGui::Begin("Horo Launcher", nullptr, flags);
-
-  const float outerPadding = 20.0f;
-  const float contentWidth = std::min(viewport->Size.x - outerPadding * 2.0f, 1120.0f);
-  const float panelX = std::max(outerPadding, (viewport->Size.x - contentWidth) * 0.5f);
-
-  const auto centerText = [&](const char* text, const float scale = 1.0f) {
-    ImGui::SetWindowFontScale(scale);
-    if (const float textWidth = ImGui::CalcTextSize(text).x; textWidth < contentWidth)
-      ImGui::SetCursorPosX(panelX + (contentWidth - textWidth) * 0.5f);
-    ImGui::TextUnformatted(text);
-    ImGui::SetWindowFontScale(1.0f);
-  };
-
-  const auto modeButton = [&](const char* title, const bool selected, const ImVec2& size) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0f, 18.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    if (selected) {
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.54f, 0.93f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.58f, 0.97f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.45f, 0.82f, 1.0f));
-    } else {
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.18f, 0.25f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.24f, 0.34f, 1.0f));
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.22f, 0.31f, 1.0f));
-    }
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.94f, 0.96f, 1.0f, 1.0f));
-    const bool pressed = ImGui::Button(title, size);
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
-    return pressed;
-  };
-
-  const auto primaryButton = [&](const char* label, const ImVec2& size) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0f, 16.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.41f, 0.68f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.46f, 0.75f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.36f, 0.62f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.97f, 1.0f, 1.0f));
-    const bool pressed = ImGui::Button(label, size);
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
-    return pressed;
-  };
-
-  const auto secondaryButton = [&](const char* label, const ImVec2& size) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 12.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.18f, 0.24f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.94f, 0.98f, 1.0f));
-    const bool pressed = ImGui::Button(label, size);
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
-    return pressed;
-  };
-
-  const auto recentProjectButton = [&](const char* title, const ImVec2& size) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 14.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.18f, 0.24f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.94f, 0.96f, 1.0f, 1.0f));
-    const bool pressed = ImGui::Button(title, size);
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
-    return pressed;
-  };
-
-  const auto labeledInput = [](const char* title, const char* id, char* buffer, const size_t bufferSize) {
-    ImGui::TextDisabled("%s", title);
-    ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputText(id, buffer, bufferSize);
-  };
-
-  const auto centeredEmptyState = [](const char* text) {
-    if (const float regionHeight = ImGui::GetContentRegionAvail().y; regionHeight > 40.0f)
-      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + regionHeight * 0.25f);
-    const float availableWidth = ImGui::GetContentRegionAvail().x;
-    if (const float textWidth = ImGui::CalcTextSize(text).x; textWidth < availableWidth)
-      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availableWidth - textWidth) * 0.5f);
-    ImGui::TextDisabled("%s", text);
-  };
-
-  ImGui::SetCursorPos(ImVec2(panelX, outerPadding));
-  ImGui::BeginGroup();
-
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  centerText("Welcome to Horo Editor", 1.95f);
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  centerText("Open an existing game project or start a new one.", 1.28f);
-  ImGui::Dummy(ImVec2(0.0f, 16.0f));
-
-  if (!m_launcherError.empty()) {
-    ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.45f, 1.0f), "%s", m_launcherError.c_str());
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  }
-
-  const float actionGap = 12.0f;
-  const float actionWidth = (contentWidth - actionGap) * 0.5f;
-  const ImVec2 actionSize(actionWidth, 56.0f);
-  if (modeButton("Open Existing Project", false, actionSize)) {
-    std::string openError;
-    if (!OpenProjectFromPicker(&openError) && !openError.empty())
-      m_launcherError = openError;
-  }
-  ImGui::SameLine(0.0f, actionGap);
-  modeButton("Create New Project", true, actionSize);
-
-  ImGui::Dummy(ImVec2(0.0f, 14.0f));
-
-  const float panelHeight = 252.0f;
-  ImGui::BeginChild("LauncherPanel",
-                    ImVec2(contentWidth, panelHeight),
-                    true,
-                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-  ImGui::TextUnformatted("Create New Project");
-  ImGui::TextDisabled("Pick a location and Horo will scaffold a minimal launcher-ready project.");
-  ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-  labeledInput("Project Name", "##new-project-name", m_newProjectNameInput.data(), m_newProjectNameInput.size());
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  labeledInput("Project Path", "##new-project-path", m_newProjectPathInput.data(), m_newProjectPathInput.size());
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  if (secondaryButton("Browse Location...", ImVec2(-1.0f, 34.0f))) {
-    const fs::path pickedLocation =
-        PickFolderPath("Select project location",
-                       DefaultBrowseDirectory(BufferToString(m_newProjectPathInput)));
-    if (!pickedLocation.empty()) {
-      const std::string projectName = BufferToString(m_newProjectNameInput);
-      fs::path resolvedProjectPath = pickedLocation;
-      if (!projectName.empty() && resolvedProjectPath.filename() != projectName)
-        resolvedProjectPath /= projectName;
-      CopyToBuffer(&m_newProjectPathInput, resolvedProjectPath.lexically_normal().string());
-      m_launcherError.clear();
-    }
-  }
-  ImGui::Dummy(ImVec2(0.0f, 10.0f));
-  if (primaryButton("Create Project", ImVec2(-1.0f, 40.0f))) {
-    std::string createError;
-    if (!CreateProjectFromLauncher(&createError))
-      m_launcherError = createError;
-  }
-  ImGui::EndChild();
-
-  ImGui::Dummy(ImVec2(0.0f, 12.0f));
-  ImGui::TextUnformatted("Recent Projects");
-  ImGui::TextDisabled("Resume work from your latest launcher projects.");
-  ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-  const float recentHeight =
-      std::max(160.0f, std::min(260.0f, viewport->Size.y - outerPadding * 2.0f - 320.0f));
-  ImGui::BeginChild("RecentProjectsList", ImVec2(contentWidth, recentHeight), true);
-  if (m_homeDocument.state.recentProjects.empty()) {
-    centeredEmptyState("No recent projects yet.");
-  } else {
-    for (const std::string& recentPath : m_homeDocument.state.recentProjects) {
-      const fs::path path(recentPath);
-      if (const std::string title = path.filename().empty() ? recentPath : path.filename().string();
-          !recentProjectButton(title.c_str(), ImVec2(-1.0f, 38.0f))) {
-        ImGui::TextDisabled("%s", recentPath.c_str());
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-        continue;
-      }
-      if (std::string openError; !OpenProject(path, &openError))
-        m_launcherError = openError;
-      ImGui::TextDisabled("%s", recentPath.c_str());
-      ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    }
-  }
-  ImGui::EndChild();
-
-  ImGui::EndGroup();
-  ImGui::End();
+void LauncherEditorShell::RenderLauncher() {
+  // ImGui launcher overlay removed — project is in MCP backend-only mode.
+  // Project selection is now handled via MCP commands.
 }
 
 void LauncherEditorShell::RenderProjectToolbar() {
-  ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_Always);
-  ImGui::SetNextWindowBgAlpha(0.92f);
-  const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoSavedSettings;
-  ImGui::Begin("Launcher Project", nullptr, flags);
-
-  ImGui::TextUnformatted(m_projectDocument.manifest.projectName.c_str());
-  ImGui::TextDisabled("%s", m_projectRoot.string().c_str());
-  ImGui::Separator();
-
-  if (!m_processRunner.IsActive()) {
-    if (ImGui::Button("Configure"))
-      ExecuteManifestCommand(m_projectDocument.manifest.configureCommand, "configure");
-    ImGui::SameLine();
-    if (ImGui::Button("Build"))
-      ExecuteManifestCommand(m_projectDocument.manifest.buildCommand, "build");
-    ImGui::SameLine();
-    if (ImGui::Button("Run Game"))
-      ExecuteManifestCommand(m_projectDocument.manifest.runCommand, "run");
-  } else {
-    if (ImGui::Button("Stop Process"))
-      m_processRunner.Stop();
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Back To Home"))
-    CloseProject();
-
-  if (const ExternalProcessStatus& status = m_processRunner.GetStatus(); !status.label.empty()) {
-    ImGui::Separator();
-    ImGui::Text("Last command: %s", status.label.c_str());
-    if (!status.commandLine.empty())
-      ImGui::TextWrapped("%s", status.commandLine.c_str());
-    if (status.active)
-      ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.55f, 1.0f), "Running");
-    else if (status.finished && status.terminatedByUser)
-      ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.0f), "Stopped by user");
-    else if (status.finished)
-      ImGui::Text("Exit code: %d", status.exitCode);
-    if (!status.error.empty())
-      ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.45f, 1.0f), "%s", status.error.c_str());
-  }
-
-  ImGui::End();
+  // ImGui toolbar removed — project is in MCP backend-only mode.
 }
 
 void LauncherEditorShell::ExecuteManifestCommand(const LauncherProjectCommand& command,

@@ -20,6 +20,12 @@
 #if defined(MONOLITH_HAS_VULKAN)
 #include <volk.h>
 #include <GLFW/glfw3.h>
+// TODO: Remove ImGui texture-descriptor helpers (TryGetImGuiVulkanInitData,
+// TryRegisterOffscreenTargetImGuiDescriptor, hasImGuiDescriptor) from the
+// Vulkan backend now that ImGui is no longer part of the engine. The Vulkan
+// build path is currently disabled (MONOLITH_ENGINE_ENABLE_VULKAN=OFF) and
+// will not compile until these hooks are replaced with a proper Vulkan
+// texture/render-target registration API.
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #endif
