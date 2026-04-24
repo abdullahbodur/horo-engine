@@ -66,7 +66,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test ui-test ui-test-windowed release coverage clean clean-all format format-check help
+.PHONY: all configure build test ui-test ui-test-windowed release coverage clean clean-all format format-check studio studio-rebuild help
 
 # Default: build debug
 all: build
@@ -111,6 +111,14 @@ format:
 ## Check formatting without modifying files (exits non-zero if changes needed)
 format-check:
 	"$(CLANG_FORMAT)" --dry-run --Werror $(FORMAT_SOURCES)
+
+## Launch horo-studio (recompiles TypeScript + Theia bundle, then opens Electron)
+studio:
+	cd horo-studio && npm run studio:electron
+
+## Recompile TypeScript + Theia webpack bundle only (no launch)
+studio-rebuild:
+	cd horo-studio && npx tsc -p tsconfig.json && npm run build:electron
 
 # ----------------------------------------------------------------
 # Coverage
@@ -178,8 +186,7 @@ coverage: $(SENTINEL_COV)
 endif
 
 ## Wipe debug build directory
-clean:
-	$(RM_RF) "build/$(PRESET_DBG)"
+clean:	$(RM_RF) "build/$(PRESET_DBG)"
 
 ## Wipe all build directories (including coverage)
 clean-all:
@@ -199,6 +206,8 @@ help:
 	@echo "  make clean-all    Remove all build dirs (incl. coverage)"
 	@echo "  make format       Format all sources in-place"
 	@echo "  make format-check Check formatting (exits non-zero if changes needed)"
+	@echo "  make studio       Rebuild horo-studio (TS + webpack) and launch Electron"
+	@echo "  make studio-rebuild  Rebuild horo-studio bundle without launching"
 	@echo ""
 	@echo "UI automation vars:"
 	@echo "  UI_TEST_DELAY_MS=<ms> (default 0)"

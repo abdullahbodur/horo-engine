@@ -111,7 +111,12 @@ add_custom_command(TARGET MonolithEngine POST_BUILD
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
-    add_executable(HoroEngine studio/HoroEditorMain.cpp)
+    set(HORO_ENGINE_SOURCES studio/HoroEditorMain.cpp)
+    if(APPLE)
+        list(APPEND HORO_ENGINE_SOURCES studio/PlatformUtils_mac.mm)
+    endif()
+
+    add_executable(HoroEngine ${HORO_ENGINE_SOURCES})
     target_link_libraries(HoroEngine PRIVATE MonolithEngine)
     target_compile_features(HoroEngine PRIVATE cxx_std_20)
 

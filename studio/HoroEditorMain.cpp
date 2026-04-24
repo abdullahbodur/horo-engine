@@ -29,6 +29,10 @@
 #include "scene/systems/PhysicsSystem.h"
 #include "scene/systems/RenderSystem.h"
 
+#ifdef __APPLE__
+namespace Monolith { void SuppressMacOSDockIcon(); }
+#endif
+
 namespace {
 using namespace Monolith;
 
@@ -61,6 +65,14 @@ class HoroEditorApp final : public Application {
 
   void OnInit() override {
     LOG_INFO("HoroEditorApp::OnInit begin");
+
+#ifdef __APPLE__
+    // GLFW registers the process as a foreground macOS application during
+    // window creation. Override that so the engine doesn't appear in the dock
+    // or the Cmd-Tab switcher when running as a headless backend.
+    SuppressMacOSDockIcon();
+#endif
+
     const std::filesystem::path exeDir = std::filesystem::current_path();
     const std::array<std::filesystem::path, 3> sdkCandidates = {
         exeDir.parent_path() / "sdk",

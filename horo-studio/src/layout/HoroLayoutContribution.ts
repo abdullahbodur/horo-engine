@@ -18,9 +18,11 @@ export class HoroLayoutContribution implements FrontendApplicationContribution {
     @inject(WidgetManager) private readonly widgetManager: WidgetManager,
   ) {}
 
-  async onDidInitializeLayout(): Promise<void> {
-    console.info('[horo-layout] onDidInitializeLayout start');
-    // Theia can restore a stale shell state; force the intended Horo layout.
+  // onStart runs on every launch (not just on first init). This ensures our
+  // custom widgets are always present even when Theia restores a saved session
+  // that pre-dates our widgets. attachIfNeeded guards against duplicates.
+  async onStart(): Promise<void> {
+    console.info('[horo-layout] onStart: enforcing horo layout');
     await this.attachIfNeeded(SceneHierarchyWidget.ID, { area: 'left' });
     await this.attachIfNeeded(AssetBrowserWidget.ID, {
       area: 'left',
@@ -34,7 +36,7 @@ export class HoroLayoutContribution implements FrontendApplicationContribution {
     const navigator = this.shell.getWidgetById('files');
     navigator?.close();
     this.shell.activateWidget(GameViewWidget.ID);
-    console.info('[horo-layout] onDidInitializeLayout complete');
+    console.info('[horo-layout] onStart: layout enforced');
   }
 
   private async attachIfNeeded(
