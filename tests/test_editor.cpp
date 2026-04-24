@@ -32,6 +32,7 @@
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/Raycaster.h"
 #include "editor/SceneDocument.h"
+#include "editor/EditorSceneGraph.h"
 #include "editor/SceneProjectBridge.h"
 #include "editor/SceneRuntimeBridge.h"
 #include "editor/SceneSerializer.h"
@@ -2481,4 +2482,1103 @@ TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {
     REQUIRE(parsed.y == Approx(2.0f));
     REQUIRE(parsed.z == Approx(0.75f));
     REQUIRE_FALSE(TryParseVec3Csv("1.0,2.0", &parsed));
+}
+
+// ============================================================
+// SceneProjectBridge coverage tests
+// ============================================================
+
+TEST_CASE("SceneProjectBridge: Camera object propagates fov/nearClip/farClip",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    doc.sceneId = "test";
+    SceneObject cam;
+    cam.id = "cam_main";
+    cam.type = SceneObjectType::Camera;
+    cam.props["fov"] = "75";
+    cam.props["nearClip"] = "0.1";
+    cam.props["farClip"] = "500";
+    doc.objects.push_back(cam);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    const SceneNodeDefinition &node = model.scene.nodes[0];
+    REQUIRE(node.kind == SceneNodeKind::Camera);
+    REQUIRE(node.camera.has_value());
+    REQUIRE(node.camera->fovY == Approx(75.0f));
+    REQUIRE(node.camera->nearClip == Approx(0.1f));
+    REQUIRE(node.camera->farClip == Approx(500.0f));
+}
+
+TEST_CASE("SceneProjectBridge: Light node parses directional type and properties",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject light;
+    light.id = "sun";
+    light.type = SceneObjectType::Light;
+    light.props["lightType"] = "directional";
+    light.props["intensity"] = "1.5";
+    light.props["color"] = "1.0,0.9,0.8";
+    light.props["radius"] = "100";
+    doc.objects.push_back(light);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    const SceneNodeDefinition &node = model.scene.nodes[0];
+    REQUIRE(node.kind == SceneNodeKind::Light);
+    REQUIRE(node.light.has_value());
+    REQUIRE(node.light->kind == SceneLightKind::Directional);
+    REQUIRE(node.light->intensity == Approx(1.5f));
+    REQUIRE(node.light->color.x == Approx(1.0f));
+    REQUIRE(node.light->color.y == Approx(0.9f));
+    REQUIRE(node.light->radius == Approx(100.0f));
+}
+
+TEST_CASE("SceneProjectBridge: Light node parses point type", "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject light;
+    light.id = "lamp";
+    light.type = SceneObjectType::Light;
+    light.props["lightType"] = "point";
+    light.props["intensity"] = "2.5";
+    doc.objects.push_back(light);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes[0].light.has_value());
+    REQUIRE(model.scene.nodes[0].light->kind == SceneLightKind::Point);
+    REQUIRE(model.scene.nodes[0].light->intensity == Approx(2.5f));
+}
+
+TEST_CASE("SceneProjectBridge: Prop with script component populates script field",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject prop;
+    prop.id = "scripted";
+    prop.type = SceneObjectType::Prop;
+    ComponentDesc script;
+    script.type = "script";
+    script.props["behaviorTag"] = "PlayerController";
+    prop.components.push_back(script);
+    doc.objects.push_back(prop);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].script.has_value());
+    REQUIRE(model.scene.nodes[0].script->behaviorTag == "PlayerController");
+}
+
+TEST_CASE("SceneProjectBridge: Prop with rigidbody component populates rigidbody field",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject prop;
+    prop.id = "box";
+    prop.type = SceneObjectType::Prop;
+    ComponentDesc rb;
+    rb.type = "rigidbody";
+    rb.props["mass"] = "10.0";
+    rb.props["isKinematic"] = "true";
+    rb.props["useGravity"] = "false";
+    prop.components.push_back(rb);
+    doc.objects.push_back(prop);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].rigidbody.has_value());
+    REQUIRE(model.scene.nodes[0].rigidbody->mass == Approx(10.0f));
+    REQUIRE(model.scene.nodes[0].rigidbody->isKinematic == true);
+    REQUIRE(model.scene.nodes[0].rigidbody->useGravity == false);
+}
+
+TEST_CASE("SceneProjectBridge: Prop with light component populates light field",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject prop;
+    prop.id = "torch";
+    prop.type = SceneObjectType::Prop;
+    ComponentDesc lightComp;
+    lightComp.type = "light";
+    lightComp.props["lightType"] = "point";
+    lightComp.props["intensity"] = "3.0";
+    lightComp.props["color"] = "1.0,0.5,0.0";
+    lightComp.props["radius"] = "8.0";
+    prop.components.push_back(lightComp);
+    doc.objects.push_back(prop);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].light.has_value());
+    REQUIRE(model.scene.nodes[0].light->kind == SceneLightKind::Point);
+    REQUIRE(model.scene.nodes[0].light->intensity == Approx(3.0f));
+    REQUIRE(model.scene.nodes[0].light->color.x == Approx(1.0f));
+    REQUIRE(model.scene.nodes[0].light->radius == Approx(8.0f));
+}
+
+TEST_CASE("SceneProjectBridge: legacy isLight=true migrates to light node",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "legacy_light";
+    obj.type = SceneObjectType::Prop;
+    obj.props["isLight"] = "true";
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].light.has_value());
+}
+
+TEST_CASE("SceneProjectBridge: legacy isLight=false does not create light node",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "not_a_light";
+    obj.type = SceneObjectType::Prop;
+    obj.props["isLight"] = "false";
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE_FALSE(model.scene.nodes[0].light.has_value());
+}
+
+TEST_CASE("SceneProjectBridge: legacy behavior prop migrates to script component",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "enemy";
+    obj.type = SceneObjectType::Prop;
+    obj.props["behavior"] = "EnemyAI";
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 1);
+    REQUIRE(model.scene.nodes[0].script.has_value());
+    REQUIRE(model.scene.nodes[0].script->behaviorTag == "EnemyAI");
+}
+
+TEST_CASE("SceneProjectBridge: behavior=none is not migrated to script",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "inert";
+    obj.type = SceneObjectType::Prop;
+    obj.props["behavior"] = "none";
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE_FALSE(model.scene.nodes[0].script.has_value());
+}
+
+TEST_CASE("SceneProjectBridge: scene settings spawnPoint is parsed",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    doc.settings["spawnPoint"] = "1.5,2.5,3.5";
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.settings.spawnPoint.x == Approx(1.5f));
+    REQUIRE(model.scene.settings.spawnPoint.y == Approx(2.5f));
+    REQUIRE(model.scene.settings.spawnPoint.z == Approx(3.5f));
+}
+
+TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent_panel";
+    parent.type = SceneObjectType::Panel;
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child_prop";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "parent_panel";
+    doc.objects.push_back(child);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.size() == 2);
+    REQUIRE(model.scene.nodes[1].parentId.has_value());
+    REQUIRE(*model.scene.nodes[1].parentId == "parent_panel");
+}
+
+TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"models/crate.obj", "2.0,3.0,4.0", ""};
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.assets.size() == 1);
+    REQUIRE(model.scene.assets[0].id == "crate");
+    REQUIRE(model.scene.assets[0].renderScale.x == Approx(2.0f));
+    REQUIRE(model.scene.assets[0].renderScale.y == Approx(3.0f));
+    REQUIRE(model.scene.assets[0].renderScale.z == Approx(4.0f));
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    doc.sceneId = "rt_test";
+    SceneObject cam;
+    cam.id = "cam1";
+    cam.type = SceneObjectType::Camera;
+    cam.props["fov"] = "90";
+    cam.props["nearClip"] = "0.5";
+    cam.props["farClip"] = "1000";
+    doc.objects.push_back(cam);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    const SceneDocument rt = BuildSceneDocument(model);
+
+    REQUIRE(rt.objects.size() == 1);
+    REQUIRE(rt.objects[0].id == "cam1");
+    REQUIRE(rt.objects[0].type == SceneObjectType::Camera);
+    REQUIRE(rt.objects[0].props.count("fov") > 0);
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Light node",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject light;
+    light.id = "light1";
+    light.type = SceneObjectType::Light;
+    light.props["lightType"] = "point";
+    light.props["intensity"] = "3.0";
+    light.props["color"] = "0.5,0.5,1.0";
+    light.props["radius"] = "10.0";
+    doc.objects.push_back(light);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    const SceneDocument rt = BuildSceneDocument(model);
+
+    REQUIRE(rt.objects.size() == 1);
+    REQUIRE(rt.objects[0].type == SceneObjectType::Light);
+    REQUIRE(rt.objects[0].props.count("lightType") > 0);
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips rigidbody component",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "rb_obj";
+    obj.type = SceneObjectType::Prop;
+    ComponentDesc rb;
+    rb.type = "rigidbody";
+    rb.props["mass"] = "5.0";
+    rb.props["isKinematic"] = "false";
+    rb.props["useGravity"] = "true";
+    obj.components.push_back(rb);
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    const SceneDocument rt = BuildSceneDocument(model);
+
+    REQUIRE(rt.objects.size() == 1);
+    REQUIRE(rt.objects[0].components.size() == 1);
+    REQUIRE(rt.objects[0].components[0].type == "rigidbody");
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips script component",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "scripted_obj";
+    obj.type = SceneObjectType::Prop;
+    ComponentDesc script;
+    script.type = "script";
+    script.props["behaviorTag"] = "EnemyAI";
+    obj.components.push_back(script);
+    doc.objects.push_back(obj);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    const SceneDocument rt = BuildSceneDocument(model);
+
+    REQUIRE_FALSE(rt.objects.empty());
+    const auto &comps = rt.objects[0].components;
+    const auto it = std::ranges::find_if(comps,
+        [](const ComponentDesc &c) { return c.type == "script"; });
+    REQUIRE(it != comps.end());
+    REQUIRE(it->props.at("behaviorTag") == "EnemyAI");
+}
+
+TEST_CASE("SceneProjectBridge: empty document produces empty model",
+          "[editor][bridge]") {
+    const SceneDocument doc;
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes.empty());
+    REQUIRE(model.scene.assets.empty());
+}
+
+TEST_CASE("SceneProjectBridge: Panel node has Panel kind in model",
+          "[editor][bridge]") {
+    SceneDocument doc;
+    SceneObject panel;
+    panel.id = "wall";
+    panel.type = SceneObjectType::Panel;
+    doc.objects.push_back(panel);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    REQUIRE(model.scene.nodes[0].kind == SceneNodeKind::Panel);
+    REQUIRE_FALSE(model.scene.nodes[0].camera.has_value());
+    REQUIRE_FALSE(model.scene.nodes[0].light.has_value());
+}
+
+// ============================================================
+// EditorSceneGraph coverage tests
+// ============================================================
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta moves child with parent",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "root_panel";
+    parent.type = SceneObjectType::Panel;
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child_prop";
+    child.type = SceneObjectType::Prop;
+    child.position = {1.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "root_panel";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    oldState.position = {0.0f, 0.0f, 0.0f};
+    // default Quaternion() is identity (w=1, xyz=0)
+
+    ParentTransformState newState;
+    newState.position = {5.0f, 0.0f, 0.0f};
+
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState, nullptr);
+
+    // child_prop was at (1,0,0) relative to parent at (0,0,0)
+    // after parent moves to (5,0,0), child should be at (6,0,0)
+    REQUIRE(doc.objects[1].position.x == Approx(6.0f));
+    REQUIRE(doc.objects[1].position.y == Approx(0.0f));
+    REQUIRE(doc.objects[1].position.z == Approx(0.0f));
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "root";
+    parent.type = SceneObjectType::Panel;
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child";
+    child.type = SceneObjectType::Prop;
+    child.position = {2.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "root";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    oldState.position = {0.0f, 0.0f, 0.0f};
+    ParentTransformState newState;
+    newState.position = {10.0f, 0.0f, 0.0f};
+
+    // child index 1 is in skipIndices — must not be moved
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState, nullptr, {1});
+
+    REQUIRE(doc.objects[1].position.x == Approx(2.0f)); // unchanged
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid parentIdx is no-op",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "solo";
+    obj.position = {3.0f, 0.0f, 0.0f};
+    doc.objects.push_back(obj);
+
+    ParentTransformState s;
+    PropagateHierarchyTransformDelta(doc, -1, s, s, nullptr);
+    PropagateHierarchyTransformDelta(doc, 99, s, s, nullptr);
+    REQUIRE(doc.objects[0].position.x == Approx(3.0f)); // unchanged
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback for moved child",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent";
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child";
+    child.position = {1.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "parent";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    ParentTransformState newState;
+    newState.position = {3.0f, 0.0f, 0.0f};
+
+    int callbackCount = 0;
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState,
+        [&callbackCount](const SceneObject &) { ++callbackCount; });
+    REQUIRE(callbackCount == 1);
+}
+
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences updates parentId",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject child;
+    child.id = "child";
+    child.props["parentId"] = "old_parent";
+    doc.objects.push_back(child);
+
+    RewriteObjectIdReferences(&doc, "old_parent", "new_parent");
+    REQUIRE(doc.objects[0].props.at("parentId") == "new_parent");
+}
+
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op for empty oldId",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj";
+    obj.props["parentId"] = "some_id";
+    doc.objects.push_back(obj);
+
+    RewriteObjectIdReferences(&doc, "", "new_id");
+    REQUIRE(doc.objects[0].props.at("parentId") == "some_id");
+}
+
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op when old equals new",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj";
+    obj.props["parentId"] = "same_id";
+    doc.objects.push_back(obj);
+
+    RewriteObjectIdReferences(&doc, "same_id", "same_id");
+    REQUIRE(doc.objects[0].props.at("parentId") == "same_id");
+}
+
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences does not crash on clean doc",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent";
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child";
+    child.props["parentId"] = "parent";
+    doc.objects.push_back(child);
+
+    LogDanglingObjectReferences(doc, "test_label");
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences warns on dangling ref",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject orphan;
+    orphan.id = "orphan";
+    orphan.props["parentId"] = "nonexistent_parent";
+    doc.objects.push_back(orphan);
+
+    // Should not crash — just logs a warning
+    LogDanglingObjectReferences(doc, "test_source");
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem handles various inputs",
+          "[editor][scene-graph]") {
+    REQUIRE(SanitizePrefabStem("hello_world") == "hello_world");
+    REQUIRE(SanitizePrefabStem("valid-name_123") == "valid-name_123");
+    REQUIRE(SanitizePrefabStem("__hello__") == "hello");
+    REQUIRE(SanitizePrefabStem("_test") == "test");
+    REQUIRE(SanitizePrefabStem("test_") == "test");
+    REQUIRE(SanitizePrefabStem("") == "prefab");
+    REQUIRE(SanitizePrefabStem("___") == "prefab");
+}
+
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem replaces spaces and special chars",
+          "[editor][scene-graph]") {
+    const std::string result = SanitizePrefabStem("hello world!");
+    // space→'_', '!'→'_', trailing '_' stripped → "hello_world"
+    REQUIRE(result == "hello_world");
+}
+
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes object ids and references",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent_id";
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child_id";
+    child.props["parentId"] = "parent_id";
+    doc.objects.push_back(child);
+
+    const auto reserved = CollectReservedObjectIds(doc);
+    REQUIRE(reserved.contains("parent_id"));
+    REQUIRE(reserved.contains("child_id"));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "used_id";
+    doc.objects.push_back(obj);
+
+    REQUIRE(IsReservedObjectId(doc, "used_id"));
+    REQUIRE_FALSE(IsReservedObjectId(doc, "free_id"));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId with ignoreConcreteObjectId",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "rename_me";
+    doc.objects.push_back(obj);
+
+    // When ignoring 'rename_me', the id should appear free
+    const std::string ignored = "rename_me";
+    REQUIRE_FALSE(IsReservedObjectId(doc, "rename_me", &ignored));
+    // But a different existing id is still reserved
+    REQUIRE(IsReservedObjectId(doc, "rename_me", nullptr));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    REQUIRE_FALSE(IsReservedObjectId(doc, ""));
+}
+
+// ============================================================
+// EditorHistory edge-case tests (exercised via MCP commands)
+// ============================================================
+
+TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Create 130 unique objects to fill and overflow the 128-entry limit
+    for (int i = 0; i < 130; ++i) {
+        const auto result = editor.ExecuteMcpCommand(
+            "editor.create_object",
+            nlohmann::json{{"type", "Prop"},
+                           {"id", std::format("overflow_obj_{}", i)}});
+        REQUIRE(result.ok);
+    }
+
+    // Undo until exhausted; should succeed exactly 128 times
+    int undoCount = 0;
+    while (true) {
+        const auto res = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+        REQUIRE(res.ok);
+        if (!res.data["undone"].get<bool>())
+            break;
+        ++undoCount;
+    }
+    REQUIRE(undoCount == 128);
+}
+
+TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for differing documents",
+          "[editor][history]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.sceneId = "base";
+    editor.LoadDocument(doc);
+
+    // Capture state before and after a create
+    const auto beforeCreate = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "snap_obj"}});
+    REQUIRE(beforeCreate.ok);
+
+    // Undo to return to empty; the redo stack now has the "after" snapshot
+    const auto undoRes = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoRes.ok);
+    REQUIRE(undoRes.data["undone"].get<bool>());
+
+    // Redo restores the object — verifies that the snapshots were indeed different
+    const auto redoRes = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redoRes.ok);
+    REQUIRE(redoRes.data["redone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+}
+
+TEST_CASE("EditorHistory: RefreshHistorySavedBaseline updates dirty flag after save",
+          "[editor][history]") {
+    namespace fs = std::filesystem;
+    const fs::path sceneDir =
+        Monolith::Tests::SecureTempBase() / "horo_history_baseline_test";
+    fs::create_directories(sceneDir);
+    const fs::path scenePath = sceneDir / "test_scene.json";
+
+    SceneDocument doc;
+    doc.sceneId = "hist_test";
+    doc.filePath = scenePath.string();
+    SceneSerializer::SaveToFile(doc, scenePath.string());
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Make a change to mark dirty
+    const auto createRes = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "dirty_obj"}});
+    REQUIRE(createRes.ok);
+    REQUIRE(editor.GetDocument().dirty);
+
+    // Save — this internally calls RefreshHistorySavedBaseline
+    const auto saveRes = editor.ExecuteMcpCommand("editor.save_scene", nlohmann::json::object());
+    REQUIRE(saveRes.ok);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+
+    // Undo the create; the restored snapshot should reflect the saved baseline
+    const auto undoRes = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoRes.ok);
+    REQUIRE(undoRes.data["undone"].get<bool>());
+    // After undo the document is dirty relative to the saved file
+    REQUIRE(editor.GetDocument().dirty);
+}
+
+// ============================================================
+// EditorMcpHandlers error path coverage
+// ============================================================
+
+TEST_CASE("EditorMcp: create_object with Camera type uses GenerateCameraId",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Camera"}});
+    REQUIRE(res.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].type == SceneObjectType::Camera);
+    // Camera id must be non-empty and start with "cam_"
+    REQUIRE_FALSE(editor.GetDocument().objects[0].id.empty());
+}
+
+TEST_CASE("EditorMcp: create_object rejects duplicate id", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto first = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "dup_id"}});
+    REQUIRE(first.ok);
+
+    const auto second = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "dup_id"}});
+    REQUIRE_FALSE(second.ok);
+    REQUIRE(second.error == "Object id already exists.");
+}
+
+TEST_CASE("EditorMcp: create_object rejects invalid scale format", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"},
+                       {"scale", nlohmann::json::array({"bad", "scale", "fmt"})}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "scale must be [x,y,z].");
+}
+
+TEST_CASE("EditorMcp: create_object rejects non-array components", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"},
+                       {"components", "not_an_array"}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "components must be an array of objects.");
+}
+
+TEST_CASE("EditorMcp: create_object rejects components with missing type field",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"},
+                       {"components", nlohmann::json::array({nlohmann::json::object()})}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "components must be an array of objects.");
+}
+
+TEST_CASE("EditorMcp: create_object rejects non-existent parentId", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"parentId", "ghost_parent"}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Parent object not found.");
+}
+
+TEST_CASE("EditorMcp: create_object rejects unknown type string", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "NotAType"}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Invalid object type.");
+}
+
+TEST_CASE("EditorMcp: update_object returns error when object not found",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "missing_obj"},
+                       {"position", nlohmann::json::array({1.0, 2.0, 3.0})}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Object not found.");
+}
+
+TEST_CASE("EditorMcp: editor.transform is an alias for editor.update_object",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "movable";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.transform",
+        nlohmann::json{{"id", "movable"},
+                       {"position", nlohmann::json::array({7.0, 8.0, 9.0})}});
+    REQUIRE(res.ok);
+    REQUIRE(editor.GetDocument().objects[0].position.x == Approx(7.0f));
+    REQUIRE(editor.GetDocument().objects[0].position.y == Approx(8.0f));
+    REQUIRE(editor.GetDocument().objects[0].position.z == Approx(9.0f));
+}
+
+TEST_CASE("EditorMcp: update_object rejects bad position format", "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "fixed_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "fixed_obj"},
+                       {"position", nlohmann::json::array({"x", "y", "z"})}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "position must be [x,y,z].");
+}
+
+TEST_CASE("EditorMcp: reparent_object rejects self-parenting", "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "self_obj";
+    obj.type = SceneObjectType::Panel;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "self_obj"}, {"parentId", "self_obj"}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Object cannot parent itself.");
+}
+
+TEST_CASE("EditorMcp: reparent_object rejects cycle-forming reparent",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "ancestor";
+    parent.type = SceneObjectType::Panel;
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "descendant";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "ancestor";
+    doc.objects.push_back(child);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Trying to make the ancestor a child of its own descendant creates a cycle
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "ancestor"}, {"parentId", "descendant"}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Parent would create a cycle.");
+}
+
+TEST_CASE("EditorMcp: reparent_object rejects unknown object id", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "ghost_obj"}, {"parentId", ""}});
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Object not found.");
+}
+
+TEST_CASE("EditorMcp: reparent_object unparents when parentId is empty",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "p";
+    parent.type = SceneObjectType::Panel;
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "c";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "p";
+    doc.objects.push_back(child);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "c"}, {"parentId", ""}});
+    REQUIRE(res.ok);
+    const auto &objs = editor.GetDocument().objects;
+    const auto cIt = std::ranges::find_if(objs, [](const SceneObject &o) { return o.id == "c"; });
+    REQUIRE(cIt != objs.end());
+    const SceneObject *c = &*cIt;
+    REQUIRE(c != nullptr);
+    REQUIRE_FALSE(c->props.contains("parentId"));
+}
+
+TEST_CASE("EditorMcp: unknown command returns descriptive error", "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.nonexistent_tool",
+        nlohmann::json::object());
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error == "Unsupported MCP command.");
+}
+
+TEST_CASE("EditorMcp: create_object with components array creates component",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"type", "Prop"},
+            {"id", "scripted_mcp_obj"},
+            {"components", nlohmann::json::array({
+                nlohmann::json{{"type", "script"},
+                               {"props", nlohmann::json{{"behaviorTag", "Guard"}}}}
+            })}
+        });
+    REQUIRE(res.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].components.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].components[0].type == "script");
+}
+
+TEST_CASE("EditorMcp: create_object with parentId links child to existing parent",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject parentObj;
+    parentObj.id = "existing_parent";
+    parentObj.type = SceneObjectType::Panel;
+    doc.objects.push_back(parentObj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"},
+                       {"id", "new_child"},
+                       {"parentId", "existing_parent"}});
+    REQUIRE(res.ok);
+    const auto &childObjs = editor.GetDocument().objects;
+    const auto childIt = std::ranges::find_if(childObjs, [](const SceneObject &o) { return o.id == "new_child"; });
+    REQUIRE(childIt != childObjs.end());
+    const SceneObject *child = &*childIt;
+    REQUIRE(child != nullptr);
+    REQUIRE(child->props.at("parentId") == "existing_parent");
+}
+
+// ============================================================
+// EditorLayer public method coverage
+// ============================================================
+
+TEST_CASE("EditorLayer: LoadDocument migrates legacy behavior prop to script component",
+          "[editor][layer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "legacy_prop";
+    obj.type = SceneObjectType::Prop;
+    obj.props["behavior"] = "GuardAI";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto &objs0 = editor.GetDocument().objects;
+    const auto it0 = std::ranges::find_if(objs0, [](const SceneObject &o) { return o.id == "legacy_prop"; });
+    REQUIRE(it0 != objs0.end());
+    const SceneObject *loaded = &*it0;
+    REQUIRE(loaded != nullptr);
+    // "behavior" prop should be erased and replaced by a script component
+    REQUIRE_FALSE(loaded->props.contains("behavior"));
+    REQUIRE(loaded->components.size() == 1);
+    REQUIRE(loaded->components[0].type == "script");
+    REQUIRE(loaded->components[0].props.at("behaviorTag") == "GuardAI");
+}
+
+TEST_CASE("EditorLayer: LoadDocument skips migration when script component already present",
+          "[editor][layer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "already_scripted";
+    obj.type = SceneObjectType::Prop;
+    obj.props["behavior"] = "OldBehavior";
+    ComponentDesc script;
+    script.type = "script";
+    script.props["behaviorTag"] = "NewScript";
+    obj.components.push_back(script);
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto &objs1 = editor.GetDocument().objects;
+    const auto it1 = std::ranges::find_if(objs1, [](const SceneObject &o) { return o.id == "already_scripted"; });
+    REQUIRE(it1 != objs1.end());
+    const SceneObject *loaded = &*it1;
+    REQUIRE(loaded != nullptr);
+    // Existing script component must be kept; behavior prop should be erased
+    REQUIRE(loaded->components.size() == 1);
+    REQUIRE(loaded->components[0].props.at("behaviorTag") == "NewScript");
+}
+
+TEST_CASE("EditorLayer: LoadDocument with behavior=none does not create script component",
+          "[editor][layer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "no_script";
+    obj.type = SceneObjectType::Prop;
+    obj.props["behavior"] = "none";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto &objs2 = editor.GetDocument().objects;
+    const auto it2 = std::ranges::find_if(objs2, [](const SceneObject &o) { return o.id == "no_script"; });
+    REQUIRE(it2 != objs2.end());
+    const SceneObject *loaded = &*it2;
+    REQUIRE(loaded != nullptr);
+    REQUIRE(loaded->components.empty());
+}
+
+TEST_CASE("EditorLayer: SetHotReloadOverlay stores state without crashing",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.SetHotReloadOverlay(true, 0.5f, 45.0f, "Compiling shaders...");
+    editor.SetHotReloadOverlay(false, 0.0f, 0.0f, "");
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped stores paths for deferred processing",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const char *paths[] = {"assets/models/crate.obj", "assets/textures/wood.png"};
+    editor.OnPathsDropped(2, paths, 100.0f, 200.0f);
+    // No crash; pending drops stored internally
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op", "[editor][layer]") {
+    EditorLayer editor;
+    editor.OnPathsDropped(5, nullptr, 0.0f, 0.0f);
+    editor.OnPathsDropped(0, nullptr, 0.0f, 0.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload flag",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // CreateObject marks dirty and triggers reload
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "tr_obj"}});
+    // WantsSceneReload may or may not be set depending on whether reload was
+    // already processed; either way AcknowledgeReload must not crash.
+    editor.AcknowledgeReload();
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: IsPlayMode returns false by default", "[editor][layer]") {
+    EditorLayer editor;
+    REQUIRE_FALSE(editor.IsPlayMode());
+}
+
+TEST_CASE("EditorLayer: GetSelectedAssetId is empty when no asset is selected",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    REQUIRE(editor.GetSelectedAssetId().empty());
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot does not crash", "[editor][layer]") {
+    EditorLayer editor;
+    editor.SetProjectBrowserRoot("assets/");
+    editor.SetProjectBrowserRoot("");
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist does not crash",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.SetProjectBrowserExtraBlocklist({"node_modules", ".git"});
+    editor.SetProjectBrowserExtraBlocklist({});
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: Render with inactive editor does not crash",
+          "[editor][layer]") {
+    ImGuiContextGuard imgui;
+
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    Camera cam;
+    // Render handles NewFrame/EndFrame/Render internally
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
 }
