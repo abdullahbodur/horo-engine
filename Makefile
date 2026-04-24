@@ -118,7 +118,7 @@ studio:
 
 ## Recompile TypeScript + Theia webpack bundle only (no launch)
 studio-rebuild:
-	cd horo-studio && npx tsc -p tsconfig.json && npm run build:electron
+	cd horo-studio/extension && npx --prefix .. tsc -p tsconfig.json && cd .. && npm run build:electron
 
 # ----------------------------------------------------------------
 # Coverage

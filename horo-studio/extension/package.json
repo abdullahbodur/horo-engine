@@ -1,0 +1,19 @@
+{
+  "name": "horo-extension",
+  "version": "0.1.0",
+  "description": "Horo Studio Theia extension — widgets, MCP client, engine UI",
+  "keywords": ["theia-extension"],
+  "license": "MIT",
+  "theiaExtensions": [
+    {
+      "frontend": "lib/horoFrontendModule"
+    }
+  ],
+  "dependencies": {
+    "@theia/core": "1.56.0",
+    "@theia/editor": "1.56.0"
+  },
+  "peerDependencies": {
+    "@theia/core": "^1.56.0"
+  }
+}

@@ -465,7 +465,7 @@ async function compileHoroFrontend(rootDir, step, total) {
     'Compiling Horo frontend extension',
     localBin(rootDir, 'tsc'),
     ['-p', 'tsconfig.json'],
-    { cwd: rootDir }
+    { cwd: path.join(rootDir, 'extension') }
   );
 }
 
