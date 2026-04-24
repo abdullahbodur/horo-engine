@@ -2195,3 +2195,732 @@ TEST_CASE(
     REQUIRE(unknownType["error"]["message"] ==
         "Unknown component type: nonexistent.");
 }
+
+// ===========================================================================
+// EditorLayer::ExecuteMcpCommand — direct handler coverage
+// These tests call ExecuteMcpCommand directly so the real handler logic runs
+// (as opposed to protocol tests which use mock command callbacks).
+// ===========================================================================
+
+TEST_CASE("EditorLayer MCP: clear_selection clears state and returns cleared=true",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.sceneName = "ClearSel";
+    SceneObject obj;
+    obj.id = "sel_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // First select an object so we have something to clear
+    const McpCommandResult sel =
+        editor.ExecuteMcpCommand("editor.select", json{{"id", "sel_obj"}});
+    REQUIRE(sel.ok);
+    REQUIRE(sel.data["selectedObjectIds"].size() == 1);
+
+    // Now clear
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.clear_selection", json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data["cleared"].get<bool>());
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+}
+
+TEST_CASE("EditorLayer MCP: undo with no history returns ok with undone=false",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.sceneName = "UndoTest";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.undo", json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data.contains("undone"));
+    REQUIRE_FALSE(result.data["undone"].get<bool>());
+    REQUIRE(result.data.contains("dirty"));
+}
+
+TEST_CASE("EditorLayer MCP: undo/redo after create_object toggle document state",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.sceneName = "UndoRedoTest";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Create something to undo
+    const McpCommandResult createResult = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        json{{"type", "Prop"}, {"id", "undo_target"}});
+    REQUIRE(createResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+
+    // Undo the creation
+    const McpCommandResult undoResult =
+        editor.ExecuteMcpCommand("editor.undo", json::object());
+    REQUIRE(undoResult.ok);
+    REQUIRE(undoResult.data["undone"].get<bool>());
+
+    // Redo restores it
+    const McpCommandResult redoResult =
+        editor.ExecuteMcpCommand("editor.redo", json::object());
+    REQUIRE(redoResult.ok);
+    REQUIRE(redoResult.data.contains("redone"));
+    REQUIRE(redoResult.data.contains("dirty"));
+}
+
+TEST_CASE("EditorLayer MCP: redo with nothing to redo returns ok with redone=false",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.redo", json::object());
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(result.data["redone"].get<bool>());
+}
+
+TEST_CASE("EditorLayer MCP: update_object sets pitch, roll, and clears assetId with null",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
+    SceneObject obj;
+    obj.id = "pitch_roll_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "box";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{
+            {"id", "pitch_roll_obj"},
+            {"pitch", 15.0f},
+            {"roll", 30.0f},
+            {"assetId", nullptr}
+        });
+    REQUIRE(result.ok);
+    const json &updated = result.data["updated"];
+    REQUIRE(NearlyEqualJsonFloat(updated["pitch"], 15.0f));
+    REQUIRE(NearlyEqualJsonFloat(updated["roll"], 30.0f));
+    REQUIRE(updated["assetId"] == "");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with assetId string updates asset reference",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
+    doc.assets["sphere"] = AssetDef{"assets/sphere.obj", "1,1,1", ""};
+    SceneObject obj;
+    obj.id = "asset_switch_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "box";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{
+            {"id", "asset_switch_obj"},
+            {"assetId", "sphere"},
+            {"props", json{{"material", "metal"}, {"count", 5}}}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(result.data["updated"]["assetId"] == "sphere");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with props containing non-string values",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "props_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Props with a numeric value (should be serialized via .dump())
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{
+            {"id", "props_obj"},
+            {"props", json{{"label", "hello"}, {"count", 42}}}
+        });
+    REQUIRE(result.ok);
+
+    // Verify the non-string prop was serialized
+    const SceneDocument &d = editor.GetDocument();
+    bool found = false;
+    for (const auto &o : d.objects) {
+        if (o.id == "props_obj") {
+            found = true;
+            REQUIRE(o.props.at("label") == "hello");
+            REQUIRE(o.props.at("count") == "42");
+        }
+    }
+    REQUIRE(found);
+}
+
+TEST_CASE("EditorLayer MCP: update_object with valid components list updates components",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "comp_update_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{
+            {"id", "comp_update_obj"},
+            {"components",
+             json::array({json{{"type", "light"}, {"props", json{{"lightType", "point"}}}}})}
+        });
+    REQUIRE(result.ok);
+
+    const SceneDocument &d = editor.GetDocument();
+    for (const auto &o : d.objects) {
+        if (o.id == "comp_update_obj") {
+            REQUIRE(o.components.size() == 1);
+            REQUIRE(o.components[0].type == "light");
+        }
+    }
+}
+
+TEST_CASE("EditorLayer MCP: update_object rejects invalid components array",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "bad_comp_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Non-object item in components
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{
+            {"id", "bad_comp_obj"},
+            {"components", json::array({"not_an_object"})}
+        });
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "components must be an array of objects.");
+}
+
+TEST_CASE("EditorLayer MCP: update_object rejects invalid scale",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "bad_scale_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{{"id", "bad_scale_obj"},
+             {"scale", json::array({"x", "y", "z"})}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "scale must be [x,y,z].");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with transform callback fires callback",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "cb_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    bool callbackFired = false;
+    editor.SetTransformCallback([&callbackFired](const SceneObject &) {
+        callbackFired = true;
+    });
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        json{{"id", "cb_obj"}, {"yaw", 45.0f}});
+    REQUIRE(result.ok);
+    REQUIRE(callbackFired);
+}
+
+TEST_CASE("EditorLayer MCP: delete by single id removes the object",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject a;
+    a.id = "del_single";
+    a.type = SceneObjectType::Prop;
+    doc.objects.push_back(a);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.delete", json{{"id", "del_single"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["deletedCount"] == 1);
+    REQUIRE(editor.GetDocument().objects.empty());
+}
+
+TEST_CASE("EditorLayer MCP: delete by ids array removes multiple objects",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    for (int i = 0; i < 3; ++i) {
+        SceneObject o;
+        o.id = std::format("multi_del_{}", i);
+        o.type = SceneObjectType::Prop;
+        doc.objects.push_back(o);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        json{{"ids", json::array({"multi_del_0", "multi_del_2"})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["deletedCount"] == 2);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].id == "multi_del_1");
+}
+
+TEST_CASE("EditorLayer MCP: delete skips non-string items in ids array",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject o;
+    o.id = "skip_del";
+    o.type = SceneObjectType::Prop;
+    doc.objects.push_back(o);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Mix of non-string and valid string ids — non-string should be skipped
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        json{{"ids", json::array({42, "skip_del", nullptr})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["deletedCount"] == 1);
+}
+
+TEST_CASE("EditorLayer MCP: delete with no matching objects returns error",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.delete", json{{"id", "ghost"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "No matching objects to delete.");
+}
+
+TEST_CASE("EditorLayer MCP: select_asset rejects unknown asset id",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.select_asset", json{{"id", "ghost_asset"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "Asset not found.");
+}
+
+TEST_CASE("EditorLayer MCP: update_asset updates fields and returns asset summary",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.assets["prop_asset"] = AssetDef{"assets/prop.obj", "1,1,1", ""};
+    SceneObject o;
+    o.id = "ref_obj";
+    o.type = SceneObjectType::Prop;
+    o.assetId = "prop_asset";
+    doc.objects.push_back(o);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        json{
+            {"id", "prop_asset"},
+            {"mesh", "assets/prop_v2.obj"},
+            {"renderScale", "2,2,2"},
+            {"albedoMap", "assets/prop_albedo.png"},
+            {"displayName", "Prop V2"}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(result.data["asset"]["id"] == "prop_asset");
+    REQUIRE(result.data["asset"]["mesh"] == "assets/prop_v2.obj");
+    REQUIRE(result.data["asset"]["objectReferenceCount"] == 1);
+}
+
+TEST_CASE("EditorLayer MCP: update_asset clears fields with null values",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.assets["clearable"] = AssetDef{"assets/c.obj", "1,1,1", "assets/c.png",
+                                       "", "Clearable"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        json{
+            {"id", "clearable"},
+            {"mesh", nullptr},
+            {"renderScale", nullptr},
+            {"albedoMap", nullptr},
+            {"displayName", nullptr}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(result.data["asset"]["mesh"] == "");
+}
+
+TEST_CASE("EditorLayer MCP: update_asset rejects unknown asset id",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.update_asset", json{{"id", "missing"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "Asset not found.");
+}
+
+TEST_CASE("EditorLayer MCP: new_scene resets doc with custom sceneId and sceneName",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "old_scene";
+    doc.sceneName = "Old Scene";
+    SceneObject o;
+    o.id = "old_obj";
+    o.type = SceneObjectType::Prop;
+    doc.objects.push_back(o);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    REQUIRE_FALSE(editor.GetDocument().objects.empty());
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.new_scene",
+        json{{"sceneId", "fresh_id"}, {"sceneName", "Fresh Scene"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["sceneId"] == "fresh_id");
+    REQUIRE(result.data["sceneName"] == "Fresh Scene");
+    REQUIRE(result.data.contains("dirty"));
+    // Document should be reset — old_obj no longer present
+    for (const auto &o : editor.GetDocument().objects) {
+        REQUIRE(o.id != "old_obj");
+    }
+}
+
+TEST_CASE("EditorLayer MCP: new_scene without args uses defaults",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "old";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.new_scene", json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data.contains("sceneId"));
+    REQUIRE(result.data.contains("sceneName"));
+    REQUIRE(result.data.contains("dirty"));
+}
+
+TEST_CASE("EditorLayer MCP: save_scene saves document and returns filePath",
+          "[mcp][handler]") {
+    namespace fs = std::filesystem;
+
+    EnvGuard env("horo_mcp_save_scene_handler");
+    const fs::path scenePath =
+        Monolith::Tests::SecureTempBase() / "horo_mcp_save_scene_handler" /
+        "scene.json";
+    fs::create_directories(scenePath.parent_path());
+
+    SceneDocument doc;
+    doc.sceneId = "save_test";
+    doc.sceneName = "Save Test";
+    doc.filePath = scenePath.string();
+    SceneObject obj;
+    obj.id = "save_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.save_scene", json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data["saved"].get<bool>());
+    REQUIRE_FALSE(result.data["filePath"].get<std::string>().empty());
+    REQUIRE(fs::exists(scenePath));
+}
+
+TEST_CASE("EditorLayer MCP: save_scene fails when filePath is unwritable",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "unwritable_scene";
+    // Set a path in a directory that cannot be created
+    doc.filePath = "/this_root_does_not_exist_on_macos/deep/nested/scene.json";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.save_scene", json::object());
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: reload_scene fails when filePath does not exist",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "no_file_scene";
+    // Point to a file that definitely does not exist
+    doc.filePath = "/this_root_does_not_exist_on_macos/ghost_scene.json";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.reload_scene", json::object());
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with ids array creates one copy per source",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject a;
+    a.id = "dup_a";
+    a.type = SceneObjectType::Prop;
+    SceneObject b;
+    b.id = "dup_b";
+    b.type = SceneObjectType::Prop;
+    doc.objects.push_back(a);
+    doc.objects.push_back(b);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        json{{"ids", json::array({"dup_a", "dup_b"})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].size() == 2);
+}
+
+TEST_CASE("EditorLayer MCP: duplicate ids array skips non-string items",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject a;
+    a.id = "skip_str_a";
+    a.type = SceneObjectType::Prop;
+    doc.objects.push_back(a);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Mix of non-string and valid string ids — non-string items should be skipped
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        json{{"ids", json::array({42, nullptr, "skip_str_a"})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["duplicates"].size() == 1);
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with no matching id returns error",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.duplicate", json{{"id", "no_such_obj"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "Object not found.");
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object rejects unknown parent id",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject obj;
+    obj.id = "orphan_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        json{{"id", "orphan_obj"}, {"parentId", "ghost_parent"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "Parent object not found.");
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    SceneObject parent;
+    parent.id = "parent_x";
+    parent.type = SceneObjectType::Prop;
+    SceneObject child;
+    child.id = "child_x";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "parent_x";
+    doc.objects.push_back(parent);
+    doc.objects.push_back(child);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        json{{"id", "child_x"}, {"parentId", ""}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["parentId"] == "");
+}
+
+TEST_CASE("EditorLayer MCP: create_object with non-string prop values uses dump()",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Numeric and boolean prop values should be serialized via .dump()
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        json{
+            {"type", "Prop"},
+            {"id", "dump_prop_obj"},
+            {"props", json{{"count", 7}, {"active", true}}}
+        });
+    REQUIRE(result.ok);
+
+    bool found = false;
+    for (const auto &o : editor.GetDocument().objects) {
+        if (o.id == "dump_prop_obj") {
+            found = true;
+            REQUIRE(o.props.at("count") == "7");
+        }
+    }
+    REQUIRE(found);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with props null value triggers early return",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Pass props as an array (not an object) — McpParseProps should return empty map
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        json{
+            {"type", "Prop"},
+            {"id", "noobj_props"},
+            {"props", json::array({1, 2, 3})}
+        });
+    REQUIRE(result.ok);
+    // The props should be empty since the non-object was discarded
+    for (const auto &o : editor.GetDocument().objects) {
+        if (o.id == "noobj_props") {
+            REQUIRE(o.props.empty());
+        }
+    }
+}
+
+TEST_CASE("EditorLayer MCP: create_object_from_asset fires transform callback",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+    doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    bool callbackFired = false;
+    editor.SetTransformCallback([&callbackFired](const SceneObject &) {
+        callbackFired = true;
+    });
+
+    const McpCommandResult result = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        json{{"assetId", "box"}, {"yaw", 90.0f}});
+    REQUIRE(result.ok);
+    REQUIRE(callbackFired);
+}
+
+TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool",
+          "[mcp][handler]") {
+    SceneDocument doc;
+    doc.sceneId = "scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const McpCommandResult result =
+        editor.ExecuteMcpCommand("editor.nonexistent_tool", json::object());
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error == "Unsupported MCP command.");
+}
