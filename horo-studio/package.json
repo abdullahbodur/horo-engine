@@ -20,7 +20,6 @@
     }
   ],
   "dependencies": {
-    "horo-studio": "file:.",
     "@theia/core": "1.56.0",
     "@theia/editor": "1.56.0",
     "@theia/electron": "1.56.0",
@@ -36,7 +35,9 @@
     "@theia/terminal": "1.56.0",
     "@theia/workspace": "1.56.0",
     "@vscode/ripgrep": "^1.17.1",
-    "node-pty": "^1.1.0"
+    "horo-studio": "file:.",
+    "node-pty": "^1.1.0",
+    "reflect-metadata": "^0.2.2"
   },
   "overrides": {
     "react": "18.3.1",

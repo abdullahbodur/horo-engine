@@ -64,12 +64,12 @@ export class McpClient {
 
   // ---- Resource reads ------------------------------------------------------
 
-  async readResource(resourceUri: string): Promise<unknown> {
+  async readResource(resourceUri: string, extraParams?: Record<string, unknown>): Promise<unknown> {
     const body = {
       jsonrpc: '2.0',
       id: this.nextId(),
       method: 'resources/read',
-      params: { uri: resourceUri },
+      params: { uri: resourceUri, ...extraParams },
     };
     const resp = await this.post(body);
     const result = resp?.['result'] as Record<string, unknown> | undefined;
@@ -211,10 +211,12 @@ export class McpClient {
 
   async getConsoleLogs(limit = 100): Promise<string[]> {
     try {
-      const text = await this.readResource('console.recent');
+      const text = await this.readResource('console.recent', { limit });
       if (typeof text === 'string') {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) return parsed as string[];
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        // Engine returns { lines: [{time, level, message}], lineCount, hasMore }
+        const lines = Array.isArray(parsed?.['lines']) ? parsed['lines'] as Record<string, string>[] : [];
+        return lines.map((l) => `[${l['time'] ?? ''}] [${l['level'] ?? 'INFO'}] ${l['message'] ?? ''}`);
       }
     } catch { /* fall through */ }
     return [];
