@@ -20,6 +20,7 @@
     }
   ],
   "dependencies": {
+    "horo-studio": "file:.",
     "@theia/core": "1.56.0",
     "@theia/editor": "1.56.0",
     "@theia/electron": "1.56.0",
