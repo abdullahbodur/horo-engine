@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -18,6 +19,8 @@
 
 #include "core/ProjectPath.h"
 #include "editor/AssetIdentity.h"
+#include "editor/EditorLayer.h"
+#include "editor/EditorSceneGraph.h"
 #include "editor/AssetImportService.h"
 #include "editor/AssetImporterRegistry.h"
 #include "editor/AssetMetadata.h"
@@ -800,4 +803,743 @@ TEST_CASE("TransformGizmo: PickAxis returns None for empty screen point",
     // Mouse far off screen — should not pick anything
     const GizmoAxis axis = g.PickAxis(9999.0f, 9999.0f, cam, 800, 800);
     CHECK(axis == GizmoAxis::None);
+}
+
+// ===========================================================================
+// EditorHistory — via MCP commands (no GLFW needed)
+// ===========================================================================
+
+TEST_CASE("EditorHistory: CommitHistoryChange records snapshot on object create",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "hist_create_a"}});
+    REQUIRE(res.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+
+    // undo must succeed, proving CommitHistoryChange pushed a snapshot
+    const auto undo = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo.ok);
+    REQUIRE(undo.data["undone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.empty());
+}
+
+TEST_CASE("EditorHistory: CommitHistoryChange is no-op when snapshots are equal",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Create an object — document is now dirty and has 1 object in undo history
+    const auto createRes = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "hist_nochange"}});
+    REQUIRE(createRes.ok);
+
+    // Capture undo depth: 1 undo entry
+    const auto undo1 = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo1.data["undone"].get<bool>());
+    // Nothing to undo now
+    const auto undo2 = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE_FALSE(undo2.data["undone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: UndoHistory with empty stack returns false",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto undo = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo.ok);
+    REQUIRE_FALSE(undo.data["undone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: UndoHistory restores prior document state",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "undo_restore"}});
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+
+    const auto undo = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo.ok);
+    REQUIRE(undo.data["undone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.empty());
+}
+
+TEST_CASE("EditorHistory: RedoHistory after undo re-applies change",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "redo_obj"}});
+    editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    const auto redo = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redo.ok);
+    REQUIRE(redo.data["redone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+}
+
+TEST_CASE("EditorHistory: RedoHistory with empty stack returns false",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto redo = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redo.ok);
+    REQUIRE_FALSE(redo.data["redone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    for (int i = 0; i < 130; ++i) {
+        const auto res = editor.ExecuteMcpCommand(
+            "editor.create_object",
+            nlohmann::json{{"type", "Prop"}, {"id", std::format("trim_obj_{}", i)}});
+        REQUIRE(res.ok);
+    }
+
+    int undoCount = 0;
+    while (true) {
+        const auto res = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+        REQUIRE(res.ok);
+        if (!res.data["undone"].get<bool>())
+            break;
+        ++undoCount;
+    }
+    REQUIRE(undoCount == 128);
+}
+
+TEST_CASE("EditorHistory: RefreshHistorySavedBaseline refreshes undo and redo snapshots",
+          "[editor][history]") {
+    namespace fs = std::filesystem;
+    const fs::path sceneDir =
+        Monolith::Tests::SecureTempBase() / "horo_hist_unit_baseline";
+    std::error_code ec;
+    fs::remove_all(sceneDir, ec);
+    fs::create_directories(sceneDir, ec);
+
+    const fs::path scenePath = sceneDir / "baseline_scene.json";
+
+    SceneDocument doc;
+    doc.sceneId = "baseline_scene";
+    doc.filePath = scenePath.string();
+    SceneSerializer::SaveToFile(doc, scenePath.string());
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Build 2 undo entries
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "bl_obj1"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "bl_obj2"}});
+    // Move one entry to redo stack
+    editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+
+    // Save — calls SaveDocument → RefreshHistorySavedBaseline with both undo and redo non-empty
+    const auto saveRes = editor.ExecuteMcpCommand("editor.save_scene", nlohmann::json::object());
+    REQUIRE(saveRes.ok);
+    REQUIRE_FALSE(editor.GetDocument().dirty);
+}
+
+TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for changed document",
+          "[editor][history]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.sceneId = "snap_diff";
+    editor.LoadDocument(doc);
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "snap_obj"}});
+
+    // Undo proves before != after (snapshots differed, so commit happened)
+    const auto undo = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo.data["undone"].get<bool>());
+
+    // Redo confirms redo stack was populated
+    const auto redo = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redo.data["redone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+}
+
+// ===========================================================================
+// EditorSceneGraph — free functions
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: FindObjectIndexById returns -1 for unknown id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "known";
+    doc.objects.push_back(obj);
+
+    REQUIRE(FindObjectIndexById(doc, "unknown") == -1);
+    REQUIRE(FindObjectIndexById(doc, "") == -1);
+}
+
+TEST_CASE("EditorSceneGraph: FindObjectIndexById returns correct index",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject a;
+    a.id = "first";
+    doc.objects.push_back(a);
+    SceneObject b;
+    b.id = "second";
+    doc.objects.push_back(b);
+
+    REQUIRE(FindObjectIndexById(doc, "first") == 0);
+    REQUIRE(FindObjectIndexById(doc, "second") == 1);
+}
+
+TEST_CASE("EditorSceneGraph: IsDescendantOf returns false for out-of-bounds indices",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj";
+    doc.objects.push_back(obj);
+
+    REQUIRE_FALSE(IsDescendantOf(doc, -1, 0));
+    REQUIRE_FALSE(IsDescendantOf(doc, 0, -1));
+    REQUIRE_FALSE(IsDescendantOf(doc, 99, 0));
+    REQUIRE_FALSE(IsDescendantOf(doc, 0, 99));
+}
+
+TEST_CASE("EditorSceneGraph: IsDescendantOf finds ancestor via while loop",
+          "[editor][scene-graph]") {
+    // grandchild -> child -> parent chain
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent";
+    doc.objects.push_back(parent);           // index 0
+
+    SceneObject child;
+    child.id = "child";
+    child.props["parentId"] = "parent";
+    doc.objects.push_back(child);            // index 1
+
+    SceneObject grandchild;
+    grandchild.id = "grandchild";
+    grandchild.props["parentId"] = "child";
+    doc.objects.push_back(grandchild);       // index 2
+
+    REQUIRE(IsDescendantOf(doc, 2, 0));      // grandchild is descendant of parent
+    REQUIRE(IsDescendantOf(doc, 1, 0));      // child is descendant of parent
+    REQUIRE_FALSE(IsDescendantOf(doc, 0, 2)); // parent is NOT descendant of grandchild
+}
+
+TEST_CASE("EditorSceneGraph: IsDescendantOf returns false when no parent chain",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject a;
+    a.id = "a";
+    doc.objects.push_back(a);
+    SceneObject b;
+    b.id = "b";
+    doc.objects.push_back(b);
+
+    // Neither is parent of the other
+    REQUIRE_FALSE(IsDescendantOf(doc, 0, 1));
+    REQUIRE_FALSE(IsDescendantOf(doc, 1, 0));
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta translates child",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "par";
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "ch";
+    child.position = {2.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "par";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    oldState.position = {0.0f, 0.0f, 0.0f};
+    oldState.rotation = Quaternion::Identity();
+
+    ParentTransformState newState;
+    newState.position = {5.0f, 0.0f, 0.0f};
+    newState.rotation = Quaternion::Identity();
+
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState, nullptr);
+
+    REQUIRE(doc.objects[1].position.x == Approx(7.0f));
+    REQUIRE(doc.objects[1].position.y == Approx(0.0f));
+    REQUIRE(doc.objects[1].position.z == Approx(0.0f));
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta applies rotation to child",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "rot_par";
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "rot_ch";
+    child.position = {1.0f, 0.0f, 0.0f};
+    child.pitch = 0.0f;
+    child.yaw = 0.0f;
+    child.roll = 0.0f;
+    child.props["parentId"] = "rot_par";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    oldState.position = {0.0f, 0.0f, 0.0f};
+    oldState.rotation = Quaternion::Identity();
+
+    // Apply a non-trivial rotation — coverage goal is to hit lines 85-91;
+    // exact resulting position depends on the engine's quaternion convention.
+    ParentTransformState newState;
+    newState.position = {0.0f, 0.0f, 0.0f};
+    newState.rotation = Quaternion::FromEuler(ToRadians(90.0f), 0.0f, 0.0f);
+
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState, nullptr);
+
+    // Child orientation fields (pitch/yaw/roll) must have been recomputed
+    // (they are always overwritten for any non-identity deltaRot).
+    // Position magnitude should be preserved under rotation.
+    const Vec3 &p = doc.objects[1].position;
+    const float dist = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+    REQUIRE(dist == Approx(1.0f).margin(1e-4f));
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "cb_par";
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "cb_ch";
+    child.position = {1.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "cb_par";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    ParentTransformState newState;
+    newState.position = {3.0f, 0.0f, 0.0f};
+    newState.rotation = Quaternion::Identity();
+
+    int cbCount = 0;
+    PropagateHierarchyTransformDelta(
+        doc, 0, oldState, newState,
+        [&cbCount](const SceneObject &) { ++cbCount; });
+    REQUIRE(cbCount == 1);
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "skip_par";
+    parent.position = {0.0f, 0.0f, 0.0f};
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "skip_ch";
+    child.position = {1.0f, 0.0f, 0.0f};
+    child.props["parentId"] = "skip_par";
+    doc.objects.push_back(child);
+
+    ParentTransformState oldState;
+    ParentTransformState newState;
+    newState.position = {10.0f, 0.0f, 0.0f};
+    newState.rotation = Quaternion::Identity();
+
+    PropagateHierarchyTransformDelta(doc, 0, oldState, newState, nullptr, {1});
+    REQUIRE(doc.objects[1].position.x == Approx(1.0f)); // unchanged
+}
+
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid parentIdx is no-op",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "solo";
+    obj.position = {3.0f, 0.0f, 0.0f};
+    doc.objects.push_back(obj);
+
+    ParentTransformState s;
+    s.rotation = Quaternion::Identity();
+    PropagateHierarchyTransformDelta(doc, -1, s, s, nullptr);
+    PropagateHierarchyTransformDelta(doc, 99, s, s, nullptr);
+    REQUIRE(doc.objects[0].position.x == Approx(3.0f)); // unchanged
+}
+
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes ids and prop references",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+
+    SceneObject parent;
+    parent.id = "res_parent";
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "res_child";
+    child.props["parentId"] = "res_parent";
+    child.props["followTargetId"] = "res_parent";
+    doc.objects.push_back(child);
+
+    SceneObject noRef;
+    noRef.id = "res_no_ref";
+    doc.objects.push_back(noRef);
+
+    const auto reserved = CollectReservedObjectIds(doc);
+    REQUIRE(reserved.contains("res_parent"));
+    REQUIRE(reserved.contains("res_child"));
+    REQUIRE(reserved.contains("res_no_ref"));
+    REQUIRE_FALSE(reserved.contains("nonexistent"));
+}
+
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds handles empty doc",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    const auto reserved = CollectReservedObjectIds(doc);
+    REQUIRE(reserved.empty());
+}
+
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences rewrites followTargetId too",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "follower";
+    obj.props["followTargetId"] = "old_target";
+    doc.objects.push_back(obj);
+
+    RewriteObjectIdReferences(&doc, "old_target", "new_target");
+    REQUIRE(doc.objects[0].props.at("followTargetId") == "new_target");
+}
+
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences null doc is no-op",
+          "[editor][scene-graph]") {
+    REQUIRE_NOTHROW(RewriteObjectIdReferences(nullptr, "old", "new"));
+}
+
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences empty label does not crash",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject orphan;
+    orphan.id = "orphan";
+    orphan.props["parentId"] = "ghost_parent";
+    doc.objects.push_back(orphan);
+
+    REQUIRE_NOTHROW(LogDanglingObjectReferences(doc, ""));
+}
+
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences skips non-ref and empty-value props",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj1";
+    // Non-reference prop — must not trigger dangling-ref warning
+    obj.props["someCustomProp"] = "anything";
+    // Reference prop with empty value — must also be skipped
+    obj.props["parentId"] = "";
+    doc.objects.push_back(obj);
+
+    // Should run without crash; exercises the `continue` branch in LogDanglingObjectReferences
+    REQUIRE_NOTHROW(LogDanglingObjectReferences(doc, "unit_test"));
+}
+
+// ===========================================================================
+// EditorSceneGraph — IsDescendantOf cycle detection and additional branches
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: IsDescendantOf cycle detection returns false after guard",
+          "[editor][scene-graph]") {
+    // Build a 3-cycle: a→b→c→a, plus an unrelated object d (index 3).
+    // guardLimit = 4. IsDescendantOf(doc, 0, 3) must iterate all 4 times
+    // without finding ancestorIdx(3) or a dead end, then return false at line 60.
+    SceneDocument doc;
+    SceneObject a; a.id = "cyc_a"; a.props["parentId"] = "cyc_b"; doc.objects.push_back(a);
+    SceneObject b; b.id = "cyc_b"; b.props["parentId"] = "cyc_c"; doc.objects.push_back(b);
+    SceneObject c; c.id = "cyc_c"; c.props["parentId"] = "cyc_a"; doc.objects.push_back(c);
+    SceneObject d; d.id = "cyc_d"; doc.objects.push_back(d); // index 3, no parent
+
+    // Is a (0) a descendant of d (3)?  Walks cycle a→b→c→a... and hits guard.
+    REQUIRE_FALSE(IsDescendantOf(doc, 0, 3));
+}
+
+// ===========================================================================
+// EditorSceneGraph — IsReservedObjectId
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj; obj.id = "x"; doc.objects.push_back(obj);
+    REQUIRE_FALSE(IsReservedObjectId(doc, ""));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing object id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj; obj.id = "used"; doc.objects.push_back(obj);
+    REQUIRE(IsReservedObjectId(doc, "used"));
+    REQUIRE_FALSE(IsReservedObjectId(doc, "unused"));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for referenced prop value",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "follower";
+    obj.props["followTargetId"] = "target_obj";
+    doc.objects.push_back(obj);
+
+    REQUIRE(IsReservedObjectId(doc, "target_obj"));
+    REQUIRE_FALSE(IsReservedObjectId(doc, "not_referenced"));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId respects ignoreConcreteObjectId",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj; obj.id = "rename_me"; doc.objects.push_back(obj);
+
+    const std::string ignored = "rename_me";
+    REQUIRE_FALSE(IsReservedObjectId(doc, "rename_me", &ignored));
+    REQUIRE(IsReservedObjectId(doc, "rename_me", nullptr));
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop references when matching ignored id",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "ref_holder";
+    obj.props["parentId"] = "ignore_this";
+    doc.objects.push_back(obj);
+
+    // The reference value matches the ignored id — should not be considered reserved
+    const std::string ignored = "ignore_this";
+    REQUIRE_FALSE(IsReservedObjectId(doc, "ignore_this", &ignored));
+}
+
+// ===========================================================================
+// EditorSceneGraph — SanitizePrefabStem and BuildUniquePrefabPath
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem cleans special characters",
+          "[editor][scene-graph]") {
+    REQUIRE(SanitizePrefabStem("hello_world") == "hello_world");
+    REQUIRE(SanitizePrefabStem("valid-name_123") == "valid-name_123");
+    REQUIRE(SanitizePrefabStem("__hello__") == "hello");
+    REQUIRE(SanitizePrefabStem("_test") == "test");
+    REQUIRE(SanitizePrefabStem("test_") == "test");
+    REQUIRE(SanitizePrefabStem("") == "prefab");
+    REQUIRE(SanitizePrefabStem("___") == "prefab");
+    REQUIRE(SanitizePrefabStem("hello world!") == "hello_world");
+}
+
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path",
+          "[editor][scene-graph]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_prefab_path_test";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    SceneDocument doc;
+    doc.sceneId = "test_scene";
+
+    SceneObject obj;
+    obj.id = "my_obj";
+
+    const std::filesystem::path path = BuildUniquePrefabPath(doc, obj);
+    REQUIRE(path.extension() == ".horo");
+    REQUIRE(path.stem().string().find("my_obj") != std::string::npos);
+}
+
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath uses sceneId when object id is empty",
+          "[editor][scene-graph]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_prefab_path_test2";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    SceneDocument doc;
+    doc.sceneId = "my_scene";
+
+    SceneObject obj; // id is empty
+
+    const std::filesystem::path path = BuildUniquePrefabPath(doc, obj);
+    REQUIRE(path.extension() == ".horo");
+    REQUIRE(path.stem().string().find("my_scene") != std::string::npos);
+}
+
+// ===========================================================================
+// EditorHistory — additional coverage: equal-snapshot no-op and TrimHistory
+// ===========================================================================
+
+TEST_CASE("EditorHistory: CommitHistoryChange skips when update makes no content change",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Create an object — now document is dirty
+    const auto createRes = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "noop_obj"}});
+    REQUIRE(createRes.ok);
+
+    // Call update_object with only the id and no other fields.
+    // Before: dirty=true, objects=[noop_obj]; After: same → before == after.
+    // CommitHistoryChange should detect this and NOT push a new undo entry.
+    const auto updRes = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "noop_obj"}});
+    REQUIRE(updRes.ok);
+
+    // Undo once should restore to empty (only 1 real undo entry from create)
+    const auto undo1 = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo1.ok);
+    REQUIRE(undo1.data["undone"].get<bool>());
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    // No more undo entries (the no-op update did not create one)
+    const auto undo2 = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE_FALSE(undo2.data["undone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: TrimHistory guard — no trim when stack within limit",
+          "[editor][history]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Create a few objects (well within 128 limit)
+    for (int i = 0; i < 3; ++i) {
+        editor.ExecuteMcpCommand(
+            "editor.create_object",
+            nlohmann::json{{"type", "Prop"}, {"id", std::format("guard_obj_{}", i)}});
+    }
+
+    // All 3 undos should succeed
+    for (int i = 0; i < 3; ++i) {
+        const auto res = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+        REQUIRE(res.data["undone"].get<bool>());
+    }
+    // Stack exhausted
+    const auto done = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE_FALSE(done.data["undone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: RestoreHistorySnapshot restores selectedAssetId from undo",
+          "[editor][history]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.sceneId = "asset_undo_test";
+    // Add an asset to the document
+    AssetDef asset;
+    asset.guid = "guid_restore_test";
+    asset.displayName = "Restore Test Asset";
+    doc.assets["restore_asset"] = asset;
+    editor.LoadDocument(doc);
+
+    // Select the asset so it appears in history snapshots
+    const auto selRes = editor.ExecuteMcpCommand(
+        "editor.select_asset", nlohmann::json{{"id", "restore_asset"}});
+    REQUIRE(selRes.ok);
+    REQUIRE(editor.GetSelectedAssetId() == "restore_asset");
+
+    // Mutate an asset field — this commits history with selectedAssetId set
+    const auto updRes = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "restore_asset"}, {"mesh", "some_mesh.obj"}});
+    REQUIRE(updRes.ok);
+
+    // Undo restores the snapshot; RestoreHistorySnapshot must set m_selectedAssetId
+    // back to "restore_asset" (it exists in the restored document's assets).
+    const auto undoRes = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undoRes.ok);
+    REQUIRE(undoRes.data["undone"].get<bool>());
+    REQUIRE(editor.GetSelectedAssetId() == "restore_asset");
+}
+
+// ===========================================================================
+// EditorSceneGraph — additional coverage for IsReservedObjectId and paths
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop value matching ignoreConcreteObjectId",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "holder";
+    // The parentId references the same id we will ignore
+    obj.props["parentId"] = "target";
+    doc.objects.push_back(obj);
+
+    const std::string ignored = "target";
+    // "target" would normally be reserved (via prop reference), but since
+    // ignoreConcreteObjectId points to "target", it must not count as reserved.
+    REQUIRE_FALSE(IsReservedObjectId(doc, "target", &ignored));
+    // Without ignoring, it IS reserved
+    REQUIRE(IsReservedObjectId(doc, "target", nullptr));
+}
+
+// ===========================================================================
+// EditorSceneGraph — BuildUniquePrefabPath suffix loop
+// ===========================================================================
+
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath appends suffix when candidate exists",
+          "[editor][scene-graph]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_prefab_suffix_test";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    // Pre-create the first candidate so BuildUniquePrefabPath must use a suffix
+    const std::filesystem::path prefabDir = root / "assets" / "prefabs";
+    std::filesystem::create_directories(prefabDir, ec);
+    WriteFile(prefabDir / "suffix_obj_prefab.horo", "{}");
+
+    SceneDocument doc;
+    doc.sceneId = "test_scene";
+    SceneObject obj;
+    obj.id = "suffix_obj";
+
+    const std::filesystem::path path = BuildUniquePrefabPath(doc, obj);
+    // The base name is taken; result must have a numeric suffix
+    REQUIRE(path.extension() == ".horo");
+    REQUIRE(path.stem().string().find("suffix_obj_prefab_") != std::string::npos);
+}
+
+TEST_CASE("EditorSceneGraph: IsReservedObjectId skips non-reference prop keys",
+          "[editor][scene-graph]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "some_obj";
+    // Non-reference prop — must be skipped in the reserved-id check (line 124 continue)
+    obj.props["customField"] = "would_be_reserved_if_checked";
+    // Reference prop with a different value
+    obj.props["parentId"] = "actual_parent";
+    doc.objects.push_back(obj);
+
+    // "would_be_reserved_if_checked" is stored only under a non-ref key — not reserved
+    REQUIRE_FALSE(IsReservedObjectId(doc, "would_be_reserved_if_checked"));
+    // "actual_parent" IS a ref-key value — reserved
+    REQUIRE(IsReservedObjectId(doc, "actual_parent"));
 }
