@@ -26,6 +26,8 @@ import { AssetBrowserContribution } from './assetBrowser/AssetBrowserContributio
 import { ConsoleWidget } from './console/ConsoleWidget';
 import { ConsoleContribution } from './console/ConsoleContribution';
 import { HoroLayoutContribution } from './layout/HoroLayoutContribution';
+import { ProjectBrowserWidget } from './projectBrowser/ProjectBrowserWidget';
+import { ProjectBrowserContribution } from './projectBrowser/ProjectBrowserContribution';
 
 export default new ContainerModule((bind) => {
   console.info('[horo-module] registering horo frontend module');
@@ -88,6 +90,16 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
   bindViewContribution(bind, ConsoleContribution);
+
+  // ---- Project Browser -----------------------------------------------------
+  bind(ProjectBrowserWidget).toSelf();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ProjectBrowserWidget.ID,
+      createWidget: () => ctx.container.get(ProjectBrowserWidget),
+    }))
+    .inSingletonScope();
+  bindViewContribution(bind, ProjectBrowserContribution);
 
   // ---- Deterministic startup layout ---------------------------------------
   bind(HoroLayoutContribution).toSelf().inSingletonScope();

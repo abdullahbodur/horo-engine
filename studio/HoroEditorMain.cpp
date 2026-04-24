@@ -90,6 +90,29 @@ class HoroEditorApp final : public Application {
     m_shell.Attach(&m_editor, &m_scene, m_runtime.get(), &m_camera);
     m_shell.Initialize();
 
+    {
+      Editor::EditorLayer::LauncherCallbacks launcherCallbacks;
+      launcherCallbacks.openProject = [this](const std::filesystem::path& p, std::string* err) {
+        return m_shell.OpenProject(p, err);
+      };
+      launcherCallbacks.createProject = [this](const std::string& name, const std::filesystem::path& p, std::string* err) {
+        return m_shell.CreateProject(name, p, err);
+      };
+      launcherCallbacks.closeProject = [this]() {
+        m_shell.CloseProject();
+      };
+      launcherCallbacks.hasProject = [this]() {
+        return m_shell.HasActiveProject();
+      };
+      launcherCallbacks.getProjectPath = [this]() {
+        return m_shell.GetProjectRoot().string();
+      };
+      launcherCallbacks.getProjectName = [this]() {
+        return m_shell.GetProjectName();
+      };
+      m_editor.SetLauncherCallbacks(std::move(launcherCallbacks));
+    }
+
 #ifdef MONOLITH_FRAMEBUFFER_STREAM
     m_framebufferStream.Start(39282);
     LOG_INFO("FramebufferStream started on ws://127.0.0.1:39282");

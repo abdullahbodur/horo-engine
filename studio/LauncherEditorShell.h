@@ -37,12 +37,15 @@ class LauncherEditorShell {
   void Shutdown();
 
   bool OpenProject(const std::filesystem::path& projectPath, std::string* outError);
+  bool CreateProject(const std::string& name, const std::filesystem::path& projectPath, std::string* outError);
   void CloseProject();
   void Update();
   void RenderOverlay();
 
   bool HasActiveProject() const { return !m_projectRoot.empty(); }
   void SetLauncherError(std::string error) { m_launcherError = std::move(error); }
+  const std::filesystem::path& GetProjectRoot() const { return m_projectRoot; }
+  std::string GetProjectName() const;
 
  private:
   Editor::EditorLayer* m_editor = nullptr;

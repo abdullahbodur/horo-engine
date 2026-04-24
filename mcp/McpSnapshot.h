@@ -107,6 +107,8 @@ struct McpEditorSnapshot {
   std::string sceneName;
   std::string sceneFilePath;
   std::string selectedAssetId;
+  std::string projectPath;   // absolute path to the active project root
+  std::string projectName;   // project display name (from manifest or folder name)
   std::vector<std::string> selectedObjectIds;
   std::vector<McpObjectSnapshot> objects;
   std::vector<McpAssetSnapshot> assets;

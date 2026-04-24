@@ -38,6 +38,18 @@ namespace Editor {
 //   editor.Shutdown();
 class EditorLayer {
  public:
+  struct LauncherCallbacks {
+    std::function<bool(const std::filesystem::path&, std::string*)> openProject;
+    std::function<bool(const std::string&, const std::filesystem::path&, std::string*)> createProject;
+    std::function<void()> closeProject;
+    std::function<bool()> hasProject;
+    std::function<std::string()> getProjectPath;
+    std::function<std::string()> getProjectName;
+  };
+  void SetLauncherCallbacks(LauncherCallbacks callbacks) {
+    m_launcherCallbacks = std::move(callbacks);
+  }
+
   void Init(GLFWwindow* window);
   void Shutdown();
 
@@ -165,6 +177,7 @@ class EditorLayer {
   AssetDeleteResult DeleteAssetDefinition(const std::string& assetId);
 
   // ---- State ----
+  LauncherCallbacks m_launcherCallbacks;
   SceneDocument m_document;
   SceneDocument m_lastSavedDocument;
   SceneDocument m_pendingDocument;

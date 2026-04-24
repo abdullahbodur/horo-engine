@@ -35,6 +35,8 @@ export interface McpSceneSummary {
   assetCount: number;
   isDirty: boolean;
   hasActiveProject: boolean;
+  projectPath: string;
+  projectName: string;
 }
 
 export interface McpToolResult {
@@ -162,6 +164,30 @@ export class McpClient {
 
   async reloadScene(): Promise<McpToolResult> {
     return this.callToolResult('editor.reload_scene', { mode: 'apply' });
+  }
+
+  // ---- Project management --------------------------------------------------
+
+  async getProjectStatus(): Promise<{ hasProject: boolean; projectPath: string; projectName: string }> {
+    try {
+      const data = await this.callTool('launcher.get_project_status', {});
+      return (data as { hasProject: boolean; projectPath: string; projectName: string }) ??
+        { hasProject: false, projectPath: '', projectName: '' };
+    } catch {
+      return { hasProject: false, projectPath: '', projectName: '' };
+    }
+  }
+
+  async openProject(projectPath: string): Promise<McpToolResult> {
+    return this.callToolResult('launcher.open_project', { path: projectPath });
+  }
+
+  async createProject(name: string, projectPath: string): Promise<McpToolResult> {
+    return this.callToolResult('launcher.create_project', { name, path: projectPath });
+  }
+
+  async closeProject(): Promise<McpToolResult> {
+    return this.callToolResult('launcher.close_project', {});
   }
 
   // ---- Camera --------------------------------------------------------------

@@ -369,6 +369,25 @@ bool LauncherEditorShell::CreateProjectFromLauncher(std::string* outError) {
   return OpenProject(request.projectRoot, outError);
 }
 
+bool LauncherEditorShell::CreateProject(const std::string& name, const fs::path& projectPath,
+                                         std::string* outError) {
+  const LauncherProjectTemplateRequest request{
+      .projectRoot = NormalizeProjectRootInput(projectPath),
+      .projectName = name,
+      .sdkRoot = ResolveCommandSdkRoot(),
+  };
+  LauncherProjectDocument createdProject;
+  if (!CreateLauncherProjectTemplate(request, &createdProject, outError))
+    return false;
+  return OpenProject(request.projectRoot, outError);
+}
+
+std::string LauncherEditorShell::GetProjectName() const {
+  if (!m_projectDocument.manifest.projectName.empty())
+    return m_projectDocument.manifest.projectName;
+  return m_projectRoot.filename().string();
+}
+
 fs::path LauncherEditorShell::ResolveCommandSdkRoot() const {
   std::vector<fs::path> candidates;
   const fs::path assetSdkRoot = NormalizePathForLookup(ProjectPath::SdkRoot());

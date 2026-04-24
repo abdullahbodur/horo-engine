@@ -173,8 +173,10 @@ async function ensureEngineRunning(studioRootDir, debugLogs = false, timeoutMs =
 
   console.log(`==> starting engine backend: ${executable}`);
   const env = { ...process.env, MONOLITH_GLFW_VISIBLE: process.env.MONOLITH_GLFW_VISIBLE || '0' };
+  // Use the bin/ directory as cwd so the engine resolves its SDK paths correctly.
+  // The engine discovers sdk/ via current_path(), looking for ../sdk, ./sdk, etc.
   const child = spawn(executable, [], {
-    cwd: engineRootDir(studioRootDir),
+    cwd: path.dirname(executable),
     env,
     detached: !debugLogs,
     stdio: debugLogs ? 'inherit' : 'ignore',

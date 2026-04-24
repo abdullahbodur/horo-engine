@@ -63,6 +63,21 @@ function stageEngineRuntime(studioRoot) {
   fs.mkdirSync(targetDir, { recursive: true });
   fs.cpSync(resolved.binDir, targetDir, { recursive: true, force: true });
 
+  // Also bundle the SDK (shaders, editor_schema.json) so the engine can find
+  // its assets at runtime. The engine looks for sdk/ relative to its cwd
+  // (the engine-runtime/ dir) at exeDir/sdk, exeDir/../sdk, etc.
+  // Placing it inside engine-runtime/sdk/ ensures it is found as exeDir/sdk.
+  const sdkSrcDir = path.join(resolved.binDir, '..', 'sdk');
+  if (fs.existsSync(sdkSrcDir)) {
+    const sdkTargetDir = path.join(targetDir, 'sdk');
+    fs.mkdirSync(sdkTargetDir, { recursive: true });
+    fs.cpSync(sdkSrcDir, sdkTargetDir, { recursive: true, force: true });
+    console.log(`[horo-studio] Staged engine SDK from: ${path.resolve(sdkSrcDir)}`);
+  } else {
+    console.warn(`[horo-studio] WARNING: SDK not found at ${sdkSrcDir} — engine may not render correctly.`);
+    console.warn(`[horo-studio] Run 'cmake --build build/<config>' first to generate the SDK.`);
+  }
+
   console.log(`[horo-studio] Staged engine runtime from: ${resolved.binDir}`);
   console.log(`[horo-studio] Staged engine executable: ${resolved.exePath}`);
   console.log(`[horo-studio] Runtime output: ${targetDir}`);

@@ -278,6 +278,9 @@ json BuildSceneStatusJson(const McpEditorSnapshot& snapshot) {
       {"assetCount", snapshot.assets.size()},
       {"selectedObjectIds", snapshot.selectedObjectIds},
       {"selectedAssetId", snapshot.selectedAssetId},
+      {"projectPath", snapshot.projectPath},
+      {"projectName", snapshot.projectName},
+      {"hasActiveProject", !snapshot.projectPath.empty()},
   };
 }
 

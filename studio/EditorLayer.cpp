@@ -883,6 +883,11 @@ namespace Monolith::Editor
         snapshot.sceneName = m_document.sceneName;
         snapshot.sceneFilePath = m_document.filePath;
         snapshot.selectedAssetId = m_selectedAssetId;
+        snapshot.projectPath = m_launcherCallbacks.getProjectPath
+            ? m_launcherCallbacks.getProjectPath() : "";
+        snapshot.projectName = m_launcherCallbacks.getProjectName
+            ? m_launcherCallbacks.getProjectName() : "";
+        snapshot.editorActive = !snapshot.projectPath.empty();
 
         for (int idx : m_selectedIndices)
         {
@@ -1495,6 +1500,60 @@ namespace Monolith::Editor
                                               {"filePath", m_document.filePath},
                                               {"dirty", m_document.dirty}},
                                          std::string()};
+        }
+
+        if (toolName == "launcher.open_project")
+        {
+            const std::string projectPath = arguments.value("path", "");
+            if (projectPath.empty())
+                return Mcp::McpCommandResult{false, json::object(), "path is required"};
+            if (!m_launcherCallbacks.openProject)
+                return Mcp::McpCommandResult{false, json::object(), "launcher not attached"};
+            std::string error;
+            const bool ok = m_launcherCallbacks.openProject(std::filesystem::path(projectPath), &error);
+            return Mcp::McpCommandResult{ok,
+                                          json{{"projectPath", projectPath},
+                                               {"ok", ok}},
+                                          ok ? std::string() : error};
+        }
+
+        if (toolName == "launcher.create_project")
+        {
+            const std::string name = arguments.value("name", "");
+            const std::string projPath = arguments.value("path", "");
+            if (name.empty() || projPath.empty())
+                return Mcp::McpCommandResult{false, json::object(), "name and path are required"};
+            if (!m_launcherCallbacks.createProject)
+                return Mcp::McpCommandResult{false, json::object(), "launcher not attached"};
+            std::string error;
+            const bool ok = m_launcherCallbacks.createProject(name, std::filesystem::path(projPath), &error);
+            return Mcp::McpCommandResult{ok,
+                                          json{{"projectPath", projPath},
+                                               {"projectName", name},
+                                               {"ok", ok}},
+                                          ok ? std::string() : error};
+        }
+
+        if (toolName == "launcher.close_project")
+        {
+            if (!m_launcherCallbacks.closeProject)
+                return Mcp::McpCommandResult{false, json::object(), "launcher not attached"};
+            m_launcherCallbacks.closeProject();
+            return Mcp::McpCommandResult{true, json{{"ok", true}}, std::string()};
+        }
+
+        if (toolName == "launcher.get_project_status")
+        {
+            const bool has = m_launcherCallbacks.hasProject && m_launcherCallbacks.hasProject();
+            const std::string projPath = (has && m_launcherCallbacks.getProjectPath)
+                ? m_launcherCallbacks.getProjectPath() : "";
+            const std::string projName = (has && m_launcherCallbacks.getProjectName)
+                ? m_launcherCallbacks.getProjectName() : "";
+            return Mcp::McpCommandResult{true,
+                                          json{{"hasProject", has},
+                                               {"projectPath", projPath},
+                                               {"projectName", projName}},
+                                          std::string()};
         }
 
         return Mcp::McpCommandResult{false, json::object(), "Unsupported MCP command."};
