@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <cstdint>
+#include <ctime>
+#include <format>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -14,6 +17,7 @@
 
 #include <imgui.h>
 
+#include "core/LogBuffer.h"
 #include "editor/SceneDocument.h"
 
 namespace Monolith::Editor {
@@ -130,6 +134,52 @@ namespace Monolith::Editor {
                 });
                 return entry == typeName;
             });
+        }
+
+        // ---- Type-string converters (used in both EditorLayer.cpp and EditorMcpHandlers.cpp) ----
+
+        inline const char *SceneObjectTypeToString(SceneObjectType type) {
+            using enum SceneObjectType;
+            switch (type) {
+                case Panel:  return "Panel";
+                case Prop:   return "Prop";
+                case Light:  return "Light";
+                case Camera: return "Camera";
+            }
+            return "Panel";
+        }
+
+        inline bool ParseSceneObjectType(std::string_view raw, SceneObjectType *outType) {
+            using enum SceneObjectType;
+            if (!outType)
+                return false;
+            std::string value(raw);
+            std::ranges::transform(value, value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (value == "panel")  { *outType = Panel;  return true; }
+            if (value == "prop")   { *outType = Prop;   return true; }
+            if (value == "light")  { *outType = Light;  return true; }
+            if (value == "camera") { *outType = Camera; return true; }
+            return false;
+        }
+
+        // Formats the wall-clock time of a LogLine as HH:MM:SS into buf.
+        inline void FormatLogTime(const LogLine &entry, char *buf, size_t bufSize) {
+            using clock = std::chrono::system_clock;
+            const std::time_t t = clock::to_time_t(entry.time);
+            std::tm tmBuf{};
+#ifdef _WIN32
+            localtime_s(&tmBuf, &t);
+#else
+            localtime_r(&t, &tmBuf);
+#endif
+            if (!buf || bufSize == 0)
+                return;
+            const auto out =
+                    std::format_to_n(buf, bufSize - 1, "{:02d}:{:02d}:{:02d}",
+                                     tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec);
+            buf[std::min(static_cast<size_t>(out.size), bufSize - 1)] = '\0';
         }
 
     } // namespace
