@@ -453,3 +453,393 @@ TEST_CASE("Grid snap: rounds to nearest 0.5", "[gizmo][snap]") {
     CHECK(snap(0.0f) == Approx(0.0f).margin(1e-5f));
     CHECK(snap(1.25f) == Approx(1.5f).margin(1e-5f));
 }
+
+// ============================================================================
+// Test accessor — grants access to private drag state and methods.
+// TransformGizmo.h declares this struct as a friend.
+// ============================================================================
+
+struct TransformGizmoTestAccessor {
+    static void SetHovered(TransformGizmo &g, GizmoAxis a) { g.m_hovered = a; }
+    static void SetDragging(TransformGizmo &g, GizmoAxis a) { g.m_dragging = a; }
+    static void SetDragPlaneNormal(TransformGizmo &g, Vec3 n) {
+        g.m_dragPlaneNormal = n;
+    }
+    static void SetDragAnchorPos(TransformGizmo &g, Vec3 p) {
+        g.m_dragAnchorPos = p;
+    }
+    static void SetDragPrevOffset(TransformGizmo &g, float f) {
+        g.m_dragPrevOffset = f;
+    }
+    static void SetDragPrevAngle(TransformGizmo &g, float f) {
+        g.m_dragPrevAngle = f;
+    }
+    static void SetDragStartDir(TransformGizmo &g, Vec3 d) { g.m_dragStartDir = d; }
+
+    static void BeginDrag(TransformGizmo &g, const Ray &ray, const Camera &cam) {
+        g.BeginDrag(ray, cam);
+    }
+    static bool ApplyActiveDrag(TransformGizmo &g, const Ray &ray, const Camera &cam,
+                                Vec3 &outDeltaPos, Quaternion &outDeltaRot,
+                                Vec3 &outDeltaScale) {
+        return g.ApplyActiveDrag(ray, cam, outDeltaPos, outDeltaRot, outDeltaScale);
+    }
+    static Vec3 GetPos(const TransformGizmo &g) { return g.m_pos; }
+};
+
+using TA = TransformGizmoTestAccessor;
+
+// ============================================================================
+// Test 14 — HandleSize: near-zero distance clamps to 0.1
+// ============================================================================
+
+TEST_CASE("HandleSize: near-zero distance returns 0.1", "[gizmo]") {
+    TransformGizmo g;
+    // Gizmo at origin; camera also at origin (dist ≈ 0 < 0.001f)
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+    Camera cam = MakeCamera({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f});
+    CHECK(g.HandleSize(cam) == Approx(0.1f));
+}
+
+// ============================================================================
+// Test 15 — AxisDir: default case returns zero
+// ============================================================================
+
+TEST_CASE("TransformGizmo: AxisDir None returns zero vector", "[gizmo]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+    Vec3 d = g.AxisDir(GizmoAxis::None);
+    CHECK(d.x == Approx(0.0f));
+    CHECK(d.y == Approx(0.0f));
+    CHECK(d.z == Approx(0.0f));
+}
+
+// ============================================================================
+// Test 16 — PickAxis: gizmo entirely behind camera triggers line 135 continue
+// ============================================================================
+
+TEST_CASE("TransformGizmo: PickAxis returns None when gizmo is behind camera",
+          "[gizmo]") {
+    TransformGizmo g;
+    // Camera at z=10 looking toward origin; gizmo placed behind the camera at z=20.
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+    g.Activate(GizmoMode::Translate, {0.0f, 0.0f, 20.0f}, Quaternion::Identity(),
+               Vec3::One());
+    // WorldToScreen(m_pos) returns false for all axes → all iterations continue
+    GizmoAxis picked = g.PickAxis(400.0f, 400.0f, cam, 800, 800);
+    CHECK(picked == GizmoAxis::None);
+}
+
+// ============================================================================
+// Test 17 — PickAxis: gizmo barely in front but Z-axis tip behind camera
+//           triggers line 137 continue for the Z axis
+// ============================================================================
+
+TEST_CASE(
+    "TransformGizmo: PickAxis skips Z axis when its tip is behind the camera",
+    "[gizmo]") {
+    // Camera at z=10. Gizmo at z=9.9999: dist ≈ 0.0001 < 0.001, so HandleSize
+    // returns 0.1. Z-axis tip = z + 0.1 = 10.0999, which is behind the camera.
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, {0.0f, 0.0f, 9.9999f}, Quaternion::Identity(),
+               Vec3::One());
+    GizmoAxis picked = g.PickAxis(400.0f, 400.0f, cam, 800, 800);
+    CHECK(picked != GizmoAxis::Z); // Z tip behind camera → Z iteration continues
+}
+
+// ============================================================================
+// Test 18 — RayClosestOnLine: zero-length line direction uses 0.0 fallback
+// ============================================================================
+
+TEST_CASE(
+    "TransformGizmo: RayClosestOnLine with zero-length lineDir returns lineOrigin",
+    "[gizmo]") {
+    Ray ray;
+    ray.origin = {3.0f, 1.0f, 0.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f};
+    // Zero-length line direction: a = dot(Zero, Zero) = 0 ≤ 1e-10 → s = 0.0
+    Vec3 closest =
+        TransformGizmo::RayClosestOnLine(ray, {1.0f, 0.0f, 0.0f}, Vec3::Zero());
+    CHECK(closest.x == Approx(1.0f));
+    CHECK(closest.y == Approx(0.0f));
+    CHECK(closest.z == Approx(0.0f));
+}
+
+// ============================================================================
+// Tests 19-22 — Draw dispatch (no OpenGL needed; DebugDraw::Line buffers only)
+// ============================================================================
+
+TEST_CASE("TransformGizmo: Draw is a no-op when mode is None", "[gizmo][draw]") {
+    TransformGizmo g; // mode = None by default
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // Must not crash or do anything observable.
+    g.Draw(cam, 800, 600);
+    CHECK(!g.IsActive());
+}
+
+TEST_CASE("TransformGizmo: Draw routes to DrawTranslate", "[gizmo][draw]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    g.Draw(cam, 800, 600); // exercises DrawTranslate: shaft, arrowhead fan
+    CHECK(g.GetMode() == GizmoMode::Translate);
+}
+
+TEST_CASE("TransformGizmo: Draw routes to DrawRotate", "[gizmo][draw]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    g.Draw(cam, 800, 600); // exercises DrawRotate: 3 rings of 32 segments
+    CHECK(g.GetMode() == GizmoMode::Rotate);
+}
+
+TEST_CASE("TransformGizmo: Draw routes to DrawScale", "[gizmo][draw]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    g.Draw(cam, 800, 600); // exercises DrawScale: shafts + endpoint boxes
+    CHECK(g.GetMode() == GizmoMode::Scale);
+}
+
+// ============================================================================
+// Tests 23-26 — BeginDrag: Translate and Rotate branches
+// ============================================================================
+
+TEST_CASE("BeginDrag: Translate mode sets dragging axis and plane", "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+    TA::SetHovered(g, GizmoAxis::X);
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // Ray hits the camera-facing plane at x=0.
+    Ray ray;
+    ray.origin = {0.0f, 0.0f, 5.0f};
+    ray.direction = {0.0f, 0.0f, -1.0f};
+    TA::BeginDrag(g, ray, cam);
+
+    CHECK(g.GetDragAxis() == GizmoAxis::X);
+}
+
+TEST_CASE("BeginDrag: Translate mode with plane-miss falls back to zero offset",
+          "[gizmo][drag]") {
+    // Ray parallel to the camera-facing plane → RayHitPlane returns false → else
+    // branch: m_dragPrevOffset = 0.
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+    TA::SetHovered(g, GizmoAxis::Y);
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // cam.GetForward() = (0,0,-1); a horizontal ray is parallel to this plane.
+    Ray ray;
+    ray.origin = {0.0f, 0.0f, 5.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f};
+    TA::BeginDrag(g, ray, cam);
+
+    CHECK(g.GetDragAxis() == GizmoAxis::Y);
+}
+
+TEST_CASE("BeginDrag: Rotate mode with ray hitting axis plane sets dragStartDir",
+          "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+    TA::SetHovered(g, GizmoAxis::Y); // rotate around Y; plane normal = (0,1,0)
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // Vertical ray hits y=0 plane at (1,0,0) → dragStartDir = (1,0,0).
+    Ray ray;
+    ray.origin = {1.0f, 5.0f, 0.0f};
+    ray.direction = {0.0f, -1.0f, 0.0f};
+    TA::BeginDrag(g, ray, cam);
+
+    CHECK(g.GetDragAxis() == GizmoAxis::Y);
+}
+
+TEST_CASE("BeginDrag: Rotate mode with plane-miss sets dragStartDir to Right",
+          "[gizmo][drag]") {
+    // Ray direction (1,0,0) is parallel to the Y-axis plane (normal = (0,1,0)),
+    // so RayHitPlane returns false → else branch: m_dragStartDir = Vec3::Right().
+    TransformGizmo g;
+    g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+    TA::SetHovered(g, GizmoAxis::Y);
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    Ray ray;
+    ray.origin = {0.0f, 0.0f, 5.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f}; // parallel to Y-axis plane
+    TA::BeginDrag(g, ray, cam);
+
+    // Verify drag was started (dragging != None) even with the fallback.
+    CHECK(g.GetDragAxis() == GizmoAxis::Y);
+}
+
+// ============================================================================
+// Tests 27-32 — ApplyActiveDrag: Translate, Rotate, Scale X/Y/Z, plane miss
+// ============================================================================
+
+TEST_CASE("ApplyActiveDrag: Translate produces axis-aligned delta", "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+
+    // Set up drag state as BeginDrag would for X axis, cam-facing plane.
+    TA::SetDragging(g, GizmoAxis::X);
+    TA::SetDragPlaneNormal(g, {0.0f, 0.0f, -1.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+    TA::SetDragPrevOffset(g, 0.0f);
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // Ray at x=2 hits plane at (2,0,0); axisDir=(1,0,0); delta = 2.
+    Ray ray;
+    ray.origin = {2.0f, 0.0f, 5.0f};
+    ray.direction = {0.0f, 0.0f, -1.0f};
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(!consumed);
+    CHECK(deltaPos.x == Approx(2.0f).margin(1e-4f));
+    CHECK(deltaPos.y == Approx(0.0f).margin(1e-4f));
+    CHECK(deltaPos.z == Approx(0.0f).margin(1e-4f));
+    // Gizmo position must advance by the delta.
+    Vec3 pos = TA::GetPos(g);
+    CHECK(pos.x == Approx(2.0f).margin(1e-4f));
+}
+
+TEST_CASE("ApplyActiveDrag: Rotate produces non-identity delta quaternion",
+          "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+
+    // Simulate drag start: startDir=(1,0,0), axisNormal=(0,1,0), prevAngle=0.
+    TA::SetDragging(g, GizmoAxis::Y);
+    TA::SetDragPlaneNormal(g, {0.0f, 1.0f, 0.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+    TA::SetDragStartDir(g, {1.0f, 0.0f, 0.0f});
+    TA::SetDragPrevAngle(g, 0.0f);
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    // Ray hits y=0 plane at (0,0,1): curDir=(0,0,1), angle = atan2(-1,0) = -90°.
+    Ray ray;
+    ray.origin = {0.0f, 5.0f, 1.0f};
+    ray.direction = {0.0f, -1.0f, 0.0f};
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(!consumed);
+    // Delta rotation must not be identity (some non-zero rotation happened).
+    const Quaternion identity = Quaternion::Identity();
+    bool isIdentity = (std::abs(deltaRot.w - identity.w) < 1e-4f) &&
+                      (std::abs(deltaRot.x - identity.x) < 1e-4f) &&
+                      (std::abs(deltaRot.y - identity.y) < 1e-4f) &&
+                      (std::abs(deltaRot.z - identity.z) < 1e-4f);
+    CHECK(!isIdentity);
+}
+
+TEST_CASE("ApplyActiveDrag: Scale X axis scales X component", "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    TA::SetDragging(g, GizmoAxis::X);
+    TA::SetDragPlaneNormal(g, {0.0f, 0.0f, -1.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+    TA::SetDragPrevOffset(g, 0.0f);
+
+    // Ray at x=0.5 → hitPt=(0.5,0,0); axisOffset=0.5; factor > 1.
+    Ray ray;
+    ray.origin = {0.5f, 0.0f, 5.0f};
+    ray.direction = {0.0f, 0.0f, -1.0f};
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(!consumed);
+    CHECK(deltaScale.x > 1.0f);
+    CHECK(deltaScale.y == Approx(1.0f));
+    CHECK(deltaScale.z == Approx(1.0f));
+}
+
+TEST_CASE("ApplyActiveDrag: Scale Y axis scales Y component", "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    TA::SetDragging(g, GizmoAxis::Y);
+    TA::SetDragPlaneNormal(g, {0.0f, 0.0f, -1.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+    TA::SetDragPrevOffset(g, 0.0f);
+
+    // Ray at y=0.5 → hitPt=(0,0.5,0); Y-axisOffset=0.5; factor > 1.
+    Ray ray;
+    ray.origin = {0.0f, 0.5f, 5.0f};
+    ray.direction = {0.0f, 0.0f, -1.0f};
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(!consumed);
+    CHECK(deltaScale.x == Approx(1.0f));
+    CHECK(deltaScale.y > 1.0f);
+    CHECK(deltaScale.z == Approx(1.0f));
+}
+
+TEST_CASE("ApplyActiveDrag: Scale Z axis scales Z component", "[gizmo][drag]") {
+    // Use a Y-facing drag plane so the Z-axis offset is non-degenerate.
+    TransformGizmo g;
+    g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(), Vec3::One());
+
+    // Camera above looking down; plane normal = (0,-1,0).
+    Camera cam = MakeCamera({0.0f, 10.0f, 0.0f}, Vec3::Zero());
+    TA::SetDragging(g, GizmoAxis::Z);
+    TA::SetDragPlaneNormal(g, {0.0f, -1.0f, 0.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+    TA::SetDragPrevOffset(g, 0.0f);
+
+    // Ray at (0,5,1) pointing down; hits plane y=0 at (0,0,1); Z offset = 1.
+    Ray ray;
+    ray.origin = {0.0f, 5.0f, 1.0f};
+    ray.direction = {0.0f, -1.0f, 0.0f};
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(!consumed);
+    CHECK(deltaScale.x == Approx(1.0f));
+    CHECK(deltaScale.y == Approx(1.0f));
+    CHECK(deltaScale.z > 1.0f);
+}
+
+TEST_CASE("ApplyActiveDrag: returns true (consumed) when ray misses drag plane",
+          "[gizmo][drag]") {
+    TransformGizmo g;
+    g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+               Vec3::One());
+
+    TA::SetDragging(g, GizmoAxis::X);
+    // Horizontal plane (normal = Y); ray direction parallel to it → no hit.
+    TA::SetDragPlaneNormal(g, {0.0f, 1.0f, 0.0f});
+    TA::SetDragAnchorPos(g, Vec3::Zero());
+
+    Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+    Ray ray;
+    ray.origin = {0.0f, 0.0f, 5.0f};
+    ray.direction = {1.0f, 0.0f, 0.0f}; // parallel to the Y-normal plane
+
+    Vec3 deltaPos;
+    Quaternion deltaRot;
+    Vec3 deltaScale;
+    bool consumed = TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale);
+    CHECK(consumed); // plane not hit → function returns true
+}

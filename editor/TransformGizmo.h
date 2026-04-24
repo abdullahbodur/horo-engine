@@ -5,6 +5,7 @@
 #include "renderer/Camera.h"
 
 struct GLFWwindow;
+struct TransformGizmoTestAccessor; // forward declaration for test seam
 
 namespace Monolith::Editor {
     enum class GizmoMode { None, Translate, Rotate, Scale };
@@ -90,5 +91,8 @@ namespace Monolith::Editor {
 
         bool ApplyActiveDrag(const Ray &ray, const Camera &cam, Vec3 &outDeltaPos,
                              Quaternion &outDeltaRot, Vec3 &outDeltaScale);
+
+        // Test seam: grants test code access to private drag state and methods.
+        friend struct ::TransformGizmoTestAccessor;
     };
 } // namespace Monolith::Editor
