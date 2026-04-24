@@ -21,6 +21,8 @@ namespace Monolith::Editor {
     struct ComponentDesc {
         std::string type; // "light", "rigidbody", "script"
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> > props; // type-specific props
+
+        bool operator==(const ComponentDesc &) const = default;
     };
 
     // Reusable mesh + scale definition.
@@ -43,11 +45,15 @@ namespace Monolith::Editor {
               albedoMap(std::move(albedoMapValue)), guid(std::move(guidValue)),
               displayName(std::move(displayNameValue)) {
         }
+
+        bool operator==(const AssetDef &) const = default;
     };
 
     struct ScenePrefabInstance {
         std::string prefabId;
         std::string sourcePath;
+
+        bool operator==(const ScenePrefabInstance &) const = default;
     };
 
     // One generic scene object: transform + optional asset reference + props bag.
@@ -68,6 +74,8 @@ namespace Monolith::Editor {
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> > props;
         std::vector<ComponentDesc>
         components; // attached components (light, rigidbody, script, …)
+
+        bool operator==(const SceneObject &) const = default;
     };
 
     struct SceneDocument {
@@ -79,5 +87,7 @@ namespace Monolith::Editor {
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> > settings;
         std::unordered_map<std::string, AssetDef, StringHash, std::equal_to<> > assets; // id → definition
         std::vector<SceneObject> objects;
+
+        bool operator==(const SceneDocument &) const = default;
     };
 } // namespace Monolith::Editor
