@@ -75,11 +75,24 @@ static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
   return wid;
 }
 
+static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return;
+  const ImGuiViewport *viewport = ImGui::GetMainViewport();
+  const ImVec2 position = viewport
+                              ? ImVec2(viewport->Pos.x + viewport->Size.x - 8.0f,
+                                       viewport->Pos.y + viewport->Size.y - 8.0f)
+                              : ImVec2(8.0f, 8.0f);
+  ctx->MouseMoveToPos(position);
+  ctx->MouseClick(ImGuiMouseButton_Left);
+  ctx->Yield(2);
+}
+
 // Opens a toolbar popup by clicking btnLabel, waits for sentinelItem,
 // and leaves ctx->SetRef pointing at the actual popup window.
 // Returns the popup window ID on success, or 0 on timeout.
-// On failure, presses Escape to ensure the popup is closed so that
-// subsequent tests start with a clean ImGui popup stack.
+// On failure, leaves state unchanged so callers fail without masking the
+// reason a user-visible popup did not appear.
 //
 // Implementation note: BeginPopup creates windows named "##Popup_XXXXXXXX",
 // NOT windows named by popupId. We find the actual popup window by reading
@@ -93,10 +106,6 @@ static ImGuiID OpenToolbarPopup(ImGuiTestContext *ctx, const char *btnLabel,
 
   const ImGuiID wid = WaitForPopup(ctx, 0, sentinelItem, maxFrames);
   if (!wid) {
-    // Popup failed to open: close any open popup so ImGui state is
-    // clean for subsequent tests.
-    ctx->PopupCloseAll();
-    ctx->Yield(2);
     ctx->SetRef("##toolbar");
   }
   return wid;
@@ -122,9 +131,12 @@ static void ClickModalButtonIfPresent(ImGuiTestContext *ctx,
 }
 
 static void DismissBlockingEditorModals(ImGuiTestContext *ctx) {
-  // PopupCloseAll() closes ImGui popup state but does not clear editor-owned
-  // modal-open flags. Click safe cancel buttons first so those flags are reset
-  // and the next toolbar interaction is not blocked by a re-opened modal.
+  // Click safe cancel buttons so editor-owned modal-open flags are reset and
+  // the next toolbar interaction is not blocked by a re-opened modal.
+  ClickModalButtonIfPresent(ctx, "Rename Object", "Cancel");
+  ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
+  ClickModalButtonIfPresent(ctx, "Create Asset", "Cancel");
+  ClickModalButtonIfPresent(ctx, "Unsaved Changes", "Cancel");
   ClickModalButtonIfPresent(ctx, "Confirm Delete Objects", "Cancel");
   ClickModalButtonIfPresent(ctx, "Confirm Delete Asset", "Cancel");
 }
@@ -179,11 +191,9 @@ bool EnsureEditorActive(ImGuiTestContext *ctx, UiAutomationRunState *state) {
     LogWarn("editor scenario: no active project, skipping.");
     return false;
   }
-  // Close any popup/modal left open by the previous scenario before
-  // checking toolbar state — an open popup blocks toolbar clicks.
+  // Close editor-owned modals left open by previous scenarios before checking
+  // toolbar state; use their visible buttons so modal flags are reset.
   DismissBlockingEditorModals(ctx);
-  ctx->PopupCloseAll();
-  ctx->Yield(2);
   ctx->SetRef("##toolbar");
   return WaitForCondition(ctx, 180,
                           [ctx]() { return ctx->ItemExists("File"); });
@@ -355,8 +365,6 @@ static bool EnableMcpViaSettings(ImGuiTestContext *ctx) {
   const ImGuiID filePopup =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Settings...");
   if (!filePopup) {
-    ctx->PopupCloseAll();
-    ctx->Yield(2);
     return false;
   }
   ctx->ItemClick("Settings...");
@@ -366,8 +374,7 @@ static bool EnableMcpViaSettings(ImGuiTestContext *ctx) {
     return ctx->ItemExists("Editor Settings/Enable built-in MCP");
   });
   if (!modalReady) {
-    ctx->PopupCloseAll();
-    ctx->Yield(2);
+    ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
     return false;
   }
 
@@ -425,8 +432,7 @@ void RunFileMenuItems(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Reset Layout"));
   IM_CHECK(ctx->ItemExists("Settings..."));
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
   LogInfo("UI scenario done: editor_ui/file_menu_items");
 }
 
@@ -451,8 +457,7 @@ void RunAddMenuItems(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Light"));
   IM_CHECK(ctx->ItemExists("Camera"));
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
   LogInfo("UI scenario done: editor_ui/add_menu_items");
 }
 
@@ -477,8 +482,7 @@ void RunEditMenuItems(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Delete"));
   IM_CHECK(ctx->ItemExists("Duplicate"));
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
   LogInfo("UI scenario done: editor_ui/edit_menu_items");
 }
 
@@ -503,8 +507,7 @@ void RunViewMenuItems(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Quick Open"));
   IM_CHECK(ctx->ItemExists("Command Palette"));
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
   LogInfo("UI scenario done: editor_ui/view_menu_items");
 }
 
@@ -1041,10 +1044,8 @@ void RunNewSceneAndAddPanel(ImGuiTestContext *ctx) {
   // File → New Scene
   const ImGuiID filePopupIdNS =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "New Scene");
-  if (!filePopupIdNS) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdNS)
     return;
-  }
   ctx->ItemClick("New Scene");
   ctx->Yield(2);
 
@@ -1109,11 +1110,8 @@ void RunQuickOpenPopup(ImGuiTestContext *ctx) {
 
   const ImGuiID quickOpenPopup = WaitForPopup(ctx, 0, "Close");
   IM_CHECK(quickOpenPopup != ImGuiID(0));
-  if (!quickOpenPopup) {
-    ctx->PopupCloseAll();
-    ctx->Yield(2);
+  if (!quickOpenPopup)
     return;
-  }
   IM_CHECK(ctx->ItemExists("##quick_open_input"));
   ctx->Yield(1);
 
@@ -1163,10 +1161,9 @@ void RunCommandPalettePopup(ImGuiTestContext *ctx) {
   if (commandPalettePopup)
     IM_CHECK(ctx->ItemExists("##command_palette_input"));
 
-  if (commandPalettePopup && ctx->ItemExists("Close"))
-    ctx->ItemClick("Close");
-  else
-    ctx->PopupCloseAll();
+  if (!commandPalettePopup)
+    return;
+  ctx->ItemClick("Close");
   ctx->Yield(1);
 
   CaptureIfEnabled(ctx, state, "editor_ui__command_palette_popup.png");
@@ -1238,30 +1235,25 @@ void RunRenameObjectModal(ImGuiTestContext *ctx) {
   // Add a Panel so we have something to select
   const ImGuiID addPopupIdRename =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdRename) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdRename)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
-  // Select the panel (tree mode: PushID(0) / ##obj_tree)
+  // Open the first hierarchy object's context menu and choose Rename...
   ctx->SetRef("Hierarchy");
   const bool panelReadyRename = WaitForCondition(
       ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
-  if (panelReadyRename)
-    ctx->ItemClick("$$0/##obj_tree");
-  ctx->Yield(1);
-
-  // Open Edit → Rename... (enabled only with single selection)
-  const ImGuiID editPopupIdRename =
-      OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Rename...");
-  IM_CHECK(editPopupIdRename != ImGuiID(0));
-  if (!editPopupIdRename) {
-    ctx->PopupCloseAll();
+  IM_CHECK(panelReadyRename);
+  if (!panelReadyRename)
     return;
-  }
 
+  ctx->ItemClick("$$0/##obj_tree", ImGuiMouseButton_Right);
+  ctx->Yield(2);
+  const ImGuiID renameContextPopup = WaitForPopup(ctx, 0, "Rename...");
+  IM_CHECK(renameContextPopup != ImGuiID(0));
+  if (!renameContextPopup)
+    return;
   ctx->ItemClick("Rename...");
   ctx->Yield(2);
 
@@ -1269,8 +1261,8 @@ void RunRenameObjectModal(ImGuiTestContext *ctx) {
       ctx, 60, [ctx]() { return ctx->ItemExists("Rename Object/New ID"); });
   IM_CHECK(renameModalOpen);
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  if (renameModalOpen)
+    ClickModalButtonIfPresent(ctx, "Rename Object", "Cancel");
 
   CaptureIfEnabled(ctx, state, "editor_ui__rename_object_modal.png");
   LogInfo("UI scenario done: editor_ui/rename_object_modal");
@@ -1302,16 +1294,16 @@ void RunObjectContextMenuInHierarchy(ImGuiTestContext *ctx) {
   const ImGuiID addPopupIdObjCtx =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
   if (!addPopupIdObjCtx) {
-    ctx->PopupCloseAll();
     LogWarn("UI scenario: Add popup did not appear.");
     return;
   }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
-  // Activate search mode so DrawObjectsTreeSearchMode provides context menu
+  // Search for the panel type label ("board") so the context menu is exposed
+  // through the searchable object rows regardless of the scene tree expansion.
   ctx->SetRef("Hierarchy");
-  ctx->ItemInputValue("##object_search", "Panel");
+  ctx->ItemInputValue("##object_search", "board");
   ctx->Yield(2);
 
   ctx->SetRef("Hierarchy");
@@ -1323,7 +1315,7 @@ void RunObjectContextMenuInHierarchy(ImGuiTestContext *ctx) {
     return;
   }
 
-  LogDebug("UI scenario action: right-click $$0/##obj_0 (search mode)");
+  LogDebug("UI scenario action: right-click $$0/##obj_0");
   ctx->ItemClick("$$0/##obj_0", ImGuiMouseButton_Right);
   ctx->Yield(2);
 
@@ -1337,8 +1329,7 @@ void RunObjectContextMenuInHierarchy(ImGuiTestContext *ctx) {
     IM_CHECK(ctx->ItemExists("Delete"));
   }
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
   ctx->SetRef("Hierarchy");
   ctx->ItemInputValue("##object_search", "");
 
@@ -1370,10 +1361,8 @@ void RunDuplicateObjectChangesHierarchy(ImGuiTestContext *ctx) {
   // Add a Panel via the Add menu
   const ImGuiID addPopupIdDup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdDup) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdDup)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -1391,10 +1380,8 @@ void RunDuplicateObjectChangesHierarchy(ImGuiTestContext *ctx) {
   const ImGuiID editPopupIdDup =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Duplicate");
   IM_CHECK(editPopupIdDup != ImGuiID(0));
-  if (!editPopupIdDup) {
-    ctx->PopupCloseAll();
+  if (!editPopupIdDup)
     return;
-  }
   ctx->ItemClick("Duplicate");
   ctx->Yield(4);
 
@@ -1433,10 +1420,8 @@ void RunDeleteSelectedObjectFlow(ImGuiTestContext *ctx) {
   // Add a Panel so there is an object to delete
   const ImGuiID addPopupIdDel =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdDel) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdDel)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -1452,10 +1437,8 @@ void RunDeleteSelectedObjectFlow(ImGuiTestContext *ctx) {
   const ImGuiID editPopupIdDel =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Delete");
   IM_CHECK(editPopupIdDel != ImGuiID(0));
-  if (!editPopupIdDel) {
-    ctx->PopupCloseAll();
+  if (!editPopupIdDel)
     return;
-  }
   ctx->ItemClick("Delete");
   ctx->Yield(2);
 
@@ -1504,10 +1487,8 @@ void RunUndoRedoViaEditMenu(ImGuiTestContext *ctx) {
   // Add a Panel to have an undoable action
   const ImGuiID addPopupIdUR =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdUR) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdUR)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -1515,10 +1496,8 @@ void RunUndoRedoViaEditMenu(ImGuiTestContext *ctx) {
   const ImGuiID undoPopupId =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Undo");
   IM_CHECK(undoPopupId != ImGuiID(0));
-  if (!undoPopupId) {
-    ctx->PopupCloseAll();
+  if (!undoPopupId)
     return;
-  }
   ctx->ItemClick("Undo");
   ctx->Yield(4);
 
@@ -1526,10 +1505,8 @@ void RunUndoRedoViaEditMenu(ImGuiTestContext *ctx) {
   const ImGuiID redoPopupId =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Redo");
   IM_CHECK(redoPopupId != ImGuiID(0));
-  if (!redoPopupId) {
-    ctx->PopupCloseAll();
+  if (!redoPopupId)
     return;
-  }
   ctx->ItemClick("Redo");
   ctx->Yield(4);
 
@@ -1759,10 +1736,8 @@ void RunObjectTypeFilterInHierarchy(ImGuiTestContext *ctx) {
   {
     const ImGuiID pid =
         OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-    if (!pid) {
-      ctx->PopupCloseAll();
+    if (!pid)
       return;
-    }
     ctx->ItemClick("Panel");
     ctx->Yield(4);
   }
@@ -1771,10 +1746,8 @@ void RunObjectTypeFilterInHierarchy(ImGuiTestContext *ctx) {
   {
     const ImGuiID pid =
         OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Camera");
-    if (!pid) {
-      ctx->PopupCloseAll();
+    if (!pid)
       return;
-    }
     ctx->ItemClick("Camera");
     ctx->Yield(4);
   }
@@ -1879,10 +1852,8 @@ void RunPropertiesShowsCameraFields(ImGuiTestContext *ctx) {
   // Add a Camera via the Add menu
   const ImGuiID addPopupIdCam =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Camera");
-  if (!addPopupIdCam) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdCam)
     return;
-  }
   ctx->ItemClick("Camera");
   ctx->Yield(4);
 
@@ -1936,10 +1907,8 @@ void RunMultiSelectShowsBatchPanel(ImGuiTestContext *ctx) {
   for (int i = 0; i < 3; ++i) {
     const ImGuiID addPid =
         OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-    if (!addPid) {
-      ctx->PopupCloseAll();
+    if (!addPid)
       return;
-    }
     ctx->ItemClick("Panel");
     ctx->Yield(3);
   }
@@ -2005,10 +1974,8 @@ void RunEditMenuShowsHistoryItems(ImGuiTestContext *ctx) {
   // Add a Panel first to ensure Rename... and Create Prefab items are enabled
   const ImGuiID addPopupIdHist =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdHist) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdHist)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2025,8 +1992,7 @@ void RunEditMenuShowsHistoryItems(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Duplicate"));
   IM_CHECK(ctx->ItemExists("Delete"));
 
-  ctx->PopupCloseAll();
-  ctx->Yield(1);
+  DismissOpenPopupByClickingOutside(ctx);
 
   CaptureIfEnabled(ctx, state, "editor_ui__edit_menu_shows_history_items.png");
   LogInfo("UI scenario done: editor_ui/edit_menu_shows_history_items");
@@ -2056,10 +2022,8 @@ void RunCloseEditorButton(ImGuiTestContext *ctx) {
   // appears instead of immediately closing the editor
   const ImGuiID addPopupIdClose =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdClose) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdClose)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2169,10 +2133,8 @@ void RunFileNewSceneCancelDirty(ImGuiTestContext *ctx) {
   // Add a Panel to make the document dirty
   const ImGuiID addPopupIdDirty =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdDirty) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdDirty)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2180,10 +2142,8 @@ void RunFileNewSceneCancelDirty(ImGuiTestContext *ctx) {
   const ImGuiID filePopupIdDirty =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "New Scene");
   IM_CHECK(filePopupIdDirty != ImGuiID(0));
-  if (!filePopupIdDirty) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdDirty)
     return;
-  }
 
   LogDebug("UI scenario action: click New Scene");
   ctx->ItemClick("New Scene");
@@ -2235,18 +2195,15 @@ void RunFileOpenSceneDismiss(ImGuiTestContext *ctx) {
   const ImGuiID filePopupIdOpen =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Open Scene...");
   IM_CHECK(filePopupIdOpen != ImGuiID(0));
-  if (!filePopupIdOpen) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdOpen)
     return;
-  }
 
   LogDebug("UI scenario action: click Open Scene...");
   ctx->ItemClick("Open Scene...");
   ctx->Yield(2);
 
-  // Dismiss any system dialog or pending action with Escape
-  ctx->PopupCloseAll();
-  ctx->Yield(2);
+  // Dismiss any system dialog or pending action with Escape.
+  DismissOpenPopupByClickingOutside(ctx);
 
   // Toolbar should still be accessible
   ctx->SetRef("##toolbar");
@@ -2280,10 +2237,8 @@ void RunFileResetLayout(ImGuiTestContext *ctx) {
   const ImGuiID filePopupIdReset =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Reset Layout");
   IM_CHECK(filePopupIdReset != ImGuiID(0));
-  if (!filePopupIdReset) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdReset)
     return;
-  }
 
   LogDebug("UI scenario action: click Reset Layout");
   ctx->ItemClick("Reset Layout");
@@ -2322,10 +2277,8 @@ void RunViewFlyModeActivate(ImGuiTestContext *ctx) {
   const ImGuiID viewPopupIdFly =
       OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Fly Mode");
   IM_CHECK(viewPopupIdFly != ImGuiID(0));
-  if (!viewPopupIdFly) {
-    ctx->PopupCloseAll();
+  if (!viewPopupIdFly)
     return;
-  }
 
   LogDebug("UI scenario action: click Fly Mode to activate");
   ctx->ItemClick("Fly Mode");
@@ -2338,8 +2291,6 @@ void RunViewFlyModeActivate(ImGuiTestContext *ctx) {
     LogDebug("UI scenario action: click Fly Mode to deactivate");
     ctx->ItemClick("Fly Mode");
     ctx->Yield(2);
-  } else {
-    ctx->PopupCloseAll();
   }
 
   CaptureIfEnabled(ctx, state, "editor_ui__view_fly_mode_activate.png");
@@ -2370,10 +2321,8 @@ void RunSettingsModalApplyButton(ImGuiTestContext *ctx) {
   const ImGuiID filePopupIdApply =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Settings...");
   IM_CHECK(filePopupIdApply != ImGuiID(0));
-  if (!filePopupIdApply) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdApply)
     return;
-  }
 
   LogDebug("UI scenario action: open Settings modal");
   ctx->ItemClick("Settings...");
@@ -2383,7 +2332,7 @@ void RunSettingsModalApplyButton(ImGuiTestContext *ctx) {
       ctx, 60, [ctx]() { return ctx->ItemExists("Editor Settings/Apply"); });
   IM_CHECK(modalReady);
   if (!modalReady) {
-    ctx->PopupCloseAll();
+    ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
     return;
   }
 
@@ -2427,10 +2376,8 @@ void RunSettingsModalPortInput(ImGuiTestContext *ctx) {
 
   const ImGuiID filePopupIdPort =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Settings...");
-  if (!filePopupIdPort) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdPort)
     return;
-  }
 
   ctx->ItemClick("Settings...");
   ctx->Yield(2);
@@ -2439,7 +2386,7 @@ void RunSettingsModalPortInput(ImGuiTestContext *ctx) {
       ctx, 60, [ctx]() { return ctx->ItemExists("Editor Settings/Port"); });
   IM_CHECK(modalReady);
   if (!modalReady) {
-    ctx->PopupCloseAll();
+    ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
     return;
   }
 
@@ -2499,7 +2446,7 @@ void RunCreateAssetModalFillCancel(ImGuiTestContext *ctx) {
       ctx, 60, [ctx]() { return ctx->ItemExists("Create Asset/##draft_id"); });
   IM_CHECK(modalReady);
   if (!modalReady) {
-    ctx->PopupCloseAll();
+    ClickModalButtonIfPresent(ctx, "Create Asset", "Cancel");
     return;
   }
 
@@ -2553,10 +2500,8 @@ void RunDeleteConfirmModalAccept(ImGuiTestContext *ctx) {
   // Add a Panel so there is an object to delete
   const ImGuiID addPopupIdConfirm =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdConfirm) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdConfirm)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2575,10 +2520,8 @@ void RunDeleteConfirmModalAccept(ImGuiTestContext *ctx) {
   const ImGuiID editPopupIdConfirm =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Delete");
   IM_CHECK(editPopupIdConfirm != ImGuiID(0));
-  if (!editPopupIdConfirm) {
-    ctx->PopupCloseAll();
+  if (!editPopupIdConfirm)
     return;
-  }
 
   ctx->ItemClick("Delete");
   ctx->Yield(2);
@@ -2649,10 +2592,8 @@ void RunSceneHeaderContextAddPanel(ImGuiTestContext *ctx) {
   // Find scene context menu popup using OpenPopupStack
   const ImGuiID sceneCtxId = WaitForPopup(ctx, 0, "Add");
   IM_CHECK(sceneCtxId != ImGuiID(0));
-  if (!sceneCtxId) {
-    ctx->PopupCloseAll();
+  if (!sceneCtxId)
     return;
-  }
 
   IM_CHECK(ctx->ItemExists("Add"));
   IM_CHECK(ctx->ItemExists("Save Scene"));
@@ -2668,8 +2609,7 @@ void RunSceneHeaderContextAddPanel(ImGuiTestContext *ctx) {
     ctx->ItemClick("Panel");
     ctx->Yield(3);
   } else {
-    ctx->PopupCloseAll();
-    ctx->Yield(1);
+    DismissOpenPopupByClickingOutside(ctx);
   }
 
   CaptureIfEnabled(ctx, state, "editor_ui__scene_header_context_add_panel.png");
@@ -2700,10 +2640,8 @@ void RunHierarchyContextMenuAddChild(ImGuiTestContext *ctx) {
   // Add a Panel as the parent object
   const ImGuiID addPopupIdChild =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdChild) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdChild)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2730,7 +2668,6 @@ void RunHierarchyContextMenuAddChild(ImGuiTestContext *ctx) {
   const ImGuiID objCtxIdChild = WaitForPopup(ctx, 0, "Add");
   IM_CHECK(objCtxIdChild != ImGuiID(0));
   if (!objCtxIdChild) {
-    ctx->PopupCloseAll();
     ctx->SetRef("Hierarchy");
     ctx->ItemInputValue("##object_search", "");
     return;
@@ -2750,8 +2687,7 @@ void RunHierarchyContextMenuAddChild(ImGuiTestContext *ctx) {
     ctx->ItemClick("Prop");
     ctx->Yield(3);
   } else {
-    ctx->PopupCloseAll();
-    ctx->Yield(1);
+    DismissOpenPopupByClickingOutside(ctx);
   }
   // Restore: clear search
   ctx->SetRef("Hierarchy");
@@ -2787,10 +2723,8 @@ void RunEditMenuCreatePrefab(ImGuiTestContext *ctx) {
   // Add a Panel so Edit > Create Prefab is enabled (needs single selection)
   const ImGuiID addPopupIdPrefab =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdPrefab) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdPrefab)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -2806,10 +2740,8 @@ void RunEditMenuCreatePrefab(ImGuiTestContext *ctx) {
   const ImGuiID editPopupIdPrefab =
       OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Create Prefab");
   IM_CHECK(editPopupIdPrefab != ImGuiID(0));
-  if (!editPopupIdPrefab) {
-    ctx->PopupCloseAll();
+  if (!editPopupIdPrefab)
     return;
-  }
 
   IM_CHECK(ctx->ItemExists("Create Prefab"));
   LogDebug("UI scenario action: click Create Prefab");
@@ -2868,8 +2800,7 @@ void RunAssetsPanelSearchOpenDismiss(ImGuiTestContext *ctx) {
     ctx->ItemClick("Close");
     ctx->Yield(2);
   } else {
-    ctx->PopupCloseAll();
-    ctx->Yield(1);
+    DismissOpenPopupByClickingOutside(ctx);
   }
 
   // Assets panel still accessible
@@ -3058,10 +2989,8 @@ void RunHierarchyEmptySpaceContextAdd(ImGuiTestContext *ctx) {
   // Find context menu popup using OpenPopupStack
   const ImGuiID emptyCtxId = WaitForPopup(ctx, 0, "Add");
   IM_CHECK(emptyCtxId != ImGuiID(0));
-  if (!emptyCtxId) {
-    ctx->PopupCloseAll();
+  if (!emptyCtxId)
     return;
-  }
 
   IM_CHECK(ctx->ItemExists("Add"));
 
@@ -3077,8 +3006,7 @@ void RunHierarchyEmptySpaceContextAdd(ImGuiTestContext *ctx) {
     ctx->ItemClick("Light");
     ctx->Yield(3);
   } else {
-    ctx->PopupCloseAll();
-    ctx->Yield(1);
+    DismissOpenPopupByClickingOutside(ctx);
   }
 
   CaptureIfEnabled(ctx, state,
@@ -3110,20 +3038,16 @@ void RunUnsavedChangesDiscard(ImGuiTestContext *ctx) {
   // Add a Panel to dirty the document
   const ImGuiID addPopupIdDiscard =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopupIdDiscard) {
-    ctx->PopupCloseAll();
+  if (!addPopupIdDiscard)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
   // File > New Scene to trigger Unsaved Changes modal
   const ImGuiID filePopupIdDiscard =
       OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "New Scene");
-  if (!filePopupIdDiscard) {
-    ctx->PopupCloseAll();
+  if (!filePopupIdDiscard)
     return;
-  }
 
   ctx->ItemClick("New Scene");
   ctx->Yield(3);
@@ -3415,10 +3339,10 @@ void RunMcpOpenSettingsFromTab(ImGuiTestContext *ctx) {
   IM_CHECK(modalReady);
 
   // Close the modal cleanly
-  if (ctx->ItemExists("Editor Settings/Cancel"))
-    ctx->ItemClick("Editor Settings/Cancel");
-  else
-    ctx->PopupCloseAll();
+  if (ctx->ItemExists("Editor Settings/Cancel")) {
+    ctx->SetRef("Editor Settings");
+    ctx->ItemClick("Cancel");
+  }
   ctx->Yield(2);
 
   CaptureIfEnabled(ctx, state, "editor_ui__mcp_open_settings_from_tab.png");
@@ -3457,8 +3381,6 @@ void RunPropertiesPanelNoSelection(ImGuiTestContext *ctx) {
       ctx->ItemClick("Discard");
       ctx->Yield(2);
     }
-  } else {
-    ctx->PopupCloseAll();
   }
 
   // With an empty scene and nothing selected, Properties should show the
@@ -3499,10 +3421,8 @@ void RunPropertiesPanelPanelObjectTransform(ImGuiTestContext *ctx) {
   // Add a Panel via toolbar.
   const ImGuiID addPopup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopup) {
-    ctx->PopupCloseAll();
+  if (!addPopup)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -3559,10 +3479,8 @@ void RunPropertiesPanelLightObjectFields(ImGuiTestContext *ctx) {
 
   const ImGuiID addPopup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
-  if (!addPopup) {
-    ctx->PopupCloseAll();
+  if (!addPopup)
     return;
-  }
   ctx->ItemClick("Light");
   ctx->Yield(4);
 
@@ -3621,10 +3539,8 @@ void RunPropertiesPanelIdentitySection(ImGuiTestContext *ctx) {
 
   const ImGuiID addPopup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-  if (!addPopup) {
-    ctx->PopupCloseAll();
+  if (!addPopup)
     return;
-  }
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
@@ -3785,10 +3701,8 @@ void RunAddPropObjectAndCheckProperties(ImGuiTestContext *ctx) {
 
   const ImGuiID addPopup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Prop");
-  if (!addPopup) {
-    ctx->PopupCloseAll();
+  if (!addPopup)
     return;
-  }
   ctx->ItemClick("Prop");
   ctx->Yield(4);
 
@@ -3846,10 +3760,8 @@ void RunHierarchyAddMultipleThenMultiSelect(ImGuiTestContext *ctx) {
   for (int i = 0; i < 2; ++i) {
     const ImGuiID addPop =
         OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
-    if (!addPop) {
-      ctx->PopupCloseAll();
+    if (!addPop)
       return;
-    }
     ctx->ItemClick("Panel");
     ctx->Yield(3);
   }
