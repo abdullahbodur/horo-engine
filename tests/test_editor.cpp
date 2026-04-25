@@ -6426,7 +6426,11 @@ TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows p
     EditorLayer editor;
     editor.LoadDocument(SceneDocument{});
 
-    const auto tmp = std::filesystem::temp_directory_path();
+    const auto tmp = Monolith::Tests::SecureTempBase() /
+                     "horo_editor_project_browser_render";
+    std::filesystem::remove_all(tmp);
+    std::filesystem::create_directories(tmp / "assets");
+    std::ofstream(tmp / "assets" / "scene.json") << "{}";
     editor.SetProjectBrowserRoot(tmp);
     editor.Toggle();
 

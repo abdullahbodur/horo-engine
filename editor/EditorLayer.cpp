@@ -2083,43 +2083,29 @@ namespace Monolith::Editor {
     void EditorLayer::DrawToolbarEditMenuItems(bool hasSelection,
                                                bool hasSingleSelection,
                                                int primaryIdx) {
-        if (!CanUndoHistory())
-            ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z"))
+        if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z", false, CanUndoHistory()))
             UndoHistory();
-        if (!CanUndoHistory())
-            ImGui::EndDisabled();
 
-        if (!CanRedoHistory())
-            ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y"))
+        if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y", false,
+                            CanRedoHistory()))
             RedoHistory();
-        if (!CanRedoHistory())
-            ImGui::EndDisabled();
 
         ImGui::Separator();
 
-        if (!hasSelection)
-            ImGui::BeginDisabled();
-        if (!hasSingleSelection)
-            ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Rename..."))
+        if (ImGui::MenuItem("Rename...", nullptr, false, hasSingleSelection))
             OpenRenameObjectModal(primaryIdx);
-        if (ImGui::MenuItem("Create Prefab")) {
+        if (ImGui::MenuItem("Create Prefab", nullptr, false, hasSingleSelection)) {
             std::string prefabError;
             if (!CreatePrefabFromSelection(&prefabError))
                 LogError("[Editor] Create prefab failed: {}", prefabError);
         }
-        if (!hasSingleSelection)
-            ImGui::EndDisabled();
-        if (ImGui::MenuItem("Duplicate"))
+        if (ImGui::MenuItem("Duplicate", nullptr, false, hasSelection))
             DuplicateSelectedObjects();
-        if (ImGui::MenuItem("Delete"))
+        if (ImGui::MenuItem("Delete", nullptr, false, hasSelection))
             RequestDeleteSelectedObjects();
         ImGui::Separator();
-        if (!hasSingleSelection)
-            ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C") && primaryIdx >= 0 &&
+        if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C", false,
+                            hasSingleSelection) && primaryIdx >= 0 &&
             primaryIdx < static_cast<int>(m_document.objects.size())) {
             const std::string ref = BuildSelectionRefCode(
                 m_document.objects[static_cast<size_t>(primaryIdx)], primaryIdx);
@@ -2127,10 +2113,6 @@ namespace Monolith::Editor {
             m_clipboardToastLabel = "Reference copied";
             m_clipboardToastTime = 1.5f;
         }
-        if (!hasSingleSelection)
-            ImGui::EndDisabled();
-        if (!hasSelection)
-            ImGui::EndDisabled();
     }
 
     void EditorLayer::DrawToolbarEditMenu(bool hasSelection, bool hasSingleSelection,
