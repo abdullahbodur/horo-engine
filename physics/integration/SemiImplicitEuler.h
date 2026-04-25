@@ -1,9 +1,9 @@
 #pragma once
 
 namespace Monolith {
-class RigidBody;
+    class RigidBody;
 
-namespace SemiImplicitEuler {
-void Integrate(RigidBody &body, float dt);
-} // namespace SemiImplicitEuler
+    namespace SemiImplicitEuler {
+        void Integrate(RigidBody &body, float dt);
+    } // namespace SemiImplicitEuler
 } // namespace Monolith

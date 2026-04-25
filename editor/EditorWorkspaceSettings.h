@@ -6,27 +6,27 @@
 #include <nlohmann/json.hpp>
 
 namespace Monolith::Editor {
-struct EditorWorkspaceState {
-  bool consoleShowInfo = true;
-  bool consoleShowWarn = true;
-  bool consoleShowError = true;
-  std::string projectBrowserCwd;
-};
+    struct EditorWorkspaceState {
+        bool consoleShowInfo = true;
+        bool consoleShowWarn = true;
+        bool consoleShowError = true;
+        std::string projectBrowserCwd;
+    };
 
-struct EditorWorkspaceDocument {
-  EditorWorkspaceState state;
-  nlohmann::json rootJson = nlohmann::json::object();
-  bool loadedFromDisk = false;
-  bool parseError = false;
-  std::string error;
-};
+    struct EditorWorkspaceDocument {
+        EditorWorkspaceState state;
+        nlohmann::json rootJson = nlohmann::json::object();
+        bool loadedFromDisk = false;
+        bool parseError = false;
+        std::string error;
+    };
 
-std::filesystem::path ResolveEditorLayoutPath();
+    std::filesystem::path ResolveEditorLayoutPath();
 
-std::filesystem::path ResolveEditorWorkspacePath();
+    std::filesystem::path ResolveEditorWorkspacePath();
 
-EditorWorkspaceDocument LoadEditorWorkspaceDocument();
+    EditorWorkspaceDocument LoadEditorWorkspaceDocument();
 
-bool SaveEditorWorkspaceDocument(EditorWorkspaceDocument *doc,
-                                 std::string *outError);
+    bool SaveEditorWorkspaceDocument(EditorWorkspaceDocument *doc,
+                                     std::string *outError);
 } // namespace Monolith::Editor

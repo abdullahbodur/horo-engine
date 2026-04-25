@@ -19,106 +19,106 @@
 #include "input/Input.h"
 
 namespace Monolith {
-namespace fs = std::filesystem;
+    namespace fs = std::filesystem;
 
-static fs::path GetExePath() {
+    static fs::path GetExePath() {
 #ifdef __APPLE__
-  auto buf = std::array<char, 4096>{};
-  if (auto size = static_cast<uint32_t>(buf.size());
-      _NSGetExecutablePath(buf.data(), &size) == 0)
-    return fs::canonical(buf.data());
-  return {};
+        auto buf = std::array<char, 4096>{};
+        if (auto size = static_cast<uint32_t>(buf.size());
+            _NSGetExecutablePath(buf.data(), &size) == 0)
+            return fs::canonical(buf.data());
+        return {};
 #elif defined(_WIN32)
-  auto buf = std::array<wchar_t, MAX_PATH>{};
-  if (const DWORD len = GetModuleFileNameW(nullptr, buf.data(),
-                                           static_cast<DWORD>(buf.size()));
-      len > 0)
-    return fs::path(buf.data());
-  return {};
+        auto buf = std::array<wchar_t, MAX_PATH>{};
+        if (const DWORD len = GetModuleFileNameW(nullptr, buf.data(),
+                                                 static_cast<DWORD>(buf.size()));
+            len > 0)
+            return fs::path(buf.data());
+        return {};
 #else
-  std::string exePath;
-  exePath.resize(4096);
-  const ssize_t len =
-      readlink("/proc/self/exe", exePath.data(), exePath.size() - 1);
-  if (len > 0) {
-    exePath.resize(static_cast<size_t>(len));
-    return fs::path(exePath);
-  }
-  return {};
+        std::string exePath;
+        exePath.resize(4096);
+        const ssize_t len =
+                readlink("/proc/self/exe", exePath.data(), exePath.size() - 1);
+        if (len > 0) {
+            exePath.resize(static_cast<size_t>(len));
+            return fs::path(exePath);
+        }
+        return {};
 #endif
-}
+    }
 
-Application::Application(const AppSpec &spec) {
-  // Normalize CWD to the exe directory so relative asset paths always resolve.
-  auto exePath = GetExePath();
-  auto exeDir = exePath.empty() ? fs::current_path() : exePath.parent_path();
-  {
-    std::error_code ec;
-    fs::current_path(exeDir, ec);
-    if (ec)
-      LogWarn("Application: could not chdir to exe dir ({}): {}",
-              exeDir.string(), ec.message());
-  }
+    Application::Application(const AppSpec &spec) {
+        // Normalize CWD to the exe directory so relative asset paths always resolve.
+        auto exePath = GetExePath();
+        auto exeDir = exePath.empty() ? fs::current_path() : exePath.parent_path();
+        {
+            std::error_code ec;
+            fs::current_path(exeDir, ec);
+            if (ec)
+                LogWarn("Application: could not chdir to exe dir ({}): {}",
+                        exeDir.string(), ec.message());
+        }
 
-  ProjectPath::Init(exeDir);
+        ProjectPath::Init(exeDir);
 
-  if (!spec.defaultSceneFile.empty())
-    m_defaultSceneFilePath =
-        ProjectPath::Resolve(spec.defaultSceneFile).string();
+        if (!spec.defaultSceneFile.empty())
+            m_defaultSceneFilePath =
+                    ProjectPath::Resolve(spec.defaultSceneFile).string();
 
-  WindowSpec ws;
-  ws.title = spec.name;
-  ws.width = spec.width;
-  ws.height = spec.height;
-  ws.vsync = spec.vsync;
-  ws.graphicsApi = spec.graphicsApi;
+        WindowSpec ws;
+        ws.title = spec.name;
+        ws.width = spec.width;
+        ws.height = spec.height;
+        ws.vsync = spec.vsync;
+        ws.graphicsApi = spec.graphicsApi;
 
-  m_window = std::make_unique<Window>(ws);
-  m_window->SetCloseCallback([this]() { m_running = false; });
+        m_window = std::make_unique<Window>(ws);
+        m_window->SetCloseCallback([this]() { m_running = false; });
 
-  Input::Init(m_window->GetNativeHandle());
-}
+        Input::Init(m_window->GetNativeHandle());
+    }
 
-Application::~Application() = default;
+    Application::~Application() = default;
 
-void Application::ParseArgs(int argc, char **argv) {
-  m_editorStartupCli = ParseEditorStartupCli(argc, argv);
-}
+    void Application::ParseArgs(int argc, char **argv) {
+        m_editorStartupCli = ParseEditorStartupCli(argc, argv);
+    }
 
-bool Application::ShouldStartWithEditor() const {
+    bool Application::ShouldStartWithEditor() const {
 #ifdef NDEBUG
-  constexpr bool kReleaseDefaults = true;
+        constexpr bool kReleaseDefaults = true;
 #else
-  constexpr bool kReleaseDefaults = false;
+        constexpr bool kReleaseDefaults = false;
 #endif
-  return Monolith::ShouldStartWithEditor(m_editorStartupCli, kReleaseDefaults);
-}
+        return Monolith::ShouldStartWithEditor(m_editorStartupCli, kReleaseDefaults);
+    }
 
-void Application::Run() {
-  OnInit();
+    void Application::Run() {
+        OnInit();
 
-  // Initialise GLFW timer
-  // glfwGetTime() starts at construction, so first Tick() will give a tiny
-  // delta — fine.
+        // Initialise GLFW timer
+        // glfwGetTime() starts at construction, so first Tick() will give a tiny
+        // delta — fine.
 
-  while (m_running && !m_window->ShouldClose()) {
-    Time::Tick();
-    m_window->PollEvents();
-    Input::Poll();
+        while (m_running && !m_window->ShouldClose()) {
+            Time::Tick();
+            m_window->PollEvents();
+            Input::Poll();
 
-    // Fixed-step loop
-    while (Time::ConsumeFixedStep())
-      OnFixedUpdate(Time::FIXED_DT);
+            // Fixed-step loop
+            while (Time::ConsumeFixedStep())
+                OnFixedUpdate(Time::FIXED_DT);
 
-    float alpha = Time::GetInterpolationAlpha();
-    OnUpdate(Time::DeltaTime());
-    OnRender(alpha);
+            float alpha = Time::GetInterpolationAlpha();
+            OnUpdate(Time::DeltaTime());
+            OnRender(alpha);
 
-    if (m_window->OwnsPresentation())
-      m_window->SwapBuffers();
-  }
+            if (m_window->OwnsPresentation())
+                m_window->SwapBuffers();
+        }
 
-  OnShutdown();
-  LogInfo("Application shut down cleanly.");
-}
+        OnShutdown();
+        LogInfo("Application shut down cleanly.");
+    }
 } // namespace Monolith

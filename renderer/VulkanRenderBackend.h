@@ -10,217 +10,217 @@
 #include "renderer/RenderTargetHandle.h"
 
 namespace Monolith {
-class VulkanRenderBackend : public IRenderBackend {
-public:
-  using OverlayRenderCallback =
-      std::function<void(void *userData, void *commandBufferHandle)>;
+    class VulkanRenderBackend : public IRenderBackend {
+    public:
+        using OverlayRenderCallback =
+        std::function<void(void *userData, void *commandBufferHandle)>;
 
-  explicit VulkanRenderBackend(void *nativeWindowHandle);
+        explicit VulkanRenderBackend(void *nativeWindowHandle);
 
-  ~VulkanRenderBackend() override;
+        ~VulkanRenderBackend() override;
 
-  VulkanRenderBackend(const VulkanRenderBackend &) = delete;
+        VulkanRenderBackend(const VulkanRenderBackend &) = delete;
 
-  VulkanRenderBackend &operator=(const VulkanRenderBackend &) = delete;
+        VulkanRenderBackend &operator=(const VulkanRenderBackend &) = delete;
 
-  VulkanRenderBackend(VulkanRenderBackend &&) = delete;
+        VulkanRenderBackend(VulkanRenderBackend &&) = delete;
 
-  VulkanRenderBackend &operator=(VulkanRenderBackend &&) = delete;
+        VulkanRenderBackend &operator=(VulkanRenderBackend &&) = delete;
 
-  void BeginFrame(const RenderFrameConfig &frame) override;
+        void BeginFrame(const RenderFrameConfig &frame) override;
 
-  void EndFrame() override;
+        void EndFrame() override;
 
-  void BeginPass(const RenderPassConfig &pass) override;
+        void BeginPass(const RenderPassConfig &pass) override;
 
-  void EndPass() override;
+        void EndPass() override;
 
-  void DrawMesh(const MeshDrawCommand &command) override;
+        void DrawMesh(const MeshDrawCommand &command) override;
 
-  void DrawSkinnedMesh(const SkinnedMeshDrawCommand &command) override;
+        void DrawSkinnedMesh(const SkinnedMeshDrawCommand &command) override;
 
-  void DrawWireframe(const WireframeDrawCommand &command) override;
+        void DrawWireframe(const WireframeDrawCommand &command) override;
 
-  bool ReadbackColorBgr8(int width, int height, std::vector<uint8_t> &outPixels,
-                         std::string *outError) override;
+        bool ReadbackColorBgr8(int width, int height, std::vector<uint8_t> &outPixels,
+                               std::string *outError) override;
 
-  bool ReadbackDepth32F(int width, int height, std::vector<float> &outDepth,
-                        std::string *outError) override;
+        bool ReadbackDepth32F(int width, int height, std::vector<float> &outDepth,
+                              std::string *outError) override;
 
-  bool EnsureEditorViewportRenderTarget(uint32_t width, uint32_t height,
-                                        std::string *outError) override;
-
-  bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
-                                              bool needsYFlip,
+        bool EnsureEditorViewportRenderTarget(uint32_t width, uint32_t height,
                                               std::string *outError) override;
 
-  RenderBackendId GetBackendId() const override {
-    return RenderBackendId::Vulkan;
-  }
+        bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
+                                                    bool needsYFlip,
+                                                    std::string *outError) override;
 
-  RenderBackendCapabilities GetCapabilities() const override;
+        RenderBackendId GetBackendId() const override {
+            return RenderBackendId::Vulkan;
+        }
 
-  int GetDrawCallCount() const override { return m_drawCalls; }
+        RenderBackendCapabilities GetCapabilities() const override;
 
-  bool IsInitialized() const;
+        int GetDrawCallCount() const override { return m_drawCalls; }
 
-  bool HasOpaqueRasterScaffold() const;
+        bool IsInitialized() const;
 
-  bool HasOpaquePipelineCreationScaffold() const;
+        bool HasOpaqueRasterScaffold() const;
 
-  bool HasOpaqueShaderPipelineScaffold() const;
+        bool HasOpaquePipelineCreationScaffold() const;
 
-  bool HasOpaqueGraphicsPipelineScaffold() const;
+        bool HasOpaqueShaderPipelineScaffold() const;
 
-  bool HasOpaqueDrawExecutionReady() const;
+        bool HasOpaqueGraphicsPipelineScaffold() const;
 
-  bool TryGetImGuiVulkanInitData(void **outInstance, void **outPhysicalDevice,
-                                 void **outDevice, uint32_t *outQueueFamily,
-                                 void **outQueue, void **outRenderPass,
-                                 uint32_t *outImageCount) const;
+        bool HasOpaqueDrawExecutionReady() const;
 
-  void *GetActiveCommandBufferHandle() const;
+        bool TryGetImGuiVulkanInitData(void **outInstance, void **outPhysicalDevice,
+                                       void **outDevice, uint32_t *outQueueFamily,
+                                       void **outQueue, void **outRenderPass,
+                                       uint32_t *outImageCount) const;
 
-  void QueueOverlayRenderCallback(OverlayRenderCallback callback,
-                                  void *userData);
+        void *GetActiveCommandBufferHandle() const;
 
-  const std::string &GetLastError() const { return m_lastError; }
+        void QueueOverlayRenderCallback(OverlayRenderCallback callback,
+                                        void *userData);
 
-  int GetExecutedOpaqueIndexedDrawCount() const {
-    return m_executedOpaqueIndexedDraws;
-  }
+        const std::string &GetLastError() const { return m_lastError; }
 
-  struct OffscreenTargetMetadata {
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint64_t generation = 0;
-    bool readyForSampling = false;
-    bool hasImGuiDescriptor = false;
-  };
+        int GetExecutedOpaqueIndexedDrawCount() const {
+            return m_executedOpaqueIndexedDraws;
+        }
 
-  bool EnsureOffscreenRenderTarget(const std::string &targetKey, uint32_t width,
-                                   uint32_t height);
+        struct OffscreenTargetMetadata {
+            uint32_t width = 0;
+            uint32_t height = 0;
+            uint64_t generation = 0;
+            bool readyForSampling = false;
+            bool hasImGuiDescriptor = false;
+        };
 
-  bool TryGetOffscreenRenderTargetHandle(const std::string &targetKey,
-                                         RenderTargetHandle *outHandle,
-                                         bool needsYFlip = false);
+        bool EnsureOffscreenRenderTarget(const std::string &targetKey, uint32_t width,
+                                         uint32_t height);
 
-  bool TryGetOffscreenRenderTargetMetadata(
-      const std::string &targetKey, OffscreenTargetMetadata *outMetadata) const;
+        bool TryGetOffscreenRenderTargetHandle(const std::string &targetKey,
+                                               RenderTargetHandle *outHandle,
+                                               bool needsYFlip = false);
 
-  void DestroyOffscreenRenderTarget(const std::string &targetKey);
+        bool TryGetOffscreenRenderTargetMetadata(
+            const std::string &targetKey, OffscreenTargetMetadata *outMetadata) const;
 
-  void DestroyAllOffscreenRenderTargets();
+        void DestroyOffscreenRenderTarget(const std::string &targetKey);
 
-  struct TranslatedMaterialState {
-    Vec4 baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
-    float roughness = 0.5f;
-    float metallic = 0.0f;
-    float uvScale = 1.0f;
-    bool usesAlbedoMap = false;
-    bool usesCustomShader = false;
-  };
+        void DestroyAllOffscreenRenderTargets();
 
-  struct OpaquePipelineKey {
-    bool usesAlbedoMap = false;
-    bool usesCustomShader = false;
-    bool writesDepth = true;
-    bool depthTestEnabled = true;
-  };
+        struct TranslatedMaterialState {
+            Vec4 baseColor = {1.0f, 1.0f, 1.0f, 1.0f};
+            float roughness = 0.5f;
+            float metallic = 0.0f;
+            float uvScale = 1.0f;
+            bool usesAlbedoMap = false;
+            bool usesCustomShader = false;
+        };
 
-  static TranslatedMaterialState
-  TranslateMaterialState(const Material &material);
+        struct OpaquePipelineKey {
+            bool usesAlbedoMap = false;
+            bool usesCustomShader = false;
+            bool writesDepth = true;
+            bool depthTestEnabled = true;
+        };
 
-  static int ResolveIndexCount(const Mesh &mesh);
+        static TranslatedMaterialState
+        TranslateMaterialState(const Material &material);
 
-  static OpaquePipelineKey
-  BuildOpaquePipelineKey(const TranslatedMaterialState &materialState);
+        static int ResolveIndexCount(const Mesh &mesh);
 
-private:
-  struct Context;
+        static OpaquePipelineKey
+        BuildOpaquePipelineKey(const TranslatedMaterialState &materialState);
 
-  bool Initialize(void *nativeWindowHandle);
+    private:
+        struct Context;
 
-  void Shutdown();
+        bool Initialize(void *nativeWindowHandle);
 
-  bool RecreateSwapchain();
+        void Shutdown();
 
-  void DestroySwapchain();
+        bool RecreateSwapchain();
 
-  bool CreateOpaqueRasterScaffold();
+        void DestroySwapchain();
 
-  void DestroyOpaqueRasterScaffold();
+        bool CreateOpaqueRasterScaffold();
 
-  bool CreateOpaquePipelineCreationScaffold();
+        void DestroyOpaqueRasterScaffold();
 
-  void DestroyOpaquePipelineCreationScaffold();
+        bool CreateOpaquePipelineCreationScaffold();
 
-  bool CreateDepthResources();
+        void DestroyOpaquePipelineCreationScaffold();
 
-  void DestroyDepthResources();
+        bool CreateDepthResources();
 
-  bool EnsureReadbackBuffers();
+        void DestroyDepthResources();
 
-  void DestroyReadbackBuffers();
+        bool EnsureReadbackBuffers();
 
-  bool CreateOpaqueMaterialBindingScaffold();
+        void DestroyReadbackBuffers();
 
-  void DestroyOpaqueMaterialBindingScaffold();
+        bool CreateOpaqueMaterialBindingScaffold();
 
-  bool CreateOpaqueDrawIndexBuffer();
+        void DestroyOpaqueMaterialBindingScaffold();
 
-  void DestroyOpaqueDrawIndexBuffer();
+        bool CreateOpaqueDrawIndexBuffer();
 
-  bool EnsureOpaqueMeshGpuBuffers(const Mesh &mesh);
+        void DestroyOpaqueDrawIndexBuffer();
 
-  void DestroyOpaqueMeshGpuBuffers();
+        bool EnsureOpaqueMeshGpuBuffers(const Mesh &mesh);
 
-  bool GetOrCreateOpaquePipeline(const OpaquePipelineKey &key,
-                                 void **outPipelineHandle);
+        void DestroyOpaqueMeshGpuBuffers();
 
-  bool CreateOpaqueShaderPipelineScaffold();
+        bool GetOrCreateOpaquePipeline(const OpaquePipelineKey &key,
+                                       void **outPipelineHandle);
 
-  void DestroyOpaqueShaderPipelineScaffold();
+        bool CreateOpaqueShaderPipelineScaffold();
 
-  bool CreateOpaqueGraphicsPipelineScaffold();
+        void DestroyOpaqueShaderPipelineScaffold();
 
-  void DestroyOpaqueGraphicsPipelineScaffold();
+        bool CreateOpaqueGraphicsPipelineScaffold();
 
-  bool RecordFrameCommands(const RenderFrameConfig &frame);
+        void DestroyOpaqueGraphicsPipelineScaffold();
 
-  bool EnsureOffscreenRenderPass();
+        bool RecordFrameCommands(const RenderFrameConfig &frame);
 
-  void DestroyOffscreenRenderPass();
+        bool EnsureOffscreenRenderPass();
 
-  bool CreateOffscreenRenderTargetResources(const std::string &targetKey,
-                                            uint32_t width, uint32_t height,
-                                            uint64_t previousGeneration);
+        void DestroyOffscreenRenderPass();
 
-  void DestroyOffscreenRenderTargetResources(const std::string &targetKey);
+        bool CreateOffscreenRenderTargetResources(const std::string &targetKey,
+                                                  uint32_t width, uint32_t height,
+                                                  uint64_t previousGeneration);
 
-  bool TryRegisterOffscreenTargetImGuiDescriptor(const std::string &targetKey,
-                                                 RenderTargetHandle *outHandle,
-                                                 bool needsYFlip);
+        void DestroyOffscreenRenderTargetResources(const std::string &targetKey);
 
-  struct PendingOpaqueDraw {
-    const Mesh *mesh = nullptr;
-    int indexCount = 0;
-    Mat4 modelMatrix = Mat4::Identity();
-    TranslatedMaterialState material;
-    OpaquePipelineKey pipelineKey;
-  };
+        bool TryRegisterOffscreenTargetImGuiDescriptor(const std::string &targetKey,
+                                                       RenderTargetHandle *outHandle,
+                                                       bool needsYFlip);
 
-  std::unique_ptr<Context> m_context;
-  RenderFrameConfig m_activeFrame;
-  RenderView m_activeView;
-  std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
-  OverlayRenderCallback m_pendingOverlayRenderCallback = nullptr;
-  void *m_pendingOverlayRenderUserData = nullptr;
-  std::string m_lastError;
-  RenderPassId m_activePassId = RenderPassId::OpaqueScene;
-  int m_drawCalls = 0;
-  int m_executedOpaqueIndexedDraws = 0;
-  bool m_frameActive = false;
-  bool m_passActive = false;
-};
+        struct PendingOpaqueDraw {
+            const Mesh *mesh = nullptr;
+            int indexCount = 0;
+            Mat4 modelMatrix = Mat4::Identity();
+            TranslatedMaterialState material;
+            OpaquePipelineKey pipelineKey;
+        };
+
+        std::unique_ptr<Context> m_context;
+        RenderFrameConfig m_activeFrame;
+        RenderView m_activeView;
+        std::vector<PendingOpaqueDraw> m_pendingOpaqueDraws;
+        OverlayRenderCallback m_pendingOverlayRenderCallback = nullptr;
+        void *m_pendingOverlayRenderUserData = nullptr;
+        std::string m_lastError;
+        RenderPassId m_activePassId = RenderPassId::OpaqueScene;
+        int m_drawCalls = 0;
+        int m_executedOpaqueIndexedDraws = 0;
+        bool m_frameActive = false;
+        bool m_passActive = false;
+    };
 } // namespace Monolith

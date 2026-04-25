@@ -4,10 +4,10 @@
 #include <string_view>
 
 namespace Monolith {
-enum class LogLevel { Debug, Info, Warn, Error };
+    enum class LogLevel { Debug, Info, Warn, Error };
 
-void LogImpl(LogLevel level, const std::source_location &loc,
-             std::string_view message);
+    void LogImpl(LogLevel level, const std::source_location &loc,
+                 std::string_view message);
 } // namespace Monolith
 
 // ---------------------------------------------------------------------------
@@ -36,46 +36,50 @@ void LogImpl(LogLevel level, const std::source_location &loc,
 //   LogInfo("editor ready");
 // ---------------------------------------------------------------------------
 
-template <typename... Args> struct LogDebug {
-  LogDebug(std::format_string<Args...> fmt, const Args &...args,
-           std::source_location loc = std::source_location::current()) {
-    Monolith::LogImpl(Monolith::LogLevel::Debug, loc,
-                      std::vformat(fmt.get(), std::make_format_args(args...)));
-  }
+template<typename... Args>
+struct LogDebug {
+    LogDebug(std::format_string<Args...> fmt, const Args &... args,
+             std::source_location loc = std::source_location::current()) {
+        Monolith::LogImpl(Monolith::LogLevel::Debug, loc,
+                          std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
 };
 
-template <typename... Args>
+template<typename... Args>
 LogDebug(std::format_string<Args...>, const Args &...) -> LogDebug<Args...>;
 
-template <typename... Args> struct LogInfo {
-  LogInfo(std::format_string<Args...> fmt, const Args &...args,
-          std::source_location loc = std::source_location::current()) {
-    Monolith::LogImpl(Monolith::LogLevel::Info, loc,
-                      std::vformat(fmt.get(), std::make_format_args(args...)));
-  }
+template<typename... Args>
+struct LogInfo {
+    LogInfo(std::format_string<Args...> fmt, const Args &... args,
+            std::source_location loc = std::source_location::current()) {
+        Monolith::LogImpl(Monolith::LogLevel::Info, loc,
+                          std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
 };
 
-template <typename... Args>
+template<typename... Args>
 LogInfo(std::format_string<Args...>, const Args &...) -> LogInfo<Args...>;
 
-template <typename... Args> struct LogWarn {
-  LogWarn(std::format_string<Args...> fmt, const Args &...args,
-          std::source_location loc = std::source_location::current()) {
-    Monolith::LogImpl(Monolith::LogLevel::Warn, loc,
-                      std::vformat(fmt.get(), std::make_format_args(args...)));
-  }
+template<typename... Args>
+struct LogWarn {
+    LogWarn(std::format_string<Args...> fmt, const Args &... args,
+            std::source_location loc = std::source_location::current()) {
+        Monolith::LogImpl(Monolith::LogLevel::Warn, loc,
+                          std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
 };
 
-template <typename... Args>
+template<typename... Args>
 LogWarn(std::format_string<Args...>, const Args &...) -> LogWarn<Args...>;
 
-template <typename... Args> struct LogError {
-  LogError(std::format_string<Args...> fmt, const Args &...args,
-           std::source_location loc = std::source_location::current()) {
-    Monolith::LogImpl(Monolith::LogLevel::Error, loc,
-                      std::vformat(fmt.get(), std::make_format_args(args...)));
-  }
+template<typename... Args>
+struct LogError {
+    LogError(std::format_string<Args...> fmt, const Args &... args,
+             std::source_location loc = std::source_location::current()) {
+        Monolith::LogImpl(Monolith::LogLevel::Error, loc,
+                          std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
 };
 
-template <typename... Args>
+template<typename... Args>
 LogError(std::format_string<Args...>, const Args &...) -> LogError<Args...>;

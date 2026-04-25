@@ -4,18 +4,18 @@
 #include "scene/Entity.h"
 
 namespace Monolith {
-class Registry;
+    class Registry;
 
-// Abstract per-entity behavior.
-class Behavior {
-public:
-  virtual ~Behavior() = default;
+    // Abstract per-entity behavior.
+    class Behavior {
+    public:
+        virtual ~Behavior() = default;
 
-  virtual void OnUpdate(Entity self, Registry &reg, float dt) = 0;
-};
+        virtual void OnUpdate(Entity self, Registry &reg, float dt) = 0;
+    };
 
-// Component that owns one behavior instance.
-struct BehaviorComponent {
-  std::unique_ptr<Behavior> behavior;
-};
+    // Component that owns one behavior instance.
+    struct BehaviorComponent {
+        std::unique_ptr<Behavior> behavior;
+    };
 } // namespace Monolith

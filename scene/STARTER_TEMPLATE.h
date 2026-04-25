@@ -31,105 +31,108 @@
 #include "scene/SceneReferenceRuntime.h"
 
 namespace MyGame {
-class StarterTemplateBackendInitException : public std::runtime_error {
-public:
-  using std::runtime_error::runtime_error;
-};
+    class StarterTemplateBackendInitException : public std::runtime_error {
+    public:
+        using std::runtime_error::runtime_error;
+    };
 
-class StarterTemplateSceneLoadException : public std::runtime_error {
-public:
-  using std::runtime_error::runtime_error;
-};
+    class StarterTemplateSceneLoadException : public std::runtime_error {
+    public:
+        using std::runtime_error::runtime_error;
+    };
 
-// STEP 1: Create a minimal app class.
-class MyGameApp : public Monolith::Application {
-public:
-  MyGameApp() : Application(BuildAppSpec()) {}
+    // STEP 1: Create a minimal app class.
+    class MyGameApp : public Monolith::Application {
+    public:
+        MyGameApp() : Application(BuildAppSpec()) {
+        }
 
-protected:
-  // STEP 2: Setup (called once at startup).
-  void OnInit() override {
-    Monolith::RenderBackendSelection backendSelection;
-    backendSelection.requested = Monolith::RenderBackendId::OpenGL;
-    backendSelection.nativeWindowHandle = GetWindow().GetNativeHandle();
-    if (const Monolith::RenderBackendInitResult backendInit =
-            Monolith::Renderer::InitializeBackend(backendSelection);
-        !backendInit.ok)
-      throw StarterTemplateBackendInitException(
-          "Failed to initialize renderer backend: " + backendInit.error);
+    protected:
+        // STEP 2: Setup (called once at startup).
+        void OnInit() override {
+            Monolith::RenderBackendSelection backendSelection;
+            backendSelection.requested = Monolith::RenderBackendId::OpenGL;
+            backendSelection.nativeWindowHandle = GetWindow().GetNativeHandle();
+            if (const Monolith::RenderBackendInitResult backendInit =
+                        Monolith::Renderer::InitializeBackend(backendSelection);
+                !backendInit.ok)
+                throw StarterTemplateBackendInitException(
+                    "Failed to initialize renderer backend: " + backendInit.error);
 
-    Monolith::DebugDraw::Init();
-    m_referenceRuntime =
-        std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);
+            Monolith::DebugDraw::Init();
+            m_referenceRuntime =
+                    std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);
 
-    if (!GetDefaultSceneFilePath().empty())
-      LoadSceneFromFile(GetDefaultSceneFilePath());
-  }
+            if (!GetDefaultSceneFilePath().empty())
+                LoadSceneFromFile(GetDefaultSceneFilePath());
+        }
 
-  // STEP 3: Game loop (called every frame).
-  void OnUpdate(float dt) override { UpdateCamera(dt); }
+        // STEP 3: Game loop (called every frame).
+        void OnUpdate(float dt) override { UpdateCamera(dt); }
 
-  // STEP 4: Physics simulation (fixed timestep).
-  void OnFixedUpdate(float dt) override { m_scene.UpdateSystems(dt); }
+        // STEP 4: Physics simulation (fixed timestep).
+        void OnFixedUpdate(float dt) override { m_scene.UpdateSystems(dt); }
 
-  // STEP 5: Rendering (variable framerate).
-  void OnRender(float alpha) override {
-    Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
-    Monolith::Renderer::BeginPass({Monolith::RenderPassId::OpaqueScene,
-                                   Monolith::BuildRenderView(m_camera),
-                                   "starter-template-scene"});
-    m_scene.RenderSystems(alpha);
-    Monolith::Renderer::EndPass();
-    Monolith::Renderer::EndFrame();
-  }
+        // STEP 5: Rendering (variable framerate).
+        void OnRender(float alpha) override {
+            Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
+            Monolith::Renderer::BeginPass({
+                Monolith::RenderPassId::OpaqueScene,
+                Monolith::BuildRenderView(m_camera),
+                "starter-template-scene"
+            });
+            m_scene.RenderSystems(alpha);
+            Monolith::Renderer::EndPass();
+            Monolith::Renderer::EndFrame();
+        }
 
-  void OnShutdown() override {
-    if (m_referenceRuntime)
-      m_referenceRuntime->Unload();
-  }
+        void OnShutdown() override {
+            if (m_referenceRuntime)
+                m_referenceRuntime->Unload();
+        }
 
-private:
-  Monolith::Scene m_scene;
-  std::unique_ptr<Monolith::SceneReferenceRuntime> m_referenceRuntime;
-  Monolith::Camera m_camera;
+    private:
+        Monolith::Scene m_scene;
+        std::unique_ptr<Monolith::SceneReferenceRuntime> m_referenceRuntime;
+        Monolith::Camera m_camera;
 
-  static Monolith::AppSpec BuildAppSpec() {
-    Monolith::AppSpec spec;
-    spec.name = "My Game";
-    spec.width = 1280;
-    spec.height = 720;
-    spec.vsync = true;
-    spec.graphicsApi = Monolith::WindowGraphicsApi::OpenGL;
-    spec.defaultSceneFile = "assets/scenes/level.json";
-    return spec;
-  }
+        static Monolith::AppSpec BuildAppSpec() {
+            Monolith::AppSpec spec;
+            spec.name = "My Game";
+            spec.width = 1280;
+            spec.height = 720;
+            spec.vsync = true;
+            spec.graphicsApi = Monolith::WindowGraphicsApi::OpenGL;
+            spec.defaultSceneFile = "assets/scenes/level.json";
+            return spec;
+        }
 
-  void LoadSceneFromFile(const std::string &path) {
-    const Monolith::Editor::SceneDocument doc =
-        Monolith::Editor::SceneSerializer::LoadFromFile(path);
-    const Monolith::SceneRuntimeOperationResult result =
-        m_referenceRuntime->LoadDocument(doc);
-    if (!result.ok) {
-      throw StarterTemplateSceneLoadException("Failed to load scene: " +
-                                              result.error);
-    }
-  }
+        void LoadSceneFromFile(const std::string &path) {
+            const Monolith::Editor::SceneDocument doc =
+                    Monolith::Editor::SceneSerializer::LoadFromFile(path);
+            const Monolith::SceneRuntimeOperationResult result =
+                    m_referenceRuntime->LoadDocument(doc);
+            if (!result.ok) {
+                throw StarterTemplateSceneLoadException("Failed to load scene: " +
+                                                        result.error);
+            }
+        }
 
-  void UpdateCamera(float dt) {
-    (void)dt;
-    const auto &coordinator = m_referenceRuntime->GetCoordinator();
-    if (!coordinator.IsActive())
-      return;
+        void UpdateCamera(float dt) {
+            (void) dt;
+            const auto &coordinator = m_referenceRuntime->GetCoordinator();
+            if (!coordinator.IsActive())
+                return;
 
-    if (const auto &sceneCamera = m_referenceRuntime->GetSceneCamera();
-        sceneCamera.has_value()) {
-      m_camera.position = sceneCamera->position;
-      m_camera.yaw = sceneCamera->yaw;
-      m_camera.pitch = sceneCamera->pitch;
-      m_camera.fov = sceneCamera->fovY;
-    }
-  }
-};
+            if (const auto &sceneCamera = m_referenceRuntime->GetSceneCamera();
+                sceneCamera.has_value()) {
+                m_camera.position = sceneCamera->position;
+                m_camera.yaw = sceneCamera->yaw;
+                m_camera.pitch = sceneCamera->pitch;
+                m_camera.fov = sceneCamera->fovY;
+            }
+        }
+    };
 } // namespace MyGame
 
 /* STEP 6: Create a main entry point in src/main.cpp that constructs

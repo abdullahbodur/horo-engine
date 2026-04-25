@@ -3,90 +3,90 @@
 #include <system_error>
 
 namespace Monolith {
-namespace fs = std::filesystem;
+    namespace fs = std::filesystem;
 
-fs::path ProjectPath::s_root;
-fs::path ProjectPath::s_sdkRoot;
-bool ProjectPath::s_hasExplicitProjectRoot = false;
+    fs::path ProjectPath::s_root;
+    fs::path ProjectPath::s_sdkRoot;
+    bool ProjectPath::s_hasExplicitProjectRoot = false;
 
-static bool IsProjectRoot(const fs::path &dir) {
-  std::error_code ec;
-  const bool hasPresets = fs::exists(dir / "CMakePresets.json", ec) && !ec;
-  const bool hasAssets = fs::is_directory(dir / "assets", ec) && !ec;
-  return hasPresets && hasAssets;
-}
-
-void ProjectPath::Init(const fs::path &exeDir) {
-  s_hasExplicitProjectRoot = false;
-  if (exeDir.empty()) {
-    s_root.clear();
-    if (s_sdkRoot.empty())
-      s_sdkRoot.clear();
-    return;
-  }
-  fs::path cur = fs::absolute(exeDir);
-  while (!cur.empty()) {
-    if (IsProjectRoot(cur)) {
-      s_root = cur;
-      if (s_sdkRoot.empty())
-        s_sdkRoot = s_root;
-      return;
+    static bool IsProjectRoot(const fs::path &dir) {
+        std::error_code ec;
+        const bool hasPresets = fs::exists(dir / "CMakePresets.json", ec) && !ec;
+        const bool hasAssets = fs::is_directory(dir / "assets", ec) && !ec;
+        return hasPresets && hasAssets;
     }
-    auto parent = cur.parent_path();
-    if (parent == cur)
-      break;
-    cur = parent;
-  }
-  s_root = exeDir; // fallback
-  if (s_sdkRoot.empty())
-    s_sdkRoot = s_root;
-}
 
-void ProjectPath::SetProjectRoot(const fs::path &root) {
-  if (root.empty()) {
-    s_root.clear();
-    s_hasExplicitProjectRoot = false;
-    return;
-  }
+    void ProjectPath::Init(const fs::path &exeDir) {
+        s_hasExplicitProjectRoot = false;
+        if (exeDir.empty()) {
+            s_root.clear();
+            if (s_sdkRoot.empty())
+                s_sdkRoot.clear();
+            return;
+        }
+        fs::path cur = fs::absolute(exeDir);
+        while (!cur.empty()) {
+            if (IsProjectRoot(cur)) {
+                s_root = cur;
+                if (s_sdkRoot.empty())
+                    s_sdkRoot = s_root;
+                return;
+            }
+            auto parent = cur.parent_path();
+            if (parent == cur)
+                break;
+            cur = parent;
+        }
+        s_root = exeDir; // fallback
+        if (s_sdkRoot.empty())
+            s_sdkRoot = s_root;
+    }
 
-  std::error_code ec;
-  fs::path canonical = fs::weakly_canonical(root, ec);
-  if (ec)
-    canonical = fs::absolute(root, ec);
-  if (ec)
-    canonical = root;
-  s_root = canonical.lexically_normal();
-  s_hasExplicitProjectRoot = true;
-}
+    void ProjectPath::SetProjectRoot(const fs::path &root) {
+        if (root.empty()) {
+            s_root.clear();
+            s_hasExplicitProjectRoot = false;
+            return;
+        }
 
-bool ProjectPath::HasExplicitProjectRoot() { return s_hasExplicitProjectRoot; }
+        std::error_code ec;
+        fs::path canonical = fs::weakly_canonical(root, ec);
+        if (ec)
+            canonical = fs::absolute(root, ec);
+        if (ec)
+            canonical = root;
+        s_root = canonical.lexically_normal();
+        s_hasExplicitProjectRoot = true;
+    }
 
-void ProjectPath::SetSdkRoot(const fs::path &sdkRoot) {
-  if (sdkRoot.empty()) {
-    s_sdkRoot.clear();
-    return;
-  }
+    bool ProjectPath::HasExplicitProjectRoot() { return s_hasExplicitProjectRoot; }
 
-  std::error_code ec;
-  fs::path canonical = fs::weakly_canonical(sdkRoot, ec);
-  if (ec)
-    canonical = fs::absolute(sdkRoot, ec);
-  if (ec)
-    canonical = sdkRoot;
-  s_sdkRoot = canonical.lexically_normal();
-}
+    void ProjectPath::SetSdkRoot(const fs::path &sdkRoot) {
+        if (sdkRoot.empty()) {
+            s_sdkRoot.clear();
+            return;
+        }
 
-const fs::path &ProjectPath::SdkRoot() {
-  return s_sdkRoot.empty() ? s_root : s_sdkRoot;
-}
+        std::error_code ec;
+        fs::path canonical = fs::weakly_canonical(sdkRoot, ec);
+        if (ec)
+            canonical = fs::absolute(sdkRoot, ec);
+        if (ec)
+            canonical = sdkRoot;
+        s_sdkRoot = canonical.lexically_normal();
+    }
 
-const fs::path &ProjectPath::Root() { return s_root; }
+    const fs::path &ProjectPath::SdkRoot() {
+        return s_sdkRoot.empty() ? s_root : s_sdkRoot;
+    }
 
-fs::path ProjectPath::Resolve(const std::string &relPath) {
-  return s_root / relPath;
-}
+    const fs::path &ProjectPath::Root() { return s_root; }
 
-fs::path ProjectPath::ResolveSdk(const std::string &relPath) {
-  return SdkRoot() / relPath;
-}
+    fs::path ProjectPath::Resolve(const std::string &relPath) {
+        return s_root / relPath;
+    }
+
+    fs::path ProjectPath::ResolveSdk(const std::string &relPath) {
+        return SdkRoot() / relPath;
+    }
 } // namespace Monolith
