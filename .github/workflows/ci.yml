@@ -546,52 +546,13 @@ jobs:
           retention-days: 30
 
   # ----------------------------------------------------------------
-  # CI Gate — single required check for branch protection rules.
-  # Add only this job to your branch ruleset instead of all three
-  # platform jobs individually.
-  # ----------------------------------------------------------------
-  ci-gate:
-    name: CI Gate
-    if: always()
-    needs: [ lint, test-linux, test-windows, test-macos ]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    steps:
-      - name: Check all jobs passed
-        run: |
-          results='${{ toJSON(needs) }}'
-          echo "$results" | python3 - <<'EOF'
-          import sys, json, os
-
-          needs = json.loads(sys.stdin.read())
-          failed = [name for name, job in needs.items() if job["result"] not in ("success", "skipped")]
-
-          summary_lines = ["## ✅ CI Gate Summary" if not failed else "## ❌ CI Gate Summary", ""]
-          summary_lines.append("| Job | Result |")
-          summary_lines.append("|-----|--------|")
-          for name, job in needs.items():
-              icon = "✅" if job["result"] in ("success", "skipped") else "❌"
-              summary_lines.append(f"| {name} | {icon} {job['result']} |")
-
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-              f.write("\n".join(summary_lines) + "\n")
-
-          if failed:
-              print(f"FAILED jobs: {', '.join(failed)}", file=sys.stderr)
-              sys.exit(1)
-
-          print("All required jobs passed.")
-          EOF
-
-  # ----------------------------------------------------------------
   # Starter integration — final PR gate.
   # Validates this PR commit inside horo-engine-starter on all OS targets.
   # ----------------------------------------------------------------
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [ ci-gate ]
+    needs: [ lint, test-linux, test-windows, test-macos ]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}
