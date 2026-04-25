@@ -1,6 +1,8 @@
 #include "renderer/Renderer.h"
 
+#include <functional>
 #include <memory>
+#include <optional>
 
 #include "core/Assert.h"
 #include "renderer/RenderBackendFactory.h"
@@ -14,18 +16,26 @@ std::unique_ptr<IRenderBackend> CreateDefaultOwnedBackend() {
   return std::move(createResult.backend);
 }
 
-std::unique_ptr<IRenderBackend> g_ownedBackend =
-    CreateDefaultOwnedBackend(); // NOSONAR: cpp:S5421 backend ownership must
-                                 // remain mutable for backend switching/reset
-// NOSONAR: cpp:S1966 backend must be mutable
-IRenderBackend *g_backend =
-    g_ownedBackend
-        .get(); // NOSONAR: cpp:S1966 backend pointer must be reassignable
+std::unique_ptr<IRenderBackend> &OwnedBackend() {
+  static std::unique_ptr<IRenderBackend> backend = CreateDefaultOwnedBackend();
+  return backend;
+}
+
+std::optional<std::reference_wrapper<IRenderBackend>> &ExternalBackend() {
+  static std::optional<std::reference_wrapper<IRenderBackend>> backend;
+  return backend;
+}
 
 IRenderBackend *ResetToDefaultBackend() {
-  g_ownedBackend = CreateDefaultOwnedBackend();
-  g_backend = g_ownedBackend.get();
-  return g_backend;
+  OwnedBackend() = CreateDefaultOwnedBackend();
+  ExternalBackend().reset();
+  return OwnedBackend().get();
+}
+
+IRenderBackend *ActiveBackendImpl() {
+  if (ExternalBackend().has_value())
+    return &ExternalBackend()->get();
+  return OwnedBackend().get();
 }
 } // namespace
 
@@ -33,9 +43,9 @@ bool Renderer::s_frameActive = false;
 bool Renderer::s_passActive = false;
 
 IRenderBackend *Renderer::ActiveBackend() {
-  MONOLITH_ASSERT(g_backend != nullptr,
+  MONOLITH_ASSERT(ActiveBackendImpl() != nullptr,
                   "Renderer backend pointer should never be null");
-  return g_backend;
+  return ActiveBackendImpl();
 }
 
 RenderBackendInitResult
@@ -53,11 +63,11 @@ Renderer::InitializeBackend(const RenderBackendSelection &selection) {
   if (!createResult.backend)
     return out;
 
-  g_ownedBackend = std::move(createResult.backend);
-  g_backend = g_ownedBackend.get();
+  OwnedBackend() = std::move(createResult.backend);
+  ExternalBackend().reset();
   out.ok = true;
-  out.selected = g_backend->GetBackendId();
-  out.capabilities = g_backend->GetCapabilities();
+  out.selected = OwnedBackend()->GetBackendId();
+  out.capabilities = OwnedBackend()->GetCapabilities();
   return out;
 }
 
@@ -78,8 +88,12 @@ bool Renderer::IsBackendSupported(RenderBackendId backendId) {
 void Renderer::UseBackend(IRenderBackend *backend) {
   MONOLITH_ASSERT(!s_frameActive && !s_passActive,
                   "Cannot swap render backend while a frame or pass is active");
-  g_ownedBackend.reset();
-  g_backend = backend ? backend : ResetToDefaultBackend();
+  if (backend) {
+    OwnedBackend().reset();
+    ExternalBackend() = std::ref(*backend);
+    return;
+  }
+  ResetToDefaultBackend();
 }
 
 void Renderer::ResetBackend() {

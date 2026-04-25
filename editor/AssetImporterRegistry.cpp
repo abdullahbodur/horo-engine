@@ -27,6 +27,36 @@ bool IsTexturePath(const std::string &path) {
          ext == ".tga" || ext == ".webp" || ext == ".hdr";
 }
 
+bool CopyFileReplacing(const std::filesystem::path &source,
+                       const std::filesystem::path &destination,
+                       std::error_code &ec) {
+  namespace fs = std::filesystem;
+
+  ec.clear();
+  if (fs::exists(destination, ec)) {
+    if (fs::equivalent(source, destination, ec)) {
+      ec.clear();
+      return true;
+    }
+    ec.clear();
+  }
+
+  fs::copy_file(source, destination, fs::copy_options::overwrite_existing, ec);
+  if (!ec)
+    return true;
+
+  if (ec != std::make_error_code(std::errc::file_exists))
+    return false;
+
+  ec.clear();
+  fs::remove(destination, ec);
+  if (ec)
+    return false;
+
+  fs::copy_file(source, destination, fs::copy_options::none, ec);
+  return !ec;
+}
+
 std::vector<std::string>
 ScanMtlForTextureNames(const std::filesystem::path &mtlSource) {
   std::vector<std::string> textures;
@@ -83,7 +113,7 @@ CopyObjCompanionAssets(const std::filesystem::path &objSource,
   const fs::path mtlDest = destinationDir / mtlName;
   if (fs::exists(mtlSource, ec) && !ec) {
     ec.clear();
-    fs::copy_file(mtlSource, mtlDest, fs::copy_options::overwrite_existing, ec);
+    CopyFileReplacing(mtlSource, mtlDest, ec);
     if (!ec)
       copiedFiles.push_back(
           fs::relative(mtlDest, ProjectPath::Root()).generic_string());
@@ -95,8 +125,7 @@ CopyObjCompanionAssets(const std::filesystem::path &objSource,
     ec.clear();
     if (fs::exists(textureSource, ec) && !ec) {
       ec.clear();
-      fs::copy_file(textureSource, textureDest,
-                    fs::copy_options::overwrite_existing, ec);
+      CopyFileReplacing(textureSource, textureDest, ec);
       if (!ec) {
         copiedFiles.push_back(
             fs::relative(textureDest, ProjectPath::Root()).generic_string());
@@ -188,8 +217,7 @@ public:
     }
 
     const fs::path destObj = destDir / sourcePath.filename();
-    fs::copy_file(sourcePath, destObj, fs::copy_options::overwrite_existing,
-                  ec);
+    CopyFileReplacing(sourcePath, destObj, ec);
     if (ec) {
       result.error = "Copy failed: " + ec.message();
       result.diagnostics.push_back(MakeDiagnostic(
@@ -276,8 +304,7 @@ public:
     }
 
     const fs::path destTexture = destDir / sourcePath.filename();
-    fs::copy_file(sourcePath, destTexture, fs::copy_options::overwrite_existing,
-                  ec);
+    CopyFileReplacing(sourcePath, destTexture, ec);
     if (ec) {
       result.error = "Copy failed: " + ec.message();
       result.diagnostics.push_back(MakeDiagnostic(

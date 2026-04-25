@@ -120,9 +120,9 @@ public:
   Mcp::McpCommandResult ExecuteMcpCommand(std::string_view toolName,
                                           const nlohmann::json &arguments);
 
-private:
   enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
 
+private:
   enum class PendingSceneAction {
     None,
     NewScene,
@@ -148,6 +148,10 @@ private:
   void ProcessPendingPathDrops();
 
   void ProcessPendingTextureDrops();
+
+  bool TryApplyDraftAlbedoDrop(const std::string &path);
+
+  bool TryApplySelectedAssetAlbedoDrop(const std::string &path);
 
   void ProcessPendingObjDrops();
 
@@ -278,6 +282,8 @@ private:
   void DrawPropertiesAddComponentMenu(SceneObject &obj);
 
   void DrawAddComponentMenuItems(SceneObject &obj);
+
+  void DrawFallbackAddComponentMenuItems(SceneObject &obj);
 
   void DrawHelpPopup();
 

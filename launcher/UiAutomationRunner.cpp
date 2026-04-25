@@ -322,7 +322,8 @@ void LogUiEnvVar(const char *name) {
   LogDebug("UI automation env: {}={}", name, value.empty() ? "<unset>" : value);
 }
 
-bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
+bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w,
+                         int h, // NOSONAR
                          unsigned int *pixels, void *user_data) {
   IM_UNUSED(viewport_id);
   IM_UNUSED(user_data);

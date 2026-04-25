@@ -835,9 +835,7 @@ void EditorLayer::DrawPropertiesComponentsList(SceneObject &obj) {
   }
 }
 
-void EditorLayer::DrawAddComponentMenuItems(
-    SceneObject &obj) { // NOSONAR: cpp:S3776 sorted component add menu with
-                        // schema-driven items
+void EditorLayer::DrawAddComponentMenuItems(SceneObject &obj) {
   std::vector<const ComponentSchema *> componentSchemas;
   componentSchemas.reserve(m_schema.ComponentSchemas().size());
   for (const auto &[key, schema] : m_schema.ComponentSchemas()) {
@@ -870,6 +868,11 @@ void EditorLayer::DrawAddComponentMenuItems(
     }
     return;
   }
+
+  DrawFallbackAddComponentMenuItems(obj);
+}
+
+void EditorLayer::DrawFallbackAddComponentMenuItems(SceneObject &obj) {
   // Fallback built-in components when no schema is registered
   if (ImGui::MenuItem("Light")) {
     ComponentDesc component;

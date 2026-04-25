@@ -6,11 +6,6 @@
 #include <stdexcept>
 #include <string>
 
-#if defined(__GNUC__) || defined(__clang__)
-// Forward-declare the gcov flush symbol so we can call it before std::_Exit.
-extern "C" void __gcov_dump();
-#endif
-
 #include <GLFW/glfw3.h>
 
 #include "core/Application.h"
@@ -28,6 +23,11 @@ extern "C" void __gcov_dump();
 #include "scene/systems/BehaviorSystem.h"
 #include "scene/systems/PhysicsSystem.h"
 #include "scene/systems/RenderSystem.h"
+
+#if defined(__GNUC__) || defined(__clang__)
+// Forward-declare the gcov flush symbol so we can call it before std::_Exit.
+extern "C" void __gcov_dump();
+#endif
 
 namespace {
 using namespace Monolith;

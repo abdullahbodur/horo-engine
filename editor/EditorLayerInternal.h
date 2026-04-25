@@ -3,14 +3,11 @@
 // Must not be included by any public header.
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <ctime>
 #include <format>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,7 +18,7 @@
 #include "editor/SceneDocument.h"
 
 namespace Monolith::Editor {
-namespace {
+namespace Internal {
 
 // ---- Layout constants ----
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
@@ -207,5 +204,7 @@ inline void FormatLogTime(const LogLine &entry, char *buf, size_t bufSize) {
   buf[std::min(static_cast<size_t>(out.size), bufSize - 1)] = '\0';
 }
 
-} // namespace
+} // namespace Internal
+
+using namespace Internal;
 } // namespace Monolith::Editor

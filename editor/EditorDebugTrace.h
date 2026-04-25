@@ -16,7 +16,7 @@ inline bool EditorTraceEnabled() {
   static bool on = false;
   if (!checked) {
     checked = 1;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_MSC_VER)
     char *value = nullptr;
     size_t len = 0;
     if (_dupenv_s(&value, &len, "MONOLITH_EDITOR_TRACE") == 0 && value) {

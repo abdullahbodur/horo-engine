@@ -1,6 +1,5 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -8,7 +7,6 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
-#include <utility>
 #include <vector>
 
 #if defined(MONOLITH_HAS_VULKAN)
@@ -544,8 +542,9 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
 
   int descriptorSetToken = 0;
   auto *fakeDescriptorSet = &descriptorSetToken;
-  const RenderTargetHandle vkHandle =
-      RenderTargetHandle::VulkanDescriptorSet(fakeDescriptorSet, false);
+  const RenderTargetHandle vkHandle = RenderTargetHandle::VulkanDescriptorSet(
+      reinterpret_cast<VulkanImGuiDescriptorSetHandle>(fakeDescriptorSet),
+      false);
   REQUIRE(vkHandle.IsValid());
   REQUIRE(vkHandle.backendId == RenderBackendId::Vulkan);
   REQUIRE(vkHandle.nativeType ==

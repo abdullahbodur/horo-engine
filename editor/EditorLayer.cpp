@@ -676,6 +676,50 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
   return RenderTargetHandle::OpenGLTexture(destTex, true);
 }
 
+RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef &asset) {
+  if (asset.mesh.empty())
+    return {};
+
+  auto &thumbnailRenderer = AssetThumbnailRenderer::Instance();
+#if defined(MONOLITH_HAS_VULKAN)
+  const bool useVulkanOffscreen =
+      Renderer::GetBackendId() == RenderBackendId::Vulkan;
+#else
+  const bool useVulkanOffscreen = false;
+#endif
+  if (!useVulkanOffscreen && !thumbnailRenderer.Init())
+    return {};
+
+  const auto *meshEntry = TryLoadAssetMesh(asset.mesh);
+  if (!meshEntry)
+    return {};
+
+  const std::string meshKey =
+      ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
+  return RenderMeshToThumbnail(*meshEntry, meshKey);
+}
+
+RenderTargetHandle TryGetCachedGltfAlbedoPreview(
+    const std::filesystem::path &meshPath,
+    std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
+                       std::equal_to<>> *cache) {
+  if (!cache)
+    return {};
+
+  const std::string absMesh = meshPath.generic_string();
+  auto it = cache->find(absMesh);
+  if (it == cache->end()) {
+    GltfLoadResult result = GltfLoader::Load(absMesh);
+    if (!result.albedoTexture || !result.albedoTexture->IsValid())
+      return {};
+    it = cache->try_emplace(absMesh, std::move(result.albedoTexture)).first;
+  }
+
+  if (!it->second || !it->second->IsValid())
+    return {};
+  return it->second->GetRenderTargetHandle();
+}
+
 bool TryGetAssetPreviewHandle( // NOSONAR: cpp:S3776 complex multi-format
                                // preview resolution; extraction would obscure
                                // flow
@@ -723,26 +767,10 @@ bool TryGetAssetPreviewHandle( // NOSONAR: cpp:S3776 complex multi-format
 
   // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
   if (caps.supportsOffscreenTargets && !asset.mesh.empty()) {
-    auto &thumbnailRenderer = AssetThumbnailRenderer::Instance();
-#if defined(MONOLITH_HAS_VULKAN)
-    const bool useVulkanOffscreen =
-        Renderer::GetBackendId() == RenderBackendId::Vulkan;
-#else
-    const bool useVulkanOffscreen = false;
-#endif
-    if (useVulkanOffscreen || thumbnailRenderer.Init()) {
-      if (const auto *meshEntry = TryLoadAssetMesh(asset.mesh)) {
-        const std::string meshKey =
-            ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
-        const RenderTargetHandle handle =
-            RenderMeshToThumbnail(*meshEntry, meshKey);
-        if (handle
-                .IsValid()) { // NOSONAR: cpp:S134 nested within multi-priority
-                              // preview selection; depth needed for correctness
-          *outHandle = handle;
-          return true;
-        }
-      }
+    const RenderTargetHandle handle = TryRenderAssetMeshPreview(asset);
+    if (handle.IsValid()) {
+      *outHandle = handle;
+      return true;
     }
   }
 
@@ -774,21 +802,10 @@ bool TryGetAssetPreviewHandle( // NOSONAR: cpp:S3776 complex multi-format
     }
 
     if (ext == ".gltf" || ext == ".glb") {
-      const std::string absMesh = meshPath.generic_string();
-      auto it = s_gltfTextureByMesh.find(absMesh);
-      if (it == s_gltfTextureByMesh.end()) {
-        GltfLoadResult result = GltfLoader::Load(absMesh);
-        if (result.albedoTexture &&
-            result.albedoTexture
-                ->IsValid()) // NOSONAR: cpp:S134 nested GLTF texture probe;
-                             // depth reflects lookup-or-insert pattern
-          it = s_gltfTextureByMesh
-                   .try_emplace(absMesh, std::move(result.albedoTexture))
-                   .first;
-      }
-      if (it != s_gltfTextureByMesh.end() && it->second &&
-          it->second->IsValid()) {
-        *outHandle = it->second->GetRenderTargetHandle();
+      const RenderTargetHandle handle =
+          TryGetCachedGltfAlbedoPreview(meshPath, &s_gltfTextureByMesh);
+      if (handle.IsValid()) {
+        *outHandle = handle;
         return true;
       }
     }
@@ -1189,60 +1206,72 @@ void EditorLayer::OnPathsDropped(int pathCount, const char **utf8Paths,
   m_hasPendingPathDrop = true;
 }
 
-void EditorLayer::ProcessPendingTextureDrops() { // NOSONAR: cpp:S3776 stateful
-                                                 // per-drop UI flow; extraction
-                                                 // would obscure intent
+bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
+  if (m_assetDraftGuid.empty())
+    m_assetDraftGuid = GenerateAssetGuid();
+  if (m_assetDraftId.empty())
+    m_assetDraftId = AssetIdFromImportedPath(path);
+  if (m_assetDraftDisplayName.empty())
+    m_assetDraftDisplayName = m_assetDraftId;
+
+  AssetDef draftAsset;
+  draftAsset.guid = m_assetDraftGuid;
+  draftAsset.displayName = m_assetDraftDisplayName;
+  draftAsset.mesh = m_assetDraftMesh;
+  draftAsset.renderScale = m_assetDraftRenderScale.empty()
+                               ? "1.0000,1.0000,1.0000"
+                               : m_assetDraftRenderScale;
+  draftAsset.albedoMap = m_assetDraftAlbedoMap;
+
+  std::string err;
+  if (!m_assetImportService.ImportTextureForAsset(path, m_assetDraftId,
+                                                  &draftAsset, &err)) {
+    if (!err.empty())
+      LogWarn("Texture drop: {}", err);
+    return false;
+  }
+
+  m_assetDraftAlbedoMap = draftAsset.albedoMap;
+  m_clipboardToastLabel = "Albedo texture set";
+  m_clipboardToastTime = 2.0f;
+  return true;
+}
+
+bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
+  if (m_selectedAssetId.empty())
+    return false;
+  auto it = m_document.assets.find(m_selectedAssetId);
+  if (it == m_document.assets.end())
+    return false;
+
+  std::string err;
+  if (!m_assetImportService.ImportTextureForAsset(path, m_selectedAssetId,
+                                                  &it->second, &err)) {
+    if (!err.empty())
+      LogWarn("Texture drop: {}", err);
+    return false;
+  }
+
+  m_document.dirty = true;
+  m_clipboardToastLabel = "Albedo texture set";
+  m_clipboardToastTime = 2.0f;
+  return true;
+}
+
+void EditorLayer::ProcessPendingTextureDrops() {
   constexpr float kTextureDropHitSlopPx = 6.0f;
   const float px = m_pendingPathDropX;
   const float py = m_pendingPathDropY;
   for (const std::string &path : m_pendingPathDropPaths) {
     if (!IsTextureFilePath(path))
       continue;
-    if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx)) {
-      if (m_assetDraftGuid.empty())
-        m_assetDraftGuid = GenerateAssetGuid();
-      if (m_assetDraftId.empty())
-        m_assetDraftId = AssetIdFromImportedPath(path);
-      if (m_assetDraftDisplayName.empty())
-        m_assetDraftDisplayName = m_assetDraftId;
-      AssetDef draftAsset;
-      draftAsset.guid = m_assetDraftGuid;
-      draftAsset.displayName = m_assetDraftDisplayName;
-      draftAsset.mesh = m_assetDraftMesh;
-      draftAsset.renderScale = m_assetDraftRenderScale.empty()
-                                   ? "1.0000,1.0000,1.0000"
-                                   : m_assetDraftRenderScale;
-      draftAsset.albedoMap = m_assetDraftAlbedoMap;
-      if (std::string err; !m_assetImportService.ImportTextureForAsset(
-              // NOSONAR: cpp:S134 nesting reflects texture-drop path with
-              // draft-asset guard
-              path, m_assetDraftId, &draftAsset, &err)) {
-        if (!err.empty()) // NOSONAR: cpp:S134
-          LogWarn("Texture drop: {}", err);
-        continue;
-      }
-      m_assetDraftAlbedoMap = draftAsset.albedoMap;
-      m_clipboardToastLabel = "Albedo texture set";
-      m_clipboardToastTime = 2.0f;
+    if (m_albedoDraftDrop.Contains(px, py, kTextureDropHitSlopPx) &&
+        TryApplyDraftAlbedoDrop(path)) {
       m_pendingPathDropPaths.clear();
       return;
     }
     if (m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) &&
-        !m_selectedAssetId.empty()) {
-      if (auto it = m_document.assets.find(m_selectedAssetId);
-          it != m_document.assets.end()) {
-        if (std::string err; !m_assetImportService.ImportTextureForAsset(
-                path, m_selectedAssetId, &it->second,
-                &err)) {    // NOSONAR: cpp:S134 nesting reflects selected-asset
-                            // texture-drop path
-          if (!err.empty()) // NOSONAR: cpp:S134
-            LogWarn("Texture drop: {}", err);
-          continue;
-        }
-        m_document.dirty = true;
-        m_clipboardToastLabel = "Albedo texture set";
-        m_clipboardToastTime = 2.0f;
-      }
+        TryApplySelectedAssetAlbedoDrop(path)) {
       m_pendingPathDropPaths.clear();
       return;
     }
@@ -1966,7 +1995,7 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
     ViewportAssetDropContext dropContext{this, &cam, screenW, screenH};
     DrawViewportAssetDropTarget(
         m_playMode, dropTargetSize.x, dropTargetSize.y, &dropContext,
-        [](void *userData,
+        [](void *userData, // NOSONAR
            const char
                *assetIdText) { // NOSONAR: cpp:S5008 required by
                                // DrawViewportAssetDropTarget callback API
@@ -2916,6 +2945,50 @@ void EditorLayer::DrawSettingsModal() {
   ImGui::EndPopup();
 }
 
+struct ViewGimbalAxisDraw {
+  EditorLayer::ViewSnap posSnap;
+  EditorLayer::ViewSnap negSnap;
+  Vec3 worldPlus;
+  ImU32 col;
+  const char *label;
+};
+
+struct ViewGimbalAxisCache {
+  float dx = 0.0f;
+  float dy = 0.0f;
+  float viewZ = 0.0f;
+  int origIdx = 0;
+};
+
+EditorLayer::ViewSnap
+FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
+                        const std::array<ViewGimbalAxisCache, 3> &cache,
+                        const std::array<ViewGimbalAxisDraw, 3> &axes,
+                        float shaftPx, float hitPxSq) {
+  float bestD = hitPxSq;
+  EditorLayer::ViewSnap snap = EditorLayer::ViewSnap::None;
+  for (const ViewGimbalAxisCache &c : cache) {
+    const ViewGimbalAxisDraw &ad = axes[c.origIdx];
+    const float px1 = center.x + c.dx * shaftPx;
+    const float py1 = center.y + c.dy * shaftPx;
+    const float px2 = center.x - c.dx * shaftPx;
+    const float py2 = center.y - c.dy * shaftPx;
+    const float d1 =
+        DistSqPointSegment2D(mouse.x, mouse.y, center.x, center.y, px1, py1);
+    const float d2 =
+        DistSqPointSegment2D(mouse.x, mouse.y, center.x, center.y, px2, py2);
+    if (d1 < bestD) {
+      bestD = d1;
+      snap = ad.posSnap;
+    }
+    if (d2 < bestD) {
+      bestD = d2;
+      snap = ad.negSnap;
+    }
+  }
+  return snap;
+}
+
 void EditorLayer::DrawViewGimbal(
     const Camera
         &cam) { // NOSONAR: cpp:S3776 complex axis gimbal with sort, hover, and
@@ -3001,14 +3074,7 @@ void EditorLayer::DrawViewGimbal(
   constexpr float kHitPx = 12.0f;
   constexpr float kHitPxSq = kHitPx * kHitPx;
 
-  struct AxisDraw {
-    ViewSnap posSnap;
-    ViewSnap negSnap;
-    Vec3 worldPlus;
-    ImU32 col;
-    const char *label;
-  };
-  static const std::array<AxisDraw, 3> kAxes = {{
+  static const std::array<ViewGimbalAxisDraw, 3> kAxes = {{
       {Right, Left, {1.0f, 0.0f, 0.0f}, IM_COL32(220, 72, 72, 255), "X"},
       {Top, Bottom, {0.0f, 1.0f, 0.0f}, IM_COL32(88, 200, 96, 255), "Y"},
       {Front, Back, {0.0f, 0.0f, 1.0f}, IM_COL32(82, 148, 255, 255), "Z"},
@@ -3016,14 +3082,7 @@ void EditorLayer::DrawViewGimbal(
 
   // Pre-compute screen directions and view-space depth once per frame.
   // Shared by hover and draw loops — no redundant WorldAxisToScreenDir calls.
-  struct AxisCache {
-    float dx = 0.0f; // normalised screen direction of the +axis
-    float dy = 0.0f;
-    float viewZ =
-        0.0f; // view-space Z (positive = toward camera) for depth sort
-    int origIdx = 0;
-  };
-  std::array<AxisCache, 3> cache{};
+  std::array<ViewGimbalAxisCache, 3> cache{};
   for (int i = 0; i < 3; i++) {
     float vz = 0.f;
     WorldAxisToScreenDir(cam, kAxes[i].worldPlus, &cache[i].dx, &cache[i].dy,
@@ -3032,49 +3091,23 @@ void EditorLayer::DrawViewGimbal(
     cache[i].origIdx = i;
   }
 
-  // Extracted into lambda to keep DrawViewGimbal complexity under S3776 limit.
-  auto findHoverSnap =
-      [&](const ImVec2
-              &mouse) { // NOSONAR: cpp:S1188 extracted local algorithm keeps
-                        // DrawViewGimbal readable and state-local
-        float bestD = kHitPxSq;
-        ViewSnap snap = None;
-        const float cx = center.x;
-        const float cy = center.y;
-        for (const AxisCache &c : cache) {
-          const AxisDraw &ad = kAxes[c.origIdx];
-          const float px1 = cx + c.dx * kShaftPx;
-          const float py1 = cy + c.dy * kShaftPx;
-          const float px2 = cx - c.dx * kShaftPx;
-          const float py2 = cy - c.dy * kShaftPx;
-          const float d1 =
-              DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px1, py1);
-          const float d2 =
-              DistSqPointSegment2D(mouse.x, mouse.y, cx, cy, px2, py2);
-          if (d1 < bestD) {
-            bestD = d1;
-            snap = ad.posSnap;
-          }
-          if (d2 < bestD) {
-            bestD = d2;
-            snap = ad.negSnap;
-          }
-        }
-        return snap;
-      };
-  const ViewSnap hoverSnap = canvasHovered ? findHoverSnap(io.MousePos) : None;
+  const ViewSnap hoverSnap =
+      canvasHovered ? FindViewGimbalHoverSnap(io.MousePos, center, cache, kAxes,
+                                              kShaftPx, kHitPxSq)
+                    : None;
 
   // Sort ascending by view-space Z so background axes draw first (painter's
   // algorithm).
-  std::ranges::sort(cache, [](const AxisCache &a, const AxisCache &b) {
-    return a.viewZ < b.viewZ;
-  });
+  std::ranges::sort(
+      cache, [](const ViewGimbalAxisCache &a, const ViewGimbalAxisCache &b) {
+        return a.viewZ < b.viewZ;
+      });
 
   const float fs = ImGui::GetFontSize();
   const float cx = center.x;
   const float cy = center.y;
-  for (const AxisCache &ac : cache) {
-    const AxisDraw &ad = kAxes[ac.origIdx];
+  for (const ViewGimbalAxisCache &ac : cache) {
+    const ViewGimbalAxisDraw &ad = kAxes[ac.origIdx];
     const float px1 = cx + ac.dx * kShaftPx;
     const float py1 = cy + ac.dy * kShaftPx;
     const float px2 = cx - ac.dx * kShaftPx;

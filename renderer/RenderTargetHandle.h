@@ -11,6 +11,8 @@ enum class RenderNativeHandleType {
   VulkanImGuiDescriptorSet,
 };
 
+using VulkanImGuiDescriptorSetHandle = uintptr_t;
+
 struct RenderTargetHandle {
   RenderBackendId backendId = RenderBackendId::Auto;
   RenderNativeHandleType nativeType = RenderNativeHandleType::None;
@@ -40,14 +42,14 @@ struct RenderTargetHandle {
             yFlip};
   }
 
-  static RenderTargetHandle VulkanDescriptorSet(
-      void *descriptorSet,
-      // NOSONAR: cpp:S5008 Vulkan/ImGui descriptor set is an opaque handle
-      bool yFlip = false, uint32_t targetWidth = 0, uint32_t targetHeight = 0,
-      uint64_t targetGeneration = 0) {
+  static RenderTargetHandle
+  VulkanDescriptorSet(VulkanImGuiDescriptorSetHandle descriptorSet,
+                      bool yFlip = false, uint32_t targetWidth = 0,
+                      uint32_t targetHeight = 0,
+                      uint64_t targetGeneration = 0) {
     return {RenderBackendId::Vulkan,
             RenderNativeHandleType::VulkanImGuiDescriptorSet,
-            static_cast<uint64_t>(reinterpret_cast<uintptr_t>(descriptorSet)),
+            static_cast<uint64_t>(descriptorSet),
             0,
             targetWidth,
             targetHeight,

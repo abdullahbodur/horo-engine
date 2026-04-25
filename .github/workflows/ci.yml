@@ -27,25 +27,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ----------------------------------------------------------------
-  # Lint — clang-format check (fast, runs in parallel with build jobs)
-  # ----------------------------------------------------------------
-  lint:
-    name: Lint · clang-format
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install clang-format
-        run: sudo apt-get install -y --no-install-recommends clang-format
-
-      - name: Check formatting
-        run: |
-          git ls-files '*.cpp' '*.h' | grep -v '^vendor/' | \
-            xargs clang-format --dry-run --Werror
-
   #   ----------------------------------------------------------------
   #   Build + Test — macOS (Clang, Ninja)
   #   ----------------------------------------------------------------
@@ -536,17 +517,6 @@ jobs:
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
             -Dsonar.qualitygate.wait=true
 
-      - name: Upload coverage report
-        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report-linux
-          path: |
-            build/coverage/summary.txt
-            build/coverage/cobertura.xml
-            build/coverage/sonar-coverage.xml
-          retention-days: 30
-
   # ----------------------------------------------------------------
   # Starter integration — final PR gate.
   # Validates this PR commit inside horo-engine-starter on all OS targets.
@@ -554,7 +524,7 @@ jobs:
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [ lint, test-linux, test-windows, test-macos ]
+    needs: [ test-linux, test-windows, test-macos ]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}

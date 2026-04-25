@@ -1192,8 +1192,9 @@ bool VulkanRenderBackend::TryRegisterOffscreenTargetImGuiDescriptor(
   }
 
   *outHandle = RenderTargetHandle::VulkanDescriptorSet(
-      reinterpret_cast<void *>(target.imguiDescriptorSet), needsYFlip,
-      target.width, target.height, target.generation);
+      reinterpret_cast<VulkanImGuiDescriptorSetHandle>(
+          target.imguiDescriptorSet),
+      needsYFlip, target.width, target.height, target.generation);
   return true;
 }
 
@@ -3320,10 +3321,9 @@ struct VulkanRenderBackend::Context {};
 
 VulkanRenderBackend::VulkanRenderBackend( // NOSONAR: cpp:S5008 native window
                                           // handle type is interface-defined
-    void *) { // NOSONAR: cpp:S5008 nativeWindowHandle is platform-specific
-  m_lastError =
-      "Vulkan backend was compiled without Vulkan dependency support.";
-}
+    void *)
+    : m_lastError(
+          "Vulkan backend was compiled without Vulkan dependency support.") {}
 
 VulkanRenderBackend::~VulkanRenderBackend() = default;
 

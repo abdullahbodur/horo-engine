@@ -3,7 +3,10 @@ cmake_minimum_required(VERSION 3.25)
 # Detect if this is a launcher build or embedded via add_subdirectory()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
-    project(MonolithEngine VERSION 0.1.0 LANGUAGES CXX C)
+    # x-release-please-start-version
+    set(MONOLITH_ENGINE_VERSION "0.1.0")
+    # x-release-please-end
+    project(MonolithEngine VERSION ${MONOLITH_ENGINE_VERSION} LANGUAGES CXX C)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 
