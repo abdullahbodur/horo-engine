@@ -3,18 +3,49 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 permissions:
   contents: read
+  checks: write        # required by mikepenz/action-junit-report to post test result annotations
+  pull-requests: write # required to post coverage summaries as PR comments
 
-# Cancel in-progress runs for the same branch when a new push arrives
+# Cancel in-progress runs for the same ref when a new push arrives.
+# PRs and branches each get their own concurrency group so they don't
+# cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # ----------------------------------------------------------------
+  # Lint — clang-format check (fast, runs in parallel with build jobs)
+  # ----------------------------------------------------------------
+  lint:
+    name: Lint · clang-format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get install -y --no-install-recommends clang-format
+
+      - name: Check formatting
+        run: |
+          git ls-files '*.cpp' '*.h' | grep -v '^vendor/' | \
+            xargs clang-format --dry-run --Werror
+
   #   ----------------------------------------------------------------
   #   Build + Test — macOS (Clang, Ninja)
   #   ----------------------------------------------------------------
@@ -53,9 +84,31 @@ jobs:
         run: cmake --build --preset debug --parallel
 
       - name: Test
-        run: ctest --preset debug --output-on-failure
+        run: |
+          mkdir -p build/debug/test-results
+          ctest --preset debug --output-on-failure \
+            --output-junit build/debug/test-results/results.xml
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug/test-results/results.xml
+          check_name: "Test Results · macOS"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: build/debug/test-results/
+          retention-days: 14
 
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
@@ -137,9 +190,32 @@ jobs:
         run: cmake --build build/debug-msvc --config Debug --parallel
 
       - name: Test
-        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
+        run: |
+          New-Item -ItemType Directory -Force -Path build/debug-msvc/test-results | Out-Null
+          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel `
+            --output-junit build/debug-msvc/test-results/results.xml
+        shell: pwsh
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug-msvc/test-results/results.xml
+          check_name: "Test Results · Windows"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: build/debug-msvc/test-results/
+          retention-days: 14
 
       - name: Install ffmpeg
         run: choco install ffmpeg -y --no-progress
@@ -294,9 +370,31 @@ jobs:
         run: cmake --build --preset debug --parallel
 
       - name: Test
-        run: ctest --preset debug --output-on-failure
+        run: |
+          mkdir -p build/debug/test-results
+          ctest --preset debug --output-on-failure \
+            --output-junit build/debug/test-results/results.xml
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug/test-results/results.xml
+          check_name: "Test Results · Linux"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: build/debug/test-results/
+          retention-days: 14
 
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
@@ -378,6 +476,52 @@ jobs:
             --exclude '.*/_deps/.*' \
             --exclude '.*/tests/.*'
 
+      - name: Generate coverage summary for GitHub output
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          # Text table — one row per source file, visible in the Actions step summary
+          python3 -m gcovr build/coverage \
+            --root "${{ github.workspace }}" \
+            --txt build/coverage/summary.txt \
+            --txt-metric line \
+            --sort-percentage \
+            --exclude-directories '.*/_deps($|/.*)' \
+            --exclude '.*/vendor/.*' \
+            --exclude '.*/_deps/.*' \
+            --exclude '.*/tests/.*'
+
+          # Cobertura XML — enables coverage badges and diff overlays on PRs
+          python3 -m gcovr build/coverage \
+            --root "${{ github.workspace }}" \
+            --cobertura build/coverage/cobertura.xml \
+            --exclude-directories '.*/_deps($|/.*)' \
+            --exclude '.*/vendor/.*' \
+            --exclude '.*/_deps/.*' \
+            --exclude '.*/tests/.*'
+
+          # Write a formatted summary to the GitHub step summary page
+          {
+            echo "## 📊 Code Coverage — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            total_line=$(grep -E '^TOTAL' build/coverage/summary.txt | tail -1 || true)
+            if [ -n "$total_line" ]; then
+              lines=$(echo "$total_line" | awk '{print $2}')
+              covered=$(echo "$total_line" | awk '{print $3}')
+              pct=$(echo "$total_line" | awk '{print $4}')
+              echo "| Lines covered | $covered / $lines ($pct) |"
+            fi
+            echo ""
+            echo "<details><summary>Per-file breakdown</summary>"
+            echo ""
+            echo '```'
+            cat build/coverage/summary.txt
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: SonarCloud scan
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: SonarSource/sonarqube-scan-action@v7.1.0
@@ -390,6 +534,56 @@ jobs:
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
             -Dsonar.qualitygate.wait=true
 
+      - name: Upload coverage report
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-linux
+          path: |
+            build/coverage/summary.txt
+            build/coverage/cobertura.xml
+            build/coverage/sonar-coverage.xml
+          retention-days: 30
+
+  # ----------------------------------------------------------------
+  # CI Gate — single required check for branch protection rules.
+  # Add only this job to your branch ruleset instead of all three
+  # platform jobs individually.
+  # ----------------------------------------------------------------
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [ lint, test-linux, test-windows, test-macos ]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check all jobs passed
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results" | python3 - <<'EOF'
+          import sys, json, os
+
+          needs = json.loads(sys.stdin.read())
+          failed = [name for name, job in needs.items() if job["result"] not in ("success", "skipped")]
+
+          summary_lines = ["## ✅ CI Gate Summary" if not failed else "## ❌ CI Gate Summary", ""]
+          summary_lines.append("| Job | Result |")
+          summary_lines.append("|-----|--------|")
+          for name, job in needs.items():
+              icon = "✅" if job["result"] in ("success", "skipped") else "❌"
+              summary_lines.append(f"| {name} | {icon} {job['result']} |")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(summary_lines) + "\n")
+
+          if failed:
+              print(f"FAILED jobs: {', '.join(failed)}", file=sys.stderr)
+              sys.exit(1)
+
+          print("All required jobs passed.")
+          EOF
+
   # ----------------------------------------------------------------
   # Starter integration — final PR gate.
   # Validates this PR commit inside horo-engine-starter on all OS targets.
@@ -397,7 +591,7 @@ jobs:
   starter-integration:
     name: Starter Integration
     if: github.event_name == 'pull_request'
-    needs: [ test-linux, test-windows, test-macos ]
+    needs: [ ci-gate ]
     uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
     with:
       engine_repository: ${{ github.repository }}
