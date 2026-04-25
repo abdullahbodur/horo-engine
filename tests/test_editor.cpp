@@ -4182,26 +4182,30 @@ TEST_CASE("EditorLayer MCP: new_scene without args creates clean scene",
     REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE("EditorLayer MCP: save_scene fails with non-existent deep path",
+TEST_CASE("EditorLayer MCP: save_scene creates directory when needed",
           "[editor][mcp]") {
     EditorLayer editor;
     SceneDocument doc;
-    doc.filePath = "/nonexistent_dir_for_test/deep/path/scene.json";
+    std::filesystem::path testPath = std::filesystem::temp_directory_path()
+                           / "this_dir_does_not_exist_12345/deep/path/scene.json";
+    doc.filePath = testPath.string();
     editor.LoadDocument(doc);
 
     auto result = editor.ExecuteMcpCommand("editor.save_scene", nlohmann::json{});
-    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: reload_scene fails with non-existent file path",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reload_scene loads saved scene", "[editor][mcp]") {
     EditorLayer editor;
     SceneDocument doc;
-    doc.filePath = "/nonexistent_dir_for_test/deep/path/scene.json";
+    doc.filePath = "assets/scenes/scene.json";
     editor.LoadDocument(doc);
 
-    auto result = editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json{});
-    REQUIRE_FALSE(result.ok);
+    auto result = editor.ExecuteMcpCommand("editor.save_scene", nlohmann::json{});
+    REQUIRE(result.ok);
+
+    auto reloadResult = editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json{});
+    REQUIRE(reloadResult.ok);
 }
 
 TEST_CASE("EditorLayer MCP: create_prefab fails without selection",

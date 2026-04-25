@@ -57,28 +57,22 @@ namespace Monolith {
 
             HomeDirGuard(HomeDirGuard &&) = delete;
 
-            HomeDirGuard &operator=(HomeDirGuard &&) = delete;
-
-#ifdef _WIN32
-    static std::string ReadWin32EnvString(const char *name) {
-        char *rawValue = nullptr;
-        if (size_t len = 0; _dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
-            return {};
-        const auto freeEnvBuffer = [](char *ptr) { std::free(ptr); };
-        std::unique_ptr<char, decltype(freeEnvBuffer)> value(rawValue,
-                                                             freeEnvBuffer);
-        return std::string(value.get());
-    }
-#endif
+HomeDirGuard &operator=(HomeDirGuard &&) = delete;
 
     static std::string ReadEnv(const char *name) {
         if (!name || !*name)
             return {};
 #ifdef _WIN32
-    return ReadWin32EnvString (name);
+        char *value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || !value)
+            return {};
+        std::string result(value);
+        std::free(value);
+        return result;
 #else
-    const char *value = std::getenv(name);
-    return value? std::string(value) : std::string();
+        const char *value = std::getenv(name);
+        return value ? std::string(value) : std::string();
 #endif
     }
 
@@ -115,51 +109,28 @@ namespace Monolith {
     bool ParseBoolEnv(const char *name) {
         if (!name || !*name)
             return false;
-#ifdef _WIN32
-    return ParseUiAutomationBoolValue (HomeDirGuard::ReadWin32EnvString(name),
-                                    false);
-#else
-    const char *value = std::getenv(name);
-  return ParseUiAutomationBoolValue (
-        value? std::string_view(value) : std::string_view(), false);
-#endif
+        const std::string value = HomeDirGuard::ReadEnv(name);
+        return ParseUiAutomationBoolValue(value, false);
     }
 
     bool ParseBoolEnvDefaultTrue(const char *name) {
         if (!name || !*name)
             return true;
-#ifdef _WIN32
-    return ParseUiAutomationBoolValue (HomeDirGuard::ReadWin32EnvString(name),
-                                    true);
-#else
-    const char *value = std::getenv(name);
-  return ParseUiAutomationBoolValue (
-        value? std::string_view(value) : std::string_view(), true);
-#endif
+        const std::string value = HomeDirGuard::ReadEnv(name);
+        return ParseUiAutomationBoolValue(value, true);
     }
 
     int ParseNonNegativeIntEnv(const char *name, int fallback = 0) {
         if (!name || !*name)
             return fallback;
-#ifdef _WIN32
-    const std::string value = HomeDirGuard::ReadWin32EnvString(name);
-  return ParseUiAutomationNonNegativeIntValue(value, fallback);
-#else
-    const char *value = std::getenv(name);
-  return ParseUiAutomationNonNegativeIntValue (
-        value? std::string_view(value) : std::string_view(), fallback);
-#endif
+        const std::string value = HomeDirGuard::ReadEnv(name);
+        return ParseUiAutomationNonNegativeIntValue(value, fallback);
     }
 
     std::string ReadEnvString(const char *name) {
         if (!name || !*name)
             return {};
-#ifdef _WIN32
-    return HomeDirGuard::ReadWin32EnvString (name);
-#else
-    const char *value = std::getenv(name);
-  return value? std::string(value) : std::string();
-#endif
+        return HomeDirGuard::ReadEnv(name);
     }
 
     void LogUiEnvVar(const char *name);
@@ -390,7 +361,7 @@ namespace Monolith {
 
     struct UiAutomationRunner::Impl {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-        static constexpr int   kDefaultUiMaxFrames     = 12000;
+        static constexpr int   kDefaultUiMaxFrames     = 30000;
         static constexpr float kActionDelayShortSec    = 0.05f;  // 50 ms between short actions
         static constexpr float kActionDelayStandardSec = 0.15f;  // 150 ms between standard actions
         static constexpr float kMouseSpeedPixPerSec    = 200.0f; // slow enough to follow visually

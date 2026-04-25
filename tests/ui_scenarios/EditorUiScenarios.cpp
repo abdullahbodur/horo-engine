@@ -85,6 +85,46 @@ namespace Monolith {
             return wid;
         }
 
+        static void ClickModalButtonIfPresent(ImGuiTestContext *ctx,
+                                              const char *modalName,
+                                              const char *buttonLabel) {
+            if (!ctx || !modalName || !buttonLabel)
+                return;
+
+            const bool modalReady = WaitForCondition(ctx, 12, [ctx, modalName,
+                                                               buttonLabel]() {
+                ctx->SetRef(modalName);
+                return ctx->ItemExists(buttonLabel);
+            });
+            if (!modalReady)
+                return;
+
+            ctx->SetRef(modalName);
+            ctx->ItemClick(buttonLabel);
+            ctx->Yield(2);
+        }
+
+        static void DismissBlockingEditorModals(ImGuiTestContext *ctx) {
+            // PopupCloseAll() closes ImGui popup state but does not clear editor-owned
+            // modal-open flags. Click safe cancel buttons first so those flags are reset
+            // and the next toolbar interaction is not blocked by a re-opened modal.
+            ClickModalButtonIfPresent(ctx, "Confirm Delete Objects", "Cancel");
+            ClickModalButtonIfPresent(ctx, "Confirm Delete Asset", "Cancel");
+        }
+
+        static bool IsPopupWindowOpen(ImGuiTestContext *ctx, const char *windowName) {
+            if (!ctx || !windowName)
+                return false;
+
+            const ImGuiContext &g = *ctx->UiContext;
+            for (int index = 0; index < g.OpenPopupStack.Size; ++index) {
+                const ImGuiWindow *window = g.OpenPopupStack[index].Window;
+                if (window && window->Name && std::string_view(window->Name) == windowName)
+                    return true;
+            }
+            return false;
+        }
+
         void CaptureScreenshotTo(ImGuiTestContext *ctx, const std::filesystem::path &dir,
                                  const char *filename) {
             if (!ctx || !ctx->CaptureArgs || dir.empty())
@@ -123,6 +163,7 @@ namespace Monolith {
             }
             // Close any popup/modal left open by the previous scenario before
             // checking toolbar state — an open popup blocks toolbar clicks.
+            DismissBlockingEditorModals(ctx);
             ctx->PopupCloseAll();
             ctx->Yield(2);
             ctx->SetRef("##toolbar");
@@ -530,9 +571,17 @@ namespace Monolith {
             ctx->SetRef("Help - Keyboard Shortcuts");
             IM_CHECK(ctx->ItemExists("##shortcut_search"));
 
-            LogDebug("UI scenario action: close Help window with Escape");
-            ctx->PopupCloseAll();
+            LogDebug("UI scenario action: close Help window with Close button");
+            IM_CHECK(ctx->ItemExists("Close"));
+            if (ctx->ItemExists("Close"))
+                ctx->ItemClick("Close");
             ctx->Yield(2);
+
+            const bool helpClosed = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Help - Keyboard Shortcuts");
+                return !ctx->ItemExists("##shortcut_search");
+            });
+            IM_CHECK(helpClosed);
 
             LogInfo("UI scenario done: editor_ui/help_window_open_close");
         }
@@ -854,18 +903,25 @@ namespace Monolith {
             ctx->ItemClick("Quick Open");
             ctx->Yield(2);
 
-            const bool quickOpenReady = WaitForCondition(ctx, 60, [ctx]() {
-                return ctx->ItemExists("Quick Open/##quick_open_input");
-            });
-            IM_CHECK(quickOpenReady);
-            if (!quickOpenReady) {
+            const ImGuiID quickOpenPopup = WaitForPopup(ctx, 0, "Close");
+            IM_CHECK(quickOpenPopup != ImGuiID(0));
+            if (!quickOpenPopup) {
                 ctx->PopupCloseAll();
                 ctx->Yield(2);
                 return;
             }
+            IM_CHECK(ctx->ItemExists("##quick_open_input"));
             ctx->Yield(1);
 
             CaptureIfEnabled(ctx, state, "editor_ui__quick_open_popup.png");
+
+            // Quick Open is modal-like for the automation harness: while it is
+            // open, later scenarios cannot reliably click toolbar or panel
+            // buttons. Close it before reporting success so the next scenario
+            // starts with an accessible editor UI.
+            ctx->ItemClick("Close");
+            ctx->Yield(2);
+
             LogInfo("UI scenario done: editor_ui/quick_open_popup");
         }
 
@@ -900,12 +956,15 @@ namespace Monolith {
             ctx->ItemClick("Command Palette");
             ctx->Yield(2);
 
-            const bool paletteReady = WaitForCondition(ctx, 60, [ctx]() {
-                return ctx->ItemExists("Command Palette/##command_palette_input");
-            });
-            IM_CHECK(paletteReady);
+            const ImGuiID commandPalettePopup = WaitForPopup(ctx, 0, "Close");
+            IM_CHECK(commandPalettePopup != ImGuiID(0));
+            if (commandPalettePopup)
+                IM_CHECK(ctx->ItemExists("##command_palette_input"));
 
-            ctx->PopupCloseAll();
+            if (commandPalettePopup && ctx->ItemExists("Close"))
+                ctx->ItemClick("Close");
+            else
+                ctx->PopupCloseAll();
             ctx->Yield(1);
 
             CaptureIfEnabled(ctx, state, "editor_ui__command_palette_popup.png");
@@ -1215,7 +1274,10 @@ namespace Monolith {
 
                 LogDebug("UI scenario action: click Cancel in delete confirm modal");
                 ctx->ItemClick("Cancel");
-                ctx->Yield(1);
+                const bool modalClosed = WaitForCondition(ctx, 30, [ctx]() {
+                    return !IsPopupWindowOpen(ctx, "Confirm Delete Objects");
+                });
+                IM_CHECK(modalClosed);
             }
 
             CaptureIfEnabled(ctx, state,
@@ -2248,7 +2310,10 @@ namespace Monolith {
 
             LogDebug("UI scenario action: click Delete in confirm modal");
             ctx->ItemClick("Delete");
-            ctx->Yield(3);
+            const bool modalClosed = WaitForCondition(ctx, 30, [ctx]() {
+                return !IsPopupWindowOpen(ctx, "Confirm Delete Objects");
+            });
+            IM_CHECK(modalClosed);
 
             // Object should be gone from hierarchy (tree node at PushID(0) gone)
             ctx->SetRef("Hierarchy");
@@ -2510,17 +2575,15 @@ namespace Monolith {
             ctx->ItemClick("Search");
             ctx->Yield(2);
 
-            const bool popupReady = WaitForCondition(ctx, 60, [ctx]() {
-                return ctx->ItemExists("Asset Search/##quick_open_input");
-            });
+            const ImGuiID assetSearchPopup = WaitForPopup(ctx, 0, "Close");
+            const bool popupReady = assetSearchPopup != ImGuiID(0);
             IM_CHECK(popupReady);
 
             if (popupReady) {
-                ctx->SetRef("Asset Search");
-                IM_CHECK(ctx->ItemExists("##quick_open_input"));
+                IM_CHECK(ctx->ItemExists("##asset_spotlight_input"));
 
-                LogDebug("UI scenario action: dismiss Asset Search popup with Escape");
-                ctx->PopupCloseAll();
+                LogDebug("UI scenario action: dismiss Asset Search popup with Close");
+                ctx->ItemClick("Close");
                 ctx->Yield(2);
             } else {
                 ctx->PopupCloseAll();

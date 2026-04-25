@@ -9,10 +9,6 @@
 #include <format>
 #include <string>
 
-#ifdef _WIN32
-#include <stdlib.h> // _dupenv_s
-#endif
-
 namespace Monolith::Editor {
     inline bool EditorTraceEnabled() {
 #ifndef NDEBUG
@@ -21,11 +17,11 @@ namespace Monolith::Editor {
         if (!checked) {
             checked = 1;
 #ifdef _WIN32
-            char *buf = nullptr;
-            size_t sz = 0;
-            if (_dupenv_s(&buf, &sz, "MONOLITH_EDITOR_TRACE") == 0 && buf) {
-                on = buf[0] != '\0' && buf[0] != '0';
-                std::free(buf);
+            char *value = nullptr;
+            size_t len = 0;
+            if (_dupenv_s(&value, &len, "MONOLITH_EDITOR_TRACE") == 0 && value) {
+                on = value[0] != '\0' && value[0] != '0';
+                std::free(value);
             }
 #else
             const char *e = std::getenv("MONOLITH_EDITOR_TRACE");

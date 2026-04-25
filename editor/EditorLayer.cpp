@@ -3836,6 +3836,11 @@ namespace Monolith::Editor {
 
         ImGui::Separator();
         ImGui::TextDisabled("Tip: press ? or F1 to close this window quickly.");
+        ImGui::SameLine();
+        if (ImGui::Button("Close")) {
+            m_helpOpen = false;
+            m_helpSearchQuery.clear();
+        }
         ImGui::End();
     }
 

@@ -266,8 +266,10 @@ int main(int argc, char **argv) {
         // teardown chains.
         std::fflush(nullptr);
 #if defined(__GNUC__) || defined(__clang__)
+#if MONOLITH_ENGINE_COVERAGE
         // Flush gcov/llvm-profdata coverage data before bypassing atexit.
         __gcov_dump();
+#endif
 #endif
         std::_Exit(exitCode);
     }
