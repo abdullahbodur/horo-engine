@@ -1,7 +1,9 @@
 #include "renderer/SkinnedMesh.h"
 
-#include <GLFW/glfw3.h>
+// clang-format off
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
+// clang-format on
 
 #include <algorithm>
 #include <cstddef>
