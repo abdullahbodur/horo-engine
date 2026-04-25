@@ -9296,6 +9296,49 @@ TEST_CASE(
   }
 }
 
+TEST_CASE("EditorLayerInternal: helper edge cases are safe",
+          "[editor][internal][schema]") {
+  {
+    SceneDocument doc;
+    REQUIRE_NOTHROW(SyncAssetScaleMetadata(nullptr));
+    REQUIRE_NOTHROW(SyncAssetScaleMetadata(&doc));
+  }
+
+  {
+    float color[3] = {0.0f, 0.0f, 0.0f};
+    ParseRGBString({}, color);
+    CHECK(color[0] == Approx(1.0f));
+    CHECK(color[1] == Approx(1.0f));
+    CHECK(color[2] == Approx(1.0f));
+  }
+
+  {
+    REQUIRE_FALSE(ParseSceneObjectType("prop", nullptr));
+    REQUIRE(SceneObjectTypeToString(static_cast<SceneObjectType>(-1)) !=
+            nullptr);
+    CHECK(std::string(SceneObjectTypeToString(
+              static_cast<SceneObjectType>(-1))) == "Panel");
+  }
+
+  {
+    LogLine entry{};
+    char buf[16] = {};
+    REQUIRE_NOTHROW(FormatLogTime(entry, nullptr, 0));
+    REQUIRE_NOTHROW(FormatLogTime(entry, buf, 0));
+  }
+}
+
+TEST_CASE(
+    "EditorLayerInternal: unavailable texture dialog button renders safely",
+    "[editor][internal][imgui]") {
+  ImGuiContextGuard ctx;
+  ImGui::NewFrame();
+  ImGui::Begin("test-window");
+  REQUIRE_NOTHROW(DrawUnavailableTextureDialogButton("dialog-button"));
+  ImGui::End();
+  ImGui::EndFrame();
+}
+
 TEST_CASE(
     "EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo filter",
     "[editor][internal][schema]") {
