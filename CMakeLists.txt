@@ -95,7 +95,7 @@ function(monolith_configure_engine_target target_name imgui_target)
     endif()
 endfunction()
 
-# Optional gcov/llvm-cov instrumentation (GCC/Clang only).
+# Optional llvm-cov instrumentation (GCC/Clang only).
 option(MONOLITH_ENGINE_COVERAGE "Add coverage flags to MonolithEngine (for reports after ctest)" OFF)
 
 monolith_configure_engine_target(MonolithEngine imgui_lib)
@@ -104,6 +104,7 @@ if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
     set(MONOLITH_UI_TEST_SOURCES
         tests/UiTestRegistry.cpp
         tests/ui_scenarios/LauncherUiScenarios.cpp
+        tests/ui_scenarios/EditorUiScenarios.cpp
     )
     add_library(MonolithEngineImGuiTest STATIC ${ENGINE_SOURCES})
     target_sources(MonolithEngineImGuiTest PRIVATE ${MONOLITH_UI_TEST_SOURCES})

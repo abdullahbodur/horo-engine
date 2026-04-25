@@ -285,3 +285,112 @@ TEST_CASE("SceneReferenceRuntime updates live light position and props without "
     REQUIRE(runtime.GetLights()[0].color.y == Approx(0.4f));
     REQUIRE(runtime.GetLights()[0].color.z == Approx(1.0f));
 }
+
+// ===========================================================================
+// Error-path tests — SceneReferenceRuntime.cpp
+// ===========================================================================
+
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight falls back on invalid float "
+          "strings (ParseFloat coverage)",
+          "[scene][reference-runtime]") {
+    // Covers lines 33-39: ParseFloat catching std::invalid_argument and
+    // std::out_of_range exceptions and returning the fallback value.
+    Scene scene;
+    SceneReferenceRuntime runtime(&scene);
+
+    SceneDocument document;
+    document.sceneId = "scene_parsefloat";
+    SceneObject light;
+    light.id = "light_pf";
+    light.type = SceneObjectType::Light;
+    light.position = {0.0f, 1.0f, 0.0f};
+    light.props["intensity"] = "1.5";
+    light.props["radius"] = "8.0";
+    document.objects.push_back(light);
+
+    REQUIRE(runtime.LoadDocument(document).ok);
+    REQUIRE(runtime.GetLights()[0].intensity == Approx(1.5f));
+    REQUIRE(runtime.GetLights()[0].radius == Approx(8.0f));
+
+    // std::invalid_argument path: non-numeric string — value must stay at 1.5
+    SceneObject bad = light;
+    bad.props["intensity"] = "not_a_float";
+    std::string error;
+    REQUIRE(runtime.UpdateLiveLight(bad, &error));
+    REQUIRE(error.empty());
+    REQUIRE(runtime.GetLights()[0].intensity == Approx(1.5f));
+
+    // std::out_of_range path: exponent too large for float — value must stay at 1.5
+    bad.props["intensity"] = "1e99999";
+    REQUIRE(runtime.UpdateLiveLight(bad, &error));
+    REQUIRE(error.empty());
+    REQUIRE(runtime.GetLights()[0].intensity == Approx(1.5f));
+}
+
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight sets directional light type "
+          "and computes direction via ForwardFromYawPitch",
+          "[scene][reference-runtime]") {
+    // Covers lines 49-54 (ForwardFromYawPitch) and lines 153-163
+    // (lightType "directional"/"point" dispatch).
+    Scene scene;
+    SceneReferenceRuntime runtime(&scene);
+
+    SceneDocument document;
+    document.sceneId = "scene_lighttype";
+    SceneObject light;
+    light.id = "light_lt";
+    light.type = SceneObjectType::Light;
+    light.position = {0.0f, 2.0f, 0.0f};
+    light.props["intensity"] = "1.0";
+    document.objects.push_back(light);
+
+    REQUIRE(runtime.LoadDocument(document).ok);
+    REQUIRE(runtime.GetLights().size() == 1);
+
+    // -- directional branch: triggers ForwardFromYawPitch and normalised dir --
+    SceneObject dir = light;
+    dir.yaw   = 45.0f;
+    dir.pitch = -30.0f;
+    dir.props["lightType"] = "directional";
+    std::string error;
+    REQUIRE(runtime.UpdateLiveLight(dir, &error));
+    REQUIRE(error.empty());
+    {
+        const Light &l = runtime.GetLights()[0];
+        const float len = std::sqrt(l.direction.x * l.direction.x +
+                                    l.direction.y * l.direction.y +
+                                    l.direction.z * l.direction.z);
+        REQUIRE(len == Approx(1.0f).margin(0.001f));
+    }
+
+    // -- point branch: overrides type to Point --
+    SceneObject pt = light;
+    pt.props["lightType"] = "point";
+    REQUIRE(runtime.UpdateLiveLight(pt, &error));
+    REQUIRE(error.empty());
+}
+
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight returns error when light id "
+          "is not found",
+          "[scene][reference-runtime]") {
+    // Covers lines 121-129: idIt == m_lightObjectIds.end() early-return path.
+    Scene scene;
+    SceneReferenceRuntime runtime(&scene);
+
+    SceneDocument document;
+    document.sceneId = "scene_notfound";
+    SceneObject light;
+    light.id = "real_light";
+    light.type = SceneObjectType::Light;
+    light.position = {0.0f, 1.0f, 0.0f};
+    light.props["intensity"] = "1.0";
+    document.objects.push_back(light);
+
+    REQUIRE(runtime.LoadDocument(document).ok);
+
+    SceneObject unknown = light;
+    unknown.id = "does_not_exist";
+    std::string error;
+    REQUIRE_FALSE(runtime.UpdateLiveLight(unknown, &error));
+    REQUIRE_FALSE(error.empty());
+}

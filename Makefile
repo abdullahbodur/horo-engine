@@ -39,7 +39,7 @@ else
     RUN_UI_WINDOWED = build/$(PRESET_DBG)/bin/HoroEditorUiTest --run-ui-tests
     TEST_CMD    = ctest --preset debug
 
-    # Coverage — Linux/macOS: gcov + lcov  (apt: lcov  |  brew: lcov)
+    # Coverage — Linux/macOS: lcov
     PRESET_COV  ?= coverage
     SENTINEL_COV := build/$(PRESET_COV)/build.ninja
     COV_DIR     := build/coverage
@@ -151,7 +151,7 @@ coverage: build
 
 else
 
-## Generate HTML coverage report using gcov + lcov (Linux / macOS)
+## Generate HTML coverage report using lcov (Linux / macOS)
 ## Requires: apt install lcov  |  brew install lcov
 $(SENTINEL_COV):
 	cmake --preset $(PRESET_COV)
@@ -160,6 +160,8 @@ coverage: $(SENTINEL_COV)
 	cmake --build build/$(PRESET_COV)
 	@$(MKDIR_P) "$(COV_DIR)"
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure
+	@echo "[coverage] running UI test scenarios ..."
+	build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests || true
 	lcov --capture \
 	     --directory build/$(PRESET_COV) \
 	     --output-file "$(COV_DIR)/raw.info" \

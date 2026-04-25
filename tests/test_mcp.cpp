@@ -2924,3 +2924,246 @@ TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool",
     REQUIRE_FALSE(result.ok);
     REQUIRE(result.error == "Unsupported MCP command.");
 }
+
+// ===========================================================================
+// McpServer.cpp error-path tests
+// ===========================================================================
+
+TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure",
+          "[mcp][server]") {
+    // Covers McpServer.cpp lines 278-286: inet_pton returns != 1 for a
+    // syntactically invalid IPv4 address, setting result.error and not binding.
+    using namespace Monolith::Mcp;
+    McpHttpServer server;
+    const McpServerStartResult result = server.Start(
+        "999.999.999.999", 9999,
+        [](const McpHttpRequest &) { return McpHttpResponse{200, {}, ""}; },
+        [] {},
+        [] {});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+    REQUIRE_FALSE(server.IsRunning());
+}
+
+TEST_CASE("McpHttpServer: Start with non-numeric host triggers inet_pton failure",
+          "[mcp][server]") {
+    // Second variant — a hostname (not an IP) also fails inet_pton.
+    using namespace Monolith::Mcp;
+    McpHttpServer server;
+    const McpServerStartResult result = server.Start(
+        "not-an-ip-address", 9999,
+        [](const McpHttpRequest &) { return McpHttpResponse{200, {}, ""}; },
+        [] {},
+        [] {});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+    REQUIRE_FALSE(server.IsRunning());
+}
+
+// ===========================================================================
+// McpSettings.cpp error-path tests
+// ===========================================================================
+
+TEST_CASE("McpSettings: SaveMcpSettings returns error when directory cannot "
+          "be created (HOME points inside a file)",
+          "[mcp][settings]") {
+    // Covers McpSettings.cpp lines 151-155: create_directories sets an error_code
+    // when the parent path is not a real directory (e.g. /dev/null on macOS/Linux).
+#ifdef _WIN32
+    SKIP("Test relies on /dev/null being a non-directory; skipped on Windows.");
+#else
+    const char *key = "HOME";
+    std::string oldHome;
+    if (const char *existing = std::getenv(key))
+        oldHome = existing;
+    setenv(key, "/dev/null", 1); // ResolveMcpSettingsDirectory() => /dev/null/.horo
+
+    McpSettingsDocument doc;
+    std::string error;
+    const bool ok = SaveMcpSettings(&doc, &error);
+
+    if (oldHome.empty())
+        unsetenv(key);
+    else
+        setenv(key, oldHome.c_str(), 1);
+
+    REQUIRE_FALSE(ok);
+    REQUIRE_FALSE(error.empty());
+#endif
+}
+
+TEST_CASE("McpSettings: SaveMcpSettings returns error when settings file "
+          "path is occupied by a directory",
+          "[mcp][settings]") {
+    // Covers McpSettings.cpp lines 156-161: ofstream::is_open() returns false
+    // when the target path is an existing directory rather than a regular file.
+    EnvGuard env("horo_mcp_ofstream_fail");
+
+    // Create <tempHome>/.horo/settings.json as a *directory* so the ofstream open fails.
+    const std::filesystem::path settingsPath = ResolveMcpSettingsPath();
+    std::error_code ec;
+    std::filesystem::create_directories(settingsPath, ec); // makes settings.json a dir
+
+    McpSettingsDocument doc;
+    std::string error;
+    const bool ok = SaveMcpSettings(&doc, &error);
+    REQUIRE_FALSE(ok);
+    REQUIRE_FALSE(error.empty());
+}
+
+TEST_CASE("McpProtocol: preview mode for create/update/rename/reparent/duplicate tools",
+          "[mcp][protocol][preview]") {
+    McpEditorSnapshot snapshot = MakeSnapshot();
+    std::vector<std::string> invoked;
+    McpProtocol protocol(McpProtocolContext{
+        [&snapshot]() { return CloneSnapshot(snapshot); },
+        [&invoked](const std::string &toolName, const json &) {
+            invoked.push_back(toolName);
+            return McpCommandResult{true, json{{"handledTool", toolName}}, {}};
+        },
+        {},
+    });
+
+    // editor.create_object with mode="preview"
+    const json createPreview = CallTool(protocol, "editor.create_object",
+        json{{"type", "Prop"}, {"id", "preview_obj"}, {"mode", "preview"}}, 1);
+    REQUIRE(createPreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(createPreview["result"]["structuredContent"]["previewToken"].is_string());
+    REQUIRE(invoked.empty());
+
+    // editor.create_object preview with position, scale, assetId
+    const json createWithDetails = CallTool(protocol, "editor.create_object",
+        json{{"type", "Prop"}, {"id", "detailed_obj"},
+             {"position", json::array({1.0, 2.0, 3.0})},
+             {"scale", json::array({1.0, 1.0, 1.0})},
+             {"assetId", "crate"},
+             {"mode", "preview"}}, 2);
+    REQUIRE(createWithDetails["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.create_object_from_asset with mode="preview"
+    const json createFromAssetPreview = CallTool(protocol, "editor.create_object_from_asset",
+        json{{"assetId", "crate"}, {"id", "from_asset_preview"}, {"mode", "preview"}}, 3);
+    REQUIRE(createFromAssetPreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.update_object with mode="preview"
+    const json updatePreview = CallTool(protocol, "editor.update_object",
+        json{{"id", "obj_root"}, {"props", json{{"tag", "updated"}}}, {"mode", "preview"}}, 4);
+    REQUIRE(updatePreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(updatePreview["result"]["structuredContent"]["previewToken"].is_string());
+    REQUIRE(invoked.empty());
+
+    // editor.transform with mode="preview"
+    const json transformPreview = CallTool(protocol, "editor.transform",
+        json{{"id", "obj_root"}, {"position", json::array({4.0, 5.0, 6.0})}, {"mode", "preview"}}, 5);
+    REQUIRE(transformPreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.rename_object with mode="preview"
+    const json renamePreview = CallTool(protocol, "editor.rename_object",
+        json{{"id", "obj_root"}, {"newId", "obj_root_preview_renamed"}, {"mode", "preview"}}, 6);
+    REQUIRE(renamePreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.reparent_object with mode="preview"
+    const json reparentPreview = CallTool(protocol, "editor.reparent_object",
+        json{{"id", "obj_child"}, {"parentId", "obj_camera"}, {"mode", "preview"}}, 7);
+    REQUIRE(reparentPreview["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.duplicate with mode="preview"
+    const json duplicatePreview = CallTool(protocol, "editor.duplicate",
+        json{{"id", "obj_root"}, {"count", 2}, {"mode", "preview"}}, 8);
+    REQUIRE(duplicatePreview["result"]["structuredContent"]["mode"] == "preview");
+
+    // None of the above should have invoked the command
+    REQUIRE(invoked.empty());
+
+    // Apply round-trip: preview then apply for editor.create_object
+    const std::string createToken =
+            createPreview["result"]["structuredContent"]["previewToken"].get<std::string>();
+    const json createApply = CallTool(protocol, "editor.create_object",
+        json{{"type", "Prop"}, {"id", "preview_obj"}, {"mode", "apply"},
+             {"previewToken", createToken}}, 9);
+    REQUIRE(createApply["result"]["structuredContent"]["handledTool"] == "editor.create_object");
+    REQUIRE(invoked.size() == 1);
+    REQUIRE(invoked[0] == "editor.create_object");
+}
+
+TEST_CASE("McpProtocol: editor.update_asset and editor.delete_asset preview mode",
+          "[mcp][protocol][preview]") {
+    McpEditorSnapshot snapshot = MakeSnapshot();
+    std::vector<std::string> invoked;
+    McpProtocol protocol(McpProtocolContext{
+        [&snapshot]() { return CloneSnapshot(snapshot); },
+        [&invoked](const std::string &toolName, const json &) {
+            invoked.push_back(toolName);
+            return McpCommandResult{true, json{{"handledTool", toolName}}, {}};
+        },
+        {},
+    });
+
+    // editor.update_asset with mode="preview"
+    const json updateAsset = CallTool(protocol, "editor.update_asset",
+        json{{"id", "crate"}, {"mesh", "assets/models/crate_v2.obj"}, {"mode", "preview"}}, 1);
+    REQUIRE(updateAsset["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(updateAsset["result"]["structuredContent"]["previewToken"].is_string());
+    REQUIRE(invoked.empty());
+
+    // editor.delete_asset with mode="preview" on an existing asset
+    const json deleteAsset = CallTool(protocol, "editor.delete_asset",
+        json{{"id", "crate"}, {"mode", "preview"}}, 2);
+    REQUIRE(deleteAsset["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.delete (objects) with a single id in preview
+    const json deleteObjects = CallTool(protocol, "editor.delete",
+        json{{"id", "obj_root"}, {"mode", "preview"}}, 3);
+    REQUIRE(deleteObjects["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+
+    // editor.delete with both id and ids list in preview (cascading delete preview)
+    const json deleteMultiple = CallTool(protocol, "editor.delete",
+        json{{"id", "obj_root"}, {"ids", json::array({"obj_child", "obj_light"})},
+             {"mode", "preview"}}, 4);
+    REQUIRE(deleteMultiple["result"]["structuredContent"]["mode"] == "preview");
+    REQUIRE(invoked.empty());
+}
+
+TEST_CASE("McpProtocol: create_object preview with parentId and position set",
+          "[mcp][protocol][preview]") {
+    McpEditorSnapshot snapshot = MakeSnapshot();
+    McpProtocol protocol(McpProtocolContext{
+        [&snapshot]() { return CloneSnapshot(snapshot); },
+        [](const std::string &, const json &) {
+            return McpCommandResult{};
+        },
+        {},
+    });
+
+    // With parentId → exercises parentId branch in BuildCreateObjectPreview
+    const json withParent = CallTool(protocol, "editor.create_object",
+        json{{"type", "Panel"}, {"parentId", "obj_root"}, {"mode", "preview"}}, 1);
+    REQUIRE(withParent["result"]["structuredContent"]["mode"] == "preview");
+    const json &preview = withParent["result"]["structuredContent"]["preview"];
+    // BuildObjectJson hoists parentId to the top-level of the object JSON
+    REQUIRE(preview["created"]["parentId"] == "obj_root");
+
+    // With assetId via create_object_from_asset → exercises assetId lookup
+    const json withAsset = CallTool(protocol, "editor.create_object_from_asset",
+        json{{"assetId", "crate"}, {"position", json::array({1.0, 2.0, 3.0})},
+             {"mode", "preview"}}, 2);
+    REQUIRE(withAsset["result"]["structuredContent"]["mode"] == "preview");
+    const json &assetPreview = withAsset["result"]["structuredContent"]["preview"];
+    REQUIRE(assetPreview["assetId"] == "crate");
+    REQUIRE(assetPreview["position"].is_array());
+
+    // update_object on existing id → exercises full before/after path in BuildUpdateObjectPreview
+    const json updateExisting = CallTool(protocol, "editor.update_object",
+        json{{"id", "obj_root"}, {"props", json{{"tag", "x"}}}, {"mode", "preview"}}, 3);
+    REQUIRE(updateExisting["result"]["structuredContent"]["mode"] == "preview");
+    const json &updatePreview = updateExisting["result"]["structuredContent"]["preview"];
+    REQUIRE(updatePreview["before"].is_object());
+    REQUIRE(updatePreview["after"].is_object());
+}

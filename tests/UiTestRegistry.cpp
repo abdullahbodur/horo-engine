@@ -14,6 +14,7 @@
 
 namespace Monolith {
     void RegisterLauncherUiScenarioSet();
+    void RegisterEditorUiScenarioSet();
 
     namespace {
         struct UiScenarioRegistration {
@@ -92,6 +93,7 @@ namespace Monolith {
             return;
         initialized = true;
         RegisterLauncherUiScenarioSet();
+        RegisterEditorUiScenarioSet();
         LogDebug("UI scenario registry initialized with {} scenario(s).",
                  Registry().size());
     }

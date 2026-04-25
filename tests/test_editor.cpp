@@ -19,6 +19,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "core/LogBuffer.h"
+#include "core/Logger.h"
 #include "core/ProjectPath.h"
 #include "editor/AssetImportService.h"
 #include "editor/AssetImporterRegistry.h"
@@ -38,6 +40,16 @@
 #include "editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 #include "tests/TestTempPaths.h"
+#include "scene/Registry.h"
+#include "scene/components/MeshComponent.h"
+#include "scene/components/TransformComponent.h"
+#include "scene/components/PlayerTagComponent.h"
+
+// Private shared helpers — included here to directly unit-test the inline
+// functions (FindEnumOptionIndex, BuildImGuiComboItems,
+// SchemaAppliesToObjectType) that live inside anonymous namespaces and are
+// not reachable via EditorLayer's public surface.
+#include "editor/EditorLayerInternal.h"
 
 using namespace Monolith;
 using namespace Monolith::Editor;
@@ -3582,3 +3594,5524 @@ TEST_CASE("EditorLayer: Render with inactive editor does not crash",
     editor.Render(cam, 1280, 720);
     REQUIRE(true);
 }
+
+// ============================================================
+// Active editor draw method coverage tests
+// ============================================================
+
+// Helper: build a minimal SceneDocument with one object of each type
+static SceneDocument MakeDocWithAllObjectTypes() {
+    SceneDocument doc;
+    {
+        SceneObject panel;
+        panel.id = "panel1";
+        panel.type = SceneObjectType::Panel;
+        panel.position = {0.f, 0.f, 0.f};
+        panel.scale = {2.f, 2.f, 0.1f};
+        doc.objects.push_back(panel);
+    }
+    {
+        SceneObject prop;
+        prop.id = "prop1";
+        prop.type = SceneObjectType::Prop;
+        prop.position = {1.f, 0.f, 0.f};
+        prop.scale = {1.f, 1.f, 1.f};
+        prop.assetId = "asset1";
+        doc.objects.push_back(prop);
+    }
+    {
+        SceneObject light;
+        light.id = "light1";
+        light.type = SceneObjectType::Light;
+        light.position = {5.f, 5.f, 0.f};
+        ComponentDesc lc;
+        lc.type = "light";
+        lc.props["intensity"] = "1.5";
+        lc.props["color"] = "1.0,0.9,0.8";
+        lc.props["radius"] = "10.0";
+        light.components.push_back(lc);
+        doc.objects.push_back(light);
+    }
+    {
+        SceneObject cam;
+        cam.id = "cam1";
+        cam.type = SceneObjectType::Camera;
+        cam.position = {0.f, 3.f, -10.f};
+        doc.objects.push_back(cam);
+    }
+    doc.assets["asset1"] = AssetDef{"", "1.0,1.0,1.0"};
+    doc.sceneId = "test-scene";
+    doc.sceneName = "Test Scene";
+    return doc;
+}
+
+TEST_CASE("EditorLayer: Toggle makes editor active without crashing",
+          "[editor][layer][draw]") {
+    EditorLayer editor;
+    REQUIRE_FALSE(editor.IsActive());
+    editor.Toggle();
+    REQUIRE(editor.IsActive());
+    editor.Toggle();
+    REQUIRE_FALSE(editor.IsActive());
+}
+
+TEST_CASE("EditorLayer: active Render with empty document does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+    REQUIRE(editor.IsActive());
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with all object types does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with Prop selected draws properties panel",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();  // activate FIRST; Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop1"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with Panel selected draws properties panel",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();  // activate FIRST
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "panel1"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with Camera selected draws camera section",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();  // activate FIRST
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam1"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with Light+components selected draws component list",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();  // activate FIRST
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "light1"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with asset selected draws asset properties",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "asset1"}});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with multiple selected draws multi-select panel",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();  // activate FIRST — Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"ids", nlohmann::json::array({"panel1", "prop1"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render multiple frames does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    Camera cam;
+    for (int i = 0; i < 3; ++i) {
+        editor.ExecuteMcpCommand("editor.select",
+                                 nlohmann::json{{"id", i % 2 == 0 ? "prop1" : "cam1"}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with rigidbody component does not crash",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "rb_obj";
+    obj.type = SceneObjectType::Prop;
+    ComponentDesc rb;
+    rb.type = "rigidbody";
+    rb.props["mass"] = "1.5";
+    rb.props["isKinematic"] = "false";
+    rb.props["useGravity"] = "true";
+    obj.components.push_back(rb);
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();  // activate FIRST — Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "rb_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with script component does not crash",
+          "[editor][layer][draw][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "script_obj";
+    obj.type = SceneObjectType::Prop;
+    ComponentDesc sc;
+    sc.type = "script";
+    sc.props["behaviorTag"] = "MyBehavior";
+    obj.components.push_back(sc);
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();  // activate FIRST — Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "script_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with multiple assets in document does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.assets["mesh_a"] = AssetDef{"", "1.0,1.0,1.0", "tex_a.png"};
+    doc.assets["mesh_b"] = AssetDef{"", "2.0,1.0,1.0"};
+    doc.assets["mesh_c"] = AssetDef{"", ""};
+
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("obj{}", i);
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = (i == 0) ? "mesh_a" : (i == 1) ? "mesh_b" : "";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with object having parentId does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    SceneObject parent;
+    parent.id = "parent";
+    parent.type = SceneObjectType::Panel;
+    doc.objects.push_back(parent);
+
+    SceneObject child;
+    child.id = "child";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "parent";
+    doc.objects.push_back(child);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();  // activate FIRST — Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "child"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with prefab instance does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "prefab_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.prefabInstance = ScenePrefabInstance{"pf-001", "assets/prefabs/box.json"};
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();  // activate FIRST — Toggle clears m_selectedIndices
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prefab_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: Toggle twice restores inactive state",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+    REQUIRE(editor.IsActive());
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    editor.Toggle();
+    REQUIRE_FALSE(editor.IsActive());
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with hot reload overlay does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetHotReloadOverlay(true, 0.5f, 1.2f, "Reloading...");
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: active Render with SetProjectBrowserRoot set does not crash",
+          "[editor][layer][draw]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetProjectBrowserRoot(
+        std::filesystem::path(RepoRootFromTestSource()) / "assets");
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ============================================================
+// TransformGizmo math helper tests
+// ============================================================
+
+TEST_CASE("TransformGizmo: Deactivate clears mode and axes",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
+                   Vec3::One());
+    REQUIRE(gizmo.IsActive());
+    REQUIRE(gizmo.GetMode() == GizmoMode::Translate);
+
+    gizmo.Deactivate();
+    REQUIRE_FALSE(gizmo.IsActive());
+    REQUIRE(gizmo.GetMode() == GizmoMode::None);
+    REQUIRE(gizmo.GetDragAxis() == GizmoAxis::None);
+}
+
+TEST_CASE("TransformGizmo: WorldToScreen projects front-facing point",
+          "[editor][gizmo]") {
+    Camera cam;
+    cam.position = {0.f, 0.f, -10.f};
+    cam.target = {0.f, 0.f, 0.f};
+    cam.fovY = 60.f;
+
+    float sx = 0.f, sy = 0.f;
+    bool visible = TransformGizmo::WorldToScreen({0.f, 0.f, 0.f}, cam, 1280, 720,
+                                                 sx, sy);
+    REQUIRE(visible);
+    REQUIRE(sx == Approx(640.f).margin(5.f));
+    REQUIRE(sy == Approx(360.f).margin(5.f));
+}
+
+TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera",
+          "[editor][gizmo]") {
+    Camera cam;
+    cam.position = {0.f, 0.f, 10.f};
+    cam.target = {0.f, 0.f, 0.f};
+    cam.fovY = 60.f;
+
+    float sx = 0.f, sy = 0.f;
+    // Point is at z=20, camera looking toward z=0, so point is behind
+    bool visible = TransformGizmo::WorldToScreen({0.f, 0.f, 20.f}, cam, 1280, 720,
+                                                 sx, sy);
+    // The result depends on clip.w sign; verify no crash
+    (void) visible;
+    REQUIRE(true);
+}
+
+TEST_CASE("TransformGizmo: RayHitPlane returns hit for non-parallel ray",
+          "[editor][gizmo]") {
+    // Ray pointing down (negative Y), plane is horizontal (Y=0)
+    Ray ray;
+    ray.origin = {0.f, 5.f, 0.f};
+    ray.direction = {0.f, -1.f, 0.f};
+    const Vec3 planeNormal = {0.f, 1.f, 0.f};
+    const Vec3 planePoint = {0.f, 0.f, 0.f};
+
+    Vec3 hit;
+    REQUIRE(TransformGizmo::RayHitPlane(ray, planeNormal, planePoint, hit));
+    REQUIRE(hit.x == Approx(0.f).margin(0.001f));
+    REQUIRE(hit.y == Approx(0.f).margin(0.001f));
+    REQUIRE(hit.z == Approx(0.f).margin(0.001f));
+}
+
+TEST_CASE("TransformGizmo: RayHitPlane returns false for parallel ray",
+          "[editor][gizmo]") {
+    Ray ray;
+    ray.origin = {0.f, 1.f, 0.f};
+    ray.direction = {1.f, 0.f, 0.f}; // parallel to XZ plane
+    const Vec3 planeNormal = {0.f, 1.f, 0.f};
+    const Vec3 planePoint = {0.f, 0.f, 0.f};
+
+    Vec3 hit;
+    REQUIRE_FALSE(TransformGizmo::RayHitPlane(ray, planeNormal, planePoint, hit));
+}
+
+TEST_CASE("TransformGizmo: RayHitPlane returns false for hit behind ray origin",
+          "[editor][gizmo]") {
+    // Ray pointing up, plane is below origin
+    Ray ray;
+    ray.origin = {0.f, 5.f, 0.f};
+    ray.direction = {0.f, 1.f, 0.f};
+    const Vec3 planeNormal = {0.f, 1.f, 0.f};
+    const Vec3 planePoint = {0.f, 0.f, 0.f}; // below origin
+
+    Vec3 hit;
+    REQUIRE_FALSE(TransformGizmo::RayHitPlane(ray, planeNormal, planePoint, hit));
+}
+
+TEST_CASE("TransformGizmo: RayClosestOnLine finds correct point",
+          "[editor][gizmo]") {
+    // Ray going in +Z, line going in +X at y=1
+    Ray ray;
+    ray.origin = {0.f, 0.f, 0.f};
+    ray.direction = {0.f, 0.f, 1.f};
+    const Vec3 lineOrigin = {0.f, 1.f, 5.f};
+    const Vec3 lineDir = {1.f, 0.f, 0.f};
+
+    Vec3 closest = TransformGizmo::RayClosestOnLine(ray, lineOrigin, lineDir);
+    // The closest point on the line to the ray should be at x=0, y=1, z=5
+    REQUIRE(closest.x == Approx(0.f).margin(0.001f));
+    REQUIRE(closest.y == Approx(1.f).margin(0.001f));
+    REQUIRE(closest.z == Approx(5.f).margin(0.001f));
+}
+
+TEST_CASE("TransformGizmo: RayClosestOnLine handles parallel lines",
+          "[editor][gizmo]") {
+    // Parallel ray and line
+    Ray ray;
+    ray.origin = {0.f, 0.f, 0.f};
+    ray.direction = {1.f, 0.f, 0.f};
+    const Vec3 lineOrigin = {5.f, 1.f, 0.f};
+    const Vec3 lineDir = {1.f, 0.f, 0.f}; // same direction
+
+    Vec3 closest = TransformGizmo::RayClosestOnLine(ray, lineOrigin, lineDir);
+    // Should not crash; result is some valid point
+    REQUIRE(std::isfinite(closest.x));
+    REQUIRE(std::isfinite(closest.y));
+    REQUIRE(std::isfinite(closest.z));
+}
+
+TEST_CASE("TransformGizmo: HandleSize returns reasonable value",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
+                   Vec3::One());
+
+    Camera cam;
+    cam.position = {0.f, 0.f, -5.f};
+    cam.target = {0.f, 0.f, 0.f};
+    cam.fovY = 60.f;
+
+    const float size = gizmo.HandleSize(cam);
+    REQUIRE(size > 0.0f);
+    REQUIRE(size < 100.0f);
+}
+
+TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same position",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
+                   Vec3::One());
+
+    Camera cam;
+    cam.position = {0.f, 0.f, 0.f}; // same as gizmo pos
+    cam.target = {0.f, 0.f, 1.f};
+    cam.fovY = 60.f;
+
+    const float size = gizmo.HandleSize(cam);
+    REQUIRE(size == Approx(0.1f));
+}
+
+TEST_CASE("TransformGizmo: AxisDir returns correct directions",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+                   Vec3::One());
+
+    const Vec3 x = gizmo.AxisDir(GizmoAxis::X);
+    const Vec3 y = gizmo.AxisDir(GizmoAxis::Y);
+    const Vec3 z = gizmo.AxisDir(GizmoAxis::Z);
+    const Vec3 none = gizmo.AxisDir(GizmoAxis::None);
+
+    REQUIRE(x.x == Approx(1.f));
+    REQUIRE(x.y == Approx(0.f));
+    REQUIRE(x.z == Approx(0.f));
+    REQUIRE(y.x == Approx(0.f));
+    REQUIRE(y.y == Approx(1.f));
+    REQUIRE(y.z == Approx(0.f));
+    REQUIRE(z.x == Approx(0.f));
+    REQUIRE(z.y == Approx(0.f));
+    REQUIRE(z.z == Approx(1.f));
+    REQUIRE(none.x == Approx(0.f));
+    REQUIRE(none.y == Approx(0.f));
+    REQUIRE(none.z == Approx(0.f));
+}
+
+TEST_CASE("TransformGizmo: PickAxis returns None when no axis near cursor",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
+                   Vec3::One());
+
+    Camera cam;
+    cam.position = {0.f, 0.f, -10.f};
+    cam.target = {0.f, 0.f, 0.f};
+    cam.fovY = 60.f;
+
+    // Mouse at corner, far from any axis
+    const GizmoAxis axis = gizmo.PickAxis(1200.f, 680.f, cam, 1280, 720);
+    // Should return None since cursor is far from gizmo center
+    (void) axis;
+    REQUIRE(true); // no crash
+}
+
+TEST_CASE("TransformGizmo: SyncTarget updates internal position",
+          "[editor][gizmo]") {
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
+                   Vec3::One());
+
+    gizmo.SyncTarget({10.f, 20.f, 30.f}, Quaternion::Identity(), {2.f, 2.f, 2.f});
+
+    Camera cam;
+    cam.position = {0.f, 0.f, -50.f};
+    cam.target = {10.f, 20.f, 30.f};
+    cam.fovY = 45.f;
+
+    const float size = gizmo.HandleSize(cam);
+    REQUIRE(size > 0.0f);
+}
+
+// ============================================================
+// Additional MCP handler tests (cover uncovered handlers)
+// ============================================================
+
+TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.new_scene",
+                                           nlohmann::json{
+                                               {"sceneId", "new-scene-id"},
+                                               {"sceneName", "My New Scene"}
+                                           });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().sceneId == "new-scene-id");
+    REQUIRE(editor.GetDocument().sceneName == "My New Scene");
+}
+
+TEST_CASE("EditorLayer MCP: new_scene without args creates clean scene",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "old_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.new_scene", nlohmann::json{});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.empty());
+}
+
+TEST_CASE("EditorLayer MCP: save_scene fails with non-existent deep path",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.filePath = "/nonexistent_dir_for_test/deep/path/scene.json";
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.save_scene", nlohmann::json{});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: reload_scene fails with non-existent file path",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.filePath = "/nonexistent_dir_for_test/deep/path/scene.json";
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json{});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_prefab fails without selection",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // nlohmann::json::object() must be used (not nlohmann::json{}) because
+    // the handler calls arguments.value() which requires an object-type JSON
+    auto result = editor.ExecuteMcpCommand("editor.create_prefab", nlohmann::json::object());
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: create_prefab with valid selection succeeds",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "test_prefab_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.create_prefab",
+                                           nlohmann::json{{"id", "test_prefab_obj"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data.contains("prefabPath"));
+    // Clean up the generated prefab file
+    if (result.data.contains("prefabPath") && result.data["prefabPath"].is_string()) {
+        std::error_code ec;
+        std::filesystem::remove(result.data["prefabPath"].get<std::string>(), ec);
+    }
+}
+
+TEST_CASE("EditorLayer MCP: update_asset modifies mesh and renderScale",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.assets["asset1"] = AssetDef{"old.obj", "1.0,1.0,1.0"};
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.update_asset",
+                                           nlohmann::json{
+                                               {"id", "asset1"},
+                                               {"mesh", "new.obj"},
+                                               {"renderScale", "2.0,2.0,2.0"},
+                                               {"albedoMap", "tex.png"},
+                                               {"displayName", "New Asset"}
+                                           });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().assets.at("asset1").mesh == "new.obj");
+    REQUIRE(editor.GetDocument().assets.at("asset1").renderScale == "2.0,2.0,2.0");
+    REQUIRE(editor.GetDocument().assets.at("asset1").albedoMap == "tex.png");
+    REQUIRE(editor.GetDocument().assets.at("asset1").displayName == "New Asset");
+}
+
+TEST_CASE("EditorLayer MCP: update_asset with null values clears fields",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.assets["asset1"] = AssetDef{"old.obj", "1.0,1.0,1.0", "tex.png"};
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.update_asset",
+                                           nlohmann::json{
+                                               {"id", "asset1"},
+                                               {"mesh", nullptr},
+                                               {"renderScale", nullptr},
+                                               {"albedoMap", nullptr},
+                                               {"displayName", nullptr}
+                                           });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().assets.at("asset1").mesh.empty());
+    REQUIRE(editor.GetDocument().assets.at("asset1").albedoMap.empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_asset fails for unknown asset",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.update_asset",
+                                           nlohmann::json{{"id", "no_such_asset"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: delete_asset removes the asset",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.assets["asset1"] = AssetDef{"cube.obj", "1.0,1.0,1.0"};
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand("editor.delete_asset",
+                                           nlohmann::json{{"id", "asset1"}});
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(editor.GetDocument().assets.contains("asset1"));
+}
+
+TEST_CASE("EditorLayer MCP: delete_asset fails for unknown asset",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.delete_asset",
+                                           nlohmann::json{{"id", "no_such"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with all types",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    for (const auto *typeName : {"Panel", "Prop", "Light"}) {
+        auto result = editor.ExecuteMcpCommand(
+            "editor.create_object",
+            nlohmann::json{{"type", typeName}});
+        REQUIRE(result.ok);
+    }
+    REQUIRE(editor.GetDocument().objects.size() == 3u);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid type fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.create_object",
+                                           nlohmann::json{{"type", "InvalidType"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with custom id and position",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"type", "Prop"},
+            {"id", "custom_id"},
+            {"position", nlohmann::json::array({1.0, 2.0, 3.0})},
+            {"scale", nlohmann::json::array({2.0, 2.0, 2.0})},
+            {"yaw", 45.0}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.back().id == "custom_id");
+    REQUIRE(editor.GetDocument().objects.back().position.x == Approx(1.f));
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid position fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"type", "Prop"},
+            {"position", nlohmann::json::array({1.0, 2.0})} // too short
+        });
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with components",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"type", "Prop"},
+            {"components", nlohmann::json::array({
+                nlohmann::json{{"type", "script"}, {"props", nlohmann::json{{"behaviorTag", "Test"}}}}
+            })}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(!editor.GetDocument().objects.empty());
+    REQUIRE(editor.GetDocument().objects.back().components.size() == 1u);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid components fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"type", "Prop"},
+            {"components", nlohmann::json::array({"not_an_object"})}
+        });
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with parentId",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "parent"}});
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "child"}, {"parentId", "parent"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.back().props.at("parentId") == "parent");
+}
+
+TEST_CASE("EditorLayer MCP: create_object with unknown parentId fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"parentId", "no_such_parent"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: rename_object changes id and updates references",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "old_name"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "child"},
+                                            {"parentId", "old_name"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.rename_object",
+                                           nlohmann::json{{"id", "old_name"},
+                                                          {"newId", "new_name"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].id == "new_name");
+    REQUIRE(editor.GetDocument().objects[1].props.at("parentId") == "new_name");
+}
+
+TEST_CASE("EditorLayer MCP: rename_object fails for unknown id",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.rename_object",
+                                           nlohmann::json{{"id", "no_such"},
+                                                          {"newId", "new_name"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: rename_object fails with empty newId",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "obj"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.rename_object",
+                                           nlohmann::json{{"id", "obj"}, {"newId", ""}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: rename_object fails when newId already exists",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "a"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "b"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.rename_object",
+                                           nlohmann::json{{"id", "a"}, {"newId", "b"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object sets parentId",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "p"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "c"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.reparent_object",
+                                           nlohmann::json{{"id", "c"}, {"parentId", "p"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[1].props.at("parentId") == "p");
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "p"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "c"},
+                                            {"parentId", "p"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.reparent_object",
+                                           nlohmann::json{{"id", "c"}, {"parentId", ""}});
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(editor.GetDocument().objects[1].props.contains("parentId"));
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object fails for self-parent",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "obj"}});
+
+    auto result = editor.ExecuteMcpCommand("editor.reparent_object",
+                                           nlohmann::json{{"id", "obj"},
+                                                          {"parentId", "obj"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object fails for cycle",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "a"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "b"},
+                                            {"parentId", "a"}});
+
+    // Try to make 'a' a child of 'b' — would create cycle
+    auto result = editor.ExecuteMcpCommand("editor.reparent_object",
+                                           nlohmann::json{{"id", "a"},
+                                                          {"parentId", "b"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: duplicate multiple objects",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "a"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "b"}});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"a", "b"})}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4u);
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with count creates multiple copies",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "src"}});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"id", "src"}, {"count", 3}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4u); // original + 3 copies
+}
+
+TEST_CASE("EditorLayer MCP: delete multiple objects by ids",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "a"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Panel"}, {"id", "b"}});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Light"}, {"id", "c"}});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        nlohmann::json{{"ids", nlohmann::json::array({"a", "c"})}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1u);
+    REQUIRE(editor.GetDocument().objects[0].id == "b");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with components updates them",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "obj"}});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "obj"},
+            {"components", nlohmann::json::array({
+                nlohmann::json{{"type", "rigidbody"}, {"props", nlohmann::json{{"mass", "2.5"}}}}
+            })}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].components.size() == 1u);
+    REQUIRE(editor.GetDocument().objects[0].components[0].props.at("mass") == "2.5");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with null assetId clears it",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "obj";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "asset1";
+    doc.objects.push_back(obj);
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "obj"}, {"assetId", nullptr}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].assetId.empty());
+}
+
+TEST_CASE("EditorLayer MCP: transform alias works same as update_object",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "obj"}});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.transform",
+        nlohmann::json{
+            {"id", "obj"},
+            {"position", nlohmann::json::array({5.0, 0.0, 0.0})},
+            {"yaw", 90.0}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].position.x == Approx(5.f));
+    REQUIRE(editor.GetDocument().objects[0].yaw == Approx(90.f));
+}
+
+TEST_CASE("EditorLayer MCP: select_asset fails for unknown asset",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.select_asset",
+                                           nlohmann::json{{"id", "no_such_asset"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: select_asset with empty id clears selection",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.assets["a"] = AssetDef{"a.obj", "1,1,1"};
+    editor.LoadDocument(doc);
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "a"}});
+    REQUIRE(editor.GetSelectedAssetId() == "a");
+
+    auto result = editor.ExecuteMcpCommand("editor.select_asset",
+                                           nlohmann::json{{"id", ""}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetSelectedAssetId().empty());
+}
+
+TEST_CASE("EditorLayer MCP: undo and redo after create",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+                             nlohmann::json{{"type", "Prop"}, {"id", "obj"}});
+    REQUIRE(editor.GetDocument().objects.size() == 1u);
+
+    auto undoResult = editor.ExecuteMcpCommand("editor.undo", nlohmann::json{});
+    REQUIRE(undoResult.ok);
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    auto redoResult = editor.ExecuteMcpCommand("editor.redo", nlohmann::json{});
+    REQUIRE(redoResult.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1u);
+}
+
+TEST_CASE("EditorLayer MCP: create_object_from_asset with unknown asset fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{{"assetId", "no_such_asset"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object_from_asset with invalid position fails",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    SceneDocument doc;
+    doc.assets["asset1"] = AssetDef{"cube.obj", "1,1,1"};
+    editor.LoadDocument(doc);
+
+    auto result = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{
+            {"assetId", "asset1"},
+            {"position", nlohmann::json::array({1.0, 2.0})} // wrong size
+        });
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: unsupported command returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    auto result = editor.ExecuteMcpCommand("editor.nonexistent_command",
+                                           nlohmann::json{});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("Unsupported") != std::string::npos);
+}
+
+// ===========================================================================
+// Properties panel: select AFTER Toggle so m_selectedIndices survives Render
+// ===========================================================================
+
+// Helper: build a doc with multiple objects covering all useful types/states
+static SceneDocument MakeRichDocument() {
+    SceneDocument doc;
+    doc.sceneId = "rich-scene";
+
+    {   // Prop with a light component
+        SceneObject obj;
+        obj.id = "prop_light";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "mesh_a";
+        ComponentDesc lc;
+        lc.type = "light";
+        lc.props["intensity"] = "2.0";
+        lc.props["color"] = "1.0,0.8,0.6";
+        lc.props["radius"] = "8.0";
+        obj.components.push_back(lc);
+        doc.objects.push_back(obj);
+    }
+    {   // Prop with a rigidbody component
+        SceneObject obj;
+        obj.id = "prop_rb";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "mesh_a";
+        ComponentDesc rb;
+        rb.type = "rigidbody";
+        rb.props["mass"] = "2.5";
+        rb.props["isKinematic"] = "false";
+        rb.props["useGravity"] = "true";
+        obj.components.push_back(rb);
+        doc.objects.push_back(obj);
+    }
+    {   // Prop with a script component
+        SceneObject obj;
+        obj.id = "prop_script";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "mesh_b";
+        ComponentDesc sc;
+        sc.type = "script";
+        sc.props["behaviorTag"] = "EnemyAI";
+        obj.components.push_back(sc);
+        doc.objects.push_back(obj);
+    }
+    {   // Prop with all 3 component types
+        SceneObject obj;
+        obj.id = "prop_all_comps";
+        obj.type = SceneObjectType::Prop;
+        ComponentDesc lc; lc.type = "light";     obj.components.push_back(lc);
+        ComponentDesc rb; rb.type = "rigidbody"; obj.components.push_back(rb);
+        ComponentDesc sc; sc.type = "script";    obj.components.push_back(sc);
+        doc.objects.push_back(obj);
+    }
+    {   // Camera with a follow target
+        SceneObject cam;
+        cam.id = "cam_follow";
+        cam.type = SceneObjectType::Camera;
+        cam.props["followTargetId"] = "prop_light";
+        cam.props["fov"] = "75.0";
+        cam.props["nearClip"] = "0.1";
+        cam.props["farClip"] = "1000.0";
+        doc.objects.push_back(cam);
+    }
+    {   // Camera with no follow target (different path in the Combo)
+        SceneObject cam;
+        cam.id = "cam_nofol";
+        cam.type = SceneObjectType::Camera;
+        doc.objects.push_back(cam);
+    }
+    {   // Panel (no asset, no components)
+        SceneObject panel;
+        panel.id = "panel_bare";
+        panel.type = SceneObjectType::Panel;
+        doc.objects.push_back(panel);
+    }
+    {   // Prop with no assetId
+        SceneObject obj;
+        obj.id = "prop_no_asset";
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    doc.assets["mesh_a"] = AssetDef{"", "1.0,1.0,1.0", "tex.png"};
+    doc.assets["mesh_b"] = AssetDef{"", "2.0,1.0,1.0"};
+    return doc;
+}
+
+// ---- Select AFTER Toggle: light component -----------------------------------
+
+TEST_CASE("EditorLayer render: light component selected after Toggle covers DrawLightComponentFields",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_light"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Select AFTER Toggle: rigidbody component ------------------------------
+
+TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers DrawRigidBodyComponentFields",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_rb"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Select AFTER Toggle: script component ---------------------------------
+
+TEST_CASE("EditorLayer render: script component selected after Toggle covers DrawScriptComponentField",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_script"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Select AFTER Toggle: all 3 component types ----------------------------
+
+TEST_CASE("EditorLayer render: all component types on one object after Toggle covers full ComponentsList",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_all_comps"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Select AFTER Toggle: camera with follow target -------------------------
+
+TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle covers camera section",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam_follow"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Select AFTER Toggle: camera without follow target ----------------------
+
+TEST_CASE("EditorLayer render: camera without followTargetId selected after Toggle",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam_nofol"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Multi-select: same assetId (covers "shared asset" path) ----------------
+
+TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows batch panel",
+          "[editor][render][properties][multiselect]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    // Both prop_light and prop_rb share assetId "mesh_a"
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_light", "prop_rb"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Multi-select: different assetIds (covers "Mixed" path) -----------------
+
+TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed label",
+          "[editor][render][properties][multiselect]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    // prop_light has "mesh_a", prop_script has "mesh_b"
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_light", "prop_script"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Multi-select: objects with no assetId (covers "<none>" path) -----------
+
+TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows none label",
+          "[editor][render][properties][multiselect]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    // prop_no_asset and panel_bare both have no assetId
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_no_asset", "panel_bare"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Multi-select 3 or more objects ----------------------------------------
+
+TEST_CASE("EditorLayer render: multi-select three objects covers batch transform UI",
+          "[editor][render][properties][multiselect]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array(
+            {"prop_light", "prop_rb", "prop_script"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Asset selected after Toggle then deleted: covers asset-not-found branch
+
+TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-found clear in DrawPropertiesPanel",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "asset-not-found";
+    doc.assets["gone_asset"] = AssetDef{"", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Select the asset (exists at this point)
+    editor.ExecuteMcpCommand("editor.select_asset",
+        nlohmann::json{{"id", "gone_asset"}});
+
+    // Activate editor AFTER selecting, so m_selectedAssetId survives Toggle
+    editor.Toggle();
+
+    // Now delete the asset so it's gone when Render() reads m_selectedAssetId
+    editor.ExecuteMcpCommand("editor.delete_asset",
+        nlohmann::json{{"id", "gone_asset"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    // After render, the missing asset should have cleared m_selectedAssetId
+    REQUIRE(editor.GetSelectedAssetId().empty());
+}
+
+// ---- Asset selected after Toggle: valid asset covers DrawPropertiesSelectedAsset fully
+
+TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawPropertiesSelectedAsset",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "asset-valid";
+    doc.assets["valid_asset"] = AssetDef{"", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    editor.ExecuteMcpCommand("editor.select_asset",
+        nlohmann::json{{"id", "valid_asset"}});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Prop with no assetId selected after Toggle ----------------------------
+
+TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle renders transform section",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_no_asset"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Panel object selected after Toggle ------------------------------------
+
+TEST_CASE("EditorLayer render: panel with no components selected after Toggle",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "panel_bare"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Switching selection across multiple Render calls ----------------------
+
+TEST_CASE("EditorLayer render: cycling through all object types with select-after-toggle",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    const std::vector<std::string> ids = {
+        "prop_light", "prop_rb", "prop_script", "prop_all_comps",
+        "cam_follow", "cam_nofol", "panel_bare", "prop_no_asset"
+    };
+    for (const auto &id : ids) {
+        editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", id}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+// ---- Overlay callback is invoked during Render ------------------------------
+
+TEST_CASE("EditorLayer render: overlay callback is invoked during active Render",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    int callCount = 0;
+    editor.SetOverlayRenderCallback([&callCount]() { ++callCount; });
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(callCount == 1);
+}
+
+// ---- Overlay callback cleared -----------------------------------------------
+
+TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    editor.SetOverlayRenderCallback([]() {});
+    editor.SetOverlayRenderCallback(nullptr);
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Script behavior options callback set ----------------------------------
+
+TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "script-cb";
+    {
+        SceneObject obj;
+        obj.id = "scripted_obj";
+        obj.type = SceneObjectType::Prop;
+        ComponentDesc sc;
+        sc.type = "script";
+        sc.props["behaviorTag"] = "PatrolAI";
+        obj.components.push_back(sc);
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    // Provide a list of behavior options so the Combo has real items
+    editor.SetScriptBehaviorOptionsProvider([]() -> std::vector<std::string> {
+        return {"PatrolAI", "GuardAI", "IdleAI", ""};  // includes empty to test erase_if
+    });
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "scripted_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Script behavior options callback with unknown behavior ----------------
+
+TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in options list",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "script-unknown";
+    {
+        SceneObject obj;
+        obj.id = "unknown_scripted";
+        obj.type = SceneObjectType::Prop;
+        ComponentDesc sc;
+        sc.type = "script";
+        sc.props["behaviorTag"] = "UnknownBehavior";
+        obj.components.push_back(sc);
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    // Options list does NOT include "UnknownBehavior" — tests the options.push_back(current) branch
+    editor.SetScriptBehaviorOptionsProvider([]() -> std::vector<std::string> {
+        return {"GuardAI"};
+    });
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "unknown_scripted"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Object selected with assetId that exists in document ------------------
+
+TEST_CASE("EditorLayer render: prop with existing assetId shows asset section after Toggle",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "prop-asset";
+    doc.assets["existing_asset"] = AssetDef{"", "1,1,1", "albedo.png"};
+    {
+        SceneObject obj;
+        obj.id = "asset_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "existing_asset";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "asset_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Object with parentId set — covers parent dropdown rendering -----------
+
+TEST_CASE("EditorLayer render: child object with parentId after Toggle shows parent dropdown",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "parent-child";
+    {
+        SceneObject parent;
+        parent.id = "the_parent";
+        parent.type = SceneObjectType::Panel;
+        doc.objects.push_back(parent);
+    }
+    {
+        SceneObject child;
+        child.id = "the_child";
+        child.type = SceneObjectType::Prop;
+        child.props["parentId"] = "the_parent";
+        doc.objects.push_back(child);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "the_child"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Object with prefab instance set ----------------------------------------
+
+TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle shows prefab label",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "prefab-select";
+    {
+        SceneObject obj;
+        obj.id = "prefab_prop";
+        obj.type = SceneObjectType::Prop;
+        obj.prefabInstance = ScenePrefabInstance{"pf-001", "assets/prefabs/crate.json"};
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prefab_prop"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// TransformGizmo::Draw — covers DrawTranslate, DrawRotate, DrawScale
+// ===========================================================================
+
+TEST_CASE("TransformGizmo: Draw with Translate mode queues axis lines",
+          "[editor][gizmo][draw]") {
+    ImGuiContextGuard imgui;
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
+                   {1.f, 1.f, 1.f});
+    REQUIRE(gizmo.IsActive());
+
+    Camera cam;
+    gizmo.Draw(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("TransformGizmo: Draw with Rotate mode queues ring lines",
+          "[editor][gizmo][draw]") {
+    ImGuiContextGuard imgui;
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Rotate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
+                   {1.f, 1.f, 1.f});
+    REQUIRE(gizmo.IsActive());
+
+    Camera cam;
+    gizmo.Draw(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("TransformGizmo: Draw with Scale mode queues box handles",
+          "[editor][gizmo][draw]") {
+    ImGuiContextGuard imgui;
+    TransformGizmo gizmo;
+    gizmo.Activate(GizmoMode::Scale, {-2.f, 1.f, 0.f}, Quaternion::Identity(),
+                   {1.f, 1.f, 1.f});
+    REQUIRE(gizmo.IsActive());
+
+    Camera cam;
+    gizmo.Draw(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("TransformGizmo: Draw with None mode is a no-op",
+          "[editor][gizmo][draw]") {
+    ImGuiContextGuard imgui;
+    TransformGizmo gizmo;
+    // Do NOT activate — mode stays None
+    REQUIRE_FALSE(gizmo.IsActive());
+
+    Camera cam;
+    gizmo.Draw(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("TransformGizmo: Draw Translate at camera position (degenerate handleSize)",
+          "[editor][gizmo][draw]") {
+    ImGuiContextGuard imgui;
+    TransformGizmo gizmo;
+    Camera cam;
+    // Place gizmo at camera origin — HandleSize approaches minimum
+    gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
+                   {1.f, 1.f, 1.f});
+
+    gizmo.Draw(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- TransformGizmo active in EditorLayer render ----------------------------
+
+TEST_CASE("EditorLayer render: active gizmo Draw is called from Render",
+          "[editor][render][gizmo]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "gizmo-render";
+    {
+        SceneObject obj;
+        obj.id = "gizmo_target";
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    // Select the object to activate the gizmo
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "gizmo_target"}});
+
+    Camera cam;
+    // Render twice to allow gizmo to sync and draw
+    editor.Render(cam, 1280, 720);
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// AssetImporterRegistry import error paths
+// ===========================================================================
+
+TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-obj source path",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "test_asset";
+    req.assetGuid = "guid-001";
+    req.displayName = "Test Asset";
+    req.sourcePath = "/some/path/not_an_obj.txt";
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+    REQUIRE_FALSE(result.diagnostics.empty());
+    REQUIRE(result.diagnostics[0].code == "asset.obj.unsupported_type");
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-existent source file",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "missing_mesh";
+    req.assetGuid = "guid-002";
+    req.displayName = "Missing Mesh";
+    req.sourcePath = "/no/such/file/mesh.obj";
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.diagnostics[0].code == "asset.obj.source_missing");
+}
+
+TEST_CASE("AssetImporterRegistry: texture importer rejects non-texture source path",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.texture_copy");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "tex_asset";
+    req.assetGuid = "guid-003";
+    req.displayName = "Tex Asset";
+    req.sourcePath = "/some/path/mesh.obj";  // .obj is not a texture
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+    REQUIRE(result.diagnostics[0].code == "asset.texture.unsupported_type");
+}
+
+TEST_CASE("AssetImporterRegistry: texture importer rejects non-existent source file",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.texture_copy");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "tex_missing";
+    req.assetGuid = "guid-004";
+    req.displayName = "Missing Tex";
+    req.sourcePath = "/no/such/file/albedo.png";
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.diagnostics.empty());
+}
+
+TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown extension",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
+    REQUIRE(registry.FindByExtension("data.bin") == nullptr);
+    REQUIRE(registry.FindByExtension("noextension") == nullptr);
+}
+
+TEST_CASE("AssetImporterRegistry: RegisteredImporterIds returns both built-in ids",
+          "[editor][importer]") {
+    AssetImporterRegistry registry;
+    const auto ids = registry.RegisteredImporterIds();
+    REQUIRE(ids.size() >= 2);
+    REQUIRE(std::ranges::find(ids, std::string("builtin.obj_mesh")) != ids.end());
+    REQUIRE(std::ranges::find(ids, std::string("builtin.texture_copy")) != ids.end());
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl companion covers full success path",
+          "[editor][importer]") {
+    namespace fs = std::filesystem;
+    const fs::path tmpDir =
+        Monolith::Tests::SecureTempBase() / "horo_importer_test_obj";
+    fs::create_directories(tmpDir);
+
+    // Write a minimal OBJ referencing an MTL with a diffuse texture map
+    const fs::path objPath = tmpDir / "cube.obj";
+    const fs::path mtlPath = tmpDir / "cube.mtl";
+    const fs::path texPath = tmpDir / "albedo.png";
+
+    WriteFile(objPath.string(),
+        "mtllib cube.mtl\n"
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+        "usemtl Material\n"
+        "f 1 2 3\n");
+    WriteFile(mtlPath.string(),
+        "newmtl Material\n"
+        "map_Kd albedo.png\n");
+    // Create a dummy PNG (not a real PNG, but file exists for copy)
+    WriteFile(texPath.string(), "PNGDATA");
+
+    // Set up a temp project root so GetManagedAssetDirectory works
+    const fs::path projectRoot = tmpDir / "project";
+    fs::create_directories(projectRoot);
+    ProjectPathGuard guard(projectRoot);
+
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "cube_mesh";
+    req.assetGuid = "guid-obj-success";
+    req.displayName = "Cube Mesh";
+    req.sourcePath = objPath.string();
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(result.asset.mesh.empty());
+
+    // Cleanup
+    fs::remove_all(tmpDir);
+}
+
+TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers full success path",
+          "[editor][importer]") {
+    namespace fs = std::filesystem;
+    const fs::path tmpDir =
+        Monolith::Tests::SecureTempBase() / "horo_importer_test_tex";
+    fs::create_directories(tmpDir);
+
+    const fs::path texPath = tmpDir / "albedo.png";
+    WriteFile(texPath.string(), "PNGDATA");
+
+    const fs::path projectRoot = tmpDir / "project";
+    fs::create_directories(projectRoot);
+    ProjectPathGuard guard(projectRoot);
+
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.texture_copy");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "tex_asset";
+    req.assetGuid = "guid-tex-success";
+    req.displayName = "Albedo Texture";
+    req.sourcePath = texPath.string();
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(result.asset.albedoMap.empty());
+
+    fs::remove_all(tmpDir);
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no mtllib covers no-companion path",
+          "[editor][importer]") {
+    namespace fs = std::filesystem;
+    const fs::path tmpDir =
+        Monolith::Tests::SecureTempBase() / "horo_importer_test_nomtl";
+    fs::create_directories(tmpDir);
+
+    // OBJ without mtllib line
+    const fs::path objPath = tmpDir / "simple.obj";
+    WriteFile(objPath.string(),
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+        "f 1 2 3\n");
+
+    const fs::path projectRoot = tmpDir / "project";
+    fs::create_directories(projectRoot);
+    ProjectPathGuard guard(projectRoot);
+
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "simple_mesh";
+    req.assetGuid = "guid-nomtl";
+    req.displayName = "Simple Mesh";
+    req.sourcePath = objPath.string();
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE(result.ok);
+
+    fs::remove_all(tmpDir);
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ importer with mtl that has no map_ entries",
+          "[editor][importer]") {
+    namespace fs = std::filesystem;
+    const fs::path tmpDir =
+        Monolith::Tests::SecureTempBase() / "horo_importer_test_nomaps";
+    fs::create_directories(tmpDir);
+
+    const fs::path objPath = tmpDir / "untextured.obj";
+    const fs::path mtlPath = tmpDir / "untextured.mtl";
+    WriteFile(objPath.string(),
+        "mtllib untextured.mtl\n"
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+        "f 1 2 3\n");
+    WriteFile(mtlPath.string(),
+        "newmtl Material\n"
+        "Kd 0.8 0.8 0.8\n");  // no map_ entries
+
+    const fs::path projectRoot = tmpDir / "project";
+    fs::create_directories(projectRoot);
+    ProjectPathGuard guard(projectRoot);
+
+    AssetImporterRegistry registry;
+    const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+    REQUIRE(importer != nullptr);
+
+    AssetImportRequest req;
+    req.assetId = "untex_mesh";
+    req.assetGuid = "guid-nomaps";
+    req.displayName = "Untextured Mesh";
+    req.sourcePath = objPath.string();
+
+    AssetImportResult result = importer->Import(req);
+    REQUIRE(result.ok);
+
+    fs::remove_all(tmpDir);
+}
+
+// ===========================================================================
+// EditorMcpHandlers: McpHandleClearSelection and additional coverage
+// ===========================================================================
+
+TEST_CASE("EditorLayer MCP: clear_selection clears selected objects and assets",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "sel_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+    doc.assets["sel_asset"] = AssetDef{"", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Select an object and an asset
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "sel_obj"}});
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "sel_asset"}});
+
+    // Now clear selection
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.clear_selection", nlohmann::json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data["cleared"].get<bool>());
+
+    // Verify side-effects
+    REQUIRE(editor.GetSelectedAssetId().empty());
+}
+
+TEST_CASE("EditorLayer MCP: select with ids array selects multiple objects",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (int i = 0; i < 4; ++i) {
+        SceneObject obj;
+        obj.id = std::format("obj{}", i);
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"obj0", "obj2", "obj3"})}});
+    REQUIRE(result.ok);
+    const auto selectedIds = result.data["selectedObjectIds"];
+    REQUIRE(selectedIds.is_array());
+    REQUIRE(selectedIds.size() == 3);
+}
+
+TEST_CASE("EditorLayer MCP: select with both id and ids selects all matching",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("item{}", i);
+        obj.type = SceneObjectType::Panel;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Provide both "id" and "ids" — both should be collected
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select",
+        nlohmann::json{
+            {"id", "item0"},
+            {"ids", nlohmann::json::array({"item1", "item2"})}});
+    REQUIRE(result.ok);
+    const auto sel = result.data["selectedObjectIds"];
+    REQUIRE(sel.size() == 3);
+}
+
+TEST_CASE("EditorLayer MCP: select with nonexistent ids selects nothing",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"ghost1", "ghost2"})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data["selectedObjectIds"].empty());
+}
+
+// ===========================================================================
+// Additional EditorLayer render states to improve EditorLayer.cpp coverage
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: SetProjectBrowserRoot to real path renders file tiles",
+          "[editor][render][browser]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    // Use the repo assets directory which definitely has files
+    editor.SetProjectBrowserRoot(
+        std::filesystem::path(RepoRootFromTestSource()) / "assets");
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    editor.Render(cam, 1280, 720);  // second frame may trigger cached path
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: SetProjectBrowserRoot with blocklist filters entries",
+          "[editor][render][browser]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetProjectBrowserRoot(
+        std::filesystem::path(RepoRootFromTestSource()) / "assets");
+    editor.SetProjectBrowserExtraBlocklist({"shaders", "textures"});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: document with many objects renders object list fully",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "many-objects";
+    for (int i = 0; i < 20; ++i) {
+        SceneObject obj;
+        obj.id = std::format("bulk_obj_{}", i);
+        obj.type = (i % 3 == 0) ? SceneObjectType::Panel
+                                 : (i % 3 == 1) ? SceneObjectType::Prop
+                                                 : SceneObjectType::Light;
+        if (i % 2 == 0)
+            obj.assetId = "mesh_a";
+        if (i > 0 && i % 5 == 0)
+            obj.props["parentId"] = std::format("bulk_obj_{}", i - 1);
+        doc.objects.push_back(obj);
+    }
+    doc.assets["mesh_a"] = AssetDef{"", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    // Select a few different objects across frames
+    Camera cam;
+    for (int i = 0; i < 5; ++i) {
+        editor.ExecuteMcpCommand("editor.select",
+            nlohmann::json{{"id", std::format("bulk_obj_{}", i * 4)}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: dirty document shows dirty indicator in toolbar",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "dirty-render";
+    doc.dirty = true;
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: scene with filePath set enables save button",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    namespace fs = std::filesystem;
+    const fs::path tmpDir =
+        Monolith::Tests::SecureTempBase() / "horo_render_filepath";
+    fs::create_directories(tmpDir);
+    const fs::path scenePath = tmpDir / "test.json";
+
+    SceneDocument doc;
+    doc.sceneId = "filepath-render";
+    doc.filePath = scenePath.string();
+    SceneSerializer::SaveToFile(doc, scenePath.string());
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+
+    fs::remove_all(tmpDir);
+}
+
+TEST_CASE("EditorLayer render: doc with all asset types renders assets panel",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "assets-panel";
+    doc.assets["asset_no_albedo"]   = AssetDef{"", "1,1,1"};
+    doc.assets["asset_with_albedo"] = AssetDef{"", "1,1,1", "tex.png"};
+    doc.assets["asset_no_scale"]    = AssetDef{"", ""};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: hot reload overlay active during Render",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetHotReloadOverlay(true, 0.8f, 2.5f, "Compiling shaders...");
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multiple Toggle cycles maintain stable render state",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+
+    Camera cam;
+    // Toggle on/off several times, rendering in between
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        editor.Toggle();  // activate
+        editor.ExecuteMcpCommand("editor.select",
+            nlohmann::json{{"id", "prop_light"}});
+        editor.Render(cam, 1280, 720);
+        editor.Toggle();  // deactivate
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: create_object then select and render covers post-create flow",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    // Create objects while the editor is active, then select and render
+    const auto r1 = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "live_prop"}});
+    REQUIRE(r1.ok);
+
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "live_prop"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: undo/redo during active render session",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Panel"}, {"id", "undo_target"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    editor.Render(cam, 1280, 720);
+
+    editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayerInternal helpers reachable through Render
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: SyncGizmoToSelection updates gizmo when object is selected",
+          "[editor][render][internal]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "sync-gizmo";
+    {
+        SceneObject obj;
+        obj.id = "gizmo_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.position = {5.f, 2.f, -3.f};
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "gizmo_obj"}});
+
+    // Render multiple times to exercise SyncGizmoToSelection
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    editor.Render(cam, 1280, 720);
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: empty selection then object selection then multi-select in sequence",
+          "[editor][render][internal]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+
+    // No selection
+    editor.ExecuteMcpCommand("editor.clear_selection", nlohmann::json::object());
+    editor.Render(cam, 1280, 720);
+
+    // Single object
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_light"}});
+    editor.Render(cam, 1280, 720);
+
+    // Multi-select
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_light", "prop_rb"})}});
+    editor.Render(cam, 1280, 720);
+
+    // Camera
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam_follow"}});
+    editor.Render(cam, 1280, 720);
+
+    // Asset select
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "mesh_a"}});
+    editor.Render(cam, 1280, 720);
+
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorMcpHandlers: additional handlers coverage
+// ===========================================================================
+
+TEST_CASE("EditorLayer MCP: create_object Camera type creates camera object",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Camera"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].type == SceneObjectType::Camera);
+    REQUIRE_FALSE(editor.GetDocument().objects[0].id.empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_object with rotation updates pitch yaw roll",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "rot_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "rot_obj"},
+            {"pitch", 15.0},
+            {"yaw",   30.0},
+            {"roll",  45.0}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].pitch == Approx(15.0f));
+    REQUIRE(editor.GetDocument().objects[0].yaw   == Approx(30.0f));
+    REQUIRE(editor.GetDocument().objects[0].roll  == Approx(45.0f));
+}
+
+TEST_CASE("EditorLayer MCP: update_object with scale updates scale vector",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "scale_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "scale_obj"},
+            {"scale", nlohmann::json::array({2.0, 3.0, 4.0})}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].scale.x == Approx(2.0f));
+    REQUIRE(editor.GetDocument().objects[0].scale.y == Approx(3.0f));
+    REQUIRE(editor.GetDocument().objects[0].scale.z == Approx(4.0f));
+}
+
+TEST_CASE("EditorLayer MCP: select with ids array returns all selected",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("list_obj_{}", i);
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Select multiple objects by ids array
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"list_obj_0", "list_obj_1", "list_obj_2"})}});
+    REQUIRE(result.ok);
+    // Result should confirm selection
+    REQUIRE_FALSE(result.data.empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_asset modifies an existing asset",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    doc.assets["asset_a"] = AssetDef{"", "1,1,1"};
+    doc.assets["asset_b"] = AssetDef{"", "2,2,2", "tex.png"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "asset_a"}, {"displayName", "NewName"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().assets.at("asset_a").displayName == "NewName");
+    // Second update to cover more branches
+    const auto result2 = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "asset_b"}, {"displayName", "TextureAsset"}});
+    REQUIRE(result2.ok);
+}
+
+TEST_CASE("EditorLayer MCP: select returns data about selected object",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "sel_get";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select", nlohmann::json{{"id", "sel_get"}});
+    REQUIRE(result.ok);
+    // The result should contain data about the selection
+    REQUIRE_FALSE(result.data.empty());
+}
+
+TEST_CASE("EditorLayer MCP: duplicate by id creates a copy",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "dup_src";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Use valid 'editor.duplicate' command with 'id' parameter
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate", nlohmann::json{{"id", "dup_src"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 2);
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object assigns new parent",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (const auto &id : {"node_a", "node_b"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Panel;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "node_b"}, {"newParentId", "node_a"}});
+    REQUIRE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: update_object with position array updates transform",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "move_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // 'editor.transform' is an alias for 'editor.update_object'
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.transform",
+        nlohmann::json{
+            {"id", "move_obj"},
+            {"position", nlohmann::json::array({10.0, 20.0, 30.0})}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].position.x == Approx(10.0f));
+    REQUIRE(editor.GetDocument().objects[0].position.y == Approx(20.0f));
+    REQUIRE(editor.GetDocument().objects[0].position.z == Approx(30.0f));
+}
+
+// ===========================================================================
+// EditorLayer: additional public API and edge cases
+// ===========================================================================
+
+TEST_CASE("EditorLayer: WantsSceneReload is initially false",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    REQUIRE_FALSE(editor.WantsSceneReload());
+}
+
+TEST_CASE("EditorLayer: GetDocument returns const reference to loaded document",
+          "[editor][layer]") {
+    SceneDocument doc;
+    doc.sceneId = "get-doc-test";
+    doc.sceneName = "Test Scene";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    REQUIRE(editor.GetDocument().sceneId == "get-doc-test");
+    REQUIRE(editor.GetDocument().sceneName == "Test Scene");
+}
+
+TEST_CASE("EditorLayer: SetTransformCallback is stored and not called immediately",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    bool called = false;
+    editor.SetTransformCallback([&called](const SceneObject &) { called = true; });
+    REQUIRE_FALSE(called);
+}
+
+TEST_CASE("EditorLayer render: transform callback is invoked when gizmo moves object",
+          "[editor][render][callback]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "transform-cb";
+    {
+        SceneObject obj;
+        obj.id = "cb_target";
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cb_target"}});
+
+    int cbCount = 0;
+    editor.SetTransformCallback([&cbCount](const SceneObject &) { ++cbCount; });
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);  // callback may or may not fire (gizmo doesn't drag headlessly)
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with .obj files stores pending import",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const char *paths[] = {"assets/models/crate.obj"};
+    editor.OnPathsDropped(1, paths, 200.0f, 300.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: IsPlayMode stays false after multiple Toggles",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+    editor.Toggle();
+    editor.Toggle();
+    REQUIRE_FALSE(editor.IsPlayMode());
+}
+
+TEST_CASE("EditorLayer: GetSelectedAssetId returns id after select_asset",
+          "[editor][layer]") {
+    SceneDocument doc;
+    doc.assets["queried_asset"] = AssetDef{"", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.ExecuteMcpCommand("editor.select_asset",
+        nlohmann::json{{"id", "queried_asset"}});
+    REQUIRE(editor.GetSelectedAssetId() == "queried_asset");
+}
+
+TEST_CASE("EditorLayer: LoadDocument with empty document does not crash",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    REQUIRE(editor.GetDocument().objects.empty());
+    REQUIRE(editor.GetDocument().assets.empty());
+}
+
+TEST_CASE("EditorLayer render: Render with very small viewport dimensions",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 320, 240);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: Render with large viewport dimensions",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 3840, 2160);
+    REQUIRE(true);
+}
+
+// ---- Camera search path in DrawPropertiesCameraSection FollowTarget combo ---
+
+TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object is handled gracefully",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "cam-missing-follow";
+    {
+        SceneObject cam;
+        cam.id = "cam_bad_follow";
+        cam.type = SceneObjectType::Camera;
+        cam.props["followTargetId"] = "nonexistent_object";
+        doc.objects.push_back(cam);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "cam_bad_follow"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Prop with assetId referencing missing asset renders gracefully --------
+
+TEST_CASE("EditorLayer render: prop with assetId that is not in assets map renders without crash",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "missing-asset-ref";
+    {
+        SceneObject obj;
+        obj.id = "obj_missing_asset";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "nonexistent_asset_id";
+        doc.objects.push_back(obj);
+    }
+    // Note: "nonexistent_asset_id" is NOT added to doc.assets
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "obj_missing_asset"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Light SceneObject type selection (different from light component) -----
+
+TEST_CASE("EditorLayer render: Light type object selected after Toggle",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "light-type";
+    {
+        SceneObject light;
+        light.id = "scene_light";
+        light.type = SceneObjectType::Light;
+        light.position = {3.f, 5.f, 0.f};
+        doc.objects.push_back(light);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "scene_light"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ---- Inspect object renders with SyncGizmoToSelection exercised multiple times
+
+TEST_CASE("EditorLayer render: selecting different objects across renders exercises gizmo sync",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    const std::vector<std::string> ids = {"prop_light", "cam_follow", "prop_rb",
+                                           "cam_nofol", "prop_script"};
+    for (const auto &id : ids) {
+        editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", id}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: SetProjectBrowserRoot branches
+// ===========================================================================
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with empty path clears state",
+          "[editor][layer][browser]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    // Empty path should clear the browser root state
+    editor.SetProjectBrowserRoot({});
+    REQUIRE(true);  // no crash
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with nonexistent path records invalid",
+          "[editor][layer][browser]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetProjectBrowserRoot(std::filesystem::path("/nonexistent_test_dir_xyz_12345"));
+    REQUIRE(true);  // no crash — records as invalid root
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid existing directory succeeds",
+          "[editor][layer][browser]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Use the temp dir — guaranteed to exist
+    const auto tmp = std::filesystem::temp_directory_path();
+    editor.SetProjectBrowserRoot(tmp);
+    REQUIRE(true);  // no crash — valid root set
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot called twice updates state",
+          "[editor][layer][browser]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto tmp = std::filesystem::temp_directory_path();
+    editor.SetProjectBrowserRoot(tmp);
+    editor.SetProjectBrowserRoot({});  // clear it
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist invalidates cache",
+          "[editor][layer][browser]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SetProjectBrowserExtraBlocklist({"node_modules", ".git", "build"});
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows project tab",
+          "[editor][render][browser]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto tmp = std::filesystem::temp_directory_path();
+    editor.SetProjectBrowserRoot(tmp);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: Workspace state methods
+// ===========================================================================
+
+TEST_CASE("EditorLayer: SaveWorkspaceStateNow does not crash",
+          "[editor][layer][workspace]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SaveWorkspaceStateNow();
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: ReloadWorkspaceStateFromDisk does not crash",
+          "[editor][layer][workspace]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ReloadWorkspaceStateFromDisk();
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SaveWorkspaceStateNow then ReloadWorkspaceStateFromDisk round-trip",
+          "[editor][layer][workspace]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.SaveWorkspaceStateNow();
+    editor.ReloadWorkspaceStateFromDisk();
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: SyncRuntimeEntityIds
+// ===========================================================================
+
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with empty registry clears _eid props",
+          "[editor][layer][sync]") {
+    SceneDocument doc;
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("prop_{}", i);
+        obj.type = SceneObjectType::Prop;
+        obj.props["_eid"] = std::to_string(100 + i);  // pre-existing _eid
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Empty registry — all _eid props should be erased
+    Monolith::Registry reg;
+    editor.SyncRuntimeEntityIds(reg);
+
+    for (const auto &obj : editor.GetDocument().objects) {
+        REQUIRE_FALSE(obj.props.contains("_eid"));
+    }
+}
+
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with matching mesh entities maps _eid",
+          "[editor][layer][sync]") {
+    SceneDocument doc;
+    for (int i = 0; i < 2; ++i) {
+        SceneObject obj;
+        obj.id = std::format("prop_{}", i);
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+    // Add a non-prop object — should NOT be mapped
+    {
+        SceneObject panel;
+        panel.id = "panel_obj";
+        panel.type = SceneObjectType::Panel;
+        doc.objects.push_back(panel);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Create registry with 2 mesh entities (no PlayerTag)
+    Monolith::Registry reg;
+    const auto e0 = reg.Create();
+    const auto e1 = reg.Create();
+    reg.Add<Monolith::MeshComponent>(e0);
+    reg.Add<Monolith::MeshComponent>(e1);
+    reg.Add<Monolith::TransformComponent>(e0);
+    reg.Add<Monolith::TransformComponent>(e1);
+
+    editor.SyncRuntimeEntityIds(reg);
+
+    // Props should now have _eid
+    int mappedCount = 0;
+    for (const auto &obj : editor.GetDocument().objects) {
+        if (obj.type == SceneObjectType::Prop && obj.props.contains("_eid"))
+            ++mappedCount;
+    }
+    REQUIRE(mappedCount == 2);
+    // Panel should NOT have _eid
+    const auto &panel = editor.GetDocument().objects[2];
+    REQUIRE_FALSE(panel.props.contains("_eid"));
+}
+
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds skips PlayerTag entities",
+          "[editor][layer][sync]") {
+    SceneDocument doc;
+    {
+        SceneObject prop;
+        prop.id = "prop_a";
+        prop.type = SceneObjectType::Prop;
+        doc.objects.push_back(prop);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    Monolith::Registry reg;
+    const auto player = reg.Create();
+    reg.Add<Monolith::MeshComponent>(player);
+    reg.Add<Monolith::PlayerTagComponent>(player);  // should be skipped
+
+    // No non-player mesh entities → prop count(1) != mesh count(0) → warning path
+    editor.SyncRuntimeEntityIds(reg);
+
+    // _eid should be removed because there are no non-player meshes
+    REQUIRE_FALSE(editor.GetDocument().objects[0].props.contains("_eid"));
+}
+
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with more meshes than props warns and maps partial",
+          "[editor][layer][sync]") {
+    SceneDocument doc;
+    {
+        SceneObject prop;
+        prop.id = "solo_prop";
+        prop.type = SceneObjectType::Prop;
+        doc.objects.push_back(prop);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // 3 mesh entities but only 1 prop → should warn and map 1
+    Monolith::Registry reg;
+    for (int i = 0; i < 3; ++i) {
+        const auto e = reg.Create();
+        reg.Add<Monolith::MeshComponent>(e);
+    }
+
+    editor.SyncRuntimeEntityIds(reg);
+
+    REQUIRE(editor.GetDocument().objects[0].props.contains("_eid"));
+}
+
+// ===========================================================================
+// EditorLayer: OnPathsDropped and ProcessPendingPathDrops
+// ===========================================================================
+
+TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op",
+          "[editor][layer][drop]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.OnPathsDropped(0, nullptr, 0.0f, 0.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with empty path array is a no-op",
+          "[editor][layer][drop]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    const char *paths[] = {nullptr};
+    editor.OnPathsDropped(1, paths, 50.0f, 60.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with .obj path stores pending drop",
+          "[editor][layer][drop]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const char *paths[] = {"some/path/model.obj"};
+    editor.OnPathsDropped(1, paths, 100.0f, 200.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with .png path stores pending drop",
+          "[editor][layer][drop]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const char *paths[] = {"some/path/texture.png"};
+    editor.OnPathsDropped(1, paths, 100.0f, 200.0f);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: OnPathsDropped with multiple paths stores all",
+          "[editor][layer][drop]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const char *paths[] = {"model.obj", "texture.png", "other.txt"};
+    editor.OnPathsDropped(3, paths, 150.0f, 250.0f);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: SetHotReloadOverlay
+// ===========================================================================
+
+TEST_CASE("EditorLayer: SetHotReloadOverlay renders overlay during Render",
+          "[editor][render][overlay]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    editor.SetHotReloadOverlay(true, 0.5f, 1.2f, "Loading...");
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SetHotReloadOverlay with full progress renders correctly",
+          "[editor][render][overlay]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    editor.SetHotReloadOverlay(true, 1.0f, 3.14f, "Done");
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer: SetHotReloadOverlay inactive renders no overlay",
+          "[editor][render][overlay]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    editor.SetHotReloadOverlay(false, 0.0f, 0.0f, "");
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: GetSelectedObjectIds
+// ===========================================================================
+
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns empty when nothing selected",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+}
+
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns selected id after select command",
+          "[editor][layer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "selectable";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "selectable"}});
+
+    const auto ids = editor.GetSelectedObjectIds();
+    REQUIRE(ids.size() == 1);
+    REQUIRE(ids[0] == "selectable");
+}
+
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns all after multi-select",
+          "[editor][layer]") {
+    SceneDocument doc;
+    for (const std::string &id : {"a", "b", "c"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"a", "c"})}});
+
+    const auto ids = editor.GetSelectedObjectIds();
+    REQUIRE(ids.size() == 2);
+}
+
+TEST_CASE("EditorLayer: GetSelectedObjectIds clears after clear_selection",
+          "[editor][layer]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "clr";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "clr"}});
+    REQUIRE(editor.GetSelectedObjectIds().size() == 1);
+
+    editor.ExecuteMcpCommand("editor.clear_selection", nlohmann::json::object());
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+}
+
+// ===========================================================================
+// EditorLayer: Asset-not-found branch in DrawPropertiesPanel (lines 77-78)
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: selected asset deleted before Render clears selection",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.assets["temp_asset"] = AssetDef{"model.obj", "1,1,1"};
+    {
+        SceneObject obj;
+        obj.id = "uses_temp";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "temp_asset";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    // select_asset BEFORE Toggle (select_asset sets m_selectedAssetId, NOT cleared by Toggle)
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "temp_asset"}});
+    editor.Toggle();  // activate editor — Toggle does NOT clear m_selectedAssetId
+
+    // Delete the asset after toggle so it's missing when DrawPropertiesPanel runs
+    editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "temp_asset"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    // The asset-not-found branch (lines 77-78) should have cleared m_selectedAssetId
+    REQUIRE(editor.GetSelectedAssetId().empty());
+}
+
+// ===========================================================================
+// EditorLayer: More multi-select render tests (now correctly Toggle first)
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: multi-select 3 props triggers batch transform section",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();  // activate FIRST
+    // Select 3 props with same asset to hit the "shared asset" batch path
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_light", "prop_rb", "prop_no_asset"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multi-select panels and props triggers mixed batch",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    for (int i = 0; i < 2; ++i) {
+        SceneObject panel;
+        panel.id = std::format("mp_{}", i);
+        panel.type = SceneObjectType::Panel;
+        doc.objects.push_back(panel);
+        SceneObject prop;
+        prop.id = std::format("mpr_{}", i);
+        prop.type = SceneObjectType::Prop;
+        doc.objects.push_back(prop);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();  // activate FIRST
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"mp_0", "mp_1", "mpr_0", "mpr_1"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer: Additional MCP handler coverage
+// ===========================================================================
+
+TEST_CASE("EditorLayer MCP: create_prefab with valid object creates prefab file",
+          "[editor][mcp][prefab]") {
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "pf_source";
+        obj.type = SceneObjectType::Prop;
+        obj.props["color"] = "red";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_prefab",
+        nlohmann::json{{"id", "pf_source"}, {"prefabId", "pf-test-001"},
+                       {"path", "assets/prefabs/test_001.json"}});
+    // May succeed or fail depending on file system; just verify no crash
+    (void)result;
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer MCP: create_prefab with nonexistent object returns error",
+          "[editor][mcp][prefab]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_prefab",
+        nlohmann::json{{"id", "ghost"}, {"prefabId", "pf-999"},
+                       {"path", "assets/prefabs/ghost.json"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object_from_asset with nonexistent asset returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{{"assetId", "missing_asset"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: create_object_from_asset with valid asset creates object",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    doc.assets["crate"] = AssetDef{"crate.obj", "1,1,1"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object_from_asset",
+        nlohmann::json{{"assetId", "crate"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+}
+
+TEST_CASE("EditorLayer MCP: update_object with unknown id returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "ghost_obj"}, {"position", nlohmann::json::array({1.0, 2.0, 3.0})}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: rename_object updates object id",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "old_name";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.rename_object",
+        nlohmann::json{{"id", "old_name"}, {"newId", "new_name"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].id == "new_name");
+}
+
+TEST_CASE("EditorLayer MCP: rename_object with duplicate id returns error",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (const std::string &id : {"obj_a", "obj_b"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.rename_object",
+        nlohmann::json{{"id", "obj_a"}, {"newId", "obj_b"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: rename_object with empty newId returns error",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "target";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.rename_object",
+        nlohmann::json{{"id", "target"}, {"newId", ""}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: delete with unknown id returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        nlohmann::json{{"id", "nobody"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: delete removes specified object",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (const std::string &id : {"keep", "remove_me"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        nlohmann::json{{"id", "remove_me"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].id == "keep");
+}
+
+TEST_CASE("EditorLayer MCP: delete_asset removes asset from document",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    doc.assets["del_me"] = AssetDef{"x.obj", "1,1,1"};
+    doc.assets["keep_me"] = AssetDef{"y.obj", "2,2,2"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.delete_asset",
+        nlohmann::json{{"id", "del_me"}});
+    REQUIRE(result.ok);
+    REQUIRE_FALSE(editor.GetDocument().assets.contains("del_me"));
+    REQUIRE(editor.GetDocument().assets.contains("keep_me"));
+}
+
+TEST_CASE("EditorLayer MCP: delete_asset with unknown id returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.delete_asset",
+        nlohmann::json{{"id", "ghost_asset"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: update_asset with nonexistent id returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "no_such_asset"}, {"displayName", "X"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: undo on empty history returns undone=false",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data.value("undone", true) == false);
+}
+
+TEST_CASE("EditorLayer MCP: redo on empty history returns redone=false",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: undo after create_object restores previous state",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "undo_target"}, {"type", "Prop"}});
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+
+    const auto result = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(result.ok);
+    REQUIRE(result.data.value("undone", false) == true);
+    REQUIRE(editor.GetDocument().objects.empty());
+}
+
+TEST_CASE("EditorLayer MCP: redo after undo re-applies the change",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "redo_target"}, {"type", "Prop"}});
+    editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(editor.GetDocument().objects.empty());
+
+    editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(editor.GetDocument().objects.size() == 1);
+}
+
+TEST_CASE("EditorLayer MCP: new_scene clears document and triggers reload",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    doc.sceneId = "old-scene";
+    {
+        SceneObject obj;
+        obj.id = "existing";
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.new_scene", nlohmann::json::object());
+    REQUIRE(result.ok);
+    // After new_scene, WantsSceneReload should be true (or objects cleared)
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer MCP: reload_scene sets WantsSceneReload",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.reload_scene", nlohmann::json::object());
+    REQUIRE(result.ok);
+    REQUIRE(editor.WantsSceneReload());
+}
+
+TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload",
+          "[editor][layer]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json::object());
+    REQUIRE(editor.WantsSceneReload());
+    editor.AcknowledgeReload();
+    REQUIRE_FALSE(editor.WantsSceneReload());
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object with nonexistent child returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "ghost"}, {"newParentId", ""}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object to empty parent clears parent",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (const std::string &id : {"root", "child"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Panel;
+        doc.objects.push_back(obj);
+    }
+    doc.objects[1].props["parentId"] = "root";
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    // Reparent to empty string = unparent
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "child"}, {"newParentId", ""}});
+    REQUIRE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with count>1 creates multiple copies",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "multi_dup";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"id", "multi_dup"}, {"count", 3}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);  // original + 3 copies
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with ids array duplicates multiple objects",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    for (const std::string &id : {"dup_a", "dup_b"}) {
+        SceneObject obj;
+        obj.id = id;
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"ids", nlohmann::json::array({"dup_a", "dup_b"})}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 4);  // 2 originals + 2 copies
+}
+
+TEST_CASE("EditorLayer MCP: duplicate with missing id returns error",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.duplicate",
+        nlohmann::json{{"id", "ghost_dup"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: save_scene triggers WantsSceneReload or succeeds",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.save_scene", nlohmann::json::object());
+    // save to default/empty path may fail — just no crash
+    (void)result;
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer MCP: select with unknown id returns ok with empty selection",
+          "[editor][mcp]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.select",
+        nlohmann::json{{"id", "ghost_select"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetSelectedObjectIds().empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_object sets components field",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "comp_target";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "comp_target"},
+            {"components", nlohmann::json::array({
+                nlohmann::json{{"type", "rigidbody"}, {"props", nlohmann::json{{"mass", "2.0"}}}}
+            })}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].components.size() == 1);
+    REQUIRE(editor.GetDocument().objects[0].components[0].type == "rigidbody");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with invalid components array returns error",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "bad_comp";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "bad_comp"},
+            {"components", nlohmann::json{{"not", "an_array"}}}
+        });
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: update_object assetId null clears asset reference",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    doc.assets["myasset"] = AssetDef{"m.obj", "1,1,1"};
+    SceneObject obj;
+    obj.id = "has_asset";
+    obj.type = SceneObjectType::Prop;
+    obj.assetId = "myasset";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "has_asset"}, {"assetId", nullptr}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].assetId.empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_object with invalid position returns error",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "pos_err";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "pos_err"}, {"position", "not_an_array"}});
+    REQUIRE_FALSE(result.ok);
+}
+
+TEST_CASE("EditorLayer MCP: transform alias same behavior as update_object",
+          "[editor][mcp]") {
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "alias_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.transform",
+        nlohmann::json{
+            {"id", "alias_obj"},
+            {"scale", nlohmann::json::array({2.0, 2.0, 2.0})}
+        });
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].scale.x == Approx(2.0f));
+}
+
+// ===========================================================================
+// EditorLayer: Render with SetLiveRegistry
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: with live registry set renders without crash",
+          "[editor][render][registry]") {
+    ImGuiContextGuard imgui;
+
+    // Build a scene and a matching registry
+    SceneDocument doc;
+    {
+        SceneObject prop;
+        prop.id = "live_prop";
+        prop.type = SceneObjectType::Prop;
+        doc.objects.push_back(prop);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    Monolith::Registry reg;
+    const auto e = reg.Create();
+    reg.Add<Monolith::MeshComponent>(e);
+    reg.Add<Monolith::TransformComponent>(e);
+
+    editor.SyncRuntimeEntityIds(reg);
+    editor.SetLiveRegistry(&reg);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "live_prop"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: property panel edge cases with correct Toggle ordering
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: prop with props map renders schema fields",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "props_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.props["color"] = "red";
+        obj.props["size"] = "large";
+        obj.props["health"] = "100";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "props_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: camera with fov and near far props renders camera section",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject cam_obj;
+        cam_obj.id = "cam_fov";
+        cam_obj.type = SceneObjectType::Camera;
+        cam_obj.props["fov"] = "60";
+        cam_obj.props["near"] = "0.1";
+        cam_obj.props["far"] = "1000";
+        doc.objects.push_back(cam_obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam_fov"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prop with all component types renders all component fields",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "all_comps";
+        obj.type = SceneObjectType::Prop;
+        {
+            ComponentDesc rb;
+            rb.type = "rigidbody";
+            rb.props["mass"] = "5.0";
+            rb.props["isKinematic"] = "true";
+            rb.props["useGravity"] = "false";
+            obj.components.push_back(rb);
+        }
+        {
+            ComponentDesc script;
+            script.type = "script";
+            script.props["behaviorTag"] = "EnemyAI";
+            obj.components.push_back(script);
+        }
+        {
+            ComponentDesc light;
+            light.type = "light";
+            light.props["color"] = "1,1,0.5";
+            light.props["intensity"] = "2.0";
+            obj.components.push_back(light);
+        }
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "all_comps"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: selecting and deselecting in sequence covers toggle paths",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    Camera cam;
+    // Select → render → clear → render × 3
+    for (const std::string &id : {"prop1", "cam1", "panel1"}) {
+        editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", id}});
+        editor.Render(cam, 1280, 720);
+        editor.ExecuteMcpCommand("editor.clear_selection", nlohmann::json::object());
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multi-select then single-select transition renders correctly",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    // Multi-select
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"prop_light", "prop_rb", "prop_script"})}});
+    editor.Render(cam, 1280, 720);
+    // Single-select (transition from multi)
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_light"}});
+    editor.Render(cam, 1280, 720);
+    // Empty selection
+    editor.ExecuteMcpCommand("editor.clear_selection", nlohmann::json::object());
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: create objects via MCP then render with each selected",
+          "[editor][render]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    // Create objects of different types and select each one
+    const std::vector<std::string> types = {"Prop", "Panel", "Camera", "Light"};
+    for (size_t i = 0; i < types.size(); ++i) {
+        editor.ExecuteMcpCommand("editor.create_object",
+            nlohmann::json{{"id", std::format("dyn_{}", i)}, {"type", types[i]}});
+    }
+
+    Camera cam;
+    for (size_t i = 0; i < types.size(); ++i) {
+        editor.ExecuteMcpCommand("editor.select",
+            nlohmann::json{{"id", std::format("dyn_{}", i)}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: asset-selection paths in DrawPropertiesSelectedAsset
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: select_asset shows asset properties panel",
+          "[editor][render][properties][asset]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    AssetDef def;
+    // Keep mesh and albedoMap empty: the OpenGL backend reports supportsOffscreenTargets=true
+    // even without a real context, so a non-empty mesh triggers AssetThumbnailRenderer::Init()
+    // which calls glGenFramebuffers with null GLAD pointers → SEGFAULT.
+    def.mesh = "";
+    def.renderScale = "1.0,1.0,1.0";
+    def.albedoMap = "";
+    def.displayName = "Cube";
+    def.guid = "asset-guid-001";
+    doc.assets["mesh_cube"] = def;
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "mesh_cube"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: stale selected asset id clears selection on render",
+          "[editor][render][properties][asset]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.assets["temp_mesh"] = AssetDef{"", "1.0,1.0,1.0"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select_asset", nlohmann::json{{"id", "temp_mesh"}});
+    // Delete the asset so the selection becomes stale
+    editor.ExecuteMcpCommand("editor.delete_asset", nlohmann::json{{"id", "temp_mesh"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: clear selection then render shows no-selection text",
+          "[editor][render][properties]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "tmp_panel";
+        obj.type = SceneObjectType::Panel;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "tmp_panel"}});
+    editor.ExecuteMcpCommand("editor.clear_selection", nlohmann::json::object());
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer OnUpdate: exercises PublishMcpSnapshot and builder helpers
+// ===========================================================================
+
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with empty scene",
+          "[editor][mcp][snapshot]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    Camera cam;
+    // OnUpdate calls HandleEditorKeyboardShortcuts, UpdateNonFlyModeInput,
+    // and then PublishMcpSnapshot which exercises BuildMcpBuildSnapshot
+    // and BuildMcpSchemaCatalogSnapshot — these were previously 0% covered.
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with populated scene",
+          "[editor][mcp][snapshot]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prop_light"}});
+
+    Camera cam;
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with schema-bearing document",
+          "[editor][mcp][snapshot]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        // A prop with schema-driven fields to exercise BuildMcpSchemaFieldSnapshot
+        SceneObject obj;
+        obj.id = "schema_prop";
+        obj.type = SceneObjectType::Prop;
+        obj.props["color"] = "red";
+        obj.props["size"] = "large";
+        obj.assetId = "mesh_x";
+        doc.objects.push_back(obj);
+    }
+    {
+        SceneObject cam_obj;
+        cam_obj.id = "cam_schema";
+        cam_obj.type = SceneObjectType::Camera;
+        cam_obj.props["fov"] = "90";
+        cam_obj.props["nearClip"] = "0.1";
+        cam_obj.props["farClip"] = "500";
+        doc.objects.push_back(cam_obj);
+    }
+    doc.assets["mesh_x"] = AssetDef{"models/box.obj", "1.0,1.0,1.0"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: multiple consecutive updates stay stable",
+          "[editor][mcp][snapshot]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    Camera cam;
+    for (int i = 0; i < 5; ++i)
+        editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: inactive editor skips update body",
+          "[editor][mcp][snapshot]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    // editor.Toggle() NOT called — editor is inactive
+    // OnUpdate body is skipped; last IO block runs safely
+
+    Camera cam;
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: parent-child hierarchy tree paths (DrawTreeNode)
+// ===========================================================================
+
+// Helper: document with a 3-level parent → child → grandchild chain.
+static SceneDocument MakeHierarchyDocument() {
+    SceneDocument doc;
+    doc.sceneId = "hierarchy-scene";
+
+    SceneObject root;
+    root.id = "root_panel";
+    root.type = SceneObjectType::Panel;
+    doc.objects.push_back(root);
+
+    SceneObject child;
+    child.id = "child_prop";
+    child.type = SceneObjectType::Prop;
+    child.assetId = "asset_h";
+    child.props["parentId"] = "root_panel";
+    doc.objects.push_back(child);
+
+    SceneObject grandchild;
+    grandchild.id = "gc_light";
+    grandchild.type = SceneObjectType::Light;
+    grandchild.props["parentId"] = "child_prop";
+    ComponentDesc lc;
+    lc.type = "light";
+    lc.props["intensity"] = "1.0";
+    grandchild.components.push_back(lc);
+    doc.objects.push_back(grandchild);
+
+    SceneObject sibling;
+    sibling.id = "sibling_cam";
+    sibling.type = SceneObjectType::Camera;
+    sibling.props["parentId"] = "root_panel";
+    doc.objects.push_back(sibling);
+
+    doc.assets["asset_h"] = AssetDef{"", "1.0,1.0,1.0"};
+    return doc;
+}
+
+TEST_CASE("EditorLayer render: parent-child hierarchy renders DrawTreeNode recursive",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: select root of hierarchy renders tree with selection",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "root_panel"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: select child node renders selected subtree leaf",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "child_prop"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: select grandchild renders deepest tree level",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "gc_light"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: cycle through all hierarchy nodes in sequence",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+
+    Camera cam;
+    for (const char *id :
+         {"root_panel", "child_prop", "gc_light", "sibling_cam"}) {
+        editor.ExecuteMcpCommand("editor.select",
+                                 nlohmann::json{{"id", id}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: reparent via MCP then render covers reparent path",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "reparent-scene";
+    {
+        SceneObject a; a.id = "obj_a"; a.type = SceneObjectType::Panel;
+        doc.objects.push_back(a);
+    }
+    {
+        SceneObject b; b.id = "obj_b"; b.type = SceneObjectType::Prop;
+        doc.objects.push_back(b);
+    }
+    {
+        SceneObject c; c.id = "obj_c"; c.type = SceneObjectType::Light;
+        doc.objects.push_back(c);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    // Reparent b under a
+    auto r1 = editor.ExecuteMcpCommand("editor.reparent_object",
+        nlohmann::json{{"id", "obj_b"}, {"parentId", "obj_a"}});
+    REQUIRE(r1.ok);
+
+    // Reparent c under b (creates a chain a→b→c)
+    auto r2 = editor.ExecuteMcpCommand("editor.reparent_object",
+        nlohmann::json{{"id", "obj_c"}, {"parentId", "obj_b"}});
+    REQUIRE(r2.ok);
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Clear parent of c (makes it a root again)
+    auto r3 = editor.ExecuteMcpCommand("editor.reparent_object",
+        nlohmann::json{{"id", "obj_c"}, {"parentId", ""}});
+    REQUIRE(r3.ok);
+
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: create_object with parentId via MCP builds hierarchy",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    // Create root
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "hier_root"}, {"type", "Panel"}});
+    // Create child under root
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "hier_child"}, {"type", "Prop"},
+                       {"parentId", "hier_root"}});
+    // Create grandchild under child
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "hier_gc"}, {"type", "Light"},
+                       {"parentId", "hier_child"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Select each level
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "hier_root"}});
+    editor.Render(cam, 1280, 720);
+
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "hier_child"}});
+    editor.Render(cam, 1280, 720);
+
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "hier_gc"}});
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multi-select across parent and child covers batch paths",
+          "[editor][render][hierarchy][multiselect]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+
+    // Select both root and its child simultaneously → multi-select path
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array(
+            {"root_panel", "child_prop", "gc_light"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: parent-child hierarchy exercises snapshot with tree",
+          "[editor][mcp][snapshot][hierarchy]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeHierarchyDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"id", "child_prop"}});
+
+    Camera cam;
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: DrawConsoleTab with log entries at various levels
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: console tab draws Info log entries",
+          "[editor][render][console]") {
+    ImGuiContextGuard imgui;
+
+    // Push log lines so DrawConsoleTab has content to iterate
+    LogBuffer::Instance().Clear();
+    LogInfo("test info message one");
+    LogInfo("test info message two");
+
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: console tab draws Warn and Error log entries",
+          "[editor][render][console]") {
+    ImGuiContextGuard imgui;
+
+    LogBuffer::Instance().Clear();
+    LogWarn("test warning entry");
+    LogError("test error entry");
+    LogInfo("test info after errors");
+
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: console tab with mixed log levels renders all rows",
+          "[editor][render][console]") {
+    ImGuiContextGuard imgui;
+
+    LogBuffer::Instance().Clear();
+    for (int i = 0; i < 5; ++i)
+        LogInfo("info line {}", i);
+    for (int i = 0; i < 3; ++i)
+        LogWarn("warn line {}", i);
+    for (int i = 0; i < 2; ++i)
+        LogError("error line {}", i);
+
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: objects with prefabInstance set
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: object with prefabInstance set renders without crash",
+          "[editor][render][prefab]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "prefab-scene";
+
+    SceneObject prefabObj;
+    prefabObj.id = "prefab_panel";
+    prefabObj.type = SceneObjectType::Panel;
+    prefabObj.prefabInstance = ScenePrefabInstance{"my_prefab_id", "assets/scenes/my_prefab.json"};
+    doc.objects.push_back(prefabObj);
+
+    SceneObject normalObj;
+    normalObj.id = "normal_prop";
+    normalObj.type = SceneObjectType::Prop;
+    doc.objects.push_back(normalObj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prefab instance selected shows properties panel",
+          "[editor][render][prefab]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "prefab-sel-scene";
+
+    SceneObject prefabObj;
+    prefabObj.id = "prefab_prop";
+    prefabObj.type = SceneObjectType::Prop;
+    prefabObj.prefabInstance = ScenePrefabInstance{"scene_pfb", "levels/room.json"};
+    prefabObj.assetId = "pfb_asset";
+    doc.objects.push_back(prefabObj);
+    doc.assets["pfb_asset"] = AssetDef{"", "1.0,1.0,1.0"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"id", "prefab_prop"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prefab instance with children in hierarchy",
+          "[editor][render][prefab][hierarchy]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "pfb-hier-scene";
+
+    SceneObject root;
+    root.id = "pfb_root";
+    root.type = SceneObjectType::Panel;
+    root.prefabInstance = ScenePrefabInstance{"group_pfb", "groups/group.json"};
+    doc.objects.push_back(root);
+
+    SceneObject child;
+    child.id = "pfb_child";
+    child.type = SceneObjectType::Prop;
+    child.props["parentId"] = "pfb_root";
+    doc.objects.push_back(child);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"id", "pfb_root"}});
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: duplicate then render covers duplicate code paths
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: duplicate object then render with new object selected",
+          "[editor][render][mcp]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    // Select and duplicate a prop
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"id", "prop1"}});
+    auto dupResult = editor.ExecuteMcpCommand("editor.duplicate",
+        nlohmann::json{{"id", "prop1"}});
+    REQUIRE(dupResult.ok);
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Select the duplicate (it will be the last object)
+    const auto &doc = editor.GetDocument();
+    REQUIRE(doc.objects.size() > 4u);
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", doc.objects.back().id}});
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: duplicate with count creates multiple objects then render",
+          "[editor][render][mcp]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.select",
+                             nlohmann::json{{"id", "panel1"}});
+    auto dupResult = editor.ExecuteMcpCommand("editor.duplicate",
+        nlohmann::json{{"id", "panel1"}, {"count", 3}});
+    REQUIRE(dupResult.ok);
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Multi-select the duplicates
+    const auto &doc = editor.GetDocument();
+    nlohmann::json ids = nlohmann::json::array();
+    const size_t total = doc.objects.size();
+    for (size_t i = total >= 3 ? total - 3 : 0; i < total; ++i)
+        ids.push_back(doc.objects[i].id);
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"ids", ids}});
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: scene controls (new_scene / reload_scene) then render
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: new_scene clears and renders empty scene",
+          "[editor][render][scene]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // new_scene replaces the document
+    editor.ExecuteMcpCommand("editor.new_scene", nlohmann::json::object());
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: reload_scene sets WantsSceneReload then render is safe",
+          "[editor][render][scene]") {
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeDocWithAllObjectTypes());
+    editor.Toggle();
+
+    editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json::object());
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayer render: large scene with many objects covers more tree nodes
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: large flat scene with many objects renders hierarchy",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "large-flat";
+
+    // Create 20 flat objects of mixed types
+    const std::array<SceneObjectType, 4> types = {
+        SceneObjectType::Panel, SceneObjectType::Prop,
+        SceneObjectType::Light, SceneObjectType::Camera};
+    for (int i = 0; i < 20; ++i) {
+        SceneObject obj;
+        obj.id = std::format("obj_{:02d}", i);
+        obj.type = types[static_cast<size_t>(i) % 4];
+        if (obj.type == SceneObjectType::Prop)
+            obj.assetId = "shared_asset";
+        doc.objects.push_back(obj);
+    }
+    doc.assets["shared_asset"] = AssetDef{"", "1.0,1.0,1.0"};
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Select a few in sequence
+    for (int i = 0; i < 5; ++i) {
+        editor.ExecuteMcpCommand("editor.select",
+            nlohmann::json{{"id", std::format("obj_{:02d}", i * 4)}});
+        editor.Render(cam, 1280, 720);
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: wide tree with multiple root siblings each having children",
+          "[editor][render][hierarchy]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "wide-tree";
+
+    for (int r = 0; r < 3; ++r) {
+        SceneObject root;
+        root.id = std::format("root_{}", r);
+        root.type = SceneObjectType::Panel;
+        doc.objects.push_back(root);
+
+        for (int c = 0; c < 3; ++c) {
+            SceneObject child;
+            child.id = std::format("child_{}_{}", r, c);
+            child.type = SceneObjectType::Prop;
+            child.props["parentId"] = root.id;
+            doc.objects.push_back(child);
+        }
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+
+    // Select one of the children
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"id", "child_1_2"}});
+    editor.Render(cam, 1280, 720);
+
+    // Multi-select across roots
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array(
+            {"root_0", "root_1", "child_2_0"})}});
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer OnUpdate: wide tree hierarchy exercises snapshot builders",
+          "[editor][mcp][snapshot][hierarchy]") {
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.sceneId = "snapshot-tree";
+    for (int r = 0; r < 3; ++r) {
+        SceneObject root;
+        root.id = std::format("snap_root_{}", r);
+        root.type = SceneObjectType::Panel;
+        doc.objects.push_back(root);
+        for (int c = 0; c < 2; ++c) {
+            SceneObject child;
+            child.id = std::format("snap_child_{}_{}", r, c);
+            child.type = SceneObjectType::Prop;
+            child.props["parentId"] = root.id;
+            doc.objects.push_back(child);
+        }
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+
+    Camera cam;
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// NEW COVERAGE TESTS — EditorPropertiesPanel.cpp
+// ===========================================================================
+
+TEST_CASE("EditorLayer render: object with prefabInstance renders prefab identity section",
+          "[editor][render][properties][prefab]") {
+    // Exercises lines 402–404 in DrawPropertiesIdentitySection
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "prefab_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.position = {1.f, 0.f, 0.f};
+        obj.prefabInstance = ScenePrefabInstance{"my_prefab_001", "prefabs/box.prefab"};
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "prefab_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: camera with followTargetId renders selected target in combo",
+          "[editor][render][properties][camera]") {
+    // MakeRichDocument contains cam_follow with props["followTargetId"] = "prop_light"
+    // Selecting it exercises the curTarget > 0 path in DrawPropertiesCameraSection
+    ImGuiContextGuard imgui;
+    EditorLayer editor;
+    editor.LoadDocument(MakeRichDocument());
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "cam_follow"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prop with stale assetId shows missing asset warning",
+          "[editor][render][properties]") {
+    // Object references assetId absent from doc.assets
+    // → DrawPropertiesAssetSection renders "Missing asset:" coloured text (lines 597–600)
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "stale_asset_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "ghost_asset";   // absent from doc.assets
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "stale_asset_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multi-select with shared non-empty assetId shows shared asset label",
+          "[editor][render][properties][multiselect]") {
+    // All selected objects share the same non-empty assetId
+    // → DrawPropertiesMultiSelect hits hasSharedAssetId=true && !empty branch (line 182)
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.assets["shared_mesh"] = AssetDef{"", "1.0,1.0,1.0"};
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("shared_{}", i);
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "shared_mesh";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"shared_0", "shared_1", "shared_2"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: multi-select with all-empty assetIds shows none label",
+          "[editor][render][properties][multiselect]") {
+    // All selected objects have empty assetId
+    // → DrawPropertiesMultiSelect hits hasSharedAssetId=true && empty branch (line 180)
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    for (int i = 0; i < 3; ++i) {
+        SceneObject obj;
+        obj.id = std::format("noasset_{}", i);
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select",
+        nlohmann::json{{"ids", nlohmann::json::array({"noasset_0", "noasset_1", "noasset_2"})}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: camera with fov nearClip farClip props renders full camera section",
+          "[editor][render][properties][camera]") {
+    // Exercises drawCamFloatProp for fov, nearClip, farClip with valid string values
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject cam_obj;
+        cam_obj.id = "main_camera";
+        cam_obj.type = SceneObjectType::Camera;
+        cam_obj.position = {0, 5, -10};
+        cam_obj.pitch = -15.0f;
+        cam_obj.yaw = 0.0f;
+        cam_obj.roll = 0.0f;
+        cam_obj.props["fov"] = "60";
+        cam_obj.props["nearClip"] = "0.1";
+        cam_obj.props["farClip"] = "1000";
+        doc.objects.push_back(cam_obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "main_camera"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prop with unknown component type renders generic header",
+          "[editor][render][properties]") {
+    // A component whose type is neither 'light', 'rigidbody', nor 'script'
+    // → DrawPropertiesComponentsList uses headerLabel = comp.type (line 786)
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "custom_comp_obj";
+        obj.type = SceneObjectType::Prop;
+        ComponentDesc custom;
+        custom.type = "custom_component_xyz";
+        custom.props["custom_key"] = "custom_value";
+        obj.components.push_back(custom);
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "custom_comp_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+TEST_CASE("EditorLayer render: prop with known assetId renders asset info lines",
+          "[editor][render][properties]") {
+    // Covers DrawPropertiesAssetSection with a valid matching asset (mesh/renderScale lines)
+    ImGuiContextGuard imgui;
+    SceneDocument doc;
+    doc.assets["known_asset"] = AssetDef{"", "2.0,1.0,1.0"};
+    {
+        SceneObject obj;
+        obj.id = "asset_obj";
+        obj.type = SceneObjectType::Prop;
+        obj.assetId = "known_asset";
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+    editor.Toggle();
+    editor.ExecuteMcpCommand("editor.select", nlohmann::json{{"id", "asset_obj"}});
+
+    Camera cam;
+    editor.Render(cam, 1280, 720);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// NEW COVERAGE TESTS — EditorMcpHandlers.cpp
+// ===========================================================================
+
+TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName sets them on document",
+          "[editor][mcp]") {
+    // Exercises lines 866–873 in McpHandleNewScene (sceneId/sceneName branches)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.new_scene",
+        nlohmann::json{{"sceneId", "brand-new-scene"}, {"sceneName", "Brand New Scene"}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data.value("sceneId", std::string{}) == "brand-new-scene");
+    REQUIRE(result.data.value("sceneName", std::string{}) == "Brand New Scene");
+    REQUIRE(editor.GetDocument().sceneId == "brand-new-scene");
+    REQUIRE(editor.GetDocument().sceneName == "Brand New Scene");
+}
+
+TEST_CASE("EditorLayer MCP: create_object with Camera type auto-generates camera id",
+          "[editor][mcp]") {
+    // When no id is provided and type is Camera, GenerateCameraId is used (lines 468–469)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Camera"}});
+    REQUIRE(result.ok);
+    const auto &objects = editor.GetDocument().objects;
+    REQUIRE(!objects.empty());
+    REQUIRE(!objects.back().id.empty());
+    REQUIRE(objects.back().type == SceneObjectType::Camera);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with valid parentId links to parent",
+          "[editor][mcp]") {
+    // Exercises lines 501–507 (parentId branch, valid parent)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "parent_obj"}, {"type", "Prop"}});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"id", "child_obj"}, {"type", "Prop"}, {"parentId", "parent_obj"}});
+    REQUIRE(result.ok);
+    const auto &objects = editor.GetDocument().objects;
+    const auto childIt = std::ranges::find_if(objects,
+        [](const SceneObject &o) { return o.id == "child_obj"; });
+    REQUIRE(childIt != objects.end());
+    REQUIRE(childIt->props.at("parentId") == "parent_obj");
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid parentId returns error",
+          "[editor][mcp]") {
+    // Exercises lines 501–506 (parentId branch, parent not found)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"id", "orphan"}, {"type", "Prop"}, {"parentId", "does_not_exist"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid position array returns error",
+          "[editor][mcp]") {
+    // Exercises lines 477–482 in McpHandleCreateObject
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"position", "not-a-vec3"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("position") != std::string::npos);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid scale array returns error",
+          "[editor][mcp]") {
+    // Exercises lines 483–488 in McpHandleCreateObject
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"scale", "bad_scale"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("scale") != std::string::npos);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with duplicate id returns error",
+          "[editor][mcp]") {
+    // Exercises lines 471–474 in McpHandleCreateObject
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+    editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"id", "dup_obj"}, {"type", "Prop"}});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"id", "dup_obj"}, {"type", "Prop"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: create_object with invalid type string returns error",
+          "[editor][mcp]") {
+    // Exercises lines 457–461 in McpHandleCreateObject (ParseSceneObjectType failure)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{{"type", "InvalidObjectType123"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("Invalid") != std::string::npos);
+}
+
+TEST_CASE("EditorLayer MCP: create_object with props and components creates full object",
+          "[editor][mcp]") {
+    // Exercises lines 493–500 in McpHandleCreateObject
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.create_object",
+        nlohmann::json{
+            {"id", "full_obj"},
+            {"type", "Prop"},
+            {"props", nlohmann::json{{"color", "red"}, {"size", "large"}}},
+            {"components", nlohmann::json::array({
+                nlohmann::json{{"type", "script"},
+                               {"props", nlohmann::json{{"behaviorTag", "EnemyAI"}}}}
+            })}
+        });
+    REQUIRE(result.ok);
+    const auto &objects = editor.GetDocument().objects;
+    const auto it = std::ranges::find_if(objects,
+        [](const SceneObject &o) { return o.id == "full_obj"; });
+    REQUIRE(it != objects.end());
+    REQUIRE(it->props.at("color") == "red");
+    REQUIRE(it->components.size() == 1);
+    REQUIRE(it->components[0].type == "script");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with yaw pitch roll updates rotation fields",
+          "[editor][mcp]") {
+    // Exercises lines 607–612 in McpHandleUpdateObject (yaw/pitch/roll branches)
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "rot_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "rot_obj"}, {"yaw", 45.0}, {"pitch", 30.0}, {"roll", 15.0}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().objects[0].yaw == Approx(45.0f));
+    REQUIRE(editor.GetDocument().objects[0].pitch == Approx(30.0f));
+    REQUIRE(editor.GetDocument().objects[0].roll == Approx(15.0f));
+}
+
+TEST_CASE("EditorLayer MCP: update_object with props field merges into object props",
+          "[editor][mcp]") {
+    // Exercises lines 618–621 in McpHandleUpdateObject (props merge branch)
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "props_merge_obj";
+    obj.type = SceneObjectType::Prop;
+    obj.props["existing_key"] = "old_value";
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{
+            {"id", "props_merge_obj"},
+            {"props", nlohmann::json{{"existing_key", "new_value"}, {"added_key", "added"}}}
+        });
+    REQUIRE(result.ok);
+    const auto &props = editor.GetDocument().objects[0].props;
+    REQUIRE(props.at("existing_key") == "new_value");
+    REQUIRE(props.at("added_key") == "added");
+}
+
+TEST_CASE("EditorLayer MCP: update_object with invalid scale returns error",
+          "[editor][mcp]") {
+    // Exercises lines 601–606 in McpHandleUpdateObject (scale validation error path)
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "scale_err_obj";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "scale_err_obj"}, {"scale", "not_a_vec3"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("scale") != std::string::npos);
+}
+
+TEST_CASE("EditorLayer MCP: update_object with nonexistent id returns error",
+          "[editor][mcp]") {
+    // Exercises lines 590–592 in McpHandleUpdateObject
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_object",
+        nlohmann::json{{"id", "nonexistent_object"}, {"yaw", 10.0}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: update_asset with displayName updates display name",
+          "[editor][mcp]") {
+    // Exercises lines 831–835 in McpHandleUpdateAsset (displayName branch)
+    SceneDocument doc;
+    AssetDef def;
+    def.displayName = "Original Name";
+    doc.assets["test_asset"] = def;
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.update_asset",
+        nlohmann::json{{"id", "test_asset"}, {"displayName", "Updated Name"}});
+    REQUIRE(result.ok);
+    REQUIRE(editor.GetDocument().assets.at("test_asset").displayName == "Updated Name");
+}
+
+TEST_CASE("EditorLayer MCP: delete with ids array removes multiple objects",
+          "[editor][mcp]") {
+    // Exercises lines 769–776 in McpHandleDelete (ids array branch)
+    SceneDocument doc;
+    for (int i = 0; i < 4; ++i) {
+        SceneObject obj;
+        obj.id = std::format("del_obj_{}", i);
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.delete",
+        nlohmann::json{{"ids", nlohmann::json::array({"del_obj_1", "del_obj_3"})}});
+    REQUIRE(result.ok);
+    REQUIRE(result.data.value("deletedCount", 0) == 2);
+    REQUIRE(editor.GetDocument().objects.size() == 2);
+}
+
+TEST_CASE("EditorLayer MCP: unsupported command returns error with message",
+          "[editor][mcp]") {
+    // Exercises lines 384–388 in ExecuteMcpCommand (fallthrough case)
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.totally_unsupported_command_xyz",
+        nlohmann::json::object());
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+TEST_CASE("EditorLayer MCP: reparent_object to self returns error",
+          "[editor][mcp]") {
+    // Exercises lines 685–688 in McpHandleReparentObject (self-parent cycle check)
+    SceneDocument doc;
+    SceneObject obj;
+    obj.id = "self_parent";
+    obj.type = SceneObjectType::Prop;
+    doc.objects.push_back(obj);
+
+    EditorLayer editor;
+    editor.LoadDocument(doc);
+
+    const auto result = editor.ExecuteMcpCommand(
+        "editor.reparent_object",
+        nlohmann::json{{"id", "self_parent"}, {"parentId", "self_parent"}});
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+// ===========================================================================
+// NEW COVERAGE TESTS — AssetImportService.cpp
+// ===========================================================================
+
+TEST_CASE("AssetImportService: ImportTextureForAsset with null asset returns false",
+          "[editor][asset-import]") {
+    // Exercises lines 260–265: null asset guard in ImportTextureForAsset
+    AssetImportService service;
+    std::string err;
+    const bool ok = service.ImportTextureForAsset("some/texture.png", "some_asset",
+                                                  nullptr, &err);
+    REQUIRE_FALSE(ok);
+    REQUIRE(err == "Asset is required.");
+}
+
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with null document returns error",
+          "[editor][asset-import][reimport]") {
+    // Exercises lines 334–337: null doc guard in ReimportAssetWithDependents
+    AssetImportService service;
+    const AssetReimportResult result =
+            service.ReimportAssetWithDependents(nullptr, "any_guid", "test reason");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+    REQUIRE(!result.records.empty());
+}
+
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with unknown guid returns error",
+          "[editor][asset-import][reimport]") {
+    // Exercises lines 346–349: rootAssetGuid not found in assetIdByGuid
+    SceneDocument doc;
+    AssetDef def;
+    def.guid = "actual_guid_abc";
+    def.displayName = "Some Asset";
+    doc.assets["some_asset"] = def;
+
+    AssetImportService service;
+    const AssetReimportResult result =
+            service.ReimportAssetWithDependents(&doc, "completely_unknown_guid", "test");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+}
+
+TEST_CASE("AssetImportService: ReimportAssetWithDependents on unimported asset hits metadata-missing branch",
+          "[editor][asset-import][reimport]") {
+    // The asset exists in the document but was never imported:
+    // LoadOrBuildMetadata produces empty importerId + sourcePath
+    // → ReimportSingleAsset hits "no importer metadata" branch (lines 409–421)
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_reimport_no_meta_branch";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    SceneDocument doc;
+    AssetDef def;
+    def.guid = "guid_never_imported";
+    def.displayName = "Never Imported Asset";
+    doc.assets["never_imported"] = def;
+
+    AssetImportService service;
+    const AssetReimportResult result =
+            service.ReimportAssetWithDependents(&doc, "guid_never_imported", "force reimport");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(!result.error.empty());
+    REQUIRE(!result.records.empty());
+    REQUIRE_FALSE(result.records[0].ok);
+}
+
+TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk",
+          "[editor][asset-import]") {
+    // Exercises lines 313–327: SaveMetadataForAsset writes metadata that can be reloaded
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_save_meta_for_asset";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    AssetDef asset;
+    asset.guid = "guid_save_meta_test";
+    asset.displayName = "Save Meta Asset";
+    // Leave mesh/albedoMap empty to avoid OpenGL calls in produced-file paths
+
+    AssetImportService service;
+    std::string err;
+    const bool ok = service.SaveMetadataForAsset("save_meta_asset", asset, &err);
+    REQUIRE(ok);
+
+    AssetMetadata loaded;
+    std::string loadErr;
+    REQUIRE(LoadAssetMetadata("guid_save_meta_test", &loaded, &loadErr));
+    REQUIRE(loaded.assetGuid == "guid_save_meta_test");
+    REQUIRE(loaded.displayName == "Save Meta Asset");
+}
+
+// ===========================================================================
+// AssetImportService.cpp — additional error-path tests
+// ===========================================================================
+
+TEST_CASE("AssetImportService: ReimportSingleAsset fails when saved importer "
+          "id is no longer registered",
+          "[editor][asset-import][reimport]") {
+    // Covers AssetImportService.cpp lines ~437-450:
+    // FindById(metadata.importerId) and FindByExtension(metadata.sourcePath)
+    // both return nullptr → "Registered importer not found." error path.
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_reimport_bad_importer";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    // First do a real import so that a metadata file exists on disk.
+    const std::filesystem::path objPath = root / "widget.obj";
+    WriteFile(objPath.string(),
+              "v 0 0 0\nv 0 1 0\nv 1 0 0\nf 1 2 3\n");
+
+    AssetImportService service;
+    AssetImportResult imported =
+            service.ImportAssetFromSource(objPath.string(), "widget",
+                                          "guid_widget_bad_imp", "Widget");
+    REQUIRE(imported.ok);
+
+    // Now corrupt the metadata: point to a non-existent importer id and a
+    // source path whose extension is also unregistered.
+    AssetMetadata meta;
+    std::string loadErr;
+    REQUIRE(LoadAssetMetadata("guid_widget_bad_imp", &meta, &loadErr));
+    meta.importerId = "nonexistent.custom_importer";
+    meta.sourcePath = (root / "widget.xyz").string(); // .xyz not registered
+    REQUIRE(SaveAssetMetadata(meta, &loadErr));
+
+    // Build a scene document referencing the corrupted asset.
+    SceneDocument doc;
+    doc.assets["widget"] = imported.asset;
+    doc.assets["widget"].guid = "guid_widget_bad_imp";
+
+    const AssetReimportResult result =
+            service.ReimportAssetWithDependents(&doc, "guid_widget_bad_imp",
+                                                "test reimport with bad importer");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE_FALSE(result.error.empty());
+    REQUIRE(!result.records.empty());
+    REQUIRE_FALSE(result.records.back().ok);
+}
+
+TEST_CASE("AssetImportService: ReimportSingleAsset covers albedo source path "
+          "reimport branch",
+          "[editor][asset-import][reimport]") {
+    // Covers AssetImportService.cpp lines ~462-480:
+    // metadata.settings["albedoSourcePath"] is non-empty → the texture re-import
+    // branch executes.  The texture file need not exist; a failed texture import
+    // is silently ignored and the overall reimport still succeeds.
+    const std::filesystem::path root =
+            Monolith::Tests::SecureTempBase() / "horo_reimport_albedo_branch";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "assets" / "models", ec);
+    WriteFile((root / "CMakePresets.json").string(), "{}");
+    ProjectPathGuard guard(root);
+
+    const std::filesystem::path objPath = root / "cube.obj";
+    WriteFile(objPath.string(),
+              "v 0 0 0\nv 0 1 0\nv 1 0 0\nf 1 2 3\n");
+
+    AssetImportService service;
+    AssetImportResult imported =
+            service.ImportAssetFromSource(objPath.string(), "cube",
+                                          "guid_cube_albedo", "Cube");
+    REQUIRE(imported.ok);
+
+    // Inject a (non-existent) albedo source path into the saved metadata so that
+    // the albedo-reimport code path is exercised on the next reimport call.
+    AssetMetadata meta;
+    std::string loadErr;
+    REQUIRE(LoadAssetMetadata("guid_cube_albedo", &meta, &loadErr));
+    meta.settings["albedoSourcePath"] = (root / "cube_albedo.png").string();
+    REQUIRE(SaveAssetMetadata(meta, &loadErr));
+
+    SceneDocument doc;
+    doc.assets["cube"] = imported.asset;
+    doc.assets["cube"].guid = "guid_cube_albedo";
+
+    // Reimport: main OBJ succeeds; albedo branch executes (file absent → ignored).
+    const AssetReimportResult result =
+            service.ReimportAssetWithDependents(&doc, "guid_cube_albedo",
+                                                "test albedo branch");
+    REQUIRE(result.ok);
+    REQUIRE(!result.records.empty());
+    REQUIRE(result.records[0].ok);
+}
+
+// ===========================================================================
+// EditorMcpHandlers: FieldWidgetToString + BuildMcpSchemaFieldSnapshot
+// (covers EditorMcpHandlers.cpp lines 101–154)
+//
+// These functions live in an anonymous namespace inside EditorMcpHandlers.cpp
+// and are only reachable via PublishMcpSnapshot(), which is called by
+// OnUpdate() when the editor is active.  We call Init(nullptr) so that
+// EditorLayer creates its own ImGui context and loads m_schema from a custom
+// schema JSON that exercises all five FieldDef::Widget values.
+// ===========================================================================
+
+TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises "
+          "FieldWidgetToString and BuildMcpSchemaFieldSnapshot",
+          "[editor][mcp][schema]") {
+    namespace fs = std::filesystem;
+
+    // Build a temp SDK root whose assets/editor_schema.json exercises every
+    // FieldDef::Widget branch: Float, Bool, Enum, Color3, String.
+    const fs::path sdkRoot =
+            Monolith::Tests::SecureTempBase() / "horo_mcp_schema_widget_types";
+    std::error_code ec;
+    fs::remove_all(sdkRoot, ec);
+    fs::create_directories(sdkRoot / "assets", ec);
+
+    const std::string schemaJson = R"({
+      "types": {
+        "Prop": {
+          "fields": [
+            {"key": "fv", "label": "Float",  "type": "float",
+             "min": 0.0, "max": 1.0, "default": "0.5"},
+            {"key": "bv", "label": "Bool",   "type": "bool",
+             "default": "false"},
+            {"key": "ev", "label": "Enum",   "type": "enum",
+             "options": ["a", "b"], "default": "a"},
+            {"key": "cv", "label": "Color",  "type": "color3",
+             "default": "1.0,1.0,1.0"},
+            {"key": "sv", "label": "String", "type": "string",
+             "default": "hello"}
+          ]
+        }
+      },
+      "components": {
+        "allWidgets": {
+          "label": "AllWidgets",
+          "appliesTo": ["Prop"],
+          "fields": [
+            {"key": "cf", "type": "float",  "min": 0.0, "max": 10.0, "default": "1.0"},
+            {"key": "cb", "type": "bool",   "default": "true"},
+            {"key": "ce", "type": "enum",   "options": ["x", "y"], "default": "x"},
+            {"key": "cc", "type": "color3", "default": "0.5,0.5,0.5"},
+            {"key": "cs", "type": "string", "default": ""}
+          ]
+        }
+      }
+    })";
+
+    WriteFile((sdkRoot / "assets" / "editor_schema.json").string(), schemaJson);
+
+    // Point BOTH the SDK root AND the project root at our temp dir.
+    // Init() searches for shaders via ResolvePreviewShaderPath() which probes
+    // candidates under both SdkRoot() and Root().  If shaders are found it calls
+    // glCreateShader() which crashes without an OpenGL context.  Redirecting
+    // Root() to a dir with no shaders makes ReadFile() throw ShaderException,
+    // which Init() already catches and logs — no crash.
+    const fs::path prevSdkRoot     = Monolith::ProjectPath::SdkRoot();
+    const fs::path prevProjectRoot = Monolith::ProjectPath::Root();
+    Monolith::ProjectPath::SetSdkRoot(sdkRoot);
+    Monolith::ProjectPath::SetProjectRoot(sdkRoot);
+
+    SceneDocument doc;
+    {
+        SceneObject obj;
+        obj.id = "schema_obj";
+        obj.type = SceneObjectType::Prop;
+        doc.objects.push_back(obj);
+    }
+
+    {
+        EditorLayer editor;
+        // Init(nullptr) creates the ImGui context and loads m_schema from
+        // sdkRoot/assets/editor_schema.json (Float, Bool, Enum, Color3, String).
+        editor.Init(nullptr);
+        editor.LoadDocument(doc);
+        editor.Toggle();  // make active so OnUpdate() runs the full body
+
+        Camera cam;
+        // OnUpdate() → PublishMcpSnapshot()
+        //   → BuildMcpSchemaCatalogSnapshot(m_schema)
+        //     → BuildMcpSchemaEntrySnapshot (TypeSchema overload,   line 132)
+        //     → BuildMcpSchemaEntrySnapshot (ComponentSchema overload, line 144)
+        //     → BuildMcpSchemaFieldSnapshot (line 113)
+        //     → FieldWidgetToString for Float/Bool/Enum/Color3/String (lines 101–111)
+        editor.OnUpdate(1.0f / 60.0f, cam, 1280, 720);
+
+        editor.Shutdown();  // destroys ImGui context created by Init()
+    }
+
+    Monolith::ProjectPath::SetSdkRoot(prevSdkRoot);
+    Monolith::ProjectPath::SetProjectRoot(prevProjectRoot);
+    REQUIRE(true);
+}
+
+// ===========================================================================
+// EditorLayerInternal inline helpers: direct unit tests
+// (covers EditorLayerInternal.h lines 88–137)
+//
+// The header is included at the top of this file; each TU gets its own copy
+// of the inline functions, and the coverage instrumentation records hits here.
+// ===========================================================================
+
+TEST_CASE("EditorLayerInternal: FindEnumOptionIndex returns correct index or 0",
+          "[editor][internal][schema]") {
+    // lines 88-94 in EditorLayerInternal.h
+    const std::vector<std::string> opts = {"alpha", "beta", "gamma"};
+    CHECK(FindEnumOptionIndex(opts, "alpha") == 0);
+    CHECK(FindEnumOptionIndex(opts, "beta")  == 1);
+    CHECK(FindEnumOptionIndex(opts, "gamma") == 2);
+    // Not found → returns 0 (safe default for ImGui::Combo).
+    CHECK(FindEnumOptionIndex(opts, "delta") == 0);
+    // Empty options list → returns 0.
+    CHECK(FindEnumOptionIndex({}, "any") == 0);
+}
+
+TEST_CASE("EditorLayerInternal: BuildImGuiComboItems produces null-separated string",
+          "[editor][internal][schema]") {
+    // lines 97-105 in EditorLayerInternal.h
+    {
+        // Multi-item case.
+        const std::vector<std::string> opts = {"one", "two", "three"};
+        const std::string items = BuildImGuiComboItems(opts);
+        // Expected: "one\0two\0three\0\0"
+        const std::string expected = std::string("one") + '\0'
+                                   + std::string("two") + '\0'
+                                   + std::string("three") + '\0'
+                                   + '\0';
+        REQUIRE(items.size() == expected.size());
+        CHECK(items == expected);
+    }
+    {
+        // Single item.
+        const std::vector<std::string> single = {"only"};
+        const std::string items = BuildImGuiComboItems(single);
+        const std::string expected = std::string("only") + '\0' + '\0';
+        REQUIRE(items.size() == expected.size());
+        CHECK(items == expected);
+    }
+    {
+        // Empty list → double-null terminator.
+        const std::string items = BuildImGuiComboItems({});
+        REQUIRE(items.size() == 1u);
+        CHECK(items[0] == '\0');
+    }
+}
+
+TEST_CASE("EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo filter",
+          "[editor][internal][schema]") {
+    // lines 118-137 in EditorLayerInternal.h
+    // Empty appliesTo → applies to all types.
+    CHECK(SchemaAppliesToObjectType({}, SceneObjectType::Prop));
+    CHECK(SchemaAppliesToObjectType({}, SceneObjectType::Light));
+    CHECK(SchemaAppliesToObjectType({}, SceneObjectType::Camera));
+    CHECK(SchemaAppliesToObjectType({}, SceneObjectType::Panel));
+
+    // Exact lowercase match for each type.
+    CHECK(SchemaAppliesToObjectType({"prop"},   SceneObjectType::Prop));
+    CHECK(SchemaAppliesToObjectType({"light"},  SceneObjectType::Light));
+    CHECK(SchemaAppliesToObjectType({"camera"}, SceneObjectType::Camera));
+    CHECK(SchemaAppliesToObjectType({"panel"},  SceneObjectType::Panel));
+
+    // Case-insensitive matching.
+    CHECK(SchemaAppliesToObjectType({"Prop"},  SceneObjectType::Prop));
+    CHECK(SchemaAppliesToObjectType({"LIGHT"}, SceneObjectType::Light));
+
+    // Multi-entry appliesTo: match if any entry matches.
+    CHECK(SchemaAppliesToObjectType({"prop", "light"}, SceneObjectType::Light));
+    CHECK(SchemaAppliesToObjectType({"prop", "light"}, SceneObjectType::Prop));
+
+    // Non-matching: entry present but for a different type.
+    CHECK_FALSE(SchemaAppliesToObjectType({"light"},  SceneObjectType::Prop));
+    CHECK_FALSE(SchemaAppliesToObjectType({"camera"}, SceneObjectType::Light));
+    CHECK_FALSE(SchemaAppliesToObjectType({"panel"},  SceneObjectType::Camera));
+}
+

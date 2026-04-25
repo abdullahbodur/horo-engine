@@ -6,6 +6,11 @@
 #include <stdexcept>
 #include <string>
 
+#if defined(__GNUC__) || defined(__clang__)
+// Forward-declare the gcov flush symbol so we can call it before std::_Exit.
+extern "C" void __gcov_dump();
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include "core/Application.h"
@@ -260,6 +265,10 @@ int main(int argc, char **argv) {
         // CI UI automation mode: avoid late process-teardown crashes from external
         // teardown chains.
         std::fflush(nullptr);
+#if defined(__GNUC__) || defined(__clang__)
+        // Flush gcov/llvm-profdata coverage data before bypassing atexit.
+        __gcov_dump();
+#endif
         std::_Exit(exitCode);
     }
 #endif

@@ -349,6 +349,122 @@ namespace Monolith {
             return true;
         }
 
+        void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
+            UiAutomationRunState *testState =
+                    RequireTestState(ctx, "launcher_ui/launcher_home_layout");
+            IM_CHECK(testState != nullptr);
+            if (testState == nullptr)
+                return;
+
+            LogDebug("UI scenario action: wait for launcher home window");
+            ctx->SetRef("Horo Launcher");
+            const bool launcherReady = WaitForCondition(
+                ctx, 180, [ctx]() { return ctx->ItemExists("Create New Project"); });
+            IM_CHECK(launcherReady);
+            if (!launcherReady)
+                return;
+
+            LogDebug("UI scenario action: find LauncherPanel window");
+            ImGuiWindow *launcherPanel = FindWindowContaining("LauncherPanel");
+            IM_CHECK(launcherPanel != nullptr);
+            if (!launcherPanel)
+                return;
+            ctx->SetRef(launcherPanel);
+
+            LogDebug("UI scenario action: assert input fields and buttons exist");
+            IM_CHECK(ctx->ItemExists("##new-project-name"));
+            IM_CHECK(ctx->ItemExists("##new-project-path"));
+            IM_CHECK(ctx->ItemExists("Create Project"));
+
+            ctx->SetRef("Horo Launcher");
+            IM_CHECK(ctx->ItemExists("Open Existing Project"));
+
+            CaptureIfEnabled(ctx, testState,
+                             "launcher_ui__launcher_home_layout__expect_home.png");
+            LogInfo("UI scenario done: launcher_ui/launcher_home_layout");
+        }
+
+        void RunLauncherProjectNameInputTest(ImGuiTestContext *ctx) {
+            UiAutomationRunState *testState =
+                    RequireTestState(ctx, "launcher_ui/launcher_project_name_input");
+            IM_CHECK(testState != nullptr);
+            if (testState == nullptr)
+                return;
+
+            Launcher::LauncherEditorShell *shell = AsLauncherShell(testState);
+            IM_CHECK(shell != nullptr);
+            if (!shell)
+                return;
+
+            if (shell->HasActiveProject()) {
+                LogDebug("UI scenario action: project already active, returning to launcher home");
+                const bool returned = ReturnToLauncherFromEditor(ctx, testState);
+                IM_CHECK(returned);
+                if (!returned)
+                    return;
+            }
+
+            LogDebug("UI scenario action: assert launcher home is visible");
+            const bool homeVisible = AssertLauncherHomeVisible(ctx);
+            IM_CHECK(homeVisible);
+            if (!homeVisible)
+                return;
+
+            LogDebug("UI scenario action: find LauncherPanel window");
+            ImGuiWindow *launcherPanel = FindWindowContaining("LauncherPanel");
+            IM_CHECK(launcherPanel != nullptr);
+            if (!launcherPanel)
+                return;
+            ctx->SetRef(launcherPanel);
+
+            LogDebug("UI scenario action: type project name into ##new-project-name");
+            ctx->ItemInputValue("##new-project-name", "TestInputProject");
+            ctx->Yield(2);
+
+            LogDebug("UI scenario action: type project path into ##new-project-path");
+            ctx->ItemInputValue("##new-project-path",
+                                testState->projectRoot.string().c_str());
+            ctx->Yield(2);
+
+            LogDebug("UI scenario action: clear project name field");
+            ctx->ItemInputValue("##new-project-name", "");
+
+            LogInfo("UI scenario done: launcher_ui/launcher_project_name_input");
+        }
+
+        void RunLauncherCreateAndVerifyToolbarTest(ImGuiTestContext *ctx) {
+            UiAutomationRunState *testState =
+                    RequireTestState(ctx, "launcher_ui/launcher_create_and_verify_toolbar");
+            IM_CHECK(testState != nullptr);
+            if (testState == nullptr)
+                return;
+
+            LogDebug("UI scenario action: ensure project created from launcher");
+            const bool created = EnsureProjectCreatedFromLauncher(
+                ctx, testState, !testState->videoEnabled);
+            IM_CHECK(created);
+            if (!created)
+                return;
+
+            LogDebug("UI scenario action: wait for toolbar File menu");
+            ctx->SetRef("##toolbar");
+            const bool fileMenuReady = WaitForCondition(
+                ctx, 180, [ctx]() { return ctx->ItemExists("File"); });
+            IM_CHECK(fileMenuReady);
+            if (!fileMenuReady)
+                return;
+
+            LogDebug("UI scenario action: assert all 4 toolbar menu buttons visible");
+            IM_CHECK(ctx->ItemExists("File"));
+            IM_CHECK(ctx->ItemExists("Add"));
+            IM_CHECK(ctx->ItemExists("Edit"));
+            IM_CHECK(ctx->ItemExists("View"));
+
+            CaptureIfEnabled(ctx, testState,
+                             "launcher_ui__create_and_verify_toolbar__expect_toolbar.png");
+            LogInfo("UI scenario done: launcher_ui/launcher_create_and_verify_toolbar");
+        }
+
         ImGuiTest *RegisterLauncherSmokeTest(ImGuiTestEngine *engine,
                                              UiAutomationRunState *state) {
             ImGuiTest *test =
@@ -366,6 +482,33 @@ namespace Monolith {
             test->TestFunc = &RunLauncherRecentProjectsTest;
             return test;
         }
+
+        ImGuiTest *RegisterLauncherHomeLayoutTest(ImGuiTestEngine *engine,
+                                                  UiAutomationRunState *state) {
+            ImGuiTest *test =
+                    IM_REGISTER_TEST(engine, "launcher_ui", "launcher_home_layout");
+            test->UserData = state;
+            test->TestFunc = &RunLauncherHomeLayoutTest;
+            return test;
+        }
+
+        ImGuiTest *RegisterLauncherProjectNameInputTest(ImGuiTestEngine *engine,
+                                                        UiAutomationRunState *state) {
+            ImGuiTest *test =
+                    IM_REGISTER_TEST(engine, "launcher_ui", "launcher_project_name_input");
+            test->UserData = state;
+            test->TestFunc = &RunLauncherProjectNameInputTest;
+            return test;
+        }
+
+        ImGuiTest *RegisterLauncherCreateAndVerifyToolbarTest(ImGuiTestEngine *engine,
+                                                              UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "launcher_ui",
+                                               "launcher_create_and_verify_toolbar");
+            test->UserData = state;
+            test->TestFunc = &RunLauncherCreateAndVerifyToolbarTest;
+            return test;
+        }
     } // namespace
 
     void RegisterLauncherUiScenarioSet() {
@@ -373,6 +516,12 @@ namespace Monolith {
                            &RegisterLauncherSmokeTest);
         RegisterUiScenario("launcher/open_project_from_recent_projects",
                            &RegisterLauncherRecentProjectsTest);
+        RegisterUiScenario("launcher/launcher_home_layout",
+                           &RegisterLauncherHomeLayoutTest);
+        RegisterUiScenario("launcher/launcher_project_name_input",
+                           &RegisterLauncherProjectNameInputTest);
+        RegisterUiScenario("launcher/launcher_create_and_verify_toolbar",
+                           &RegisterLauncherCreateAndVerifyToolbarTest);
     }
 } // namespace Monolith
 

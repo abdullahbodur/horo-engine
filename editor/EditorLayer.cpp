@@ -1019,8 +1019,9 @@ namespace Monolith::Editor {
         m_closeRequested = false;
         m_confirmExitOpen = false;
         m_exitConfirmError.clear();
-        glfwSetInputMode(m_window, GLFW_CURSOR,
-                         m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+        if (m_window)
+            glfwSetInputMode(m_window, GLFW_CURSOR,
+                             m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
         m_prevMouseL = false;
         m_selectedIndices.clear();
         m_mcpController.SetEditorActive(m_active);
@@ -1311,6 +1312,8 @@ namespace Monolith::Editor {
     // Dispatches all keyboard shortcuts (toggle popups, undo/redo, escape,
     // tab/fly-mode) that must fire every active editor frame.
     void EditorLayer::HandleEditorKeyboardShortcuts(const Camera &cam) { // NOSONAR: cpp:S3776 multi-shortcut dispatch; each branch is a distinct binding
+        if (!m_window)
+            return;
         const ImGuiIO &io = ImGui::GetIO();
         const bool accelHeld =
                 glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
@@ -1558,6 +1561,8 @@ namespace Monolith::Editor {
 
     void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
                                             int screenH) {
+        if (!m_window)
+            return;
         const ImGuiIO &io = ImGui::GetIO();
         const bool accelHeld =
                 glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||

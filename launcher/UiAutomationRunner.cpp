@@ -390,8 +390,10 @@ namespace Monolith {
 
     struct UiAutomationRunner::Impl {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-        static constexpr int kDefaultUiMaxFrames = 1200;
-        static constexpr int kCapturedUiMaxFrames = 3600;
+        static constexpr int   kDefaultUiMaxFrames     = 12000;
+        static constexpr float kActionDelayShortSec    = 0.05f;  // 50 ms between short actions
+        static constexpr float kActionDelayStandardSec = 0.15f;  // 150 ms between standard actions
+        static constexpr float kMouseSpeedPixPerSec    = 200.0f; // slow enough to follow visually
         static constexpr int kHeartbeatFrameInterval = 30;
         bool active = false;
         bool passed = true;
@@ -463,7 +465,6 @@ namespace Monolith {
         m_impl->state.videoEnabled =
                 recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
         const std::string uiFilter = ReadEnvString("MONOLITH_UI_TEST_FILTER");
-        const int uiDelayMs = ParseNonNegativeIntEnv("MONOLITH_UI_TEST_DELAY_MS", 0);
         const std::string outputDirEnv = ReadEnvString("MONOLITH_UI_TEST_OUTPUT_DIR");
         m_impl->state.uiCaptureOutputDir =
                 ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
@@ -480,9 +481,7 @@ namespace Monolith {
                 ? "<disabled>"
                 : m_impl->state.uiCaptureOutputDir.string());
         PrepareUiAutomationDirectories(&m_impl->state);
-        m_impl->maxFrames = (uiDelayMs > 0 || m_impl->state.videoEnabled)
-                                ? Impl::kCapturedUiMaxFrames
-                                : Impl::kDefaultUiMaxFrames;
+        m_impl->maxFrames = Impl::kDefaultUiMaxFrames;
         m_impl->frameCount = 0;
         m_impl->timedOut = false;
         m_impl->startTimeSeconds = glfwGetTime();
@@ -501,13 +500,10 @@ namespace Monolith {
                 m_impl->state.captureEnabled ? &UiScreenCaptureFunc : nullptr;
         ConfigureUiVideoCapture(&m_impl->state, &testIo);
         testIo.ConfigFixedDeltaTime = 1.0f / 60.0f;
-        testIo.ConfigRunSpeed =
-                uiDelayMs > 0 ? ImGuiTestRunSpeed_Normal : ImGuiTestRunSpeed_Fast;
-        if (uiDelayMs > 0) {
-            const float delaySec = static_cast<float>(uiDelayMs) / 1000.0f;
-            testIo.ActionDelayShort = delaySec;
-            testIo.ActionDelayStandard = delaySec;
-        }
+        testIo.ConfigRunSpeed = ImGuiTestRunSpeed_Normal;
+        testIo.ActionDelayShort    = Impl::kActionDelayShortSec;
+        testIo.ActionDelayStandard = Impl::kActionDelayStandardSec;
+        testIo.MouseSpeed          = Impl::kMouseSpeedPixPerSec;
         testIo.ConfigVerboseLevel = ImGuiTestVerboseLevel_Error;
         testIo.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
         LogDebug("UI engine IO config: capture={} run_speed={} fixed_dt={:.4f} "
@@ -536,9 +532,10 @@ namespace Monolith {
         }
         LogInfo("Queued {} UI scenario(s) with filter '{}'.", queuedCount,
                 uiFilter);
-        LogInfo("Running Dear ImGui Test Suite in {} mode (delay={}ms) with full "
-                "rendering enabled.",
-                uiDelayMs > 0 ? "Normal" : "Fast", uiDelayMs);
+        LogInfo("Running Dear ImGui Test Suite in Normal mode "
+                "(delay_short={:.0f}ms delay_std={:.0f}ms) with full rendering enabled.",
+                Impl::kActionDelayShortSec * 1000.0f,
+                Impl::kActionDelayStandardSec * 1000.0f);
 #else
         (void) runUiAutomation;
         (void) shellContext;
