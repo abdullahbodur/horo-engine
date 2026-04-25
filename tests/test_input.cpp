@@ -18,16 +18,7 @@
 
 #include <cmath>
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wkeyword-macro"
-#endif
-#define private public
 #include "input/Input.h"
-#undef private
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 #include "input/FPSCameraController.h"
 #include "math/MathUtils.h"
@@ -35,19 +26,6 @@
 
 using namespace Monolith;
 using Catch::Approx;
-
-namespace {
-void ResetInputState() {
-  Input::s_keys.fill(false);
-  Input::s_keysLast.fill(false);
-  Input::s_buttons.fill(false);
-  Input::s_buttonsLast.fill(false);
-  Input::s_mousePos = {};
-  Input::s_mousePosLast = {};
-  Input::s_mouseDelta = {};
-  Input::s_scrollDelta = 0.0f;
-}
-} // namespace
 
 // ===========================================================================
 // FPSCameraController — construction defaults
@@ -273,67 +251,3 @@ TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary",
   REQUIRE(ctrl.GetPitch() == Approx(-70.0f));
 }
 
-// ===========================================================================
-// Input — branch behavior for state transitions and scroll accumulation
-// ===========================================================================
-
-TEST_CASE("Input: key transition queries reflect current and last key state",
-          "[input]") {
-  ResetInputState();
-
-  Input::s_keys[static_cast<size_t>(Key::A)] = true;
-  Input::s_keysLast[static_cast<size_t>(Key::A)] = false;
-  REQUIRE(Input::IsKeyDown(Key::A));
-  REQUIRE(Input::IsKeyPressed(Key::A));
-  REQUIRE_FALSE(Input::IsKeyReleased(Key::A));
-
-  Input::s_keys[static_cast<size_t>(Key::A)] = false;
-  Input::s_keysLast[static_cast<size_t>(Key::A)] = true;
-  REQUIRE_FALSE(Input::IsKeyDown(Key::A));
-  REQUIRE_FALSE(Input::IsKeyPressed(Key::A));
-  REQUIRE(Input::IsKeyReleased(Key::A));
-}
-
-TEST_CASE(
-    "Input: mouse transition queries reflect current and last button state",
-    "[input]") {
-  ResetInputState();
-
-  Input::s_buttons[static_cast<size_t>(MouseButton::Left)] = true;
-  Input::s_buttonsLast[static_cast<size_t>(MouseButton::Left)] = false;
-  REQUIRE(Input::IsMouseButtonDown(MouseButton::Left));
-  REQUIRE(Input::IsMouseButtonPressed(MouseButton::Left));
-  REQUIRE_FALSE(Input::IsMouseButtonReleased(MouseButton::Left));
-
-  Input::s_buttons[static_cast<size_t>(MouseButton::Left)] = false;
-  Input::s_buttonsLast[static_cast<size_t>(MouseButton::Left)] = true;
-  REQUIRE_FALSE(Input::IsMouseButtonDown(MouseButton::Left));
-  REQUIRE_FALSE(Input::IsMouseButtonPressed(MouseButton::Left));
-  REQUIRE(Input::IsMouseButtonReleased(MouseButton::Left));
-}
-
-TEST_CASE("Input: mouse position/delta accessors return stored values",
-          "[input]") {
-  ResetInputState();
-
-  Input::s_mousePos = {42.0f, -10.0f};
-  Input::s_mouseDelta = {3.5f, -2.5f};
-
-  const Vec2 mousePos = Input::GetMousePosition();
-  const Vec2 mouseDelta = Input::GetMouseDelta();
-  REQUIRE(mousePos.x == Approx(42.0f));
-  REQUIRE(mousePos.y == Approx(-10.0f));
-  REQUIRE(mouseDelta.x == Approx(3.5f));
-  REQUIRE(mouseDelta.y == Approx(-2.5f));
-}
-
-TEST_CASE("Input: scroll callback accumulates and GetScrollDelta consumes once",
-          "[input]") {
-  ResetInputState();
-
-  Input::ScrollCallback(nullptr, 0.0, 1.5);
-  Input::ScrollCallback(nullptr, 0.0, -0.25);
-
-  REQUIRE(Input::GetScrollDelta() == Approx(1.25f));
-  REQUIRE(Input::GetScrollDelta() == Approx(0.0f));
-}

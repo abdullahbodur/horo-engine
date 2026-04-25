@@ -85,9 +85,9 @@ jobs:
 
       - name: Test
         run: |
-          mkdir -p build/debug/test-results
+          mkdir -p "${{ github.workspace }}/build/debug/test-results"
           ctest --preset debug --output-on-failure \
-            --output-junit build/debug/test-results/results.xml
+            --output-junit "${{ github.workspace }}/build/debug/test-results/results.xml"
         env:
           MONOLITH_LOG_LEVEL: "debug"
 
@@ -191,9 +191,9 @@ jobs:
 
       - name: Test
         run: |
-          New-Item -ItemType Directory -Force -Path build/debug-msvc/test-results | Out-Null
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/build/debug-msvc/test-results" | Out-Null
           ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel `
-            --output-junit build/debug-msvc/test-results/results.xml
+            --output-junit "${{ github.workspace }}/build/debug-msvc/test-results/results.xml"
         shell: pwsh
         env:
           MONOLITH_LOG_LEVEL: "debug"
@@ -371,9 +371,9 @@ jobs:
 
       - name: Test
         run: |
-          mkdir -p build/debug/test-results
+          mkdir -p "${{ github.workspace }}/build/debug/test-results"
           ctest --preset debug --output-on-failure \
-            --output-junit build/debug/test-results/results.xml
+            --output-junit "${{ github.workspace }}/build/debug/test-results/results.xml"
         env:
           MONOLITH_LOG_LEVEL: "debug"
 
