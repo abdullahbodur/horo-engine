@@ -361,7 +361,7 @@ HomeDirGuard &operator=(HomeDirGuard &&) = delete;
 
     struct UiAutomationRunner::Impl {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-        static constexpr int   kDefaultUiMaxFrames     = 30000;
+        static constexpr int   kDefaultUiMaxFrames     = 75000;
         static constexpr float kActionDelayShortSec    = 0.05f;  // 50 ms between short actions
         static constexpr float kActionDelayStandardSec = 0.15f;  // 150 ms between standard actions
         static constexpr float kMouseSpeedPixPerSec    = 200.0f; // slow enough to follow visually

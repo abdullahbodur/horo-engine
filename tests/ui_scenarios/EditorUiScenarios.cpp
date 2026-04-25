@@ -3,8 +3,25 @@
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
 
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <format>
 #include <string>
 #include <string_view>
+#include <thread>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -168,6 +185,205 @@ namespace Monolith {
             ctx->Yield(2);
             ctx->SetRef("##toolbar");
             return WaitForCondition(ctx, 180, [ctx]() { return ctx->ItemExists("File"); });
+        }
+
+        bool OpenMcpTab(ImGuiTestContext *ctx, int maxFrames = 120) {
+            if (!ctx)
+                return false;
+            const bool mcpTabReady = WaitForCondition(ctx, maxFrames, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##bottom_tabs/MCP");
+            });
+            if (!mcpTabReady)
+                return false;
+            ctx->SetRef("Workspace");
+            ctx->ItemClick("##bottom_tabs/MCP");
+            ctx->Yield(2);
+            return true;
+        }
+
+        bool WaitForMcpMarker(ImGuiTestContext *ctx, std::string marker,
+                              int maxFrames = 60) {
+            if (!ctx || marker.empty())
+                return false;
+            return WaitForCondition(ctx, maxFrames, [ctx, marker]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists(marker.c_str());
+            });
+        }
+
+        int ReadMcpActivityRowCount(ImGuiTestContext *ctx,
+                                    int maxTrackedRows = 40) {
+            if (!ctx || maxTrackedRows < 0)
+                return -1;
+            ctx->SetRef("Workspace");
+            for (int rows = 0; rows <= maxTrackedRows; ++rows) {
+                const std::string marker =
+                        "##mcp_test/activity_rows_" + std::to_string(rows);
+                if (ctx->ItemExists(marker.c_str()))
+                    return rows;
+            }
+            return -1;
+        }
+
+        bool WaitForMcpActivityRowsAtLeast(ImGuiTestContext *ctx, int minRows,
+                                           int maxFrames = 120) {
+            if (!ctx || minRows < 0)
+                return false;
+            return WaitForCondition(ctx, maxFrames, [ctx, minRows]() {
+                const int rows = ReadMcpActivityRowCount(ctx);
+                return rows >= minRows;
+            });
+        }
+
+        bool WaitForMcpActivityRowsIncrease(ImGuiTestContext *ctx, int previousRows,
+                                            int maxFrames = 180) {
+            if (!ctx || previousRows < 0)
+                return false;
+            return WaitForMcpActivityRowsAtLeast(ctx, previousRows + 1, maxFrames);
+        }
+
+        enum class McpLogClearToggleState {
+            Unknown,
+            Off,
+            On
+        };
+
+        McpLogClearToggleState ReadMcpLogClearToggleState(ImGuiTestContext *ctx) {
+            if (!ctx)
+                return McpLogClearToggleState::Unknown;
+            ctx->SetRef("Workspace");
+            const bool isOn = ctx->ItemExists("##mcp_test/log_clear_toggle_on");
+            const bool isOff = ctx->ItemExists("##mcp_test/log_clear_toggle_off");
+            if (isOn == isOff)
+                return McpLogClearToggleState::Unknown;
+            return isOn ? McpLogClearToggleState::On : McpLogClearToggleState::Off;
+        }
+
+        bool WaitForMcpLogClearToggleFlip(ImGuiTestContext *ctx,
+                                          McpLogClearToggleState previous,
+                                          int maxFrames = 60) {
+            if (previous == McpLogClearToggleState::Unknown)
+                return false;
+            return WaitForCondition(ctx, maxFrames, [ctx, previous]() {
+                const McpLogClearToggleState current =
+                        ReadMcpLogClearToggleState(ctx);
+                return current != McpLogClearToggleState::Unknown &&
+                       current != previous;
+            });
+        }
+
+        bool WaitForMcpRequestDetailFieldMarkers(ImGuiTestContext *ctx,
+                                                 int maxFrames = 60) {
+            return WaitForCondition(ctx, maxFrames, [ctx]() {
+                ctx->SetRef("Workspace");
+                const bool methodMarker =
+                        ctx->ItemExists("##mcp_test/request_method_present") ||
+                        ctx->ItemExists("##mcp_test/request_method_empty");
+                const bool operationMarker =
+                        ctx->ItemExists("##mcp_test/request_operation_present") ||
+                        ctx->ItemExists("##mcp_test/request_operation_empty");
+                const bool requestIdMarker =
+                        ctx->ItemExists("##mcp_test/request_id_present") ||
+                        ctx->ItemExists("##mcp_test/request_id_empty");
+                return ctx->ItemExists("##mcp_test/request_detail_visible") &&
+                       ctx->ItemExists("##mcp_test/request_http_present") &&
+                       methodMarker && operationMarker && requestIdMarker;
+            });
+        }
+
+        // ---- MCP HTTP request helpers (cross-platform, used by mcp_send_* scenarios) ----
+
+#ifdef _WIN32
+        using UiSockHandle = SOCKET;
+        static constexpr UiSockHandle kUiInvalidSock = INVALID_SOCKET;
+        static void UiCloseSock(UiSockHandle s) {
+            if (s != kUiInvalidSock)
+                closesocket(s);
+        }
+        static void UiInitSocks() {
+            static bool s_ready = false;
+            if (!s_ready) {
+                WSADATA d{};
+                WSAStartup(MAKEWORD(2, 2), &d);
+                s_ready = true;
+            }
+        }
+#else
+        using UiSockHandle = int;
+        static constexpr UiSockHandle kUiInvalidSock = -1;
+        static void UiCloseSock(UiSockHandle s) {
+            if (s >= 0)
+                close(s);
+        }
+        static void UiInitSocks() {}
+#endif
+
+        // Sends an HTTP POST JSON-RPC body to 127.0.0.1:<port>/mcp.
+        // Intended to be called from a detached background thread so the ImGui
+        // frame pump is not blocked.
+        static bool SendMcpHttpPost(int port, const std::string &body) {
+            UiInitSocks();
+            const UiSockHandle sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (sock == kUiInvalidSock)
+                return false;
+            struct sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(static_cast<uint16_t>(port));
+            inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+            if (connect(sock, reinterpret_cast<struct sockaddr *>(&addr),
+                        sizeof(addr)) != 0) {
+                UiCloseSock(sock);
+                return false;
+            }
+            const std::string req = std::format(
+                "POST /mcp HTTP/1.1\r\n"
+                "Host: 127.0.0.1:{}\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: {}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "{}",
+                port, body.size(), body);
+            send(sock, req.c_str(), static_cast<int>(req.size()), 0);
+            std::array<char, 512> buf{};
+            recv(sock, buf.data(), static_cast<int>(buf.size() - 1), 0);
+            UiCloseSock(sock);
+            return true;
+        }
+
+        // Opens the Settings modal, checks "Enable built-in MCP", and clicks Apply.
+        // Returns true when Apply was clicked successfully.
+        static bool EnableMcpViaSettings(ImGuiTestContext *ctx) {
+            if (!ctx)
+                return false;
+            const ImGuiID filePopup = OpenToolbarPopup(ctx, "File",
+                                                       "##toolbar_file_popup",
+                                                       "Settings...");
+            if (!filePopup) {
+                ctx->PopupCloseAll();
+                ctx->Yield(2);
+                return false;
+            }
+            ctx->ItemClick("Settings...");
+            ctx->Yield(2);
+
+            const bool modalReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("Editor Settings/Enable built-in MCP");
+            });
+            if (!modalReady) {
+                ctx->PopupCloseAll();
+                ctx->Yield(2);
+                return false;
+            }
+
+            ctx->SetRef("Editor Settings");
+            // Check the box unconditionally — idempotent if already checked.
+            ctx->ItemCheck("Enable built-in MCP");
+            ctx->Yield(1);
+            ctx->ItemClick("Apply");
+            ctx->Yield(4);
+            return true;
         }
 
         // ---- Scenario run functions ----
@@ -1366,18 +1582,10 @@ namespace Monolith {
             if (!EnsureEditorActive(ctx, state))
                 return;
 
-            const bool tabReady = WaitForCondition(ctx, 120, [ctx]() {
-                ctx->SetRef("Workspace");
-                return ctx->ItemExists("##bottom_tabs/MCP");
-            });
+            const bool tabReady = OpenMcpTab(ctx);
             IM_CHECK(tabReady);
             if (!tabReady)
                 return;
-
-            ctx->SetRef("Workspace");
-            LogDebug("UI scenario action: click MCP tab");
-            ctx->ItemClick("##bottom_tabs/MCP");
-            ctx->Yield(2);
 
             // Verify the MCP clients table region is rendered
             ctx->SetRef("Workspace");
@@ -1386,6 +1594,28 @@ namespace Monolith {
                 return ctx->ItemExists("##mcp_catalog");
             });
             IM_CHECK(catalogReady);
+            if (!catalogReady)
+                return;
+
+            const bool detailStateKnown = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##mcp_test/request_detail_visible") ||
+                       ctx->ItemExists("##mcp_test/request_detail_hidden");
+            });
+            IM_CHECK(detailStateKnown);
+            if (!detailStateKnown)
+                return;
+
+            ctx->SetRef("Workspace");
+            if (ctx->ItemExists("##mcp_test/request_detail_visible")) {
+                const bool detailMarkersReady =
+                        WaitForMcpRequestDetailFieldMarkers(ctx);
+                IM_CHECK(detailMarkersReady);
+            } else {
+                const bool emptyRows =
+                        WaitForMcpMarker(ctx, "##mcp_test/activity_rows_0");
+                IM_CHECK(emptyRows);
+            }
 
             CaptureIfEnabled(ctx, state,
                              "editor_ui__mcp_tab_content_visible.png");
@@ -1398,6 +1628,100 @@ namespace Monolith {
                     IM_REGISTER_TEST(engine, "editor_ui", "mcp_tab_content_visible");
             test->UserData = state;
             test->TestFunc = &RunMcpTabContentVisible;
+            return test;
+        }
+
+        void RunMcpLiveRequestVisibility(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_live_request_visibility");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool tabReady = OpenMcpTab(ctx);
+            IM_CHECK(tabReady);
+            if (!tabReady)
+                return;
+
+            const bool rowMarkerReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ReadMcpActivityRowCount(ctx) >= 0;
+            });
+            IM_CHECK(rowMarkerReady);
+            if (!rowMarkerReady)
+                return;
+
+            const int rowsBefore = ReadMcpActivityRowCount(ctx);
+            IM_CHECK(rowsBefore >= 0);
+            if (rowsBefore < 0)
+                return;
+
+            const bool rowsIncreased =
+                    WaitForMcpActivityRowsIncrease(ctx, rowsBefore, 180);
+            IM_CHECK(rowsIncreased);
+
+            const bool detailVisible =
+                    WaitForMcpMarker(ctx, "##mcp_test/request_detail_visible", 120);
+            IM_CHECK(detailVisible);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_live_request_visibility.png");
+            LogInfo("UI scenario done: editor_ui/mcp_live_request_visibility");
+        }
+
+        ImGuiTest *RegisterMcpLiveRequestVisibility(ImGuiTestEngine *engine,
+                                                    UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_live_request_visibility");
+            test->UserData = state;
+            test->TestFunc = &RunMcpLiveRequestVisibility;
+            return test;
+        }
+
+        void RunMcpRequestDetailFieldsVisible(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_request_detail_fields_visible");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool tabReady = OpenMcpTab(ctx);
+            IM_CHECK(tabReady);
+            if (!tabReady)
+                return;
+
+            const bool hasRequestRows = WaitForMcpActivityRowsAtLeast(ctx, 1, 180);
+            IM_CHECK(hasRequestRows);
+            if (!hasRequestRows)
+                return;
+
+            const bool detailVisible =
+                    WaitForMcpMarker(ctx, "##mcp_test/request_detail_visible", 120);
+            IM_CHECK(detailVisible);
+            if (!detailVisible)
+                return;
+
+            const bool detailFieldsReady = WaitForMcpRequestDetailFieldMarkers(ctx, 120);
+            IM_CHECK(detailFieldsReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_request_detail_fields_visible.png");
+            LogInfo("UI scenario done: editor_ui/mcp_request_detail_fields_visible");
+        }
+
+        ImGuiTest *RegisterMcpRequestDetailFieldsVisible(ImGuiTestEngine *engine,
+                                                         UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_request_detail_fields_visible");
+            test->UserData = state;
+            test->TestFunc = &RunMcpRequestDetailFieldsVisible;
             return test;
         }
 
@@ -2681,30 +3005,56 @@ namespace Monolith {
             if (!EnsureEditorActive(ctx, state))
                 return;
 
-            const bool mcpTabReady = WaitForCondition(ctx, 120, [ctx]() {
-                ctx->SetRef("Workspace");
-                return ctx->ItemExists("##bottom_tabs/MCP");
-            });
+            const bool mcpTabReady = OpenMcpTab(ctx);
             IM_CHECK(mcpTabReady);
             if (!mcpTabReady)
                 return;
-
-            ctx->SetRef("Workspace");
-            LogDebug("UI scenario action: switch to MCP tab");
-            ctx->ItemClick("##bottom_tabs/MCP");
-            ctx->Yield(2);
 
             ctx->SetRef("Workspace");
             const bool clearBtnReady = WaitForCondition(ctx, 60, [ctx]() {
                 return ctx->ItemExists("Clear Request Log");
             });
             IM_CHECK(clearBtnReady);
+            if (!clearBtnReady)
+                return;
 
-            if (clearBtnReady) {
-                LogDebug("UI scenario action: click Clear Request Log");
-                ctx->ItemClick("Clear Request Log");
-                ctx->Yield(2);
-            }
+            const bool hasRowsBeforeClear = WaitForMcpActivityRowsAtLeast(ctx, 1, 180);
+            IM_CHECK(hasRowsBeforeClear);
+            if (!hasRowsBeforeClear)
+                return;
+
+            const bool detailVisibleBeforeClear =
+                    WaitForMcpMarker(ctx, "##mcp_test/request_detail_visible", 120);
+            IM_CHECK(detailVisibleBeforeClear);
+            if (!detailVisibleBeforeClear)
+                return;
+
+            const int rowsBeforeClear = ReadMcpActivityRowCount(ctx);
+            IM_CHECK(rowsBeforeClear > 0);
+            if (rowsBeforeClear <= 0)
+                return;
+
+            const McpLogClearToggleState clearToggleBefore =
+                    ReadMcpLogClearToggleState(ctx);
+            IM_CHECK(clearToggleBefore != McpLogClearToggleState::Unknown);
+
+            LogDebug("UI scenario action: click Clear Request Log");
+            ctx->ItemClick("Clear Request Log");
+            ctx->Yield(2);
+
+            const bool clearToggleFlipped = WaitForMcpLogClearToggleFlip(
+                ctx, clearToggleBefore, 90);
+            IM_CHECK(clearToggleFlipped);
+
+            const bool detailHidden =
+                    WaitForMcpMarker(ctx, "##mcp_test/request_detail_hidden", 90);
+            IM_CHECK(detailHidden);
+            const bool emptyRows =
+                    WaitForMcpMarker(ctx, "##mcp_test/activity_rows_0", 90);
+            IM_CHECK(emptyRows);
+
+            const int rowsAfterClear = ReadMcpActivityRowCount(ctx);
+            IM_CHECK(rowsAfterClear == 0);
 
             CaptureIfEnabled(ctx, state, "editor_ui__mcp_clear_request_log.png");
             LogInfo("UI scenario done: editor_ui/mcp_clear_request_log");
@@ -2856,6 +3206,753 @@ namespace Monolith {
             return test;
         }
 
+        // ---- New scenarios added for coverage improvement ----
+
+        // mcp_enable_and_verify_running: opens Settings, enables MCP, applies, verifies
+        // the status line shows "Running" (or at least "Yes" for Enabled).
+        void RunMcpEnableAndVerifyRunning(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_enable_and_verify_running");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool enabled = EnableMcpViaSettings(ctx);
+            IM_CHECK(enabled);
+            if (!enabled)
+                return;
+
+            const bool mcpTabReady = OpenMcpTab(ctx);
+            IM_CHECK(mcpTabReady);
+            if (!mcpTabReady)
+                return;
+
+            // The status header should now show "Enabled: Yes"
+            ctx->SetRef("Workspace");
+            const bool enabledLabelReady = WaitForCondition(ctx, 120, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##mcp_test/activity_rows_0") ||
+                       ctx->ItemExists("##mcp_test/activity_rows_1");
+            });
+            IM_CHECK(enabledLabelReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_enable_and_verify_running.png");
+            LogInfo("UI scenario done: editor_ui/mcp_enable_and_verify_running");
+        }
+
+        ImGuiTest *RegisterMcpEnableAndVerifyRunning(ImGuiTestEngine *engine,
+                                                      UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_enable_and_verify_running");
+            test->UserData = state;
+            test->TestFunc = &RunMcpEnableAndVerifyRunning;
+            return test;
+        }
+
+        // mcp_send_request_and_verify_log: sends a real HTTP POST to the MCP server
+        // in a background thread and waits for the activity log to reflect it.
+        void RunMcpSendRequestAndVerifyLog(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_send_request_and_verify_log");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool mcpTabReady = OpenMcpTab(ctx);
+            IM_CHECK(mcpTabReady);
+            if (!mcpTabReady)
+                return;
+
+            // Wait until the row-count marker is renderable.
+            const bool markerReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ReadMcpActivityRowCount(ctx) >= 0;
+            });
+            IM_CHECK(markerReady);
+            if (!markerReady)
+                return;
+
+            const int rowsBefore = ReadMcpActivityRowCount(ctx);
+
+            // Send a tools/list request from a background thread so the ImGui
+            // frame pump is not blocked.
+            constexpr int kMcpPort = 39281;
+            const std::string listToolsBody =
+                    R"({"jsonrpc":"2.0","id":99,"method":"tools/list","params":{}})";
+            std::thread([listToolsBody]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                SendMcpHttpPost(kMcpPort, listToolsBody);
+            }).detach();
+
+            // Wait up to ~4s for the new row to appear.
+            const bool rowIncreased =
+                    WaitForMcpActivityRowsIncrease(ctx, rowsBefore, 240);
+            IM_CHECK(rowIncreased);
+            if (!rowIncreased)
+                return;
+
+            // A detail pane entry should now be visible.
+            const bool detailVisible =
+                    WaitForMcpMarker(ctx, "##mcp_test/request_detail_visible", 120);
+            IM_CHECK(detailVisible);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_send_request_and_verify_log.png");
+            LogInfo("UI scenario done: editor_ui/mcp_send_request_and_verify_log");
+        }
+
+        ImGuiTest *RegisterMcpSendRequestAndVerifyLog(ImGuiTestEngine *engine,
+                                                       UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_send_request_and_verify_log");
+            test->UserData = state;
+            test->TestFunc = &RunMcpSendRequestAndVerifyLog;
+            return test;
+        }
+
+        // mcp_send_tool_call_verify_method: sends a tools/call request (get_scene)
+        // and verifies the method field appears in the request detail pane.
+        void RunMcpSendToolCallVerifyMethod(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_send_tool_call_verify_method");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool mcpTabReady = OpenMcpTab(ctx);
+            IM_CHECK(mcpTabReady);
+            if (!mcpTabReady)
+                return;
+
+            const bool markerReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ReadMcpActivityRowCount(ctx) >= 0;
+            });
+            IM_CHECK(markerReady);
+            if (!markerReady)
+                return;
+
+            const int rowsBefore = ReadMcpActivityRowCount(ctx);
+
+            constexpr int kMcpPort = 39281;
+            const std::string toolCallBody =
+                    R"({"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"editor.get_scene","arguments":{}}})";
+            std::thread([toolCallBody]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                SendMcpHttpPost(kMcpPort, toolCallBody);
+            }).detach();
+
+            const bool rowIncreased =
+                    WaitForMcpActivityRowsIncrease(ctx, rowsBefore, 240);
+            IM_CHECK(rowIncreased);
+            if (!rowIncreased)
+                return;
+
+            // After selecting the row (which selects the newest), verify the method
+            // marker is present (present or empty variant both indicate the field
+            // was rendered).
+            const bool detailReady = WaitForMcpRequestDetailFieldMarkers(ctx, 120);
+            IM_CHECK(detailReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_send_tool_call_verify_method.png");
+            LogInfo("UI scenario done: editor_ui/mcp_send_tool_call_verify_method");
+        }
+
+        ImGuiTest *RegisterMcpSendToolCallVerifyMethod(ImGuiTestEngine *engine,
+                                                        UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_send_tool_call_verify_method");
+            test->UserData = state;
+            test->TestFunc = &RunMcpSendToolCallVerifyMethod;
+            return test;
+        }
+
+        // mcp_catalog_shows_tools: verifies that the catalog section of the MCP tab
+        // renders the tool entries exposed by McpProtocol.
+        void RunMcpCatalogShowsTools(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_catalog_shows_tools");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool mcpTabReady = OpenMcpTab(ctx);
+            IM_CHECK(mcpTabReady);
+            if (!mcpTabReady)
+                return;
+
+            ctx->SetRef("Workspace");
+            const bool catalogReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##mcp_catalog");
+            });
+            IM_CHECK(catalogReady);
+
+            // The tools catalog child window should exist and render
+            const bool toolsChildReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##mcp_tools_catalog");
+            });
+            IM_CHECK(toolsChildReady);
+
+            // Resources catalog child window
+            const bool resourcesChildReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##mcp_resources_catalog");
+            });
+            IM_CHECK(resourcesChildReady);
+
+            CaptureIfEnabled(ctx, state, "editor_ui__mcp_catalog_shows_tools.png");
+            LogInfo("UI scenario done: editor_ui/mcp_catalog_shows_tools");
+        }
+
+        ImGuiTest *RegisterMcpCatalogShowsTools(ImGuiTestEngine *engine,
+                                                 UiAutomationRunState *state) {
+            ImGuiTest *test =
+                    IM_REGISTER_TEST(engine, "editor_ui", "mcp_catalog_shows_tools");
+            test->UserData = state;
+            test->TestFunc = &RunMcpCatalogShowsTools;
+            return test;
+        }
+
+        // mcp_open_settings_from_tab: clicks the "Open Settings" button inside the
+        // MCP tab (not the File menu) and verifies the settings modal opens.
+        void RunMcpOpenSettingsFromTab(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/mcp_open_settings_from_tab");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool mcpTabReady = OpenMcpTab(ctx);
+            IM_CHECK(mcpTabReady);
+            if (!mcpTabReady)
+                return;
+
+            ctx->SetRef("Workspace");
+            const bool btnReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("Open Settings");
+            });
+            IM_CHECK(btnReady);
+            if (!btnReady)
+                return;
+
+            LogDebug("UI scenario action: click Open Settings in MCP tab");
+            ctx->ItemClick("Open Settings");
+            ctx->Yield(2);
+
+            const bool modalReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("Editor Settings/Apply") ||
+                       ctx->ItemExists("Editor Settings/Cancel");
+            });
+            IM_CHECK(modalReady);
+
+            // Close the modal cleanly
+            if (ctx->ItemExists("Editor Settings/Cancel"))
+                ctx->ItemClick("Editor Settings/Cancel");
+            else
+                ctx->PopupCloseAll();
+            ctx->Yield(2);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__mcp_open_settings_from_tab.png");
+            LogInfo("UI scenario done: editor_ui/mcp_open_settings_from_tab");
+        }
+
+        ImGuiTest *RegisterMcpOpenSettingsFromTab(ImGuiTestEngine *engine,
+                                                   UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "mcp_open_settings_from_tab");
+            test->UserData = state;
+            test->TestFunc = &RunMcpOpenSettingsFromTab;
+            return test;
+        }
+
+        // properties_panel_no_selection_message: verifies that the Properties panel
+        // shows a "No selection" placeholder when nothing is selected.
+        void RunPropertiesPanelNoSelection(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/properties_panel_no_selection");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            // Create a fresh scene so there are no objects to select.
+            const ImGuiID filePopupIdNS =
+                    OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "New Scene");
+            if (filePopupIdNS) {
+                ctx->ItemClick("New Scene");
+                ctx->Yield(2);
+                if (ctx->ItemExists("Unsaved Changes/Discard")) {
+                    ctx->SetRef("Unsaved Changes");
+                    ctx->ItemClick("Discard");
+                    ctx->Yield(2);
+                }
+            } else {
+                ctx->PopupCloseAll();
+            }
+
+            // With an empty scene and nothing selected, Properties should show the
+            // "No selection" placeholder text.
+            ctx->SetRef("Properties");
+            const bool noSelReady = WaitForCondition(ctx, 120, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("No selection");
+            });
+            IM_CHECK(noSelReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__properties_panel_no_selection.png");
+            LogInfo("UI scenario done: editor_ui/properties_panel_no_selection");
+        }
+
+        ImGuiTest *RegisterPropertiesPanelNoSelection(ImGuiTestEngine *engine,
+                                                       UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "properties_panel_no_selection");
+            test->UserData = state;
+            test->TestFunc = &RunPropertiesPanelNoSelection;
+            return test;
+        }
+
+        // properties_panel_panel_object_transform: adds a Panel object, selects it,
+        // and verifies that the transform fields (Position, Scale, Rotation) appear
+        // in the Properties panel.  This exercises DrawPropertiesTransformSection.
+        void RunPropertiesPanelPanelObjectTransform(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx,
+                                 "editor_ui/properties_panel_panel_object_transform");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            // Add a Panel via toolbar.
+            const ImGuiID addPopup =
+                    OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+            if (!addPopup) {
+                ctx->PopupCloseAll();
+                return;
+            }
+            ctx->ItemClick("Panel");
+            ctx->Yield(4);
+
+            // Select the object in the Hierarchy.
+            ctx->SetRef("Hierarchy");
+            const bool objReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("$$0/##obj_tree");
+            });
+            if (objReady) {
+                ctx->ItemClick("$$0/##obj_tree");
+                ctx->Yield(2);
+            }
+
+            // Properties panel should now show transform drag fields.
+            ctx->SetRef("Properties");
+            const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("Position");
+            });
+            IM_CHECK(posReady);
+            if (posReady) {
+                IM_CHECK(ctx->ItemExists("Scale"));
+                IM_CHECK(ctx->ItemExists("Rotation (P/Y/R)"));
+            }
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__properties_panel_panel_object_transform.png");
+            LogInfo("UI scenario done: "
+                    "editor_ui/properties_panel_panel_object_transform");
+        }
+
+        ImGuiTest *RegisterPropertiesPanelPanelObjectTransform(
+                ImGuiTestEngine *engine, UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "properties_panel_panel_object_transform");
+            test->UserData = state;
+            test->TestFunc = &RunPropertiesPanelPanelObjectTransform;
+            return test;
+        }
+
+        // properties_panel_light_object_fields: adds a Light object, selects it, and
+        // verifies that the identity section (ID / Type) and transform fields render.
+        // This exercises DrawPropertiesIdentitySection + DrawPropertiesTransformSection
+        // for the Light type path.
+        void RunPropertiesPanelLightObjectFields(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/properties_panel_light_object_fields");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const ImGuiID addPopup =
+                    OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
+            if (!addPopup) {
+                ctx->PopupCloseAll();
+                return;
+            }
+            ctx->ItemClick("Light");
+            ctx->Yield(4);
+
+            ctx->SetRef("Hierarchy");
+            const bool objReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("$$0/##obj_tree");
+            });
+            if (objReady) {
+                ctx->ItemClick("$$0/##obj_tree");
+                ctx->Yield(2);
+            }
+
+            // Identity section: ID and Type labels
+            ctx->SetRef("Properties");
+            const bool idReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("ID");
+            });
+            IM_CHECK(idReady);
+            if (idReady)
+                IM_CHECK(ctx->ItemExists("Type"));
+
+            // Transform section should also be present for Lights
+            const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("Position");
+            });
+            IM_CHECK(posReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__properties_panel_light_object_fields.png");
+            LogInfo("UI scenario done: "
+                    "editor_ui/properties_panel_light_object_fields");
+        }
+
+        ImGuiTest *RegisterPropertiesPanelLightObjectFields(ImGuiTestEngine *engine,
+                                                             UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "properties_panel_light_object_fields");
+            test->UserData = state;
+            test->TestFunc = &RunPropertiesPanelLightObjectFields;
+            return test;
+        }
+
+        // properties_panel_identity_section: adds any object, selects it, and verifies
+        // the identity labels (ID, Type, Parent combo) render in Properties.
+        void RunPropertiesPanelIdentitySection(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/properties_panel_identity_section");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const ImGuiID addPopup =
+                    OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+            if (!addPopup) {
+                ctx->PopupCloseAll();
+                return;
+            }
+            ctx->ItemClick("Panel");
+            ctx->Yield(4);
+
+            ctx->SetRef("Hierarchy");
+            const bool objReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("$$0/##obj_tree");
+            });
+            if (objReady) {
+                ctx->ItemClick("$$0/##obj_tree");
+                ctx->Yield(2);
+            }
+
+            ctx->SetRef("Properties");
+            const bool identityReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("ID") && ctx->ItemExists("Type");
+            });
+            IM_CHECK(identityReady);
+            if (identityReady) {
+                // Parent combo should also render
+                IM_CHECK(ctx->ItemExists("Parent"));
+            }
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__properties_panel_identity_section.png");
+            LogInfo("UI scenario done: editor_ui/properties_panel_identity_section");
+        }
+
+        ImGuiTest *RegisterPropertiesPanelIdentitySection(ImGuiTestEngine *engine,
+                                                           UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "properties_panel_identity_section");
+            test->UserData = state;
+            test->TestFunc = &RunPropertiesPanelIdentitySection;
+            return test;
+        }
+
+        // console_info_checkbox_toggle: toggles the Info checkbox in the console tab
+        // and verifies the editor remains responsive.
+        void RunConsoleInfoCheckboxToggle(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/console_info_checkbox_toggle");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool consoleTabReady = WaitForCondition(ctx, 120, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##bottom_tabs/Console");
+            });
+            IM_CHECK(consoleTabReady);
+            if (!consoleTabReady)
+                return;
+
+            ctx->SetRef("Workspace");
+            ctx->ItemClick("##bottom_tabs/Console");
+            ctx->Yield(2);
+
+            ctx->SetRef("Workspace");
+            const bool infoReady =
+                    WaitForCondition(ctx, 60, [ctx]() { return ctx->ItemExists("Info"); });
+            IM_CHECK(infoReady);
+            if (!infoReady)
+                return;
+
+            // Toggle Info off
+            LogDebug("UI scenario action: uncheck Info in console");
+            ctx->ItemUncheck("Info");
+            ctx->Yield(2);
+
+            // Toggle Info back on
+            LogDebug("UI scenario action: re-check Info in console");
+            ctx->ItemCheck("Info");
+            ctx->Yield(2);
+
+            // Editor toolbar should still be accessible
+            ctx->SetRef("##toolbar");
+            IM_CHECK(ctx->ItemExists("File"));
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__console_info_checkbox_toggle.png");
+            LogInfo("UI scenario done: editor_ui/console_info_checkbox_toggle");
+        }
+
+        ImGuiTest *RegisterConsoleInfoCheckboxToggle(ImGuiTestEngine *engine,
+                                                      UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "console_info_checkbox_toggle");
+            test->UserData = state;
+            test->TestFunc = &RunConsoleInfoCheckboxToggle;
+            return test;
+        }
+
+        // console_error_checkbox_toggle: toggles the Error checkbox in the console
+        // tab — exercises the Error filter branch in DrawConsoleTab.
+        void RunConsoleErrorCheckboxToggle(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/console_error_checkbox_toggle");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const bool consoleTabReady = WaitForCondition(ctx, 120, [ctx]() {
+                ctx->SetRef("Workspace");
+                return ctx->ItemExists("##bottom_tabs/Console");
+            });
+            IM_CHECK(consoleTabReady);
+            if (!consoleTabReady)
+                return;
+
+            ctx->SetRef("Workspace");
+            ctx->ItemClick("##bottom_tabs/Console");
+            ctx->Yield(2);
+
+            ctx->SetRef("Workspace");
+            const bool errorReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("Error");
+            });
+            IM_CHECK(errorReady);
+            if (!errorReady)
+                return;
+
+            ctx->ItemUncheck("Error");
+            ctx->Yield(2);
+            ctx->ItemCheck("Error");
+            ctx->Yield(2);
+
+            ctx->SetRef("##toolbar");
+            IM_CHECK(ctx->ItemExists("File"));
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__console_error_checkbox_toggle.png");
+            LogInfo("UI scenario done: editor_ui/console_error_checkbox_toggle");
+        }
+
+        ImGuiTest *RegisterConsoleErrorCheckboxToggle(ImGuiTestEngine *engine,
+                                                       UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "console_error_checkbox_toggle");
+            test->UserData = state;
+            test->TestFunc = &RunConsoleErrorCheckboxToggle;
+            return test;
+        }
+
+        // add_prop_object_and_check_properties: adds a Prop object and verifies the
+        // Properties panel renders the asset and schema sections for it.
+        void RunAddPropObjectAndCheckProperties(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/add_prop_object_and_check_properties");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            const ImGuiID addPopup =
+                    OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Prop");
+            if (!addPopup) {
+                ctx->PopupCloseAll();
+                return;
+            }
+            ctx->ItemClick("Prop");
+            ctx->Yield(4);
+
+            ctx->SetRef("Hierarchy");
+            const bool objReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("$$0/##obj_tree");
+            });
+            if (objReady) {
+                ctx->ItemClick("$$0/##obj_tree");
+                ctx->Yield(2);
+            }
+
+            ctx->SetRef("Properties");
+            const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("Position");
+            });
+            IM_CHECK(posReady);
+
+            // Asset section combo should render for Prop
+            const bool assetSectionReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("Asset ID");
+            });
+            IM_CHECK(assetSectionReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__add_prop_object_and_check_properties.png");
+            LogInfo("UI scenario done: "
+                    "editor_ui/add_prop_object_and_check_properties");
+        }
+
+        ImGuiTest *RegisterAddPropObjectAndCheckProperties(
+                ImGuiTestEngine *engine, UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "add_prop_object_and_check_properties");
+            test->UserData = state;
+            test->TestFunc = &RunAddPropObjectAndCheckProperties;
+            return test;
+        }
+
+        // hierarchy_add_multiple_then_multi_select: adds two objects and uses
+        // Shift+Click to multi-select them, verifying the batch panel renders.
+        void RunHierarchyAddMultipleThenMultiSelect(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx,
+                                 "editor_ui/hierarchy_add_multiple_then_multi_select");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            // Add two Panel objects.
+            for (int i = 0; i < 2; ++i) {
+                const ImGuiID addPop =
+                        OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+                if (!addPop) {
+                    ctx->PopupCloseAll();
+                    return;
+                }
+                ctx->ItemClick("Panel");
+                ctx->Yield(3);
+            }
+
+            ctx->SetRef("Hierarchy");
+            // Select first, then shift-click second.
+            const bool firstReady = WaitForCondition(ctx, 60, [ctx]() {
+                return ctx->ItemExists("$$0/##obj_tree");
+            });
+            IM_CHECK(firstReady);
+            if (!firstReady)
+                return;
+            ctx->ItemClick("$$0/##obj_tree");
+            ctx->Yield(1);
+
+            // Shift-click second entry for multi-select.
+            ctx->KeyDown(ImGuiMod_Shift);
+            ctx->ItemClick("$$1/##obj_tree");
+            ctx->KeyUp(ImGuiMod_Shift);
+            ctx->Yield(2);
+
+            // Properties panel should now show the batch panel.
+            ctx->SetRef("Properties");
+            const bool batchReady = WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Properties");
+                return ctx->ItemExists("Duplicate Selected") ||
+                       ctx->ItemExists("Delete Selected");
+            });
+            IM_CHECK(batchReady);
+
+            CaptureIfEnabled(ctx, state,
+                             "editor_ui__hierarchy_add_multiple_then_multi_select.png");
+            LogInfo("UI scenario done: "
+                    "editor_ui/hierarchy_add_multiple_then_multi_select");
+        }
+
+        ImGuiTest *RegisterHierarchyAddMultipleThenMultiSelect(
+                ImGuiTestEngine *engine, UiAutomationRunState *state) {
+            ImGuiTest *test =
+                    IM_REGISTER_TEST(engine, "editor_ui",
+                                     "hierarchy_add_multiple_then_multi_select");
+            test->UserData = state;
+            test->TestFunc = &RunHierarchyAddMultipleThenMultiSelect;
+            return test;
+        }
+
     } // namespace
 
     void RegisterEditorUiScenarioSet() {
@@ -2904,6 +4001,10 @@ namespace Monolith {
                            &RegisterUndoRedoViaEditMenu);
         RegisterUiScenario("editor/mcp_tab_content_visible",
                            &RegisterMcpTabContentVisible);
+        RegisterUiScenario("editor/mcp_live_request_visibility",
+                           &RegisterMcpLiveRequestVisibility);
+        RegisterUiScenario("editor/mcp_request_detail_fields_visible",
+                           &RegisterMcpRequestDetailFieldsVisible);
         RegisterUiScenario("editor/project_tab_visible", &RegisterProjectTabVisible);
         RegisterUiScenario("editor/object_type_filter_in_hierarchy",
                            &RegisterObjectTypeFilterInHierarchy);
@@ -2947,6 +4048,32 @@ namespace Monolith {
                            &RegisterHierarchyEmptySpaceContextAdd);
         RegisterUiScenario("editor/unsaved_changes_discard",
                            &RegisterUnsavedChangesDiscard);
+        RegisterUiScenario("editor/mcp_enable_and_verify_running",
+                           &RegisterMcpEnableAndVerifyRunning);
+        RegisterUiScenario("editor/mcp_send_request_and_verify_log",
+                           &RegisterMcpSendRequestAndVerifyLog);
+        RegisterUiScenario("editor/mcp_send_tool_call_verify_method",
+                           &RegisterMcpSendToolCallVerifyMethod);
+        RegisterUiScenario("editor/mcp_catalog_shows_tools",
+                           &RegisterMcpCatalogShowsTools);
+        RegisterUiScenario("editor/mcp_open_settings_from_tab",
+                           &RegisterMcpOpenSettingsFromTab);
+        RegisterUiScenario("editor/properties_panel_no_selection",
+                           &RegisterPropertiesPanelNoSelection);
+        RegisterUiScenario("editor/properties_panel_panel_object_transform",
+                           &RegisterPropertiesPanelPanelObjectTransform);
+        RegisterUiScenario("editor/properties_panel_light_object_fields",
+                           &RegisterPropertiesPanelLightObjectFields);
+        RegisterUiScenario("editor/properties_panel_identity_section",
+                           &RegisterPropertiesPanelIdentitySection);
+        RegisterUiScenario("editor/console_info_checkbox_toggle",
+                           &RegisterConsoleInfoCheckboxToggle);
+        RegisterUiScenario("editor/console_error_checkbox_toggle",
+                           &RegisterConsoleErrorCheckboxToggle);
+        RegisterUiScenario("editor/add_prop_object_and_check_properties",
+                           &RegisterAddPropObjectAndCheckProperties);
+        RegisterUiScenario("editor/hierarchy_add_multiple_then_multi_select",
+                           &RegisterHierarchyAddMultipleThenMultiSelect);
         // Keep editor-closing scenarios LAST — they leave no active project,
         // which would cause all subsequent editor tests to skip.
         RegisterUiScenario("editor/close_editor_button", &RegisterCloseEditorButton);

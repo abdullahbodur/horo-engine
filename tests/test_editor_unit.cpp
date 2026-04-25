@@ -29,10 +29,12 @@
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/SceneDocument.h"
 #include "editor/SceneProjectBridge.h"
+#include "scene/SceneProjectModel.h"
 #include "editor/SceneRuntimeBridge.h"
 #include "editor/SceneRuntimeCoordinatorBridge.h"
 #include "editor/SceneSerializer.h"
 #include "editor/TransformGizmo.h"
+#include "editor/EditorSearch.h"
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
@@ -1542,4 +1544,299 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId skips non-reference prop keys",
     REQUIRE_FALSE(IsReservedObjectId(doc, "would_be_reserved_if_checked"));
     // "actual_parent" IS a ref-key value — reserved
     REQUIRE(IsReservedObjectId(doc, "actual_parent"));
+}
+
+// ===========================================================================
+// EditorSearch — coverage for uncovered branches
+// ===========================================================================
+
+TEST_CASE("EditorSearch: ObjectTypeLabel returns 'unknown' for unrecognised type",
+          "[editor][search]") {
+    const auto unknownType = static_cast<SceneObjectType>(99);
+    CHECK(std::string(ObjectTypeLabel(unknownType)) == "unknown");
+}
+
+TEST_CASE("EditorSearch: ObjectTypeLabel covers all known types",
+          "[editor][search]") {
+    using enum SceneObjectType;
+    CHECK(std::string(ObjectTypeLabel(Prop)) == "prop");
+    CHECK(std::string(ObjectTypeLabel(Light)) == "light");
+    CHECK(std::string(ObjectTypeLabel(Panel)) == "board");
+    CHECK(std::string(ObjectTypeLabel(Camera)) == "[cam]");
+}
+
+TEST_CASE("EditorSearch: ContainsCaseInsensitive returns true for empty query",
+          "[editor][search]") {
+    CHECK(ContainsCaseInsensitive("anything", ""));
+}
+
+TEST_CASE("EditorSearch: ContainsCaseInsensitive is case-insensitive",
+          "[editor][search]") {
+    CHECK(ContainsCaseInsensitive("Hello World", "hello"));
+    CHECK(ContainsCaseInsensitive("UPPER", "upper"));
+    CHECK_FALSE(ContainsCaseInsensitive("abc", "xyz"));
+}
+
+TEST_CASE("EditorSearch: MatchesShortcutQuery empty query always matches",
+          "[editor][search]") {
+    ShortcutRow row{"Editor", "Undo", "Ctrl+Z"};
+    CHECK(MatchesShortcutQuery(row, ""));
+    CHECK(MatchesShortcutQuery(row, "Editor"));
+    CHECK(MatchesShortcutQuery(row, "Ctrl"));
+    CHECK_FALSE(MatchesShortcutQuery(row, "ZZZ_NO_MATCH"));
+}
+
+TEST_CASE("EditorSearch: MatchesCommandPaletteQuery empty query always matches",
+          "[editor][search]") {
+    CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
+    CHECK(MatchesCommandPaletteQuery(row, ""));
+    CHECK(MatchesCommandPaletteQuery(row, "save"));
+    CHECK(MatchesCommandPaletteQuery(row, "Toolbar"));
+    CHECK_FALSE(MatchesCommandPaletteQuery(row, "XYZ_NOT_FOUND"));
+}
+
+TEST_CASE("EditorSearch: ObjectMatchesQuickOpenQuery uses id and type",
+          "[editor][search]") {
+    SceneObject obj;
+    obj.id = "my_light";
+    obj.type = SceneObjectType::Light;
+    obj.assetId = "";
+    CHECK(ObjectMatchesQuickOpenQuery(obj, ""));
+    CHECK(ObjectMatchesQuickOpenQuery(obj, "my_light"));
+    CHECK(ObjectMatchesQuickOpenQuery(obj, "light"));
+    CHECK_FALSE(ObjectMatchesQuickOpenQuery(obj, "camera_xyz"));
+}
+
+TEST_CASE("EditorSearch: AssetMatchesQuickOpenQuery uses assetId and mesh",
+          "[editor][search]") {
+    AssetDef asset;
+    asset.mesh = "meshes/cube.obj";
+    asset.albedoMap = "textures/albedo.png";
+    CHECK(AssetMatchesQuickOpenQuery("cube_asset", asset, ""));
+    CHECK(AssetMatchesQuickOpenQuery("cube_asset", asset, "cube"));
+    CHECK(AssetMatchesQuickOpenQuery("cube_asset", asset, "albedo"));
+    CHECK_FALSE(AssetMatchesQuickOpenQuery("cube_asset", asset, "XYZ_NONE"));
+}
+
+TEST_CASE("EditorSearch: EvaluateFilteredListState None when shownCount > 0",
+          "[editor][search]") {
+    using enum FilteredListState;
+    CHECK(EvaluateFilteredListState(5, 3, "q") == None);
+}
+
+TEST_CASE("EditorSearch: EvaluateFilteredListState EmptyData when totalCount == 0",
+          "[editor][search]") {
+    using enum FilteredListState;
+    CHECK(EvaluateFilteredListState(0, 0, "") == EmptyData);
+}
+
+TEST_CASE("EditorSearch: EvaluateFilteredListState NoMatches when query non-empty",
+          "[editor][search]") {
+    using enum FilteredListState;
+    CHECK(EvaluateFilteredListState(5, 0, "nomatch") == NoMatches);
+}
+
+TEST_CASE("EditorSearch: EvaluateFilteredListState None when query empty totalCount>0",
+          "[editor][search]") {
+    using enum FilteredListState;
+    // totalCount > 0, shown == 0, query empty → None (items exist, none filtered)
+    CHECK(EvaluateFilteredListState(3, 0, "") == None);
+}
+
+TEST_CASE("EditorSearch: GetEditorShortcuts returns non-empty span",
+          "[editor][search]") {
+    CHECK(!GetEditorShortcuts().empty());
+}
+
+TEST_CASE("EditorSearch: GetEditorCommands returns non-empty span",
+          "[editor][search]") {
+    CHECK(!GetEditorCommands().empty());
+}
+
+// ===========================================================================
+// EditorHistory — additional branch coverage via MCP commands
+// ===========================================================================
+
+TEST_CASE("EditorHistory: undo command returns false when nothing to undo",
+          "[editor][history][extra]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(res.ok);
+    REQUIRE_FALSE(res.data["undone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: redo command returns false when nothing to redo",
+          "[editor][history][extra]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    const auto res = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(res.ok);
+    REQUIRE_FALSE(res.data["redone"].get<bool>());
+}
+
+TEST_CASE("EditorHistory: undo after create_object via transaction path",
+          "[editor][history][extra]") {
+    EditorLayer editor;
+    editor.LoadDocument(SceneDocument{});
+
+    // Create two objects so undo stack has entries.
+    auto r1 = editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"type", "Prop"}, {"id", "txn_obj_a"}});
+    REQUIRE(r1.ok);
+    auto r2 = editor.ExecuteMcpCommand("editor.create_object",
+        nlohmann::json{{"type", "Light"}, {"id", "txn_obj_b"}});
+    REQUIRE(r2.ok);
+    REQUIRE(editor.GetDocument().objects.size() == 2);
+
+    auto undo1 = editor.ExecuteMcpCommand("editor.undo", nlohmann::json::object());
+    REQUIRE(undo1.ok);
+    REQUIRE(undo1.data["undone"].get<bool>());
+    CHECK(editor.GetDocument().objects.size() == 1);
+
+    // Redo should restore it.
+    auto redo1 = editor.ExecuteMcpCommand("editor.redo", nlohmann::json::object());
+    REQUIRE(redo1.ok);
+    REQUIRE(redo1.data["redone"].get<bool>());
+    CHECK(editor.GetDocument().objects.size() == 2);
+}
+
+// ===========================================================================
+// SceneProjectBridge — exercise internal helpers via public interface
+// ===========================================================================
+
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel produces model with camera node",
+          "[editor][scene-bridge]") {
+    // Camera objects in SceneDocument exercise ParseFloat, ParseVec3Csv, etc.
+    SceneDocument doc;
+    doc.sceneId = "cam_scene";
+
+    SceneObject cam;
+    cam.id = "cam_node";
+    cam.type = SceneObjectType::Camera;
+    cam.props["fov"] = "75.0";
+    cam.props["nearClip"] = "0.05";
+    cam.props["farClip"] = "1000.0";
+    cam.position = Vec3{1.0f, 2.0f, 3.0f};
+    doc.objects.push_back(cam);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    CHECK(!model.scene.nodes.empty());
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles light object",
+          "[editor][scene-bridge]") {
+    SceneDocument doc;
+    doc.sceneId = "light_scene";
+
+    SceneObject light;
+    light.id = "light_node";
+    light.type = SceneObjectType::Light;
+    light.position = Vec3{0.0f, 5.0f, 0.0f};
+    light.props["color"] = "1.0,0.8,0.6";
+    light.props["intensity"] = "2.5";
+    doc.objects.push_back(light);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    bool foundLight = false;
+    for (const auto &node : model.scene.nodes) {
+        if (node.kind == SceneNodeKind::Light)
+            foundLight = true;
+    }
+    CHECK(foundLight);
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles invalid float prop",
+          "[editor][scene-bridge]") {
+    // Non-parseable values should fall back to defaults without crashing.
+    SceneDocument doc;
+    doc.sceneId = "bad_float_scene";
+
+    SceneObject cam;
+    cam.id = "cam_bad_fov";
+    cam.type = SceneObjectType::Camera;
+    cam.props["fov"] = "not_a_number";
+    cam.props["nearClip"] = "";
+    doc.objects.push_back(cam);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    CHECK(!model.scene.nodes.empty());
+}
+
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document",
+          "[editor][scene-bridge]") {
+    SceneDocument doc;
+    doc.sceneId = "roundtrip";
+    doc.sceneName = "Round Trip";
+
+    SceneObject prop;
+    prop.id = "prop1";
+    prop.type = SceneObjectType::Prop;
+    prop.assetId = "crate";
+    prop.position = Vec3{1.0f, 2.0f, 3.0f};
+    doc.objects.push_back(prop);
+
+    const SceneProjectModel model = BuildSceneProjectModel(doc);
+    const SceneDocument rebuilt = BuildSceneDocument(model);
+    CHECK(rebuilt.sceneId == "roundtrip");
+}
+
+// ===========================================================================
+// AssetImportService — additional error paths
+// ===========================================================================
+
+TEST_CASE("AssetImportService: ImportTextureForAsset with missing source returns false",
+          "[editor][asset-import][extra]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_import_tex_missing";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    AssetImportService service;
+    AssetDef asset;
+    std::string err;
+    const bool ok = service.ImportTextureForAsset(
+        (root / "nonexistent_tex.png").string(), "test_asset", &asset, &err);
+    REQUIRE_FALSE(ok);
+    CHECK(!err.empty());
+}
+
+TEST_CASE("AssetImportService: ImportAssetFromSource with missing file returns error",
+          "[editor][asset-import][extra]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_import_asset_missing";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    AssetImportService service;
+    const AssetImportResult result = service.ImportAssetFromSource(
+        (root / "does_not_exist.obj").string(), "asset_missing", "guid_missing", "Missing");
+    CHECK_FALSE(result.ok);
+    CHECK(!result.diagnostics.empty());
+}
+
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with null doc is no-op",
+          "[editor][asset-import][extra]") {
+    const std::filesystem::path root =
+        Monolith::Tests::SecureTempBase() / "horo_reimport_null";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    WriteFile(root / "CMakePresets.json", "{}");
+    ProjectPathGuard guard(root);
+
+    AssetImportService service;
+    // Must not crash when doc is null.
+    const AssetReimportResult result =
+        service.ReimportAssetWithDependents(nullptr, "some_guid", "test");
+    // Result should indicate nothing was reimported.
+    CHECK(result.order.empty());
 }

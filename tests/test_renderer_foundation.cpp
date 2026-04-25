@@ -1664,3 +1664,28 @@ TEST_CASE("DebugHUD early-outs safely when backend does not support HUD",
 
     Renderer::ResetBackend();
 }
+
+TEST_CASE(
+    "DebugHUD update path is deterministic without initialization side effects",
+    "[renderer][debughud]") {
+    FakeRenderBackend backend;
+    Renderer::UseBackend(&backend);
+
+    DebugHUD::Shutdown();
+    DebugHUD::SetScreenSize(320, 200);
+
+    HUDStats stats{};
+    stats.fps = 120.0f;
+    stats.frameTimeMs = 8.33f;
+    stats.showNoCameraOverlay = false;
+
+    DebugHUD::Update(1.0f / 120.0f, stats);
+    DebugHUD::Update(0.0f, stats);
+    DebugHUD::Render();
+
+    CHECK_FALSE(DebugHUD::IsVisible());
+    CHECK_FALSE(DebugHUD::IsCollisionBoxesOn());
+
+    DebugHUD::Shutdown();
+    Renderer::ResetBackend();
+}

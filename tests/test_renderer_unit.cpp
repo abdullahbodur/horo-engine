@@ -12,15 +12,19 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "renderer/Camera.h"
 #include "renderer/Light.h"
 #include "renderer/Material.h"
+#include "renderer/OpenGLRenderBackend.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/Shader.h"
+#include "renderer/Texture.h"
 
 using namespace Monolith;
 using Catch::Approx;
@@ -199,4 +203,124 @@ TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result",
     // Either true (Vulkan present) or false (not compiled in) — both are valid.
     (void) result;
     SUCCEED();
+}
+
+// ===========================================================================
+// Shader / Texture / OpenGL backend deterministic paths
+// ===========================================================================
+
+TEST_CASE("Shader: FromFiles throws when shader files are missing",
+          "[renderer][shader]") {
+    const auto missing = std::filesystem::path("tests/fixtures/does_not_exist");
+    CHECK_THROWS_AS(
+        Shader::FromFiles((missing / "missing.vert").string(),
+                          (missing / "missing.frag").string()),
+        ShaderException);
+}
+
+TEST_CASE("Texture: default object exposes invalid OpenGL handle metadata",
+          "[renderer][texture]") {
+    Texture texture;
+    const RenderTargetHandle handle = texture.GetRenderTargetHandle(true);
+
+    CHECK_FALSE(texture.IsValid());
+    CHECK(texture.GetNativeId() == 0u);
+    CHECK(texture.GetWidth() == 0);
+    CHECK(texture.GetHeight() == 0);
+    CHECK(handle.backendId == RenderBackendId::OpenGL);
+    CHECK(handle.nativeType == RenderNativeHandleType::OpenGLTexture2D);
+    CHECK(handle.nativeHandle == 0u);
+    CHECK_FALSE(handle.IsValid());
+    CHECK(handle.needsYFlip);
+}
+
+TEST_CASE("OpenGLRenderBackend: readback validates dimensions and errors",
+          "[renderer][backend][opengl]") {
+    OpenGLRenderBackend backend;
+    std::vector<uint8_t> color;
+    std::vector<float> depth;
+    std::string error;
+
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(0, 4, color, &error));
+    CHECK(error.find("positive dimensions") != std::string::npos);
+    REQUIRE_FALSE(backend.ReadbackDepth32F(4, -1, depth, &error));
+    CHECK(error.find("positive dimensions") != std::string::npos);
+    REQUIRE_FALSE(backend.ReadbackColorBgr8(-1, 4, color, nullptr));
+    REQUIRE_FALSE(backend.ReadbackDepth32F(4, 0, depth, nullptr));
+}
+
+TEST_CASE("OpenGLRenderBackend: viewport target APIs remain unavailable",
+          "[renderer][backend][opengl]") {
+    OpenGLRenderBackend backend;
+    std::string error;
+    RenderTargetHandle handle = RenderTargetHandle::OpenGLTexture(33u);
+
+    REQUIRE_FALSE(backend.EnsureEditorViewportRenderTarget(800u, 600u, &error));
+    CHECK(error.find("unavailable") != std::string::npos);
+    REQUIRE_FALSE(
+        backend.TryGetEditorViewportRenderTargetHandle(&handle, true, &error));
+    CHECK(error.find("unavailable") != std::string::npos);
+    CHECK_FALSE(handle.IsValid());
+
+    REQUIRE_FALSE(
+        backend.TryGetEditorViewportRenderTargetHandle(nullptr, false, nullptr));
+}
+
+// ===========================================================================
+// Mesh — non-GPU paths
+// ===========================================================================
+
+#include "renderer/Mesh.h"
+#include "renderer/SkinnedMesh.h"
+
+TEST_CASE("Mesh: default construction gives zero index count and unit half-extents",
+          "[renderer][mesh]") {
+    Mesh m;
+    CHECK(m.GetIndexCount() == 0);
+    const Vec3 he = m.GetHalfExtents();
+    CHECK(he.x == Approx(0.5f));
+    CHECK(he.y == Approx(0.5f));
+    CHECK(he.z == Approx(0.5f));
+    const Vec3 center = m.GetLocalAabbCenter();
+    CHECK(center.x == Approx(0.0f));
+    CHECK(center.y == Approx(0.0f));
+    CHECK(center.z == Approx(0.0f));
+}
+
+TEST_CASE("Mesh: move constructor transfers state", "[renderer][mesh]") {
+    Mesh a;
+    Mesh b(std::move(a));
+    CHECK(b.GetIndexCount() == 0);
+}
+
+TEST_CASE("Mesh: move assignment transfers state", "[renderer][mesh]") {
+    Mesh a;
+    Mesh b;
+    b = std::move(a);
+    CHECK(b.GetIndexCount() == 0);
+}
+
+// ===========================================================================
+// SkinnedMesh — non-GPU paths
+// ===========================================================================
+
+TEST_CASE("SkinnedMesh: default construction is valid", "[renderer][skinned-mesh]") {
+    SkinnedMesh sm;
+    CHECK(sm.GetIndexCount() == 0);
+}
+
+TEST_CASE("SkinnedMesh: move constructor transfers state",
+          "[renderer][skinned-mesh]") {
+    SkinnedMesh a;
+    SkinnedMesh b(std::move(a));
+    CHECK(b.GetIndexCount() == 0);
+    CHECK(a.GetIndexCount() == 0);
+}
+
+TEST_CASE("SkinnedMesh: move assignment transfers state",
+          "[renderer][skinned-mesh]") {
+    SkinnedMesh a;
+    SkinnedMesh b;
+    b = std::move(a);
+    CHECK(b.GetIndexCount() == 0);
 }

@@ -98,6 +98,12 @@ namespace Monolith::Editor {
         // large trees).
         constexpr uint32_t kProjectListingCacheFrames = 48;
 
+        void DrawUiAutomationMarker(const char *label) {
+            if (!label || !*label)
+                return;
+            ImGui::TextUnformatted(label);
+        }
+
         // World-space selection / picking bounds for a prop when ECS has a valid _eid.
         bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
                               Vec3 &outHalf) {
@@ -2616,6 +2622,10 @@ namespace Monolith::Editor {
 
     void EditorLayer::DrawMcpTabLiveRequests(
         const Mcp::McpStatusSnapshot &status) {
+        DrawUiAutomationMarker(
+            std::format("##mcp_test/activity_rows_{}",
+                        status.recentActivity.size())
+                .c_str());
         if (!ImGui::BeginTable("##mcp_requests", 6,
                                ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -2659,8 +2669,10 @@ namespace Monolith::Editor {
         }
         ImGui::EndTable();
 
-        if (status.recentActivity.empty())
+        if (status.recentActivity.empty()) {
+            DrawUiAutomationMarker("##mcp_test/request_detail_hidden");
             return;
+        }
         const Mcp::McpActivityEntry &selected =
                 status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
         ImGui::SeparatorText("Request Detail");
@@ -2681,6 +2693,17 @@ namespace Monolith::Editor {
         ImGui::SameLine();
         ImGui::Text("Request ID: %s",
                     selected.requestId.empty() ? "-" : selected.requestId.c_str());
+        DrawUiAutomationMarker("##mcp_test/request_detail_visible");
+        DrawUiAutomationMarker(selected.mcpMethod.empty()
+                                   ? "##mcp_test/request_method_empty"
+                                   : "##mcp_test/request_method_present");
+        DrawUiAutomationMarker("##mcp_test/request_http_present");
+        DrawUiAutomationMarker(selected.operation.empty()
+                                   ? "##mcp_test/request_operation_empty"
+                                   : "##mcp_test/request_operation_present");
+        DrawUiAutomationMarker(selected.requestId.empty()
+                                   ? "##mcp_test/request_id_empty"
+                                   : "##mcp_test/request_id_present");
         if (!selected.error.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
             ImGui::TextWrapped("Error: %s", selected.error.c_str());
@@ -2793,6 +2816,11 @@ namespace Monolith::Editor {
         ImGui::SameLine();
         if (ImGui::Button("Clear Request Log"))
             m_mcpController.ClearActivityLog();
+        if (ImGui::IsItemClicked())
+            m_mcpUiClearToggle = !m_mcpUiClearToggle;
+        DrawUiAutomationMarker(m_mcpUiClearToggle
+                                   ? "##mcp_test/log_clear_toggle_on"
+                                   : "##mcp_test/log_clear_toggle_off");
 
         ImGui::SeparatorText("Clients");
         if (ImGui::BeginTable("##mcp_clients", 3,

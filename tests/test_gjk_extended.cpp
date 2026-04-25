@@ -63,6 +63,35 @@ TEST_CASE("GJK: contact normal is normalized", "[gjk]") {
     REQUIRE(len == Approx(1.0f).epsilon(1e-5f));
 }
 
+TEST_CASE("GJK: touching spheres do not create contact due to strict overlap test",
+          "[gjk]") {
+    RigidBody a = RigidBody::MakeSphere(1.5f, 1.0f);
+    RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
+    a.position = {0.0f, 0.0f, 0.0f};
+    b.position = {2.0f, 0.0f, 0.0f}; // dist == sumR
+
+    const auto m = GJK::Test(a, b);
+    REQUIRE_FALSE(m.hasContact());
+}
+
+TEST_CASE("GJK: co-located asymmetric spheres use Up fallback and expected contact point",
+          "[gjk]") {
+    RigidBody a = RigidBody::MakeSphere(2.0f, 1.0f);
+    RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
+    a.position = {3.0f, -2.0f, 4.0f};
+    b.position = {3.0f, -2.0f, 4.0f};
+
+    const auto m = GJK::Test(a, b);
+    REQUIRE(m.hasContact());
+    REQUIRE(m.contacts[0].penetration == Approx(2.5f).epsilon(1e-5f));
+    REQUIRE(m.contacts[0].normal.x == Approx(0.0f).margin(1e-6f));
+    REQUIRE(m.contacts[0].normal.y == Approx(1.0f).margin(1e-6f));
+    REQUIRE(m.contacts[0].normal.z == Approx(0.0f).margin(1e-6f));
+    REQUIRE(m.contacts[0].point.x == Approx(3.0f).epsilon(1e-5f));
+    REQUIRE(m.contacts[0].point.y == Approx(-1.5f).epsilon(1e-5f));
+    REQUIRE(m.contacts[0].point.z == Approx(4.0f).epsilon(1e-5f));
+}
+
 TEST_CASE("GJK: different-radius spheres overlapping", "[gjk]") {
     RigidBody a = RigidBody::MakeSphere(2.0f, 1.0f);
     RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
