@@ -357,6 +357,20 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   if (testState == nullptr)
     return;
 
+  Launcher::LauncherEditorShell *shell = AsLauncherShell(testState);
+  IM_CHECK(shell != nullptr);
+  if (!shell)
+    return;
+
+  if (shell->HasActiveProject()) {
+    LogDebug("UI scenario action: project already active, returning to "
+             "launcher home");
+    const bool returned = ReturnToLauncherFromEditor(ctx, testState);
+    IM_CHECK(returned);
+    if (!returned)
+      return;
+  }
+
   LogDebug("UI scenario action: wait for launcher home window");
   ctx->SetRef("Horo Launcher");
   const bool launcherReady = WaitForCondition(
