@@ -4,13 +4,13 @@
 #include "scene/SceneRuntimeCoordinator.h"
 
 namespace Monolith::Editor {
-    SceneRuntimeOperationResult
-    LoadSceneDocument(SceneRuntimeCoordinator &coordinator,
-                      const SceneDocument &document,
-                      const RuntimeSceneApplyCallback &applyCallback);
+SceneRuntimeOperationResult
+LoadSceneDocument(SceneRuntimeCoordinator &coordinator,
+                  const SceneDocument &document,
+                  const RuntimeSceneApplyCallback &applyCallback);
 
-    SceneRuntimeOperationResult
-    ReloadSceneDocument(SceneRuntimeCoordinator &coordinator,
-                        const SceneDocument &document,
-                        const RuntimeSceneApplyCallback &applyCallback);
+SceneRuntimeOperationResult
+ReloadSceneDocument(SceneRuntimeCoordinator &coordinator,
+                    const SceneDocument &document,
+                    const RuntimeSceneApplyCallback &applyCallback);
 } // namespace Monolith::Editor

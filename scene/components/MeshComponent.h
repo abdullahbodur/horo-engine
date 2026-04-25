@@ -6,10 +6,10 @@
 #include "renderer/Mesh.h"
 
 namespace Monolith {
-    struct MeshComponent {
-        std::shared_ptr<Mesh> mesh;
-        std::shared_ptr<Material> material;
-        bool visible = true;
-        std::string meshTag; // source tag for scene export ("stone.obj", etc.)
-    };
+struct MeshComponent {
+  std::shared_ptr<Mesh> mesh;
+  std::shared_ptr<Material> material;
+  bool visible = true;
+  std::string meshTag; // source tag for scene export ("stone.obj", etc.)
+};
 } // namespace Monolith

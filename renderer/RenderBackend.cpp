@@ -1,80 +1,75 @@
 #include "renderer/RenderBackend.h"
 
 namespace Monolith {
-    const char *ToString(RenderBackendId backendId) {
-        using enum RenderBackendId;
-        switch (backendId) {
-            case Auto:
-                return "Auto";
-            case OpenGL:
-                return "OpenGL";
-            case Vulkan:
-                return "Vulkan";
-        }
+const char *ToString(RenderBackendId backendId) {
+  using enum RenderBackendId;
+  switch (backendId) {
+  case Auto:
+    return "Auto";
+  case OpenGL:
+    return "OpenGL";
+  case Vulkan:
+    return "Vulkan";
+  }
 
-        return "Unknown";
-    }
+  return "Unknown";
+}
 
-    RenderBackendId
-    ResolveRequestedRenderBackend(const RenderBackendSelection &selection) {
-        return selection.requested == RenderBackendId::Auto
-                   ? RenderBackendId::OpenGL
-                   : selection.requested;
-    }
+RenderBackendId
+ResolveRequestedRenderBackend(const RenderBackendSelection &selection) {
+  return selection.requested == RenderBackendId::Auto ? RenderBackendId::OpenGL
+                                                      : selection.requested;
+}
 
-    RenderBackendCapabilities
-    GetDefaultRenderBackendCapabilities(RenderBackendId backendId) {
-        switch (backendId) {
-            case RenderBackendId::Auto:
-                return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
-            case RenderBackendId::OpenGL:
-                return {
-                    .supportsDebugDraw = true,
-                    .supportsWireframeOverlay = true,
-                    .supportsDebugLabels = false,
-                    .supportsOffscreenTargets = true,
-                    .supportsNativeTextureHandles = true,
-                    .supportsReadback = true,
-                    .supportsDepthReadback = true,
-                    .supportsDebugHud = true,
-                    .supportsComputePasses = false,
-                    .supportsGpuTimestamps = false,
-                    .supportsBindlessResources = false
-                };
-            case RenderBackendId::Vulkan:
-                return {
-                    .supportsDebugDraw = false,
-                    .supportsWireframeOverlay = false,
-                    .supportsDebugLabels = false,
-                    .supportsOffscreenTargets = true,
-                    .supportsNativeTextureHandles = true,
-                    .supportsReadback = false,
-                    .supportsDepthReadback = false,
-                    .supportsDebugHud = false,
-                    .supportsComputePasses = false,
-                    .supportsGpuTimestamps = false,
-                    .supportsBindlessResources = false
-                };
-        }
+RenderBackendCapabilities
+GetDefaultRenderBackendCapabilities(RenderBackendId backendId) {
+  switch (backendId) {
+  case RenderBackendId::Auto:
+    return GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+  case RenderBackendId::OpenGL:
+    return {.supportsDebugDraw = true,
+            .supportsWireframeOverlay = true,
+            .supportsDebugLabels = false,
+            .supportsOffscreenTargets = true,
+            .supportsNativeTextureHandles = true,
+            .supportsReadback = true,
+            .supportsDepthReadback = true,
+            .supportsDebugHud = true,
+            .supportsComputePasses = false,
+            .supportsGpuTimestamps = false,
+            .supportsBindlessResources = false};
+  case RenderBackendId::Vulkan:
+    return {.supportsDebugDraw = false,
+            .supportsWireframeOverlay = false,
+            .supportsDebugLabels = false,
+            .supportsOffscreenTargets = true,
+            .supportsNativeTextureHandles = true,
+            .supportsReadback = false,
+            .supportsDepthReadback = false,
+            .supportsDebugHud = false,
+            .supportsComputePasses = false,
+            .supportsGpuTimestamps = false,
+            .supportsBindlessResources = false};
+  }
 
-        return {};
-    }
+  return {};
+}
 
-    bool IsRenderBackendSupported(RenderBackendId backendId) {
-        using enum RenderBackendId;
-        switch (ResolveRequestedRenderBackend(RenderBackendSelection{backendId})) {
-            case OpenGL:
-                return true;
-            case Vulkan:
+bool IsRenderBackendSupported(RenderBackendId backendId) {
+  using enum RenderBackendId;
+  switch (ResolveRequestedRenderBackend(RenderBackendSelection{backendId})) {
+  case OpenGL:
+    return true;
+  case Vulkan:
 #if defined(MONOLITH_HAS_VULKAN)
-                return true;
+    return true;
 #else
-                return false;
+    return false;
 #endif
-            case Auto:
-                break;
-        }
+  case Auto:
+    break;
+  }
 
-        return false;
-    }
+  return false;
+}
 } // namespace Monolith

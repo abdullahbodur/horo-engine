@@ -9,70 +9,70 @@
 #include "math/Vec4.h"
 
 namespace Monolith {
-    class ShaderException : public std::runtime_error {
-    public:
-        using std::runtime_error::runtime_error;
-    };
+class ShaderException : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
 
-    class Shader {
-    public:
-        Shader();
+class Shader {
+public:
+  Shader();
 
-        ~Shader();
+  ~Shader();
 
-        Shader(const Shader &) = delete;
+  Shader(const Shader &) = delete;
 
-        Shader &operator=(const Shader &) = delete;
+  Shader &operator=(const Shader &) = delete;
 
-        Shader(Shader &&o) noexcept;
+  Shader(Shader &&o) noexcept;
 
-        Shader &operator=(Shader &&o) noexcept;
+  Shader &operator=(Shader &&o) noexcept;
 
-        // Load from files on disk
-        static Shader FromFiles(const std::string &vertPath,
-                                const std::string &fragPath);
+  // Load from files on disk
+  static Shader FromFiles(const std::string &vertPath,
+                          const std::string &fragPath);
 
-        // Load from inline source strings
-        static Shader FromSource(const std::string &vertSrc,
-                                 const std::string &fragSrc);
+  // Load from inline source strings
+  static Shader FromSource(const std::string &vertSrc,
+                           const std::string &fragSrc);
 
-        void Bind() const;
+  void Bind() const;
 
-        void Unbind() const;
+  void Unbind() const;
 
-        bool IsValid() const;
+  bool IsValid() const;
 
-        unsigned int GetProgramID() const;
+  unsigned int GetProgramID() const;
 
-        // Uniform setters
-        void SetInt(const std::string &name, int v) const;
+  // Uniform setters
+  void SetInt(const std::string &name, int v) const;
 
-        void SetFloat(const std::string &name, float v) const;
+  void SetFloat(const std::string &name, float v) const;
 
-        void SetVec2(const std::string &name, float x, float y) const;
+  void SetVec2(const std::string &name, float x, float y) const;
 
-        void SetVec3(const std::string &name, const Vec3 &v) const;
+  void SetVec3(const std::string &name, const Vec3 &v) const;
 
-        void SetVec4(const std::string &name, const Vec4 &v) const;
+  void SetVec4(const std::string &name, const Vec4 &v) const;
 
-        void SetMat3(const std::string &name, const Mat3 &m) const;
+  void SetMat3(const std::string &name, const Mat3 &m) const;
 
-        void SetMat4(const std::string &name, const Mat4 &m) const;
+  void SetMat4(const std::string &name, const Mat4 &m) const;
 
-        // Upload an array of count matrices to uniform `name[0]` through
-        // `name[count-1]`. Uses glUniformMatrix4fv for a single GL call (efficient
-        // for bone palettes).
-        void SetMat4Array(const std::string &name, int count,
-                          const float *data) const;
+  // Upload an array of count matrices to uniform `name[0]` through
+  // `name[count-1]`. Uses glUniformMatrix4fv for a single GL call (efficient
+  // for bone palettes).
+  void SetMat4Array(const std::string &name, int count,
+                    const float *data) const;
 
-    private:
-        struct ProgramStorage;
-        std::unique_ptr<ProgramStorage> m_programStorage;
+private:
+  struct ProgramStorage;
+  std::unique_ptr<ProgramStorage> m_programStorage;
 
-        int GetUniformLocation(const std::string &name) const;
+  int GetUniformLocation(const std::string &name) const;
 
-        static unsigned int CompileShader(unsigned int type, const std::string &src);
+  static unsigned int CompileShader(unsigned int type, const std::string &src);
 
-        static unsigned int LinkProgram(unsigned int vert, unsigned int frag);
-    };
+  static unsigned int LinkProgram(unsigned int vert, unsigned int frag);
+};
 } // namespace Monolith

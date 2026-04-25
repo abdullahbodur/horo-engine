@@ -8,34 +8,33 @@
 #endif
 
 namespace Monolith::Launcher {
-    class LauncherEditorShell;
+class LauncherEditorShell;
 }
 
 namespace Monolith {
 #ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-    struct UiAutomationRunState {
-        std::filesystem::path tempRoot;
-        std::filesystem::path projectRoot;
-        std::filesystem::path uiCaptureOutputDir;
+struct UiAutomationRunState {
+  std::filesystem::path tempRoot;
+  std::filesystem::path projectRoot;
+  std::filesystem::path uiCaptureOutputDir;
 
-        bool captureEnabled = false;
-        bool videoEnabled = false;
-        bool videoCaptureOpen = false;
+  bool captureEnabled = false;
+  bool videoEnabled = false;
+  bool videoCaptureOpen = false;
 
-        Launcher::LauncherEditorShell *shellContext = nullptr;
-    };
+  Launcher::LauncherEditorShell *shellContext = nullptr;
+};
 
-    bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
-                                    UiAutomationRunState *state,
-                                    const std::string &filter,
-                                    int *outQueuedCount = nullptr);
+bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
+                                UiAutomationRunState *state,
+                                const std::string &filter,
+                                int *outQueuedCount = nullptr);
 #else
-    struct UiAutomationRunState {
-    };
+struct UiAutomationRunState {};
 
-    inline bool QueueRegisteredUiScenarios(void *, UiAutomationRunState *,
-                                           const std::string &, int * = nullptr) {
-        return false;
-    }
+inline bool QueueRegisteredUiScenarios(void *, UiAutomationRunState *,
+                                       const std::string &, int * = nullptr) {
+  return false;
+}
 #endif
 } // namespace Monolith

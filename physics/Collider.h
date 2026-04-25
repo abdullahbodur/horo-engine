@@ -1,14 +1,13 @@
 #pragma once
 
 namespace Monolith {
-    enum class ColliderType { Sphere, Box, Capsule, Plane };
+enum class ColliderType { Sphere, Box, Capsule, Plane };
 
-    struct Collider {
-        ColliderType type;
+struct Collider {
+  ColliderType type;
 
-        explicit Collider(ColliderType t) : type(t) {
-        }
+  explicit Collider(ColliderType t) : type(t) {}
 
-        virtual ~Collider() = default;
-    };
+  virtual ~Collider() = default;
+};
 } // namespace Monolith

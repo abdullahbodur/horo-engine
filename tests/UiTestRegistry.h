@@ -10,16 +10,16 @@
 #include "launcher/UiTestHarness.h"
 
 namespace Monolith {
-    using UiScenarioRegisterFn =
+using UiScenarioRegisterFn =
     std::function<ImGuiTest *(ImGuiTestEngine *, UiAutomationRunState *)>;
 
-    void RegisterUiScenario(const char *fullName, UiScenarioRegisterFn fn);
+void RegisterUiScenario(const char *fullName, UiScenarioRegisterFn fn);
 
-    void InitializeUiScenarioRegistry();
+void InitializeUiScenarioRegistry();
 
-    bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
-                                    UiAutomationRunState *state,
-                                    const std::string &filter, int *outQueuedCount);
+bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
+                                UiAutomationRunState *state,
+                                const std::string &filter, int *outQueuedCount);
 } // namespace Monolith
 
 #endif
