@@ -1312,7 +1312,7 @@ void DebugHUD::BuildFontAtlas() {
   constexpr int ATLAS_W = 1024;
   constexpr int ATLAS_H = 8;
 
-  std::array<uint8_t, ATLAS_W * ATLAS_H> pixels = {};
+  std::array<uint8_t, ATLAS_W *ATLAS_H> pixels = {};
 
   for (int ch = 0; ch < 128; ++ch) {
     for (int row = 0; row < 8; ++row) {

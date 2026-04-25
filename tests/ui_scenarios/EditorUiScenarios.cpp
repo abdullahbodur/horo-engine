@@ -323,7 +323,7 @@ static bool SendMcpHttpPost(int port, const std::string &body) {
   const UiSockHandle sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock == kUiInvalidSock)
     return false;
-  struct sockaddr_in addr{};
+  struct sockaddr_in addr {};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(static_cast<uint16_t>(port));
   inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);

@@ -250,4 +250,3 @@ TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary",
   ctrl.Update(0.016f);
   REQUIRE(ctrl.GetPitch() == Approx(-70.0f));
 }
-

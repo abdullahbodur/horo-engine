@@ -213,9 +213,9 @@ private:
   // Helpers
   bool IsSelected(int i) const;
 
-  int PrimaryIdx() const;    // last selected index, or -1 if empty
-  void ToggleSelect(int i);  // add or remove i; clears others if Shift not held
-  void TriggerReload();      // snapshot document → pending and set wantsReload
+  int PrimaryIdx() const;   // last selected index, or -1 if empty
+  void ToggleSelect(int i); // add or remove i; clears others if Shift not held
+  void TriggerReload();     // snapshot document → pending and set wantsReload
   void MarkDirtyAndReload(); // dirty = true + TriggerReload()
 
   void DrawToolbar();
