@@ -25,7 +25,7 @@ ifeq ($(OS),Windows_NT)
     # Coverage — Windows: OpenCppCoverage (install via: winget install OpenCppCoverage.OpenCppCoverage)
     OPENCOV     := "C:/Program Files/OpenCppCoverage/OpenCppCoverage.exe"
     COV_DIR     := $(CURDIR)/build/coverage
-    COV_FLAGS   := --sources "$(WIN_CURDIR)"
+    COV_FLAGS   := --sources "$(WIN_CURDIR)" --excluded_sources "$(WIN_CURDIR)\vendor\*" --excluded_sources "$(WIN_CURDIR)\build\*" --excluded_sources "$(WIN_CURDIR)\tests\*"
     COV_REPORT  := $(COV_DIR)/html/index.html
 else
     PRESET_DBG  ?= debug
@@ -122,30 +122,18 @@ ifeq ($(OS),Windows_NT)
 ## Requires: winget install OpenCppCoverage.OpenCppCoverage
 coverage: build
 	@$(MKDIR_P) "$(COV_DIR)"
-	@echo "[coverage] collecting test_math ..."
+	@echo "[coverage] collecting full CTest suite ..."
 	@$(OPENCOV) $(COV_FLAGS) \
-	    --export_type binary:"$(COV_DIR)/cov0.cov" \
-	    -- "$(TESTS_BIN)/test_math.exe"
-	@echo "[coverage] collecting test_math_extended ..."
-	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage "$(COV_DIR)/cov0.cov" \
-	    --export_type binary:"$(COV_DIR)/cov1.cov" \
-	    -- "$(TESTS_BIN)/test_math_extended.exe"
-	@echo "[coverage] collecting test_physics ..."
-	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage "$(COV_DIR)/cov1.cov" \
-	    --export_type binary:"$(COV_DIR)/cov2.cov" \
-	    -- "$(TESTS_BIN)/test_physics.exe"
-	@echo "[coverage] collecting test_physics_extended ..."
-	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage "$(COV_DIR)/cov2.cov" \
-	    --export_type binary:"$(COV_DIR)/cov3.cov" \
-	    -- "$(TESTS_BIN)/test_physics_extended.exe"
-	@echo "[coverage] collecting test_ecs + generating HTML report ..."
-	@$(OPENCOV) $(COV_FLAGS) \
-	    --input_coverage "$(COV_DIR)/cov3.cov" \
+	    --cover_children \
+	    --export_type binary:"$(COV_DIR)/ctest.cov" \
+	    -- ctest --test-dir "build/$(PRESET_DBG)" -C Debug --output-on-failure
+	@echo "[coverage] collecting editor UI scenarios ..."
+	-@$(OPENCOV) $(COV_FLAGS) \
+	    --input_coverage "$(COV_DIR)/ctest.cov" \
+	    --cover_children \
 	    --export_type html:"$(COV_DIR)/html" \
-	    -- "$(TESTS_BIN)/test_ecs.exe"
+	    --export_type cobertura:"$(COV_DIR)/cobertura.xml" \
+	    -- $(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=0 MONOLITH_UI_TEST_DELAY_MS=0 MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 

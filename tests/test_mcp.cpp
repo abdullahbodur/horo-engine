@@ -31,6 +31,7 @@
 
 #include "mcp/McpController.h"
 #include "mcp/McpProtocol.h"
+#include "mcp/McpServer.h"
 #include "mcp/McpSettings.h"
 #include "mcp/McpSnapshot.h"
 #include "tests/TestTempPaths.h"
@@ -195,6 +196,45 @@ namespace {
         return HttpResponse{
             .statusCode = std::stoi(head.substr(firstSpace + 1, 3)),
             .body = responseBody
+        };
+    }
+
+    HttpResponse SendRawHttpRequest(int port, const std::string &request) {
+        EnsureSocketsReady();
+
+        SocketHandle socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        REQUIRE(socketHandle != kInvalidSocket);
+        if (socketHandle == kInvalidSocket)
+            return {};
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(static_cast<uint16_t>(port));
+        REQUIRE(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) == 1);
+        REQUIRE(connect(socketHandle, reinterpret_cast<sockaddr *>(&addr),
+            sizeof(addr)) == 0);
+        REQUIRE(send(socketHandle, request.data(), static_cast<int>(request.size()),
+            0) > 0);
+
+        std::string raw;
+        std::string buffer(4096, '\0');
+        while (true) {
+            const auto rc =
+                    recv(socketHandle, buffer.data(), static_cast<int>(buffer.size()), 0);
+            if (rc <= 0)
+                break;
+            raw.append(buffer.data(), static_cast<size_t>(rc));
+        }
+        CloseSocket(socketHandle);
+
+        const size_t headerEnd = raw.find("\r\n\r\n");
+        REQUIRE(headerEnd != std::string::npos);
+        const std::string head = raw.substr(0, headerEnd);
+        const size_t firstSpace = head.find(' ');
+        REQUIRE(firstSpace != std::string::npos);
+        return HttpResponse{
+            .statusCode = std::stoi(head.substr(firstSpace + 1, 3)),
+            .body = raw.substr(headerEnd + 4)
         };
     }
 
@@ -2963,6 +3003,82 @@ TEST_CASE("McpHttpServer: Start with non-numeric host triggers inet_pton failure
     REQUIRE_FALSE(server.IsRunning());
 }
 
+TEST_CASE("McpHttpServer: parses request headers and dispatches one complete body",
+          "[mcp][server]") {
+    McpHttpServer server;
+    int beginCount = 0;
+    int endCount = 0;
+    McpHttpRequest captured;
+
+    const int port = 39882;
+    const McpServerStartResult started = server.Start(
+        "127.0.0.1", port,
+        [&captured](const McpHttpRequest &request) {
+            captured = request;
+            McpHttpResponse response;
+            response.statusCode = 200;
+            response.statusText = "OK";
+            response.contentType = "application/json";
+            response.body = R"({"ok":true})";
+            return response;
+        },
+        [&beginCount] { ++beginCount; }, [&endCount] { ++endCount; });
+    REQUIRE(started.ok);
+
+    const std::string body = R"({"jsonrpc":"2.0","id":1,"method":"ping"})";
+    const std::string request =
+            std::format("POST /mcp HTTP/1.1\r\nHost: LOCALHOST\r\nContent-Type: "
+                        "application/json\r\nCoNtEnT-LeNgTh: {}\r\nX-Trace:  abc  "
+                        "\r\nConnection: close\r\n\r\n{}",
+                        body.size(), body);
+
+    const HttpResponse response = SendRawHttpRequest(port, request);
+    server.Stop();
+
+    REQUIRE(response.statusCode == 200);
+    REQUIRE(json::parse(response.body)["ok"].get<bool>());
+    REQUIRE(beginCount == 1);
+    REQUIRE(endCount == 1);
+    REQUIRE(captured.method == "POST");
+    REQUIRE(captured.path == "/mcp");
+    REQUIRE(captured.body == body);
+    REQUIRE(captured.headers.at("content-type") == "application/json");
+    REQUIRE(captured.headers.at("x-trace") == "abc");
+}
+
+TEST_CASE("McpHttpServer: malformed request returns bad request without handler",
+          "[mcp][server]") {
+    McpHttpServer server;
+    bool handlerCalled = false;
+    int beginCount = 0;
+    int endCount = 0;
+
+    const int port = 39883;
+    const McpServerStartResult started = server.Start(
+        "127.0.0.1", port,
+        [&handlerCalled](const McpHttpRequest &) {
+            handlerCalled = true;
+            McpHttpResponse response;
+            response.statusCode = 200;
+            response.statusText = "OK";
+            response.contentType = "application/json";
+            response.body = "{}";
+            return response;
+        },
+        [&beginCount] { ++beginCount; }, [&endCount] { ++endCount; });
+    REQUIRE(started.ok);
+
+    const HttpResponse response = SendRawHttpRequest(
+        port, "\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n");
+    server.Stop();
+
+    REQUIRE(response.statusCode == 400);
+    REQUIRE(json::parse(response.body)["error"] == "Invalid HTTP request.");
+    REQUIRE_FALSE(handlerCalled);
+    REQUIRE(beginCount == 1);
+    REQUIRE(endCount == 1);
+}
+
 // ===========================================================================
 // McpSettings.cpp error-path tests
 // ===========================================================================
@@ -3248,6 +3364,7 @@ TEST_CASE("McpController: BuildVsCodeConfigSnippet contains url key",
 
 TEST_CASE("McpController: GetStatusSnapshot toolCatalog populated on init",
           "[mcp][controller]") {
+    EnvGuard env("horo_mcp_controller_status_default");
     ProjectRootGuard guard("McpControllerStatusDefault");
 
     McpController ctrl;
