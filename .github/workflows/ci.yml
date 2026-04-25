@@ -484,7 +484,8 @@ jobs:
             --root "${{ github.workspace }}" \
             --txt build/coverage/summary.txt \
             --txt-metric line \
-            --sort-percentage \
+            --sort uncovered-percent \
+            --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
             --exclude '.*/vendor/.*' \
             --exclude '.*/_deps/.*' \
@@ -494,6 +495,7 @@ jobs:
           python3 -m gcovr build/coverage \
             --root "${{ github.workspace }}" \
             --cobertura build/coverage/cobertura.xml \
+            --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
             --exclude '.*/vendor/.*' \
             --exclude '.*/_deps/.*' \

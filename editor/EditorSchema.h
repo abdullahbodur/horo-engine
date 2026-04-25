@@ -54,8 +54,9 @@ public:
   const ComponentSchema *
   GetComponentSchema(const std::string &componentType) const;
 
-  const std::unordered_map<std::string, TypeSchema, StringHash, std::equal_to<>>
-      &TypeSchemas() const {
+  const std::unordered_map<std::string, TypeSchema, StringHash,
+                           std::equal_to<>> &
+  TypeSchemas() const {
     return m_schemas;
   }
 
