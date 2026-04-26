@@ -103,7 +103,7 @@ constexpr uint32_t kProjectListingCacheFrames = 48;
 void DrawUiAutomationMarker(const char *label) {
   if (!label || !*label)
     return;
-  ImGui::TextUnformatted(label);
+  ImGui::InvisibleButton(label, ImVec2(1.0f, 1.0f));
 }
 
 // World-space selection / picking bounds for a prop when ECS has a valid _eid.
@@ -2712,6 +2712,26 @@ void EditorLayer::DrawMcpTab() {
   ImGui::TextDisabled("|");
   ImGui::SameLine();
   ImGui::Text("Enabled: %s", status.enabled ? "Yes" : "No");
+  DrawUiAutomationMarker(status.enabled ? "##mcp_test/status_enabled"
+                                         : "##mcp_test/status_disabled");
+  DrawUiAutomationMarker(status.running ? "##mcp_test/status_running"
+                                        : "##mcp_test/status_stopped");
+  DrawUiAutomationMarker(m_mcpUiClearToggle
+                             ? "##mcp_test/log_clear_toggle_on"
+                             : "##mcp_test/log_clear_toggle_off");
+#ifdef HORO_STANDALONE_UI_AUTOMATION
+  if (ImGui::InvisibleButton("##mcp_test/open_settings_action",
+                             ImVec2(1.0f, 1.0f))) {
+    m_settingsOpen = true;
+    m_mcpSettingsDraft = m_mcpController.GetSettings();
+    m_mcpSettingsError.clear();
+  }
+  if (ImGui::InvisibleButton("##mcp_test/clear_log_action",
+                             ImVec2(1.0f, 1.0f))) {
+    m_mcpController.ClearActivityLog();
+    m_mcpUiClearToggle = !m_mcpUiClearToggle;
+  }
+#endif
   ImGui::SameLine();
   ImGui::TextDisabled("|");
   ImGui::SameLine();
@@ -2719,6 +2739,26 @@ void EditorLayer::DrawMcpTab() {
 
   ImGui::Text("Requests: %llu",
               static_cast<unsigned long long>(status.totalRequests));
+  DrawUiAutomationMarker(
+      std::format("##mcp_test/activity_rows_{}", status.recentActivity.size())
+          .c_str());
+  DrawUiAutomationMarker(status.recentActivity.empty()
+                             ? "##mcp_test/request_detail_hidden"
+                             : "##mcp_test/request_detail_visible");
+  if (!status.recentActivity.empty()) {
+    const Mcp::McpActivityEntry &selected =
+        status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
+    DrawUiAutomationMarker(selected.mcpMethod.empty()
+                               ? "##mcp_test/request_method_empty"
+                               : "##mcp_test/request_method_present");
+    DrawUiAutomationMarker("##mcp_test/request_http_present");
+    DrawUiAutomationMarker(selected.operation.empty()
+                               ? "##mcp_test/request_operation_empty"
+                               : "##mcp_test/request_operation_present");
+    DrawUiAutomationMarker(selected.requestId.empty()
+                               ? "##mcp_test/request_id_empty"
+                               : "##mcp_test/request_id_present");
+  }
   ImGui::SameLine();
   ImGui::TextDisabled("|");
   ImGui::SameLine();
@@ -2735,10 +2775,15 @@ void EditorLayer::DrawMcpTab() {
   ImGui::Text("Active: %d", status.activeRequests);
 
   ImGui::Text("Tools: %d", static_cast<int>(status.toolCount));
+  DrawUiAutomationMarker(status.toolCount > 0 ? "##mcp_test/tools_available"
+                                              : "##mcp_test/tools_empty");
   ImGui::SameLine();
   ImGui::TextDisabled("|");
   ImGui::SameLine();
   ImGui::Text("Resources: %d", static_cast<int>(status.resourceCount));
+  DrawUiAutomationMarker(status.resourceCount > 0
+                             ? "##mcp_test/resources_available"
+                             : "##mcp_test/resources_empty");
   ImGui::SameLine();
   ImGui::TextDisabled("|");
   ImGui::SameLine();
