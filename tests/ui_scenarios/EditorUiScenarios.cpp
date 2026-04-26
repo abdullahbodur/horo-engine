@@ -69,23 +69,22 @@ static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
                             const char *sentinelItem, int maxFrames) {
   ImGuiID wid = 0;
   bool sentinelFound = false;
-  WaitForCondition(ctx,
-                   maxFrames,
+  WaitForCondition(ctx, maxFrames,
                    [ctx, depth, sentinelItem, &wid, &sentinelFound]() -> bool {
-    ImGuiContext &g = *ctx->UiContext;
-    if (g.OpenPopupStack.Size > depth) {
-      ImGuiWindow *win = g.OpenPopupStack[depth].Window;
-      if (win != nullptr) {
-        wid = win->ID;
-        ctx->SetRef(wid);
-        if (!sentinelItem)
-          return true;
-        sentinelFound = ctx->ItemExists(sentinelItem);
-        return sentinelFound;
-      }
-    }
-    return false;
-  });
+                     ImGuiContext &g = *ctx->UiContext;
+                     if (g.OpenPopupStack.Size > depth) {
+                       ImGuiWindow *win = g.OpenPopupStack[depth].Window;
+                       if (win != nullptr) {
+                         wid = win->ID;
+                         ctx->SetRef(wid);
+                         if (!sentinelItem)
+                           return true;
+                         sentinelFound = ctx->ItemExists(sentinelItem);
+                         return sentinelFound;
+                       }
+                     }
+                     return false;
+                   });
   if (wid && (!sentinelItem || sentinelFound))
     ctx->SetRef(wid);
   return sentinelItem && !sentinelFound ? ImGuiID(0) : wid;
@@ -96,7 +95,8 @@ struct UiScalarRow {
   std::vector<ImGuiID> fieldIds;
 };
 
-static std::vector<UiScalarRow> GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
+static std::vector<UiScalarRow>
+GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
   std::vector<UiScalarRow> rows;
   if (!ctx)
     return rows;
@@ -129,8 +129,8 @@ static std::vector<UiScalarRow> GatherUnlabeledScalarRows(ImGuiTestContext *ctx)
   return rows;
 }
 
-static const nlohmann::json *FindLastObjectOfType(const nlohmann::json &sceneJson,
-                                                  const char *typeName) {
+static const nlohmann::json *
+FindLastObjectOfType(const nlohmann::json &sceneJson, const char *typeName) {
   if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array())
     return nullptr;
   const auto &objects = sceneJson.at("objects");
@@ -225,10 +225,10 @@ static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
   if (!ctx)
     return;
   const ImGuiViewport *viewport = ImGui::GetMainViewport();
-  const ImVec2 position = viewport
-                              ? ImVec2(viewport->Pos.x + viewport->Size.x - 8.0f,
-                                       viewport->Pos.y + viewport->Size.y - 8.0f)
-                              : ImVec2(8.0f, 8.0f);
+  const ImVec2 position =
+      viewport ? ImVec2(viewport->Pos.x + viewport->Size.x - 8.0f,
+                        viewport->Pos.y + viewport->Size.y - 8.0f)
+               : ImVec2(8.0f, 8.0f);
   ctx->MouseMoveToPos(position);
   ctx->MouseClick(ImGuiMouseButton_Left);
   ctx->Yield(2);
@@ -480,7 +480,7 @@ static bool SendMcpHttpPost(int port, const std::string &body) {
   const UiSockHandle sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock == kUiInvalidSock)
     return false;
-  struct sockaddr_in addr {};
+  struct sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(static_cast<uint16_t>(port));
   inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
@@ -3807,13 +3807,15 @@ void RunPropertiesPanelLightControlsWorkflow(ImGuiTestContext *ctx) {
 
   CaptureIfEnabled(ctx, state,
                    "editor_ui__properties_panel_light_controls_workflow.png");
-  LogInfo("UI scenario done: editor_ui/properties_panel_light_controls_workflow");
+  LogInfo(
+      "UI scenario done: editor_ui/properties_panel_light_controls_workflow");
 }
 
-ImGuiTest *RegisterPropertiesPanelLightControlsWorkflow(
-    ImGuiTestEngine *engine, UiAutomationRunState *state) {
-  ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
-                                     "properties_panel_light_controls_workflow");
+ImGuiTest *
+RegisterPropertiesPanelLightControlsWorkflow(ImGuiTestEngine *engine,
+                                             UiAutomationRunState *state) {
+  ImGuiTest *test = IM_REGISTER_TEST(
+      engine, "editor_ui", "properties_panel_light_controls_workflow");
   test->UserData = state;
   test->TestFunc = &RunPropertiesPanelLightControlsWorkflow;
   return test;

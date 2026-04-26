@@ -66,7 +66,7 @@ else
     CLANG_FORMAT ?= clang-format
 endif
 
-.PHONY: all configure build test ui-test ui-test-windowed release coverage clean clean-all format format-check help
+.PHONY: all configure build test ui-test ui-test-windowed release coverage coverage-source-summary clean clean-all format format-check help
 
 # Default: build debug
 all: build
@@ -137,6 +137,10 @@ coverage: build
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
+coverage-source-summary:
+	@echo "coverage-source-summary is not supported on Windows/MSVC yet" >&2
+	@exit 1
+
 else
 
 ## Generate HTML coverage report using lcov (Linux / macOS)
@@ -165,6 +169,47 @@ coverage: $(SENTINEL_COV)
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
+coverage-source-summary: $(SENTINEL_COV)
+	cmake --build build/$(PRESET_COV)
+	@$(MKDIR_P) "$(COV_DIR)"
+	@rm -f "$(COV_DIR)/raw.info" "$(COV_DIR)/raw.info.tmp" "$(COV_DIR)/filtered.info" "$(COV_DIR)/filtered.info.tmp"; \
+	set +e; \
+	lcov --zerocounters \
+	     --directory build/$(PRESET_COV) \
+	     --rc lcov_branch_coverage=1 \
+	     --ignore-errors inconsistent,source,format,unused,count,deprecated,unsupported; \
+	zero_rc=$$?; \
+	ctest --test-dir build/$(PRESET_COV) --output-on-failure; \
+	test_rc=$$?; \
+	if [ $$test_rc -ne 0 ]; then exit $$test_rc; fi; \
+	lcov --capture \
+	     --directory build/$(PRESET_COV) \
+	     --output-file "$(COV_DIR)/raw.info.tmp" \
+	     --rc lcov_branch_coverage=1 \
+	     --ignore-errors inconsistent,source,format,unused,count,deprecated,unsupported; \
+	raw_rc=$$?; \
+	if [ ! -s "$(COV_DIR)/raw.info.tmp" ]; then \
+	    echo "[coverage-source-summary] missing raw coverage info: $(COV_DIR)/raw.info.tmp" >&2; \
+	    exit 1; \
+	fi; \
+	mv "$(COV_DIR)/raw.info.tmp" "$(COV_DIR)/raw.info"; \
+	lcov --remove "$(COV_DIR)/raw.info" \
+	     '*/vendor/*' '*/_deps/*' '*/tests/*' '*/build/*' \
+	     '/Applications/Xcode.app/*' \
+	     --output-file "$(COV_DIR)/filtered.info.tmp" \
+	     --rc lcov_branch_coverage=1 \
+	     --ignore-errors inconsistent,source,format,unused,count,deprecated,unsupported; \
+	remove_rc=$$?; \
+	if [ ! -s "$(COV_DIR)/filtered.info.tmp" ]; then \
+	    echo "[coverage-source-summary] missing filtered coverage info: $(COV_DIR)/filtered.info.tmp" >&2; \
+	    exit 1; \
+	fi; \
+	mv "$(COV_DIR)/filtered.info.tmp" "$(COV_DIR)/filtered.info"; \
+	if [ $$zero_rc -ne 0 ]; then echo "[coverage-source-summary] warning: lcov --zerocounters returned $$zero_rc" >&2; fi; \
+	if [ $$raw_rc -ne 0 ]; then echo "[coverage-source-summary] warning: lcov --capture returned $$raw_rc" >&2; fi; \
+	if [ $$remove_rc -ne 0 ]; then echo "[coverage-source-summary] warning: lcov --remove returned $$remove_rc" >&2; fi; \
+	python3 scripts/project_source_coverage.py "$(COV_DIR)/filtered.info" --repo "$(CURDIR)" --threshold 80
+
 endif
 
 ## Wipe debug build directory
@@ -183,6 +228,7 @@ help:
 	@echo "  make ui-test      Build & run headless launcher UI tests"
 	@echo "  make ui-test-windowed Build & run windowed launcher UI automation"
 	@echo "  make coverage     Build, run tests, generate HTML coverage report"
+	@echo "  make coverage-source-summary Build, run tests, print source-only coverage summary"
 	@echo "  make release      Build release library"
 	@echo "  make configure    Run cmake --preset only"
 	@echo "  make clean        Remove debug build dir"

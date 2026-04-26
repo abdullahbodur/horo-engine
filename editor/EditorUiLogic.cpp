@@ -172,11 +172,17 @@ namespace Monolith::Editor {
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        int consumed = 0;
 #ifdef _WIN32
-        if (sscanf_s(text.c_str(), " %f , %f , %f ", &x, &y, &z) != 3)
+        if (sscanf_s(text.c_str(), " %f , %f , %f %n", &x, &y, &z,
+                     &consumed) != 3)
 #else
-        if (std::sscanf(text.c_str(), " %f , %f , %f ", &x, &y, &z) != 3)
+        if (std::sscanf(text.c_str(), " %f , %f , %f %n", &x, &y, &z,
+                        &consumed) != 3)
 #endif
+            return false;
+
+        if (consumed != static_cast<int>(text.size()))
             return false;
 
         *outValue = {x, y, z};

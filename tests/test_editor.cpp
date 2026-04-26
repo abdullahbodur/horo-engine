@@ -249,13 +249,14 @@ static void SeedExternalAssetDragPayload(const char *assetId) {
 // ===========================================================================
 
 TEST_CASE("EditorSchema: missing file is silently ignored",
-          "[editor][schema]") {
+          "[editor][schema][coverage]") {
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile("/nonexistent/path/schema.json"));
   REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema]") {
+TEST_CASE("EditorSchema: empty JSON is silently ignored",
+          "[editor][schema][coverage]") {
   WriteFile(TmpPath("schema_empty.json"), "{}");
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_empty.json")));
@@ -263,7 +264,7 @@ TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema]") {
 }
 
 TEST_CASE("EditorSchema: malformed JSON is silently ignored",
-          "[editor][schema]") {
+          "[editor][schema][coverage]") {
   WriteFile(TmpPath("schema_bad.json"), "{ this is not valid json !!!}");
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
@@ -522,7 +523,7 @@ TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]") {
 }
 
 TEST_CASE("EditorSchema: loads component schema metadata and lookups",
-          "[editor][schema]") {
+          "[editor][schema][coverage]") {
   const std::string json = R"({
         "types": {
             "Prop": {
@@ -584,10 +585,12 @@ TEST_CASE("EditorSchema: loads component schema metadata and lookups",
   REQUIRE(lightSchema->fields[0].maxVal == Approx(20.0f));
   REQUIRE(lightSchema->fields[1].widget == FieldDef::Widget::Enum);
   REQUIRE(lightSchema->fields[1].options.size() == 2);
+  REQUIRE(lightSchema->fields[1].options[0] == "point");
+  REQUIRE(lightSchema->fields[1].options[1] == "directional");
 }
 
 TEST_CASE("EditorSchema: bundled schema exposes shared component definitions",
-          "[editor][schema]") {
+          "[editor][schema][coverage]") {
   const std::filesystem::path schemaPath =
       RepoRootFromTestSource() / "assets" / "editor_schema.json";
   REQUIRE(std::filesystem::exists(schemaPath));
@@ -2283,7 +2286,8 @@ TEST_CASE("RayVsAABBHit reports side-face hit point and normal",
   REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
-TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
+TEST_CASE("Editor viewport rect excludes docks and panels",
+          "[editor][ui-logic][coverage]") {
   const EditorViewportRect rect = BuildEditorViewportRect(
       1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
 
@@ -2299,7 +2303,7 @@ TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui]") {
 
 TEST_CASE(
     "Editor view gimbal layout reserves wire button and combined pick rect",
-    "[editor][ui]") {
+    "[editor][ui-logic][coverage]") {
   const EditorViewportRect viewport = BuildEditorViewportRect(
       1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
   const EditorViewGimbalLayout layout =
@@ -2319,15 +2323,18 @@ TEST_CASE(
 }
 
 TEST_CASE("Editor layout helpers clamp dock widths and workspace height",
-          "[editor][ui]") {
+          "[editor][ui-logic][coverage]") {
   REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
   REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
+  REQUIRE(ComputeEditorLeftDockWidth(0.0f) == Approx(220.0f));
 
   REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
   REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(0.0f) == Approx(280.0f));
 
   REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
   REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
+  REQUIRE(ComputeEditorBottomDockHeight(0.0f) == Approx(180.0f));
 }
 
 TEST_CASE(
@@ -2469,13 +2476,22 @@ TEST_CASE("Editor workspace settings: round-trip console filters and cwd",
   REQUIRE(loaded.state.projectBrowserCwd == "C:/project/assets");
 }
 
-TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui]") {
+TEST_CASE("Vec3 CSV parser accepts render scale triples",
+          "[editor][ui-logic][coverage]") {
   Vec3 parsed = Vec3::Zero();
   REQUIRE(TryParseVec3Csv("1.5000, 2.0000,0.7500", &parsed));
   REQUIRE(parsed.x == Approx(1.5f));
   REQUIRE(parsed.y == Approx(2.0f));
   REQUIRE(parsed.z == Approx(0.75f));
+
+  const Vec3 original = parsed;
   REQUIRE_FALSE(TryParseVec3Csv("1.0,2.0", &parsed));
+  REQUIRE(parsed == original);
+  REQUIRE_FALSE(TryParseVec3Csv("1.0, nope, 3.0", &parsed));
+  REQUIRE(parsed == original);
+  REQUIRE_FALSE(TryParseVec3Csv("1.0,2.0,3.0,4.0", &parsed));
+  REQUIRE(parsed == original);
+  REQUIRE_FALSE(TryParseVec3Csv("", nullptr));
 }
 
 // ============================================================

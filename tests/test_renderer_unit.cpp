@@ -4,7 +4,7 @@
 //
 // Coverage targets:
 //   - RenderBackend: ToString, IsRenderBackendSupported,
-//     ResolveRequestedRenderBackend, GetDefaultRenderBackendCapabilities(Auto)
+//     ResolveRequestedRenderBackend, GetDefaultRenderBackendCapabilities
 //   - RenderViewUtils: BuildRenderView
 //   - Light: struct defaults
 //   - Material: HasShader
@@ -81,11 +81,11 @@ TEST_CASE("IsRenderBackendSupported: Auto is supported (resolves to OpenGL)",
 }
 
 // ===========================================================================
-// RenderBackend — GetDefaultRenderBackendCapabilities(Auto)
+// RenderBackend — GetDefaultRenderBackendCapabilities
 // ===========================================================================
 
 TEST_CASE("GetDefaultRenderBackendCapabilities: Auto delegates to OpenGL",
-          "[renderer][backend]") {
+          "[renderer][backend][coverage]") {
   const RenderBackendCapabilities autoCaps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::Auto);
   const RenderBackendCapabilities glCaps =
@@ -97,6 +97,42 @@ TEST_CASE("GetDefaultRenderBackendCapabilities: Auto delegates to OpenGL",
   CHECK(autoCaps.supportsOffscreenTargets == glCaps.supportsOffscreenTargets);
   CHECK(autoCaps.supportsReadback == glCaps.supportsReadback);
   CHECK(autoCaps.supportsDebugHud == glCaps.supportsDebugHud);
+}
+
+TEST_CASE("GetDefaultRenderBackendCapabilities: OpenGL defaults are explicit",
+          "[renderer][backend][coverage]") {
+  const RenderBackendCapabilities caps =
+      GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+
+  CHECK(caps.supportsDebugDraw);
+  CHECK(caps.supportsWireframeOverlay);
+  CHECK_FALSE(caps.supportsDebugLabels);
+  CHECK(caps.supportsOffscreenTargets);
+  CHECK(caps.supportsNativeTextureHandles);
+  CHECK(caps.supportsReadback);
+  CHECK(caps.supportsDepthReadback);
+  CHECK(caps.supportsDebugHud);
+  CHECK_FALSE(caps.supportsComputePasses);
+  CHECK_FALSE(caps.supportsGpuTimestamps);
+  CHECK_FALSE(caps.supportsBindlessResources);
+}
+
+TEST_CASE("GetDefaultRenderBackendCapabilities: Vulkan defaults are explicit",
+          "[renderer][backend][coverage]") {
+  const RenderBackendCapabilities caps =
+      GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
+
+  CHECK_FALSE(caps.supportsDebugDraw);
+  CHECK_FALSE(caps.supportsWireframeOverlay);
+  CHECK_FALSE(caps.supportsDebugLabels);
+  CHECK(caps.supportsOffscreenTargets);
+  CHECK(caps.supportsNativeTextureHandles);
+  CHECK_FALSE(caps.supportsReadback);
+  CHECK_FALSE(caps.supportsDepthReadback);
+  CHECK_FALSE(caps.supportsDebugHud);
+  CHECK_FALSE(caps.supportsComputePasses);
+  CHECK_FALSE(caps.supportsGpuTimestamps);
+  CHECK_FALSE(caps.supportsBindlessResources);
 }
 
 // ===========================================================================
@@ -166,13 +202,13 @@ TEST_CASE("Light: Directional type can be assigned", "[renderer][light]") {
 // ===========================================================================
 
 TEST_CASE("Material: HasShader returns false when shader is null",
-          "[renderer][material]") {
+          "[renderer][material][coverage]") {
   Material mat;
   CHECK_FALSE(mat.HasShader());
 }
 
 TEST_CASE("Material: HasShader returns false for invalid shader",
-          "[renderer][material]") {
+          "[renderer][material][coverage]") {
   Material mat;
   mat.shader = std::make_shared<Shader>();
   // Default-constructed Shader is not valid (no GL program loaded)
@@ -182,18 +218,6 @@ TEST_CASE("Material: HasShader returns false for invalid shader",
 // ===========================================================================
 // RenderBackend — Vulkan capability and support paths
 // ===========================================================================
-
-TEST_CASE("GetDefaultRenderBackendCapabilities: Vulkan returns expected caps",
-          "[renderer][backend]") {
-  const RenderBackendCapabilities caps =
-      GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
-  // Vulkan preset does not support debug draw in the current backend spec.
-  CHECK_FALSE(caps.supportsDebugDraw);
-  CHECK_FALSE(caps.supportsDebugHud);
-  // Offscreen targets and native handles are supported even for Vulkan.
-  CHECK(caps.supportsOffscreenTargets);
-  CHECK(caps.supportsNativeTextureHandles);
-}
 
 TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result",
           "[renderer][backend]") {

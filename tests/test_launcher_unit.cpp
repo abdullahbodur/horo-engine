@@ -97,6 +97,12 @@ TEST_CASE("SanitizeProjectId normalizes names for manifest ids",
   REQUIRE(SanitizeProjectId("A  B") == "a_b");
 }
 
+TEST_CASE("SanitizeProjectId strips unsafe path characters",
+          "[launcher][project][coverage]") {
+  REQUIRE(SanitizeProjectId("..\\My:/Game?*") == "mygame");
+  REQUIRE(SanitizeProjectId("<>|\"/\\:?*") == "project");
+}
+
 TEST_CASE("ResolveProjectManifestPath points at .horo/project.json",
           "[launcher][project]") {
   const fs::path root = fs::path("workspace") / "MyProject";
@@ -127,7 +133,7 @@ TEST_CASE("IsLauncherProjectRoot is true only when manifest exists",
 // ===========================================================================
 
 TEST_CASE("LoadProjectManifestDocument returns parse error when file missing",
-          "[launcher][project]") {
+          "[launcher][project][coverage]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_missing";
   std::error_code ec;
@@ -170,7 +176,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root",
 
 TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key "
           "absent",
-          "[launcher][project]") {
+          "[launcher][project][coverage]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_noprojectobj";
   std::error_code ec;
@@ -185,7 +191,7 @@ TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key "
   // Default-filled manifest does not trigger a parse error
   CHECK_FALSE(doc.parseError);
   CHECK(doc.manifest.schemaVersion == 1);
-  CHECK_FALSE(doc.manifest.projectId.empty());
+  CHECK(doc.manifest.projectId == "project");
 }
 
 TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0",
@@ -452,7 +458,7 @@ TEST_CASE("PruneMissingRecentProjects with null doc does not crash",
 // ===========================================================================
 
 TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON",
-          "[launcher][home]") {
+          "[launcher][home][coverage]") {
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_home_load_badjson";
   std::error_code ec;
@@ -465,6 +471,7 @@ TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON",
   CHECK(doc.loadedFromDisk);
   CHECK(doc.parseError);
   CHECK_FALSE(doc.error.empty());
+  CHECK(doc.state.recentProjects.empty());
 }
 
 TEST_CASE("LoadEditorHomeDocument: parse error for non-object root",

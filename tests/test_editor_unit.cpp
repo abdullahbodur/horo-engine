@@ -1864,9 +1864,102 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document",
   CHECK(rebuilt.sceneId == "roundtrip");
 }
 
+TEST_CASE(
+    "SceneProjectBridge: BuildSceneProjectModel preserves light and component props",
+    "[editor][scene-bridge][coverage]") {
+  SceneDocument doc;
+  doc.sceneId = "component_scene";
+
+  SceneObject obj;
+  obj.id = "node_1";
+  obj.type = SceneObjectType::Light;
+  obj.props["lightType"] = "directional";
+  obj.props["intensity"] = "2.5";
+  obj.props["color"] = "0.25,0.50,0.75";
+  obj.props["radius"] = "42.0";
+  obj.components.push_back(
+      ComponentDesc{"script", {{"behaviorTag", "spin"}, {"custom", "x"}}});
+  obj.components.push_back(ComponentDesc{"rigidbody",
+                                         {{"mass", "7.5"},
+                                          {"isKinematic", "true"},
+                                          {"useGravity", "false"},
+                                          {"extra", "y"}}});
+  doc.objects.push_back(obj);
+
+  const SceneProjectModel model = BuildSceneProjectModel(doc);
+  REQUIRE(model.scene.nodes.size() == 1);
+  const SceneNodeDefinition &node = model.scene.nodes[0];
+  REQUIRE(node.light.has_value());
+  REQUIRE(node.light->kind == SceneLightKind::Directional);
+  REQUIRE(node.light->intensity == Approx(2.5f));
+  REQUIRE(node.light->color.x == Approx(0.25f));
+  REQUIRE(node.light->radius == Approx(42.0f));
+  REQUIRE(node.script.has_value());
+  REQUIRE(node.script->behaviorTag == "spin");
+  REQUIRE(node.script->extraProps.at("custom") == "x");
+  REQUIRE(node.rigidbody.has_value());
+  REQUIRE(node.rigidbody->mass == Approx(7.5f));
+  REQUIRE(node.rigidbody->isKinematic);
+  REQUIRE_FALSE(node.rigidbody->useGravity);
+  REQUIRE(node.rigidbody->extraProps.at("extra") == "y");
+}
+
 // ===========================================================================
 // AssetImportService — additional error paths
 // ===========================================================================
+
+TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing",
+          "[editor][asset-metadata][coverage]") {
+  const std::filesystem::path root =
+      Monolith::Tests::SecureTempBase() / "horo_asset_metadata_bad_sidecar";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models" /
+                                      "guid_bad_meta", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteFile(GetAssetMetadataPath("guid_bad_meta"), "{ not valid json");
+
+  AssetMetadata metadata;
+  std::string error;
+  REQUIRE_FALSE(LoadAssetMetadata("guid_bad_meta", &metadata, &error));
+  REQUIRE_FALSE(error.empty());
+}
+
+TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id",
+          "[editor][asset-metadata][coverage]") {
+  const std::filesystem::path root =
+      Monolith::Tests::SecureTempBase() / "horo_asset_metadata_roundtrip";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models" /
+                                      "guid_roundtrip", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetMetadata metadata;
+  metadata.assetId = "asset_roundtrip";
+  metadata.assetGuid = "guid_roundtrip";
+  metadata.displayName = "Round Trip";
+  metadata.importerId = "builtin.obj_mesh";
+  metadata.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::Source, "src.obj"});
+  metadata.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "dep_guid"});
+
+  std::string error;
+  REQUIRE(SaveAssetMetadata(metadata, &error));
+  REQUIRE(error.empty());
+
+  AssetMetadata loaded;
+  REQUIRE(LoadAssetMetadata("guid_roundtrip", &loaded, &error));
+  REQUIRE(loaded.importerId == "builtin.obj_mesh");
+  REQUIRE(loaded.dependencies.size() == 2);
+  REQUIRE(loaded.dependencies[0].value == "src.obj");
+  REQUIRE(loaded.dependencies[1].kind == AssetDependencyKind::DownstreamAsset);
+  REQUIRE(loaded.dependencies[1].value == "dep_guid");
+}
 
 TEST_CASE("AssetImportService: ImportTextureForAsset with missing source "
           "returns false",

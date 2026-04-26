@@ -168,7 +168,7 @@ TEST_CASE("ProjectPath explicit root switches editor workspace to "
 }
 
 TEST_CASE("Editor home settings remember and prune recent projects",
-          "[launcher][home]") {
+          "[launcher][home][coverage]") {
   const std::filesystem::path tempHome = MakeTempRoot("editor_home");
   std::filesystem::remove_all(tempHome);
   std::filesystem::create_directories(tempHome);
@@ -189,6 +189,7 @@ TEST_CASE("Editor home settings remember and prune recent projects",
   REQUIRE(doc.state.recentProjects.size() == 2);
   REQUIRE(doc.state.recentProjects.front() ==
           NormalizeComparablePath(projectA));
+  REQUIRE(doc.state.recentProjects[1] == NormalizeComparablePath(projectB));
   REQUIRE(doc.state.lastProjectPath == NormalizeComparablePath(projectA));
 
   std::filesystem::remove(projectB / ".horo" / "project.json");

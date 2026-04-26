@@ -553,7 +553,37 @@ json CallTool(const McpProtocol &protocol, std::string_view name,
       protocol, "tools/call",
       json{{"name", std::string(name)}, {"arguments", arguments}}, id);
 }
+
 } // namespace
+
+TEST_CASE("McpSettings loads missing values with defaults and keeps extras",
+          "[mcp][settings][coverage]") {
+  EnvGuard env("horo_mcp_settings_coverage");
+  const std::filesystem::path settingsPath = ResolveMcpSettingsPath();
+  std::filesystem::create_directories(settingsPath.parent_path());
+
+  {
+    std::ofstream out(settingsPath);
+    out << R"({
+      "theme": "ice",
+      "mcp": {
+        "enabled": true,
+        "custom": "keep-me"
+      }
+    })";
+  }
+
+  const McpSettingsDocument doc = LoadMcpSettings();
+  REQUIRE(doc.loadedFromDisk);
+  REQUIRE_FALSE(doc.parseError);
+  REQUIRE(doc.rootJson["theme"] == "ice");
+  REQUIRE(doc.rootJson["mcp"]["custom"] == "keep-me");
+  REQUIRE(doc.settings.enabled);
+  REQUIRE(doc.settings.transport == std::string(kDefaultMcpTransport));
+  REQUIRE(doc.settings.host == std::string(kDefaultMcpHost));
+  REQUIRE(doc.settings.port == kDefaultMcpPort);
+  REQUIRE(doc.settings.autoStart == true);
+}
 
 TEST_CASE("McpSettings preserves unknown keys and uses home settings path",
           "[mcp][settings]") {
@@ -759,7 +789,7 @@ TEST_CASE("McpSnapshot builds world-space edges for rotated objects",
 
 TEST_CASE(
     "McpProtocol serves initialize, lists, all resources, and all read tools",
-    "[mcp][protocol]") {
+    "[mcp][protocol][coverage]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<McpActivityRecord> activity;
   McpProtocol protocol(McpProtocolContext{
@@ -1409,7 +1439,7 @@ TEST_CASE("McpProtocol supports the recommended inspect to audit workflow",
 
 TEST_CASE(
     "McpProtocol returns expected errors for unsupported or unavailable paths",
-    "[mcp][protocol]") {
+    "[mcp][protocol][coverage]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocolWithSnapshot(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -1435,7 +1465,9 @@ TEST_CASE(
 
   const json unknownMethod = ProtocolRequest(
       protocolWithSnapshot, "bogus/method", json::object(), 400);
-  REQUIRE(unknownMethod["error"]["message"] == "Method not found.");
+  REQUIRE(unknownMethod["id"] == 400);
+  REQUIRE(unknownMethod["error"].is_object());
+  REQUIRE(unknownMethod["error"]["code"] == -32601);
 
   const json unknownResource = ReadResource(
       protocolWithSnapshot, "scene://missing", json::object(), 401);
@@ -3309,218 +3341,4 @@ TEST_CASE("McpController: PublishSnapshot with empty snapshot does not crash",
   McpEditorSnapshot snap;
   ctrl.PublishSnapshot(snap);
   ctrl.Shutdown();
-}
-
-// ===========================================================================
-// McpProtocol — additional branch coverage via correct helpers
-// ===========================================================================
-
-namespace {
-McpEditorSnapshot MakeBareSnapshot(const std::string &sceneId = "s1") {
-  McpEditorSnapshot snap;
-  snap.editorActive = true;
-  snap.sceneId = sceneId;
-  snap.sceneName = "Test Scene";
-  snap.sceneFilePath = "assets/bare.json";
-  return snap;
-}
-
-// Re-uses the existing ProtocolRequest helper style.
-json BareProtocolRequest(const McpProtocol &protocol, std::string_view method,
-                         const json &params = json::object(), int id = 1) {
-  const McpHttpResponse response =
-      protocol.HandleHttp(McpHttpRequest{"POST",
-                                         "/mcp",
-                                         {},
-                                         json{{"jsonrpc", "2.0"},
-                                              {"id", id},
-                                              {"method", std::string(method)},
-                                              {"params", params}}
-                                             .dump()});
-  if (response.body.empty() || response.statusCode == 0)
-    return json{};
-  return json::parse(response.body);
-}
-
-json BareCallTool(const McpProtocol &protocol, std::string_view name,
-                  const json &arguments = json::object(), int id = 200) {
-  return BareProtocolRequest(
-      protocol, "tools/call",
-      json{{"name", std::string(name)}, {"arguments", arguments}}, id);
-}
-} // namespace
-
-TEST_CASE("McpProtocol: initialize method returns server info",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp =
-      BareProtocolRequest(protocol, "initialize",
-                          json{{"protocolVersion", "2024-11-05"},
-                               {"clientInfo", {{"name", "test"}}}});
-  REQUIRE(resp.contains("result"));
-  REQUIRE(resp["result"]["serverInfo"]["name"] == "horo-engine");
-}
-
-TEST_CASE("McpProtocol: resources_list returns non-empty resources",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp =
-      BareProtocolRequest(protocol, "resources/list", json::object());
-  REQUIRE(resp.contains("result"));
-  REQUIRE(resp["result"]["resources"].is_array());
-  CHECK(!resp["result"]["resources"].empty());
-}
-
-TEST_CASE("McpProtocol: resources_read with scene summary returns content",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot("my_scene");
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareProtocolRequest(protocol, "resources/read",
-                                        json{{"uri", "scene://summary"}});
-  REQUIRE(resp.contains("result"));
-  REQUIRE(resp["result"]["contents"].is_array());
-}
-
-TEST_CASE("McpProtocol: resources_read with unknown uri returns error",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareProtocolRequest(
-      protocol, "resources/read", json{{"uri", "unknown://does_not_exist"}});
-  REQUIRE(resp.contains("error"));
-}
-
-TEST_CASE("McpProtocol: tools_call editor.scene_status returns scene data",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot("scene42");
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) {
-        return McpCommandResult{true, json::object(), ""};
-      },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareCallTool(protocol, "editor.scene_status");
-  REQUIRE(resp.contains("result"));
-  const std::string body = resp["result"].dump();
-  CHECK(body.find("scene42") != std::string::npos);
-}
-
-TEST_CASE("McpProtocol: tools_call editor.list_objects returns result",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareCallTool(protocol, "editor.list_objects");
-  REQUIRE(resp.contains("result"));
-}
-
-TEST_CASE(
-    "McpProtocol: tools_call with unknown tool name returns graceful result",
-    "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareCallTool(protocol, "nonexistent.tool");
-  // Should return a result (not crash), content may indicate failure.
-  CHECK((resp.contains("result") || resp.contains("error")));
-}
-
-TEST_CASE(
-    "McpProtocol: editor.search_console with empty snapshot returns result",
-    "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp =
-      BareCallTool(protocol, "editor.search_console", json{{"query", "error"}});
-  CHECK((resp.contains("result") || resp.contains("error")));
-}
-
-TEST_CASE("McpProtocol: ToolCatalog is non-empty", "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  CHECK(!protocol.ToolCatalog().empty());
-}
-
-TEST_CASE("McpProtocol: ResourceCatalog is non-empty",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  CHECK(!protocol.ResourceCatalog().empty());
-}
-
-TEST_CASE("McpProtocol: ping method returns valid response",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [](const McpActivityRecord &) {},
-  });
-
-  const json resp = BareProtocolRequest(protocol, "ping", json::object());
-  CHECK((resp.contains("result") || resp.contains("error") || resp.is_null()));
-}
-
-TEST_CASE("McpProtocol: activity callback fires on tools_call",
-          "[mcp][protocol][extra]") {
-  McpEditorSnapshot snap = MakeBareSnapshot();
-  std::vector<McpActivityRecord> activity;
-
-  McpProtocol protocol(McpProtocolContext{
-      [&snap]() { return CloneSnapshot(snap); },
-      [](const std::string &, const json &) { return McpCommandResult{}; },
-      [&activity](const McpActivityRecord &entry) {
-        activity.push_back(entry);
-      },
-  });
-
-  BareCallTool(protocol, "editor.get_scene");
-  CHECK(!activity.empty());
 }

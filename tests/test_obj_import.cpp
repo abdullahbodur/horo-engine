@@ -65,7 +65,7 @@ TEST_CASE("ObjLoader::Load throws typed exception for OBJ without geometry",
 }
 
 TEST_CASE("ObjLoader::Load parses a valid triangle and returns CPU mesh data",
-          "[objloader][load]") {
+          "[objloader][load][renderer][obj][coverage]") {
   const std::string path = TmpPath("obj_valid_triangle.obj");
   WriteFile(path, "v 0.0 0.0 0.0\n"
                   "v 1.0 0.0 0.0\n"
