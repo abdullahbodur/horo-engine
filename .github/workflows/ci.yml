@@ -189,7 +189,7 @@ jobs:
         shell: pwsh
         run: |
           $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
-          $binDir = "${{ github.workspace }}\build\debug-msvc\bin\Debug"
+          $binDir = "${{ github.workspace }}\build\debug-msvc\bin\tests"
           $buildDir = "${{ github.workspace }}\build\debug-msvc"
           python3 "${{ github.workspace }}\scripts\patch_junit_tags.py" $outDir $binDir $buildDir
 
