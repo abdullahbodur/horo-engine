@@ -1864,9 +1864,9 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document",
   CHECK(rebuilt.sceneId == "roundtrip");
 }
 
-TEST_CASE(
-    "SceneProjectBridge: BuildSceneProjectModel preserves light and component props",
-    "[editor][scene-bridge][coverage]") {
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel preserves light and "
+          "component props",
+          "[editor][scene-bridge][coverage]") {
   SceneDocument doc;
   doc.sceneId = "component_scene";
 
@@ -1914,8 +1914,8 @@ TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing",
       Monolith::Tests::SecureTempBase() / "horo_asset_metadata_bad_sidecar";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
-  std::filesystem::create_directories(root / "assets" / "models" /
-                                      "guid_bad_meta", ec);
+  std::filesystem::create_directories(
+      root / "assets" / "models" / "guid_bad_meta", ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
 
@@ -1933,8 +1933,8 @@ TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id",
       Monolith::Tests::SecureTempBase() / "horo_asset_metadata_roundtrip";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
-  std::filesystem::create_directories(root / "assets" / "models" /
-                                      "guid_roundtrip", ec);
+  std::filesystem::create_directories(
+      root / "assets" / "models" / "guid_roundtrip", ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
 
