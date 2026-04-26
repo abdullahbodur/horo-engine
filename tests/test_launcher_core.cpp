@@ -432,21 +432,21 @@ TEST_CASE("External process runner rejects Start while process is active", "[lau
   REQUIRE_FALSE(runner.IsActive());
 }
 
-TEST_CASE("External process runner reports non-zero exit for invalid command", "[launcher][process]") {
+TEST_CASE("External process runner reports non-zero exit from child process", "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
   command.workingDirectory = Monolith::Tests::SecureTempBase();
 #ifdef _WIN32
-  command.executable = "definitely_missing_executable_test.exe";
-  command.args = {};
+  command.executable = "cmd";
+  command.args = {"/c", "exit /b 7"};
 #else
-  command.executable = "definitely_missing_executable_test";
-  command.args = {};
+  command.executable = "sh";
+  command.args = {"-c", "exit 7"};
 #endif
   command.debugString = command.executable.generic_string();
 
   std::string error;
-  REQUIRE(runner.Start(command, "invalid-process-name", &error));
+  REQUIRE(runner.Start(command, "non-zero-exit-process", &error));
 
   for (int i = 0; i < 120 && runner.IsActive(); ++i) {
     runner.Poll();
@@ -456,5 +456,5 @@ TEST_CASE("External process runner reports non-zero exit for invalid command", "
   REQUIRE_FALSE(runner.IsActive());
   REQUIRE(runner.GetStatus().finished);
   REQUIRE_FALSE(runner.GetStatus().terminatedByUser);
-  REQUIRE(runner.GetStatus().exitCode != 0);
+  REQUIRE(runner.GetStatus().exitCode == 7);
 }
