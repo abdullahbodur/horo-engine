@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <ctime>
+#include <filesystem>
 #include <format>
 #include <string>
 #include <string_view>
@@ -15,6 +16,8 @@
 #include <imgui.h>
 
 #include "core/LogBuffer.h"
+#include "core/ProjectPath.h"
+#include "editor/EditorUiLogic.h"
 #include "editor/SceneDocument.h"
 
 namespace Monolith::Editor {
@@ -59,6 +62,73 @@ inline void SyncAssetScaleMetadata(SceneDocument *doc) {
                                          ? "1.0000,1.0000,1.0000"
                                          : assetIt->second.renderScale;
   }
+}
+
+inline Vec3 ResolveObjectPlacementHalfExtents(const SceneObject &obj) {
+  Vec3 assetRenderScale = Vec3::One();
+  if (const auto assetScaleIt = obj.props.find("_assetRenderScale");
+      assetScaleIt != obj.props.end())
+    TryParseVec3Csv(assetScaleIt->second, &assetRenderScale);
+
+  return {std::max(std::abs(obj.scale.x * assetRenderScale.x), 0.01f),
+          std::max(std::abs(obj.scale.y * assetRenderScale.y), 0.01f),
+          std::max(std::abs(obj.scale.z * assetRenderScale.z), 0.01f)};
+}
+
+inline float ProjectHalfExtentOntoNormal(const Vec3 &halfExtents,
+                                         const Vec3 &normal) {
+  return std::abs(normal.x) * halfExtents.x +
+         std::abs(normal.y) * halfExtents.y +
+         std::abs(normal.z) * halfExtents.z;
+}
+
+inline float DistSqPointSegment2D(float px, float py, float ax, float ay,
+                                 float bx, float by) {
+  const float abx = bx - ax;
+  const float aby = by - ay;
+  const float apx = px - ax;
+  const float apy = py - ay;
+  const float abLen2 = abx * abx + aby * aby;
+  if (abLen2 < 1e-8f)
+    return apx * apx + apy * apy;
+  float t = (apx * abx + apy * aby) / abLen2;
+  t = std::clamp(t, 0.f, 1.f);
+  const float cx = ax + t * abx;
+  const float cy = ay + t * aby;
+  const float dx = px - cx;
+  const float dy = py - cy;
+  return dx * dx + dy * dy;
+}
+
+inline bool IsTextureFilePath(std::string_view path) {
+  if (path.empty())
+    return false;
+  namespace fs = std::filesystem;
+  std::string ext = fs::path(path).extension().string();
+  std::ranges::transform(ext, ext.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+         ext == ".bmp" || ext == ".tga" || ext == ".webp" ||
+         ext == ".hdr";
+}
+
+inline std::string ToLowerAscii(std::string s) {
+  std::ranges::transform(s, s.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return s;
+}
+
+inline std::filesystem::path
+ResolveProjectRelativeOrAbsolutePath(std::string_view rawPath) {
+  if (rawPath.empty())
+    return {};
+  namespace fs = std::filesystem;
+  fs::path p(rawPath);
+  if (p.is_absolute())
+    return p;
+  return ProjectPath::Root() / p;
 }
 
 // ---- UI utilities ----
@@ -208,15 +278,21 @@ using Internal::BuildImGuiComboItems;
 using Internal::DrawUnavailableTextureDialogButton;
 using Internal::FindEnumOptionIndex;
 using Internal::FormatLogTime;
+using Internal::DistSqPointSegment2D;
 using Internal::kEditorPropertiesWindow;
 using Internal::kEditorStatusH;
 using Internal::kEditorToolbarH;
 using Internal::kMainPanelWindowFlags;
 using Internal::kMaxEditorHistorySnapshots;
 using Internal::ObjectAt;
+using Internal::IsTextureFilePath;
+using Internal::ProjectHalfExtentOntoNormal;
 using Internal::ParseRGBString;
 using Internal::ParseSceneObjectType;
+using Internal::ResolveObjectPlacementHalfExtents;
+using Internal::ResolveProjectRelativeOrAbsolutePath;
 using Internal::SceneObjectTypeToString;
 using Internal::SchemaAppliesToObjectType;
+using Internal::ToLowerAscii;
 using Internal::SyncAssetScaleMetadata;
 } // namespace Monolith::Editor

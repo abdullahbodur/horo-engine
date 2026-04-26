@@ -478,7 +478,7 @@ jobs:
           MONOLITH_UI_TEST_CAPTURE: "0"
           MONOLITH_UI_TEST_VIDEO: "0"
           MONOLITH_UI_TEST_RECORDING: "0"
-          MONOLITH_UI_TEST_FILTER: "launcher/create_project_from_launcher,editor/properties_panel_light_controls_workflow"
+          MONOLITH_UI_TEST_FILTER: "launcher/create_project_from_launcher,editor/properties_panel_light_controls_workflow,editor/properties_panel_mixed_selection_workflow,editor/properties_panel_rename_delete_undo_workflow,editor/properties_panel_scene_save_reload_workflow"
           MONOLITH_UI_TEST_DELAY_MS: "0"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/build/coverage/ui_test_output
 

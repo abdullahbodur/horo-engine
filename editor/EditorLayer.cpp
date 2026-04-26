@@ -124,31 +124,13 @@ bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
   if (!mc.mesh)
     return false;
   Transform wt(tc.current.position, tc.current.rotation, tc.current.scale);
-  WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(),
-                        mc.mesh->GetHalfExtents(), wt, outCenter, outHalf);
+  WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(),
+                        wt, outCenter, outHalf);
   return true;
 }
 
-Vec3 ResolveObjectPlacementHalfExtents(const SceneObject &obj) {
-  Vec3 assetRenderScale = Vec3::One();
-  if (const auto assetScaleIt = obj.props.find("_assetRenderScale");
-      assetScaleIt != obj.props.end())
-    TryParseVec3Csv(assetScaleIt->second, &assetRenderScale);
-
-  return {std::max(std::abs(obj.scale.x * assetRenderScale.x), 0.01f),
-          std::max(std::abs(obj.scale.y * assetRenderScale.y), 0.01f),
-          std::max(std::abs(obj.scale.z * assetRenderScale.z), 0.01f)};
-}
-
-float ProjectHalfExtentOntoNormal(const Vec3 &halfExtents, const Vec3 &normal) {
-  return std::abs(normal.x) * halfExtents.x +
-         std::abs(normal.y) * halfExtents.y +
-         std::abs(normal.z) * halfExtents.z;
-}
-
-bool TryGetPlacementSurfaceBounds(Registry *liveRegistry,
-                                  const SceneObject &obj, Vec3 *outCenter,
-                                  Vec3 *outHalf) {
+bool TryGetPlacementSurfaceBounds(Registry *liveRegistry, const SceneObject &obj,
+                                  Vec3 *outCenter, Vec3 *outHalf) {
   using enum SceneObjectType;
   if (!outCenter || !outHalf)
     return false;
@@ -193,24 +175,6 @@ void WorldAxisToScreenDir(const Camera &cam, const Vec3 &worldUnit,
   *outDy = dy / len;
 }
 
-float DistSqPointSegment2D(float px, float py, float ax, float ay, float bx,
-                           float by) {
-  const float abx = bx - ax;
-  const float aby = by - ay;
-  const float apx = px - ax;
-  const float apy = py - ay;
-  const float abLen2 = abx * abx + aby * aby;
-  if (abLen2 < 1e-8f)
-    return apx * apx + apy * apy;
-  float t = (apx * abx + apy * aby) / abLen2;
-  t = std::clamp(t, 0.f, 1.f);
-  const float cx = ax + t * abx;
-  const float cy = ay + t * aby;
-  const float dx = px - cx;
-  const float dy = py - cy;
-  return dx * dx + dy * dy;
-}
-
 #if defined(__APPLE__)
 std::string ReadPathFromOsascript(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
@@ -247,36 +211,6 @@ std::string PickObjFilePath() {
 #else
   return {};
 #endif
-}
-
-bool IsTextureFilePath(std::string_view path) {
-  if (path.empty())
-    return false;
-  namespace fs = std::filesystem;
-  std::string ext = fs::path(path).extension().string();
-  std::ranges::transform(ext, ext.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" ||
-         ext == ".tga" || ext == ".webp" || ext == ".hdr";
-}
-
-std::string ToLowerAscii(std::string s) {
-  std::ranges::transform(s, s.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  return s;
-}
-
-std::filesystem::path
-ResolveProjectRelativeOrAbsolutePath(std::string_view rawPath) {
-  if (rawPath.empty())
-    return {};
-  namespace fs = std::filesystem;
-  fs::path p(rawPath);
-  if (p.is_absolute())
-    return p;
-  return ProjectPath::Root() / p;
 }
 
 std::filesystem::path ResolvePreviewShaderPath(const char *fileName) {

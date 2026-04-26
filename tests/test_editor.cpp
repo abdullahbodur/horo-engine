@@ -8989,6 +8989,37 @@ TEST_CASE("EditorLayerInternal: helper edge cases are safe", "[editor][internal]
   }
 }
 
+TEST_CASE("EditorLayerInternal: placement and path helpers cover deterministic branches", "[editor][internal][coverage]") {
+  SceneObject panel;
+  panel.type = SceneObjectType::Panel;
+  panel.scale = {2.0f, -0.5f, 0.0f};
+  CHECK(ResolveObjectPlacementHalfExtents(panel).x == Approx(2.0f));
+  CHECK(ResolveObjectPlacementHalfExtents(panel).y == Approx(0.5f));
+  CHECK(ResolveObjectPlacementHalfExtents(panel).z == Approx(0.01f));
+
+  CHECK(ProjectHalfExtentOntoNormal({2.0f, 3.0f, 4.0f}, {1.0f, -2.0f, 0.5f}) == Approx(10.0f));
+
+  CHECK(DistSqPointSegment2D(1.0f, 1.0f, 0.0f, 0.0f, 2.0f, 0.0f) == Approx(1.0f));
+  CHECK(DistSqPointSegment2D(2.0f, 3.0f, 1.0f, 1.0f, 1.0f, 1.0f) == Approx(5.0f));
+
+  CHECK_FALSE(IsTextureFilePath({}));
+  CHECK(IsTextureFilePath("asset.PNG"));
+  CHECK(IsTextureFilePath("asset.hdr"));
+  CHECK_FALSE(IsTextureFilePath("asset.txt"));
+
+  CHECK(ToLowerAscii("AbC123!") == "abc123!");
+
+  const std::filesystem::path root = Monolith::Tests::SecureTempBase() / "horo_editor_layer_internal_paths";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  ProjectPathGuard guard(root);
+  CHECK(ResolveProjectRelativeOrAbsolutePath("").empty());
+  const std::filesystem::path absolutePath = root / "abs.txt";
+  CHECK(ResolveProjectRelativeOrAbsolutePath(absolutePath.string()) == absolutePath);
+  CHECK(ResolveProjectRelativeOrAbsolutePath("relative.txt") == (root / "relative.txt"));
+}
+
 TEST_CASE("EditorLayerInternal: unavailable texture dialog button renders safely", "[editor][internal][imgui]") {
   ImGuiContextGuard ctx;
   ImGui::NewFrame();
