@@ -116,7 +116,6 @@ jobs:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
           MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "0"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
@@ -277,7 +276,6 @@ jobs:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
           MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "0"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
           MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
@@ -412,7 +410,6 @@ jobs:
           MONOLITH_UI_TEST_CAPTURE: "1"
           MONOLITH_UI_TEST_VIDEO: "1"
           MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
           MONOLITH_UI_TEST_DELAY_MS: "0"
           MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
           MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
@@ -464,23 +461,6 @@ jobs:
           MONOLITH_GLFW_SAMPLES: "0"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-
-      - name: Run UI smoke tests (coverage build)
-        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            build/coverage/bin/HoroEditorUiTest --run-ui-tests
-        env:
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
-          LIBGL_ALWAYS_SOFTWARE: "1"
-          GALLIUM_DRIVER: "llvmpipe"
-          MONOLITH_UI_TEST_CAPTURE: "0"
-          MONOLITH_UI_TEST_VIDEO: "0"
-          MONOLITH_UI_TEST_RECORDING: "0"
-          MONOLITH_UI_TEST_FILTER: "launcher/create_project_from_launcher,editor/properties_panel_light_controls_workflow,editor/properties_panel_mixed_selection_workflow,editor/properties_panel_rename_delete_undo_workflow,editor/properties_panel_scene_save_reload_workflow"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/build/coverage/ui_test_output
 
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
