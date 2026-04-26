@@ -5,7 +5,12 @@
 
 namespace Horo {
     inline constexpr int kUiAutomationDefaultMaxFrames = 300000;
-    inline constexpr bool kUiAutomationHeartbeatLogEnabled = false;
+    inline constexpr double kUiAutomationLargeFrameDeltaWarningSec = 1.0;
+
+    bool ShouldLogUiAutomationHeartbeat(bool enabled, int frameCount,
+                                        int heartbeatInterval);
+    bool ShouldWarnUiAutomationLargeFrameDelta(double frameDeltaSec);
+    bool ShouldLogEditorRenderHeartbeat(bool enabled, int frameCount);
 
     // Parses UI automation boolean env-like values.
     // Empty value => fallback.

@@ -34,7 +34,27 @@ TEST_CASE("ResolveUiCaptureOutputDir obeys capture flag and env", "[launcher][ui
 
 TEST_CASE("UI automation defaults avoid heartbeat spam and allow long runs", "[launcher][ui-automation]") {
   REQUIRE(kUiAutomationDefaultMaxFrames == 300000);
-  REQUIRE_FALSE(kUiAutomationHeartbeatLogEnabled);
+  REQUIRE(kUiAutomationLargeFrameDeltaWarningSec == 1.0);
+}
+
+TEST_CASE("UI automation heartbeat and frame-delta logging decisions are independent", "[launcher][ui-automation]") {
+  REQUIRE_FALSE(ShouldLogUiAutomationHeartbeat(false, 1, 30));
+  REQUIRE_FALSE(ShouldLogUiAutomationHeartbeat(false, 30, 30));
+  REQUIRE_FALSE(ShouldLogUiAutomationHeartbeat(true, 31, 30));
+  REQUIRE(ShouldLogUiAutomationHeartbeat(true, 1, 30));
+  REQUIRE(ShouldLogUiAutomationHeartbeat(true, 30, 30));
+
+  REQUIRE_FALSE(ShouldWarnUiAutomationLargeFrameDelta(1.0));
+  REQUIRE(ShouldWarnUiAutomationLargeFrameDelta(1.01));
+}
+
+TEST_CASE("Editor render heartbeat is opt-in and sampled", "[launcher][ui-automation]") {
+  REQUIRE_FALSE(ShouldLogEditorRenderHeartbeat(false, 1));
+  REQUIRE_FALSE(ShouldLogEditorRenderHeartbeat(false, 60));
+
+  REQUIRE(ShouldLogEditorRenderHeartbeat(true, 1));
+  REQUIRE(ShouldLogEditorRenderHeartbeat(true, 60));
+  REQUIRE_FALSE(ShouldLogEditorRenderHeartbeat(true, 59));
 }
 
 TEST_CASE("SelectUiAutomationBaseDir prefers platform-specific home roots", "[launcher][ui-automation]") {

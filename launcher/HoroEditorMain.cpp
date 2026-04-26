@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include <GLFW/glfw3.h>
 
@@ -14,6 +15,7 @@
 #include "core/ProjectPath.h"
 #include "editor/EditorLayer.h"
 #include "launcher/LauncherEditorShell.h"
+#include "launcher/UiAutomationConfig.h"
 #include "launcher/UiAutomationRunner.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderViewUtils.h"
@@ -41,6 +43,13 @@ namespace {
                 return true;
         }
         return false;
+    }
+
+    bool IsRenderHeartbeatEnabled() {
+        const char *value = std::getenv("HORO_RENDER_HEARTBEAT");
+        return ParseUiAutomationBoolValue(value ? std::string_view(value)
+                                                : std::string_view(),
+                                          false);
     }
 #endif
 
@@ -180,8 +189,9 @@ namespace {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
             if (m_runUiAutomation && m_uiAutomation)
                 m_uiAutomation->PostRenderFrame(GetWindow().GetNativeHandle());
-            if (m_runUiAutomation &&
-                (m_renderFrameCount == 1 || (m_renderFrameCount % 60) == 0)) {
+            if (m_runUiAutomation && ShouldLogEditorRenderHeartbeat(
+                                         m_renderHeartbeatEnabled,
+                                         m_renderFrameCount)) {
                 LogInfo("HoroEditorApp render heartbeat: frame={} width={} height={} "
                         "active_project={}",
                         m_renderFrameCount, GetWindow().GetWidth(),
@@ -240,6 +250,7 @@ namespace {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
         bool m_runUiAutomation = false;
         bool m_uiAutomationPassed = true;
+        bool m_renderHeartbeatEnabled = IsRenderHeartbeatEnabled();
         std::unique_ptr<UiAutomationRunner> m_uiAutomation =
                 std::make_unique<UiAutomationRunner>();
 #endif

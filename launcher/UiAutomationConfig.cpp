@@ -3,6 +3,22 @@
 #include <charconv>
 
 namespace Horo {
+    bool ShouldLogUiAutomationHeartbeat(const bool enabled,
+                                        const int frameCount,
+                                        const int heartbeatInterval) {
+        return enabled && heartbeatInterval > 0 &&
+               (frameCount == 1 || (frameCount % heartbeatInterval) == 0);
+    }
+
+    bool ShouldWarnUiAutomationLargeFrameDelta(const double frameDeltaSec) {
+        return frameDeltaSec > kUiAutomationLargeFrameDeltaWarningSec;
+    }
+
+    bool ShouldLogEditorRenderHeartbeat(const bool enabled,
+                                        const int frameCount) {
+        return enabled && (frameCount == 1 || (frameCount % 60) == 0);
+    }
+
     bool ParseUiAutomationBoolValue(std::string_view value, bool fallback) {
         if (value.empty())
             return fallback;

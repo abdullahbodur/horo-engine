@@ -276,6 +276,7 @@ struct UiHeartbeatSnapshot {
   int frameCount = 0;
   int maxFrames = 0;
   int heartbeatInterval = 0;
+  bool heartbeatLogEnabled = false;
   GLFWwindow *nativeWindowHandle = nullptr;
   double elapsedSec = 0.0;
   double frameDeltaSec = 0.0;
@@ -284,36 +285,33 @@ struct UiHeartbeatSnapshot {
 };
 
 void LogUiHeartbeat(const UiHeartbeatSnapshot &snapshot) {
-  if (!kUiAutomationHeartbeatLogEnabled)
-    return;
-
   const int frameCount = snapshot.frameCount;
-  if (frameCount != 1 && (frameCount % snapshot.heartbeatInterval) != 0)
-    return;
-
-  int focused = -1;
-  int iconified = -1;
-  int visible = -1;
-  int shouldClose = -1;
-  if (snapshot.nativeWindowHandle) {
-    focused = glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_FOCUSED);
-    iconified =
-        glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_ICONIFIED);
-    visible = glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_VISIBLE);
-    shouldClose = glfwWindowShouldClose(snapshot.nativeWindowHandle);
+  if (ShouldLogUiAutomationHeartbeat(snapshot.heartbeatLogEnabled, frameCount,
+                                     snapshot.heartbeatInterval)) {
+    int focused = -1;
+    int iconified = -1;
+    int visible = -1;
+    int shouldClose = -1;
+    if (snapshot.nativeWindowHandle) {
+      focused = glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_FOCUSED);
+      iconified =
+          glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_ICONIFIED);
+      visible = glfwGetWindowAttrib(snapshot.nativeWindowHandle, GLFW_VISIBLE);
+      shouldClose = glfwWindowShouldClose(snapshot.nativeWindowHandle);
+    }
+    LogDebug(
+        "UI automation heartbeat: frame={}/{} elapsed={:.2f}s frame_dt={:.4f}s "
+        "avg_fps={:.2f} running={} queue_empty={} focused={} iconified={} "
+        "visible={} should_close={}",
+        frameCount, snapshot.maxFrames, snapshot.elapsedSec,
+        snapshot.frameDeltaSec,
+        snapshot.elapsedSec > 0.0
+            ? static_cast<double>(frameCount) / snapshot.elapsedSec
+            : 0.0,
+        snapshot.running ? 1 : 0, snapshot.queueEmpty ? 1 : 0, focused,
+        iconified, visible, shouldClose);
   }
-  LogDebug(
-      "UI automation heartbeat: frame={}/{} elapsed={:.2f}s frame_dt={:.4f}s "
-      "avg_fps={:.2f} running={} queue_empty={} focused={} iconified={} "
-      "visible={} should_close={}",
-      frameCount, snapshot.maxFrames, snapshot.elapsedSec,
-      snapshot.frameDeltaSec,
-      snapshot.elapsedSec > 0.0
-          ? static_cast<double>(frameCount) / snapshot.elapsedSec
-          : 0.0,
-      snapshot.running ? 1 : 0, snapshot.queueEmpty ? 1 : 0, focused, iconified,
-      visible, shouldClose);
-  if (snapshot.frameDeltaSec > 1.0) {
+  if (ShouldWarnUiAutomationLargeFrameDelta(snapshot.frameDeltaSec)) {
     LogWarn(
         "UI automation large frame delta detected: frame={} frame_dt={:.3f}s",
         frameCount, snapshot.frameDeltaSec);
@@ -377,6 +375,7 @@ struct UiAutomationRunner::Impl {
   int maxFrames = kUiAutomationDefaultMaxFrames;
   int testsRun = 0;
   int testsSucceeded = 0;
+  bool heartbeatLogEnabled = false;
   bool lastRunningState = false;
   bool lastQueueEmptyState = true;
   double startTimeSeconds = 0.0;
@@ -441,6 +440,7 @@ void UiAutomationRunner::StartIfRequested(
   const std::string outputDirEnv = ReadEnvString("HORO_UI_TEST_OUTPUT_DIR");
   m_impl->state.uiCaptureOutputDir =
       ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
+  m_impl->heartbeatLogEnabled = ParseBoolEnv("HORO_UI_TEST_HEARTBEAT");
   m_impl->state.shellContext = shellContext;
   LogInfo(
       "UI automation config: filter='{}', recording={}, capture={}, video={}",
@@ -543,6 +543,7 @@ void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
       .frameCount = m_impl->frameCount,
       .maxFrames = m_impl->maxFrames,
       .heartbeatInterval = Impl::kHeartbeatFrameInterval,
+      .heartbeatLogEnabled = m_impl->heartbeatLogEnabled,
       .nativeWindowHandle = nativeWindowHandle,
       .elapsedSec = elapsedSec,
       .frameDeltaSec = frameDeltaSec,
