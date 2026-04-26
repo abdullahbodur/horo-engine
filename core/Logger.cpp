@@ -42,7 +42,7 @@ namespace Monolith {
         }
 
         bool ShouldLog(LogLevel level) {
-            static const LogLevel minimumLevel = ParseLogLevelFromEnv();
+            const LogLevel minimumLevel = ParseLogLevelFromEnv();
             return static_cast<int>(level) >= static_cast<int>(minimumLevel);
         }
     } // namespace

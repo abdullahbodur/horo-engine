@@ -83,6 +83,7 @@ std::vector<LogLine> SnapshotLogLines() {
 } // namespace
 
 TEST_CASE("Logger env warn: filters info/debug but keeps warn/error", "[logger][env][warn]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "warning");
   LogBuffer::Instance().Clear();
 
   LogDebug("debug should be filtered");
@@ -100,6 +101,7 @@ TEST_CASE("Logger env warn: filters info/debug but keeps warn/error", "[logger][
 }
 
 TEST_CASE("Logger env error: filters warn/info/debug and keeps error", "[logger][env][error]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "error");
   LogBuffer::Instance().Clear();
 
   LogDebug("debug should be filtered");
@@ -116,6 +118,7 @@ TEST_CASE("Logger env error: filters warn/info/debug and keeps error", "[logger]
 }
 
 TEST_CASE("Logger env invalid value falls back to info", "[logger][env][invalid]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "verbose");
   LogBuffer::Instance().Clear();
 
   LogInfo("info is kept on fallback");
@@ -130,6 +133,7 @@ TEST_CASE("Logger env invalid value falls back to info", "[logger][env][invalid]
 }
 
 TEST_CASE("Logger env debug: keeps debug and info levels", "[logger][env][debug]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "debug");
   LogBuffer::Instance().Clear();
 
   LogDebug("debug is kept");
@@ -142,6 +146,7 @@ TEST_CASE("Logger env debug: keeps debug and info levels", "[logger][env][debug]
 }
 
 TEST_CASE("Logger env empty value falls back to info", "[logger][env][empty]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "");
   LogBuffer::Instance().Clear();
 
   LogDebug("debug is filtered on empty env");
@@ -153,6 +158,7 @@ TEST_CASE("Logger env empty value falls back to info", "[logger][env][empty]") {
 }
 
 TEST_CASE("Logger env mixed-case debug value is normalized", "[logger][env][mixed_debug]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "DeBuG");
   LogBuffer::Instance().Clear();
 
   LogDebug("debug survives mixed-case env");
@@ -163,6 +169,7 @@ TEST_CASE("Logger env mixed-case debug value is normalized", "[logger][env][mixe
 }
 
 TEST_CASE("Logger env short warn alias keeps warning logs", "[logger][env][warn_alias]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "warn");
   LogBuffer::Instance().Clear();
 
   LogInfo("info is filtered");
@@ -174,6 +181,7 @@ TEST_CASE("Logger env short warn alias keeps warning logs", "[logger][env][warn_
 }
 
 TEST_CASE("Logger default level label handles unknown enum values", "[logger][env][unknown_level]") {
+  const ScopedEnvVar logLevel("MONOLITH_LOG_LEVEL", "info");
   LogBuffer::Instance().Clear();
 
   LogImpl(static_cast<LogLevel>(99), std::source_location::current(),
