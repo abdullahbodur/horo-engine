@@ -465,6 +465,23 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
 
+      - name: Run UI smoke tests (coverage build)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            build/coverage/bin/HoroEditorUiTest --run-ui-tests
+        env:
+          MONOLITH_LOG_LEVEL: "debug"
+          MONOLITH_GLFW_SAMPLES: "0"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
+          MONOLITH_UI_TEST_CAPTURE: "0"
+          MONOLITH_UI_TEST_VIDEO: "0"
+          MONOLITH_UI_TEST_RECORDING: "0"
+          MONOLITH_UI_TEST_FILTER: "launcher/create_project_from_launcher,editor/properties_panel_light_controls_workflow"
+          MONOLITH_UI_TEST_DELAY_MS: "0"
+          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/build/coverage/ui_test_output
+
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
