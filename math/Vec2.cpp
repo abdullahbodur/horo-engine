@@ -4,19 +4,17 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
+    Vec2 Vec2::Normalized() const {
+        float len = Length();
+        if (NearlyZero(len))
+            return Vec2::Zero();
+        return *this / len;
+    }
 
-Vec2 Vec2::Normalized() const {
-  float len = Length();
-  if (NearlyZero(len))
-    return Vec2::Zero();
-  return *this / len;
-}
-
-std::string Vec2::ToString() const {
-  std::ostringstream ss;
-  ss << "Vec2(" << x << ", " << y << ")";
-  return ss.str();
-}
-
-}  // namespace Monolith
+    std::string Vec2::ToString() const {
+        std::ostringstream ss;
+        ss << "Vec2(" << x << ", " << y << ")";
+        return ss.str();
+    }
+} // namespace Horo

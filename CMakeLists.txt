@@ -3,7 +3,10 @@ cmake_minimum_required(VERSION 3.25)
 # Detect if this is a launcher build or embedded via add_subdirectory()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
-    project(MonolithEngine VERSION 0.1.0 LANGUAGES CXX C)
+    # x-release-please-start-version
+    set(HORO_ENGINE_VERSION "0.1.0")
+    # x-release-please-end
+    project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 
@@ -15,9 +18,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-    option(MONOLITH_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
-    option(MONOLITH_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
-    option(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
+    option(HORO_ENGINE_BUILD_TESTS "Build engine unit tests" ON)
+    option(HORO_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
+    option(HORO_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
 
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
@@ -31,30 +34,30 @@ endif()
 # project already defined any of these targets.
 add_subdirectory(vendor)
 
-# ---- MonolithEngine static library ----
+# ---- HoroEngine static library ----
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/math/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/mcp/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/physics/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
 )
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
 
-add_library(MonolithEngine STATIC ${ENGINE_SOURCES})
-add_library(MonolithEngine::MonolithEngine ALIAS MonolithEngine)
+add_library(HoroEngine STATIC ${ENGINE_SOURCES})
+add_library(HoroEngine::HoroEngine ALIAS HoroEngine)
 
-function(monolith_configure_engine_target target_name imgui_target)
+function(horo_configure_engine_target target_name imgui_target)
     target_include_directories(${target_name}
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
             $<INSTALL_INTERFACE:include>
-            $<BUILD_INTERFACE:${MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR}>
+            $<BUILD_INTERFACE:${HORO_VENDOR_NLOHMANN_INCLUDE_DIR}>
             $<INSTALL_INTERFACE:include/vendor/nlohmann>
     )
 
@@ -70,9 +73,9 @@ function(monolith_configure_engine_target target_name imgui_target)
             tinygltf
     )
 
-    if(MONOLITH_ENGINE_ENABLE_VULKAN)
-        target_link_libraries(${target_name} PUBLIC monolith_volk monolith_vulkan_headers)
-        target_compile_definitions(${target_name} PUBLIC MONOLITH_HAS_VULKAN=1)
+    if(HORO_ENGINE_ENABLE_VULKAN)
+        target_link_libraries(${target_name} PUBLIC horo_volk horo_vulkan_headers)
+        target_compile_definitions(${target_name} PUBLIC HORO_HAS_VULKAN=1)
     endif()
 
     if(APPLE)
@@ -89,45 +92,46 @@ function(monolith_configure_engine_target target_name imgui_target)
         target_compile_definitions(${target_name} PUBLIC NOMINMAX)
     endif()
 
-    if(MONOLITH_ENGINE_COVERAGE AND NOT MSVC)
+    if(HORO_ENGINE_COVERAGE AND NOT MSVC)
         target_compile_options(${target_name} PUBLIC --coverage -O0 -g)
         target_link_options(${target_name} PUBLIC --coverage)
     endif()
 endfunction()
 
-# Optional gcov/llvm-cov instrumentation (GCC/Clang only).
-option(MONOLITH_ENGINE_COVERAGE "Add coverage flags to MonolithEngine (for reports after ctest)" OFF)
+# Optional llvm-cov instrumentation (GCC/Clang only).
+option(HORO_ENGINE_COVERAGE "Add coverage flags to HoroEngine (for reports after ctest)" OFF)
 
-monolith_configure_engine_target(MonolithEngine imgui_lib)
+horo_configure_engine_target(HoroEngine imgui_lib)
 
-if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
-    set(MONOLITH_UI_TEST_SOURCES
+if(HORO_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
+    set(HORO_UI_TEST_SOURCES
         tests/UiTestRegistry.cpp
         tests/ui_scenarios/LauncherUiScenarios.cpp
+        tests/ui_scenarios/EditorUiScenarios.cpp
     )
-    add_library(MonolithEngineImGuiTest STATIC ${ENGINE_SOURCES})
-    target_sources(MonolithEngineImGuiTest PRIVATE ${MONOLITH_UI_TEST_SOURCES})
-    target_compile_definitions(MonolithEngineImGuiTest PUBLIC
+    add_library(HoroEngineImGuiTest STATIC ${ENGINE_SOURCES})
+    target_sources(HoroEngineImGuiTest PRIVATE ${HORO_UI_TEST_SOURCES})
+    target_compile_definitions(HoroEngineImGuiTest PUBLIC
         IMGUI_USER_CONFIG=\"imgui_test_engine_config.h\"
-        MONOLITH_STANDALONE_UI_AUTOMATION=1
+        HORO_STANDALONE_UI_AUTOMATION=1
     )
-    target_include_directories(MonolithEngineImGuiTest PUBLIC
+    target_include_directories(HoroEngineImGuiTest PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
-    monolith_configure_engine_target(MonolithEngineImGuiTest imgui_test_lib)
+    horo_configure_engine_target(HoroEngineImGuiTest imgui_test_lib)
 endif()
 
 # Copy GLSL shaders to bin/shaders alongside the executable
-add_custom_command(TARGET MonolithEngine POST_BUILD
+add_custom_command(TARGET HoroEngine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
         ${CMAKE_BINARY_DIR}/bin/shaders
     COMMENT "Copying shaders to bin/shaders"
 )
 
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STANDALONE_EDITOR)
     add_executable(HoroEditor launcher/HoroEditorMain.cpp)
-    target_link_libraries(HoroEditor PRIVATE MonolithEngine)
+    target_link_libraries(HoroEditor PRIVATE HoroEngine)
     target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
     if(WIN32)
@@ -146,11 +150,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
         COMMENT "Copying HoroEditor SDK resources next to launcher binary"
     )
 
-    if(MONOLITH_ENGINE_BUILD_TESTS AND TARGET MonolithEngineImGuiTest)
+    if(HORO_ENGINE_BUILD_TESTS AND TARGET HoroEngineImGuiTest)
         add_executable(HoroEditorUiTest launcher/HoroEditorMain.cpp)
-        target_link_libraries(HoroEditorUiTest PRIVATE MonolithEngineImGuiTest)
+        target_link_libraries(HoroEditorUiTest PRIVATE HoroEngineImGuiTest)
         target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
-        target_compile_definitions(HoroEditorUiTest PRIVATE MONOLITH_STANDALONE_UI_AUTOMATION=1)
+        target_compile_definitions(HoroEditorUiTest PRIVATE HORO_STANDALONE_UI_AUTOMATION=1)
 
         if(WIN32)
             target_compile_definitions(HoroEditorUiTest PRIVATE NOMINMAX)
@@ -171,14 +175,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND MONOLITH_ENGINE_BUILD_
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    install(TARGETS MonolithEngine glad imgui_lib glfw glm stb tinygltf nlohmann_json
-        EXPORT MonolithEngineTargets
+    install(TARGETS HoroEngine glad imgui_lib glfw glm stb tinygltf nlohmann_json
+        EXPORT HoroEngineTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
 
-    if(MONOLITH_ENGINE_BUILD_STANDALONE_EDITOR)
+    if(HORO_ENGINE_BUILD_STANDALONE_EDITOR)
         install(TARGETS HoroEditor
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
@@ -195,73 +199,73 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     install(DIRECTORY renderer/shaders/
         DESTINATION sdk/renderer/shaders
     )
-    install(DIRECTORY ${MONOLITH_VENDOR_GLM_INCLUDE_DIR}/
+    install(DIRECTORY ${HORO_VENDOR_GLM_INCLUDE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/glm
     )
-    install(DIRECTORY ${MONOLITH_VENDOR_STB_INCLUDE_DIR}/
+    install(DIRECTORY ${HORO_VENDOR_STB_INCLUDE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/stb
     )
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vendor/glad/include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/glad
     )
-    install(DIRECTORY ${MONOLITH_VENDOR_GLFW_INCLUDE_DIR}/GLFW
+    install(DIRECTORY ${HORO_VENDOR_GLFW_INCLUDE_DIR}/GLFW
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/glfw
     )
     install(FILES
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imconfig.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imgui.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imgui_internal.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imstb_rectpack.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imstb_textedit.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/imstb_truetype.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imconfig.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imgui.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imgui_internal.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imstb_rectpack.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imstb_textedit.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/imstb_truetype.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/imgui
     )
     install(FILES
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/backends/imgui_impl_glfw.h
-        ${MONOLITH_VENDOR_IMGUI_INCLUDE_DIR}/backends/imgui_impl_opengl3.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/backends/imgui_impl_glfw.h
+        ${HORO_VENDOR_IMGUI_INCLUDE_DIR}/backends/imgui_impl_opengl3.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/imgui/backends
     )
-    install(DIRECTORY ${MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR}/nlohmann
+    install(DIRECTORY ${HORO_VENDOR_NLOHMANN_INCLUDE_DIR}/nlohmann
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/nlohmann
     )
-    install(FILES ${MONOLITH_VENDOR_TINYGLTF_INCLUDE_DIR}/tiny_gltf.h
+    install(FILES ${HORO_VENDOR_TINYGLTF_INCLUDE_DIR}/tiny_gltf.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vendor/tinygltf
     )
 
     configure_package_config_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MonolithEngineConfig.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineConfig.cmake
-        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MonolithEngine
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/HoroEngineConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/HoroEngineConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/HoroEngine
     )
     write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineConfigVersion.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/HoroEngineConfigVersion.cmake
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
     )
-    export(EXPORT MonolithEngineTargets
-        FILE ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineTargets.cmake
-        NAMESPACE MonolithEngine::
+    export(EXPORT HoroEngineTargets
+        FILE ${CMAKE_CURRENT_BINARY_DIR}/HoroEngineTargets.cmake
+        NAMESPACE HoroEngine::
     )
 
-    install(EXPORT MonolithEngineTargets
-        FILE MonolithEngineTargets.cmake
-        NAMESPACE MonolithEngine::
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MonolithEngine
+    install(EXPORT HoroEngineTargets
+        FILE HoroEngineTargets.cmake
+        NAMESPACE HoroEngine::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/HoroEngine
     )
     install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineConfig.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/MonolithEngineConfigVersion.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MonolithEngine
+        ${CMAKE_CURRENT_BINARY_DIR}/HoroEngineConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/HoroEngineConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/HoroEngine
     )
 endif()
 
 # NOTE: The assets/ copy command (${CMAKE_SOURCE_DIR}/assets) is intentionally
-# absent here. Game assets belong to the consumer project (monolith/app/).
+# absent here. Game assets belong to the consumer project (horo/app/).
 # In launcher mode there are no game assets; in embedded mode app/CMakeLists.txt
 # handles the copy. Keeping it here would break launcher CI with a missing-dir error.
 
 # ---- Tests (launcher only) ----
-if(MONOLITH_ENGINE_BUILD_TESTS)
+if(HORO_ENGINE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()

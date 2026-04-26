@@ -2,38 +2,40 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #include "editor/SceneDocument.h"
 #include "editor/SceneProjectBridge.h"
 #include "scene/SceneProjectModel.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 namespace {
-
-const SceneNodeDefinition* FindNode(const SceneProjectModel& model, const std::string& id) {
-  const auto it = std::find_if(model.scene.nodes.begin(),
-                               model.scene.nodes.end(),
-                               [&id](const SceneNodeDefinition& node) { return node.id == id; });
-  return (it != model.scene.nodes.end()) ? &(*it) : nullptr;
+const SceneNodeDefinition *FindNode(const SceneProjectModel &model,
+                                    const std::string &id) {
+  const auto it = std::ranges::find_if(
+      model.scene.nodes,
+      [&id](const SceneNodeDefinition &node) { return node.id == id; });
+  return (it != model.scene.nodes.end()) ? std::to_address(it) : nullptr;
 }
 
-const SceneAssetDefinition* FindAsset(const SceneProjectModel& model, const std::string& id) {
-  const auto it = std::find_if(model.scene.assets.begin(),
-                               model.scene.assets.end(),
-                               [&id](const SceneAssetDefinition& asset) { return asset.id == id; });
-  return (it != model.scene.assets.end()) ? &(*it) : nullptr;
+const SceneAssetDefinition *FindAsset(const SceneProjectModel &model,
+                                      const std::string &id) {
+  const auto it = std::ranges::find_if(
+      model.scene.assets,
+      [&id](const SceneAssetDefinition &asset) { return asset.id == id; });
+  return (it != model.scene.assets.end()) ? std::to_address(it) : nullptr;
 }
-
-}  // namespace
+} // namespace
 
 TEST_CASE("SceneProjectModel: defaults validate cleanly", "[scene][project-model]") {
   SceneProjectModel model;
 
-  const SceneProjectValidationResult validation = ValidateSceneProjectModel(model);
+  const SceneProjectValidationResult validation =
+      ValidateSceneProjectModel(model);
 
   REQUIRE_FALSE(validation.HasErrors());
   REQUIRE(validation.WarningCount() == 0);
@@ -44,8 +46,7 @@ TEST_CASE("SceneProjectModel: defaults validate cleanly", "[scene][project-model
   REQUIRE(model.scene.settings.spawnPoint.z == Approx(3.0f));
 }
 
-TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring document",
-          "[scene][project-model][bridge]") {
+TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring document", "[scene][project-model][bridge]") {
   SceneDocument doc;
   doc.version = 3;
   doc.sceneId = "world";
@@ -54,7 +55,8 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   doc.settings["spawnPoint"] = "1.0,2.0,3.0";
   doc.settings["ambient"] = "dusk";
 
-  doc.assets["stone"] = AssetDef{"stone.obj", "2.0000,1.5000,0.5000", "stone.png"};
+  doc.assets["stone"] =
+      AssetDef{"stone.obj", "2.0000,1.5000,0.5000", "stone.png"};
 
   SceneObject root;
   root.id = "root_000";
@@ -80,9 +82,12 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   prop.assetId = "stone";
   prop.props["parentId"] = "root_000";
   prop.props["category"] = "pickup";
-  prop.components.push_back({"script", {{"behaviorTag", "OpenDoor"}, {"phase", "start"}}});
-  prop.components.push_back({"rigidbody", {{"mass", "2.5"}, {"isKinematic", "true"}}});
-  prop.components.push_back({"light", {{"intensity", "3.0"}, {"color", "1.0,0.8,0.5"}}});
+  prop.components.push_back(
+      {"script", {{"behaviorTag", "OpenDoor"}, {"phase", "start"}}});
+  prop.components.push_back(
+      {"rigidbody", {{"mass", "2.5"}, {"isKinematic", "true"}}});
+  prop.components.push_back(
+      {"light", {{"intensity", "3.0"}, {"color", "1.0,0.8,0.5"}}});
 
   SceneObject sun;
   sun.id = "sun_000";
@@ -96,7 +101,8 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   doc.objects = {root, camera, prop, sun};
 
   const SceneProjectModel model = BuildSceneProjectModel(doc);
-  const SceneProjectValidationResult validation = ValidateSceneProjectModel(model);
+  const SceneProjectValidationResult validation =
+      ValidateSceneProjectModel(model);
 
   REQUIRE_FALSE(validation.HasErrors());
   REQUIRE(validation.WarningCount() == 0);
@@ -114,7 +120,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(model.scene.settings.spawnPoint.z == Approx(3.0f));
   REQUIRE(model.scene.settings.extraSettings.at("ambient") == "dusk");
 
-  const SceneAssetDefinition* stone = FindAsset(model, "stone");
+  const SceneAssetDefinition *stone = FindAsset(model, "stone");
   REQUIRE(stone != nullptr);
   REQUIRE(stone->mesh == "stone.obj");
   REQUIRE(stone->renderScale.x == Approx(2.0f));
@@ -123,7 +129,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE_FALSE(stone->guid.empty());
   REQUIRE(stone->displayName == "stone");
 
-  const SceneNodeDefinition* cam = FindNode(model, "cam_000");
+  const SceneNodeDefinition *cam = FindNode(model, "cam_000");
   REQUIRE(cam != nullptr);
   REQUIRE(cam->kind == SceneNodeKind::Camera);
   REQUIRE(cam->parentId.has_value());
@@ -134,7 +140,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(cam->camera->farClip == Approx(400.0f));
   REQUIRE(cam->extraProps.at("tag") == "hero");
 
-  const SceneNodeDefinition* typedProp = FindNode(model, "prop_001");
+  const SceneNodeDefinition *typedProp = FindNode(model, "prop_001");
   REQUIRE(typedProp != nullptr);
   REQUIRE(typedProp->kind == SceneNodeKind::Prop);
   REQUIRE(typedProp->assetId == "stone");
@@ -149,7 +155,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(typedProp->light->intensity == Approx(3.0f));
   REQUIRE(typedProp->extraProps.at("category") == "pickup");
 
-  const SceneNodeDefinition* typedSun = FindNode(model, "sun_000");
+  const SceneNodeDefinition *typedSun = FindNode(model, "sun_000");
   REQUIRE(typedSun != nullptr);
   REQUIRE(typedSun->kind == SceneNodeKind::Light);
   REQUIRE(typedSun->light.has_value());
@@ -160,8 +166,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(typedSun->light->color.z == Approx(0.4f));
 }
 
-TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed model",
-          "[scene][project-model][bridge]") {
+TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed model", "[scene][project-model][bridge]") {
   SceneDocument doc;
   doc.version = 2;
   doc.sceneId = "test_scene";
@@ -169,7 +174,8 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   doc.filePath = "assets/scenes/test_scene.json";
   doc.settings["spawnPoint"] = "10.0,0.5,-4.0";
   doc.settings["fog"] = "light";
-  doc.assets["crate_asset"] = AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  doc.assets["crate_asset"] =
+      AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
 
   SceneObject prop;
   prop.id = "crate_000";
@@ -196,7 +202,8 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   REQUIRE(roundTrip.settings.at("fog") == "light");
   REQUIRE(roundTrip.settings.at("spawnPoint") == "10.0000,0.5000,-4.0000");
   REQUIRE(roundTrip.assets.at("crate_asset").mesh == "crate.obj");
-  REQUIRE(roundTrip.assets.at("crate_asset").renderScale == "1.0000,2.0000,3.0000");
+  REQUIRE(roundTrip.assets.at("crate_asset").renderScale ==
+          "1.0000,2.0000,3.0000");
   REQUIRE_FALSE(roundTrip.assets.at("crate_asset").guid.empty());
   REQUIRE(roundTrip.assets.at("crate_asset").displayName == "crate_asset");
   REQUIRE(roundTrip.objects.size() == 2);
@@ -205,27 +212,148 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   REQUIRE(roundTrip.objects[1].props.at("parentId") == "root_000");
   REQUIRE(roundTrip.objects[1].components.size() == 1);
   REQUIRE(roundTrip.objects[1].components[0].type == "script");
-  REQUIRE(roundTrip.objects[1].components[0].props.at("behaviorTag") == "Inspect");
+  REQUIRE(roundTrip.objects[1].components[0].props.at("behaviorTag") ==
+          "Inspect");
 }
 
-TEST_CASE("SceneProjectModel: validation catches broken references and invalid versions",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: validation catches broken references and invalid versions", "[scene][project-model][validation]") {
   SceneProjectModel model;
   model.scene.metadata.schemaVersion = 0;
   model.project.schemaVersion = 0;
   model.scene.metadata.sceneId.clear();
-  model.scene.nodes.push_back(SceneNodeDefinition{});
+  model.scene.nodes.emplace_back();
   model.scene.nodes.back().id = "dup";
   model.scene.nodes.back().assetId = "missing";
   model.scene.nodes.back().parentId = "ghost";
-  model.scene.nodes.push_back(SceneNodeDefinition{});
+  model.scene.nodes.emplace_back();
   model.scene.nodes.back().id = "dup";
   model.project.defaultSceneId = "missing_scene";
-  model.project.scenes.push_back({"scene_a", "assets/scenes/a.json"});
+  model.project.scenes.emplace_back("scene_a", "assets/scenes/a.json");
 
-  const SceneProjectValidationResult validation = ValidateSceneProjectModel(model);
+  const SceneProjectValidationResult validation =
+      ValidateSceneProjectModel(model);
 
   REQUIRE(validation.HasErrors());
   REQUIRE(validation.ErrorCount() >= 5);
   REQUIRE(validation.WarningCount() >= 1);
+}
+
+TEST_CASE("SceneProjectModel: duplicate asset GUID is an error", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneAssetDefinition a1;
+  a1.id = "asset_a";
+  a1.guid = "same-guid-0001";
+  a1.mesh = "a.obj";
+  SceneAssetDefinition a2;
+  a2.id = "asset_b";
+  a2.guid = "same-guid-0001"; // duplicate!
+  a2.mesh = "b.obj";
+  model.scene.assets.push_back(a1);
+  model.scene.assets.push_back(a2);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.HasErrors());
+  REQUIRE(v.ErrorCount() >= 1);
+}
+
+TEST_CASE("SceneProjectModel: empty asset id is an error", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneAssetDefinition asset;
+  asset.id = ""; // empty!
+  asset.guid = "valid-guid";
+  asset.mesh = "mesh.obj";
+  model.scene.assets.push_back(asset);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.HasErrors());
+}
+
+TEST_CASE("SceneProjectModel: Camera node without camera props is a warning", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneNodeDefinition cam;
+  cam.id = "cam_no_props";
+  cam.kind = SceneNodeKind::Camera;
+  // No camera optional set
+  model.scene.nodes.push_back(cam);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.WarningCount() >= 1);
+}
+
+TEST_CASE("SceneProjectModel: Camera node with camera props has no warning", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneNodeDefinition cam;
+  cam.id = "cam_with_props";
+  cam.kind = SceneNodeKind::Camera;
+  SceneCameraProperties cp;
+  cp.fovY = 60.0f;
+  cam.camera = cp;
+  model.scene.nodes.push_back(cam);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  // No warnings expected for a well-formed camera
+  REQUIRE(v.WarningCount() == 0);
+  REQUIRE_FALSE(v.HasErrors());
+}
+
+TEST_CASE("SceneProjectModel: prefab instance with empty prefabId is an error", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneNodeDefinition node;
+  node.id = "prefab_node";
+  node.kind = SceneNodeKind::Panel;
+  node.prefabInstance = ScenePrefabReference{};
+  node.prefabInstance->prefabId = "";            // invalid!
+  node.prefabInstance->sourcePath = "path.json"; // valid
+  model.scene.nodes.push_back(node);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.HasErrors());
+}
+
+TEST_CASE("SceneProjectModel: prefab instance with empty sourcePath is an error", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneNodeDefinition node;
+  node.id = "prefab_node2";
+  node.kind = SceneNodeKind::Panel;
+  node.prefabInstance = ScenePrefabReference{};
+  node.prefabInstance->prefabId = "pf_001";
+  node.prefabInstance->sourcePath = ""; // invalid!
+  model.scene.nodes.push_back(node);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.HasErrors());
+}
+
+TEST_CASE("SceneProjectModel: parentId resolving to known node is valid", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  SceneNodeDefinition parent;
+  parent.id = "parent_000";
+  parent.kind = SceneNodeKind::Panel;
+  SceneNodeDefinition child;
+  child.id = "child_000";
+  child.kind = SceneNodeKind::Panel;
+  child.parentId = "parent_000"; // resolves to parent above
+  model.scene.nodes.push_back(parent);
+  model.scene.nodes.push_back(child);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE_FALSE(v.HasErrors());
+}
+
+TEST_CASE("SceneProjectModel: ErrorCount and WarningCount are precise", "[scene][project-model][validation]") {
+  SceneProjectModel model;
+  // One error: empty node id; one warning: Camera without props
+  SceneNodeDefinition emptyId;
+  emptyId.id = "";
+  emptyId.kind = SceneNodeKind::Panel;
+  SceneNodeDefinition camNoProps;
+  camNoProps.id = "cam_np";
+  camNoProps.kind = SceneNodeKind::Camera;
+  model.scene.nodes.push_back(emptyId);
+  model.scene.nodes.push_back(camNoProps);
+
+  const SceneProjectValidationResult v = ValidateSceneProjectModel(model);
+  REQUIRE(v.ErrorCount() >= 1);
+  REQUIRE(v.WarningCount() >= 1);
+  REQUIRE(v.ErrorCount() + v.WarningCount() == v.issues.size());
 }

@@ -7,7 +7,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0"
       }
     },
     {
@@ -16,7 +17,7 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "MONOLITH_ENGINE_BUILD_TESTS": "ON"
+        "HORO_ENGINE_BUILD_TESTS": "ON"
       }
     },
     {
@@ -25,7 +26,7 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "MONOLITH_ENGINE_BUILD_TESTS": "OFF"
+        "HORO_ENGINE_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -40,7 +41,7 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "MONOLITH_ENGINE_BUILD_TESTS": "ON"
+        "HORO_ENGINE_BUILD_TESTS": "ON"
       }
     },
     {
@@ -49,7 +50,7 @@
       "inherits": "debug-msvc",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "MONOLITH_ENGINE_BUILD_TESTS": "OFF"
+        "HORO_ENGINE_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -63,7 +64,7 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "MONOLITH_ENGINE_BUILD_TESTS": "ON",
+        "HORO_ENGINE_BUILD_TESTS": "ON",
         "CMAKE_CXX_FLAGS": "--coverage -O0",
         "CMAKE_C_FLAGS": "--coverage -O0",
         "CMAKE_EXE_LINKER_FLAGS": "--coverage"

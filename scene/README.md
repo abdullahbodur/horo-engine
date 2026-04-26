@@ -20,8 +20,8 @@
 - `Registry` is type-indexed and creates component pools lazily on first `Add<T>()`.
 - No manual component registration required.
 - `Scene` holds two system lists:
-  - update systems (fixed/variable gameplay updates)
-  - render systems (render-time updates with interpolation alpha)
+    - update systems (fixed/variable gameplay updates)
+    - render systems (render-time updates with interpolation alpha)
 
 ## Core Components
 
@@ -44,28 +44,37 @@
 ## Typed Scene Contract
 
 - `SceneProjectModel` is the engine-owned typed scene/project contract for authoring-to-runtime work.
-- `RuntimeSceneDefinition` is the engine-owned runtime build input that replaces ad hoc game-shaped conversion as the canonical target.
-- `SceneRuntimeCoordinator` is the canonical lifecycle owner for load/reload/unload transitions over runtime scene definitions.
-- `SceneReferenceRuntime` is the canonical in-repo example that applies authoring scenes into a plain `Scene` without depending on `game/` glue.
-- `SceneDocument` remains the persisted editor format, but runtime-facing code should target the typed scene model instead of parsing string bags directly.
+- `RuntimeSceneDefinition` is the engine-owned runtime build input that replaces ad hoc game-shaped conversion as the
+  canonical target.
+- `SceneRuntimeCoordinator` is the canonical lifecycle owner for load/reload/unload transitions over runtime scene
+  definitions.
+- `SceneReferenceRuntime` is the canonical in-repo example that applies authoring scenes into a plain `Scene` without
+  depending on `game/` glue.
+- `SceneDocument` remains the persisted editor format, but runtime-facing code should target the typed scene model
+  instead of parsing string bags directly.
 - Common built-in data is modeled explicitly:
-  - scene metadata and typed spawn settings
-  - asset definitions with typed `renderScale`
-  - typed node kinds (`Panel`, `Prop`, `Light`, `Camera`)
-  - typed camera, light, rigidbody, and script payloads
-- Escape hatches remain available through `extraSettings`, `extraProps`, and `extraComponents` so the model can evolve without blocking existing content.
-- `ValidateSceneProjectModel(...)` is the baseline validation entrypoint for schema version, ID uniqueness, asset references, and project scene references.
-- `BuildRuntimeSceneDefinition(...)` turns typed authoring data into runtime-ready panels, props, lights, camera, and spawn settings without instantiating game behaviors in engine code.
-- `SceneRuntimeCoordinator` applies runtime definitions through callback hooks while exposing explicit transition state and failure reporting to consumers.
-- `SceneReferenceRuntime` wires `SceneDocument -> RuntimeSceneDefinition -> SceneRuntimeCoordinator` together for engine-only load, reload, and unload flows.
+    - scene metadata and typed spawn settings
+    - asset definitions with typed `renderScale`
+    - typed node kinds (`Panel`, `Prop`, `Light`, `Camera`)
+    - typed camera, light, rigidbody, and script payloads
+- Escape hatches remain available through `extraSettings`, `extraProps`, and `extraComponents` so the model can evolve
+  without blocking existing content.
+- `ValidateSceneProjectModel(...)` is the baseline validation entrypoint for schema version, ID uniqueness, asset
+  references, and project scene references.
+- `BuildRuntimeSceneDefinition(...)` turns typed authoring data into runtime-ready panels, props, lights, camera, and
+  spawn settings without instantiating game behaviors in engine code.
+- `SceneRuntimeCoordinator` applies runtime definitions through callback hooks while exposing explicit transition state
+  and failure reporting to consumers.
+- `SceneReferenceRuntime` wires `SceneDocument -> RuntimeSceneDefinition -> SceneRuntimeCoordinator` together for
+  engine-only load, reload, and unload flows.
 
 ## Example
 
 ```cpp
-Monolith::Scene scene;
-Monolith::Entity e = scene.CreateEntity({0, 1, 0});
+Horo::Scene scene;
+Horo::Entity e = scene.CreateEntity({0, 1, 0});
 
-scene.registry.Add<Monolith::CameraComponent>(e, {});
+scene.registry.Add<Horo::CameraComponent>(e, {});
 scene.UpdateSystems(dt);
 scene.RenderSystems(alpha);
 ```

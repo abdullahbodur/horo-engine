@@ -3,31 +3,39 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <source_location>
 #include <string>
+#include <string_view>
 
 #include "mcp/McpController.h"
 
-using namespace Monolith;
-using namespace Monolith::Mcp;
+using namespace Horo;
+using namespace Horo::Mcp;
 
 namespace {
-
-std::string ReadTextFile(const std::filesystem::path& path) {
+std::string ReadTextFile(const std::filesystem::path &path) {
   std::ifstream in(path);
   REQUIRE(in.is_open());
-  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  return std::string((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
 }
 
-void RequireFileContains(const std::filesystem::path& path, const std::string& snippet) {
+void RequireFileContains(const std::filesystem::path &path,
+                         const std::string_view snippet) {
   const std::string text = ReadTextFile(path);
   REQUIRE(text.find(snippet) != std::string::npos);
 }
 
-}  // namespace
+std::filesystem::path RepoRootFromSource(
+    std::source_location location = std::source_location::current()) {
+  return std::filesystem::path(location.file_name())
+      .parent_path()
+      .parent_path();
+}
+} // namespace
 
 TEST_CASE("Architecture docs exist and are discoverable from README", "[architecture][docs]") {
-  const std::filesystem::path root =
-      std::filesystem::path(__FILE__).parent_path().parent_path();
+  const std::filesystem::path root = RepoRootFromSource();
   const std::filesystem::path docsRoot = root / "docs" / "architecture";
   const std::filesystem::path devDocsRoot = root / "docs" / "development";
 
@@ -35,22 +43,30 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(std::filesystem::is_directory(devDocsRoot));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "README.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "module-boundaries.md"));
-  REQUIRE(std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
+  REQUIRE(
+      std::filesystem::is_regular_file(docsRoot / "renderer-foundation.md"));
   REQUIRE(std::filesystem::is_regular_file(
-      docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
+      docsRoot /
+      "backend-agnostic-rendering-foundation-and-runtime-selection.md"));
   REQUIRE(std::filesystem::is_regular_file(
       docsRoot / "vulkan-backend-integration-and-backend-parity.md"));
-  REQUIRE(std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
+  REQUIRE(
+      std::filesystem::is_regular_file(docsRoot / "ownership-lifecycle.md"));
   REQUIRE(std::filesystem::is_regular_file(docsRoot / "error-result-model.md"));
-  REQUIRE(std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
-  REQUIRE(std::filesystem::is_regular_file(devDocsRoot / "backend-parity-validation-matrix.md"));
+  REQUIRE(
+      std::filesystem::is_regular_file(docsRoot / "threading-and-mutation.md"));
+  REQUIRE(std::filesystem::is_regular_file(
+      devDocsRoot / "backend-parity-validation-matrix.md"));
 
   const std::string readme = ReadTextFile(root / "README.md");
   REQUIRE(readme.find("docs/architecture") != std::string::npos);
-  REQUIRE(readme.find("backend-parity-validation-matrix.md") != std::string::npos);
-  REQUIRE(readme.find("new headers are internal by default") != std::string::npos);
+  REQUIRE(readme.find("backend-parity-validation-matrix.md") !=
+          std::string::npos);
+  REQUIRE(readme.find("new headers are internal by default") !=
+          std::string::npos);
 
-  const std::string moduleBoundaries = ReadTextFile(docsRoot / "module-boundaries.md");
+  const std::string moduleBoundaries =
+      ReadTextFile(docsRoot / "module-boundaries.md");
   REQUIRE(moduleBoundaries.find("core") != std::string::npos);
   REQUIRE(moduleBoundaries.find("math") != std::string::npos);
   REQUIRE(moduleBoundaries.find("scene") != std::string::npos);
@@ -61,35 +77,46 @@ TEST_CASE("Architecture docs exist and are discoverable from README", "[architec
   REQUIRE(moduleBoundaries.find("mcp") != std::string::npos);
 
   const std::string architectureReadme = ReadTextFile(docsRoot / "README.md");
-  REQUIRE(architectureReadme.find("renderer-foundation.md") != std::string::npos);
-  REQUIRE(architectureReadme.find("backend-agnostic-rendering-foundation-and-runtime-selection.md") !=
+  REQUIRE(architectureReadme.find("renderer-foundation.md") !=
           std::string::npos);
-  REQUIRE(architectureReadme.find("vulkan-backend-integration-and-backend-parity.md") !=
+  REQUIRE(
+      architectureReadme.find(
+          "backend-agnostic-rendering-foundation-and-runtime-selection.md") !=
+      std::string::npos);
+  REQUIRE(architectureReadme.find(
+              "vulkan-backend-integration-and-backend-parity.md") !=
           std::string::npos);
 
   RequireFileContains(docsRoot / "renderer-foundation.md", "IRenderBackend");
   RequireFileContains(docsRoot / "renderer-foundation.md", "RenderPassConfig");
   RequireFileContains(docsRoot / "renderer-foundation.md", "Material");
-  RequireFileContains(docsRoot / "renderer-foundation.md", "OpenGLRenderBackend");
-  RequireFileContains(docsRoot / "backend-agnostic-rendering-foundation-and-runtime-selection.md",
-                      "runtime backend selection");
-  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+  RequireFileContains(docsRoot / "renderer-foundation.md",
+                      "OpenGLRenderBackend");
+  RequireFileContains(
+      docsRoot /
+          "backend-agnostic-rendering-foundation-and-runtime-selection.md",
+      "runtime backend selection");
+  RequireFileContains(docsRoot /
+                          "vulkan-backend-integration-and-backend-parity.md",
                       "capability-driven parity");
-  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+  RequireFileContains(docsRoot /
+                          "vulkan-backend-integration-and-backend-parity.md",
                       "editor viewport");
-  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+  RequireFileContains(docsRoot /
+                          "vulkan-backend-integration-and-backend-parity.md",
                       "Current Implemented Foundation State");
-  RequireFileContains(docsRoot / "vulkan-backend-integration-and-backend-parity.md",
+  RequireFileContains(docsRoot /
+                          "vulkan-backend-integration-and-backend-parity.md",
                       "backend-parity-validation-matrix.md");
-  RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md", "Vulkan-enabled build");
+  RequireFileContains(devDocsRoot / "backend-parity-validation-matrix.md",
+                      "Vulkan-enabled build");
 }
 
-TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems",
-          "[architecture][renderer]") {
-  const std::filesystem::path root =
-      std::filesystem::path(__FILE__).parent_path().parent_path();
+TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems", "[architecture][renderer]") {
+  const std::filesystem::path root = RepoRootFromSource();
 
-  const std::string backend = ReadTextFile(root / "renderer" / "OpenGLRenderBackend.cpp");
+  const std::string backend =
+      ReadTextFile(root / "renderer" / "OpenGLRenderBackend.cpp");
   REQUIRE(backend.find("GetProgramID(") != std::string::npos);
 
   const std::string renderer = ReadTextFile(root / "renderer" / "Renderer.cpp");
@@ -103,37 +130,47 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   const std::string shaderHeader = ReadTextFile(root / "renderer" / "Shader.h");
   REQUIRE(shaderHeader.find("unsigned int m_program") == std::string::npos);
 
-  const std::string textureHeader = ReadTextFile(root / "renderer" / "Texture.h");
+  const std::string textureHeader =
+      ReadTextFile(root / "renderer" / "Texture.h");
   REQUIRE(textureHeader.find("unsigned int m_id") == std::string::npos);
 
-  const std::string skinnedMeshHeader = ReadTextFile(root / "renderer" / "SkinnedMesh.h");
+  const std::string skinnedMeshHeader =
+      ReadTextFile(root / "renderer" / "SkinnedMesh.h");
   REQUIRE(skinnedMeshHeader.find("m_vao") == std::string::npos);
   REQUIRE(skinnedMeshHeader.find("m_vbo") == std::string::npos);
   REQUIRE(skinnedMeshHeader.find("m_ebo") == std::string::npos);
 
-  const std::string renderContext = ReadTextFile(root / "renderer" / "RenderContext.cpp");
+  const std::string renderContext =
+      ReadTextFile(root / "renderer" / "RenderContext.cpp");
   REQUIRE(renderContext.find("glViewport(") == std::string::npos);
   REQUIRE(renderContext.find("glad/glad.h") == std::string::npos);
 
-  const std::string renderSystem = ReadTextFile(root / "scene" / "systems" / "RenderSystem.cpp");
+  const std::string renderSystem =
+      ReadTextFile(root / "scene" / "systems" / "RenderSystem.cpp");
   REQUIRE(renderSystem.find("GetProgramID(") == std::string::npos);
 
   const std::string skinnedRenderSystem =
       ReadTextFile(root / "scene" / "systems" / "SkinnedRenderSystem.cpp");
   REQUIRE(skinnedRenderSystem.find("GetProgramID(") == std::string::npos);
 
-  const std::string starterTemplate = ReadTextFile(root / "scene" / "STARTER_TEMPLATE.h");
-  REQUIRE(starterTemplate.find("RenderContext::BeginFrame") == std::string::npos);
+  const std::string starterTemplate =
+      ReadTextFile(root / "scene" / "STARTER_TEMPLATE.h");
+  REQUIRE(starterTemplate.find("RenderContext::BeginFrame") ==
+          std::string::npos);
   REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
 
-  const std::string editorLayer = ReadTextFile(root / "editor" / "EditorLayer.cpp");
+  const std::string editorLayer =
+      ReadTextFile(root / "editor" / "EditorLayer.cpp");
   REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
   REQUIRE(editorLayer.find("ImGui_ImplOpenGL3_") == std::string::npos);
 
-  const std::string editorImGuiBackend = ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
-  REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") != std::string::npos);
+  const std::string editorImGuiBackend =
+      ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
+  REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") !=
+          std::string::npos);
 
-  const std::string debugDraw = ReadTextFile(root / "renderer" / "DebugDraw.cpp");
+  const std::string debugDraw =
+      ReadTextFile(root / "renderer" / "DebugDraw.cpp");
   REQUIRE(debugDraw.find("supportsDebugDraw") != std::string::npos);
 
   const std::string screenshot = ReadTextFile(root / "core" / "Screenshot.cpp");

@@ -6,25 +6,28 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
+    struct EditorHomeState {
+        std::vector<std::string> recentProjects;
+        std::string lastProjectPath;
+    };
 
-struct EditorHomeState {
-  std::vector<std::string> recentProjects;
-  std::string lastProjectPath;
-};
+    struct EditorHomeDocument {
+        EditorHomeState state;
+        nlohmann::json rootJson = nlohmann::json::object();
+        bool loadedFromDisk = false;
+        bool parseError = false;
+        std::string error;
+    };
 
-struct EditorHomeDocument {
-  EditorHomeState state;
-  nlohmann::json rootJson = nlohmann::json::object();
-  bool loadedFromDisk = false;
-  bool parseError = false;
-  std::string error;
-};
+    std::filesystem::path ResolveEditorHomePath();
 
-std::filesystem::path ResolveEditorHomePath();
-EditorHomeDocument LoadEditorHomeDocument();
-bool SaveEditorHomeDocument(EditorHomeDocument* doc, std::string* outError);
-void RememberRecentProject(EditorHomeDocument* doc, const std::filesystem::path& projectRoot);
-void PruneMissingRecentProjects(EditorHomeDocument* doc);
+    EditorHomeDocument LoadEditorHomeDocument();
 
-}  // namespace Monolith::Launcher
+    bool SaveEditorHomeDocument(EditorHomeDocument *doc, std::string *outError);
+
+    void RememberRecentProject(EditorHomeDocument *doc,
+                               const std::filesystem::path &projectRoot);
+
+    void PruneMissingRecentProjects(EditorHomeDocument *doc);
+} // namespace Horo::Launcher

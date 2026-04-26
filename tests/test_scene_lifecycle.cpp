@@ -1,8 +1,7 @@
-#include <catch2/catch_test_macros.hpp>
 #include "scene/SceneLifecycle.h"
+#include <catch2/catch_test_macros.hpp>
 
-namespace Monolith {
-
+namespace Horo {
 TEST_CASE("SceneLifecycle: Valid linear transitions", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
@@ -49,7 +48,8 @@ TEST_CASE("SceneLifecycle: Invalid transition FinishLoading before BeginLoading"
   REQUIRE(!lc.FinishLoading());
   REQUIRE(lc.GetState() == SceneLifecycleState::Uninitialized);
   REQUIRE(lc.GetError() != nullptr);
-  REQUIRE(std::string(lc.GetError()).find("FinishLoading") != std::string::npos);
+  REQUIRE(std::string(lc.GetError()).find("FinishLoading") !=
+          std::string::npos);
 }
 
 TEST_CASE("SceneLifecycle: Invalid transition BeginLoading while Loading", "[scene][lifecycle]") {
@@ -85,25 +85,25 @@ TEST_CASE("SceneLifecycle: Invalid transition BeginUnloading from Loading", "[sc
 TEST_CASE("SceneLifecycle: IsTransitioning utility", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
-  REQUIRE(!lc.IsTransitioning());  // Uninitialized
+  REQUIRE(!lc.IsTransitioning()); // Uninitialized
 
   REQUIRE(lc.BeginLoading());
-  REQUIRE(lc.IsTransitioning());  // Loading
+  REQUIRE(lc.IsTransitioning()); // Loading
 
   REQUIRE(lc.FinishLoading());
-  REQUIRE(!lc.IsTransitioning());  // Active
+  REQUIRE(!lc.IsTransitioning()); // Active
 
   REQUIRE(lc.BeginReloading());
-  REQUIRE(lc.IsTransitioning());  // Reloading
+  REQUIRE(lc.IsTransitioning()); // Reloading
 
   REQUIRE(lc.CompleteReload());
-  REQUIRE(!lc.IsTransitioning());  // Active again
+  REQUIRE(!lc.IsTransitioning()); // Active again
 
   REQUIRE(lc.BeginUnloading());
-  REQUIRE(lc.IsTransitioning());  // Unloading
+  REQUIRE(lc.IsTransitioning()); // Unloading
 
   REQUIRE(lc.FinishUnloading());
-  REQUIRE(!lc.IsTransitioning());  // Uninitialized
+  REQUIRE(!lc.IsTransitioning()); // Uninitialized
 }
 
 TEST_CASE("SceneLifecycle: Multiple load cycles", "[scene][lifecycle]") {
@@ -127,5 +127,4 @@ TEST_CASE("SceneLifecycle: Multiple load cycles", "[scene][lifecycle]") {
   REQUIRE(lc.FinishUnloading());
   REQUIRE(lc.GetState() == SceneLifecycleState::Uninitialized);
 }
-
-}  // namespace Monolith
+} // namespace Horo

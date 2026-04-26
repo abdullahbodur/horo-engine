@@ -3,38 +3,44 @@
 #include <filesystem>
 #include <string>
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 #include <imgui_test_engine/imgui_te_engine.h>
 #endif
 
-namespace Monolith::Launcher {
-class LauncherEditorShell;
+namespace Horo::Launcher {
+    class LauncherEditorShell;
 }
 
-namespace Monolith {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-struct UiAutomationRunState {
-  std::filesystem::path tempRoot;
-  std::filesystem::path projectRoot;
-  std::filesystem::path uiCaptureOutputDir;
+namespace Horo::Editor {
+    class EditorLayer;
+}
 
-  bool captureEnabled = false;
-  bool videoEnabled = false;
-  bool videoCaptureOpen = false;
+namespace Horo {
+#ifdef HORO_STANDALONE_UI_AUTOMATION
+    struct UiAutomationRunState {
+        std::filesystem::path tempRoot;
+        std::filesystem::path projectRoot;
+        std::filesystem::path uiCaptureOutputDir;
 
-  Launcher::LauncherEditorShell* shellContext = nullptr;
-};
+        bool captureEnabled = false;
+        bool videoEnabled = false;
+        bool videoCaptureOpen = false;
 
-bool QueueRegisteredUiScenarios(ImGuiTestEngine* engine,
-                                UiAutomationRunState* state,
-                                const std::string& filter,
-                                int* outQueuedCount = nullptr);
+        Launcher::LauncherEditorShell *shellContext = nullptr;
+        Editor::EditorLayer *editorContext = nullptr;
+    };
+
+    bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
+                                    UiAutomationRunState *state,
+                                    const std::string &filter,
+                                    int *outQueuedCount = nullptr);
 #else
-struct UiAutomationRunState {};
-inline bool QueueRegisteredUiScenarios(void*, UiAutomationRunState*, const std::string&, int* = nullptr) {
-  return false;
-}
+    struct UiAutomationRunState {
+    };
+
+    inline bool QueueRegisteredUiScenarios(void *, UiAutomationRunState *,
+                                           const std::string &, int * = nullptr) {
+        return false;
+    }
 #endif
-
-}  // namespace Monolith
-
+} // namespace Horo

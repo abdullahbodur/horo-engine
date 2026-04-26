@@ -3,4 +3,4 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 
-include("${CMAKE_CURRENT_LIST_DIR}/MonolithEngineTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/HoroEngineTargets.cmake")

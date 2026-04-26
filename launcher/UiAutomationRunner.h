@@ -4,33 +4,43 @@
 
 struct GLFWwindow;
 
-namespace Monolith::Launcher {
-class LauncherEditorShell;
+namespace Horo::Launcher {
+    class LauncherEditorShell;
 }
 
-namespace Monolith {
-class UiAutomationRunner {
- public:
-  static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
+namespace Horo::Editor {
+    class EditorLayer;
+}
 
-  UiAutomationRunner();
-  ~UiAutomationRunner();
+namespace Horo {
+    class UiAutomationRunner {
+    public:
+        static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
 
-  UiAutomationRunner(const UiAutomationRunner&) = delete;
-  UiAutomationRunner& operator=(const UiAutomationRunner&) = delete;
+        UiAutomationRunner();
 
-  void StartIfRequested(bool runUiAutomation, Launcher::LauncherEditorShell* shellContext);
-  void PostRenderFrame(GLFWwindow* nativeWindowHandle);
-  void Shutdown();
-  void DestroyContext();
+        ~UiAutomationRunner();
 
-  bool DidPass() const;
-  bool IsActive() const;
+        UiAutomationRunner(const UiAutomationRunner &) = delete;
 
- private:
-  struct Impl;
-  std::unique_ptr<Impl> m_impl;
-};
+        UiAutomationRunner &operator=(const UiAutomationRunner &) = delete;
 
-}  // namespace Monolith
+        void StartIfRequested(bool runUiAutomation,
+                              Launcher::LauncherEditorShell *shellContext,
+                              Editor::EditorLayer *editorContext) const;
 
+        void PostRenderFrame(GLFWwindow *nativeWindowHandle) const;
+
+        void Shutdown() const;
+
+        void DestroyContext() const;
+
+        bool DidPass() const;
+
+        bool IsActive() const;
+
+    private:
+        struct Impl;
+        std::unique_ptr<Impl> m_impl;
+    };
+} // namespace Horo

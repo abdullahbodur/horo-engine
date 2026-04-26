@@ -3,94 +3,96 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
-#include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <ranges>
+#include <source_location>
 #include <string>
+#include <vector>
 
-namespace Monolith {
-namespace {
-
-LogLevel ParseLogLevelFromEnv() {
+namespace Horo {
+    namespace {
+        LogLevel ParseLogLevelFromEnv() {
 #ifdef _WIN32
-  char* rawValue = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&rawValue, &len, "MONOLITH_LOG_LEVEL") != 0 || !rawValue)
-    return LogLevel::Info;
-  std::string level(rawValue);
-  std::free(rawValue);
+            size_t len = 0;
+            if (getenv_s(&len, nullptr, 0, "HORO_LOG_LEVEL") != 0 || len <= 1)
+                return LogLevel::Info;
+            std::vector<char> value(len);
+            if (getenv_s(&len, value.data(), value.size(), "HORO_LOG_LEVEL") != 0 ||
+                len <= 1)
+                return LogLevel::Info;
+            std::string level(value.data());
 #else
-  const char* raw = std::getenv("MONOLITH_LOG_LEVEL");
-  if (!raw || !*raw)
-    return LogLevel::Info;
-  std::string level(raw);
+            const char *raw = std::getenv("HORO_LOG_LEVEL");
+            if (!raw || !*raw)
+                return LogLevel::Info;
+            std::string level(raw);
 #endif
-  std::ranges::transform(level, level.begin(), [](unsigned char ch) {
-    return static_cast<char>(std::tolower(ch));
-  });
+            std::ranges::transform(level, level.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
 
-  if (level == "debug")
-    return LogLevel::Debug;
-  if (level == "warn" || level == "warning")
-    return LogLevel::Warn;
-  if (level == "error")
-    return LogLevel::Error;
-  return LogLevel::Info;
-}
+            if (level == "debug")
+                return LogLevel::Debug;
+            if (level == "warn" || level == "warning")
+                return LogLevel::Warn;
+            if (level == "error")
+                return LogLevel::Error;
+            return LogLevel::Info;
+        }
 
-bool ShouldLog(LogLevel level) {
-  static const LogLevel minimumLevel = ParseLogLevelFromEnv();
-  return static_cast<int>(level) >= static_cast<int>(minimumLevel);
-}
+        bool ShouldLog(LogLevel level) {
+            const LogLevel minimumLevel = ParseLogLevelFromEnv();
+            return static_cast<int>(level) >= static_cast<int>(minimumLevel);
+        }
+    } // namespace
 
-}  // namespace
+    void LogImpl(LogLevel level, const std::source_location &loc,
+                 std::string_view message) {
+        if (!ShouldLog(level))
+            return;
 
-void Log(LogLevel level, const char* file, int line, const char* fmt, ...) {
-  if (!ShouldLog(level))
-    return;
+        const char *prefix;
+        switch (level) {
+                using enum LogLevel;
+            case Debug:
+                prefix = "[DEBUG] ";
+                break;
+            case Info:
+                prefix = "[INFO] ";
+                break;
+            case Warn:
+                prefix = "[WARN] ";
+                break;
+            case Error:
+                prefix = "[ERROR] ";
+                break;
+            default:
+                prefix = "[?] ";
+                break;
+        }
 
-  const char* prefix;
-  switch (level) {
-    case LogLevel::Debug:
-      prefix = "[DEBUG] ";
-      break;
-    case LogLevel::Info:
-      prefix = "[INFO] ";
-      break;
-    case LogLevel::Warn:
-      prefix = "[WARN] ";
-      break;
-    case LogLevel::Error:
-      prefix = "[ERROR] ";
-      break;
-    default:
-      prefix = "[?] ";
-      break;
-  }
+        // Strip path prefix — show only filename
+        const char *file = loc.file_name();
+        const char *slash = file;
+        for (const char *p = file; *p; p++)
+            if (*p == '/' || *p == '\\')
+                slash = p + 1;
 
-  char msg[1024];
-  va_list args;
-  va_start(args, fmt);
-  std::vsnprintf(msg, sizeof(msg), fmt, args);
-  va_end(args);
+        const auto line = static_cast<int>(loc.line());
 
-  // Strip path prefix — show only filename
-  const char* slash = file;
-  for (const char* p = file; *p; p++)
-    if (*p == '/' || *p == '\\')
-      slash = p + 1;
+        if (level == LogLevel::Error || level == LogLevel::Warn)
+            std::fprintf(stderr, "%s%.*s (%s:%d)\n", prefix,
+                         static_cast<int>(message.size()), message.data(), slash, line);
+        else
+            std::fprintf(stdout, "%s%.*s\n", prefix, static_cast<int>(message.size()),
+                         message.data());
 
-  if (level == LogLevel::Error)
-    std::fprintf(stderr, "%s%s (%s:%d)\n", prefix, msg, slash, line);
-  else
-    std::printf("%s%s\n", prefix, msg);
-  if (level == LogLevel::Error)
-    std::fflush(stderr);
-  else
-    std::fflush(stdout);
+        if (level == LogLevel::Error || level == LogLevel::Warn)
+            std::fflush(stderr);
+        else
+            std::fflush(stdout);
 
-  LogBuffer::Instance().Push(level, slash, line, std::string(msg));
-}
-
-}  // namespace Monolith
+        LogBuffer::Instance().Push(level, slash, line, message);
+    }
+} // namespace Horo
