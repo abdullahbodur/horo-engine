@@ -75,14 +75,15 @@ jobs:
         shell: bash
         run: |
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          bindir="${{ github.workspace }}/build/debug/bin/tests"
           mkdir -p "$outdir"
-          for binary in build/debug/bin/tests/test_*; do
+          for binary in "$bindir"/test_*; do
             if [ -x "$binary" ] && [ -f "$binary" ]; then
               name=$(basename "$binary")
-              "$binary" \
-                --reporter JUnit::out="${outdir}/${name}.xml" > /dev/null 2>&1 || true
+              "$binary" --reporter "JUnit::out=${outdir}/${name}.xml" > /dev/null 2>&1 || true
             fi
           done
+          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir"
 
       - name: Publish test results
         if: always()
@@ -194,12 +195,14 @@ jobs:
         shell: pwsh
         run: |
           $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
+          $binDir = "${{ github.workspace }}\build\debug-msvc\bin\Debug"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          Get-ChildItem "build\debug-msvc\bin\Debug\test_*.exe" | ForEach-Object {
+          Get-ChildItem "$binDir\test_*.exe" | ForEach-Object {
             $name = $_.BaseName
             $outFile = Join-Path $outDir "$name.xml"
-            & $_.FullName --reporter JUnit::out="$outFile" 2>&1 | Out-Null
+            & $_.FullName --reporter "JUnit::out=$outFile" 2>&1 | Out-Null
           }
+          python3 "${{ github.workspace }}\scripts\patch_junit_tags.py" $outDir $binDir
 
       - name: Publish test results
         if: always()
@@ -383,14 +386,15 @@ jobs:
         shell: bash
         run: |
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          bindir="${{ github.workspace }}/build/debug/bin/tests"
           mkdir -p "$outdir"
-          for binary in build/debug/bin/tests/test_*; do
+          for binary in "$bindir"/test_*; do
             if [ -x "$binary" ] && [ -f "$binary" ]; then
               name=$(basename "$binary")
-              "$binary" \
-                --reporter JUnit::out="${outdir}/${name}.xml" > /dev/null 2>&1 || true
+              "$binary" --reporter "JUnit::out=${outdir}/${name}.xml" > /dev/null 2>&1 || true
             fi
           done
+          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir"
 
       - name: Publish test results
         if: always()
