@@ -390,7 +390,7 @@ namespace Monolith::Editor {
                                                     int primaryIdx) {
         using enum SceneObjectType;
         // ---- Identity ----
-        ImGui::LabelText("ID", "%s", obj.id.c_str());
+        ImGui::LabelText("ID##identity_id", "%s", obj.id.c_str());
         const char *typeName = "Panel";
         if (obj.type == Prop)
             typeName = "Prop";
@@ -398,7 +398,7 @@ namespace Monolith::Editor {
             typeName = "Light";
         else if (obj.type == Camera)
             typeName = "Camera";
-        ImGui::LabelText("Type", "%s", typeName);
+        ImGui::LabelText("Type##identity_type", "%s", typeName);
         if (obj.prefabInstance.has_value()) {
             ImGui::LabelText("Prefab", "%s", obj.prefabInstance->prefabId.c_str());
             ImGui::TextDisabled("%s", obj.prefabInstance->sourcePath.c_str());
@@ -419,7 +419,7 @@ namespace Monolith::Editor {
                 if (id == currentParent)
                     currentIdx = static_cast<int>(parentItems.size()) - 1;
             }
-            if (ImGui::Combo("Parent", &currentIdx, parentItems.data(),
+            if (ImGui::Combo("Parent##identity_parent", &currentIdx, parentItems.data(),
                              static_cast<int>(parentItems.size()))) {
                 if (currentIdx == 0)
                     obj.props.erase("parentId");
@@ -626,6 +626,7 @@ namespace Monolith::Editor {
     void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
                                             const FieldDef &fd, std::string &val) {
         using enum SceneObjectType;
+        const std::string widgetLabel = fd.label + "##schema_" + fd.key;
         // Lambda keeps the repeated Light-transform notification out of the switch
         // body so the per-case nesting depth stays within S3776 limits.
         auto notifyLightTransform = [&]() {
@@ -636,7 +637,7 @@ namespace Monolith::Editor {
             case FieldDef::Widget::String: {
                 std::string buf(256, '\0');
                 val.copy(buf.data(), buf.size() - 1);
-                if (ImGui::InputText(fd.label.c_str(), buf.data(), buf.size())) {
+                if (ImGui::InputText(widgetLabel.c_str(), buf.data(), buf.size())) {
                     val = buf.data();
                     m_document.dirty = true;
                     notifyLightTransform();
@@ -645,7 +646,8 @@ namespace Monolith::Editor {
             }
             case FieldDef::Widget::Float: {
                 if (float f = val.empty() ? fd.minVal : std::stof(val);
-                    ImGui::SliderFloat(fd.label.c_str(), &f, fd.minVal, fd.maxVal)) {
+                    ImGui::SliderFloat(widgetLabel.c_str(), &f, fd.minVal,
+                                       fd.maxVal)) {
                     val = std::format("{:.4f}", f);
                     m_document.dirty = true;
                     notifyLightTransform();
@@ -654,7 +656,7 @@ namespace Monolith::Editor {
             }
             case FieldDef::Widget::Bool: {
                 if (bool b = (val == "true" || val == "1");
-                    ImGui::Checkbox(fd.label.c_str(), &b)) {
+                    ImGui::Checkbox(widgetLabel.c_str(), &b)) {
                     val = b ? "true" : "false";
                     m_document.dirty = true;
                     notifyLightTransform();
@@ -664,7 +666,7 @@ namespace Monolith::Editor {
             case FieldDef::Widget::Enum: {
                 int cur = FindEnumOptionIndex(fd.options, val);
                 if (const std::string items = BuildImGuiComboItems(fd.options);
-                    ImGui::Combo(fd.label.c_str(), &cur, items.c_str())) {
+                    ImGui::Combo(widgetLabel.c_str(), &cur, items.c_str())) {
                     val = fd.options[static_cast<size_t>(cur)];
                     m_document.dirty = true;
                     notifyLightTransform();
@@ -674,7 +676,7 @@ namespace Monolith::Editor {
             case FieldDef::Widget::Color3: {
                 std::array<float, 3> col = {1.0f, 1.0f, 1.0f};
                 ParseRGBString(val, col.data());
-                if (ImGui::ColorEdit3(fd.label.c_str(), col.data())) {
+                if (ImGui::ColorEdit3(widgetLabel.c_str(), col.data())) {
                     val = std::format("{:.4f},{:.4f},{:.4f}", col[0], col[1], col[2]);
                     m_document.dirty = true;
                     notifyLightTransform();

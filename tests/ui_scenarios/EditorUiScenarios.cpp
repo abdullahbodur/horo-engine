@@ -5,10 +5,16 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <initializer_list>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -47,6 +53,10 @@ bool WaitForCondition(ImGuiTestContext *ctx, int maxFrames,
   return predicate();
 }
 
+static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
+                            const char *sentinelItem, int maxFrames = 60);
+static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx);
+
 // ---------------------------------------------------------------------------
 // WaitForPopup: waits for the popup at stack depth `depth` to be rendered
 // and contain `sentinelItem`.  On success leaves ctx->SetRef at that window
@@ -56,23 +66,159 @@ bool WaitForCondition(ImGuiTestContext *ctx, int maxFrames,
 // depth 1 = second popup (e.g. an "Add" sub-menu inside a context menu).
 // ---------------------------------------------------------------------------
 static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
-                            const char *sentinelItem, int maxFrames = 60) {
+                            const char *sentinelItem, int maxFrames) {
   ImGuiID wid = 0;
-  WaitForCondition(ctx, maxFrames, [ctx, depth, sentinelItem, &wid]() -> bool {
+  bool sentinelFound = false;
+  WaitForCondition(ctx,
+                   maxFrames,
+                   [ctx, depth, sentinelItem, &wid, &sentinelFound]() -> bool {
     ImGuiContext &g = *ctx->UiContext;
     if (g.OpenPopupStack.Size > depth) {
       ImGuiWindow *win = g.OpenPopupStack[depth].Window;
       if (win != nullptr) {
         wid = win->ID;
         ctx->SetRef(wid);
-        return sentinelItem ? ctx->ItemExists(sentinelItem) : true;
+        if (!sentinelItem)
+          return true;
+        sentinelFound = ctx->ItemExists(sentinelItem);
+        return sentinelFound;
       }
     }
     return false;
   });
-  if (wid)
+  if (wid && (!sentinelItem || sentinelFound))
     ctx->SetRef(wid);
-  return wid;
+  return sentinelItem && !sentinelFound ? ImGuiID(0) : wid;
+}
+
+struct UiScalarRow {
+  float minY = 0.0f;
+  std::vector<ImGuiID> fieldIds;
+};
+
+static std::vector<UiScalarRow> GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
+  std::vector<UiScalarRow> rows;
+  if (!ctx)
+    return rows;
+
+  ctx->SetRef("Properties");
+  ImGuiTestItemList items;
+  ctx->GatherItems(&items, nullptr, -1);
+  for (int itemIndex = 0; itemIndex < items.GetSize(); ++itemIndex) {
+    const ImGuiTestItemInfo *info = items.GetByIndex(itemIndex);
+    if (!info || info->ID == 0 || info->DebugLabel[0] != '\0')
+      continue;
+
+    UiScalarRow *rowForItem = nullptr;
+    for (UiScalarRow &row : rows) {
+      if (std::abs(row.minY - info->RectFull.Min.y) < 0.5f) {
+        rowForItem = &row;
+        break;
+      }
+    }
+    if (!rowForItem) {
+      rows.push_back(UiScalarRow{info->RectFull.Min.y, {}});
+      rowForItem = &rows.back();
+    }
+    rowForItem->fieldIds.push_back(info->ID);
+  }
+
+  std::ranges::sort(rows, [](const UiScalarRow &lhs, const UiScalarRow &rhs) {
+    return lhs.minY < rhs.minY;
+  });
+  return rows;
+}
+
+static const nlohmann::json *FindLastObjectOfType(const nlohmann::json &sceneJson,
+                                                  const char *typeName) {
+  if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array())
+    return nullptr;
+  const auto &objects = sceneJson.at("objects");
+  for (auto it = objects.rbegin(); it != objects.rend(); ++it) {
+    if (it->contains("type") && it->at("type") == typeName)
+      return &(*it);
+  }
+  return nullptr;
+}
+
+static nlohmann::json ReadSceneJson(const std::filesystem::path &projectRoot) {
+  const auto scenePath = projectRoot / "assets" / "scenes" / "level.json";
+  std::ifstream sceneFile(scenePath);
+  if (!sceneFile.is_open())
+    return nlohmann::json::parse("", nullptr, false);
+  return nlohmann::json::parse(sceneFile, nullptr, false);
+}
+
+static bool JsonFloatNear(const nlohmann::json &value, float expected) {
+  return value.is_number() && std::abs(value.get<float>() - expected) < 0.001f;
+}
+
+static bool JsonVectorNear(const nlohmann::json &value,
+                           std::initializer_list<float> expected) {
+  if (!value.is_array() || value.size() != expected.size())
+    return false;
+  size_t index = 0;
+  for (float component : expected) {
+    if (!JsonFloatNear(value.at(index), component))
+      return false;
+    ++index;
+  }
+  return true;
+}
+
+static bool JsonStringFloatNear(const nlohmann::json &value, float expected) {
+  if (!value.is_string())
+    return false;
+  try {
+    return std::abs(std::stof(value.get<std::string>()) - expected) < 0.001f;
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool LightWorkflowJsonMatches(const nlohmann::json &sceneJson) {
+  if (sceneJson.is_discarded())
+    return false;
+  const nlohmann::json *lightObj = FindLastObjectOfType(sceneJson, "Light");
+  if (!lightObj || !lightObj->is_object())
+    return false;
+  if (!lightObj->contains("id") || !lightObj->contains("type") ||
+      !lightObj->contains("position") || !lightObj->contains("scale") ||
+      !lightObj->contains("pitch") || !lightObj->contains("yaw") ||
+      !lightObj->contains("roll") || !lightObj->contains("props"))
+    return false;
+
+  const nlohmann::json &props = lightObj->at("props");
+  if (!props.is_object() || !props.contains("lightType") ||
+      !props.contains("radius") || !props.contains("intensity") ||
+      !props.contains("color"))
+    return false;
+
+  return lightObj->at("id") == "obj_000" && lightObj->at("type") == "Light" &&
+         JsonVectorNear(lightObj->at("position"), {4.25f, 5.25f, 6.25f}) &&
+         JsonVectorNear(lightObj->at("scale"), {1.5f, 1.75f, 2.0f}) &&
+         JsonFloatNear(lightObj->at("pitch"), 30.0f) &&
+         JsonFloatNear(lightObj->at("yaw"), 45.0f) &&
+         JsonFloatNear(lightObj->at("roll"), 60.0f) &&
+         props.at("lightType") == "directional" &&
+         JsonStringFloatNear(props.at("radius"), 12.5f) &&
+         JsonStringFloatNear(props.at("intensity"), 2.25f) &&
+         props.at("color") == "0.2000,0.4000,0.6000";
+}
+
+static bool ClickLastItemInCurrentRef(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ImGuiTestItemList items;
+  ctx->GatherItems(&items, nullptr, -1);
+  for (int itemIndex = items.GetSize() - 1; itemIndex >= 0; --itemIndex) {
+    const ImGuiTestItemInfo *info = items.GetByIndex(itemIndex);
+    if (!info || info->ID == 0)
+      continue;
+    ctx->ItemClick(info->ID);
+    return true;
+  }
+  return false;
 }
 
 static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
@@ -91,8 +237,8 @@ static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
 // Opens a toolbar popup by clicking btnLabel, waits for sentinelItem,
 // and leaves ctx->SetRef pointing at the actual popup window.
 // Returns the popup window ID on success, or 0 on timeout.
-// On failure, leaves state unchanged so callers fail without masking the
-// reason a user-visible popup did not appear.
+// On failure, dismisses any partially opened popup and restores the toolbar
+// ref so callers fail without leaking popup state into later scenarios.
 //
 // Implementation note: BeginPopup creates windows named "##Popup_XXXXXXXX",
 // NOT windows named by popupId. We find the actual popup window by reading
@@ -106,6 +252,7 @@ static ImGuiID OpenToolbarPopup(ImGuiTestContext *ctx, const char *btnLabel,
 
   const ImGuiID wid = WaitForPopup(ctx, 0, sentinelItem, maxFrames);
   if (!wid) {
+    DismissOpenPopupByClickingOutside(ctx);
     ctx->SetRef("##toolbar");
   }
   return wid;
@@ -396,8 +543,9 @@ void RunToolbarButtonsVisible(ImGuiTestContext *ctx) {
   if (!state)
     return;
 
-  IM_CHECK(EnsureEditorActive(ctx, state));
-  if (!EnsureEditorActive(ctx, state))
+  const bool editorActive = EnsureEditorActive(ctx, state);
+  IM_CHECK(editorActive);
+  if (!editorActive)
     return;
 
   ctx->SetRef("##toolbar");
@@ -3496,11 +3644,11 @@ void RunPropertiesPanelLightObjectFields(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool idReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("ID");
+    return ctx->ItemExists("ID##identity_id");
   });
   IM_CHECK(idReady);
   if (idReady)
-    IM_CHECK(ctx->ItemExists("Type"));
+    IM_CHECK(ctx->ItemExists("Type##identity_type"));
 
   // Transform section should also be present for Lights
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
@@ -3522,6 +3670,152 @@ RegisterPropertiesPanelLightObjectFields(ImGuiTestEngine *engine,
                                      "properties_panel_light_object_fields");
   test->UserData = state;
   test->TestFunc = &RunPropertiesPanelLightObjectFields;
+  return test;
+}
+
+void RunPropertiesPanelLightControlsWorkflow(ImGuiTestContext *ctx) {
+  UiAutomationRunState *state =
+      GetTestState(ctx, "editor_ui/properties_panel_light_controls_workflow");
+  IM_CHECK(state != nullptr);
+  if (!state)
+    return;
+  const bool editorActive = EnsureEditorActive(ctx, state);
+  IM_CHECK(editorActive);
+  if (!editorActive)
+    return;
+
+  ctx->SetRef("##toolbar");
+  IM_CHECK(ctx->ItemExists("Load"));
+  IM_CHECK(ctx->ItemExists("Save"));
+  IM_CHECK(ctx->ItemExists("Close editor"));
+  LogInfo("workflow: toolbar visible");
+
+  const ImGuiID addPopup =
+      OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
+  IM_CHECK(addPopup != ImGuiID(0));
+  if (!addPopup)
+    return;
+  ctx->ItemClick("Light");
+  ctx->Yield(4);
+  LogInfo("workflow: light object added");
+
+  const bool propertiesReady = WaitForCondition(ctx, 60, [ctx]() {
+    ctx->SetRef("Properties");
+    return ctx->ItemExists("Parent##identity_parent") &&
+           ctx->ItemExists("Asset ID") && ctx->ItemExists("+ Add Component");
+  });
+  IM_CHECK(propertiesReady);
+  if (!propertiesReady)
+    return;
+  LogInfo("workflow: properties ready");
+
+  ctx->SetRef("Properties");
+  ctx->ItemClick("Parent##identity_parent");
+  ctx->Yield(2);
+  const ImGuiID parentPopup = WaitForPopup(ctx, 0, nullptr, 30);
+  IM_CHECK(parentPopup != ImGuiID(0));
+  if (!parentPopup)
+    return;
+  if (ctx->ItemExists("<root>"))
+    ctx->ItemClick("<root>");
+  else
+    ctx->KeyPress(ImGuiKey_Escape);
+  ctx->Yield(2);
+  LogInfo("workflow: parent combo handled");
+
+  std::vector<UiScalarRow> scalarRows = GatherUnlabeledScalarRows(ctx);
+  std::vector<UiScalarRow> vectorRows;
+  for (const UiScalarRow &row : scalarRows) {
+    if (row.fieldIds.size() == 3)
+      vectorRows.push_back(row);
+  }
+  IM_CHECK(vectorRows.size() >= 3);
+  if (vectorRows.size() < 3)
+    return;
+  ctx->ItemInputValue(vectorRows[0].fieldIds[0], 4.25f);
+  ctx->ItemInputValue(vectorRows[0].fieldIds[1], 5.25f);
+  ctx->ItemInputValue(vectorRows[0].fieldIds[2], 6.25f);
+  ctx->ItemInputValue(vectorRows[1].fieldIds[0], 1.5f);
+  ctx->ItemInputValue(vectorRows[1].fieldIds[1], 1.75f);
+  ctx->ItemInputValue(vectorRows[1].fieldIds[2], 2.0f);
+  ctx->ItemInputValue(vectorRows[2].fieldIds[0], 30.0f);
+  ctx->ItemInputValue(vectorRows[2].fieldIds[1], 45.0f);
+  ctx->ItemInputValue(vectorRows[2].fieldIds[2], 60.0f);
+  ctx->Yield(2);
+  LogInfo("workflow: transform edited");
+
+  ctx->SetRef("Properties");
+  IM_CHECK(ctx->ItemExists("Asset ID"));
+  ctx->ItemClick("Asset ID");
+  ctx->Yield(2);
+  const ImGuiID assetPopup = WaitForPopup(ctx, 0, nullptr, 20);
+  IM_CHECK(assetPopup != ImGuiID(0));
+  if (!assetPopup)
+    return;
+  if (ctx->ItemExists("<none>"))
+    ctx->ItemClick("<none>");
+  else
+    ctx->KeyPress(ImGuiKey_Escape);
+  ctx->Yield(2);
+  LogInfo("workflow: asset combo handled");
+
+  ctx->SetRef("Properties");
+  ctx->ItemClick("Type##schema_lightType");
+  ctx->Yield(2);
+  const ImGuiID typePopup = WaitForPopup(ctx, 0, nullptr, 20);
+  IM_CHECK(typePopup != ImGuiID(0));
+  if (!typePopup)
+    return;
+  // The Light type popup items are not reliably addressable by visible label in
+  // this test engine, so choose the last schema option and verify the resulting
+  // persisted value is the expected non-default "directional" type.
+  const bool selectedLightType = ClickLastItemInCurrentRef(ctx);
+  IM_CHECK(selectedLightType);
+  if (!selectedLightType)
+    return;
+  ctx->Yield(2);
+  LogInfo("workflow: light type combo handled");
+
+  ctx->SetRef("Properties");
+  ctx->ItemInputValue("Radius##schema_radius", 12.5f);
+  ctx->ItemInputValue("Intensity##schema_intensity", 2.25f);
+  ctx->ItemInputValue("Color RGB##schema_color##X", 51.0f);
+  ctx->ItemInputValue("Color RGB##schema_color##Y", 102.0f);
+  ctx->ItemInputValue("Color RGB##schema_color##Z", 153.0f);
+  ctx->Yield(2);
+  LogInfo("workflow: light values edited");
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+  LogInfo("workflow: save clicked");
+
+  const bool sceneSaved = WaitForCondition(ctx, 60, [state]() {
+    return LightWorkflowJsonMatches(ReadSceneJson(state->projectRoot));
+  });
+  IM_CHECK(sceneSaved);
+  if (!sceneSaved)
+    return;
+  const nlohmann::json sceneJson = ReadSceneJson(state->projectRoot);
+  IM_CHECK(LightWorkflowJsonMatches(sceneJson));
+  if (!LightWorkflowJsonMatches(sceneJson))
+    return;
+
+  ctx->SetRef("##toolbar");
+  IM_CHECK(ctx->ItemExists("Load"));
+  IM_CHECK(ctx->ItemExists("Close editor"));
+
+  CaptureIfEnabled(ctx, state,
+                   "editor_ui__properties_panel_light_controls_workflow.png");
+  LogInfo("UI scenario done: editor_ui/properties_panel_light_controls_workflow");
+}
+
+ImGuiTest *RegisterPropertiesPanelLightControlsWorkflow(
+    ImGuiTestEngine *engine, UiAutomationRunState *state) {
+  ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                     "properties_panel_light_controls_workflow");
+  test->UserData = state;
+  test->TestFunc = &RunPropertiesPanelLightControlsWorkflow;
   return test;
 }
 
@@ -3555,12 +3849,13 @@ void RunPropertiesPanelIdentitySection(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool identityReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("ID") && ctx->ItemExists("Type");
+    return ctx->ItemExists("ID##identity_id") &&
+           ctx->ItemExists("Type##identity_type");
   });
   IM_CHECK(identityReady);
   if (identityReady) {
     // Parent combo should also render
-    IM_CHECK(ctx->ItemExists("Parent"));
+    IM_CHECK(ctx->ItemExists("Parent##identity_parent"));
   }
 
   CaptureIfEnabled(ctx, state,
@@ -3835,6 +4130,8 @@ void RegisterEditorUiScenarioSet() {
                      &RegisterSettingsModalOpenCancel);
   RegisterUiScenario("editor/properties_panel_visible",
                      &RegisterPropertiesPanelVisible);
+  RegisterUiScenario("editor/properties_panel_light_controls_workflow",
+                     &RegisterPropertiesPanelLightControlsWorkflow);
   RegisterUiScenario("editor/viewport_statusbar_visible",
                      &RegisterViewportAndStatusbarVisible);
   RegisterUiScenario("editor/new_scene_and_add_panel",
