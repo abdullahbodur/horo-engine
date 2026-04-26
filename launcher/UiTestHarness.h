@@ -25,6 +25,7 @@ namespace Horo {
         bool captureEnabled = false;
         bool videoEnabled = false;
         bool videoCaptureOpen = false;
+        bool videoCaptureOwnedByRegistry = false;
 
         Launcher::LauncherEditorShell *shellContext = nullptr;
         Editor::EditorLayer *editorContext = nullptr;

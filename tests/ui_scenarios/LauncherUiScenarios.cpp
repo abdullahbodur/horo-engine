@@ -99,6 +99,8 @@ void EndTestVideoCaptureIfNeeded(ImGuiTestContext *ctx,
                                  UiAutomationRunState *state) {
   if (!ctx || !state || !state->videoCaptureOpen)
     return;
+  if (state->videoCaptureOwnedByRegistry)
+    return;
   LogDebug("UI scenario end video capture.");
   ctx->CaptureEndVideo();
   ctx->CaptureReset();
