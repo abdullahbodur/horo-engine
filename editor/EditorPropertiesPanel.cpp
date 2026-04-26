@@ -16,15 +16,11 @@
 #endif
 
 // clang-format off
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
 #include <imgui.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdint>
 #include <format>
 #include <memory>
 #include <ranges>
@@ -33,18 +29,25 @@
 #include <unordered_map>
 #include <vector>
 
-#include "editor/AssetIdentity.h"
 #include "editor/AssetMetadata.h"
 #include "editor/EditorLayer.h"
 #include "editor/EditorLayerInternal.h"
 #include "editor/EditorSceneGraph.h"
 #include "editor/EditorUiLogic.h"
-#include "editor/SceneProjectBridge.h"
-#include "editor/SceneSerializer.h"
 #include "math/MathUtils.h"
 #include "math/Quaternion.h"
-#include "renderer/Texture.h"
-#include "scene/SceneRuntimeConversion.h"
+
+namespace {
+#ifdef HORO_STANDALONE_UI_AUTOMATION
+void DrawUiAutomationMarker(const char *label) {
+  if (!label || !*label)
+    return;
+  ImGui::InvisibleButton(label, ImVec2(1.0f, 1.0f));
+}
+#else
+void DrawUiAutomationMarker(const char *) {}
+#endif
+} // namespace
 
 namespace Horo::Editor {
 void EditorLayer::DrawPropertiesPanel() {
@@ -84,6 +87,7 @@ void EditorLayer::DrawPropertiesPanel() {
       }
     }
     ImGui::TextDisabled("No selection");
+    DrawUiAutomationMarker("##properties_test/no_selection");
     ImGui::TextDisabled("Pick an object or asset to edit properties.");
     ImGui::End();
     return;
@@ -155,6 +159,7 @@ void EditorLayer::ApplyBatchTransform() {
 void EditorLayer::DrawPropertiesMultiSelect() {
   ImGui::Text("%d objects selected",
               static_cast<int>(m_selectedIndices.size()));
+  DrawUiAutomationMarker("##properties_test/multi_select");
   ImGui::Separator();
 
   std::string sharedAssetId;
@@ -384,6 +389,7 @@ void EditorLayer::DrawPropertiesIdentitySection(SceneObject &obj,
                                                 int primaryIdx) {
   using enum SceneObjectType;
   // ---- Identity ----
+  DrawUiAutomationMarker("##properties_test/identity_section");
   ImGui::LabelText("ID##identity_id", "%s", obj.id.c_str());
   const char *typeName = "Panel";
   if (obj.type == Prop)
@@ -529,6 +535,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
 
 void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
                                                  int primaryIdx) {
+  DrawUiAutomationMarker("##properties_test/transform_section");
   const Vec3 oldPos = obj.position;
   const Quaternion oldRot = Quaternion::FromEuler(
       ToRadians(obj.pitch), ToRadians(obj.yaw), ToRadians(obj.roll));
@@ -577,6 +584,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
 void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
   ImGui::Separator();
   ImGui::Text("Asset");
+  DrawUiAutomationMarker("##properties_test/asset_section");
 
   std::vector<const char *> assetItems;
   assetItems.reserve(m_document.assets.size() + 1);

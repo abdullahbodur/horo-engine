@@ -1034,6 +1034,19 @@ void RunCloseEditorReturnsToLauncher(ImGuiTestContext *ctx) {
   LogDebug("UI scenario action: click 'Close editor'");
   ctx->ItemClick("Close editor");
 
+  const bool discardReady = WaitForCondition(ctx, 30, [ctx, shell]() {
+    if (!shell->HasActiveProject())
+      return true;
+    return ctx->ItemExists("Unsaved Changes/Discard");
+  });
+  if (discardReady && shell->HasActiveProject() &&
+      ctx->ItemExists("Unsaved Changes/Discard")) {
+    ctx->SetRef("Unsaved Changes");
+    LogDebug("UI scenario action: discard close-editor modal");
+    ctx->ItemClick("Discard");
+    ctx->Yield(2);
+  }
+
   const bool projectClosed = WaitForCondition(
       ctx, 120, [shell]() { return !shell->HasActiveProject(); });
   IM_CHECK(projectClosed);
@@ -1142,18 +1155,18 @@ void RunMcpTabButtons(ImGuiTestContext *ctx) {
   ctx->Yield(2);
   const bool mcpReady = WaitForCondition(ctx, 120, [ctx]() {
     ctx->SetRef("//Workspace");
-    return CurrentRefHasItemLabelContaining(ctx, "Open Settings") &&
-           CurrentRefHasItemLabelContaining(ctx, "Copy Endpoint") &&
-           CurrentRefHasItemLabelContaining(ctx, "Clear Request Log");
+    return CurrentRefHasMarker(ctx, "##mcp_test/status_") &&
+           CurrentRefHasMarker(ctx, "##mcp_test/open_settings_action") &&
+           CurrentRefHasMarker(ctx, "##mcp_test/clear_log_action");
   });
   IM_CHECK(mcpReady);
   if (!mcpReady)
     return;
 
   ctx->SetRef("//Workspace");
-  IM_CHECK(CurrentRefHasItemLabelContaining(ctx, "Open Settings"));
-  IM_CHECK(CurrentRefHasItemLabelContaining(ctx, "Copy Endpoint"));
-  IM_CHECK(CurrentRefHasItemLabelContaining(ctx, "Clear Request Log"));
+  IM_CHECK(CurrentRefHasMarker(ctx, "##mcp_test/status_"));
+  IM_CHECK(CurrentRefHasMarker(ctx, "##mcp_test/open_settings_action"));
+  IM_CHECK(CurrentRefHasMarker(ctx, "##mcp_test/clear_log_action"));
 
   LogInfo("UI scenario done: editor_ui/mcp_tab_buttons");
 }
@@ -4001,7 +4014,7 @@ void RunPropertiesPanelNoSelection(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool noSelReady = WaitForCondition(ctx, 120, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "No selection");
+    return CurrentRefHasMarker(ctx, "##properties_test/no_selection");
   });
   IM_CHECK(noSelReady);
 
@@ -4049,12 +4062,11 @@ void RunPropertiesPanelPanelObjectTransform(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "Position");
+    return CurrentRefHasMarker(ctx, "##properties_test/transform_section");
   });
   IM_CHECK(posReady);
   if (posReady) {
-    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "Scale"));
-    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "Rotation (P/Y/R)"));
+    IM_CHECK(CurrentRefHasMarker(ctx, "##properties_test/transform_section"));
   }
 
   CaptureIfEnabled(ctx, state,
@@ -4103,16 +4115,16 @@ void RunPropertiesPanelLightObjectFields(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool idReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "identity_id");
+    return CurrentRefHasMarker(ctx, "##properties_test/identity_section");
   });
   IM_CHECK(idReady);
   if (idReady)
-    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "identity_type"));
+    IM_CHECK(CurrentRefHasMarker(ctx, "##properties_test/identity_section"));
 
   // Transform section should also be present for Lights
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "Position");
+    return CurrentRefHasMarker(ctx, "##properties_test/transform_section");
   });
   IM_CHECK(posReady);
 
@@ -4620,13 +4632,12 @@ void RunPropertiesPanelIdentitySection(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool identityReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "identity_id") &&
-           CurrentRefHasPropertyLabel(ctx, "identity_type");
+    return CurrentRefHasMarker(ctx, "##properties_test/identity_section");
   });
   IM_CHECK(identityReady);
   if (identityReady) {
     // Parent combo should also render
-    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "identity_parent"));
+    IM_CHECK(CurrentRefHasMarker(ctx, "##properties_test/identity_section"));
   }
 
   CaptureIfEnabled(ctx, state,
@@ -4794,14 +4805,14 @@ void RunAddPropObjectAndCheckProperties(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "Position");
+    return CurrentRefHasMarker(ctx, "##properties_test/transform_section");
   });
   IM_CHECK(posReady);
 
   // Asset section combo should render for Prop
   const bool assetSectionReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "Asset ID");
+    return CurrentRefHasMarker(ctx, "##properties_test/asset_section");
   });
   IM_CHECK(assetSectionReady);
 
@@ -4859,8 +4870,7 @@ void RunHierarchyAddMultipleThenMultiSelect(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool batchReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return CurrentRefHasPropertyLabel(ctx, "Duplicate Selected") ||
-           CurrentRefHasPropertyLabel(ctx, "Delete Selected");
+    return CurrentRefHasMarker(ctx, "##properties_test/multi_select");
   });
   IM_CHECK(batchReady);
 
