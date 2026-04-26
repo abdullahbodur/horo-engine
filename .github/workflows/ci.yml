@@ -313,6 +313,7 @@ jobs:
     timeout-minutes: 45
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      BUILD_WRAPPER_OUT_DIR: bw-output
     steps:
       - uses: actions/checkout@v4
         with:
@@ -466,7 +467,7 @@ jobs:
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           build-wrapper-linux-x86-64 \
-            --out-dir bw-output \
+            --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
             cmake --build --preset coverage --parallel
 
       - name: Run tests (coverage build)
@@ -476,6 +477,28 @@ jobs:
             ctest --preset coverage --output-on-failure
         env:
           HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
+
+      - name: Run UI automation (coverage build)
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          set -euo pipefail
+          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
+          for suite in "${suites[@]}"; do
+            echo "::group::Coverage UI test suite ${suite}"
+            HORO_UI_TEST_SUITE="${suite}" \
+            HORO_UI_TEST_CAPTURE=0 \
+            HORO_UI_TEST_VIDEO=0 \
+            HORO_UI_TEST_RECORDING=0 \
+            HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/coverage-${suite}" \
+              xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+                build/coverage/bin/HoroEditorUiTest --run-ui-tests
+            echo "::endgroup::"
+          done
+        env:
+          HORO_LOG_LEVEL: "info"
           HORO_GLFW_SAMPLES: "0"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
@@ -503,6 +526,8 @@ jobs:
           args: >
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.coverageReportPaths=build/coverage/sonar-coverage.xml
+            -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
             -Dsonar.qualitygate.wait=true
 
   # ----------------------------------------------------------------

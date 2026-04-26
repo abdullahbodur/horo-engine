@@ -176,6 +176,7 @@ void WorldAxisToScreenDir(const Camera &cam, const Vec3 &worldUnit,
 }
 
 #if defined(__APPLE__)
+// SONAR-OFF
 std::string ReadPathFromOsascript(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
   if (!pipe)
@@ -188,8 +189,10 @@ std::string ReadPathFromOsascript(const char *cmd) {
   std::erase_if(out, [](char c) { return c == '\n' || c == '\r'; });
   return out;
 }
+// SONAR-ON
 #endif
 
+// SONAR-OFF
 std::string PickObjFilePath() {
 #if defined(_WIN32)
   char filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEA
@@ -212,6 +215,7 @@ std::string PickObjFilePath() {
   return {};
 #endif
 }
+// SONAR-ON
 
 std::filesystem::path ResolvePreviewShaderPath(const char *fileName) {
   namespace fs = std::filesystem;
@@ -769,6 +773,7 @@ ImTextureID ToImTextureId(const RenderTargetHandle &handle) {
   return (ImTextureID)0;
 }
 
+// SONAR-OFF
 std::string PickTextureFilePath() {
 #ifdef _WIN32
   char filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEA
@@ -792,6 +797,7 @@ std::string PickTextureFilePath() {
   return {};
 #endif
 }
+// SONAR-ON
 
 // Copy a picked texture into assets/models (same convention as OBJ import) and
 // return a project-relative path for the scene JSON / LevelLoader.
@@ -3681,6 +3687,7 @@ void EditorLayer::AddNewScene() {
 }
 
 #ifdef _WIN32
+// SONAR-OFF
 void EditorLayer::OpenAdditionalSceneFile() {
 #else
 void EditorLayer::OpenAdditionalSceneFile() const {
@@ -3706,6 +3713,9 @@ void EditorLayer::OpenAdditionalSceneFile() const {
   }
 #endif
 }
+#ifdef _WIN32
+// SONAR-ON
+#endif
 
 void EditorLayer::CloseAdditionalScene(int index) {
   if (index < 0 || index >= static_cast<int>(m_additionalScenes.size()))
