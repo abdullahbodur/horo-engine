@@ -11,21 +11,20 @@
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeConversion.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 namespace {
-
 class DummyBehavior : public Behavior {
- public:
-  void OnUpdate(Entity, Registry&, float) override {}
+public:
+  void OnUpdate(Entity, Registry &, float) override {
+    // no-op: behavior logic is not under test
+  }
 };
+} // namespace
 
-}  // namespace
-
-TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definition",
-          "[scene][runtime-conversion]") {
+TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definition", "[scene][runtime-conversion]") {
   SceneProjectModel model;
   model.scene.metadata.sceneId = "world";
   model.scene.settings.spawnPoint = {1.0f, 2.0f, 3.0f};
@@ -66,7 +65,8 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   light.id = "light_000";
   light.kind = SceneNodeKind::Light;
   light.position = {3.0f, 4.0f, 5.0f};
-  light.light = SceneLightProperties{SceneLightKind::Directional, 4.5f, {0.2f, 0.3f, 0.4f}, 25.0f, {}};
+  light.light = SceneLightProperties{
+      SceneLightKind::Directional, 4.5f, {0.2f, 0.3f, 0.4f}, 25.0f, {}};
 
   SceneNodeDefinition camera;
   camera.id = "cam_000";
@@ -78,7 +78,8 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
 
   model.scene.nodes = {panel, prop, inlineProp, light, camera};
 
-  const RuntimeSceneBuildResult build = Monolith::BuildRuntimeSceneDefinition(model);
+  const RuntimeSceneBuildResult build =
+      Horo::BuildRuntimeSceneDefinition(model);
 
   REQUIRE_FALSE(build.HasErrors());
   REQUIRE(build.definition.rooms.size() == 1);
@@ -92,7 +93,7 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   REQUIRE(build.definition.rooms[0].panels[0].half.z == Approx(9.0f));
   REQUIRE(build.definition.rooms[0].props.size() == 2);
 
-  const RuntimeSceneProp& assetProp = build.definition.rooms[0].props[0];
+  const RuntimeSceneProp &assetProp = build.definition.rooms[0].props[0];
   REQUIRE(assetProp.id == "prop_000");
   REQUIRE(assetProp.meshTag == "stone.obj");
   REQUIRE(assetProp.albedoMap == "stone.png");
@@ -102,7 +103,7 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   REQUIRE(assetProp.isLight);
   REQUIRE(assetProp.scriptTag == "OpenDoor");
 
-  const RuntimeSceneProp& basicProp = build.definition.rooms[0].props[1];
+  const RuntimeSceneProp &basicProp = build.definition.rooms[0].props[1];
   REQUIRE(basicProp.meshTag == "cylinder");
   REQUIRE(basicProp.scale.x == Approx(3.0f));
   REQUIRE(basicProp.scale.y == Approx(2.0f));
@@ -118,14 +119,14 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   REQUIRE(build.definition.sceneCamera->pitch == Approx(89.0f));
 }
 
-TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipeline",
-          "[scene][runtime-conversion][bridge]") {
+TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipeline", "[scene][runtime-conversion][bridge]") {
   SceneDocument doc;
   doc.sceneId = "bridge_scene";
   doc.sceneName = "Bridge Scene";
   doc.filePath = "assets/scenes/bridge_scene.json";
   doc.settings["spawnPoint"] = "10.0,0.5,-4.0";
-  doc.assets["crate_asset"] = AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  doc.assets["crate_asset"] =
+      AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
 
   SceneObject panel;
   panel.id = "panel_000";
@@ -143,7 +144,8 @@ TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipe
 
   doc.objects = {panel, prop};
 
-  const RuntimeSceneBuildResult build = Editor::BuildRuntimeSceneDefinition(doc);
+  const RuntimeSceneBuildResult build =
+      Editor::BuildRuntimeSceneDefinition(doc);
 
   REQUIRE_FALSE(build.HasErrors());
   REQUIRE(build.definition.rooms.size() == 1);
@@ -160,8 +162,7 @@ TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipe
   REQUIRE(build.definition.spawnPoint.z == Approx(-4.0f));
 }
 
-TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministic errors",
-          "[scene][runtime-conversion][validation]") {
+TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministic errors", "[scene][runtime-conversion][validation]") {
   SceneProjectModel model;
   model.scene.metadata.sceneId = "broken_scene";
 
@@ -171,7 +172,8 @@ TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministi
   prop.assetId = "missing_asset";
   model.scene.nodes.push_back(prop);
 
-  const RuntimeSceneBuildResult build = Monolith::BuildRuntimeSceneDefinition(model);
+  const RuntimeSceneBuildResult build =
+      Horo::BuildRuntimeSceneDefinition(model);
 
   REQUIRE(build.HasErrors());
   REQUIRE(build.ErrorCount() >= 1);
@@ -180,9 +182,9 @@ TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministi
   REQUIRE(build.definition.rooms[0].props[0].meshTag == "box");
 }
 
-TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned",
-          "[scene][runtime-conversion][behavior]") {
-  RuntimeBehaviorFactory factory = [](const std::string& tag) -> std::unique_ptr<Behavior> {
+TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned", "[scene][runtime-conversion][behavior]") {
+  RuntimeBehaviorFactory factory =
+      [](std::string_view tag) -> std::unique_ptr<Behavior> {
     if (tag == "Inspect")
       return std::make_unique<DummyBehavior>();
     return nullptr;
@@ -193,4 +195,23 @@ TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned",
 
   REQUIRE(behavior != nullptr);
   REQUIRE(missing == nullptr);
+}
+
+TEST_CASE("RuntimeSceneBuildResult: WarningCount counts severity Warning only", "[scene][runtime-conversion][warnings]") {
+  using enum RuntimeSceneBuildIssue::Severity;
+  RuntimeSceneBuildResult result;
+  CHECK(result.WarningCount() == 0);
+  CHECK(result.ErrorCount() == 0);
+
+  result.issues.emplace_back(Warning, "node_w", "minor warning");
+  CHECK(result.WarningCount() == 1);
+  CHECK(result.ErrorCount() == 0);
+
+  result.issues.emplace_back(Error, "node_e", "critical error");
+  CHECK(result.WarningCount() == 1);
+  CHECK(result.ErrorCount() == 1);
+
+  result.issues.emplace_back(Warning, "node_w2", "another warn");
+  CHECK(result.WarningCount() == 2);
+  CHECK(result.ErrorCount() == 1);
 }

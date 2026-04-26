@@ -26,7 +26,7 @@
 ```cpp
 #include "core/Application.h"
 
-class MyGame final : public Monolith::Application {
+class MyGame final : public Horo::Application {
  public:
   MyGame() : Application({.name = "MyGame", .width = 1280, .height = 720}) {}
 

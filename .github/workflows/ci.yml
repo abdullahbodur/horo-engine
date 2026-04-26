@@ -3,13 +3,25 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 permissions:
   contents: read
+  checks: write        # required by mikepenz/action-junit-report to post test result annotations
+  pull-requests: write # required to post coverage summaries as PR comments
 
-# Cancel in-progress runs for the same branch when a new push arrives
+# Cancel in-progress runs for the same ref when a new push arrives.
+# PRs and branches each get their own concurrency group so they don't
+# cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -30,9 +42,6 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2.22
         with:
           key: ${{ github.job }}-${{ runner.os }}
-
-      - name: Install Ninja
-        run: brew install ninja
 
       - name: Install ffmpeg
         run: brew install ffmpeg
@@ -56,9 +65,38 @@ jobs:
         run: cmake --build --preset debug --parallel
 
       - name: Test
-        run: ctest --preset debug --output-on-failure
+        run: |
+          ctest --preset debug --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: bash
+        run: |
+          outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          bindir="${{ github.workspace }}/build/debug/bin/tests"
+          builddir="${{ github.workspace }}/build/debug"
+          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug/test-results/scenarios/*.xml
+          check_name: "Test Results · macOS"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: build/debug/test-results/
+          retention-days: 14
 
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
@@ -73,17 +111,25 @@ jobs:
       - name: Run UI Automation
         shell: bash
         run: |
-          build/debug/bin/HoroEditorUiTest --run-ui-tests
+          set -euo pipefail
+          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
+          for suite in "${suites[@]}"; do
+            echo "::group::UI test suite ${suite}"
+            mkdir -p "ui_test_output/${suite}"
+            HORO_UI_TEST_SUITE="${suite}" \
+              HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
+              build/debug/bin/HoroEditorUiTest --run-ui-tests
+            echo "::endgroup::"
+          done
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
 
       - name: Setup tmate session
         if: failure() && github.event_name == 'workflow_dispatch'
@@ -140,9 +186,39 @@ jobs:
         run: cmake --build build/debug-msvc --config Debug --parallel
 
       - name: Test
-        run: ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
+        run: |
+          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
+        shell: pwsh
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: pwsh
+        run: |
+          $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
+          $binDir = "${{ github.workspace }}\build\debug-msvc\bin\tests"
+          $buildDir = "${{ github.workspace }}\build\debug-msvc"
+          python3 "${{ github.workspace }}\scripts\patch_junit_tags.py" $outDir $binDir $buildDir
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug-msvc/test-results/scenarios/*.xml
+          check_name: "Test Results · Windows"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: build/debug-msvc/test-results/
+          retention-days: 14
 
       - name: Install ffmpeg
         run: choco install ffmpeg -y --no-progress
@@ -182,39 +258,34 @@ jobs:
 
       - name: Run UI Automation
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
-          # Redirect stdout/stderr to files so output survives a timeout kill.
-          # (PowerShell loses buffered child stdout when it kills by timeout.)
-          $out = "ui_test_output\stdout.txt"
-          $err = "ui_test_output\stderr.txt"
-          $proc = Start-Process `
-              -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
-              -ArgumentList "--run-ui-tests" `
-              -NoNewWindow -PassThru `
-              -RedirectStandardOutput $out `
-              -RedirectStandardError  $err
-          Write-Host "HoroEditorUiTest PID=$($proc.Id) — waiting up to 8 min..."
-          $exited = $proc.WaitForExit(480000)
-          if (-not $exited) {
-              Write-Warning "Process did not exit — killing"
-              $proc.Kill()
-              Start-Sleep -Seconds 2
+          $suites = @(
+            "launcher-basic",
+            "properties-workflows",
+            "mcp-project",
+            "modals-mcp",
+            "properties-close"
+          )
+          foreach ($suite in $suites) {
+            Write-Host "::group::UI test suite $suite"
+            $env:HORO_UI_TEST_SUITE = $suite
+            $env:HORO_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}\ui_test_output\$suite"
+            New-Item -ItemType Directory -Force -Path $env:HORO_UI_TEST_OUTPUT_DIR | Out-Null
+            .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) { exit $code }
           }
-          if (Test-Path $out) { Write-Host "=== stdout ==="; Get-Content $out }
-          if (Test-Path $err) { Write-Host "=== stderr ==="; Get-Content $err }
-          $code = if ($proc.HasExited) { $proc.ExitCode } else { -1 }
-          if ($code -ne 0) { Write-Error "HoroEditorUiTest exited $code"; exit 1 }
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
           # No GALLIUM_DRIVER — mesa 25.x WGL uses D3D12/WARP by default
           LIBGL_DEBUG: "verbose"
           MESA_DEBUG: "1"
@@ -297,9 +368,38 @@ jobs:
         run: cmake --build --preset debug --parallel
 
       - name: Test
-        run: ctest --preset debug --output-on-failure
+        run: |
+          ctest --preset debug --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: bash
+        run: |
+          outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          bindir="${{ github.workspace }}/build/debug/bin/tests"
+          builddir="${{ github.workspace }}/build/debug"
+          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: build/debug/test-results/scenarios/*.xml
+          check_name: "Test Results · Linux"
+          fail_on_failure: true
+          require_tests: true
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: build/debug/test-results/
+          retention-days: 14
 
       - name: Prepare UI test output directory
         run: mkdir -p ui_test_output
@@ -309,20 +409,32 @@ jobs:
 
       - name: Run UI Automation
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            build/debug/bin/HoroEditorUiTest --run-ui-tests
+          set -euo pipefail
+          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
+          status=0
+          for suite in "${suites[@]}"; do
+            echo "::group::UI test suite ${suite}"
+            mkdir -p "ui_test_output/${suite}"
+            if ! HORO_UI_TEST_SUITE="${suite}" \
+              HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
+              xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+                build/debug/bin/HoroEditorUiTest --run-ui-tests; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "${status}"
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_FILTER: "launcher/*"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          HORO_LOG_LEVEL: "debug"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_GLFW_SAMPLES: "0"
 
       - name: Setup tmate session on failure
         if: failure() && github.event_name == 'workflow_dispatch'
@@ -363,8 +475,8 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             ctest --preset coverage --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
 
@@ -391,7 +503,6 @@ jobs:
           args: >
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-            -Dsonar.coverage.exclusions=editor/**,launcher/**,core/Logger.h
             -Dsonar.qualitygate.wait=true
 
   # ----------------------------------------------------------------

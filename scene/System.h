@@ -1,13 +1,12 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
+    class Registry;
 
-class Registry;
+    class System {
+    public:
+        virtual ~System() = default;
 
-class System {
- public:
-  virtual ~System() = default;
-  virtual void OnUpdate(Registry& registry, float dt) = 0;
-};
-
-}  // namespace Monolith
+        virtual void OnUpdate(Registry &registry, float dt) = 0;
+    };
+} // namespace Horo

@@ -8,8 +8,11 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
 
-  - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v20.1.8
+  - repo: local
     hooks:
-      - id: clang-format
-        files: \.(c|cc|cpp|cxx|h|hh|hpp|hxx)$
+      - id: horo-engine-build-and-tests
+        name: horo-engine build + unit/ui tests gate
+        entry: bash scripts/precommit-gate.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

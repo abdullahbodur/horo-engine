@@ -33,11 +33,11 @@
 ## Example
 
 ```cpp
-Monolith::PhysicsWorld world;
+Horo::PhysicsWorld world;
 world.gravity = {0.0f, -9.81f, 0.0f};
 
-Monolith::RigidBody sphere = Monolith::RigidBody::MakeSphere(0.5f, 1.0f);
-Monolith::RigidBody* body = world.AddBody(std::move(sphere));
+Horo::RigidBody sphere = Horo::RigidBody::MakeSphere(0.5f, 1.0f);
+Horo::RigidBody* body = world.AddBody(std::move(sphere));
 body->position = {0.0f, 5.0f, 0.0f};
 
 world.Step(1.0f / 120.0f);

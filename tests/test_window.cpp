@@ -1,39 +1,54 @@
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <GLFW/glfw3.h>
 
+#include <array>
 #include <climits>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "core/Window.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 namespace {
-
-std::string ReadEnvValue(const char* name) {
+std::string ReadEnvValue(const char *name) {
   if (!name || !*name)
     return {};
 #ifdef _WIN32
-  char* rawValue = nullptr;
   size_t len = 0;
-  if (_dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+  if (getenv_s(&len, nullptr, 0, name) != 0 || len <= 1)
     return {};
-  std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
-  return std::string(value.get());
+  std::vector<char> value(len);
+  if (getenv_s(&len, value.data(), value.size(), name) != 0 || len <= 1)
+    return {};
+  return std::string(value.data());
 #else
-  const char* value = std::getenv(name);
+  const char *value = std::getenv(name);
   return value ? std::string(value) : std::string();
 #endif
 }
 
+bool ShouldSkipWindowBootstrapOnThisRunner() {
+#if defined(__APPLE__)
+  // Headless macOS CI can trap inside GLFW/AppKit window creation
+  // (Bus error) instead of returning a regular init failure.
+  const std::string ci = ReadEnvValue("CI");
+  const std::string gha = ReadEnvValue("GITHUB_ACTIONS");
+  if (ci == "true" || gha == "true")
+    return true;
+#endif
+  return false;
+}
+
 class ScopedEnvVar {
- public:
-  ScopedEnvVar(const char* name, const char* value)
-      : m_name(name ? name : ""), m_previous(ReadEnvValue(name)), m_hadPrevious(!m_previous.empty()) {
+public:
+  ScopedEnvVar(const char *name, const char *value)
+      : m_name(name ? name : ""), m_previous(ReadEnvValue(name)),
+        m_hadPrevious(!m_previous.empty()) {
     if (m_name.empty())
       return;
 #ifdef _WIN32
@@ -62,25 +77,34 @@ class ScopedEnvVar {
 #endif
   }
 
- private:
+  ScopedEnvVar(const ScopedEnvVar &) = delete;
+
+  ScopedEnvVar &operator=(const ScopedEnvVar &) = delete;
+
+  ScopedEnvVar(ScopedEnvVar &&) = delete;
+
+  ScopedEnvVar &operator=(ScopedEnvVar &&) = delete;
+
+private:
   std::string m_name;
   std::string m_previous;
   bool m_hadPrevious = false;
 };
 
-std::unique_ptr<Window> CreateWindowIfAvailable(const WindowSpec& spec) {
+std::unique_ptr<Window> CreateWindowIfAvailable(const WindowSpec &spec) {
+  if (ShouldSkipWindowBootstrapOnThisRunner())
+    return nullptr;
   try {
     return std::make_unique<Window>(spec);
-  } catch (const std::exception&) {
+  } catch (const WindowInitException &) {
     return nullptr;
   }
 }
-
-}  // namespace
+} // namespace
 
 TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", "[core][window][opengl]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec spec;
   spec.title = "window-opengl-test";
@@ -120,21 +144,21 @@ TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", 
   window->SwapBuffers();
 
   int resizeEvents = 0;
-  window->SetResizeCallback([&](int, int) { ++resizeEvents; });
+  window->SetResizeCallback([&resizeEvents](int, int) { ++resizeEvents; });
   glfwSetWindowSize(window->GetNativeHandle(), 640, 360);
   for (int i = 0; i < 8; ++i)
     window->PollEvents();
   REQUIRE(window->GetWidth() >= 1);
   REQUIRE(window->GetHeight() >= 1);
 
-  window->SetCloseCallback([] {});
-  window->SetFileDropCallback([](int, const char**) {});
+  window->SetCloseCallback([]() { (void)0; });
+  window->SetFileDropCallback([](int, const char **) { (void)0; });
   if (resizeEvents > 0)
     REQUIRE(resizeEvents >= 1);
 }
 
 TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[core][window][vulkan]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
 
   WindowSpec spec;
   spec.title = "window-vulkan-test";
@@ -144,8 +168,7 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[cor
   spec.graphicsApi = WindowGraphicsApi::Vulkan;
 
   auto first = CreateWindowIfAvailable(spec);
-  auto second = CreateWindowIfAvailable(spec);
-  if (!first || !second) {
+  if (auto second = CreateWindowIfAvailable(spec); !first || !second) {
     SUCCEED("Window initialization is unavailable on this machine");
     return;
   }
@@ -160,7 +183,7 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[cor
   first->PollEvents();
   first->SwapBuffers();
 
-  first->SetResizeCallback([](int, int) {});
+  first->SetResizeCallback([](int, int) { (void)0; });
   glfwSetWindowSize(first->GetNativeHandle(), 300, 200);
   for (int i = 0; i < 8; ++i)
     first->PollEvents();
@@ -169,8 +192,8 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[cor
 }
 
 TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window][callbacks]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec spec;
   spec.title = "window-callback-test";
@@ -190,21 +213,24 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   int dropCount = 0;
   int droppedPathCount = 0;
 
-  window->SetResizeCallback([&](int w, int h) {
+  window->SetResizeCallback([&resizedW, &resizedH](int w, int h) {
     resizedW = w;
     resizedH = h;
   });
-  window->SetCloseCallback([&]() { ++closeCount; });
-  window->SetFileDropCallback([&](int pathCount, const char**) {
-    ++dropCount;
-    droppedPathCount = pathCount;
-  });
+  window->SetCloseCallback([&closeCount]() { ++closeCount; });
+  window->SetFileDropCallback(
+      [&dropCount, &droppedPathCount](int pathCount, const char **) {
+        ++dropCount;
+        droppedPathCount = pathCount;
+      });
 
-  GLFWframebuffersizefun framebufferCb = glfwSetFramebufferSizeCallback(window->GetNativeHandle(), nullptr);
+  GLFWframebuffersizefun framebufferCb =
+      glfwSetFramebufferSizeCallback(window->GetNativeHandle(), nullptr);
   REQUIRE(framebufferCb != nullptr);
   glfwSetFramebufferSizeCallback(window->GetNativeHandle(), framebufferCb);
 
-  GLFWwindowclosefun closeCb = glfwSetWindowCloseCallback(window->GetNativeHandle(), nullptr);
+  GLFWwindowclosefun closeCb =
+      glfwSetWindowCloseCallback(window->GetNativeHandle(), nullptr);
   REQUIRE(closeCb != nullptr);
   glfwSetWindowCloseCallback(window->GetNativeHandle(), closeCb);
 
@@ -218,18 +244,20 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   window->SetFileDropCallback({});
   framebufferCb(window->GetNativeHandle(), 320, 180);
   closeCb(window->GetNativeHandle());
-  const char* noDropPaths[] = {"assets/ignore.me"};
-  dropCb(window->GetNativeHandle(), 1, noDropPaths);
+  std::array<const char *, 1> noDropPaths = {"assets/ignore.me"};
+  const char **noDropPathPtr = noDropPaths.data();
+  dropCb(window->GetNativeHandle(), 1, noDropPathPtr);
 
-  window->SetResizeCallback([&](int w, int h) {
+  window->SetResizeCallback([&resizedW, &resizedH](int w, int h) {
     resizedW = w;
     resizedH = h;
   });
-  window->SetCloseCallback([&]() { ++closeCount; });
-  window->SetFileDropCallback([&](int pathCount, const char**) {
-    ++dropCount;
-    droppedPathCount = pathCount;
-  });
+  window->SetCloseCallback([&closeCount]() { ++closeCount; });
+  window->SetFileDropCallback(
+      [&dropCount, &droppedPathCount](int pathCount, const char **) {
+        ++dropCount;
+        droppedPathCount = pathCount;
+      });
 
   framebufferCb(window->GetNativeHandle(), 640, 0);
   REQUIRE(window->GetWidth() == 640);
@@ -238,17 +266,18 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   REQUIRE(resizedW == 640);
   REQUIRE(resizedH == 0);
 
-  const char* dropped[] = {"assets/models/crate.obj"};
+  std::array<const char *, 1> dropped = {"assets/models/crate.obj"};
   closeCb(window->GetNativeHandle());
-  dropCb(window->GetNativeHandle(), 1, dropped);
+  const char **droppedPtr = dropped.data();
+  dropCb(window->GetNativeHandle(), 1, droppedPtr);
   REQUIRE(closeCount == 1);
   REQUIRE(dropCount == 1);
   REQUIRE(droppedPathCount == 1);
 }
 
 TEST_CASE("Window env parsing falls back when variables are unset", "[core][window][env_unset]") {
-  const ScopedEnvVar unsetVisible("MONOLITH_GLFW_VISIBLE", nullptr);
-  const ScopedEnvVar unsetSamples("MONOLITH_GLFW_SAMPLES", nullptr);
+  const ScopedEnvVar unsetVisible("HORO_GLFW_VISIBLE", nullptr);
+  const ScopedEnvVar unsetSamples("HORO_GLFW_SAMPLES", nullptr);
 
   WindowSpec spec;
   spec.title = "window-env-unset-test";
@@ -272,28 +301,27 @@ TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core
   spec.height = 96;
   spec.graphicsApi = WindowGraphicsApi::OpenGL;
 
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar invalidSamples("MONOLITH_GLFW_SAMPLES", "abc");
-  auto first = CreateWindowIfAvailable(spec);
-  if (!first) {
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar invalidSamples("HORO_GLFW_SAMPLES", "abc");
+  if (auto first = CreateWindowIfAvailable(spec); !first) {
     SUCCEED("Window initialization is unavailable on this machine");
     return;
   }
 
-  const ScopedEnvVar visibleWindow("MONOLITH_GLFW_VISIBLE", "1");
-  const ScopedEnvVar negativeSamples("MONOLITH_GLFW_SAMPLES", "-2");
+  const ScopedEnvVar visibleWindow("HORO_GLFW_VISIBLE", "1");
+  const ScopedEnvVar negativeSamples("HORO_GLFW_SAMPLES", "-2");
   auto second = CreateWindowIfAvailable(spec);
   REQUIRE(second != nullptr);
 
-  const ScopedEnvVar emptyVisible("MONOLITH_GLFW_VISIBLE", "");
-  const ScopedEnvVar tooLargeSamples("MONOLITH_GLFW_SAMPLES", "99");
+  const ScopedEnvVar emptyVisible("HORO_GLFW_VISIBLE", "");
+  const ScopedEnvVar tooLargeSamples("HORO_GLFW_SAMPLES", "99");
   auto third = CreateWindowIfAvailable(spec);
   REQUIRE(third != nullptr);
 }
 
 TEST_CASE("Window reports init failures for invalid dimensions", "[core][window][errors]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec probe;
   probe.title = "window-probe";
@@ -305,18 +333,19 @@ TEST_CASE("Window reports init failures for invalid dimensions", "[core][window]
     return;
   }
 
-  const WindowSpec invalidSpecs[] = {
+  const std::array<WindowSpec, 4> invalidSpecs = {
       WindowSpec{"invalid-0x0", 0, 0, true, WindowGraphicsApi::OpenGL},
       WindowSpec{"invalid-negw", -1, 64, true, WindowGraphicsApi::OpenGL},
       WindowSpec{"invalid-negh", 64, -1, true, WindowGraphicsApi::OpenGL},
-      WindowSpec{"invalid-huge", INT_MAX, INT_MAX, true, WindowGraphicsApi::OpenGL},
+      WindowSpec{"invalid-huge", INT_MAX, INT_MAX, true,
+                 WindowGraphicsApi::OpenGL},
   };
 
   bool sawInitFailure = false;
-  for (const WindowSpec& candidate : invalidSpecs) {
+  for (const WindowSpec &candidate : invalidSpecs) {
     try {
       Window window(candidate);
-    } catch (const WindowInitException&) {
+    } catch (const WindowInitException &) {
       sawInitFailure = true;
       break;
     }
@@ -326,8 +355,8 @@ TEST_CASE("Window reports init failures for invalid dimensions", "[core][window]
 }
 
 TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][window][logfilter]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec glSpec;
   glSpec.title = "window-logfilter-gl";
@@ -354,6 +383,11 @@ TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][wi
 }
 
 TEST_CASE("Window exposes glfwInit failure path when no display is available", "[core][window][glfw-init-fail]") {
+  if (ShouldSkipWindowBootstrapOnThisRunner()) {
+    SUCCEED("Window bootstrap skipped on this CI runner");
+    return;
+  }
+
   WindowSpec spec;
   spec.title = "window-init-fail";
   spec.width = 64;
@@ -363,7 +397,7 @@ TEST_CASE("Window exposes glfwInit failure path when no display is available", "
   try {
     Window window(spec);
     SUCCEED("glfwInit failure path unavailable on this machine");
-  } catch (const std::runtime_error&) {
+  } catch (const WindowInitException &) {
     SUCCEED("glfwInit failure path covered");
   }
 }

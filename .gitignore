@@ -5,3 +5,7 @@ ui_test_output/
 .vs/
 *.log
 .idea
+.vscode/
+.scannerwork/
+bw-output/
+compile_commands.json

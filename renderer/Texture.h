@@ -4,37 +4,43 @@
 
 #include "renderer/RenderTargetHandle.h"
 
-namespace Monolith {
+namespace Horo {
+    class Texture {
+    public:
+        Texture();
 
-class Texture {
- public:
-  Texture();
-  ~Texture();
+        ~Texture();
 
-  Texture(const Texture&) = delete;
-  Texture& operator=(const Texture&) = delete;
-  Texture(Texture&& o) noexcept;
-  Texture& operator=(Texture&& o) noexcept;
+        Texture(const Texture &) = delete;
 
-  static Texture FromFile(const std::string& path, bool flipY = true);
-  static Texture CreateWhite1x1();
+        Texture &operator=(const Texture &) = delete;
 
-  void Bind(unsigned int slot = 0) const;
-  void Unbind() const;
+        Texture(Texture &&o) noexcept;
 
-  bool IsValid() const;
-  int GetWidth() const { return m_width; }
-  int GetHeight() const { return m_height; }
-  // Temporary OpenGL escape hatch used by editor integration until offscreen/ImGui
-  // texture presentation is fully backend-neutral.
-  unsigned int GetNativeId() const;
-  RenderTargetHandle GetRenderTargetHandle(bool needsYFlip = false) const;
+        Texture &operator=(Texture &&o) noexcept;
 
- private:
-  struct TextureStorage;
-  std::unique_ptr<TextureStorage> m_textureStorage;
-  int m_width = 0;
-  int m_height = 0;
-};
+        static Texture FromFile(const std::string &path, bool flipY = true);
 
-}  // namespace Monolith
+        static Texture CreateWhite1x1();
+
+        void Bind(unsigned int slot = 0) const;
+
+        void Unbind() const;
+
+        bool IsValid() const;
+
+        int GetWidth() const { return m_width; }
+        int GetHeight() const { return m_height; }
+        // Temporary OpenGL escape hatch used by editor integration until
+        // offscreen/ImGui texture presentation is fully backend-neutral.
+        unsigned int GetNativeId() const;
+
+        RenderTargetHandle GetRenderTargetHandle(bool needsYFlip = false) const;
+
+    private:
+        struct TextureStorage;
+        std::unique_ptr<TextureStorage> m_textureStorage;
+        int m_width = 0;
+        int m_height = 0;
+    };
+} // namespace Horo

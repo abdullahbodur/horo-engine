@@ -36,7 +36,7 @@ These tests protect backend-neutral engine contracts and should remain green reg
 
 ### Vulkan-enabled build
 
-- `MONOLITH_ENGINE_ENABLE_VULKAN=ON`
+- `HORO_ENGINE_ENABLE_VULKAN=ON`
 - configure/build succeeds without machine-global SDK import-lib assumptions
 - `test_renderer_foundation` validates:
   - support reporting
@@ -60,7 +60,7 @@ ctest --test-dir build/debug-msvc -C Debug --output-on-failure -R "test_core|tes
 ### Vulkan-enabled build
 
 ```bash
-cmake -S . -B build/debug-msvc-vulkan-tests -G "Visual Studio 17 2022" -A x64 -DMONOLITH_ENGINE_ENABLE_VULKAN=ON -DMONOLITH_ENGINE_BUILD_TESTS=ON
+cmake -S . -B build/debug-msvc-vulkan-tests -G "Visual Studio 17 2022" -A x64 -DHORO_ENGINE_ENABLE_VULKAN=ON -DHORO_ENGINE_BUILD_TESTS=ON
 cmake --build build/debug-msvc-vulkan-tests --config Debug --target test_renderer_foundation test_architecture_docs test_editor
 ctest --test-dir build/debug-msvc-vulkan-tests -C Debug --output-on-failure -R "test_renderer_foundation|test_architecture_docs|test_editor"
 ```

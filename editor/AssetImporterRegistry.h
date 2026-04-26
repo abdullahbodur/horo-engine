@@ -2,52 +2,56 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include "editor/AssetMetadata.h"
 
-namespace Monolith {
-namespace Editor {
+namespace Horo::Editor {
+    struct AssetImportRequest {
+        std::string assetId;
+        std::string assetGuid;
+        std::string displayName;
+        std::string sourcePath;
+        std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
+        settings;
+    };
 
-struct AssetImportRequest {
-  std::string assetId;
-  std::string assetGuid;
-  std::string displayName;
-  std::string sourcePath;
-  std::unordered_map<std::string, std::string> settings;
-};
+    struct AssetImportResult {
+        bool ok = false;
+        AssetDef asset;
+        AssetMetadata metadata;
+        std::string error;
+        std::vector<AssetImportDiagnostic> diagnostics;
+    };
 
-struct AssetImportResult {
-  bool ok = false;
-  AssetDef asset;
-  AssetMetadata metadata;
-  std::string error;
-  std::vector<AssetImportDiagnostic> diagnostics;
-};
+    class AssetImporter {
+    public:
+        virtual ~AssetImporter() = default;
 
-class AssetImporter {
- public:
-  virtual ~AssetImporter() = default;
+        virtual const char *ImporterId() const = 0;
 
-  virtual const char* ImporterId() const = 0;
-  virtual const char* AssetKind() const = 0;
-  virtual std::vector<std::string> SupportedExtensions() const = 0;
-  virtual AssetImportResult Import(const AssetImportRequest& request) const = 0;
-};
+        virtual const char *AssetKind() const = 0;
 
-class AssetImporterRegistry {
- public:
-  AssetImporterRegistry();
+        virtual std::vector<std::string> SupportedExtensions() const = 0;
 
-  void Register(std::unique_ptr<AssetImporter> importer);
-  const AssetImporter* FindByExtension(const std::string& sourcePath) const;
-  const AssetImporter* FindById(const std::string& importerId) const;
-  std::vector<std::string> RegisteredImporterIds() const;
+        virtual AssetImportResult Import(const AssetImportRequest &request) const = 0;
+    };
 
- private:
-  std::vector<std::unique_ptr<AssetImporter>> m_importers;
-};
+    class AssetImporterRegistry {
+    public:
+        AssetImporterRegistry();
 
-}  // namespace Editor
-}  // namespace Monolith
+        void Register(std::unique_ptr<AssetImporter> importer);
+
+        const AssetImporter *FindByExtension(const std::string &sourcePath) const;
+
+        const AssetImporter *FindById(std::string_view importerId) const;
+
+        std::vector<std::string> RegisteredImporterIds() const;
+
+    private:
+        std::vector<std::unique_ptr<AssetImporter> > m_importers;
+    };
+} // namespace Horo::Editor

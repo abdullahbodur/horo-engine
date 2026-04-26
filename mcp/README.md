@@ -9,7 +9,8 @@
 - Hosts a loopback-only HTTP MCP endpoint at `http://127.0.0.1:39281/mcp`
 - Queues editor mutations onto the main thread instead of mutating editor state from the network thread
 
-The editor owns lifecycle integration. When `MCP enabled` is turned on in `File -> Settings...`, the server starts automatically while the editor is open and stops when the editor closes.
+The editor owns lifecycle integration. When `MCP enabled` is turned on in `File -> Settings...`, the server starts
+automatically while the editor is open and stops when the editor closes.
 
 ## Files
 
@@ -98,9 +99,11 @@ For client compatibility, `tools/list` exposes these tool ids with underscores i
 
 The bottom `MCP` tab is also the built-in debugger for the server:
 
-- Status strip for endpoint, request totals, success/failure counts, active requests, top tool/resource, and last request time
+- Status strip for endpoint, request totals, success/failure counts, active requests, top tool/resource, and last
+  request time
 - `Codex`, `Claude`, and `VS Code` cards with copy-ready config snippets and the expected config file locations
-- Live request history with timestamps, duration, method/tool name, request preview, response preview, HTTP status, and errors
+- Live request history with timestamps, duration, method/tool name, request preview, response preview, HTTP status, and
+  errors
 - Capability catalog listing the current built-in tools and resources
 
 ## Settings
@@ -133,7 +136,8 @@ Official docs:
 - https://code.claude.com/docs/en/mcp
 - https://code.claude.com/docs/en/settings
 
-Anthropic documents HTTP MCP as a supported transport, and its settings docs show that user/local MCP configuration lives in `~/.claude.json`, while project-scoped MCP config can live in `.mcp.json`.
+Anthropic documents HTTP MCP as a supported transport, and its settings docs show that user/local MCP configuration
+lives in `~/.claude.json`, while project-scoped MCP config can live in `.mcp.json`.
 
 ### Option 1: use Claude CLI
 
@@ -165,7 +169,8 @@ Add a `.mcp.json` file to your project:
 
 ### Option 3: user config
 
-Claude also stores user/local MCP server configuration in `~/.claude.json`. If you prefer a user-scoped setup instead of a project file, add the same MCP server definition there.
+Claude also stores user/local MCP server configuration in `~/.claude.json`. If you prefer a user-scoped setup instead of
+a project file, add the same MCP server definition there.
 
 ## Codex integration
 
@@ -173,7 +178,8 @@ Official docs:
 
 - https://developers.openai.com/codex/mcp
 
-OpenAI documents Codex MCP configuration in `config.toml`, usually at `~/.codex/config.toml`, with optional project-scoped `.codex/config.toml`.
+OpenAI documents Codex MCP configuration in `config.toml`, usually at `~/.codex/config.toml`, with optional
+project-scoped `.codex/config.toml`.
 
 ### Option 1: edit `config.toml`
 
@@ -199,7 +205,8 @@ Official docs:
 - https://code.visualstudio.com/docs/copilot/customization/mcp-servers
 - https://code.visualstudio.com/docs/copilot/reference/mcp-configuration
 
-VS Code supports MCP natively and uses `mcp.json` for server configuration. Microsoft documents workspace scope, user-profile scope, guided setup from the Command Palette, and CLI setup.
+VS Code supports MCP natively and uses `mcp.json` for server configuration. Microsoft documents workspace scope,
+user-profile scope, guided setup from the Command Palette, and CLI setup.
 
 ### Option 1: workspace setup with `.vscode/mcp.json`
 

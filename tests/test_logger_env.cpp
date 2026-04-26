@@ -8,30 +8,31 @@
 #include "core/LogBuffer.h"
 #include "core/Logger.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 namespace {
-
-std::string ReadEnvValue(const char* name) {
+std::string ReadEnvValue(const char *name) {
   if (!name || !*name)
     return {};
 #ifdef _WIN32
-  char* rawValue = nullptr;
   size_t len = 0;
-  if (_dupenv_s(&rawValue, &len, name) != 0 || !rawValue)
+  if (getenv_s(&len, nullptr, 0, name) != 0 || len <= 1)
     return {};
-  std::unique_ptr<char, decltype(&std::free)> value(rawValue, &std::free);
-  return std::string(value.get());
+  std::vector<char> value(len);
+  if (getenv_s(&len, value.data(), value.size(), name) != 0 || len <= 1)
+    return {};
+  return std::string(value.data());
 #else
-  const char* value = std::getenv(name);
+  const char *value = std::getenv(name);
   return value ? std::string(value) : std::string();
 #endif
 }
 
 class ScopedEnvVar {
- public:
-  ScopedEnvVar(const char* name, const char* value)
-      : m_name(name ? name : ""), m_previous(ReadEnvValue(name)), m_hadPrevious(!m_previous.empty()) {
+public:
+  ScopedEnvVar(const char *name, const char *value)
+      : m_name(name ? name : ""), m_previous(ReadEnvValue(name)),
+        m_hadPrevious(!m_previous.empty()) {
     if (m_name.empty())
       return;
 #ifdef _WIN32
@@ -60,7 +61,15 @@ class ScopedEnvVar {
 #endif
   }
 
- private:
+  ScopedEnvVar(const ScopedEnvVar &) = delete;
+
+  ScopedEnvVar &operator=(const ScopedEnvVar &) = delete;
+
+  ScopedEnvVar(ScopedEnvVar &&) = delete;
+
+  ScopedEnvVar &operator=(ScopedEnvVar &&) = delete;
+
+private:
   std::string m_name;
   std::string m_previous;
   bool m_hadPrevious = false;
@@ -71,16 +80,16 @@ std::vector<LogLine> SnapshotLogLines() {
   LogBuffer::Instance().CopyLinesTo(&lines);
   return lines;
 }
-
-}  // namespace
+} // namespace
 
 TEST_CASE("Logger env warn: filters info/debug but keeps warn/error", "[logger][env][warn]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "warning");
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug should be filtered");
-  LOG_INFO("info should be filtered");
-  LOG_WARN("warn should be recorded");
-  LOG_ERROR("error should be recorded");
+  LogDebug("debug should be filtered");
+  LogInfo("info should be filtered");
+  LogWarn("warn should be recorded");
+  LogError("error should be recorded");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 2);
@@ -92,12 +101,13 @@ TEST_CASE("Logger env warn: filters info/debug but keeps warn/error", "[logger][
 }
 
 TEST_CASE("Logger env error: filters warn/info/debug and keeps error", "[logger][env][error]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "error");
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug should be filtered");
-  LOG_INFO("info should be filtered");
-  LOG_WARN("warn should be filtered");
-  LOG_ERROR("error should be recorded");
+  LogDebug("debug should be filtered");
+  LogInfo("info should be filtered");
+  LogWarn("warn should be filtered");
+  LogError("error should be recorded");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
@@ -108,11 +118,12 @@ TEST_CASE("Logger env error: filters warn/info/debug and keeps error", "[logger]
 }
 
 TEST_CASE("Logger env invalid value falls back to info", "[logger][env][invalid]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "verbose");
   LogBuffer::Instance().Clear();
 
-  LOG_INFO("info is kept on fallback");
-  LOG_WARN("warn is kept on fallback");
-  LOG_ERROR("error is kept on fallback");
+  LogInfo("info is kept on fallback");
+  LogWarn("warn is kept on fallback");
+  LogError("error is kept on fallback");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 3);
@@ -122,10 +133,11 @@ TEST_CASE("Logger env invalid value falls back to info", "[logger][env][invalid]
 }
 
 TEST_CASE("Logger env debug: keeps debug and info levels", "[logger][env][debug]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "debug");
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug is kept");
-  LOG_INFO("info is kept");
+  LogDebug("debug is kept");
+  LogInfo("info is kept");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 2);
@@ -134,10 +146,11 @@ TEST_CASE("Logger env debug: keeps debug and info levels", "[logger][env][debug]
 }
 
 TEST_CASE("Logger env empty value falls back to info", "[logger][env][empty]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "");
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug is filtered on empty env");
-  LOG_INFO("info is kept on empty env");
+  LogDebug("debug is filtered on empty env");
+  LogInfo("info is kept on empty env");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
@@ -145,9 +158,10 @@ TEST_CASE("Logger env empty value falls back to info", "[logger][env][empty]") {
 }
 
 TEST_CASE("Logger env mixed-case debug value is normalized", "[logger][env][mixed_debug]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "DeBuG");
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug survives mixed-case env");
+  LogDebug("debug survives mixed-case env");
   const std::vector<LogLine> lines = SnapshotLogLines();
 
   REQUIRE(lines.size() == 1);
@@ -155,10 +169,11 @@ TEST_CASE("Logger env mixed-case debug value is normalized", "[logger][env][mixe
 }
 
 TEST_CASE("Logger env short warn alias keeps warning logs", "[logger][env][warn_alias]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "warn");
   LogBuffer::Instance().Clear();
 
-  LOG_INFO("info is filtered");
-  LOG_WARN("warn is kept via alias");
+  LogInfo("info is filtered");
+  LogWarn("warn is kept via alias");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
@@ -166,9 +181,11 @@ TEST_CASE("Logger env short warn alias keeps warning logs", "[logger][env][warn_
 }
 
 TEST_CASE("Logger default level label handles unknown enum values", "[logger][env][unknown_level]") {
+  const ScopedEnvVar logLevel("HORO_LOG_LEVEL", "info");
   LogBuffer::Instance().Clear();
 
-  Log(static_cast<LogLevel>(99), __FILE__, __LINE__, "unknown-level-message");
+  LogImpl(static_cast<LogLevel>(99), std::source_location::current(),
+          "unknown-level-message");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
@@ -176,11 +193,11 @@ TEST_CASE("Logger default level label handles unknown enum values", "[logger][en
 }
 
 TEST_CASE("Logger unset env falls back to info", "[logger][env][unset]") {
-  const ScopedEnvVar unsetLevel("MONOLITH_LOG_LEVEL", nullptr);
+  const ScopedEnvVar unsetLevel("HORO_LOG_LEVEL", nullptr);
   LogBuffer::Instance().Clear();
 
-  LOG_DEBUG("debug is filtered when env is absent");
-  LOG_INFO("info is kept when env is absent");
+  LogDebug("debug is filtered when env is absent");
+  LogInfo("info is kept when env is absent");
 
   const std::vector<LogLine> lines = SnapshotLogLines();
   REQUIRE(lines.size() == 1);
