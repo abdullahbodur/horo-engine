@@ -1,0 +1,66 @@
+#include "editor/EditorPropertyRules.h"
+
+#include "editor/EditorSchema.h"
+#include "editor/EditorSelectionRules.h"
+#include "editor/SceneDocument.h"
+
+namespace Monolith::Editor {
+
+SceneObject MakeObjectFromAsset(const SceneDocument &doc,
+                                const std::string &assetId,
+                                const EditorSchema &schema) {
+  using enum SceneObjectType;
+
+  SceneObject obj;
+  obj.id = GenerateUniqueId(doc, "obj");
+  obj.type = Prop;
+  obj.assetId = assetId;
+
+  if (const auto assetIt = doc.assets.find(assetId);
+      assetIt != doc.assets.end()) {
+    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty()
+                                         ? "1.0000,1.0000,1.0000"
+                                         : assetIt->second.renderScale;
+  }
+
+  if (const TypeSchema *typeSchema = schema.GetSchema(obj.type); typeSchema) {
+    for (const auto &fd : typeSchema->fields)
+      obj.props[fd.key] = fd.defaultValue;
+  }
+
+  return obj;
+}
+
+void ApplySchemaFieldDefaults(SceneObject &obj, const EditorSchema &schema) {
+  const TypeSchema *typeSchema = schema.GetSchema(obj.type);
+  if (!typeSchema)
+    return;
+  for (const auto &fd : typeSchema->fields) {
+    if (fd.hasDefault && !obj.props.contains(fd.key))
+      obj.props[fd.key] = fd.defaultValue;
+  }
+}
+
+void ApplyComponentFieldDefaults(ComponentDesc &comp,
+                                 const EditorSchema &schema) {
+  const ComponentSchema *compSchema = schema.GetComponentSchema(comp.type);
+  if (!compSchema)
+    return;
+  for (const FieldDef &field : compSchema->fields) {
+    if (field.hasDefault && !comp.props.contains(field.key))
+      comp.props[field.key] = field.defaultValue;
+  }
+}
+
+void ApplyCameraBuiltinDefaults(SceneObject &obj) {
+  if (!obj.props.contains("fov"))
+    obj.props["fov"] = "60";
+  if (!obj.props.contains("nearClip"))
+    obj.props["nearClip"] = "0.1";
+  if (!obj.props.contains("farClip"))
+    obj.props["farClip"] = "500";
+  if (!obj.props.contains("followTargetId"))
+    obj.props["followTargetId"] = "";
+}
+
+} // namespace Monolith::Editor
