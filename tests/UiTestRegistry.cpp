@@ -7,6 +7,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -60,24 +61,34 @@ bool MatchesPattern(std::string_view value, std::string_view pattern) {
   return value.size() >= prefix.size() + suffix.size();
 }
 
-bool MatchesFilter(std::string_view scenarioName, std::string_view rawFilter) {
+std::vector<std::string> SplitFilterTokens(std::string_view rawFilter) {
+  std::vector<std::string> tokens;
   const std::string filter = Trim(std::string(rawFilter));
-  if (filter.empty())
-    return true;
-
   size_t start = 0;
   while (start <= filter.size()) {
     const size_t end = filter.find(',', start);
-    if (const std::string token = Trim(filter.substr(
-            start, end == std::string::npos ? std::string::npos : end - start));
-        !token.empty() && MatchesPattern(scenarioName, token)) {
-      return true;
-    }
+    std::string token = Trim(filter.substr(
+        start, end == std::string::npos ? std::string::npos : end - start));
+    if (!token.empty())
+      tokens.push_back(std::move(token));
     if (end == std::string::npos)
       break;
     start = end + 1;
   }
-  return false;
+  return tokens;
+}
+
+bool QueueScenario(ImGuiTestEngine *engine, UiAutomationRunState *state,
+                   const UiScenarioRegistration &entry, int *queued) {
+  if (!entry.fn)
+    return false;
+  LogDebug("UI scenario queued: '{}'", entry.fullName);
+  ImGuiTest *test = entry.fn(engine, state);
+  if (!test)
+    return false;
+  ImGuiTestEngine_QueueTest(engine, test);
+  ++(*queued);
+  return true;
 }
 } // namespace
 
@@ -107,19 +118,26 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
   InitializeUiScenarioRegistry();
 
   int queued = 0;
-  for (const UiScenarioRegistration &entry : Registry()) {
-    if (!entry.fn)
-      continue;
-    if (!MatchesFilter(entry.fullName, filter)) {
-      LogDebug("UI scenario skipped by filter: '{}' (filter='{}')",
-               entry.fullName, filter);
-      continue;
+  const std::vector<std::string> filterTokens = SplitFilterTokens(filter);
+  if (filterTokens.empty()) {
+    for (const UiScenarioRegistration &entry : Registry())
+      QueueScenario(engine, state, entry, &queued);
+  } else {
+    std::unordered_set<std::string> queuedNames;
+    for (const std::string &token : filterTokens) {
+      for (const UiScenarioRegistration &entry : Registry()) {
+        if (queuedNames.contains(entry.fullName) ||
+            !MatchesPattern(entry.fullName, token)) {
+          continue;
+        }
+        if (QueueScenario(engine, state, entry, &queued))
+          queuedNames.insert(entry.fullName);
+      }
     }
-    LogDebug("UI scenario queued: '{}'", entry.fullName);
-    ImGuiTest *test = entry.fn(engine, state);
-    if (test) {
-      ImGuiTestEngine_QueueTest(engine, test);
-      ++queued;
+    for (const UiScenarioRegistration &entry : Registry()) {
+      if (!queuedNames.contains(entry.fullName))
+        LogDebug("UI scenario skipped by filter: '{}' (filter='{}')",
+                 entry.fullName, filter);
     }
   }
   LogInfo(

@@ -111,7 +111,16 @@ jobs:
       - name: Run UI Automation
         shell: bash
         run: |
-          build/debug/bin/HoroEditorUiTest --run-ui-tests
+          set -euo pipefail
+          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
+          for suite in "${suites[@]}"; do
+            echo "::group::UI test suite ${suite}"
+            mkdir -p "ui_test_output/${suite}"
+            HORO_UI_TEST_SUITE="${suite}" \
+              HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
+              build/debug/bin/HoroEditorUiTest --run-ui-tests
+            echo "::endgroup::"
+          done
         env:
           HORO_UI_TEST_CAPTURE: "1"
           HORO_UI_TEST_VIDEO: "1"
@@ -249,29 +258,25 @@ jobs:
 
       - name: Run UI Automation
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
-          # Redirect stdout/stderr to files so output survives a timeout kill.
-          # (PowerShell loses buffered child stdout when it kills by timeout.)
-          $out = "ui_test_output\stdout.txt"
-          $err = "ui_test_output\stderr.txt"
-          $proc = Start-Process `
-              -FilePath ".\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe" `
-              -ArgumentList "--run-ui-tests" `
-              -NoNewWindow -PassThru `
-              -RedirectStandardOutput $out `
-              -RedirectStandardError  $err
-          Write-Host "HoroEditorUiTest PID=$($proc.Id) — waiting up to 8 min..."
-          $exited = $proc.WaitForExit(480000)
-          if (-not $exited) {
-              Write-Warning "Process did not exit — killing"
-              $proc.Kill()
-              Start-Sleep -Seconds 2
+          $suites = @(
+            "launcher-basic",
+            "properties-workflows",
+            "mcp-project",
+            "modals-mcp",
+            "properties-close"
+          )
+          foreach ($suite in $suites) {
+            Write-Host "::group::UI test suite $suite"
+            $env:HORO_UI_TEST_SUITE = $suite
+            $env:HORO_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}\ui_test_output\$suite"
+            New-Item -ItemType Directory -Force -Path $env:HORO_UI_TEST_OUTPUT_DIR | Out-Null
+            .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) { exit $code }
           }
-          if (Test-Path $out) { Write-Host "=== stdout ==="; Get-Content $out }
-          if (Test-Path $err) { Write-Host "=== stderr ==="; Get-Content $err }
-          $code = if ($proc.HasExited) { $proc.ExitCode } else { -1 }
-          if ($code -ne 0) { Write-Error "HoroEditorUiTest exited $code"; exit 1 }
         env:
           HORO_UI_TEST_CAPTURE: "1"
           HORO_UI_TEST_VIDEO: "1"
@@ -404,8 +409,33 @@ jobs:
 
       - name: Run UI Automation
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            build/debug/bin/HoroEditorUiTest --run-ui-tests
+          set -euo pipefail
+          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
+          pids=()
+          names=()
+          for suite in "${suites[@]}"; do
+            mkdir -p "ui_test_output/${suite}"
+            (
+              HORO_UI_TEST_SUITE="${suite}" \
+                HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
+                xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+                  build/debug/bin/HoroEditorUiTest --run-ui-tests
+            ) > "ui_test_output/${suite}/stdout.txt" 2>&1 &
+            pids+=("$!")
+            names+=("${suite}")
+          done
+          status=0
+          for index in "${!pids[@]}"; do
+            suite="${names[$index]}"
+            pid="${pids[$index]}"
+            if ! wait "${pid}"; then
+              status=1
+            fi
+            echo "::group::UI test suite ${suite}"
+            cat "ui_test_output/${suite}/stdout.txt"
+            echo "::endgroup::"
+          done
+          exit "${status}"
         env:
           HORO_UI_TEST_CAPTURE: "1"
           HORO_UI_TEST_VIDEO: "1"

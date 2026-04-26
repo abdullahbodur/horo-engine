@@ -166,12 +166,13 @@ const fs::path &UiAutomationTempRoot() {
 }
 
 void LogUiAutomationEnv() {
-  static constexpr std::array<const char *, 10> kEnvVars = {
+  static constexpr std::array<const char *, 11> kEnvVars = {
       "HORO_UI_TEST_CAPTURE",     "HORO_UI_TEST_VIDEO",
       "HORO_UI_TEST_RECORDING",   "HORO_UI_TEST_FILTER",
-      "HORO_UI_TEST_DELAY_MS",    "HORO_UI_TEST_OUTPUT_DIR",
-      "HORO_UI_TEST_FFMPEG_PATH", "HORO_UI_TEST_CLEAN_TEMP",
-      "HORO_GLFW_SAMPLES",        "HORO_GLFW_VISIBLE",
+      "HORO_UI_TEST_SUITE",      "HORO_UI_TEST_DELAY_MS",
+      "HORO_UI_TEST_OUTPUT_DIR",  "HORO_UI_TEST_FFMPEG_PATH",
+      "HORO_UI_TEST_CLEAN_TEMP",  "HORO_GLFW_SAMPLES",
+      "HORO_GLFW_VISIBLE",
   };
   for (const char *name : kEnvVars)
     LogUiEnvVar(name);
@@ -436,16 +437,20 @@ void UiAutomationRunner::StartIfRequested(
       recordingEnabled && ParseBoolEnv("HORO_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled =
       recordingEnabled && ParseBoolEnv("HORO_UI_TEST_VIDEO");
-  const std::string uiFilter = ReadEnvString("HORO_UI_TEST_FILTER");
+  const std::string uiFilterEnv = ReadEnvString("HORO_UI_TEST_FILTER");
+  const std::string uiSuite = ReadEnvString("HORO_UI_TEST_SUITE");
+  const std::string uiFilter(
+      ResolveUiAutomationScenarioFilter(uiFilterEnv, uiSuite));
   const std::string outputDirEnv = ReadEnvString("HORO_UI_TEST_OUTPUT_DIR");
   m_impl->state.uiCaptureOutputDir =
       ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
   m_impl->heartbeatLogEnabled = ParseBoolEnv("HORO_UI_TEST_HEARTBEAT");
   m_impl->state.shellContext = shellContext;
   LogInfo(
-      "UI automation config: filter='{}', recording={}, capture={}, video={}",
-      uiFilter, recordingEnabled ? 1 : 0, m_impl->state.captureEnabled ? 1 : 0,
-      m_impl->state.videoEnabled ? 1 : 0);
+      "UI automation config: suite='{}', filter='{}', recording={}, capture={}, "
+      "video={}",
+      uiSuite, uiFilter, recordingEnabled ? 1 : 0,
+      m_impl->state.captureEnabled ? 1 : 0, m_impl->state.videoEnabled ? 1 : 0);
   LogDebug(
       "UI automation paths: temp_root='{}', project_root='{}', output_dir='{}'",
       m_impl->state.tempRoot.string(), m_impl->state.projectRoot.string(),
@@ -503,7 +508,7 @@ void UiAutomationRunner::StartIfRequested(
   }
   LogInfo("Queued {} UI scenario(s) with filter '{}'.", queuedCount, uiFilter);
   LogInfo(
-      "Running Dear ImGui Test Suite in Normal mode "
+      "Running Dear ImGui test suite in Normal mode "
       "(delay_short={:.0f}ms delay_std={:.0f}ms) with full rendering enabled.",
       Impl::kActionDelayShortSec * 1000.0f,
       Impl::kActionDelayStandardSec * 1000.0f);

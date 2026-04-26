@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string_view>
+#include <vector>
 
 namespace Horo {
     inline constexpr int kUiAutomationDefaultMaxFrames = 300000;
@@ -11,6 +12,9 @@ namespace Horo {
                                         int heartbeatInterval);
     bool ShouldWarnUiAutomationLargeFrameDelta(double frameDeltaSec);
     bool ShouldLogEditorRenderHeartbeat(bool enabled, int frameCount);
+    std::vector<std::string_view> UiAutomationTestSuiteNames();
+    std::string_view ResolveUiAutomationScenarioFilter(
+        std::string_view explicitFilter, std::string_view suiteName);
 
     // Parses UI automation boolean env-like values.
     // Empty value => fallback.

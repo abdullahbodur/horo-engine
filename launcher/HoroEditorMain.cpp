@@ -45,11 +45,26 @@ namespace {
         return false;
     }
 
+    std::string ReadEnvString(const char *name) {
+        if (!name || !*name)
+            return {};
+#ifdef _WIN32
+        char *value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || !value)
+            return {};
+        std::string result(value);
+        std::free(value);
+        return result;
+#else
+        const char *value = std::getenv(name);
+        return value ? std::string(value) : std::string();
+#endif
+    }
+
     bool IsRenderHeartbeatEnabled() {
-        const char *value = std::getenv("HORO_RENDER_HEARTBEAT");
-        return ParseUiAutomationBoolValue(value ? std::string_view(value)
-                                                : std::string_view(),
-                                          false);
+        const std::string value = ReadEnvString("HORO_RENDER_HEARTBEAT");
+        return ParseUiAutomationBoolValue(value, false);
     }
 #endif
 
