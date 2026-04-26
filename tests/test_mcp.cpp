@@ -3342,3 +3342,132 @@ TEST_CASE("McpController: PublishSnapshot with empty snapshot does not crash",
   ctrl.PublishSnapshot(snap);
   ctrl.Shutdown();
 }
+
+TEST_CASE("McpController captures executor JSON exceptions as tool errors",
+          "[mcp][controller]") {
+  EnvGuard env("horo_mcp_controller_executor_exception");
+  McpController controller;
+  controller.Initialize();
+  controller.PublishSnapshot(MakeSnapshot());
+
+  McpSettings settings = controller.GetSettings();
+  settings.enabled = true;
+  settings.autoStart = true;
+  settings.host = kDefaultMcpHost;
+  settings.port = 39882;
+
+  std::string err;
+  REQUIRE(controller.ApplySettings(settings, &err));
+  controller.SetEditorActive(true);
+
+  std::promise<HttpResponse> responsePromise;
+  std::future<HttpResponse> responseFuture = responsePromise.get_future();
+  std::thread worker([&settings, promise = std::move(responsePromise)]() mutable {
+    promise.set_value(SendHttpPost(
+        settings.port,
+        json{{"jsonrpc", "2.0"},
+             {"id", 901},
+             {"method", "tools/call"},
+             {"params",
+              {{"name", "editor.select"},
+               {"arguments", json{{"id", "obj_root"}}}}}}));
+  });
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  const size_t drained = controller.DrainCommands(
+      [](std::string_view, const json &arguments) -> McpCommandResult {
+        (void)arguments.at("missing_key").get<std::string>();
+        return {true, json::object(), {}};
+      });
+  REQUIRE(drained == 1);
+
+  const HttpResponse response = responseFuture.get();
+  if (worker.joinable())
+    worker.join();
+  REQUIRE(response.statusCode == 200);
+  const json payload = json::parse(response.body);
+  REQUIRE(payload["error"]["message"].is_string());
+  REQUIRE_FALSE(payload["error"]["message"].get<std::string>().empty());
+
+  controller.SetEditorActive(false);
+}
+
+TEST_CASE("McpController activity stats track top targets and clear cleanly",
+          "[mcp][controller]") {
+  EnvGuard env("horo_mcp_controller_activity_stats");
+  McpController controller;
+  controller.Initialize();
+  controller.PublishSnapshot(MakeSnapshot());
+
+  McpSettings settings = controller.GetSettings();
+  settings.enabled = true;
+  settings.autoStart = true;
+  settings.host = kDefaultMcpHost;
+  settings.port = 39883;
+
+  std::string err;
+  REQUIRE(controller.ApplySettings(settings, &err));
+  controller.SetEditorActive(true);
+
+  const HttpResponse toolCallA =
+      SendHttpPost(settings.port,
+                   json{{"jsonrpc", "2.0"},
+                        {"id", 910},
+                        {"method", "tools/call"},
+                        {"params",
+                         {{"name", "editor.scene_status"},
+                          {"arguments", json::object()}}}});
+  REQUIRE(toolCallA.statusCode == 200);
+
+  const HttpResponse toolCallB =
+      SendHttpPost(settings.port,
+                   json{{"jsonrpc", "2.0"},
+                        {"id", 911},
+                        {"method", "tools/call"},
+                        {"params",
+                         {{"name", "editor.scene_status"},
+                          {"arguments", json::object()}}}});
+  REQUIRE(toolCallB.statusCode == 200);
+
+  const HttpResponse resourceReadA = SendHttpPost(
+      settings.port, json{{"jsonrpc", "2.0"},
+                          {"id", 912},
+                          {"method", "resources/read"},
+                          {"params", {{"uri", "scene://summary"}}}});
+  REQUIRE(resourceReadA.statusCode == 200);
+
+  const HttpResponse resourceReadB = SendHttpPost(
+      settings.port, json{{"jsonrpc", "2.0"},
+                          {"id", 913},
+                          {"method", "resources/read"},
+                          {"params", {{"uri", "scene://summary"}}}});
+  REQUIRE(resourceReadB.statusCode == 200);
+
+  const HttpResponse failingMethod =
+      SendHttpPost(settings.port, json{{"jsonrpc", "2.0"},
+                                       {"id", 914},
+                                       {"method", "bogus/method"},
+                                       {"params", json::object()}});
+  REQUIRE(failingMethod.statusCode == 200);
+
+  const McpStatusSnapshot beforeClear = controller.GetStatusSnapshot();
+  REQUIRE(beforeClear.successCount >= 4);
+  REQUIRE(beforeClear.failureCount >= 1);
+  REQUIRE(beforeClear.totalRequests >= 5);
+  REQUIRE(beforeClear.topTool == "editor.scene_status");
+  REQUIRE(beforeClear.topResource == "scene://summary");
+  REQUIRE_FALSE(beforeClear.lastRequestTime.empty());
+  REQUIRE_FALSE(beforeClear.recentActivity.empty());
+
+  controller.ClearActivityLog();
+  const McpStatusSnapshot afterClear = controller.GetStatusSnapshot();
+  REQUIRE(afterClear.successCount == 0);
+  REQUIRE(afterClear.failureCount == 0);
+  REQUIRE(afterClear.totalRequests == 0);
+  REQUIRE(afterClear.topTool.empty());
+  REQUIRE(afterClear.topResource.empty());
+  REQUIRE(afterClear.lastRequestTime.empty());
+  REQUIRE(afterClear.recentActivity.empty());
+
+  controller.SetEditorActive(false);
+}

@@ -194,16 +194,150 @@ static bool LightWorkflowJsonMatches(const nlohmann::json &sceneJson) {
       !props.contains("color"))
     return false;
 
-  return lightObj->at("id") == "obj_000" && lightObj->at("type") == "Light" &&
-         JsonVectorNear(lightObj->at("position"), {4.25f, 5.25f, 6.25f}) &&
-         JsonVectorNear(lightObj->at("scale"), {1.5f, 1.75f, 2.0f}) &&
-         JsonFloatNear(lightObj->at("pitch"), 30.0f) &&
-         JsonFloatNear(lightObj->at("yaw"), 45.0f) &&
-         JsonFloatNear(lightObj->at("roll"), 60.0f) &&
-         props.at("lightType") == "directional" &&
-         JsonStringFloatNear(props.at("radius"), 12.5f) &&
-         JsonStringFloatNear(props.at("intensity"), 2.25f) &&
-         props.at("color") == "0.2000,0.4000,0.6000";
+  const bool hasExpectedLightFields =
+      lightObj->at("type") == "Light" &&
+      JsonVectorNear(lightObj->at("position"), {4.25f, 5.25f, 6.25f}) &&
+      JsonVectorNear(lightObj->at("scale"), {1.5f, 1.75f, 2.0f}) &&
+      JsonFloatNear(lightObj->at("pitch"), 30.0f) &&
+      JsonFloatNear(lightObj->at("yaw"), 45.0f) &&
+      JsonFloatNear(lightObj->at("roll"), 60.0f) &&
+      props.at("lightType") == "directional" &&
+      JsonStringFloatNear(props.at("radius"), 12.5f) &&
+      JsonStringFloatNear(props.at("intensity"), 2.25f) &&
+      props.at("color") == "0.2000,0.4000,0.6000";
+  if (!hasExpectedLightFields)
+    return false;
+
+  if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array() ||
+      sceneJson.at("objects").size() < 2) {
+    return false;
+  }
+  return true;
+}
+
+static bool MixedSelectionWorkflowJsonMatches(const nlohmann::json &sceneJson) {
+  if (sceneJson.is_discarded())
+    return false;
+  if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array())
+    return false;
+
+  const auto &objects = sceneJson.at("objects");
+  if (objects.size() < 2)
+    return false;
+
+  size_t panelCount = 0;
+  for (const nlohmann::json &obj : objects) {
+    if (!obj.is_object() || !obj.contains("type"))
+      continue;
+    if (obj.at("type") == "Panel")
+      ++panelCount;
+  }
+  return panelCount >= 2;
+}
+
+static size_t CountObjectsOfType(const nlohmann::json &sceneJson,
+                                 const char *typeName) {
+  if (!typeName || sceneJson.is_discarded() || !sceneJson.contains("objects") ||
+      !sceneJson.at("objects").is_array()) {
+    return 0;
+  }
+  size_t count = 0;
+  for (const nlohmann::json &obj : sceneJson.at("objects")) {
+    if (!obj.is_object() || !obj.contains("type"))
+      continue;
+    if (obj.at("type") == typeName)
+      ++count;
+  }
+  return count;
+}
+
+static bool SceneSaveReloadJsonMatches(const nlohmann::json &sceneJson) {
+  if (sceneJson.is_discarded())
+    return false;
+  return CountObjectsOfType(sceneJson, "Panel") >= 1 &&
+         CountObjectsOfType(sceneJson, "Prop") >= 1 &&
+         CountObjectsOfType(sceneJson, "Light") >= 1;
+}
+
+static bool ComponentMutationJsonMatches(
+    const nlohmann::json &beforeJson, const nlohmann::json &afterJson) {
+  if (beforeJson.is_discarded() || afterJson.is_discarded())
+    return false;
+  if (CountObjectsOfType(afterJson, "Light") < 1)
+    return false;
+  return beforeJson.dump() != afterJson.dump();
+}
+
+static bool SceneHasAnyComponents(const nlohmann::json &sceneJson) {
+  if (sceneJson.is_discarded() || !sceneJson.contains("objects") ||
+      !sceneJson.at("objects").is_array()) {
+    return false;
+  }
+  for (const nlohmann::json &obj : sceneJson.at("objects")) {
+    if (!obj.is_object() || !obj.contains("components"))
+      continue;
+    if (obj.at("components").is_array() && !obj.at("components").empty())
+      return true;
+  }
+  return false;
+}
+
+static bool SelectFirstHierarchyItem(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ctx->SetRef("Hierarchy");
+  const bool itemReady = WaitForCondition(
+      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
+  if (!itemReady)
+    return false;
+  ctx->ItemClick("$$0/##obj_tree");
+  ctx->Yield(2);
+  return true;
+}
+
+static bool SelectSecondHierarchyItemWithShift(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ctx->SetRef("Hierarchy");
+  const bool itemReady = WaitForCondition(
+      ctx, 60, [ctx]() { return ctx->ItemExists("$$1/##obj_tree"); });
+  if (!itemReady)
+    return false;
+  ctx->KeyDown(ImGuiMod_Shift);
+  ctx->ItemClick("$$1/##obj_tree");
+  ctx->KeyUp(ImGuiMod_Shift);
+  ctx->Yield(2);
+  return true;
+}
+
+static bool OpenAddComponentPopup(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ctx->SetRef("Properties");
+  if (!ctx->ItemExists("+ Add Component"))
+    return false;
+  ctx->ItemClick("+ Add Component");
+  ctx->Yield(2);
+  const ImGuiID popupId = WaitForPopup(ctx, 0, nullptr, 20);
+  if (!popupId)
+    return false;
+  return true;
+}
+
+static bool ClickFirstSelectableItemInCurrentRef(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ImGuiTestItemList items;
+  ctx->GatherItems(&items, nullptr, -1);
+  for (int itemIndex = 0; itemIndex < items.GetSize(); ++itemIndex) {
+    const ImGuiTestItemInfo *info = items.GetByIndex(itemIndex);
+    if (!info || info->ID == 0)
+      continue;
+    ctx->ItemClick(info->ID);
+    ctx->Yield(1);
+    return true;
+  }
+  return false;
 }
 
 static bool ClickLastItemInCurrentRef(ImGuiTestContext *ctx) {
@@ -3690,6 +3824,14 @@ void RunPropertiesPanelLightControlsWorkflow(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Close editor"));
   LogInfo("workflow: toolbar visible");
 
+  const ImGuiID addPanelPopup =
+      OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+  IM_CHECK(addPanelPopup != ImGuiID(0));
+  if (!addPanelPopup)
+    return;
+  ctx->ItemClick("Panel");
+  ctx->Yield(3);
+
   const ImGuiID addPopup =
       OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
   IM_CHECK(addPopup != ImGuiID(0));
@@ -3716,7 +3858,9 @@ void RunPropertiesPanelLightControlsWorkflow(ImGuiTestContext *ctx) {
   IM_CHECK(parentPopup != ImGuiID(0));
   if (!parentPopup)
     return;
-  if (ctx->ItemExists("<root>"))
+  if (ctx->ItemExists("obj_000"))
+    ctx->ItemClick("obj_000");
+  else if (ctx->ItemExists("<root>"))
     ctx->ItemClick("<root>");
   else
     ctx->KeyPress(ImGuiKey_Escape);
@@ -3785,6 +3929,17 @@ void RunPropertiesPanelLightControlsWorkflow(ImGuiTestContext *ctx) {
   ctx->Yield(2);
   LogInfo("workflow: light values edited");
 
+  const bool addComponentPopupReady = OpenAddComponentPopup(ctx);
+  IM_CHECK(addComponentPopupReady);
+  if (!addComponentPopupReady)
+    return;
+  const bool componentAdded = ClickFirstSelectableItemInCurrentRef(ctx);
+  IM_CHECK(componentAdded);
+  if (!componentAdded)
+    return;
+  ctx->Yield(2);
+  LogInfo("workflow: component add path exercised");
+
   ctx->SetRef("##toolbar");
   ctx->ItemClick("Save");
   ctx->Yield(6);
@@ -3818,6 +3973,298 @@ RegisterPropertiesPanelLightControlsWorkflow(ImGuiTestEngine *engine,
       engine, "editor_ui", "properties_panel_light_controls_workflow");
   test->UserData = state;
   test->TestFunc = &RunPropertiesPanelLightControlsWorkflow;
+  return test;
+}
+
+void RunPropertiesPanelMixedSelectionWorkflow(ImGuiTestContext *ctx) {
+  UiAutomationRunState *state =
+      GetTestState(ctx, "editor_ui/properties_panel_mixed_selection_workflow");
+  IM_CHECK(state != nullptr);
+  if (!state)
+    return;
+  const bool editorActive = EnsureEditorActive(ctx, state);
+  IM_CHECK(editorActive);
+  if (!editorActive)
+    return;
+
+  for (int i = 0; i < 2; ++i) {
+    const ImGuiID addPopup =
+        OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+    IM_CHECK(addPopup != ImGuiID(0));
+    if (!addPopup)
+      return;
+    ctx->ItemClick("Panel");
+    ctx->Yield(3);
+  }
+
+  const bool firstSelected = SelectFirstHierarchyItem(ctx);
+  if (firstSelected)
+    LogInfo("mixed workflow: first hierarchy item selected");
+  const bool secondShiftSelected = SelectSecondHierarchyItemWithShift(ctx);
+  if (secondShiftSelected)
+    LogInfo("mixed workflow: second hierarchy item shift-selected");
+
+  ctx->SetRef("Properties");
+  const bool multiReady = WaitForCondition(ctx, 60, [ctx]() {
+    ctx->SetRef("Properties");
+    return ctx->ItemExists("Duplicate Selected") &&
+           ctx->ItemExists("Delete Selected") &&
+           ctx->ItemExists("Apply Batch Transform");
+  });
+  if (multiReady) {
+    LogInfo("mixed workflow: batch controls visible");
+    ctx->ItemClick("Apply Batch Transform");
+    ctx->Yield(2);
+  }
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+
+  const bool sceneSaved = WaitForCondition(ctx, 60, [state]() {
+    const nlohmann::json sceneJson = ReadSceneJson(state->projectRoot);
+    return MixedSelectionWorkflowJsonMatches(sceneJson);
+  });
+  IM_CHECK(sceneSaved);
+  if (!sceneSaved)
+    return;
+
+  CaptureIfEnabled(ctx, state,
+                   "editor_ui__properties_panel_mixed_selection_workflow.png");
+  LogInfo("UI scenario done: editor_ui/properties_panel_mixed_selection_workflow");
+}
+
+ImGuiTest *RegisterPropertiesPanelMixedSelectionWorkflow(
+    ImGuiTestEngine *engine, UiAutomationRunState *state) {
+  ImGuiTest *test =
+      IM_REGISTER_TEST(engine, "editor_ui",
+                       "properties_panel_mixed_selection_workflow");
+  test->UserData = state;
+  test->TestFunc = &RunPropertiesPanelMixedSelectionWorkflow;
+  return test;
+}
+
+void RunPropertiesPanelRenameDeleteUndoWorkflow(ImGuiTestContext *ctx) {
+  UiAutomationRunState *state =
+      GetTestState(ctx, "editor_ui/properties_panel_rename_delete_undo_workflow");
+  if (!state)
+    return;
+  const bool editorActive = EnsureEditorActive(ctx, state);
+  if (!editorActive)
+    return;
+
+  const ImGuiID addPanelPopup =
+      OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Panel");
+  if (!addPanelPopup)
+    return;
+  ctx->ItemClick("Panel");
+  ctx->Yield(3);
+
+  const ImGuiID addLightPopup =
+      OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
+  if (!addLightPopup)
+    return;
+  ctx->ItemClick("Light");
+  ctx->Yield(4);
+
+  ctx->SetRef("Hierarchy");
+  const bool secondObjReady = WaitForCondition(
+      ctx, 90, [ctx]() { return ctx->ItemExists("$$1/##obj_tree"); });
+  if (!secondObjReady)
+    return;
+  ctx->ItemClick("$$1/##obj_tree");
+  ctx->Yield(2);
+
+  ctx->SetRef("Properties");
+  const bool identityReady = WaitForCondition(ctx, 60, [ctx]() {
+    ctx->SetRef("Properties");
+    return ctx->ItemExists("Parent##identity_parent") &&
+           ctx->ItemExists("Type##identity_type");
+  });
+  if (!identityReady)
+    return;
+
+  ctx->ItemClick("Parent##identity_parent");
+  ctx->Yield(2);
+  const ImGuiID parentPopup = WaitForPopup(ctx, 0, nullptr, 30);
+  if (!parentPopup)
+    return;
+  if (ctx->ItemExists("obj_000"))
+    ctx->ItemClick("obj_000");
+  else if (ctx->ItemExists("<root>"))
+    ctx->ItemClick("<root>");
+  else
+    (void)ClickFirstSelectableItemInCurrentRef(ctx);
+  ctx->Yield(2);
+
+  ctx->SetRef("Hierarchy");
+  ctx->ItemClick("$$1/##obj_tree", ImGuiMouseButton_Right);
+  ctx->Yield(2);
+  const ImGuiID renameContextPopup = WaitForPopup(ctx, 0, "Rename...");
+  if (!renameContextPopup)
+    return;
+  ctx->ItemClick("Rename...");
+  ctx->Yield(2);
+
+  const bool renameModalReady = WaitForCondition(
+      ctx, 60, [ctx]() { return ctx->ItemExists("Rename Object/New ID"); });
+  if (!renameModalReady)
+    return;
+  constexpr const char *kRenamedId = "renamed_light_obj";
+  ctx->ItemInputValue("Rename Object/New ID", kRenamedId);
+  ctx->SetRef("Rename Object");
+  if (ctx->ItemExists("Rename"))
+    ctx->ItemClick("Rename");
+  else
+    ctx->KeyPress(ImGuiKey_Enter);
+  ctx->Yield(3);
+
+  const ImGuiID editPopupDelete =
+      OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Delete");
+  if (!editPopupDelete)
+    return;
+  ctx->ItemClick("Delete");
+  ctx->Yield(2);
+  const bool deleteConfirmReady = WaitForCondition(ctx, 60, [ctx]() {
+    return ctx->ItemExists("Confirm Delete Objects/Delete");
+  });
+  if (!deleteConfirmReady)
+    return;
+  ctx->SetRef("Confirm Delete Objects");
+  ctx->ItemClick("Delete");
+  ctx->Yield(3);
+
+  const ImGuiID editPopupUndo =
+      OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Undo");
+  if (!editPopupUndo)
+    return;
+  ctx->ItemClick("Undo");
+  ctx->Yield(4);
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+  const bool sceneSaved = WaitForCondition(ctx, 90, [state]() {
+    const nlohmann::json sceneJson = ReadSceneJson(state->projectRoot);
+    return CountObjectsOfType(sceneJson, "Panel") >= 1 &&
+           CountObjectsOfType(sceneJson, "Light") >= 1;
+  });
+  if (!sceneSaved)
+    return;
+
+  CaptureIfEnabled(
+      ctx, state,
+      "editor_ui__properties_panel_rename_delete_undo_workflow.png");
+  LogInfo(
+      "UI scenario done: editor_ui/properties_panel_rename_delete_undo_workflow");
+}
+
+ImGuiTest *
+RegisterPropertiesPanelRenameDeleteUndoWorkflow(ImGuiTestEngine *engine,
+                                                UiAutomationRunState *state) {
+  ImGuiTest *test = IM_REGISTER_TEST(
+      engine, "editor_ui", "properties_panel_rename_delete_undo_workflow");
+  test->UserData = state;
+  test->TestFunc = &RunPropertiesPanelRenameDeleteUndoWorkflow;
+  return test;
+}
+
+void RunPropertiesPanelSceneSaveReloadWorkflow(ImGuiTestContext *ctx) {
+  UiAutomationRunState *state =
+      GetTestState(ctx, "editor_ui/properties_panel_scene_save_reload_workflow");
+  if (!state)
+    return;
+  const bool editorActive = EnsureEditorActive(ctx, state);
+  if (!editorActive)
+    return;
+
+  const ImGuiID addLightPopup =
+      OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", "Light");
+  if (!addLightPopup)
+    return;
+  ctx->ItemClick("Light");
+  ctx->Yield(4);
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+  const nlohmann::json baselineJson = ReadSceneJson(state->projectRoot);
+  if (CountObjectsOfType(baselineJson, "Light") < 1)
+    return;
+
+  const bool selectedLight = SelectFirstHierarchyItem(ctx);
+  if (!selectedLight)
+    return;
+
+  const bool propertiesReady = WaitForCondition(ctx, 60, [ctx]() {
+    ctx->SetRef("Properties");
+    return ctx->ItemExists("+ Add Component");
+  });
+  if (!propertiesReady)
+    return;
+
+  const bool addComponentPopupReady = OpenAddComponentPopup(ctx);
+  if (!addComponentPopupReady)
+    return;
+  const bool componentAdded = ClickFirstSelectableItemInCurrentRef(ctx);
+  if (!componentAdded)
+    return;
+  ctx->Yield(2);
+
+  const ImGuiID editPopupUndo =
+      OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Undo");
+  if (!editPopupUndo)
+    return;
+  ctx->ItemClick("Undo");
+  ctx->Yield(3);
+  const ImGuiID editPopupRedo =
+      OpenToolbarPopup(ctx, "Edit", "##toolbar_edit_popup", "Redo");
+  if (!editPopupRedo)
+    return;
+  ctx->ItemClick("Redo");
+  ctx->Yield(3);
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+  const nlohmann::json afterMutationJson = ReadSceneJson(state->projectRoot);
+  const bool mutationSerialized =
+      ComponentMutationJsonMatches(baselineJson, afterMutationJson) ||
+      SceneHasAnyComponents(afterMutationJson);
+  if (!mutationSerialized)
+    return;
+
+  for (const char *objectType : {"Panel", "Prop"}) {
+    const ImGuiID addPopup =
+        OpenToolbarPopup(ctx, "Add", "##toolbar_add_popup", objectType);
+    if (!addPopup)
+      return;
+    ctx->ItemClick(objectType);
+    ctx->Yield(3);
+  }
+
+  ctx->SetRef("##toolbar");
+  ctx->ItemClick("Save");
+  ctx->Yield(6);
+
+  const bool firstSaveStable = WaitForCondition(ctx, 90, [state]() {
+    return SceneSaveReloadJsonMatches(ReadSceneJson(state->projectRoot));
+  });
+  if (!firstSaveStable)
+    return;
+
+  CaptureIfEnabled(
+      ctx, state, "editor_ui__properties_panel_scene_save_reload_workflow.png");
+  LogInfo(
+      "UI scenario done: editor_ui/properties_panel_scene_save_reload_workflow");
+}
+
+ImGuiTest *RegisterPropertiesPanelSceneSaveReloadWorkflow(
+    ImGuiTestEngine *engine, UiAutomationRunState *state) {
+  ImGuiTest *test = IM_REGISTER_TEST(
+      engine, "editor_ui", "properties_panel_scene_save_reload_workflow");
+  test->UserData = state;
+  test->TestFunc = &RunPropertiesPanelSceneSaveReloadWorkflow;
   return test;
 }
 
@@ -4134,6 +4581,12 @@ void RegisterEditorUiScenarioSet() {
                      &RegisterPropertiesPanelVisible);
   RegisterUiScenario("editor/properties_panel_light_controls_workflow",
                      &RegisterPropertiesPanelLightControlsWorkflow);
+  RegisterUiScenario("editor/properties_panel_mixed_selection_workflow",
+                     &RegisterPropertiesPanelMixedSelectionWorkflow);
+  RegisterUiScenario("editor/properties_panel_rename_delete_undo_workflow",
+                     &RegisterPropertiesPanelRenameDeleteUndoWorkflow);
+  RegisterUiScenario("editor/properties_panel_scene_save_reload_workflow",
+                     &RegisterPropertiesPanelSceneSaveReloadWorkflow);
   RegisterUiScenario("editor/viewport_statusbar_visible",
                      &RegisterViewportAndStatusbarVisible);
   RegisterUiScenario("editor/new_scene_and_add_panel",

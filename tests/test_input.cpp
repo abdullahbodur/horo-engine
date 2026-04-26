@@ -16,6 +16,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <GLFW/glfw3.h>
+
 #include <cmath>
 
 #include "input/Input.h"
@@ -249,4 +251,31 @@ TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary",
   ctrl.SetPitch(-70.0f); // exactly at pitchMin
   ctrl.Update(0.016f);
   REQUIRE(ctrl.GetPitch() == Approx(-70.0f));
+}
+
+TEST_CASE("Input: scroll callback accumulates and GetScrollDelta consumes value",
+          "[input][glfw]") {
+  if (!glfwInit())
+    SKIP("GLFW initialization failed on this machine");
+
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *window =
+      glfwCreateWindow(32, 32, "input-scroll-callback-test", nullptr, nullptr);
+  if (!window) {
+    glfwTerminate();
+    SKIP("Unable to create hidden GLFW window for input callback test");
+  }
+
+  Input::Init(window);
+  GLFWscrollfun scrollCallback = glfwSetScrollCallback(window, nullptr);
+  REQUIRE(scrollCallback != nullptr);
+  glfwSetScrollCallback(window, scrollCallback);
+
+  scrollCallback(window, 0.0, 2.5);
+  scrollCallback(window, 0.0, -1.0);
+  CHECK(Input::GetScrollDelta() == Approx(1.5f));
+  CHECK(Input::GetScrollDelta() == Approx(0.0f));
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
 }

@@ -20,11 +20,69 @@
 #include "core/Time.h"
 #include "core/Window.h"
 #include "math/MathUtils.h"
+#include "renderer/IRenderBackend.h"
+#include "renderer/RenderBackend.h"
+#include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "tests/TestTempPaths.h"
 
 using namespace Monolith;
 using Catch::Approx;
+
+namespace {
+class ScreenshotTestBackend final : public IRenderBackend {
+public:
+  RenderBackendCapabilities capabilities =
+      GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+  bool colorReadbackResult = true;
+  std::string colorReadbackError = "synthetic readback failure";
+  std::vector<uint8_t> colorPixels;
+  int readbackColorCalls = 0;
+  int lastReadbackWidth = 0;
+  int lastReadbackHeight = 0;
+
+  void BeginFrame(const RenderFrameConfig &) override {}
+  void EndFrame() override {}
+  void BeginPass(const RenderPassConfig &) override {}
+  void EndPass() override {}
+  void DrawMesh(const MeshDrawCommand &) override {}
+  void DrawSkinnedMesh(const SkinnedMeshDrawCommand &) override {}
+  void DrawWireframe(const WireframeDrawCommand &) override {}
+  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+  RenderBackendCapabilities GetCapabilities() const override {
+    return capabilities;
+  }
+  int GetDrawCallCount() const override { return 0; }
+
+  bool ReadbackColorBgr8(int width, int height, std::vector<uint8_t> &outPixels,
+                         std::string *outError) override {
+    ++readbackColorCalls;
+    lastReadbackWidth = width;
+    lastReadbackHeight = height;
+    if (!colorReadbackResult) {
+      if (outError)
+        *outError = colorReadbackError;
+      return false;
+    }
+    outPixels = colorPixels;
+    return true;
+  }
+
+  bool ReadbackDepth32F(int, int, std::vector<float> &, std::string *) override {
+    return false;
+  }
+
+  bool EnsureEditorViewportRenderTarget(uint32_t, uint32_t,
+                                        std::string *) override {
+    return false;
+  }
+
+  bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *, bool,
+                                              std::string *) override {
+    return false;
+  }
+};
+} // namespace
 
 // ===========================================================================
 // Logger — just verifies the API doesn't crash (output goes to stdout/stderr)
@@ -646,6 +704,75 @@ TEST_CASE("Screenshot: negative dimensions return empty string",
           "[screenshot]") {
   const std::string outDir = Monolith::Tests::SecureTempBase().string();
   REQUIRE(Monolith::Screenshot::Save(-1, -1, outDir).empty());
+}
+
+TEST_CASE("Screenshot: backend without readback support returns empty without readback",
+          "[core][screenshot]") {
+  ScreenshotTestBackend backend;
+  backend.capabilities.supportsReadback = false;
+  Renderer::UseBackend(&backend);
+
+  const std::string outDir = Monolith::Tests::SecureTempBase().string();
+  REQUIRE(Screenshot::Save(2, 2, outDir).empty());
+  CHECK(backend.readbackColorCalls == 0);
+
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Screenshot: readback failure returns empty and captures request dimensions",
+          "[core][screenshot]") {
+  ScreenshotTestBackend backend;
+  backend.capabilities.supportsReadback = true;
+  backend.colorReadbackResult = false;
+  backend.colorReadbackError = "readback unavailable in test backend";
+  Renderer::UseBackend(&backend);
+
+  const std::string outDir = Monolith::Tests::SecureTempBase().string();
+  REQUIRE(Screenshot::Save(7, 3, outDir).empty());
+  CHECK(backend.readbackColorCalls == 1);
+  CHECK(backend.lastReadbackWidth == 7);
+  CHECK(backend.lastReadbackHeight == 3);
+
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Screenshot: successful save writes a BMP file with expected header",
+          "[core][screenshot]") {
+  ScreenshotTestBackend backend;
+  backend.capabilities.supportsReadback = true;
+  backend.colorReadbackResult = true;
+  backend.colorPixels = {
+      // Row 0 (bottom): BGR
+      0u, 0u, 255u, 0u, 255u, 0u,
+      // Row 1 (top): BGR
+      255u, 0u, 0u, 255u, 255u, 255u,
+  };
+  Renderer::UseBackend(&backend);
+
+  const std::filesystem::path outDir =
+      Monolith::Tests::SecureTempPath("screenshot_success_path");
+  std::error_code ec;
+  std::filesystem::create_directories(outDir, ec);
+  REQUIRE_FALSE(ec);
+
+  const std::string path = Screenshot::Save(2, 2, outDir.string());
+  REQUIRE_FALSE(path.empty());
+  CHECK(path.find(".bmp") != std::string::npos);
+  CHECK(backend.readbackColorCalls == 1);
+
+  const std::filesystem::path screenshotPath(path);
+  REQUIRE(std::filesystem::exists(screenshotPath));
+  CHECK(std::filesystem::file_size(screenshotPath) == 70u);
+
+  std::ifstream file(path, std::ios::binary);
+  REQUIRE(file.is_open());
+  char signature[2] = {0, 0};
+  file.read(signature, 2);
+  REQUIRE(file.gcount() == 2);
+  CHECK(signature[0] == 'B');
+  CHECK(signature[1] == 'M');
+
+  Renderer::ResetBackend();
 }
 
 // ===========================================================================

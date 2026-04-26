@@ -66,17 +66,31 @@ jobs:
 
       - name: Test
         run: |
-          mkdir -p "${{ github.workspace }}/build/debug/test-results"
-          ctest --preset debug --output-on-failure \
-            --output-junit "${{ github.workspace }}/build/debug/test-results/results.xml"
+          ctest --preset debug --output-on-failure
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: bash
+        run: |
+          outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          mkdir -p "$outdir"
+          for binary in build/debug/bin/tests/test_*; do
+            if [ -x "$binary" ] && [ -f "$binary" ]; then
+              name=$(basename "$binary")
+              MONOLITH_LOG_LEVEL=warn "$binary" \
+                --reporter JUnit::out="${outdir}/${name}.xml" || true
+            fi
+          done
+        env:
+          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
         uses: mikepenz/action-junit-report@v4
         with:
-          report_paths: build/debug/test-results/results.xml
+          report_paths: build/debug/test-results/scenarios/*.xml
           check_name: "Test Results · macOS"
           fail_on_failure: true
           require_tests: true
@@ -172,18 +186,30 @@ jobs:
 
       - name: Test
         run: |
-          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/build/debug-msvc/test-results" | Out-Null
-          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel `
-            --output-junit "${{ github.workspace }}/build/debug-msvc/test-results/results.xml"
+          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
         shell: pwsh
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: pwsh
+        run: |
+          $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Get-ChildItem "build\debug-msvc\bin\Debug\test_*.exe" | ForEach-Object {
+            $name = $_.BaseName
+            $outFile = Join-Path $outDir "$name.xml"
+            & $_.FullName --reporter JUnit::out="$outFile"
+          }
+        env:
+          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
         uses: mikepenz/action-junit-report@v4
         with:
-          report_paths: build/debug-msvc/test-results/results.xml
+          report_paths: build/debug-msvc/test-results/scenarios/*.xml
           check_name: "Test Results · Windows"
           fail_on_failure: true
           require_tests: true
@@ -352,17 +378,31 @@ jobs:
 
       - name: Test
         run: |
-          mkdir -p "${{ github.workspace }}/build/debug/test-results"
-          ctest --preset debug --output-on-failure \
-            --output-junit "${{ github.workspace }}/build/debug/test-results/results.xml"
+          ctest --preset debug --output-on-failure
         env:
           MONOLITH_LOG_LEVEL: "debug"
+
+      - name: Generate scenario-level JUnit reports
+        if: always()
+        shell: bash
+        run: |
+          outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
+          mkdir -p "$outdir"
+          for binary in build/debug/bin/tests/test_*; do
+            if [ -x "$binary" ] && [ -f "$binary" ]; then
+              name=$(basename "$binary")
+              MONOLITH_LOG_LEVEL=warn "$binary" \
+                --reporter JUnit::out="${outdir}/${name}.xml" || true
+            fi
+          done
+        env:
+          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
         uses: mikepenz/action-junit-report@v4
         with:
-          report_paths: build/debug/test-results/results.xml
+          report_paths: build/debug/test-results/scenarios/*.xml
           check_name: "Test Results · Linux"
           fail_on_failure: true
           require_tests: true

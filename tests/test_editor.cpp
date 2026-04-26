@@ -2837,6 +2837,94 @@ TEST_CASE("SceneProjectBridge: Panel node has Panel kind in model",
   REQUIRE_FALSE(model.scene.nodes[0].light.has_value());
 }
 
+TEST_CASE("SceneProjectBridge: malformed scalar/vector props fall back to "
+          "defaults",
+          "[editor][bridge]") {
+  SceneDocument baselineDoc;
+  SceneObject baselineCam;
+  baselineCam.id = "cam_base";
+  baselineCam.type = SceneObjectType::Camera;
+  baselineDoc.objects.push_back(baselineCam);
+  SceneObject baselineLight;
+  baselineLight.id = "light_base";
+  baselineLight.type = SceneObjectType::Light;
+  baselineDoc.objects.push_back(baselineLight);
+  const SceneProjectModel baselineModel = BuildSceneProjectModel(baselineDoc);
+
+  SceneDocument malformedDoc;
+  SceneObject badCam;
+  badCam.id = "cam_bad";
+  badCam.type = SceneObjectType::Camera;
+  badCam.props["fov"] = "not-a-float";
+  badCam.props["nearClip"] = "";
+  badCam.props["farClip"] = "oops";
+  malformedDoc.objects.push_back(badCam);
+  SceneObject badLight;
+  badLight.id = "light_bad";
+  badLight.type = SceneObjectType::Light;
+  badLight.props["intensity"] = "oops";
+  badLight.props["color"] = "x,y,z";
+  badLight.props["radius"] = "nope";
+  malformedDoc.objects.push_back(badLight);
+  malformedDoc.settings["spawnPoint"] = "bad,spawn,value";
+  const SceneProjectModel malformedModel = BuildSceneProjectModel(malformedDoc);
+
+  REQUIRE(malformedModel.scene.nodes[0].camera.has_value());
+  REQUIRE(baselineModel.scene.nodes[0].camera.has_value());
+  REQUIRE(malformedModel.scene.nodes[0].camera->fovY ==
+          Approx(baselineModel.scene.nodes[0].camera->fovY));
+  REQUIRE(malformedModel.scene.nodes[0].camera->nearClip ==
+          Approx(baselineModel.scene.nodes[0].camera->nearClip));
+  REQUIRE(malformedModel.scene.nodes[0].camera->farClip ==
+          Approx(baselineModel.scene.nodes[0].camera->farClip));
+
+  REQUIRE(malformedModel.scene.nodes[1].light.has_value());
+  REQUIRE(baselineModel.scene.nodes[1].light.has_value());
+  REQUIRE(malformedModel.scene.nodes[1].light->intensity ==
+          Approx(baselineModel.scene.nodes[1].light->intensity));
+  REQUIRE(malformedModel.scene.nodes[1].light->color.x ==
+          Approx(baselineModel.scene.nodes[1].light->color.x));
+  REQUIRE(malformedModel.scene.nodes[1].light->color.y ==
+          Approx(baselineModel.scene.nodes[1].light->color.y));
+  REQUIRE(malformedModel.scene.nodes[1].light->color.z ==
+          Approx(baselineModel.scene.nodes[1].light->color.z));
+  REQUIRE(malformedModel.scene.nodes[1].light->radius ==
+          Approx(baselineModel.scene.nodes[1].light->radius));
+}
+
+TEST_CASE("SceneProjectBridge: round-trip preserves extra props and extra "
+          "components",
+          "[editor][bridge]") {
+  SceneDocument doc;
+  doc.sceneId = "bridge_extra_roundtrip";
+  SceneObject object;
+  object.id = "obj_extra";
+  object.type = SceneObjectType::Prop;
+  object.props["customFlag"] = "enabled";
+  object.props["parentId"] = "root_parent";
+  object.props["behavior"] = "none";
+  object.components.push_back(
+      ComponentDesc{"custom_component", {{"k1", "v1"}, {"k2", "v2"}}});
+  doc.objects.push_back(object);
+
+  const SceneProjectModel model = BuildSceneProjectModel(doc);
+  REQUIRE(model.scene.nodes.size() == 1);
+  REQUIRE(model.scene.nodes[0].extraProps.at("customFlag") == "enabled");
+  REQUIRE(model.scene.nodes[0].parentId.has_value());
+  REQUIRE(*model.scene.nodes[0].parentId == "root_parent");
+  REQUIRE(model.scene.nodes[0].extraComponents.size() == 1);
+  REQUIRE(model.scene.nodes[0].extraComponents[0].type == "custom_component");
+  REQUIRE(model.scene.nodes[0].extraComponents[0].props.at("k1") == "v1");
+
+  const SceneDocument rebuilt = BuildSceneDocument(model);
+  REQUIRE(rebuilt.objects.size() == 1);
+  REQUIRE(rebuilt.objects[0].props.at("customFlag") == "enabled");
+  REQUIRE(rebuilt.objects[0].props.at("parentId") == "root_parent");
+  REQUIRE(rebuilt.objects[0].components.size() == 1);
+  REQUIRE(rebuilt.objects[0].components[0].type == "custom_component");
+  REQUIRE(rebuilt.objects[0].components[0].props.at("k2") == "v2");
+}
+
 // ============================================================
 // EditorSceneGraph coverage tests
 // ============================================================
@@ -5540,6 +5628,14 @@ TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown "
   REQUIRE(registry.FindByExtension("noextension") == nullptr);
 }
 
+TEST_CASE("AssetImporterRegistry: extension lookup is case-insensitive",
+          "[editor][importer]") {
+  AssetImporterRegistry registry;
+  REQUIRE(registry.FindByExtension("mesh.OBJ") != nullptr);
+  REQUIRE(registry.FindByExtension("ALBEDO.PNG") != nullptr);
+  REQUIRE(registry.FindByExtension("roughness.JpEg") != nullptr);
+}
+
 TEST_CASE(
     "AssetImporterRegistry: RegisteredImporterIds returns both built-in ids",
     "[editor][importer]") {
@@ -5696,6 +5792,100 @@ TEST_CASE(
   REQUIRE(result.ok);
 
   fs::remove_all(tmpDir);
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs",
+          "[editor][importer]") {
+  namespace fs = std::filesystem;
+  const fs::path tmpDir =
+      Monolith::Tests::SecureTempBase() / "horo_importer_dedupe_sort";
+  std::error_code ec;
+  fs::remove_all(tmpDir, ec);
+  fs::create_directories(tmpDir, ec);
+
+  const fs::path objPath = tmpDir / "dup.obj";
+  const fs::path mtlPath = tmpDir / "dup.mtl";
+  const fs::path texPath = tmpDir / "tex_a.png";
+  WriteFile(objPath.string(), "mtllib dup.mtl\n"
+                              "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                              "usemtl Mat\n"
+                              "f 1 2 3\n");
+  WriteFile(mtlPath.string(), "newmtl Mat\n"
+                              "map_Kd tex_a.png\n"
+                              "map_Kd tex_a.png\n");
+  WriteFile(texPath.string(), "PNGDATA");
+
+  const fs::path projectRoot = tmpDir / "project";
+  fs::create_directories(projectRoot, ec);
+  ProjectPathGuard guard(projectRoot);
+
+  AssetImporterRegistry registry;
+  const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+  REQUIRE(importer != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "dup_mesh";
+  req.assetGuid = "guid-dedupe-sort";
+  req.displayName = "Dup Mesh";
+  req.sourcePath = objPath.string();
+
+  const AssetImportResult result = importer->Import(req);
+  REQUIRE(result.ok);
+  REQUIRE(std::is_sorted(result.metadata.producedFiles.begin(),
+                         result.metadata.producedFiles.end()));
+  auto dedupedProducedFiles = result.metadata.producedFiles;
+  const auto uniqueEnd = std::unique(dedupedProducedFiles.begin(),
+                                     dedupedProducedFiles.end());
+  REQUIRE(uniqueEnd == dedupedProducedFiles.end());
+
+  size_t producedOutputDeps = 0;
+  for (const auto &dep : result.metadata.dependencies) {
+    if (dep.kind == AssetDependencyKind::ProducedOutput)
+      ++producedOutputDeps;
+  }
+  REQUIRE(producedOutputDeps == result.metadata.producedFiles.size());
+
+  fs::remove_all(tmpDir, ec);
+}
+
+TEST_CASE("AssetImporterRegistry: OBJ reimport replaces existing destination",
+          "[editor][importer]") {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      Monolith::Tests::SecureTempBase() / "horo_importer_replace_dest";
+  std::error_code ec;
+  fs::remove_all(root, ec);
+  fs::create_directories(root / "src", ec);
+  fs::create_directories(root / "project", ec);
+  ProjectPathGuard guard(root / "project");
+
+  const fs::path sourceObj = root / "src" / "replace.obj";
+  WriteFile(sourceObj.string(), "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
+  REQUIRE(importer != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "replace_mesh";
+  req.assetGuid = "guid-replace-mesh";
+  req.displayName = "Replace Mesh";
+  req.sourcePath = sourceObj.string();
+
+  const AssetImportResult first = importer->Import(req);
+  REQUIRE(first.ok);
+
+  WriteFile(sourceObj.string(),
+            "v 0 0 0\nv 2 0 0\nv 0 2 0\nv 0 0 1\nf 1 2 3\nf 1 3 4\n");
+  const AssetImportResult second = importer->Import(req);
+  REQUIRE(second.ok);
+
+  const std::filesystem::path managedObj = ProjectPath::Resolve(second.asset.mesh);
+  std::ifstream stream(managedObj);
+  REQUIRE(stream.is_open());
+  std::string body((std::istreambuf_iterator<char>(stream)),
+                   std::istreambuf_iterator<char>());
+  REQUIRE(body.find("f 1 3 4") != std::string::npos);
 }
 
 // ===========================================================================
@@ -9064,6 +9254,40 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk",
   REQUIRE(loaded.displayName == "Save Meta Asset");
 }
 
+TEST_CASE("AssetImportService: SaveMetadataForAsset reports empty metadata path",
+          "[editor][asset-import]") {
+  AssetImportService service;
+  AssetDef asset;
+  asset.displayName = "No Guid Asset";
+  std::string err;
+  const bool ok = service.SaveMetadataForAsset("asset_without_guid", asset, &err);
+  REQUIRE_FALSE(ok);
+  REQUIRE(err == "Asset metadata path is empty.");
+}
+
+TEST_CASE("AssetImportService: ImportTextureForAsset unsupported type includes "
+          "message",
+          "[editor][asset-import]") {
+  const std::filesystem::path root =
+      Monolith::Tests::SecureTempBase() / "horo_texture_unsupported_message";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile((root / "CMakePresets.json").string(), "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  AssetDef asset;
+  asset.guid = "guid_tex_bad_type";
+  asset.displayName = "Bad Texture Type";
+  std::string err;
+  const bool ok = service.ImportTextureForAsset((root / "bad_type.txt").string(),
+                                                "tex_bad_type", &asset, &err);
+  REQUIRE_FALSE(ok);
+  REQUIRE(err ==
+          "Unsupported image type (use png, jpg, bmp, tga, webp, …).");
+}
+
 // ===========================================================================
 // AssetImportService.cpp — additional error-path tests
 // ===========================================================================
@@ -9383,4 +9607,234 @@ TEST_CASE(
   CHECK_FALSE(SchemaAppliesToObjectType({"light"}, SceneObjectType::Prop));
   CHECK_FALSE(SchemaAppliesToObjectType({"camera"}, SceneObjectType::Light));
   CHECK_FALSE(SchemaAppliesToObjectType({"panel"}, SceneObjectType::Camera));
+}
+
+// ===========================================================================
+// EditorSelectionRules
+// ===========================================================================
+#include "editor/EditorPropertyRules.h"
+#include "editor/EditorSelectionRules.h"
+
+TEST_CASE("ValidateRenameCandidate: empty draft returns error",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  SceneObject obj;
+  obj.id = "existing_obj";
+  doc.objects.push_back(obj);
+
+  const std::string err = ValidateRenameCandidate(doc, 0, "");
+  CHECK_FALSE(err.empty());
+  CHECK(err.find("empty") != std::string::npos);
+}
+
+TEST_CASE("ValidateRenameCandidate: out-of-range index returns error",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+
+  CHECK_FALSE(ValidateRenameCandidate(doc, 0, "new_id").empty());
+  CHECK_FALSE(ValidateRenameCandidate(doc, -1, "new_id").empty());
+}
+
+TEST_CASE("ValidateRenameCandidate: ID already used by another object is rejected",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  SceneObject a;
+  a.id = "obj_a";
+  doc.objects.push_back(a);
+  SceneObject b;
+  b.id = "obj_b";
+  doc.objects.push_back(b);
+
+  const std::string err = ValidateRenameCandidate(doc, 0, "obj_b");
+  CHECK_FALSE(err.empty());
+  CHECK(err.find("exists") != std::string::npos);
+}
+
+TEST_CASE("ValidateRenameCandidate: renaming to own current ID succeeds",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  SceneObject obj;
+  obj.id = "same_id";
+  doc.objects.push_back(obj);
+
+  CHECK(ValidateRenameCandidate(doc, 0, "same_id").empty());
+}
+
+TEST_CASE("ValidateRenameCandidate: fresh unique ID succeeds",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  SceneObject obj;
+  obj.id = "obj_000";
+  doc.objects.push_back(obj);
+
+  CHECK(ValidateRenameCandidate(doc, 0, "obj_new_name").empty());
+}
+
+TEST_CASE("CollectParentCandidates: excludes self and descendants",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  SceneObject parent;
+  parent.id = "parent";
+  doc.objects.push_back(parent);
+  SceneObject child;
+  child.id = "child";
+  child.props["parentId"] = "parent";
+  doc.objects.push_back(child);
+  SceneObject other;
+  other.id = "other";
+  doc.objects.push_back(other);
+
+  const std::vector<std::string> candidates = CollectParentCandidates(doc, 0);
+  CHECK(std::ranges::find(candidates, "parent") == candidates.end());
+  CHECK(std::ranges::find(candidates, "child") == candidates.end());
+  CHECK(std::ranges::find(candidates, "other") != candidates.end());
+}
+
+TEST_CASE("GenerateUniqueId: produces unique ID not in document",
+          "[editor][selection-rules]") {
+  SceneDocument doc;
+  for (int i = 0; i < 5; ++i) {
+    SceneObject obj;
+    obj.id = std::format("obj_{:03d}", i);
+    doc.objects.push_back(obj);
+  }
+
+  const std::string id = GenerateUniqueId(doc, "obj");
+  CHECK_FALSE(id.empty());
+  for (const auto &obj : doc.objects)
+    CHECK(obj.id != id);
+}
+
+// ===========================================================================
+// EditorPropertyRules
+// ===========================================================================
+
+TEST_CASE("MakeObjectFromAsset: creates Prop with correct assetId",
+          "[editor][property-rules]") {
+  SceneDocument doc;
+  AssetDef asset;
+  asset.displayName = "Barrel";
+  asset.renderScale = "1.0,1.0,1.0";
+  doc.assets["barrel"] = asset;
+
+  EditorSchema schema;
+  const SceneObject obj = MakeObjectFromAsset(doc, "barrel", schema);
+
+  CHECK(obj.type == SceneObjectType::Prop);
+  CHECK(obj.assetId == "barrel");
+  CHECK_FALSE(obj.id.empty());
+  CHECK(obj.props.contains("_assetRenderScale"));
+  CHECK(obj.props.at("_assetRenderScale") == "1.0,1.0,1.0");
+}
+
+TEST_CASE("MakeObjectFromAsset: uses default render scale when empty",
+          "[editor][property-rules]") {
+  SceneDocument doc;
+  AssetDef asset;
+  asset.displayName = "Box";
+  asset.renderScale = "";
+  doc.assets["box"] = asset;
+
+  EditorSchema schema;
+  const SceneObject obj = MakeObjectFromAsset(doc, "box", schema);
+
+  REQUIRE(obj.props.contains("_assetRenderScale"));
+  CHECK(obj.props.at("_assetRenderScale") == "1.0000,1.0000,1.0000");
+}
+
+TEST_CASE("MakeObjectFromAsset: no _assetRenderScale when asset not found",
+          "[editor][property-rules]") {
+  SceneDocument doc;
+  EditorSchema schema;
+  const SceneObject obj = MakeObjectFromAsset(doc, "missing_asset", schema);
+  CHECK(obj.assetId == "missing_asset");
+  CHECK_FALSE(obj.props.contains("_assetRenderScale"));
+}
+
+TEST_CASE("ApplySchemaFieldDefaults: sets missing fields from schema",
+          "[editor][property-rules]") {
+  const std::string json = R"({
+    "types": {
+      "Light": {
+        "fields": [{"key": "color", "label": "Color", "type": "string", "default": "1.0,1.0,1.0"}]
+      }
+    }
+  })";
+  WriteFile(TmpPath("prrules_schema_light.json"), json);
+  EditorSchema schema;
+  schema.LoadFromFile(TmpPath("prrules_schema_light.json"));
+
+  SceneObject obj;
+  obj.type = SceneObjectType::Light;
+  ApplySchemaFieldDefaults(obj, schema);
+
+  CHECK(obj.props.contains("color"));
+  CHECK(obj.props.at("color") == "1.0,1.0,1.0");
+}
+
+TEST_CASE("ApplySchemaFieldDefaults: does not overwrite existing values",
+          "[editor][property-rules]") {
+  const std::string json = R"({
+    "types": {
+      "Light": {
+        "fields": [{"key": "intensity", "label": "Intensity", "type": "float", "default": "1.0",
+                    "min": 0.0, "max": 10.0}]
+      }
+    }
+  })";
+  WriteFile(TmpPath("prrules_schema_intensity.json"), json);
+  EditorSchema schema;
+  schema.LoadFromFile(TmpPath("prrules_schema_intensity.json"));
+
+  SceneObject obj;
+  obj.type = SceneObjectType::Light;
+  obj.props["intensity"] = "5.0";
+  ApplySchemaFieldDefaults(obj, schema);
+
+  CHECK(obj.props.at("intensity") == "5.0");
+}
+
+TEST_CASE("ApplyComponentFieldDefaults: sets missing component fields",
+          "[editor][property-rules]") {
+  const std::string json = R"({
+    "components": {
+      "rigidbody": {
+        "fields": [{"key": "mass", "label": "Mass", "type": "float", "default": "1.0",
+                    "min": 0.0, "max": 10000.0}]
+      }
+    }
+  })";
+  WriteFile(TmpPath("prrules_schema_comp.json"), json);
+  EditorSchema schema;
+  schema.LoadFromFile(TmpPath("prrules_schema_comp.json"));
+
+  ComponentDesc comp;
+  comp.type = "rigidbody";
+  ApplyComponentFieldDefaults(comp, schema);
+
+  CHECK(comp.props.contains("mass"));
+  CHECK(comp.props.at("mass") == "1.0");
+}
+
+TEST_CASE("ApplyCameraBuiltinDefaults: sets fov/nearClip/farClip/followTargetId",
+          "[editor][property-rules]") {
+  SceneObject obj;
+  obj.type = SceneObjectType::Camera;
+  ApplyCameraBuiltinDefaults(obj);
+
+  CHECK(obj.props.at("fov") == "60");
+  CHECK(obj.props.at("nearClip") == "0.1");
+  CHECK(obj.props.at("farClip") == "500");
+  CHECK(obj.props.contains("followTargetId"));
+}
+
+TEST_CASE("ApplyCameraBuiltinDefaults: does not overwrite existing values",
+          "[editor][property-rules]") {
+  SceneObject obj;
+  obj.type = SceneObjectType::Camera;
+  obj.props["fov"] = "90";
+  ApplyCameraBuiltinDefaults(obj);
+
+  CHECK(obj.props.at("fov") == "90");
+  CHECK(obj.props.at("nearClip") == "0.1");
 }

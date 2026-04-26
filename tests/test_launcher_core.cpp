@@ -418,3 +418,59 @@ TEST_CASE(
   REQUIRE(runner.GetStatus().finished);
   REQUIRE(runner.GetStatus().terminatedByUser);
 }
+
+TEST_CASE("External process runner rejects Start while process is active",
+          "[launcher][process]") {
+  ExternalProcessRunner runner;
+  ResolvedLauncherCommand slowCommand;
+  slowCommand.workingDirectory = Monolith::Tests::SecureTempBase();
+#ifdef _WIN32
+  slowCommand.executable = "cmd";
+  slowCommand.args = {"/c", "ping -n 6 127.0.0.1 >nul"};
+#else
+  slowCommand.executable = "sh";
+  slowCommand.args = {"-c", "sleep 2"};
+#endif
+  slowCommand.debugString = slowCommand.executable.generic_string();
+
+  std::string error;
+  REQUIRE(runner.Start(slowCommand, "slow-process-active", &error));
+  REQUIRE(runner.IsActive());
+
+  ResolvedLauncherCommand secondCommand = slowCommand;
+  secondCommand.debugString = "second command";
+  error.clear();
+  REQUIRE_FALSE(runner.Start(secondCommand, "second-start-attempt", &error));
+  REQUIRE(error.find("already running") != std::string::npos);
+
+  runner.Stop();
+  REQUIRE_FALSE(runner.IsActive());
+}
+
+TEST_CASE("External process runner reports non-zero exit for invalid command",
+          "[launcher][process]") {
+  ExternalProcessRunner runner;
+  ResolvedLauncherCommand command;
+  command.workingDirectory = Monolith::Tests::SecureTempBase();
+#ifdef _WIN32
+  command.executable = "definitely_missing_executable_test.exe";
+  command.args = {};
+#else
+  command.executable = "definitely_missing_executable_test";
+  command.args = {};
+#endif
+  command.debugString = command.executable.generic_string();
+
+  std::string error;
+  REQUIRE(runner.Start(command, "invalid-process-name", &error));
+
+  for (int i = 0; i < 120 && runner.IsActive(); ++i) {
+    runner.Poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  REQUIRE_FALSE(runner.IsActive());
+  REQUIRE(runner.GetStatus().finished);
+  REQUIRE_FALSE(runner.GetStatus().terminatedByUser);
+  REQUIRE(runner.GetStatus().exitCode != 0);
+}

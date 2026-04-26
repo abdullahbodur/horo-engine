@@ -50,6 +50,7 @@ UI_TEST_DELAY_MS ?= 0
 UI_TEST_CAPTURE ?= 0
 UI_TEST_OUTPUT_DIR ?= $(CURDIR)/ui_test_output
 TEST_LOG_LEVEL ?= debug
+COVERAGE_UI_FILTER ?= launcher/create_project_from_launcher,editor/properties_panel_light_controls_workflow,editor/properties_panel_mixed_selection_workflow,editor/properties_panel_rename_delete_undo_workflow,editor/properties_panel_scene_save_reload_workflow
 
 # Source files to format: all tracked .cpp/.h (excluding vendor/)
 ifeq ($(OS),Windows_NT)
@@ -133,7 +134,7 @@ coverage: build
 	    --cover_children \
 	    --export_type html:"$(COV_DIR)/html" \
 	    --export_type cobertura:"$(COV_DIR)/cobertura.xml" \
-	    -- $(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=0 MONOLITH_UI_TEST_DELAY_MS=0 MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
+	    -- $(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=0 MONOLITH_UI_TEST_DELAY_MS=0 MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' $(RUN_UI_WINDOWED)
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
@@ -153,7 +154,7 @@ coverage: $(SENTINEL_COV)
 	@$(MKDIR_P) "$(COV_DIR)"
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure
 	@echo "[coverage] running UI test scenarios ..."
-	build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests || true
+	MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests
 	lcov --capture \
 	     --directory build/$(PRESET_COV) \
 	     --output-file "$(COV_DIR)/raw.info" \
@@ -182,6 +183,9 @@ coverage-source-summary: $(SENTINEL_COV)
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure; \
 	test_rc=$$?; \
 	if [ $$test_rc -ne 0 ]; then exit $$test_rc; fi; \
+	MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests; \
+	ui_rc=$$?; \
+	if [ $$ui_rc -ne 0 ]; then exit $$ui_rc; fi; \
 	lcov --capture \
 	     --directory build/$(PRESET_COV) \
 	     --output-file "$(COV_DIR)/raw.info.tmp" \

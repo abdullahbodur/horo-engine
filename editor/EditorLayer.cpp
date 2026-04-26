@@ -52,8 +52,10 @@
 #include "editor/EditorAssetImport.h"
 #include "editor/EditorDebugTrace.h"
 #include "editor/EditorImGuiBackend.h"
+#include "editor/EditorPropertyRules.h"
 #include "editor/EditorSceneGraph.h"
 #include "editor/EditorSearch.h"
+#include "editor/EditorSelectionRules.h"
 #include "editor/EditorUiLogic.h"
 #include "editor/EditorWorkspaceSettings.h"
 #include "editor/ProjectEntryFilter.h"
@@ -944,17 +946,6 @@ std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef &asset) {
   return managedDir;
 }
 
-std::string GenerateIdWithPrefix(const SceneDocument &doc,
-                                 std::string_view prefix) {
-  const std::unordered_set<std::string, StringHash, std::equal_to<>>
-      existingIds = CollectReservedObjectIds(doc);
-  for (int i = 0; i < 1000000; ++i) {
-    std::string id = std::format("{}_{:03d}", prefix, i);
-    if (!existingIds.contains(id))
-      return id;
-  }
-  return std::format("{}_new", prefix);
-}
 } // namespace
 
 // ---- Lifecycle
@@ -3172,34 +3163,17 @@ static const char *ObjectTypeIcon(SceneObjectType type) {
 // ----------------------
 
 void EditorLayer::ApplyRenameObject() {
-  if (m_renameObjectIndex < 0 ||
-      m_renameObjectIndex >= static_cast<int>(m_document.objects.size())) {
-    m_renameObjectError = "Selected object is no longer valid.";
+  m_renameObjectError =
+      ValidateRenameCandidate(m_document, m_renameObjectIndex, m_renameObjectDraft);
+  if (!m_renameObjectError.empty())
     return;
-  }
-  if (m_renameObjectDraft.empty()) {
-    m_renameObjectError = "ID cannot be empty.";
-    return;
-  }
-  if (const int existingIdx =
-          FindObjectIndexById(m_document, m_renameObjectDraft);
-      existingIdx >= 0 && existingIdx != m_renameObjectIndex) {
-    m_renameObjectError = "ID already exists.";
-    return;
-  }
+
   SceneObject &target =
       m_document.objects[static_cast<size_t>(m_renameObjectIndex)];
   const std::string oldId = target.id;
   if (const std::string newId = m_renameObjectDraft; oldId != newId) {
     target.id = newId;
-    for (auto &other : m_document.objects) {
-      if (auto p = other.props.find("parentId");
-          p != other.props.end() && p->second == oldId)
-        p->second = newId;
-      if (auto f = other.props.find("followTargetId");
-          f != other.props.end() && f->second == oldId)
-        f->second = newId;
-    }
+    RewriteObjectIdReferences(&m_document, oldId, newId);
     m_document.dirty = true;
   }
   m_renameObjectError.clear();
@@ -5157,12 +5131,8 @@ void EditorLayer::AddObject(SceneObjectType type, std::string_view parentId) {
       (type == Camera) ? GenerateCameraId(m_document) : GenerateId(m_document);
   obj.type = type;
   ApplySchemaDefaults(obj);
-  if (type == Camera) {
-    obj.props["fov"] = "60";
-    obj.props["nearClip"] = "0.1";
-    obj.props["farClip"] = "500";
-    obj.props["followTargetId"] = "";
-  }
+  if (type == Camera)
+    ApplyCameraBuiltinDefaults(obj);
   if (!parentId.empty())
     obj.props["parentId"] = parentId;
 
@@ -5328,23 +5298,7 @@ void EditorLayer::DuplicateSelectedObjects() {
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument &doc,
                                              const std::string &assetId,
                                              const EditorSchema &schema) {
-  using enum SceneObjectType;
-  SceneObject obj;
-  obj.id = GenerateId(doc);
-  obj.type = Prop;
-  obj.assetId = assetId;
-  if (const auto assetIt = doc.assets.find(assetId);
-      assetIt != doc.assets.end())
-    obj.props["_assetRenderScale"] = assetIt->second.renderScale.empty()
-                                         ? "1.0000,1.0000,1.0000"
-                                         : assetIt->second.renderScale;
-
-  if (const TypeSchema *typeSchema = schema.GetSchema(obj.type); typeSchema) {
-    for (const auto &fd : typeSchema->fields)
-      obj.props[fd.key] = fd.defaultValue;
-  }
-
-  return obj;
+  return Monolith::Editor::MakeObjectFromAsset(doc, assetId, schema);
 }
 
 SceneObject EditorLayer::DuplicateObject(const SceneDocument &doc,
@@ -5387,11 +5341,11 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject &obj,
 }
 
 std::string EditorLayer::GenerateId(const SceneDocument &doc) {
-  return GenerateIdWithPrefix(doc, "obj");
+  return GenerateUniqueId(doc, "obj");
 }
 
 std::string EditorLayer::GenerateCameraId(const SceneDocument &doc) {
-  return GenerateIdWithPrefix(doc, "cam");
+  return GenerateUniqueId(doc, "cam");
 }
 
 // ---- Fly camera
@@ -5486,22 +5440,11 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
 }
 
 void EditorLayer::ApplySchemaDefaults(SceneObject &obj) const {
-  const TypeSchema *schema = m_schema.GetSchema(obj.type);
-  if (!schema)
-    return;
-  for (const auto &fd : schema->fields)
-    if (fd.hasDefault && !obj.props.contains(fd.key))
-      obj.props[fd.key] = fd.defaultValue;
+  ApplySchemaFieldDefaults(obj, m_schema);
 }
 
 void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc &component) const {
-  const ComponentSchema *schema = m_schema.GetComponentSchema(component.type);
-  if (!schema)
-    return;
-  for (const FieldDef &field : schema->fields) {
-    if (field.hasDefault && !component.props.contains(field.key))
-      component.props[field.key] = field.defaultValue;
-  }
+  ApplyComponentFieldDefaults(component, m_schema);
 }
 
 // ---- Wireframe overlay

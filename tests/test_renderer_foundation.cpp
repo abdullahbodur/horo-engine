@@ -14,6 +14,7 @@
 #endif
 
 #include "math/Mat4.h"
+#include "renderer/DebugDraw.h"
 #include "renderer/DebugHUD.h"
 #include "renderer/GltfLoader.h"
 #include "renderer/IRenderBackend.h"
@@ -132,6 +133,16 @@ public:
   RenderBackendCapabilities GetCapabilities() const override {
     RenderBackendCapabilities caps = {};
     caps.supportsDebugHud = false;
+    return caps;
+  }
+};
+
+class DebugDrawUnsupportedBackend final : public FakeRenderBackend {
+public:
+  RenderBackendCapabilities GetCapabilities() const override {
+    RenderBackendCapabilities caps =
+        GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
+    caps.supportsDebugDraw = false;
     return caps;
   }
 };
@@ -1687,5 +1698,22 @@ TEST_CASE(
   CHECK_FALSE(DebugHUD::IsCollisionBoxesOn());
 
   DebugHUD::Shutdown();
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("DebugDraw gracefully ignores submissions when backend support is disabled",
+          "[renderer][debugdraw]") {
+  DebugDrawUnsupportedBackend backend;
+  Renderer::UseBackend(&backend);
+  DebugDraw::Shutdown();
+  DebugDraw::Init();
+
+  DebugDraw::Line({0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f});
+  DebugDraw::Sphere({0.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 0.0f, 0.0f, 1.0f}, 8);
+  DebugDraw::Box({0.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 3.0f});
+
+  Camera camera;
+  REQUIRE_NOTHROW(DebugDraw::Flush(camera));
+  DebugDraw::Shutdown();
   Renderer::ResetBackend();
 }
