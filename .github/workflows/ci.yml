@@ -79,12 +79,10 @@ jobs:
           for binary in build/debug/bin/tests/test_*; do
             if [ -x "$binary" ] && [ -f "$binary" ]; then
               name=$(basename "$binary")
-              MONOLITH_LOG_LEVEL=warn "$binary" \
-                --reporter JUnit::out="${outdir}/${name}.xml" || true
+              "$binary" \
+                --reporter JUnit::out="${outdir}/${name}.xml" > /dev/null 2>&1 || true
             fi
           done
-        env:
-          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
@@ -200,10 +198,8 @@ jobs:
           Get-ChildItem "build\debug-msvc\bin\Debug\test_*.exe" | ForEach-Object {
             $name = $_.BaseName
             $outFile = Join-Path $outDir "$name.xml"
-            & $_.FullName --reporter JUnit::out="$outFile"
+            & $_.FullName --reporter JUnit::out="$outFile" 2>&1 | Out-Null
           }
-        env:
-          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
@@ -391,12 +387,10 @@ jobs:
           for binary in build/debug/bin/tests/test_*; do
             if [ -x "$binary" ] && [ -f "$binary" ]; then
               name=$(basename "$binary")
-              MONOLITH_LOG_LEVEL=warn "$binary" \
-                --reporter JUnit::out="${outdir}/${name}.xml" || true
+              "$binary" \
+                --reporter JUnit::out="${outdir}/${name}.xml" > /dev/null 2>&1 || true
             fi
           done
-        env:
-          MONOLITH_LOG_LEVEL: "warn"
 
       - name: Publish test results
         if: always()
