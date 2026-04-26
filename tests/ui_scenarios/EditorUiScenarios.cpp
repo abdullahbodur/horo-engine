@@ -54,9 +54,9 @@ bool WaitForCondition(ImGuiTestContext *ctx, int maxFrames,
   return predicate();
 }
 
-static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
+ ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
                             const char *sentinelItem, int maxFrames = 60);
-static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx);
+ void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx);
 
 // ---------------------------------------------------------------------------
 // WaitForPopup: waits for the popup at stack depth `depth` to be rendered
@@ -66,7 +66,7 @@ static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx);
 // depth 0 = first/outermost popup (e.g. a toolbar or context menu popup).
 // depth 1 = second popup (e.g. an "Add" sub-menu inside a context menu).
 // ---------------------------------------------------------------------------
-static ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
+ ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth,
                             const char *sentinelItem, int maxFrames) {
   ImGuiID wid = 0;
   bool sentinelFound = false;
@@ -96,8 +96,7 @@ struct UiScalarRow {
   std::vector<ImGuiID> fieldIds;
 };
 
-static std::vector<UiScalarRow>
-GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
+ std::vector<UiScalarRow> GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
   std::vector<UiScalarRow> rows;
   if (!ctx)
     return rows;
@@ -130,7 +129,7 @@ GatherUnlabeledScalarRows(ImGuiTestContext *ctx) {
   return rows;
 }
 
-static const nlohmann::json *
+ const nlohmann::json *
 FindLastObjectOfType(const nlohmann::json &sceneJson, const char *typeName) {
   if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array())
     return nullptr;
@@ -142,7 +141,7 @@ FindLastObjectOfType(const nlohmann::json &sceneJson, const char *typeName) {
   return nullptr;
 }
 
-static nlohmann::json ReadSceneJson(const std::filesystem::path &projectRoot) {
+ nlohmann::json ReadSceneJson(const std::filesystem::path &projectRoot) {
   const auto scenePath = projectRoot / "assets" / "scenes" / "level.json";
   std::ifstream sceneFile(scenePath);
   if (!sceneFile.is_open())
@@ -150,11 +149,11 @@ static nlohmann::json ReadSceneJson(const std::filesystem::path &projectRoot) {
   return nlohmann::json::parse(sceneFile, nullptr, false);
 }
 
-static bool JsonFloatNear(const nlohmann::json &value, float expected) {
+ bool JsonFloatNear(const nlohmann::json &value, float expected) {
   return value.is_number() && std::abs(value.get<float>() - expected) < 0.001f;
 }
 
-static bool JsonVectorNear(const nlohmann::json &value,
+ bool JsonVectorNear(const nlohmann::json &value,
                            std::initializer_list<float> expected) {
   if (!value.is_array() || value.size() != expected.size())
     return false;
@@ -167,7 +166,7 @@ static bool JsonVectorNear(const nlohmann::json &value,
   return true;
 }
 
-static bool JsonStringFloatNear(const nlohmann::json &value, float expected) {
+ bool JsonStringFloatNear(const nlohmann::json &value, float expected) {
   if (!value.is_string())
     return false;
   try {
@@ -177,7 +176,7 @@ static bool JsonStringFloatNear(const nlohmann::json &value, float expected) {
   }
 }
 
-static bool LightWorkflowJsonMatches(const nlohmann::json &sceneJson) {
+ bool LightWorkflowJsonMatches(const nlohmann::json &sceneJson) {
   if (sceneJson.is_discarded())
     return false;
   const nlohmann::json *lightObj = FindLastObjectOfType(sceneJson, "Light");
@@ -216,7 +215,7 @@ static bool LightWorkflowJsonMatches(const nlohmann::json &sceneJson) {
   return true;
 }
 
-static bool MixedSelectionWorkflowJsonMatches(const nlohmann::json &sceneJson) {
+ bool MixedSelectionWorkflowJsonMatches(const nlohmann::json &sceneJson) {
   if (sceneJson.is_discarded())
     return false;
   if (!sceneJson.contains("objects") || !sceneJson.at("objects").is_array())
@@ -236,7 +235,7 @@ static bool MixedSelectionWorkflowJsonMatches(const nlohmann::json &sceneJson) {
   return panelCount >= 2;
 }
 
-static size_t CountObjectsOfType(const nlohmann::json &sceneJson,
+ size_t CountObjectsOfType(const nlohmann::json &sceneJson,
                                  const char *typeName) {
   if (!typeName || sceneJson.is_discarded() || !sceneJson.contains("objects") ||
       !sceneJson.at("objects").is_array()) {
@@ -252,7 +251,7 @@ static size_t CountObjectsOfType(const nlohmann::json &sceneJson,
   return count;
 }
 
-static bool SceneSaveReloadJsonMatches(const nlohmann::json &sceneJson) {
+ bool SceneSaveReloadJsonMatches(const nlohmann::json &sceneJson) {
   if (sceneJson.is_discarded())
     return false;
   return CountObjectsOfType(sceneJson, "Panel") >= 1 &&
@@ -260,7 +259,7 @@ static bool SceneSaveReloadJsonMatches(const nlohmann::json &sceneJson) {
          CountObjectsOfType(sceneJson, "Light") >= 1;
 }
 
-static bool ComponentMutationJsonMatches(
+ bool ComponentMutationJsonMatches(
     const nlohmann::json &beforeJson, const nlohmann::json &afterJson) {
   if (beforeJson.is_discarded() || afterJson.is_discarded())
     return false;
@@ -269,7 +268,7 @@ static bool ComponentMutationJsonMatches(
   return beforeJson.dump() != afterJson.dump();
 }
 
-static bool SceneHasAnyComponents(const nlohmann::json &sceneJson) {
+ bool SceneHasAnyComponents(const nlohmann::json &sceneJson) {
   if (sceneJson.is_discarded() || !sceneJson.contains("objects") ||
       !sceneJson.at("objects").is_array()) {
     return false;
@@ -283,15 +282,17 @@ static bool SceneHasAnyComponents(const nlohmann::json &sceneJson) {
   return false;
 }
 
-static int CountCurrentRefItemsLabelContaining(ImGuiTestContext *ctx,
+ int CountCurrentRefItemsLabelContaining(ImGuiTestContext *ctx,
                                                std::string_view labelFragment);
-static bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
+ static bool CurrentRefHasItemLabelContaining(ImGuiTestContext *ctx,
+                                             std::string_view labelFragment);
+ bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
                                                std::string_view labelFragment);
-static bool ClickLastCurrentRefItemLabelContaining(
+ bool ClickLastCurrentRefItemLabelContaining(
     ImGuiTestContext *ctx, std::string_view labelFragment,
     ImGuiMouseButton button = ImGuiMouseButton_Left);
 
-static bool SelectFirstHierarchyItem(ImGuiTestContext *ctx) {
+ bool SelectFirstHierarchyItem(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   ctx->SetRef("Hierarchy");
@@ -308,7 +309,23 @@ static bool SelectFirstHierarchyItem(ImGuiTestContext *ctx) {
   return true;
 }
 
-static bool SelectSecondHierarchyItemWithShift(ImGuiTestContext *ctx) {
+ bool SelectLastHierarchyItem(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return false;
+  ctx->SetRef("Hierarchy");
+  const bool itemReady = WaitForCondition(ctx, 60, [ctx]() {
+    ctx->SetRef("Hierarchy");
+    return CountCurrentRefItemsLabelContaining(ctx, "##obj_tree") > 0;
+  });
+  if (!itemReady)
+    return false;
+  if (!ClickLastCurrentRefItemLabelContaining(ctx, "##obj_tree"))
+    return false;
+  ctx->Yield(2);
+  return true;
+}
+
+ bool SelectSecondHierarchyItemWithShift(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   ctx->SetRef("Hierarchy");
@@ -328,7 +345,7 @@ static bool SelectSecondHierarchyItemWithShift(ImGuiTestContext *ctx) {
   return true;
 }
 
-static bool OpenAddComponentPopup(ImGuiTestContext *ctx) {
+ bool OpenAddComponentPopup(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   ctx->SetRef("Properties");
@@ -342,7 +359,16 @@ static bool OpenAddComponentPopup(ImGuiTestContext *ctx) {
   return true;
 }
 
-static bool ClickFirstSelectableItemInCurrentRef(ImGuiTestContext *ctx) {
+ bool CurrentRefHasPropertyLabel(ImGuiTestContext *ctx,
+                                       std::string_view labelFragment) {
+  if (!ctx || labelFragment.empty())
+    return false;
+  const std::string label(labelFragment);
+  return ctx->ItemExists(label.c_str()) ||
+         CurrentRefHasItemLabelContaining(ctx, labelFragment);
+}
+
+ bool ClickFirstSelectableItemInCurrentRef(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   ImGuiTestItemList items;
@@ -375,7 +401,7 @@ static bool ClickFirstSelectableItemInCurrentRef(ImGuiTestContext *ctx) {
   return count;
 }
 
-static bool ClickLastItemInCurrentRef(ImGuiTestContext *ctx) {
+ bool ClickLastItemInCurrentRef(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   ImGuiTestItemList items;
@@ -410,7 +436,7 @@ static bool ClickLastItemInCurrentRef(ImGuiTestContext *ctx) {
   return false;
 }
 
-static bool CurrentRefHasItemLabelContaining(ImGuiTestContext *ctx,
+ bool CurrentRefHasItemLabelContaining(ImGuiTestContext *ctx,
                                              std::string_view labelFragment) {
   if (!ctx || labelFragment.empty())
     return false;
@@ -426,10 +452,10 @@ static bool CurrentRefHasItemLabelContaining(ImGuiTestContext *ctx,
   return false;
 }
 
-static bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
+ bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
                                                std::string_view labelFragment);
 
-static bool CurrentRefHasMarker(ImGuiTestContext *ctx,
+ bool CurrentRefHasMarker(ImGuiTestContext *ctx,
                                 std::string_view marker) {
   if (!ctx || marker.empty())
     return false;
@@ -444,7 +470,7 @@ static bool CurrentRefHasMarker(ImGuiTestContext *ctx,
       ctx, marker.substr(0, std::min(marker.size(), kDebugLabelPrefixLength)));
 }
 
-static bool ClickCurrentRefMarker(ImGuiTestContext *ctx,
+ bool ClickCurrentRefMarker(ImGuiTestContext *ctx,
                                   std::string_view marker) {
   if (!ctx || marker.empty())
     return false;
@@ -461,7 +487,7 @@ static bool ClickCurrentRefMarker(ImGuiTestContext *ctx,
                : marker);
 }
 
-static bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
+ bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
                                                std::string_view labelFragment) {
   if (!ctx || labelFragment.empty())
     return false;
@@ -480,7 +506,7 @@ static bool ClickCurrentRefItemLabelContaining(ImGuiTestContext *ctx,
   return false;
 }
 
-static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
+ void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
   if (!ctx)
     return;
   const ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -502,7 +528,7 @@ static void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx) {
 // Implementation note: BeginPopup creates windows named "##Popup_XXXXXXXX",
 // NOT windows named by popupId. We find the actual popup window by reading
 // g.OpenPopupStack[0].Window directly — this is immune to hash mismatches.
-static ImGuiID OpenToolbarPopup(ImGuiTestContext *ctx, const char *btnLabel,
+ ImGuiID OpenToolbarPopup(ImGuiTestContext *ctx, const char *btnLabel,
                                 const char * /*popupId*/,
                                 const char *sentinelItem, int maxFrames = 60) {
   ctx->SetRef("##toolbar");
@@ -517,7 +543,7 @@ static ImGuiID OpenToolbarPopup(ImGuiTestContext *ctx, const char *btnLabel,
   return wid;
 }
 
-static void ClickModalButtonIfPresent(ImGuiTestContext *ctx,
+ void ClickModalButtonIfPresent(ImGuiTestContext *ctx,
                                       const char *modalName,
                                       const char *buttonLabel) {
   if (!ctx || !modalName || !buttonLabel)
@@ -536,7 +562,7 @@ static void ClickModalButtonIfPresent(ImGuiTestContext *ctx,
   ctx->Yield(2);
 }
 
-static void DismissBlockingEditorModals(ImGuiTestContext *ctx) {
+ void DismissBlockingEditorModals(ImGuiTestContext *ctx) {
   // Click safe cancel buttons so editor-owned modal-open flags are reset and
   // the next toolbar interaction is not blocked by a re-opened modal.
   ClickModalButtonIfPresent(ctx, "Rename Object", "Cancel");
@@ -547,7 +573,7 @@ static void DismissBlockingEditorModals(ImGuiTestContext *ctx) {
   ClickModalButtonIfPresent(ctx, "Confirm Delete Asset", "Cancel");
 }
 
-static bool IsPopupWindowOpen(ImGuiTestContext *ctx, const char *windowName) {
+ bool IsPopupWindowOpen(ImGuiTestContext *ctx, const char *windowName) {
   if (!ctx || !windowName)
     return false;
 
@@ -733,13 +759,13 @@ bool WaitForMcpRequestDetailFieldMarkers(ImGuiTestContext *ctx,
 
 #ifdef _WIN32
 using UiSockHandle = SOCKET;
-static constexpr UiSockHandle kUiInvalidSock = INVALID_SOCKET;
-static void UiCloseSock(UiSockHandle s) {
+ constexpr UiSockHandle kUiInvalidSock = INVALID_SOCKET;
+ void UiCloseSock(UiSockHandle s) {
   if (s != kUiInvalidSock)
     closesocket(s);
 }
-static void UiInitSocks() {
-  static bool s_ready = false;
+ void UiInitSocks() {
+   bool s_ready = false;
   if (!s_ready) {
     WSADATA d{};
     WSAStartup(MAKEWORD(2, 2), &d);
@@ -748,18 +774,18 @@ static void UiInitSocks() {
 }
 #else
 using UiSockHandle = int;
-static constexpr UiSockHandle kUiInvalidSock = -1;
-static void UiCloseSock(UiSockHandle s) {
+ constexpr UiSockHandle kUiInvalidSock = -1;
+ void UiCloseSock(UiSockHandle s) {
   if (s >= 0)
     close(s);
 }
-static void UiInitSocks() {}
+ void UiInitSocks() {}
 #endif
 
 // Sends an HTTP POST JSON-RPC body to 127.0.0.1:<port>/mcp.
 // Intended to be called from a detached background thread so the ImGui
 // frame pump is not blocked.
-static bool SendMcpHttpPost(int port, const std::string &body) {
+ bool SendMcpHttpPost(int port, const std::string &body) {
   UiInitSocks();
   const UiSockHandle sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock == kUiInvalidSock)
@@ -790,7 +816,7 @@ static bool SendMcpHttpPost(int port, const std::string &body) {
 
 // Opens the Settings modal, checks "Enable built-in MCP", and clicks Apply.
 // Returns true when Apply was clicked successfully.
-static bool EnableMcpViaSettings(ImGuiTestContext *ctx) {
+ bool EnableMcpViaSettings(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
   const ImGuiID filePopup =
@@ -983,11 +1009,26 @@ void RunCloseEditorReturnsToLauncher(ImGuiTestContext *ctx) {
   if (!state)
     return;
 
+  Launcher::LauncherEditorShell *shell = state->shellContext;
+  IM_CHECK(shell != nullptr);
+  if (!shell)
+    return;
+
+  if (!shell->HasActiveProject()) {
+    std::string openError;
+    const bool reopened = shell->OpenProject(state->projectRoot, &openError);
+    IM_CHECK(reopened);
+    if (!reopened) {
+      LogWarn("UI scenario failed to reopen project before close test: {}",
+              openError);
+      return;
+    }
+    ctx->Yield(4);
+  }
+
   IM_CHECK(EnsureEditorActive(ctx, state));
   if (!EnsureEditorActive(ctx, state))
     return;
-
-  const Launcher::LauncherEditorShell *shell = state->shellContext;
 
   ctx->SetRef("##toolbar");
   LogDebug("UI scenario action: click 'Close editor'");
@@ -2526,6 +2567,10 @@ void RunCloseEditorButton(ImGuiTestContext *ctx) {
   IM_CHECK(EnsureEditorActive(ctx, state));
   if (!EnsureEditorActive(ctx, state))
     return;
+  Launcher::LauncherEditorShell *shell = state->shellContext;
+  IM_CHECK(shell != nullptr);
+  if (!shell)
+    return;
 
   // Add a Panel to make the document dirty so the Unsaved Changes modal
   // appears instead of immediately closing the editor
@@ -2560,9 +2605,19 @@ void RunCloseEditorButton(ImGuiTestContext *ctx) {
     ctx->SetRef("##toolbar");
     IM_CHECK(ctx->ItemExists("File"));
   } else {
-    // Document was clean; editor may have already closed — log and skip
     LogWarn("UI scenario: Close editor did not produce Unsaved Changes "
             "modal (document may have been clean).");
+    if (!shell->HasActiveProject()) {
+      std::string openError;
+      const bool reopened = shell->OpenProject(state->projectRoot, &openError);
+      IM_CHECK(reopened);
+      if (!reopened) {
+        LogWarn("UI scenario failed to reopen project after clean close: {}",
+                openError);
+        return;
+      }
+      ctx->Yield(4);
+    }
   }
 
   CaptureIfEnabled(ctx, state, "editor_ui__close_editor_button.png");
@@ -3946,7 +4001,7 @@ void RunPropertiesPanelNoSelection(ImGuiTestContext *ctx) {
   ctx->SetRef("Properties");
   const bool noSelReady = WaitForCondition(ctx, 120, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("No selection");
+    return CurrentRefHasPropertyLabel(ctx, "No selection");
   });
   IM_CHECK(noSelReady);
 
@@ -3985,24 +4040,21 @@ void RunPropertiesPanelPanelObjectTransform(ImGuiTestContext *ctx) {
   ctx->Yield(4);
 
   // Select the object in the Hierarchy.
-  ctx->SetRef("Hierarchy");
-  const bool objReady = WaitForCondition(
-      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
-  if (objReady) {
-    ctx->ItemClick("$$0/##obj_tree");
-    ctx->Yield(2);
-  }
+  const bool objReady = SelectLastHierarchyItem(ctx);
+  IM_CHECK(objReady);
+  if (!objReady)
+    return;
 
   // Properties panel should now show transform drag fields.
   ctx->SetRef("Properties");
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("Position");
+    return CurrentRefHasPropertyLabel(ctx, "Position");
   });
   IM_CHECK(posReady);
   if (posReady) {
-    IM_CHECK(ctx->ItemExists("Scale"));
-    IM_CHECK(ctx->ItemExists("Rotation (P/Y/R)"));
+    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "Scale"));
+    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "Rotation (P/Y/R)"));
   }
 
   CaptureIfEnabled(ctx, state,
@@ -4042,28 +4094,25 @@ void RunPropertiesPanelLightObjectFields(ImGuiTestContext *ctx) {
   ctx->ItemClick("Light");
   ctx->Yield(4);
 
-  ctx->SetRef("Hierarchy");
-  const bool objReady = WaitForCondition(
-      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
-  if (objReady) {
-    ctx->ItemClick("$$0/##obj_tree");
-    ctx->Yield(2);
-  }
+  const bool objReady = SelectLastHierarchyItem(ctx);
+  IM_CHECK(objReady);
+  if (!objReady)
+    return;
 
   // Identity section: ID and Type labels
   ctx->SetRef("Properties");
   const bool idReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("ID##identity_id");
+    return CurrentRefHasPropertyLabel(ctx, "identity_id");
   });
   IM_CHECK(idReady);
   if (idReady)
-    IM_CHECK(ctx->ItemExists("Type##identity_type"));
+    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "identity_type"));
 
   // Transform section should also be present for Lights
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("Position");
+    return CurrentRefHasPropertyLabel(ctx, "Position");
   });
   IM_CHECK(posReady);
 
@@ -4563,24 +4612,21 @@ void RunPropertiesPanelIdentitySection(ImGuiTestContext *ctx) {
   ctx->ItemClick("Panel");
   ctx->Yield(4);
 
-  ctx->SetRef("Hierarchy");
-  const bool objReady = WaitForCondition(
-      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
-  if (objReady) {
-    ctx->ItemClick("$$0/##obj_tree");
-    ctx->Yield(2);
-  }
+  const bool objReady = SelectLastHierarchyItem(ctx);
+  IM_CHECK(objReady);
+  if (!objReady)
+    return;
 
   ctx->SetRef("Properties");
   const bool identityReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("ID##identity_id") &&
-           ctx->ItemExists("Type##identity_type");
+    return CurrentRefHasPropertyLabel(ctx, "identity_id") &&
+           CurrentRefHasPropertyLabel(ctx, "identity_type");
   });
   IM_CHECK(identityReady);
   if (identityReady) {
     // Parent combo should also render
-    IM_CHECK(ctx->ItemExists("Parent##identity_parent"));
+    IM_CHECK(CurrentRefHasPropertyLabel(ctx, "identity_parent"));
   }
 
   CaptureIfEnabled(ctx, state,
@@ -4622,20 +4668,27 @@ void RunConsoleInfoCheckboxToggle(ImGuiTestContext *ctx) {
   ctx->Yield(2);
 
   ctx->SetRef("Workspace");
-  const bool infoReady =
-      WaitForCondition(ctx, 60, [ctx]() { return ctx->ItemExists("Info"); });
+  const bool infoReady = WaitForCondition(ctx, 60, [ctx]() {
+    return CurrentRefHasItemLabelContaining(ctx, "Info");
+  });
   IM_CHECK(infoReady);
   if (!infoReady)
     return;
 
   // Toggle Info off
   LogDebug("UI scenario action: uncheck Info in console");
-  ctx->ItemUncheck("Info");
+  if (ctx->ItemExists("Info"))
+    ctx->ItemUncheck("Info");
+  else
+    IM_CHECK(ClickCurrentRefItemLabelContaining(ctx, "Info"));
   ctx->Yield(2);
 
   // Toggle Info back on
   LogDebug("UI scenario action: re-check Info in console");
-  ctx->ItemCheck("Info");
+  if (ctx->ItemExists("Info"))
+    ctx->ItemCheck("Info");
+  else
+    IM_CHECK(ClickCurrentRefItemLabelContaining(ctx, "Info"));
   ctx->Yield(2);
 
   // Editor toolbar should still be accessible
@@ -4680,15 +4733,22 @@ void RunConsoleErrorCheckboxToggle(ImGuiTestContext *ctx) {
   ctx->Yield(2);
 
   ctx->SetRef("Workspace");
-  const bool errorReady =
-      WaitForCondition(ctx, 60, [ctx]() { return ctx->ItemExists("Error"); });
+  const bool errorReady = WaitForCondition(ctx, 60, [ctx]() {
+    return CurrentRefHasItemLabelContaining(ctx, "Error");
+  });
   IM_CHECK(errorReady);
   if (!errorReady)
     return;
 
-  ctx->ItemUncheck("Error");
+  if (ctx->ItemExists("Error"))
+    ctx->ItemUncheck("Error");
+  else
+    IM_CHECK(ClickCurrentRefItemLabelContaining(ctx, "Error"));
   ctx->Yield(2);
-  ctx->ItemCheck("Error");
+  if (ctx->ItemExists("Error"))
+    ctx->ItemCheck("Error");
+  else
+    IM_CHECK(ClickCurrentRefItemLabelContaining(ctx, "Error"));
   ctx->Yield(2);
 
   ctx->SetRef("##toolbar");
@@ -4726,25 +4786,22 @@ void RunAddPropObjectAndCheckProperties(ImGuiTestContext *ctx) {
   ctx->ItemClick("Prop");
   ctx->Yield(4);
 
-  ctx->SetRef("Hierarchy");
-  const bool objReady = WaitForCondition(
-      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
-  if (objReady) {
-    ctx->ItemClick("$$0/##obj_tree");
-    ctx->Yield(2);
-  }
+  const bool objReady = SelectLastHierarchyItem(ctx);
+  IM_CHECK(objReady);
+  if (!objReady)
+    return;
 
   ctx->SetRef("Properties");
   const bool posReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("Position");
+    return CurrentRefHasPropertyLabel(ctx, "Position");
   });
   IM_CHECK(posReady);
 
   // Asset section combo should render for Prop
   const bool assetSectionReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("Asset ID");
+    return CurrentRefHasPropertyLabel(ctx, "Asset ID");
   });
   IM_CHECK(assetSectionReady);
 
@@ -4787,27 +4844,23 @@ void RunHierarchyAddMultipleThenMultiSelect(ImGuiTestContext *ctx) {
   }
 
   ctx->SetRef("Hierarchy");
-  // Select first, then shift-click second.
-  const bool firstReady = WaitForCondition(
-      ctx, 60, [ctx]() { return ctx->ItemExists("$$0/##obj_tree"); });
+  // Select first, then shift-click last.
+  const bool firstReady = SelectFirstHierarchyItem(ctx);
   IM_CHECK(firstReady);
   if (!firstReady)
     return;
-  ctx->ItemClick("$$0/##obj_tree");
-  ctx->Yield(1);
 
-  // Shift-click second entry for multi-select.
-  ctx->KeyDown(ImGuiMod_Shift);
-  ctx->ItemClick("$$1/##obj_tree");
-  ctx->KeyUp(ImGuiMod_Shift);
-  ctx->Yield(2);
+  const bool secondSelected = SelectSecondHierarchyItemWithShift(ctx);
+  IM_CHECK(secondSelected);
+  if (!secondSelected)
+    return;
 
   // Properties panel should now show the batch panel.
   ctx->SetRef("Properties");
   const bool batchReady = WaitForCondition(ctx, 60, [ctx]() {
     ctx->SetRef("Properties");
-    return ctx->ItemExists("Duplicate Selected") ||
-           ctx->ItemExists("Delete Selected");
+    return CurrentRefHasPropertyLabel(ctx, "Duplicate Selected") ||
+           CurrentRefHasPropertyLabel(ctx, "Delete Selected");
   });
   IM_CHECK(batchReady);
 
