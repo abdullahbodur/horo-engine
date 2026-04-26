@@ -109,8 +109,7 @@ TEST_CASE("HandleSize: varies with FOV", "[gizmo]") {
 // Test 3 — WorldToScreen projection
 // ============================================================================
 
-TEST_CASE("TransformGizmo: WorldToScreen projects origin to screen centre",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: WorldToScreen projects origin to screen centre", "[gizmo]") {
   // Camera looking straight down -Z at origin; object at origin should map to
   // screen centre.
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
@@ -124,8 +123,7 @@ TEST_CASE("TransformGizmo: WorldToScreen projects origin to screen centre",
   CHECK(sy == Approx(400.0f).margin(1.0f));
 }
 
-TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera", "[gizmo]") {
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
 
   // Point behind the camera (further along +Z than the eye)
@@ -210,8 +208,7 @@ TEST_CASE("TransformGizmo: RayClosestOnLine perpendicular ray", "[gizmo]") {
   CHECK(closest.z == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE("TransformGizmo: RayClosestOnLine parallel ray projects origin",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: RayClosestOnLine parallel ray projects origin", "[gizmo]") {
   // Ray parallel to X axis at y=1: closest point on X-axis line is directly
   // below ray origin. w0 = ray.origin - lineOrigin = {3,1,0}; d = dot({1,0,0},
   // {3,1,0}) = 3. Parallel branch uses s = d/a = 3/1 = 3, so closest = {3,0,0}.
@@ -230,9 +227,7 @@ TEST_CASE("TransformGizmo: RayClosestOnLine parallel ray projects origin",
 // Test 6 — PickAxis: mouse over axis → correct axis returned
 // ============================================================================
 
-TEST_CASE(
-    "TransformGizmo: PickAxis returns X for mouse on X axis screen projection",
-    "[gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis returns X for mouse on X axis screen projection", "[gizmo]") {
   TransformGizmo g;
   // Place gizmo at origin, camera looking down -Z from distance 10.
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
@@ -253,9 +248,7 @@ TEST_CASE(
   CHECK(picked == GizmoAxis::X);
 }
 
-TEST_CASE(
-    "TransformGizmo: PickAxis returns None when mouse is far from all axes",
-    "[gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis returns None when mouse is far from all axes", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -267,8 +260,7 @@ TEST_CASE(
   CHECK(picked == GizmoAxis::None);
 }
 
-TEST_CASE("TransformGizmo: PickAxis ignores clicks near gizmo origin",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis ignores clicks near gizmo origin", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -287,9 +279,7 @@ TEST_CASE("TransformGizmo: PickAxis ignores clicks near gizmo origin",
 // Test 7 — RayHitPlane + axis projection: translate delta math
 // ============================================================================
 
-TEST_CASE(
-    "TransformGizmo: translate delta is parallel to axis and correct magnitude",
-    "[gizmo]") {
+TEST_CASE("TransformGizmo: translate delta is parallel to axis and correct magnitude", "[gizmo]") {
   // Simulate the translate drag math directly.
   // Drag from x=0 to x=2 along X axis on a camera-facing plane.
   Vec3 anchor = {0.0f, 0.0f, 0.0f};
@@ -322,8 +312,7 @@ TEST_CASE(
 // Test 8 — Rotate delta math (90° arc → quarter-turn quaternion)
 // ============================================================================
 
-TEST_CASE("TransformGizmo: rotate delta math produces 90 degree rotation",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: rotate delta math produces 90 degree rotation", "[gizmo]") {
   // Simulate rotating around the +Y axis by 90° (right-hand rule).
   // +X rotated 90° CCW around +Y becomes -Z.
   Vec3 axisNormal = {0.0f, 1.0f, 0.0f};
@@ -364,8 +353,7 @@ TEST_CASE("TransformGizmo: scale delta math for half-handle drag", "[gizmo]") {
   CHECK(factor == Approx(1.5f).margin(1e-4f));
 }
 
-TEST_CASE("TransformGizmo: scale delta math for full-handle drag doubles scale",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: scale delta math for full-handle drag doubles scale", "[gizmo]") {
   float handleLen = 2.0f;
   float prevOffset = 0.0f;
   float curOffset = handleLen;
@@ -377,8 +365,7 @@ TEST_CASE("TransformGizmo: scale delta math for full-handle drag doubles scale",
 // Test 10 — SyncTarget updates internal state
 // ============================================================================
 
-TEST_CASE("TransformGizmo: SyncTarget updates gizmo position for HandleSize",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: SyncTarget updates gizmo position for HandleSize", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -398,9 +385,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates gizmo position for HandleSize",
 // Test 11 — Deactivate simulates Escape dismissal
 // ============================================================================
 
-TEST_CASE(
-    "TransformGizmo: Deactivate dismisses active gizmo (simulates Escape)",
-    "[gizmo]") {
+TEST_CASE("TransformGizmo: Deactivate dismisses active gizmo (simulates Escape)", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Scale, {1.0f, 2.0f, 3.0f}, Quaternion::Identity(),
              Vec3::One());
@@ -522,8 +507,7 @@ TEST_CASE("TransformGizmo: AxisDir None returns zero vector", "[gizmo]") {
 // Test 16 — PickAxis: gizmo entirely behind camera triggers line 135 continue
 // ============================================================================
 
-TEST_CASE("TransformGizmo: PickAxis returns None when gizmo is behind camera",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis returns None when gizmo is behind camera", "[gizmo]") {
   TransformGizmo g;
   // Camera at z=10 looking toward origin; gizmo placed behind the camera at
   // z=20.
@@ -540,9 +524,7 @@ TEST_CASE("TransformGizmo: PickAxis returns None when gizmo is behind camera",
 //           triggers line 137 continue for the Z axis
 // ============================================================================
 
-TEST_CASE(
-    "TransformGizmo: PickAxis skips Z axis when its tip is behind the camera",
-    "[gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis skips Z axis when its tip is behind the camera", "[gizmo]") {
   // Camera at z=10. Gizmo at z=9.9999: dist ≈ 0.0001 < 0.001, so HandleSize
   // returns 0.1. Z-axis tip = z + 0.1 = 10.0999, which is behind the camera.
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
@@ -557,9 +539,7 @@ TEST_CASE(
 // Test 18 — RayClosestOnLine: zero-length line direction uses 0.0 fallback
 // ============================================================================
 
-TEST_CASE("TransformGizmo: RayClosestOnLine with zero-length lineDir returns "
-          "lineOrigin",
-          "[gizmo]") {
+TEST_CASE("TransformGizmo: RayClosestOnLine with zero-length lineDir returns lineOrigin", "[gizmo]") {
   Ray ray;
   ray.origin = {3.0f, 1.0f, 0.0f};
   ray.direction = {1.0f, 0.0f, 0.0f};
@@ -575,8 +555,7 @@ TEST_CASE("TransformGizmo: RayClosestOnLine with zero-length lineDir returns "
 // Tests 19-22 — Draw dispatch (no OpenGL needed; DebugDraw::Line buffers only)
 // ============================================================================
 
-TEST_CASE("TransformGizmo: Draw is a no-op when mode is None",
-          "[gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw is a no-op when mode is None", "[gizmo][draw]") {
   TransformGizmo g; // mode = None by default
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
   // Must not crash or do anything observable.
@@ -615,8 +594,7 @@ TEST_CASE("TransformGizmo: Draw routes to DrawScale", "[gizmo][draw]") {
 // Tests 23-26 — BeginDrag: Translate and Rotate branches
 // ============================================================================
 
-TEST_CASE("BeginDrag: Translate mode sets dragging axis and plane",
-          "[gizmo][drag]") {
+TEST_CASE("BeginDrag: Translate mode sets dragging axis and plane", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -632,8 +610,7 @@ TEST_CASE("BeginDrag: Translate mode sets dragging axis and plane",
   CHECK(g.GetDragAxis() == GizmoAxis::X);
 }
 
-TEST_CASE("BeginDrag: Translate mode with plane-miss falls back to zero offset",
-          "[gizmo][drag]") {
+TEST_CASE("BeginDrag: Translate mode with plane-miss falls back to zero offset", "[gizmo][drag]") {
   // Ray parallel to the camera-facing plane → RayHitPlane returns false → else
   // branch: m_dragPrevOffset = 0.
   TransformGizmo g;
@@ -651,9 +628,7 @@ TEST_CASE("BeginDrag: Translate mode with plane-miss falls back to zero offset",
   CHECK(g.GetDragAxis() == GizmoAxis::Y);
 }
 
-TEST_CASE(
-    "BeginDrag: Rotate mode with ray hitting axis plane sets dragStartDir",
-    "[gizmo][drag]") {
+TEST_CASE("BeginDrag: Rotate mode with ray hitting axis plane sets dragStartDir", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -669,8 +644,7 @@ TEST_CASE(
   CHECK(g.GetDragAxis() == GizmoAxis::Y);
 }
 
-TEST_CASE("BeginDrag: Rotate mode with plane-miss sets dragStartDir to Right",
-          "[gizmo][drag]") {
+TEST_CASE("BeginDrag: Rotate mode with plane-miss sets dragStartDir to Right", "[gizmo][drag]") {
   // Ray direction (1,0,0) is parallel to the Y-axis plane (normal = (0,1,0)),
   // so RayHitPlane returns false → else branch: m_dragStartDir = Vec3::Right().
   TransformGizmo g;
@@ -692,8 +666,7 @@ TEST_CASE("BeginDrag: Rotate mode with plane-miss sets dragStartDir to Right",
 // Tests 27-32 — ApplyActiveDrag: Translate, Rotate, Scale X/Y/Z, plane miss
 // ============================================================================
 
-TEST_CASE("ApplyActiveDrag: Translate produces axis-aligned delta",
-          "[gizmo][drag]") {
+TEST_CASE("ApplyActiveDrag: Translate produces axis-aligned delta", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -724,8 +697,7 @@ TEST_CASE("ApplyActiveDrag: Translate produces axis-aligned delta",
   CHECK(pos.x == Approx(2.0f).margin(1e-4f));
 }
 
-TEST_CASE("ApplyActiveDrag: Rotate produces non-identity delta quaternion",
-          "[gizmo][drag]") {
+TEST_CASE("ApplyActiveDrag: Rotate produces non-identity delta quaternion", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -841,8 +813,7 @@ TEST_CASE("ApplyActiveDrag: Scale Z axis scales Z component", "[gizmo][drag]") {
   CHECK(deltaScale.z > 1.0f);
 }
 
-TEST_CASE("ApplyActiveDrag: returns true (consumed) when ray misses drag plane",
-          "[gizmo][drag]") {
+TEST_CASE("ApplyActiveDrag: returns true (consumed) when ray misses drag plane", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());

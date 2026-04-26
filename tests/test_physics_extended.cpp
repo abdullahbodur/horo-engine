@@ -19,8 +19,7 @@ using Catch::Approx;
 // RigidBody construction (extended)
 // ============================================================
 
-TEST_CASE("RigidBody MakeBox sets mass, invMass and box collider",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody MakeBox sets mass, invMass and box collider", "[physics][rigidbody]") {
   Vec3 half{1.0f, 0.5f, 2.0f};
   auto body = RigidBody::MakeBox(half, 4.0f);
 
@@ -35,8 +34,7 @@ TEST_CASE("RigidBody MakeBox sets mass, invMass and box collider",
   REQUIRE(bc->halfExtents.z == Approx(2.0f));
 }
 
-TEST_CASE("RigidBody box inertia tensor is diagonal and positive",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody box inertia tensor is diagonal and positive", "[physics][rigidbody]") {
   Vec3 half{1.0f, 1.0f, 1.0f};
   auto body = RigidBody::MakeBox(half, 1.0f);
   // For this symmetric box, inverse inertia should be equal on all axes.
@@ -66,8 +64,7 @@ TEST_CASE("RigidBody AddTorque accumulates", "[physics][rigidbody]") {
   REQUIRE(body.torqueAccum.y == Approx(8.0f));
 }
 
-TEST_CASE("RigidBody ClearForces resets both accumulators",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody ClearForces resets both accumulators", "[physics][rigidbody]") {
   auto body = RigidBody::MakeSphere(1.0f, 1.0f);
   body.AddForce({10, 20, 30});
   body.AddTorque({1, 2, 3});
@@ -96,8 +93,7 @@ TEST_CASE("RigidBody SetMass updates invMass", "[physics][rigidbody]") {
   REQUIRE(body.invMass == Approx(0.2f));
 }
 
-TEST_CASE("RigidBody IsStatic returns true only for zero invMass",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody IsStatic returns true only for zero invMass", "[physics][rigidbody]") {
   auto stat = RigidBody::MakeStatic();
   auto dyn = RigidBody::MakeSphere(1.0f, 2.0f);
   REQUIRE(stat.IsStatic());
@@ -114,8 +110,7 @@ TEST_CASE("ContactManifold starts empty", "[physics][manifold]") {
   REQUIRE(m.count == 0);
 }
 
-TEST_CASE("ContactManifold AddContact increments count",
-          "[physics][manifold]") {
+TEST_CASE("ContactManifold AddContact increments count", "[physics][manifold]") {
   ContactManifold m;
   m.AddContact({0, 0, 0}, Vec3::Up(), 0.1f);
   REQUIRE(m.hasContact());
@@ -124,8 +119,7 @@ TEST_CASE("ContactManifold AddContact increments count",
   REQUIRE(m.contacts[0].normal.y == Approx(1.0f));
 }
 
-TEST_CASE("ContactManifold does not exceed MAX_CONTACTS",
-          "[physics][manifold]") {
+TEST_CASE("ContactManifold does not exceed MAX_CONTACTS", "[physics][manifold]") {
   ContactManifold m;
   for (int i = 0; i < ContactManifold::MAX_CONTACTS + 5; ++i)
     m.AddContact(Vec3::Zero(), Vec3::Up(), 0.01f);
@@ -163,8 +157,7 @@ TEST_CASE("SAT::TestBoxBox: overlapping boxes along Z axis", "[physics][sat]") {
   REQUIRE(m.contacts[0].penetration > 0.0f);
 }
 
-TEST_CASE("SAT::TestBoxBox: clearly separated boxes produce no contact",
-          "[physics][sat]") {
+TEST_CASE("SAT::TestBoxBox: clearly separated boxes produce no contact", "[physics][sat]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   RigidBody b = RigidBody::MakeStatic();
   b.collider = std::make_shared<BoxCollider>(Vec3{0.5f, 0.5f, 0.5f});
@@ -181,8 +174,7 @@ TEST_CASE("SAT::TestBoxBox: clearly separated boxes produce no contact",
 // Broadphase: BruteForce
 // ============================================================
 
-TEST_CASE("BruteForce: empty body list returns no pairs",
-          "[physics][broadphase]") {
+TEST_CASE("BruteForce: empty body list returns no pairs", "[physics][broadphase]") {
   std::vector<RigidBody *> bodies;
   auto pairs = BruteForce::FindOverlappingPairs(bodies);
   REQUIRE(pairs.empty());
@@ -195,8 +187,7 @@ TEST_CASE("BruteForce: single body returns no pairs", "[physics][broadphase]") {
   REQUIRE(pairs.empty());
 }
 
-TEST_CASE("BruteForce: two overlapping spheres produce one pair",
-          "[physics][broadphase]") {
+TEST_CASE("BruteForce: two overlapping spheres produce one pair", "[physics][broadphase]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 0, 0};
@@ -209,8 +200,7 @@ TEST_CASE("BruteForce: two overlapping spheres produce one pair",
   REQUIRE(pairs[0].second == 1);
 }
 
-TEST_CASE("BruteForce: two separated spheres produce no pairs",
-          "[physics][broadphase]") {
+TEST_CASE("BruteForce: two separated spheres produce no pairs", "[physics][broadphase]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = {0, 0, 0};
@@ -221,8 +211,7 @@ TEST_CASE("BruteForce: two separated spheres produce no pairs",
   REQUIRE(pairs.empty());
 }
 
-TEST_CASE("BruteForce: three bodies, two overlapping, one not",
-          "[physics][broadphase]") {
+TEST_CASE("BruteForce: three bodies, two overlapping, one not", "[physics][broadphase]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody c = RigidBody::MakeSphere(1.0f, 1.0f);
@@ -235,8 +224,7 @@ TEST_CASE("BruteForce: three bodies, two overlapping, one not",
   REQUIRE(pairs.size() == 1);
 }
 
-TEST_CASE("BruteForce: all pairs returned when all overlap",
-          "[physics][broadphase]") {
+TEST_CASE("BruteForce: all pairs returned when all overlap", "[physics][broadphase]") {
   RigidBody a = RigidBody::MakeSphere(5.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(5.0f, 1.0f);
   RigidBody c = RigidBody::MakeSphere(5.0f, 1.0f);
@@ -261,8 +249,7 @@ TEST_CASE("PhysicsWorld AddBody returns non-null pointer", "[physics][world]") {
   REQUIRE(world.GetBodies().size() == 1);
 }
 
-TEST_CASE("PhysicsWorld AddBody multiple bodies increases count",
-          "[physics][world]") {
+TEST_CASE("PhysicsWorld AddBody multiple bodies increases count", "[physics][world]") {
   PhysicsWorld world;
   world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
   world.AddBody(RigidBody::MakeSphere(0.5f, 2.0f));
@@ -287,8 +274,7 @@ TEST_CASE("PhysicsWorld Clear removes all bodies", "[physics][world]") {
   REQUIRE(world.GetBodies().empty());
 }
 
-TEST_CASE("PhysicsWorld Step: dynamic body accelerates under gravity",
-          "[physics][world]") {
+TEST_CASE("PhysicsWorld Step: dynamic body accelerates under gravity", "[physics][world]") {
   PhysicsWorld world;
   RigidBody *body = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
   body->position = {0, 10, 0};
@@ -303,8 +289,7 @@ TEST_CASE("PhysicsWorld Step: dynamic body accelerates under gravity",
   REQUIRE(body->position.y < 10.0f);
 }
 
-TEST_CASE("PhysicsWorld Step: static body is not moved by gravity",
-          "[physics][world]") {
+TEST_CASE("PhysicsWorld Step: static body is not moved by gravity", "[physics][world]") {
   PhysicsWorld world;
   RigidBody *body = world.AddBody(RigidBody::MakeStatic());
   body->position = {0, 5, 0};

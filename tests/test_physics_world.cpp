@@ -15,8 +15,7 @@ using Catch::Approx;
 // PhysicsWorld — floor collision responses
 // ============================================================
 
-TEST_CASE("PhysicsWorld: sphere bounces off floor at y=0",
-          "[world][collision]") {
+TEST_CASE("PhysicsWorld: sphere bounces off floor at y=0", "[world][collision]") {
   PhysicsWorld world;
   RigidBody *sphere = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
   // Position sphere below floor so the floor solver fires; velocity downward
@@ -31,8 +30,7 @@ TEST_CASE("PhysicsWorld: sphere bounces off floor at y=0",
   REQUIRE(sphere->velocity.y > 0.0f);
 }
 
-TEST_CASE("PhysicsWorld: sphere above floor does not bounce",
-          "[world][collision]") {
+TEST_CASE("PhysicsWorld: sphere above floor does not bounce", "[world][collision]") {
   PhysicsWorld world;
   RigidBody *sphere = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
   sphere->position = {0, 10.0f, 0}; // far above floor
@@ -60,8 +58,7 @@ TEST_CASE("PhysicsWorld: box bounces off floor at y=0", "[world][collision]") {
   REQUIRE(box->velocity.y >= 0.0f);
 }
 
-TEST_CASE("PhysicsWorld: box moving upward does not trigger floor response",
-          "[world][collision]") {
+TEST_CASE("PhysicsWorld: box moving upward does not trigger floor response", "[world][collision]") {
   PhysicsWorld world;
   RigidBody *box = world.AddBody(RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f));
   box->position = {0, 0.3f, 0}; // slightly below threshold
@@ -75,8 +72,7 @@ TEST_CASE("PhysicsWorld: box moving upward does not trigger floor response",
   REQUIRE(box->velocity.y > 0.0f);
 }
 
-TEST_CASE("PhysicsWorld: two overlapping spheres get separated",
-          "[world][collision]") {
+TEST_CASE("PhysicsWorld: two overlapping spheres get separated", "[world][collision]") {
   PhysicsWorld world;
   RigidBody *a = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
   RigidBody *b = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
@@ -89,8 +85,7 @@ TEST_CASE("PhysicsWorld: two overlapping spheres get separated",
   REQUIRE_NOTHROW(world.Step(1.0f / 120.0f));
 }
 
-TEST_CASE("PhysicsWorld: box-box collision processed without crash",
-          "[world][collision]") {
+TEST_CASE("PhysicsWorld: box-box collision processed without crash", "[world][collision]") {
   PhysicsWorld world;
   RigidBody *a = world.AddBody(RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f));
   RigidBody *b = world.AddBody(RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f));
@@ -102,8 +97,7 @@ TEST_CASE("PhysicsWorld: box-box collision processed without crash",
   REQUIRE_NOTHROW(world.Step(1.0f / 120.0f));
 }
 
-TEST_CASE("PhysicsWorld: static-static pair is skipped in narrowphase",
-          "[world]") {
+TEST_CASE("PhysicsWorld: static-static pair is skipped in narrowphase", "[world]") {
   PhysicsWorld world;
   RigidBody *a = world.AddBody(RigidBody::MakeStatic());
   RigidBody *b = world.AddBody(RigidBody::MakeStatic());
@@ -119,8 +113,7 @@ TEST_CASE("PhysicsWorld: static-static pair is skipped in narrowphase",
   REQUIRE(b->position.x == Approx(0.1f));
 }
 
-TEST_CASE("PhysicsWorld: body without collider is skipped in floor check",
-          "[world]") {
+TEST_CASE("PhysicsWorld: body without collider is skipped in floor check", "[world]") {
   PhysicsWorld world;
   RigidBody *body = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
   body->collider = nullptr; // remove collider
@@ -141,8 +134,7 @@ TEST_CASE("PhysicsWorld: multiple Step calls don't crash", "[world]") {
     REQUIRE_NOTHROW(world.Step(DT));
 }
 
-TEST_CASE("PhysicsWorld: body falls and stays at floor level over time",
-          "[world]") {
+TEST_CASE("PhysicsWorld: body falls and stays at floor level over time", "[world]") {
   PhysicsWorld world;
   world.SetGravity({0, -9.81f, 0});
   RigidBody *b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));

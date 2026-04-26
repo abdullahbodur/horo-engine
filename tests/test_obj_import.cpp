@@ -42,20 +42,17 @@ static bool ParseVec3String(const std::string &s, float &x, float &y,
 // ObjLoader::ComputeAABB
 // ===========================================================================
 
-TEST_CASE("ObjLoader::ComputeAABB returns invalid for nonexistent file",
-          "[objloader][aabb]") {
+TEST_CASE("ObjLoader::ComputeAABB returns invalid for nonexistent file", "[objloader][aabb]") {
   ObjAABB result = ObjLoader::ComputeAABB("/nonexistent/path/no_such_file.obj");
   REQUIRE_FALSE(result.valid);
 }
 
-TEST_CASE("ObjLoader::Load throws typed exception for missing OBJ",
-          "[objloader][load]") {
+TEST_CASE("ObjLoader::Load throws typed exception for missing OBJ", "[objloader][load]") {
   REQUIRE_THROWS_AS(ObjLoader::Load("/nonexistent/path/no_such_file.obj"),
                     ObjLoaderException);
 }
 
-TEST_CASE("ObjLoader::Load throws typed exception for OBJ without geometry",
-          "[objloader][load]") {
+TEST_CASE("ObjLoader::Load throws typed exception for OBJ without geometry", "[objloader][load]") {
   const std::string path = TmpPath("obj_no_geometry.obj");
   WriteFile(path, "# comment only\n"
                   "vt 0.0 1.0\n"
@@ -64,8 +61,7 @@ TEST_CASE("ObjLoader::Load throws typed exception for OBJ without geometry",
   REQUIRE_THROWS_AS(ObjLoader::Load(path), ObjLoaderException);
 }
 
-TEST_CASE("ObjLoader::Load parses a valid triangle and returns CPU mesh data",
-          "[objloader][load][renderer][obj][coverage]") {
+TEST_CASE("ObjLoader::Load parses a valid triangle and returns CPU mesh data", "[objloader][load][renderer][obj][coverage]") {
   const std::string path = TmpPath("obj_valid_triangle.obj");
   WriteFile(path, "v 0.0 0.0 0.0\n"
                   "v 1.0 0.0 0.0\n"
@@ -83,8 +79,7 @@ TEST_CASE("ObjLoader::Load parses a valid triangle and returns CPU mesh data",
   REQUIRE(mesh.GetIndices().size() == 3);
 }
 
-TEST_CASE("ObjLoader::Load auto-generates normals when OBJ has no vn lines",
-          "[objloader][load]") {
+TEST_CASE("ObjLoader::Load auto-generates normals when OBJ has no vn lines", "[objloader][load]") {
   const std::string path = TmpPath("obj_auto_normals.obj");
   WriteFile(path, "v 0.0 0.0 0.0\n"
                   "v 1.0 0.0 0.0\n"
@@ -98,8 +93,7 @@ TEST_CASE("ObjLoader::Load auto-generates normals when OBJ has no vn lines",
   }
 }
 
-TEST_CASE("ObjLoader::ComputeAABB computes correct bounds for simple triangle",
-          "[objloader][aabb]") {
+TEST_CASE("ObjLoader::ComputeAABB computes correct bounds for simple triangle", "[objloader][aabb]") {
   const std::string path = TmpPath("aabb_triangle.obj");
   WriteFile(path, "# simple triangle\n"
                   "v 0.0 0.0 0.0\n"
@@ -118,8 +112,7 @@ TEST_CASE("ObjLoader::ComputeAABB computes correct bounds for simple triangle",
   REQUIRE(result.max.z == Approx(0.5f).epsilon(0.001f));
 }
 
-TEST_CASE("ObjLoader::ComputeAABB ignores non-vertex lines",
-          "[objloader][aabb]") {
+TEST_CASE("ObjLoader::ComputeAABB ignores non-vertex lines", "[objloader][aabb]") {
   const std::string path = TmpPath("aabb_mixed.obj");
   WriteFile(path, "# comment line\n"
                   "mtllib material.mtl\n"
@@ -193,16 +186,14 @@ TEST_CASE("AssetIdFromImportedPath extracts stem", "[editor][import]") {
 // EditorAssetImport — MeshTagFromImportedPath
 // ===========================================================================
 
-TEST_CASE("MeshTagFromImportedPath returns assets/models relative path",
-          "[editor][import]") {
+TEST_CASE("MeshTagFromImportedPath returns assets/models relative path", "[editor][import]") {
   // Unix-style path — only the filename is kept and placed under
   // assets/models/.
   REQUIRE(MeshTagFromImportedPath("/some/path/model.obj") ==
           "assets/models/model.obj");
 }
 
-TEST_CASE("MeshTagFromImportedPath handles nested Unix path",
-          "[editor][import]") {
+TEST_CASE("MeshTagFromImportedPath handles nested Unix path", "[editor][import]") {
   // Deeply nested path — only the filename portion should be used.
   REQUIRE(MeshTagFromImportedPath("/a/b/c/d/e/mymodel.obj") ==
           "assets/models/mymodel.obj");
@@ -212,8 +203,7 @@ TEST_CASE("MeshTagFromImportedPath handles nested Unix path",
 // EditorAssetImport — SuggestRenderScale
 // ===========================================================================
 
-TEST_CASE("SuggestRenderScale returns 1,1,1 for nonexistent file",
-          "[editor][import]") {
+TEST_CASE("SuggestRenderScale returns 1,1,1 for nonexistent file", "[editor][import]") {
   // The mesh tag refers to an OBJ that does not exist on disk.
   // The function should fall back gracefully and return identity scale.
   const std::string result =
@@ -228,14 +218,12 @@ TEST_CASE("SuggestRenderScale returns 1,1,1 for nonexistent file",
   REQUIRE(z == Approx(1.0f).epsilon(0.01f));
 }
 
-TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for nonexistent OBJ",
-          "[objloader][texture]") {
+TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for nonexistent OBJ", "[objloader][texture]") {
   REQUIRE(
       ObjLoader::FindDiffuseTexture("/nonexistent/path/no_such.obj").empty());
 }
 
-TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for OBJ without mtllib",
-          "[objloader][texture]") {
+TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for OBJ without mtllib", "[objloader][texture]") {
   const std::string path =
       Monolith::Tests::SecureTempBase().string() + "/test_no_mtllib.obj";
   WriteFile(path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
@@ -243,8 +231,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for OBJ without mtllib",
   std::remove(path.c_str());
 }
 
-TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL file missing",
-          "[objloader][texture]") {
+TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL file missing", "[objloader][texture]") {
   const std::string path =
       Monolith::Tests::SecureTempBase().string() + "/test_missing_mtl.obj";
   WriteFile(path, "mtllib missing_material.mtl\nv 0 0 0\n");
@@ -252,8 +239,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL file missing",
   std::remove(path.c_str());
 }
 
-TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL has no map_Kd",
-          "[objloader][texture]") {
+TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL has no map_Kd", "[objloader][texture]") {
   namespace fs = std::filesystem;
   const std::string dir = Monolith::Tests::SecureTempBase().string();
   const std::string objPath = dir + "/test_no_diffuse.obj";
@@ -265,8 +251,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL has no map_Kd",
   std::remove(mtlPath.c_str());
 }
 
-TEST_CASE("ObjLoader::FindDiffuseTexture resolves map_Kd from MTL",
-          "[objloader][texture]") {
+TEST_CASE("ObjLoader::FindDiffuseTexture resolves map_Kd from MTL", "[objloader][texture]") {
   namespace fs = std::filesystem;
   const std::string dir = Monolith::Tests::SecureTempBase().string();
   const std::string objPath = dir + "/test_diffuse.obj";
@@ -280,8 +265,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture resolves map_Kd from MTL",
   std::remove(mtlPath.c_str());
 }
 
-TEST_CASE("SuggestRenderScale scales mesh to target height",
-          "[editor][import]") {
+TEST_CASE("SuggestRenderScale scales mesh to target height", "[editor][import]") {
   // Write an OBJ spanning y = 0.0 .. 0.5  →  height = 0.5 units.
   // With targetHeight = 2.0, the expected uniform scale is 2.0 / 0.5 = 4.0.
   const std::string objPath = TmpPath("scale_test.obj");

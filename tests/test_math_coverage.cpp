@@ -95,8 +95,7 @@ TEST_CASE("Mat3 operator== and operator!=", "[math][mat3]") {
   REQUIRE(A != C);
 }
 
-TEST_CASE("Mat3 singular matrix Inverse returns Identity fallback",
-          "[math][mat3]") {
+TEST_CASE("Mat3 singular matrix Inverse returns Identity fallback", "[math][mat3]") {
   Mat3 Z = Mat3::Zero();
   Mat3 inv = Z.Inverse();
   REQUIRE(inv(0, 0) == Approx(1.0f));
@@ -128,8 +127,7 @@ TEST_CASE("Mat4 Zero returns zero matrix", "[math][mat4]") {
       REQUIRE(Z(r, c) == Approx(0.0f));
 }
 
-TEST_CASE("Mat4 singular matrix Inverse returns Identity fallback",
-          "[math][mat4]") {
+TEST_CASE("Mat4 singular matrix Inverse returns Identity fallback", "[math][mat4]") {
   Mat4 Z = Mat4::Zero();
   Mat4 inv = Z.Inverse();
   REQUIRE(inv(0, 0) == Approx(1.0f));
@@ -146,8 +144,7 @@ TEST_CASE("Mat4 Transposed twice gives original", "[math][mat4]") {
       REQUIRE(TT(r, c) == Approx(T(r, c)).epsilon(1e-5f));
 }
 
-TEST_CASE("Mat4 operator* (matrix × matrix): Scale * Scale = Scale²",
-          "[math][mat4]") {
+TEST_CASE("Mat4 operator* (matrix × matrix): Scale * Scale = Scale²", "[math][mat4]") {
   Mat4 S = Mat4::Scale({2, 3, 4});
   Mat4 R = S * S;
   REQUIRE(R(0, 0) == Approx(4));
@@ -168,8 +165,7 @@ TEST_CASE("Mat4 ToString produces non-empty string", "[math][mat4][tostring]") {
   REQUIRE(s.find("1") != std::string::npos);
 }
 
-TEST_CASE("Quaternion ToEuler then FromEuler round-trip (pitch)",
-          "[math][quat]") {
+TEST_CASE("Quaternion ToEuler then FromEuler round-trip (pitch)", "[math][quat]") {
   float angle = ToRadians(45.0f);
   Quaternion q = Quaternion::FromAxisAngle(Vec3::Right(), angle);
   Vec3 euler = q.ToEuler();
@@ -192,29 +188,25 @@ TEST_CASE("Quaternion Lerp produces intermediate orientation", "[math][quat]") {
   REQUIRE(mid.w != Approx(b.w).epsilon(1e-3f));
 }
 
-TEST_CASE("Quaternion LookRotation toward +X gives correct forward",
-          "[math][quat]") {
+TEST_CASE("Quaternion LookRotation toward +X gives correct forward", "[math][quat]") {
   Quaternion q = Quaternion::LookRotation(Vec3::Right());
   Vec3 fwd = q.Forward();
   REQUIRE(fwd.x == Approx(1.0f).epsilon(1e-4f));
   REQUIRE(fwd.y == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE("Quaternion LookRotation toward -Z (forward) is near identity",
-          "[math][quat]") {
+TEST_CASE("Quaternion LookRotation toward -Z (forward) is near identity", "[math][quat]") {
   Quaternion q = Quaternion::LookRotation(Vec3::Forward());
   Vec3 fwd = q.Forward();
   REQUIRE(fwd.z == Approx(-1.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("Quaternion Dot: two identical quaternions dot to 1",
-          "[math][quat]") {
+TEST_CASE("Quaternion Dot: two identical quaternions dot to 1", "[math][quat]") {
   Quaternion q = Quaternion::FromAxisAngle(Vec3::Up(), ToRadians(45.0f));
   REQUIRE(Quaternion::Dot(q, q) == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion Conjugate: conjugate then multiply gives scalar",
-          "[math][quat]") {
+TEST_CASE("Quaternion Conjugate: conjugate then multiply gives scalar", "[math][quat]") {
   Quaternion q =
       Quaternion::FromAxisAngle({1, 0, 0}, ToRadians(60.0f)).Normalized();
   Quaternion c = q.Conjugate();

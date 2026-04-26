@@ -63,9 +63,7 @@ TEST_CASE("GJK: contact normal is normalized", "[gjk]") {
   REQUIRE(len == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE(
-    "GJK: touching spheres do not create contact due to strict overlap test",
-    "[gjk]") {
+TEST_CASE("GJK: touching spheres do not create contact due to strict overlap test", "[gjk]") {
   RigidBody a = RigidBody::MakeSphere(1.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = {0.0f, 0.0f, 0.0f};
@@ -75,9 +73,7 @@ TEST_CASE(
   REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("GJK: co-located asymmetric spheres use Up fallback and expected "
-          "contact point",
-          "[gjk]") {
+TEST_CASE("GJK: co-located asymmetric spheres use Up fallback and expected contact point", "[gjk]") {
   RigidBody a = RigidBody::MakeSphere(2.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = {3.0f, -2.0f, 4.0f};
@@ -148,8 +144,7 @@ TEST_CASE("SAT::TestBoxBox: no collider returns empty", "[sat]") {
   REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: overlapping axis-aligned boxes produce contact",
-          "[sat]") {
+TEST_CASE("SAT::TestBoxBox: overlapping axis-aligned boxes produce contact", "[sat]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   RigidBody b = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   a.position = {0.0f, 0.0f, 0.0f};
@@ -189,8 +184,7 @@ TEST_CASE("SAT::TestBoxBox: overlapping along Z axis", "[sat]") {
   REQUIRE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: wrong collider types (sphere+sphere) returns empty",
-          "[sat]") {
+TEST_CASE("SAT::TestBoxBox: wrong collider types (sphere+sphere) returns empty", "[sat]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   auto m = SAT::TestBoxBox(a, b);
@@ -218,8 +212,7 @@ TEST_CASE("SAT::TestBoxBox: large boxes vs small box overlapping", "[sat]") {
   REQUIRE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: rotated overlapping boxes produce contact",
-          "[sat]") {
+TEST_CASE("SAT::TestBoxBox: rotated overlapping boxes produce contact", "[sat]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   RigidBody b = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   a.position = {0.0f, 0.0f, 0.0f};
@@ -231,8 +224,7 @@ TEST_CASE("SAT::TestBoxBox: rotated overlapping boxes produce contact",
   REQUIRE(m.hasContact());
 }
 
-TEST_CASE("SAT::TestBoxBox: contact normal is approximately normalized",
-          "[sat]") {
+TEST_CASE("SAT::TestBoxBox: contact normal is approximately normalized", "[sat]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   RigidBody b = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   a.position = {0.0f, 0.0f, 0.0f};

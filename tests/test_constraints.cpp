@@ -45,8 +45,7 @@ TEST_CASE("ContactConstraint: empty manifold is a no-op", "[constraint]") {
   REQUIRE(a.velocity.y == Approx(-5.0f)); // unchanged
 }
 
-TEST_CASE("ContactConstraint: separating bodies are not impuled",
-          "[constraint]") {
+TEST_CASE("ContactConstraint: separating bodies are not impuled", "[constraint]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 1, 0};
@@ -125,8 +124,7 @@ TEST_CASE("ContactConstraint: static bodyB is not moved", "[constraint]") {
   REQUIRE(a.velocity.y > 0.0f); // bounced up
 }
 
-TEST_CASE("ContactConstraint: friction reduces lateral velocity",
-          "[constraint]") {
+TEST_CASE("ContactConstraint: friction reduces lateral velocity", "[constraint]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeStatic();
   a.position = {0, 0.1f, 0};
@@ -148,8 +146,7 @@ TEST_CASE("ContactConstraint: friction reduces lateral velocity",
   REQUIRE(std::abs(a.velocity.x) < 5.0f);
 }
 
-TEST_CASE("ContactConstraint: position correction pushes bodies apart",
-          "[constraint]") {
+TEST_CASE("ContactConstraint: position correction pushes bodies apart", "[constraint]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 1, 0};
@@ -173,8 +170,7 @@ TEST_CASE("ContactConstraint: position correction pushes bodies apart",
   REQUIRE(finalDistY >= initialDistY);
 }
 
-TEST_CASE("ContactConstraint: four contact points all resolved",
-          "[constraint]") {
+TEST_CASE("ContactConstraint: four contact points all resolved", "[constraint]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 1.0f);
   RigidBody b = RigidBody::MakeStatic();
   a.position = {0, 0.4f, 0};
@@ -228,8 +224,7 @@ TEST_CASE("ConstraintSolver: runs multiple iterations", "[solver]") {
   REQUIRE_NOTHROW(solver.Solve(constraints, 10));
 }
 
-TEST_CASE("ConstraintSolver: default 1 iteration resolves basic contact",
-          "[solver]") {
+TEST_CASE("ConstraintSolver: default 1 iteration resolves basic contact", "[solver]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeStatic();
   a.velocity = {0, -4, 0};
@@ -250,9 +245,7 @@ TEST_CASE("ConstraintSolver: default 1 iteration resolves basic contact",
   REQUIRE(a.velocity.y > 0.0f);
 }
 
-TEST_CASE(
-    "ContactConstraint: tangential velocity triggers friction angular impulse",
-    "[constraint]") {
+TEST_CASE("ContactConstraint: tangential velocity triggers friction angular impulse", "[constraint]") {
   // Both bodies dynamic, sliding laterally while approaching along the contact
   // normal — ensures jn > 0 so friction clamp is non-trivial.
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
@@ -279,8 +272,7 @@ TEST_CASE(
   REQUIRE(a.velocity.x < 3.0f);
 }
 
-TEST_CASE("ContactConstraint: offset contact point generates friction torque",
-          "[constraint]") {
+TEST_CASE("ContactConstraint: offset contact point generates friction torque", "[constraint]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
 

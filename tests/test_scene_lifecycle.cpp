@@ -41,9 +41,7 @@ TEST_CASE("SceneLifecycle: Hot-reload cycle", "[scene][lifecycle]") {
   REQUIRE(lc.IsActive());
 }
 
-TEST_CASE(
-    "SceneLifecycle: Invalid transition FinishLoading before BeginLoading",
-    "[scene][lifecycle]") {
+TEST_CASE("SceneLifecycle: Invalid transition FinishLoading before BeginLoading", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
   // Should fail: FinishLoading when not Loading
@@ -54,8 +52,7 @@ TEST_CASE(
           std::string::npos);
 }
 
-TEST_CASE("SceneLifecycle: Invalid transition BeginLoading while Loading",
-          "[scene][lifecycle]") {
+TEST_CASE("SceneLifecycle: Invalid transition BeginLoading while Loading", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
   // Begin first load
@@ -67,9 +64,7 @@ TEST_CASE("SceneLifecycle: Invalid transition BeginLoading while Loading",
   REQUIRE(lc.GetError() != nullptr);
 }
 
-TEST_CASE(
-    "SceneLifecycle: Invalid transition BeginReloading from Uninitialized",
-    "[scene][lifecycle]") {
+TEST_CASE("SceneLifecycle: Invalid transition BeginReloading from Uninitialized", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
   // Can't reload if not Active
@@ -77,8 +72,7 @@ TEST_CASE(
   REQUIRE(lc.GetState() == SceneLifecycleState::Uninitialized);
 }
 
-TEST_CASE("SceneLifecycle: Invalid transition BeginUnloading from Loading",
-          "[scene][lifecycle]") {
+TEST_CASE("SceneLifecycle: Invalid transition BeginUnloading from Loading", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
   REQUIRE(lc.BeginLoading());

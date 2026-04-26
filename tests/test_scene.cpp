@@ -69,16 +69,14 @@ TEST_CASE("Registry::Clear resets free list", "[registry]") {
 // Scene — CreateEntity
 // ============================================================
 
-TEST_CASE("Scene::CreateEntity returns valid entity with TransformComponent",
-          "[scene]") {
+TEST_CASE("Scene::CreateEntity returns valid entity with TransformComponent", "[scene]") {
   Scene scene;
   Entity e = scene.CreateEntity();
   REQUIRE(e != INVALID_ENTITY);
   REQUIRE(scene.GetRegistry().Has<TransformComponent>(e));
 }
 
-TEST_CASE("Scene::CreateEntity sets position on TransformComponent",
-          "[scene]") {
+TEST_CASE("Scene::CreateEntity sets position on TransformComponent", "[scene]") {
   Scene scene;
   Vec3 pos{3, -1, 7};
   Entity e = scene.CreateEntity(pos);
@@ -209,8 +207,7 @@ TEST_CASE("BehaviorSystem: no BehaviorComponents is safe", "[behavior]") {
 // CameraSystem
 // ============================================================
 
-TEST_CASE("CameraSystem syncs camera position from active entity",
-          "[camera-system]") {
+TEST_CASE("CameraSystem syncs camera position from active entity", "[camera-system]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -269,8 +266,7 @@ TEST_CASE("CameraSystem: camera without transform is safe", "[camera-system]") {
 // PhysicsSystem
 // ============================================================
 
-TEST_CASE("PhysicsSystem syncs body position to TransformComponent",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem syncs body position to TransformComponent", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 
@@ -293,8 +289,7 @@ TEST_CASE("PhysicsSystem syncs body position to TransformComponent",
   REQUIRE(tc.current.position.y < 4.0f); // gravity pulled it down in world.Step
 }
 
-TEST_CASE("PhysicsSystem: entity without RigidBodyComponent is skipped",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem: entity without RigidBodyComponent is skipped", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 
@@ -306,8 +301,7 @@ TEST_CASE("PhysicsSystem: entity without RigidBodyComponent is skipped",
   REQUIRE_NOTHROW(sys.OnUpdate(reg, 1.0f / 60.0f));
 }
 
-TEST_CASE("PhysicsSystem: null body pointer is skipped safely",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem: null body pointer is skipped safely", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 
@@ -322,8 +316,7 @@ TEST_CASE("PhysicsSystem: null body pointer is skipped safely",
   REQUIRE_NOTHROW(sys.OnUpdate(reg, 1.0f / 60.0f));
 }
 
-TEST_CASE("PhysicsSystem stores previous transform before sync",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem stores previous transform before sync", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 

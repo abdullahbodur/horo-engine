@@ -179,8 +179,7 @@ TEST_CASE("Vec3 reflect", "[math][vec3]") {
   REQUIRE(reflected == expected);
 }
 
-TEST_CASE("Vec3 reflect: perpendicular to normal is unchanged",
-          "[math][vec3]") {
+TEST_CASE("Vec3 reflect: perpendicular to normal is unchanged", "[math][vec3]") {
   Vec3 incident{1, 0, 0};
   Vec3 normal{0, 1, 0};
   Vec3 r = Vec3::Reflect(incident, normal);
@@ -567,8 +566,7 @@ TEST_CASE("Quaternion lerp at endpoints", "[math][quat]") {
   REQUIRE(l1.z == Approx(b.z).epsilon(1e-4f));
 }
 
-TEST_CASE("Quaternion ToMat3 from identity is identity matrix",
-          "[math][quat]") {
+TEST_CASE("Quaternion ToMat3 from identity is identity matrix", "[math][quat]") {
   Quaternion id = Quaternion::Identity();
   Mat3 M = id.ToMat3();
   REQUIRE(M(0, 0) == Approx(1).epsilon(1e-5f));
@@ -578,8 +576,7 @@ TEST_CASE("Quaternion ToMat3 from identity is identity matrix",
   REQUIRE(M(1, 0) == Approx(0).margin(1e-5f));
 }
 
-TEST_CASE("Quaternion ToMat3 produces same rotation as operator*",
-          "[math][quat]") {
+TEST_CASE("Quaternion ToMat3 produces same rotation as operator*", "[math][quat]") {
   Quaternion q = Quaternion::FromAxisAngle({0, 1, 0}, ToRadians(45.0f));
   Vec3 v{1, 0, 0};
   Vec3 byOp = q * v;
@@ -601,8 +598,7 @@ TEST_CASE("Quaternion direction vectors from identity", "[math][quat]") {
   REQUIRE(rt.x == Approx(1).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion FromEuler pitch=90deg matches AxisAngle Y rotation",
-          "[math][quat]") {
+TEST_CASE("Quaternion FromEuler pitch=90deg matches AxisAngle Y rotation", "[math][quat]") {
   float angle = ToRadians(90.0f);
   Quaternion qEuler = Quaternion::FromEuler(angle, 0.0f, 0.0f);
   Quaternion qAxis = Quaternion::FromAxisAngle(Vec3::Up(), angle);
@@ -615,8 +611,7 @@ TEST_CASE("Quaternion FromEuler pitch=90deg matches AxisAngle Y rotation",
   REQUIRE(r1.z == Approx(r2.z).epsilon(1e-4f));
 }
 
-TEST_CASE("Quaternion FromEuler roll=90deg matches AxisAngle X rotation",
-          "[math][quat]") {
+TEST_CASE("Quaternion FromEuler roll=90deg matches AxisAngle X rotation", "[math][quat]") {
   float angle = ToRadians(90.0f);
   Quaternion qEuler = Quaternion::FromEuler(0.0f, 0.0f, angle);
   Quaternion qAxis = Quaternion::FromAxisAngle(Vec3::Right(), angle);
@@ -629,15 +624,13 @@ TEST_CASE("Quaternion FromEuler roll=90deg matches AxisAngle X rotation",
   REQUIRE(r1.z == Approx(r2.z).epsilon(1e-4f));
 }
 
-TEST_CASE("Quaternion ToEuler: identity gives zero pitch and roll",
-          "[math][quat]") {
+TEST_CASE("Quaternion ToEuler: identity gives zero pitch and roll", "[math][quat]") {
   Vec3 euler = Quaternion::Identity().ToEuler();
   REQUIRE(euler.x == Approx(0).margin(1e-5f));
   REQUIRE(euler.z == Approx(0).margin(1e-5f));
 }
 
-TEST_CASE("Quaternion LookRotation toward forward is near-identity",
-          "[math][quat]") {
+TEST_CASE("Quaternion LookRotation toward forward is near-identity", "[math][quat]") {
   Quaternion q = Quaternion::LookRotation(Vec3::Forward());
   Vec3 fwd = q.Forward();
   REQUIRE(fwd.x == Approx(Vec3::Forward().x).margin(1e-4f));
@@ -673,8 +666,7 @@ TEST_CASE("Transform ToMatrix applies scale", "[math][transform]") {
   REQUIRE(r.z == Approx(4));
 }
 
-TEST_CASE("Transform TransformPoint: translation + identity rotation",
-          "[math][transform]") {
+TEST_CASE("Transform TransformPoint: translation + identity rotation", "[math][transform]") {
   Transform t;
   t.position = {10, 0, 0};
   Vec3 result = t.TransformPoint({1, 0, 0});
@@ -683,8 +675,7 @@ TEST_CASE("Transform TransformPoint: translation + identity rotation",
   REQUIRE(result.z == Approx(0));
 }
 
-TEST_CASE("Transform direction vectors are correct for identity",
-          "[math][transform]") {
+TEST_CASE("Transform direction vectors are correct for identity", "[math][transform]") {
   Transform t = Transform::Identity();
   REQUIRE(t.Forward().z == Approx(Vec3::Forward().z).epsilon(1e-5f));
   REQUIRE(t.Up().y == Approx(1).epsilon(1e-5f));

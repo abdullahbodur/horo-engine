@@ -112,8 +112,7 @@ TEST_CASE("Skeleton: default-constructed skeleton is invalid", "[skeleton]") {
   REQUIRE(skel.BoneCount() == 0);
 }
 
-TEST_CASE("Skeleton: adding one bone makes it valid and BoneCount returns 1",
-          "[skeleton]") {
+TEST_CASE("Skeleton: adding one bone makes it valid and BoneCount returns 1", "[skeleton]") {
   Skeleton skel;
   Bone b;
   b.name = "Hip";
@@ -181,8 +180,7 @@ TEST_CASE("Skeleton: child bone stores valid parentIndex", "[skeleton]") {
   CHECK(skel->GetBone(1).parentIndex == 0);
 }
 
-TEST_CASE("Skeleton: inverseBindMatrix is stored and retrieved correctly",
-          "[skeleton]") {
+TEST_CASE("Skeleton: inverseBindMatrix is stored and retrieved correctly", "[skeleton]") {
   Skeleton skel;
   Bone b;
   b.name = "Root";
@@ -203,17 +201,13 @@ TEST_CASE("Skeleton: inverseBindMatrix is stored and retrieved correctly",
 // AnimationClip tests
 // ===========================================================================
 
-TEST_CASE(
-    "AnimationClip: default-constructed clip has duration 0 and no tracks",
-    "[clip]") {
+TEST_CASE("AnimationClip: default-constructed clip has duration 0 and no tracks", "[clip]") {
   AnimationClip clip;
   CHECK(clip.duration == Approx(0.0f));
   CHECK(clip.GetTracks().empty());
 }
 
-TEST_CASE(
-    "AnimationClip: single-key position track returns that key at any time",
-    "[clip]") {
+TEST_CASE("AnimationClip: single-key position track returns that key at any time", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -236,8 +230,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE("AnimationClip: two-key position track lerps to midpoint at t=0.5",
-          "[clip]") {
+TEST_CASE("AnimationClip: two-key position track lerps to midpoint at t=0.5", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -291,8 +284,7 @@ TEST_CASE("AnimationClip: two-key rotation track slerps at t=0.5", "[clip]") {
   CHECK(out[0].m[2][2] == Approx(expected.m[2][2]).margin(1e-4f));
 }
 
-TEST_CASE("AnimationClip: two-key scale track lerps to midpoint at t=0.5",
-          "[clip]") {
+TEST_CASE("AnimationClip: two-key scale track lerps to midpoint at t=0.5", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -314,8 +306,7 @@ TEST_CASE("AnimationClip: two-key scale track lerps to midpoint at t=0.5",
   CHECK(out[0].m[2][2] == Approx(4.0f).margin(1e-4f)); // lerp(1,7,0.5)
 }
 
-TEST_CASE("AnimationClip: Sample before first key clamps to first key value",
-          "[clip]") {
+TEST_CASE("AnimationClip: Sample before first key clamps to first key value", "[clip]") {
   AnimationClip clip;
   clip.duration = 2.0f;
 
@@ -331,8 +322,7 @@ TEST_CASE("AnimationClip: Sample before first key clamps to first key value",
   CHECK(out[0].m[3][0] == Approx(10.0f).margin(1e-4f));
 }
 
-TEST_CASE("AnimationClip: Sample after last key clamps to last key value",
-          "[clip]") {
+TEST_CASE("AnimationClip: Sample after last key clamps to last key value", "[clip]") {
   AnimationClip clip;
   clip.duration = 2.0f;
 
@@ -348,8 +338,7 @@ TEST_CASE("AnimationClip: Sample after last key clamps to last key value",
   CHECK(out[0].m[3][0] == Approx(20.0f).margin(1e-4f));
 }
 
-TEST_CASE("AnimationClip: bone with no track receives Mat4::Identity",
-          "[clip]") {
+TEST_CASE("AnimationClip: bone with no track receives Mat4::Identity", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -370,9 +359,7 @@ TEST_CASE("AnimationClip: bone with no track receives Mat4::Identity",
       CHECK(out[1].m[col][row] == Approx(identity.m[col][row]).margin(1e-5f));
 }
 
-TEST_CASE("AnimationClip: position-only track defaults rotation to identity "
-          "and scale to one",
-          "[clip]") {
+TEST_CASE("AnimationClip: position-only track defaults rotation to identity and scale to one", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -394,9 +381,7 @@ TEST_CASE("AnimationClip: position-only track defaults rotation to identity "
       CHECK(out[0].m[col][row] == Approx(identity.m[col][row]).margin(1e-5f));
 }
 
-TEST_CASE("AnimationClip: multiple tracks for different bones each get their "
-          "own data",
-          "[clip]") {
+TEST_CASE("AnimationClip: multiple tracks for different bones each get their own data", "[clip]") {
   AnimationClip clip;
   clip.duration = 1.0f;
 
@@ -431,8 +416,7 @@ TEST_CASE("AnimationClip: multiple tracks for different bones each get their "
 // AnimationSystem integration tests
 // ===========================================================================
 
-TEST_CASE("AnimationSystem: advances time by dt * speed",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: advances time by dt * speed", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
   auto &ac =
@@ -448,9 +432,7 @@ TEST_CASE("AnimationSystem: advances time by dt * speed",
   CHECK(reg.Get<AnimationComponent>(e).time == Approx(0.2f).margin(1e-5f));
 }
 
-TEST_CASE(
-    "AnimationSystem: wraps time when loop=true and time exceeds duration",
-    "[animation-system]") {
+TEST_CASE("AnimationSystem: wraps time when loop=true and time exceeds duration", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
   auto clip = MakePositionClip(1.0f);
@@ -465,8 +447,7 @@ TEST_CASE(
   CHECK(reg.Get<AnimationComponent>(e).time == Approx(0.1f).margin(1e-4f));
 }
 
-TEST_CASE("AnimationSystem: does not advance time when playing=false",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: does not advance time when playing=false", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
   auto &ac =
@@ -480,8 +461,7 @@ TEST_CASE("AnimationSystem: does not advance time when playing=false",
   REQUIRE(reg.Get<AnimationComponent>(e).time == Approx(0.3f).margin(1e-5f));
 }
 
-TEST_CASE("AnimationSystem: does not advance when currentClip is null",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: does not advance when currentClip is null", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -499,8 +479,7 @@ TEST_CASE("AnimationSystem: does not advance when currentClip is null",
   REQUIRE(reg.Get<AnimationComponent>(e).boneMatrices.empty());
 }
 
-TEST_CASE("AnimationSystem: does not advance when skeleton is null",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: does not advance when skeleton is null", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -518,9 +497,7 @@ TEST_CASE("AnimationSystem: does not advance when skeleton is null",
   REQUIRE(reg.Get<AnimationComponent>(e).boneMatrices.empty());
 }
 
-TEST_CASE("AnimationSystem: boneMatrices.size() equals skeleton BoneCount "
-          "after update",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: boneMatrices.size() equals skeleton BoneCount after update", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
   AddAnimComp(reg, e, MakeTwoBoneSkeleton(), MakePositionClip(1.0f));
@@ -532,10 +509,7 @@ TEST_CASE("AnimationSystem: boneMatrices.size() equals skeleton BoneCount "
   REQUIRE(static_cast<int>(ac.boneMatrices.size()) == 2);
 }
 
-TEST_CASE("AnimationSystem: single root bone with identity inverseBindMatrix "
-          "and position track — "
-          "boneMatrices[0] encodes the sampled position at t=0.5",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: single root bone with identity inverseBindMatrix and position track — boneMatrices[0] encodes the sampled position at t=0.5", "[animation-system]") {
   // The clip has a position track: pos(0)=(0,0,0), pos(1)=(1,0,0).
   // At time=0 after the update (dt=0.5, so time advances from 0 to 0.5 with
   // loop):
@@ -559,9 +533,7 @@ TEST_CASE("AnimationSystem: single root bone with identity inverseBindMatrix "
   CHECK(ac.boneMatrices[0].m[3][2] == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE("AnimationSystem: single bone at t=0 with position (0,0,0) produces "
-          "identity boneMatrix",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: single bone at t=0 with position (0,0,0) produces identity boneMatrix", "[animation-system]") {
   // At t=0 the only position key is (0,0,0), rotation defaults to identity,
   // scale to (1,1,1). inverseBindMatrix is identity.  Expected result:
   // identity.
@@ -600,9 +572,7 @@ TEST_CASE("AnimationSystem: single bone at t=0 with position (0,0,0) produces "
             Approx(identity.m[col][row]).margin(1e-5f));
 }
 
-TEST_CASE("AnimationSystem: two-bone hierarchy — parent transform propagates "
-          "into child global matrix",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: two-bone hierarchy — parent transform propagates into child global matrix", "[animation-system]") {
   auto skel =
       MakeTwoBoneSkeleton(); // both bones have Identity inverseBindMatrix
 
@@ -654,9 +624,7 @@ TEST_CASE("AnimationSystem: two-bone hierarchy — parent transform propagates "
   CHECK(result.boneMatrices[1].m[3][2] == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE(
-    "AnimationSystem: two-bone hierarchy — parent rotation propagates to child",
-    "[animation-system]") {
+TEST_CASE("AnimationSystem: two-bone hierarchy — parent rotation propagates to child", "[animation-system]") {
   // Rotate the parent 90 degrees around Y.  Child is at local (1,0,0).
   // After 90-degree Y rotation, the child's world position becomes (0,0,-1) in
   // X-Z plane.
@@ -721,9 +689,7 @@ TEST_CASE(
   CHECK(result.boneMatrices[1].m[3][2] == Approx(rotated.z).margin(1e-4f));
 }
 
-TEST_CASE("AnimationSystem: non-identity inverseBindMatrix is applied to final "
-          "bone matrix",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: non-identity inverseBindMatrix is applied to final bone matrix", "[animation-system]") {
   // Single bone.  inverseBindMatrix translates -2 along X.
   // Clip positions the bone at +2 along X.
   // Expected boneMatrix = Translate(2,0,0) * Translate(-2,0,0) = Identity
@@ -770,9 +736,7 @@ TEST_CASE("AnimationSystem: non-identity inverseBindMatrix is applied to final "
   CHECK(result.boneMatrices[0].m[3][2] == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE("AnimationSystem: non-looping clip clamps time at duration when dt "
-          "overshoots",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: non-looping clip clamps time at duration when dt overshoots", "[animation-system]") {
   Registry reg;
   Entity e = reg.Create();
   auto &ac =
@@ -786,9 +750,7 @@ TEST_CASE("AnimationSystem: non-looping clip clamps time at duration when dt "
   CHECK(reg.Get<AnimationComponent>(e).time == Approx(1.0f).margin(1e-5f));
 }
 
-TEST_CASE("AnimationSystem: boneMatrices is resized correctly when skeleton "
-          "grows between updates",
-          "[animation-system]") {
+TEST_CASE("AnimationSystem: boneMatrices is resized correctly when skeleton grows between updates", "[animation-system]") {
   // Simulate an entity whose skeleton reference is replaced mid-game (not a
   // realistic engine operation, but verifies that the system resizes on every
   // update rather than assuming a stable size).

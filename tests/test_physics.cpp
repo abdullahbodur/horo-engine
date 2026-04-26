@@ -16,8 +16,7 @@ using Catch::Approx;
 
 // ---- RigidBody construction ----
 
-TEST_CASE("RigidBody MakeSphere sets mass and collider",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody MakeSphere sets mass and collider", "[physics][rigidbody]") {
   auto body = RigidBody::MakeSphere(0.5f, 2.0f);
   REQUIRE(body.mass == Approx(2.0f));
   REQUIRE(body.invMass == Approx(0.5f));
@@ -33,8 +32,7 @@ TEST_CASE("RigidBody MakeStatic has zero invMass", "[physics][rigidbody]") {
 
 // ---- Integration ----
 
-TEST_CASE("SemiImplicitEuler: static body is not moved",
-          "[physics][integration]") {
+TEST_CASE("SemiImplicitEuler: static body is not moved", "[physics][integration]") {
   RigidBody b = RigidBody::MakeStatic();
   b.position = {5, 5, 5};
   b.AddForce({100, -100, 100});
@@ -45,8 +43,7 @@ TEST_CASE("SemiImplicitEuler: static body is not moved",
   REQUIRE(b.position.y == Approx(5.0f));
 }
 
-TEST_CASE("SemiImplicitEuler: free fall under gravity (one step)",
-          "[physics][integration]") {
+TEST_CASE("SemiImplicitEuler: free fall under gravity (one step)", "[physics][integration]") {
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   b.position = {0, 10, 0};
   b.velocity = Vec3::Zero();
@@ -65,8 +62,7 @@ TEST_CASE("SemiImplicitEuler: free fall under gravity (one step)",
   REQUIRE(b.position.y == Approx(expectedPosY).epsilon(1e-3));
 }
 
-TEST_CASE("SemiImplicitEuler: sphere falls correct distance over many steps",
-          "[physics][integration]") {
+TEST_CASE("SemiImplicitEuler: sphere falls correct distance over many steps", "[physics][integration]") {
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   b.position = {0, 20, 0};
   b.velocity = Vec3::Zero();
@@ -93,8 +89,7 @@ TEST_CASE("SemiImplicitEuler: sphere falls correct distance over many steps",
 
 // ---- Sphere-plane collision impulse ----
 
-TEST_CASE("Sphere-plane impulse reverses vertical velocity",
-          "[physics][collision]") {
+TEST_CASE("Sphere-plane impulse reverses vertical velocity", "[physics][collision]") {
   // Set up a sphere approaching a floor at y=0
   RigidBody sphere = RigidBody::MakeSphere(0.5f, 1.0f);
   sphere.position = {0, 0.5f,
@@ -130,8 +125,7 @@ TEST_CASE("Sphere-plane: no impulse when moving away", "[physics][collision]") {
   REQUIRE(vn > 0); // separating — solver should skip
 }
 
-TEST_CASE("ContactConstraint: resolves two-body normal impulse",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint: resolves two-body normal impulse", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = {0, 1.0f, 0};
@@ -194,8 +188,7 @@ TEST_CASE("SAT::TestBoxBox normal points from B toward A", "[physics][sat]") {
   REQUIRE(m.contacts[0].penetration > 0.0f);
 }
 
-TEST_CASE("SAT::TestBoxBox produces no contact for separated boxes",
-          "[physics][sat]") {
+TEST_CASE("SAT::TestBoxBox produces no contact for separated boxes", "[physics][sat]") {
   RigidBody a = RigidBody::MakeBox({0.5f, 0.5f, 0.5f}, 70.0f);
   RigidBody b = RigidBody::MakeStatic();
   b.collider = std::make_shared<BoxCollider>(Vec3{0.5f, 0.5f, 0.5f});

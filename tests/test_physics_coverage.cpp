@@ -33,8 +33,7 @@ using Catch::Approx;
 // SAT — FaceB axis path and edge-edge path
 // ============================================================
 
-TEST_CASE("SAT::TestBoxBox: FaceB contact (B larger than A)",
-          "[physics][sat]") {
+TEST_CASE("SAT::TestBoxBox: FaceB contact (B larger than A)", "[physics][sat]") {
   // Make B much larger so FaceB axis wins
   RigidBody a = RigidBody::MakeBox({0.2f, 0.2f, 0.2f}, 1.0f);
   RigidBody b = RigidBody::MakeBox({2.0f, 2.0f, 2.0f}, 1.0f);
@@ -109,8 +108,7 @@ TEST_CASE("GJK: box vs sphere returns no contact (stub)", "[gjk][box]") {
 // BruteForce — pair skip when no collider
 // ============================================================
 
-TEST_CASE("BruteForce: body without collider is skipped in pair check",
-          "[broadphase]") {
+TEST_CASE("BruteForce: body without collider is skipped in pair check", "[broadphase]") {
   RigidBody a = RigidBody::MakeStatic(); // no collider
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 0, 0};
@@ -148,8 +146,7 @@ TEST_CASE("BruteForce: box vs sphere AABB no overlap", "[broadphase]") {
 // RigidBody — AddForceAtPoint torque verification
 // ============================================================
 
-TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque",
-          "[rigidbody]") {
+TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque", "[rigidbody]") {
   auto b = RigidBody::MakeSphere(1.0f, 1.0f);
   b.position = {5, 5, 5};
   // Force at center (worldPoint == position) → r = 0 → torque = 0
@@ -160,8 +157,7 @@ TEST_CASE("RigidBody AddForceAtPoint: force at center adds zero torque",
   REQUIRE(b.torqueAccum.z == Approx(0).margin(1e-5f));
 }
 
-TEST_CASE("RigidBody AddForceAtPoint: force at offset creates torque",
-          "[rigidbody]") {
+TEST_CASE("RigidBody AddForceAtPoint: force at offset creates torque", "[rigidbody]") {
   auto b = RigidBody::MakeSphere(1.0f, 1.0f);
   b.position = {0, 0, 0};
   // A forward force applied at +X should rotate negatively around Y.
@@ -184,8 +180,7 @@ TEST_CASE("RigidBody multiple AddForce accumulate correctly", "[rigidbody]") {
 // PhysicsWorld — extended scenarios
 // ============================================================
 
-TEST_CASE("PhysicsWorld: zero gravity world does not accelerate bodies",
-          "[world]") {
+TEST_CASE("PhysicsWorld: zero gravity world does not accelerate bodies", "[world]") {
   PhysicsWorld world;
   world.SetGravity(Vec3::Zero());
   RigidBody *b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
@@ -209,8 +204,7 @@ TEST_CASE("PhysicsWorld: Step then Clear leaves world empty", "[world]") {
   REQUIRE(world.GetBodies().empty());
 }
 
-TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction",
-          "[world]") {
+TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction", "[world]") {
   PhysicsWorld world;
   world.SetGravity({1.0f, 0.0f, 0.0f}); // gravity pointing +X only
   RigidBody *b = world.AddBody(RigidBody::MakeSphere(0.5f, 1.0f));
@@ -223,8 +217,7 @@ TEST_CASE("PhysicsWorld: custom gravity pulls body in correct direction",
   REQUIRE(b->velocity.y == Approx(0.0f).margin(1e-4f)); // no Y gravity
 }
 
-TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies",
-          "[world]") {
+TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies", "[world]") {
   PhysicsWorld world;
   world.SetGravity(Vec3::Zero()); // no gravity so they don't fall
   RigidBody *a = world.AddBody(RigidBody::MakeSphere(1.0f, 1.0f));
@@ -239,8 +232,7 @@ TEST_CASE("PhysicsWorld: sphere-sphere collision between two dynamic bodies",
     REQUIRE_NOTHROW(world.Step(1.0f / 60.0f));
 }
 
-TEST_CASE("PhysicsWorld: static body added and stepped does not move",
-          "[world]") {
+TEST_CASE("PhysicsWorld: static body added and stepped does not move", "[world]") {
   PhysicsWorld world;
   RigidBody *s = world.AddBody(RigidBody::MakeStatic());
   s->position = {0, 0, 0};

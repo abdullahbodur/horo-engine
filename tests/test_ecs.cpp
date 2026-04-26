@@ -90,8 +90,7 @@ TEST_CASE("ComponentPool Remove non-existent entity is safe", "[ecs][pool]") {
   REQUIRE(pool.Size() == 0);
 }
 
-TEST_CASE("ComponentPool Remove-swap preserves remaining components",
-          "[ecs][pool]") {
+TEST_CASE("ComponentPool Remove-swap preserves remaining components", "[ecs][pool]") {
   ComponentPool<Position> pool;
   Entity a = 1;
   Entity b = 2;
@@ -159,8 +158,7 @@ TEST_CASE("ComponentPool GetEntities returns entity list", "[ecs][pool]") {
   REQUIRE(foundE2);
 }
 
-TEST_CASE("ComponentPool multiple adds and removes maintain consistency",
-          "[ecs][pool]") {
+TEST_CASE("ComponentPool multiple adds and removes maintain consistency", "[ecs][pool]") {
   ComponentPool<Velocity> pool;
   for (Entity i = 0; i < 10; ++i)
     pool.Add(i, Velocity{(float)i, 0, 0});
@@ -201,8 +199,7 @@ TEST_CASE("Registry Create gives unique IDs", "[ecs][registry]") {
   REQUIRE(a != c);
 }
 
-TEST_CASE("Registry IsAlive returns false for unknown entity",
-          "[ecs][registry]") {
+TEST_CASE("Registry IsAlive returns false for unknown entity", "[ecs][registry]") {
   Registry reg;
   REQUIRE_FALSE(reg.IsAlive(9999));
   REQUIRE_FALSE(reg.IsAlive(INVALID_ENTITY));
@@ -288,8 +285,7 @@ TEST_CASE("Registry multiple component types per entity", "[ecs][registry]") {
   REQUIRE(reg.Get<Velocity>(e).vx == 4);
 }
 
-TEST_CASE("Registry Has returns false for component on different entity",
-          "[ecs][registry]") {
+TEST_CASE("Registry Has returns false for component on different entity", "[ecs][registry]") {
   Registry reg;
   Entity a = reg.Create();
   Entity b = reg.Create();
@@ -299,8 +295,7 @@ TEST_CASE("Registry Has returns false for component on different entity",
   REQUIRE_FALSE(reg.Has<Position>(b));
 }
 
-TEST_CASE("Registry GetEntities returns entities with component",
-          "[ecs][registry]") {
+TEST_CASE("Registry GetEntities returns entities with component", "[ecs][registry]") {
   Registry reg;
   Entity a = reg.Create();
   Entity b = reg.Create();
@@ -323,16 +318,14 @@ TEST_CASE("Registry GetEntities returns entities with component",
   REQUIRE(foundB);
 }
 
-TEST_CASE("Registry GetEntities returns empty for unknown component type",
-          "[ecs][registry]") {
+TEST_CASE("Registry GetEntities returns empty for unknown component type", "[ecs][registry]") {
   Registry reg;
   reg.Create();
   const auto &entities = reg.GetEntities<Velocity>();
   REQUIRE(entities.empty());
 }
 
-TEST_CASE("Registry: destroying entity with components leaves others intact",
-          "[ecs][registry]") {
+TEST_CASE("Registry: destroying entity with components leaves others intact", "[ecs][registry]") {
   Registry reg;
   Entity a = reg.Create();
   Entity b = reg.Create();

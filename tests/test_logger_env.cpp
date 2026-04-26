@@ -82,8 +82,7 @@ std::vector<LogLine> SnapshotLogLines() {
 }
 } // namespace
 
-TEST_CASE("Logger env warn: filters info/debug but keeps warn/error",
-          "[logger][env][warn]") {
+TEST_CASE("Logger env warn: filters info/debug but keeps warn/error", "[logger][env][warn]") {
   LogBuffer::Instance().Clear();
 
   LogDebug("debug should be filtered");
@@ -100,8 +99,7 @@ TEST_CASE("Logger env warn: filters info/debug but keeps warn/error",
   REQUIRE(LogBuffer::Instance().CountError() == 1);
 }
 
-TEST_CASE("Logger env error: filters warn/info/debug and keeps error",
-          "[logger][env][error]") {
+TEST_CASE("Logger env error: filters warn/info/debug and keeps error", "[logger][env][error]") {
   LogBuffer::Instance().Clear();
 
   LogDebug("debug should be filtered");
@@ -117,8 +115,7 @@ TEST_CASE("Logger env error: filters warn/info/debug and keeps error",
   REQUIRE(LogBuffer::Instance().CountError() == 1);
 }
 
-TEST_CASE("Logger env invalid value falls back to info",
-          "[logger][env][invalid]") {
+TEST_CASE("Logger env invalid value falls back to info", "[logger][env][invalid]") {
   LogBuffer::Instance().Clear();
 
   LogInfo("info is kept on fallback");
@@ -132,8 +129,7 @@ TEST_CASE("Logger env invalid value falls back to info",
   REQUIRE(lines[2].level == LogLevel::Error);
 }
 
-TEST_CASE("Logger env debug: keeps debug and info levels",
-          "[logger][env][debug]") {
+TEST_CASE("Logger env debug: keeps debug and info levels", "[logger][env][debug]") {
   LogBuffer::Instance().Clear();
 
   LogDebug("debug is kept");
@@ -156,8 +152,7 @@ TEST_CASE("Logger env empty value falls back to info", "[logger][env][empty]") {
   REQUIRE(lines[0].level == LogLevel::Info);
 }
 
-TEST_CASE("Logger env mixed-case debug value is normalized",
-          "[logger][env][mixed_debug]") {
+TEST_CASE("Logger env mixed-case debug value is normalized", "[logger][env][mixed_debug]") {
   LogBuffer::Instance().Clear();
 
   LogDebug("debug survives mixed-case env");
@@ -167,8 +162,7 @@ TEST_CASE("Logger env mixed-case debug value is normalized",
   REQUIRE(lines[0].level == LogLevel::Debug);
 }
 
-TEST_CASE("Logger env short warn alias keeps warning logs",
-          "[logger][env][warn_alias]") {
+TEST_CASE("Logger env short warn alias keeps warning logs", "[logger][env][warn_alias]") {
   LogBuffer::Instance().Clear();
 
   LogInfo("info is filtered");
@@ -179,8 +173,7 @@ TEST_CASE("Logger env short warn alias keeps warning logs",
   REQUIRE(lines[0].level == LogLevel::Warn);
 }
 
-TEST_CASE("Logger default level label handles unknown enum values",
-          "[logger][env][unknown_level]") {
+TEST_CASE("Logger default level label handles unknown enum values", "[logger][env][unknown_level]") {
   LogBuffer::Instance().Clear();
 
   LogImpl(static_cast<LogLevel>(99), std::source_location::current(),

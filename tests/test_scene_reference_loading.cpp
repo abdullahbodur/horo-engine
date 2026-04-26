@@ -98,9 +98,7 @@ MakeReferenceSceneDocument(std::string_view filePath, std::string_view sceneId,
 }
 } // namespace
 
-TEST_CASE(
-    "SceneReferenceRuntime loads, reloads, and unloads temp-authored scenes",
-    "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime loads, reloads, and unloads temp-authored scenes", "[scene][reference-runtime]") {
   const std::string scenePath = TmpPath("reference_scene.json");
   std::filesystem::create_directories(
       std::filesystem::path(scenePath).parent_path());
@@ -195,9 +193,7 @@ TEST_CASE(
   REQUIRE(scene.GetRegistry().GetEntities<TransformComponent>().empty());
 }
 
-TEST_CASE("SceneReferenceRuntime keeps active scene on build failure and does "
-          "not require a behavior factory",
-          "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime keeps active scene on build failure and does not require a behavior factory", "[scene][reference-runtime]") {
   const std::string scenePath = TmpPath("reference_scene_broken.json");
   std::filesystem::create_directories(
       std::filesystem::path(scenePath).parent_path());
@@ -240,9 +236,7 @@ TEST_CASE("SceneReferenceRuntime keeps active scene on build failure and does "
           "scene_valid");
 }
 
-TEST_CASE("SceneReferenceRuntime updates live light position and props without "
-          "reload",
-          "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime updates live light position and props without reload", "[scene][reference-runtime]") {
   Scene scene;
   SceneReferenceRuntime runtime(&scene);
 
@@ -291,9 +285,7 @@ TEST_CASE("SceneReferenceRuntime updates live light position and props without "
 // Error-path tests — SceneReferenceRuntime.cpp
 // ===========================================================================
 
-TEST_CASE("SceneReferenceRuntime UpdateLiveLight falls back on invalid float "
-          "strings (ParseFloat coverage)",
-          "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight falls back on invalid float strings (ParseFloat coverage)", "[scene][reference-runtime]") {
   // Covers lines 33-39: ParseFloat catching std::invalid_argument and
   // std::out_of_range exceptions and returning the fallback value.
   Scene scene;
@@ -329,9 +321,7 @@ TEST_CASE("SceneReferenceRuntime UpdateLiveLight falls back on invalid float "
   REQUIRE(runtime.GetLights()[0].intensity == Approx(1.5f));
 }
 
-TEST_CASE("SceneReferenceRuntime UpdateLiveLight sets directional light type "
-          "and computes direction via ForwardFromYawPitch",
-          "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight sets directional light type and computes direction via ForwardFromYawPitch", "[scene][reference-runtime]") {
   // Covers lines 49-54 (ForwardFromYawPitch) and lines 153-163
   // (lightType "directional"/"point" dispatch).
   Scene scene;
@@ -372,9 +362,7 @@ TEST_CASE("SceneReferenceRuntime UpdateLiveLight sets directional light type "
   REQUIRE(error.empty());
 }
 
-TEST_CASE("SceneReferenceRuntime UpdateLiveLight returns error when light id "
-          "is not found",
-          "[scene][reference-runtime]") {
+TEST_CASE("SceneReferenceRuntime UpdateLiveLight returns error when light id is not found", "[scene][reference-runtime]") {
   // Covers lines 121-129: idIt == m_lightObjectIds.end() early-return path.
   Scene scene;
   SceneReferenceRuntime runtime(&scene);

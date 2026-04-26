@@ -33,16 +33,13 @@ using Catch::Approx;
 // FPSCameraController — construction defaults
 // ===========================================================================
 
-TEST_CASE("FPSCameraController: default yaw and pitch are zero",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: default yaw and pitch are zero", "[input][fps_camera]") {
   FPSCameraController ctrl;
   REQUIRE(ctrl.GetYaw() == Approx(0.0f));
   REQUIRE(ctrl.GetPitch() == Approx(0.0f));
 }
 
-TEST_CASE("FPSCameraController: default sensitivity is accessible via "
-          "setter/getter cycle",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: default sensitivity is accessible via setter/getter cycle", "[input][fps_camera]") {
   FPSCameraController ctrl;
   // Round-trip: apply the known default and confirm it is accepted
   ctrl.SetMouseSensitivity(0.15f);
@@ -50,9 +47,7 @@ TEST_CASE("FPSCameraController: default sensitivity is accessible via "
   REQUIRE_NOTHROW(ctrl.Update(0.016f));
 }
 
-TEST_CASE(
-    "FPSCameraController: pitch limits survive a round-trip through setters",
-    "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: pitch limits survive a round-trip through setters", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPitchMin(-70.0f);
   ctrl.SetPitchMax(70.0f);
@@ -66,22 +61,19 @@ TEST_CASE(
 // FPSCameraController — SetYaw / GetYaw
 // ===========================================================================
 
-TEST_CASE("FPSCameraController: SetYaw round-trip for positive angles",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: SetYaw round-trip for positive angles", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetYaw(45.0f);
   REQUIRE(ctrl.GetYaw() == Approx(45.0f));
 }
 
-TEST_CASE("FPSCameraController: SetYaw round-trip for negative angles",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: SetYaw round-trip for negative angles", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetYaw(-90.0f);
   REQUIRE(ctrl.GetYaw() == Approx(-90.0f));
 }
 
-TEST_CASE("FPSCameraController: SetYaw to zero resets yaw",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: SetYaw to zero resets yaw", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetYaw(180.0f);
   ctrl.SetYaw(0.0f);
@@ -92,15 +84,13 @@ TEST_CASE("FPSCameraController: SetYaw to zero resets yaw",
 // FPSCameraController — SetPitch / GetPitch
 // ===========================================================================
 
-TEST_CASE("FPSCameraController: SetPitch round-trip for positive angles",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: SetPitch round-trip for positive angles", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPitch(30.0f);
   REQUIRE(ctrl.GetPitch() == Approx(30.0f));
 }
 
-TEST_CASE("FPSCameraController: SetPitch round-trip for negative angles",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: SetPitch round-trip for negative angles", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPitch(-45.0f);
   REQUIRE(ctrl.GetPitch() == Approx(-45.0f));
@@ -110,8 +100,7 @@ TEST_CASE("FPSCameraController: SetPitch round-trip for negative angles",
 // FPSCameraController — ApplyToCamera: position forwarding
 // ===========================================================================
 
-TEST_CASE("FPSCameraController: ApplyToCamera copies position to camera",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: ApplyToCamera copies position to camera", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({3.0f, 5.0f, 7.0f});
   ctrl.SetYaw(0.0f);
@@ -129,8 +118,7 @@ TEST_CASE("FPSCameraController: ApplyToCamera copies position to camera",
 // FPSCameraController — ApplyToCamera: look-direction math
 // ===========================================================================
 
-TEST_CASE("FPSCameraController: yaw=0 pitch=0 aims along negative Z",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: yaw=0 pitch=0 aims along negative Z", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({0.0f, 0.0f, 0.0f});
   ctrl.SetYaw(0.0f);
@@ -144,8 +132,7 @@ TEST_CASE("FPSCameraController: yaw=0 pitch=0 aims along negative Z",
   REQUIRE(cam.target.z == Approx(-1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("FPSCameraController: yaw=90 pitch=0 aims along negative X",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: yaw=90 pitch=0 aims along negative X", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({0.0f, 0.0f, 0.0f});
   ctrl.SetYaw(90.0f);
@@ -159,8 +146,7 @@ TEST_CASE("FPSCameraController: yaw=90 pitch=0 aims along negative X",
   REQUIRE(std::fabs(cam.target.z) < 1e-4f);
 }
 
-TEST_CASE("FPSCameraController: pitch=45 tilts target upward",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: pitch=45 tilts target upward", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({0.0f, 0.0f, 0.0f});
   ctrl.SetYaw(0.0f);
@@ -172,8 +158,7 @@ TEST_CASE("FPSCameraController: pitch=45 tilts target upward",
   REQUIRE(cam.target.y > 0.0f);
 }
 
-TEST_CASE("FPSCameraController: pitch=-45 tilts target downward",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: pitch=-45 tilts target downward", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({0.0f, 0.0f, 0.0f});
   ctrl.SetYaw(0.0f);
@@ -185,9 +170,7 @@ TEST_CASE("FPSCameraController: pitch=-45 tilts target downward",
   REQUIRE(cam.target.y < 0.0f);
 }
 
-TEST_CASE(
-    "FPSCameraController: ApplyToCamera with non-zero position offsets target",
-    "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: ApplyToCamera with non-zero position offsets target", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPosition({10.0f, 5.0f, 3.0f});
   ctrl.SetYaw(0.0f);
@@ -205,9 +188,7 @@ TEST_CASE(
 // FPSCameraController — Update: zero-delta preserves state
 // ===========================================================================
 
-TEST_CASE(
-    "FPSCameraController: Update with zero mouse delta leaves yaw unchanged",
-    "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: Update with zero mouse delta leaves yaw unchanged", "[input][fps_camera]") {
   // Input::s_mouseDelta is zero-initialised; no GLFW window needed.
   FPSCameraController ctrl;
   ctrl.SetYaw(45.0f);
@@ -218,9 +199,7 @@ TEST_CASE(
   REQUIRE(ctrl.GetYaw() == Approx(45.0f));
 }
 
-TEST_CASE(
-    "FPSCameraController: Update with zero mouse delta leaves pitch unchanged",
-    "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: Update with zero mouse delta leaves pitch unchanged", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetYaw(0.0f);
   ctrl.SetPitch(30.0f);
@@ -230,8 +209,7 @@ TEST_CASE(
   REQUIRE(ctrl.GetPitch() == Approx(30.0f));
 }
 
-TEST_CASE("FPSCameraController: Update clamps pitch within pitchMin/pitchMax",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: Update clamps pitch within pitchMin/pitchMax", "[input][fps_camera]") {
   // After Update() with zero delta the clamping code still executes.
   // Set pitch to pitchMax (70) — it should remain unchanged (still within
   // range).
@@ -243,8 +221,7 @@ TEST_CASE("FPSCameraController: Update clamps pitch within pitchMin/pitchMax",
   REQUIRE(ctrl.GetPitch() == Approx(70.0f));
 }
 
-TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary",
-          "[input][fps_camera]") {
+TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary", "[input][fps_camera]") {
   FPSCameraController ctrl;
   ctrl.SetPitchMin(-70.0f);
   ctrl.SetPitchMax(70.0f);
@@ -253,8 +230,7 @@ TEST_CASE("FPSCameraController: Update clamps pitch at pitchMin boundary",
   REQUIRE(ctrl.GetPitch() == Approx(-70.0f));
 }
 
-TEST_CASE("Input: scroll callback accumulates and GetScrollDelta consumes value",
-          "[input][glfw]") {
+TEST_CASE("Input: scroll callback accumulates and GetScrollDelta consumes value", "[input][glfw]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 

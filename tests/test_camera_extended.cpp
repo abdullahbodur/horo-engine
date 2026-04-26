@@ -81,8 +81,7 @@ TEST_CASE("Camera GetView: is invertible (non-zero determinant)", "[camera]") {
   REQUIRE(cam.GetView().Determinant() != Approx(0.0f).margin(1e-6f));
 }
 
-TEST_CASE("Camera GetView: view matrix maps camera position to origin",
-          "[camera]") {
+TEST_CASE("Camera GetView: view matrix maps camera position to origin", "[camera]") {
   Camera cam;
   cam.position = {5.0f, 3.0f, 2.0f};
   cam.target = {0.0f, 0.0f, 0.0f};
@@ -148,8 +147,7 @@ TEST_CASE("Camera GetRight: diagonal forward direction", "[camera]") {
 // Camera — ViewProjection matrix decomposition
 // ===========================================================================
 
-TEST_CASE("Camera GetViewProjection: moving camera changes VP matrix",
-          "[camera]") {
+TEST_CASE("Camera GetViewProjection: moving camera changes VP matrix", "[camera]") {
   Camera cam1;
   cam1.position = {0.0f, 0.0f, 5.0f};
   cam1.target = {0.0f, 0.0f, 0.0f};

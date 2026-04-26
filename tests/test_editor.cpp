@@ -248,31 +248,27 @@ static void SeedExternalAssetDragPayload(const char *assetId) {
 // EditorSchema
 // ===========================================================================
 
-TEST_CASE("EditorSchema: missing file is silently ignored",
-          "[editor][schema][coverage]") {
+TEST_CASE("EditorSchema: missing file is silently ignored", "[editor][schema][coverage]") {
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile("/nonexistent/path/schema.json"));
   REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: empty JSON is silently ignored",
-          "[editor][schema][coverage]") {
+TEST_CASE("EditorSchema: empty JSON is silently ignored", "[editor][schema][coverage]") {
   WriteFile(TmpPath("schema_empty.json"), "{}");
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_empty.json")));
   REQUIRE(schema.GetSchema(SceneObjectType::Panel) == nullptr);
 }
 
-TEST_CASE("EditorSchema: malformed JSON is silently ignored",
-          "[editor][schema][coverage]") {
+TEST_CASE("EditorSchema: malformed JSON is silently ignored", "[editor][schema][coverage]") {
   WriteFile(TmpPath("schema_bad.json"), "{ this is not valid json !!!}");
   EditorSchema schema;
   REQUIRE_NOTHROW(schema.LoadFromFile(TmpPath("schema_bad.json")));
   REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities",
-          "[editor][imgui][backend]") {
+TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities", "[editor][imgui][backend]") {
   REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
   REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
 
@@ -318,8 +314,7 @@ TEST_CASE("EditorSchema: loads Prop mesh as enum field", "[editor][schema]") {
   REQUIRE(ts->fields[0].options[3] == "pyramid");
 }
 
-TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum",
-          "[editor][schema]") {
+TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum", "[editor][schema]") {
   const std::string json = R"({
         "types": {
             "Prop": {
@@ -342,8 +337,7 @@ TEST_CASE("EditorSchema: normalizes legacy Prop mesh string field to enum",
   REQUIRE_FALSE(ts->fields[0].options.empty());
 }
 
-TEST_CASE("EditorSchema: ignores deprecated Prop isLight field",
-          "[editor][schema]") {
+TEST_CASE("EditorSchema: ignores deprecated Prop isLight field", "[editor][schema]") {
   const std::string json = R"({
         "types": {
             "Prop": {
@@ -457,8 +451,7 @@ TEST_CASE("EditorSchema: loads color3 field", "[editor][schema]") {
   REQUIRE(ts->fields[0].widget == FieldDef::Widget::Color3);
 }
 
-TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type",
-          "[editor][schema]") {
+TEST_CASE("EditorSchema: GetSchema returns nullptr for unregistered type", "[editor][schema]") {
   const std::string json = R"({
         "types": {
             "Prop": {
@@ -522,8 +515,7 @@ TEST_CASE("EditorSchema: type without fields is skipped", "[editor][schema]") {
   REQUIRE(schema.GetSchema(SceneObjectType::Prop) == nullptr);
 }
 
-TEST_CASE("EditorSchema: loads component schema metadata and lookups",
-          "[editor][schema][coverage]") {
+TEST_CASE("EditorSchema: loads component schema metadata and lookups", "[editor][schema][coverage]") {
   const std::string json = R"({
         "types": {
             "Prop": {
@@ -589,8 +581,7 @@ TEST_CASE("EditorSchema: loads component schema metadata and lookups",
   REQUIRE(lightSchema->fields[1].options[1] == "directional");
 }
 
-TEST_CASE("EditorSchema: bundled schema exposes shared component definitions",
-          "[editor][schema][coverage]") {
+TEST_CASE("EditorSchema: bundled schema exposes shared component definitions", "[editor][schema][coverage]") {
   const std::filesystem::path schemaPath =
       RepoRootFromTestSource() / "assets" / "editor_schema.json";
   REQUIRE(std::filesystem::exists(schemaPath));
@@ -619,14 +610,12 @@ TEST_CASE("EditorSchema: bundled schema exposes shared component definitions",
 // SceneSerializer
 // ===========================================================================
 
-TEST_CASE("SceneSerializer: LoadFromFile throws on missing file",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: LoadFromFile throws on missing file", "[editor][serializer]") {
   REQUIRE_THROWS_AS(SceneSerializer::LoadFromFile("/nonexistent/scene.json"),
                     std::runtime_error);
 }
 
-TEST_CASE("SceneSerializer: LoadFromFile throws on invalid JSON",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: LoadFromFile throws on invalid JSON", "[editor][serializer]") {
   WriteFile(TmpPath("bad_scene.json"), "{ not json!!! }");
   REQUIRE_THROWS_AS(SceneSerializer::LoadFromFile(TmpPath("bad_scene.json")),
                     std::runtime_error);
@@ -645,8 +634,7 @@ TEST_CASE("SceneSerializer: round-trip empty scene", "[editor][serializer]") {
   REQUIRE(loaded.assets.empty());
 }
 
-TEST_CASE("SceneSerializer: round-trip single Panel object",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: round-trip single Panel object", "[editor][serializer]") {
   SceneDocument doc;
 
   SceneObject obj;
@@ -674,8 +662,7 @@ TEST_CASE("SceneSerializer: round-trip single Panel object",
   REQUIRE(o.props.at("texture") == "wood.png");
 }
 
-TEST_CASE("SceneSerializer: round-trip Prop and Light types",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: round-trip Prop and Light types", "[editor][serializer]") {
   SceneDocument doc;
 
   SceneObject prop;
@@ -711,8 +698,7 @@ TEST_CASE("SceneSerializer: round-trip Prop and Light types",
   REQUIRE(foundLight);
 }
 
-TEST_CASE("SceneSerializer: round-trip asset registry",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: round-trip asset registry", "[editor][serializer]") {
   SceneDocument doc;
 
   AssetDef asset;
@@ -742,9 +728,7 @@ TEST_CASE("SceneSerializer: round-trip asset registry",
   REQUIRE(loaded.objects[0].assetId == "stone_asset");
 }
 
-TEST_CASE(
-    "SceneSerializer: legacy asset entries gain guid and display name on load",
-    "[editor][serializer]") {
+TEST_CASE("SceneSerializer: legacy asset entries gain guid and display name on load", "[editor][serializer]") {
   const std::string path = TmpPath("legacy_asset_identity_scene.json");
   const std::string json = R"({
       "version": 1,
@@ -765,8 +749,7 @@ TEST_CASE(
   REQUIRE(loaded.assets.at("crate").displayName == "crate");
 }
 
-TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
-          "[editor][asset-metadata]") {
+TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files", "[editor][asset-metadata]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_metadata_case";
   std::error_code ec;
@@ -792,9 +775,7 @@ TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files",
   REQUIRE(metadata.producedFiles.size() == 2);
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: built-in importers resolve by extension and id",
-    "[editor][asset-import]") {
+TEST_CASE("AssetImporterRegistry: built-in importers resolve by extension and id", "[editor][asset-import]") {
   AssetImporterRegistry registry;
   const AssetImporter *objImporter = registry.FindByExtension("mesh.OBJ");
   REQUIRE(objImporter != nullptr);
@@ -811,8 +792,7 @@ TEST_CASE(
   REQUIRE(registry.FindById("builtin.texture_copy") != nullptr);
 }
 
-TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: imports OBJ and persists importer metadata", "[editor][asset-import]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_import_obj";
   std::error_code ec;
@@ -847,9 +827,7 @@ TEST_CASE("AssetImportService: imports OBJ and persists importer metadata",
   REQUIRE(metadata.diagnostics.empty());
 }
 
-TEST_CASE(
-    "AssetImportService: unsupported source yields structured diagnostics",
-    "[editor][asset-import][diagnostics]") {
+TEST_CASE("AssetImportService: unsupported source yields structured diagnostics", "[editor][asset-import][diagnostics]") {
   AssetImportService service;
   AssetImportResult result = service.ImportAssetFromSource(
       "C:/tmp/unsupported.txt", "broken", "guid_broken", "Broken");
@@ -861,9 +839,7 @@ TEST_CASE(
   REQUIRE(result.diagnostics[0].assetGuid == "guid_broken");
 }
 
-TEST_CASE("AssetImportService: reimport propagation follows deterministic "
-          "topological order",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: reimport propagation follows deterministic topological order", "[editor][asset-import][reimport]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_reimport_graph";
   std::error_code ec;
@@ -925,9 +901,7 @@ TEST_CASE("AssetImportService: reimport propagation follows deterministic "
   REQUIRE(gammaMetadata.lastImportReason == "Dependency changed: guid_beta");
 }
 
-TEST_CASE("AssetImportService: cyclic dependencies fail reimport with "
-          "actionable error",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable error", "[editor][asset-import][reimport]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_reimport_cycle";
   std::error_code ec;
@@ -974,8 +948,7 @@ TEST_CASE("AssetImportService: cyclic dependencies fail reimport with "
   REQUIRE(aReloaded.diagnostics[0].code == "asset.reimport.dependency_cycle");
 }
 
-TEST_CASE("SceneSerializer: asset albedoMap round-trip",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]") {
   SceneDocument doc;
   AssetDef asset;
   asset.mesh = "prop.obj";
@@ -997,8 +970,7 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip",
           "assets/models/custom_Albedo.png");
 }
 
-TEST_CASE("SceneSerializer: empty albedoMap not written to JSON",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]") {
   SceneDocument doc;
   AssetDef asset;
   asset.mesh = "x.obj";
@@ -1014,8 +986,7 @@ TEST_CASE("SceneSerializer: empty albedoMap not written to JSON",
   REQUIRE(saved.find("albedoMap") == std::string::npos);
 }
 
-TEST_CASE("SceneSerializer: asset-backed objects omit inline props block",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
   SceneDocument doc;
 
   AssetDef asset;
@@ -1047,9 +1018,7 @@ TEST_CASE("SceneSerializer: asset-backed objects omit inline props block",
   REQUIRE(loaded.objects[0].assetId == "crate");
 }
 
-TEST_CASE(
-    "SceneSerializer: inline props survive when object has no asset reference",
-    "[editor][serializer]") {
+TEST_CASE("SceneSerializer: inline props survive when object has no asset reference", "[editor][serializer]") {
   SceneDocument doc;
 
   SceneObject obj;
@@ -1069,8 +1038,7 @@ TEST_CASE(
   REQUIRE(loaded.objects[0].props.at("renderScale") == "1.2500,1.2500,1.2500");
 }
 
-TEST_CASE("SceneSerializer: prefab instance metadata round-trips",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: prefab instance metadata round-trips", "[editor][serializer]") {
   SceneDocument doc;
 
   SceneObject obj;
@@ -1092,8 +1060,7 @@ TEST_CASE("SceneSerializer: prefab instance metadata round-trips",
           "assets/prefabs/crate_prefab.horo");
 }
 
-TEST_CASE("Editor helpers: duplicating an object clears runtime entity id",
-          "[editor]") {
+TEST_CASE("Editor helpers: duplicating an object clears runtime entity id", "[editor]") {
   SceneDocument doc;
   SceneObject src;
   src.id = "prop_001";
@@ -1110,8 +1077,7 @@ TEST_CASE("Editor helpers: duplicating an object clears runtime entity id",
   REQUIRE(clone.props.at("mesh") == "crate.obj");
 }
 
-TEST_CASE("Editor helpers: asset-backed object stores selected asset id",
-          "[editor]") {
+TEST_CASE("Editor helpers: asset-backed object stores selected asset id", "[editor]") {
   SceneDocument doc;
   AssetDef asset;
   asset.mesh = "torch.obj";
@@ -1135,8 +1101,7 @@ TEST_CASE("Editor helpers: object query matches id and asset id", "[editor]") {
   REQUIRE_FALSE(ObjectMatchesQuickOpenQuery(obj, "torch"));
 }
 
-TEST_CASE("Editor helpers: shortcut query matches category command and keys",
-          "[editor]") {
+TEST_CASE("Editor helpers: shortcut query matches category command and keys", "[editor]") {
   ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
   REQUIRE(MatchesShortcutQuery(row, "editor"));
   REQUIRE(MatchesShortcutQuery(row, "quick"));
@@ -1144,8 +1109,7 @@ TEST_CASE("Editor helpers: shortcut query matches category command and keys",
   REQUIRE_FALSE(MatchesShortcutQuery(row, "delete"));
 }
 
-TEST_CASE("Editor helpers: command palette query matches command and shortcut",
-          "[editor]") {
+TEST_CASE("Editor helpers: command palette query matches command and shortcut", "[editor]") {
   CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
   REQUIRE(MatchesCommandPaletteQuery(row, "save"));
   REQUIRE(MatchesCommandPaletteQuery(row, "toolbar"));
@@ -1161,8 +1125,7 @@ TEST_CASE("Editor helpers: object type labels are stable", "[editor]") {
           "unknown");
 }
 
-TEST_CASE("Editor helpers: generic search helpers handle empty query",
-          "[editor]") {
+TEST_CASE("Editor helpers: generic search helpers handle empty query", "[editor]") {
   ShortcutRow row{"Editor", "Quick open", "Ctrl/Cmd + P"};
   REQUIRE(MatchesShortcutQuery(row, ""));
   REQUIRE(ContainsCaseInsensitive("Any Text", ""));
@@ -1179,8 +1142,7 @@ TEST_CASE("Editor helpers: generic search helpers handle empty query",
   REQUIRE(AssetMatchesQuickOpenQuery("crate_asset", asset, ""));
 }
 
-TEST_CASE("Editor helpers: asset quick-open query matches id and mesh",
-          "[editor]") {
+TEST_CASE("Editor helpers: asset quick-open query matches id and mesh", "[editor]") {
   AssetDef asset;
   asset.mesh = "assets/models/torch.obj";
   REQUIRE(AssetMatchesQuickOpenQuery("torch_asset", asset, "torch"));
@@ -1188,9 +1150,7 @@ TEST_CASE("Editor helpers: asset quick-open query matches id and mesh",
   REQUIRE_FALSE(AssetMatchesQuickOpenQuery("torch_asset", asset, "barrel"));
 }
 
-TEST_CASE(
-    "Editor helpers: filtered list state handles empty and no-match cases",
-    "[editor]") {
+TEST_CASE("Editor helpers: filtered list state handles empty and no-match cases", "[editor]") {
   REQUIRE(EvaluateFilteredListState(3, 1, "") == FilteredListState::None);
   REQUIRE(EvaluateFilteredListState(0, 0, "") == FilteredListState::EmptyData);
   REQUIRE(EvaluateFilteredListState(4, 0, "torch") ==
@@ -1198,8 +1158,7 @@ TEST_CASE(
   REQUIRE(EvaluateFilteredListState(4, 0, "") == FilteredListState::None);
 }
 
-TEST_CASE("Editor helpers: shortcut table includes required entries",
-          "[editor]") {
+TEST_CASE("Editor helpers: shortcut table includes required entries", "[editor]") {
   const auto rows = GetEditorShortcuts();
   REQUIRE_FALSE(rows.empty());
 
@@ -1230,16 +1189,14 @@ TEST_CASE("Editor helpers: shortcut table commands are unique", "[editor]") {
   }
 }
 
-TEST_CASE("Editor asset import: validates obj extension case-insensitively",
-          "[editor]") {
+TEST_CASE("Editor asset import: validates obj extension case-insensitively", "[editor]") {
   REQUIRE(IsObjFilePath("sandbox/mesh.obj"));
   REQUIRE(IsObjFilePath("sandbox/MESH.OBJ"));
   REQUIRE_FALSE(IsObjFilePath("sandbox/mesh.fbx"));
   REQUIRE_FALSE(IsObjFilePath(""));
 }
 
-TEST_CASE("Editor asset import: derives asset id and mesh tag from path",
-          "[editor]") {
+TEST_CASE("Editor asset import: derives asset id and mesh tag from path", "[editor]") {
   const std::string path = "/Users/bodur/Downloads/torch_model.obj";
   REQUIRE(AssetIdFromImportedPath(path) == "torch_model");
   REQUIRE(MeshTagFromImportedPath(path) == "assets/models/torch_model.obj");
@@ -1248,8 +1205,7 @@ TEST_CASE("Editor asset import: derives asset id and mesh tag from path",
   REQUIRE(MeshTagFromImportedPath("").empty());
 }
 
-TEST_CASE("Editor MCP delete_asset removes managed imported asset folders",
-          "[editor][mcp][filesystem]") {
+TEST_CASE("Editor MCP delete_asset removes managed imported asset folders", "[editor][mcp][filesystem]") {
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
@@ -1292,9 +1248,7 @@ TEST_CASE("Editor MCP delete_asset removes managed imported asset folders",
   REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "crate"));
 }
 
-TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only "
-          "registry entry",
-          "[editor][mcp][filesystem]") {
+TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only registry entry", "[editor][mcp][filesystem]") {
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
@@ -1321,8 +1275,7 @@ TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only "
   REQUIRE(fs::exists(projectRoot / "assets" / "models" / "crate.obj"));
 }
 
-TEST_CASE("Editor create_object_from_asset shares parent-aware creation path",
-          "[editor][mcp][assets]") {
+TEST_CASE("Editor create_object_from_asset shares parent-aware creation path", "[editor][mcp][assets]") {
   SceneDocument doc;
   doc.assets["crate"] =
       AssetDef{"assets/models/crate/crate.obj", "1.0000,2.0000,3.0000", ""};
@@ -1367,8 +1320,7 @@ TEST_CASE("Editor create_object_from_asset shares parent-aware creation path",
   REQUIRE(updated.objects[2].position.z == Approx(6.0f));
 }
 
-TEST_CASE("Editor MCP duplicate duplicates each selected object once",
-          "[editor][mcp][selection]") {
+TEST_CASE("Editor MCP duplicate duplicates each selected object once", "[editor][mcp][selection]") {
   SceneDocument doc;
 
   SceneObject first;
@@ -1425,8 +1377,7 @@ TEST_CASE("Editor MCP duplicate duplicates each selected object once",
   REQUIRE(selectedIds[1] == lightClone.id);
 }
 
-TEST_CASE("Editor MCP duplicate preserves single-object count behavior",
-          "[editor][mcp][selection]") {
+TEST_CASE("Editor MCP duplicate preserves single-object count behavior", "[editor][mcp][selection]") {
   SceneDocument doc;
 
   SceneObject source;
@@ -1462,8 +1413,7 @@ TEST_CASE("Editor MCP duplicate preserves single-object count behavior",
   REQUIRE(selectedIds[2] == updated.objects[3].id);
 }
 
-TEST_CASE("Editor MCP undo and redo restore created object selection",
-          "[editor][mcp][history]") {
+TEST_CASE("Editor MCP undo and redo restore created object selection", "[editor][mcp][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1495,9 +1445,7 @@ TEST_CASE("Editor MCP undo and redo restore created object selection",
           std::vector<std::string>{"panel_created"});
 }
 
-TEST_CASE(
-    "Editor MCP undo and redo restore duplicate selection and dirty state",
-    "[editor][mcp][history]") {
+TEST_CASE("Editor MCP undo and redo restore duplicate selection and dirty state", "[editor][mcp][history]") {
   SceneDocument doc;
 
   SceneObject first;
@@ -1538,8 +1486,7 @@ TEST_CASE(
   REQUIRE(editor.GetSelectedObjectIds() == duplicatedSelection);
 }
 
-TEST_CASE("Editor MCP undo restores previous scene after new_scene",
-          "[editor][mcp][history]") {
+TEST_CASE("Editor MCP undo restores previous scene after new_scene", "[editor][mcp][history]") {
   SceneDocument doc;
   doc.sceneId = "forest";
   doc.sceneName = "Forest";
@@ -1570,8 +1517,7 @@ TEST_CASE("Editor MCP undo restores previous scene after new_scene",
   REQUIRE_FALSE(editor.GetDocument().dirty);
 }
 
-TEST_CASE("Editor MCP undo restores asset edits and selected asset",
-          "[editor][mcp][history]") {
+TEST_CASE("Editor MCP undo restores asset edits and selected asset", "[editor][mcp][history]") {
   SceneDocument doc;
   doc.assets["crate"] = AssetDef{"assets/models/crate.obj", "1,1,1", ""};
 
@@ -1603,9 +1549,7 @@ TEST_CASE("Editor MCP undo restores asset edits and selected asset",
   REQUIRE_FALSE(editor.GetDocument().dirty);
 }
 
-TEST_CASE(
-    "Editor MCP create_prefab writes prefab file and links selected instance",
-    "[editor][mcp][prefab]") {
+TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instance", "[editor][mcp][prefab]") {
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
@@ -1651,8 +1595,7 @@ TEST_CASE(
   REQUIRE(editor.GetDocument().dirty);
 }
 
-TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props",
-          "[editor][prefab][runtime]") {
+TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "[editor][prefab][runtime]") {
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
@@ -1709,16 +1652,14 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props",
   REQUIRE(prop.scale.z == Approx(4.0f));
 }
 
-TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge",
-          "[editor]") {
+TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[editor]") {
   REQUIRE(ShouldToggleHelpPopup(true, false, false, false));
   REQUIRE_FALSE(ShouldToggleHelpPopup(true, true, false, false));
   REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, true, false));
   REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
 }
 
-TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input",
-          "[editor]") {
+TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]") {
   REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
@@ -1726,8 +1667,7 @@ TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input",
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
 }
 
-TEST_CASE("Editor helpers: command palette table includes scene actions",
-          "[editor]") {
+TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]") {
   const auto rows = GetEditorCommands();
   REQUIRE_FALSE(rows.empty());
 
@@ -1745,16 +1685,14 @@ TEST_CASE("Editor helpers: command palette table includes scene actions",
   REQUIRE(hasCommand("redo", "Redo"));
 }
 
-TEST_CASE("Editor UI logic: command palette shares quick-open gating",
-          "[editor]") {
+TEST_CASE("Editor UI logic: command palette shares quick-open gating", "[editor]") {
   REQUIRE(ShouldOpenCommandPalette(true, false, false, false, false));
   REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, true, false, false));
   REQUIRE_FALSE(ShouldOpenCommandPalette(true, false, false, true, false));
   REQUIRE_FALSE(ShouldOpenCommandPalette(true, true, false, false, false));
 }
 
-TEST_CASE("Editor UI logic: copy and delete actions gate correctly",
-          "[editor]") {
+TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]") {
   REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
@@ -1763,8 +1701,7 @@ TEST_CASE("Editor UI logic: copy and delete actions gate correctly",
   REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
 }
 
-TEST_CASE("Editor UI logic: escape handling respects modal and input gates",
-          "[editor]") {
+TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[editor]") {
   REQUIRE(ShouldHandleEditorEscape(true, false, false, false, false));
   REQUIRE_FALSE(ShouldHandleEditorEscape(true, true, false, false, false));
   REQUIRE_FALSE(ShouldHandleEditorEscape(true, false, true, false, false));
@@ -1779,15 +1716,13 @@ TEST_CASE("Editor UI logic: exit decision reflects unsaved state", "[editor]") {
           EditorExitDecision::PromptUnsavedConfirm);
 }
 
-TEST_CASE("Editor UI logic: close finalization waits for pending reload",
-          "[editor]") {
+TEST_CASE("Editor UI logic: close finalization waits for pending reload", "[editor]") {
   REQUIRE_FALSE(ShouldFinalizeEditorClose(false, false));
   REQUIRE_FALSE(ShouldFinalizeEditorClose(true, true));
   REQUIRE(ShouldFinalizeEditorClose(true, false));
 }
 
-TEST_CASE("Editor UI logic: status text is stable and clamps selection",
-          "[editor]") {
+TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[editor]") {
   EditorStatusText status =
       BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
   REQUIRE(status.selectionCount == 0);
@@ -1802,8 +1737,7 @@ TEST_CASE("Editor UI logic: status text is stable and clamps selection",
   REQUIRE(std::string(status.reloadText) == "idle");
 }
 
-TEST_CASE("Editor UI logic: edit menu enables only for single valid selection",
-          "[editor]") {
+TEST_CASE("Editor UI logic: edit menu enables only for single valid selection", "[editor]") {
   REQUIRE(CanEditSingleSelection(1, 0, 1));
   REQUIRE(CanEditSingleSelection(1, 2, 5));
 
@@ -1813,8 +1747,7 @@ TEST_CASE("Editor UI logic: edit menu enables only for single valid selection",
   REQUIRE_FALSE(CanEditSingleSelection(1, 5, 5));
 }
 
-TEST_CASE("SceneSerializer: _eid prop is stripped on save",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: _eid prop is stripped on save", "[editor][serializer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj1";
@@ -1832,8 +1765,7 @@ TEST_CASE("SceneSerializer: _eid prop is stripped on save",
   REQUIRE(loaded.objects[0].props.count("visible") == 1);
 }
 
-TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component", "[editor][serializer]") {
   const std::string path = TmpPath("legacy_islight_true.json");
   const std::string json = R"({
       "version": 1,
@@ -1858,9 +1790,7 @@ TEST_CASE("SceneSerializer: legacy isLight=true migrates to light component",
   REQUIRE(loaded.objects[0].components[0].type == "light");
 }
 
-TEST_CASE(
-    "SceneSerializer: legacy isLight=false is tolerated but not persisted",
-    "[editor][serializer]") {
+TEST_CASE("SceneSerializer: legacy isLight=false is tolerated but not persisted", "[editor][serializer]") {
   const std::string path = TmpPath("legacy_islight_false.json");
   const std::string json = R"({
       "version": 1,
@@ -1890,8 +1820,7 @@ TEST_CASE(
   REQUIRE(roundTrip.objects[0].props.count("isLight") == 0);
 }
 
-TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path", "[editor][serializer]") {
   SceneDocument doc;
   // Unix: true root path — mkdir/open fail without privileges.
   // Windows: a leading "/" is *not* filesystem root; it resolves under the
@@ -1906,8 +1835,7 @@ TEST_CASE("SceneSerializer: SaveToFile throws on unwriteable path",
                     std::runtime_error);
 }
 
-TEST_CASE("SceneSerializer: filePath is set after load",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: filePath is set after load", "[editor][serializer]") {
   SceneDocument doc;
   const std::string path = TmpPath("filepath_test.json");
   SceneSerializer::SaveToFile(doc, path);
@@ -1916,8 +1844,7 @@ TEST_CASE("SceneSerializer: filePath is set after load",
   REQUIRE(loaded.filePath == path);
 }
 
-TEST_CASE("SceneSerializer: multiple props round-trip",
-          "[editor][serializer]") {
+TEST_CASE("SceneSerializer: multiple props round-trip", "[editor][serializer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "multi_prop";
@@ -1979,8 +1906,7 @@ TEST_CASE("RayVsAABB: ray origin inside box returns 0", "[editor][raycaster]") {
   REQUIRE(t == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("RayVsAABB: parallel ray outside slab misses",
-          "[editor][raycaster]") {
+TEST_CASE("RayVsAABB: parallel ray outside slab misses", "[editor][raycaster]") {
   Ray ray;
   ray.origin = {5.0f, 5.0f, 0.0f}; // outside x-slab of box centered at origin
   ray.direction = {0.0f, 0.0f, 1.0f}; // moves in Z only — parallel to Y slab
@@ -2031,8 +1957,7 @@ TEST_CASE("RayVsAABB: hit along +Y axis", "[editor][raycaster]") {
   REQUIRE(t == Approx(6.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("RayVsAABB: ray pointing away from box misses",
-          "[editor][raycaster]") {
+TEST_CASE("RayVsAABB: ray pointing away from box misses", "[editor][raycaster]") {
   Ray ray;
   ray.origin = {10.0f, 0.0f, 0.0f};
   ray.direction = {1.0f, 0.0f, 0.0f}; // pointing away from origin box
@@ -2048,8 +1973,7 @@ TEST_CASE("RayVsAABB: ray pointing away from box misses",
 // Raycaster — ScreenToRay
 // ===========================================================================
 
-TEST_CASE("ScreenToRay: center of screen produces ray through view center",
-          "[editor][raycaster]") {
+TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[editor][raycaster]") {
   Camera cam;
   cam.position = {0.0f, 0.0f, 5.0f};
   cam.target = {0.0f, 0.0f, 0.0f};
@@ -2090,8 +2014,7 @@ TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]") {
   }
 }
 
-TEST_CASE("ScreenToRay: origin is at/near camera position",
-          "[editor][raycaster]") {
+TEST_CASE("ScreenToRay: origin is at/near camera position", "[editor][raycaster]") {
   Camera cam;
   cam.position = {3.0f, 2.0f, 7.0f};
   cam.target = {0.0f, 0.0f, 0.0f};
@@ -2148,8 +2071,7 @@ TEST_CASE("Hierarchy plain click replaces selection", "[editor][hierarchy]") {
   REQUIRE(last == 7);
 }
 
-TEST_CASE("Hierarchy range select fills contiguous range",
-          "[editor][hierarchy]") {
+TEST_CASE("Hierarchy range select fills contiguous range", "[editor][hierarchy]") {
   std::vector<int> sel;
   int last = -1;
 
@@ -2170,9 +2092,7 @@ TEST_CASE("Hierarchy range select fills contiguous range",
   REQUIRE(sel[2] == 2);
 }
 
-TEST_CASE(
-    "Hierarchy shift-click with no prior anchor falls back to single select",
-    "[editor][hierarchy]") {
+TEST_CASE("Hierarchy shift-click with no prior anchor falls back to single select", "[editor][hierarchy]") {
   std::vector<int> sel;
   int last = -1;
 
@@ -2184,8 +2104,7 @@ TEST_CASE(
   REQUIRE(last == 4);
 }
 
-TEST_CASE("Hierarchy ctrl-click toggles individual items",
-          "[editor][hierarchy]") {
+TEST_CASE("Hierarchy ctrl-click toggles individual items", "[editor][hierarchy]") {
   std::vector<int> sel;
   int last = -1;
 
@@ -2242,8 +2161,7 @@ TEST_CASE("Drop ray hits y=0 plane at correct XZ", "[editor][dragdrop]") {
   REQUIRE(hit.x == Approx(3.0f).margin(1e-4f)); // no x-component in direction
 }
 
-TEST_CASE("Drop ray parallel to ground plane is rejected",
-          "[editor][dragdrop]") {
+TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]") {
   Ray r;
   r.origin = {2.0f, 3.0f, 4.0f};
   r.direction = {1.0f, 0.0f, 0.0f};
@@ -2252,8 +2170,7 @@ TEST_CASE("Drop ray parallel to ground plane is rejected",
   REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
 }
 
-TEST_CASE("RayVsAABBHit reports top-face hit point and normal",
-          "[editor][dragdrop]") {
+TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdrop]") {
   Ray ray;
   ray.origin = {0.0f, 5.0f, 0.0f};
   ray.direction = {0.0f, -1.0f, 0.0f};
@@ -2269,8 +2186,7 @@ TEST_CASE("RayVsAABBHit reports top-face hit point and normal",
   REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
-TEST_CASE("RayVsAABBHit reports side-face hit point and normal",
-          "[editor][dragdrop]") {
+TEST_CASE("RayVsAABBHit reports side-face hit point and normal", "[editor][dragdrop]") {
   Ray ray;
   ray.origin = {-5.0f, 0.25f, 0.0f};
   ray.direction = {1.0f, 0.0f, 0.0f};
@@ -2286,8 +2202,7 @@ TEST_CASE("RayVsAABBHit reports side-face hit point and normal",
   REQUIRE(hit.normal.z == Approx(0.0f));
 }
 
-TEST_CASE("Editor viewport rect excludes docks and panels",
-          "[editor][ui-logic][coverage]") {
+TEST_CASE("Editor viewport rect excludes docks and panels", "[editor][ui-logic][coverage]") {
   const EditorViewportRect rect = BuildEditorViewportRect(
       1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
 
@@ -2301,9 +2216,7 @@ TEST_CASE("Editor viewport rect excludes docks and panels",
   REQUIRE_FALSE(rect.Contains(600.0f, 800.0f));
 }
 
-TEST_CASE(
-    "Editor view gimbal layout reserves wire button and combined pick rect",
-    "[editor][ui-logic][coverage]") {
+TEST_CASE("Editor view gimbal layout reserves wire button and combined pick rect", "[editor][ui-logic][coverage]") {
   const EditorViewportRect viewport = BuildEditorViewportRect(
       1600.0f, 900.0f, 36.0f, 24.0f, 200.0f, 308.0f, 280.0f);
   const EditorViewGimbalLayout layout =
@@ -2322,8 +2235,7 @@ TEST_CASE(
                                    layout.gimbalRect.maxY - 4.0f));
 }
 
-TEST_CASE("Editor layout helpers clamp dock widths and workspace height",
-          "[editor][ui-logic][coverage]") {
+TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[editor][ui-logic][coverage]") {
   REQUIRE(ComputeEditorLeftDockWidth(1200.0f) == Approx(220.0f));
   REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
   REQUIRE(ComputeEditorLeftDockWidth(0.0f) == Approx(220.0f));
@@ -2337,9 +2249,7 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height",
   REQUIRE(ComputeEditorBottomDockHeight(0.0f) == Approx(180.0f));
 }
 
-TEST_CASE(
-    "Editor viewport asset drop target matches active asset payload inline",
-    "[editor][ui][dragdrop]") {
+TEST_CASE("Editor viewport asset drop target matches active asset payload inline", "[editor][ui][dragdrop]") {
   ImGuiContextGuard imgui;
   bool callbackInvoked = false;
 
@@ -2373,8 +2283,7 @@ TEST_CASE(
   REQUIRE_FALSE(callbackInvoked);
 }
 
-TEST_CASE("Editor viewport asset drop target stays inactive during play mode",
-          "[editor][ui][dragdrop]") {
+TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "[editor][ui][dragdrop]") {
   ImGuiContextGuard imgui;
   bool callbackInvoked = false;
 
@@ -2407,8 +2316,7 @@ TEST_CASE("Editor viewport asset drop target stays inactive during play mode",
   REQUIRE_FALSE(callbackInvoked);
 }
 
-TEST_CASE("Editor workspace settings: missing file falls back to defaults",
-          "[editor][workspace]") {
+TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_editor_workspace_missing";
@@ -2429,8 +2337,7 @@ TEST_CASE("Editor workspace settings: missing file falls back to defaults",
           tempHome / ".horo" / "editor_workspace.json");
 }
 
-TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback",
-          "[editor][workspace]") {
+TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_editor_workspace_invalid";
@@ -2447,8 +2354,7 @@ TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback",
   REQUIRE(loaded.state.consoleShowInfo);
 }
 
-TEST_CASE("Editor workspace settings: round-trip console filters and cwd",
-          "[editor][workspace]") {
+TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_editor_workspace_roundtrip";
@@ -2476,8 +2382,7 @@ TEST_CASE("Editor workspace settings: round-trip console filters and cwd",
   REQUIRE(loaded.state.projectBrowserCwd == "C:/project/assets");
 }
 
-TEST_CASE("Vec3 CSV parser accepts render scale triples",
-          "[editor][ui-logic][coverage]") {
+TEST_CASE("Vec3 CSV parser accepts render scale triples", "[editor][ui-logic][coverage]") {
   Vec3 parsed = Vec3::Zero();
   REQUIRE(TryParseVec3Csv("1.5000, 2.0000,0.7500", &parsed));
   REQUIRE(parsed.x == Approx(1.5f));
@@ -2498,8 +2403,7 @@ TEST_CASE("Vec3 CSV parser accepts render scale triples",
 // SceneProjectBridge coverage tests
 // ============================================================
 
-TEST_CASE("SceneProjectBridge: Camera object propagates fov/nearClip/farClip",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Camera object propagates fov/nearClip/farClip", "[editor][bridge]") {
   SceneDocument doc;
   doc.sceneId = "test";
   SceneObject cam;
@@ -2520,9 +2424,7 @@ TEST_CASE("SceneProjectBridge: Camera object propagates fov/nearClip/farClip",
   REQUIRE(node.camera->farClip == Approx(500.0f));
 }
 
-TEST_CASE(
-    "SceneProjectBridge: Light node parses directional type and properties",
-    "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Light node parses directional type and properties", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject light;
   light.id = "sun";
@@ -2545,8 +2447,7 @@ TEST_CASE(
   REQUIRE(node.light->radius == Approx(100.0f));
 }
 
-TEST_CASE("SceneProjectBridge: Light node parses point type",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Light node parses point type", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject light;
   light.id = "lamp";
@@ -2561,9 +2462,7 @@ TEST_CASE("SceneProjectBridge: Light node parses point type",
   REQUIRE(model.scene.nodes[0].light->intensity == Approx(2.5f));
 }
 
-TEST_CASE(
-    "SceneProjectBridge: Prop with script component populates script field",
-    "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Prop with script component populates script field", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject prop;
   prop.id = "scripted";
@@ -2580,9 +2479,7 @@ TEST_CASE(
   REQUIRE(model.scene.nodes[0].script->behaviorTag == "PlayerController");
 }
 
-TEST_CASE("SceneProjectBridge: Prop with rigidbody component populates "
-          "rigidbody field",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Prop with rigidbody component populates rigidbody field", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject prop;
   prop.id = "box";
@@ -2603,8 +2500,7 @@ TEST_CASE("SceneProjectBridge: Prop with rigidbody component populates "
   REQUIRE(model.scene.nodes[0].rigidbody->useGravity == false);
 }
 
-TEST_CASE("SceneProjectBridge: Prop with light component populates light field",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Prop with light component populates light field", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject prop;
   prop.id = "torch";
@@ -2627,8 +2523,7 @@ TEST_CASE("SceneProjectBridge: Prop with light component populates light field",
   REQUIRE(model.scene.nodes[0].light->radius == Approx(8.0f));
 }
 
-TEST_CASE("SceneProjectBridge: legacy isLight=true migrates to light node",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: legacy isLight=true migrates to light node", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "legacy_light";
@@ -2641,8 +2536,7 @@ TEST_CASE("SceneProjectBridge: legacy isLight=true migrates to light node",
   REQUIRE(model.scene.nodes[0].light.has_value());
 }
 
-TEST_CASE("SceneProjectBridge: legacy isLight=false does not create light node",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: legacy isLight=false does not create light node", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "not_a_light";
@@ -2655,9 +2549,7 @@ TEST_CASE("SceneProjectBridge: legacy isLight=false does not create light node",
   REQUIRE_FALSE(model.scene.nodes[0].light.has_value());
 }
 
-TEST_CASE(
-    "SceneProjectBridge: legacy behavior prop migrates to script component",
-    "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: legacy behavior prop migrates to script component", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "enemy";
@@ -2671,8 +2563,7 @@ TEST_CASE(
   REQUIRE(model.scene.nodes[0].script->behaviorTag == "EnemyAI");
 }
 
-TEST_CASE("SceneProjectBridge: behavior=none is not migrated to script",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: behavior=none is not migrated to script", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "inert";
@@ -2684,8 +2575,7 @@ TEST_CASE("SceneProjectBridge: behavior=none is not migrated to script",
   REQUIRE_FALSE(model.scene.nodes[0].script.has_value());
 }
 
-TEST_CASE("SceneProjectBridge: scene settings spawnPoint is parsed",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: scene settings spawnPoint is parsed", "[editor][bridge]") {
   SceneDocument doc;
   doc.settings["spawnPoint"] = "1.5,2.5,3.5";
 
@@ -2695,8 +2585,7 @@ TEST_CASE("SceneProjectBridge: scene settings spawnPoint is parsed",
   REQUIRE(model.scene.settings.spawnPoint.z == Approx(3.5f));
 }
 
-TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "parent_panel";
@@ -2715,8 +2604,7 @@ TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId",
   REQUIRE(*model.scene.nodes[1].parentId == "parent_panel");
 }
 
-TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly", "[editor][bridge]") {
   SceneDocument doc;
   doc.assets["crate"] = AssetDef{"models/crate.obj", "2.0,3.0,4.0", ""};
 
@@ -2728,8 +2616,7 @@ TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly",
   REQUIRE(model.scene.assets[0].renderScale.z == Approx(4.0f));
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node", "[editor][bridge]") {
   SceneDocument doc;
   doc.sceneId = "rt_test";
   SceneObject cam;
@@ -2749,8 +2636,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node",
   REQUIRE(rt.objects[0].props.count("fov") > 0);
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Light node",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Light node", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject light;
   light.id = "light1";
@@ -2769,9 +2655,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Light node",
   REQUIRE(rt.objects[0].props.count("lightType") > 0);
 }
 
-TEST_CASE(
-    "SceneProjectBridge: BuildSceneDocument round-trips rigidbody component",
-    "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips rigidbody component", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "rb_obj";
@@ -2792,8 +2676,7 @@ TEST_CASE(
   REQUIRE(rt.objects[0].components[0].type == "rigidbody");
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips script component",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips script component", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "scripted_obj";
@@ -2815,16 +2698,14 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips script component",
   REQUIRE(it->props.at("behaviorTag") == "EnemyAI");
 }
 
-TEST_CASE("SceneProjectBridge: empty document produces empty model",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: empty document produces empty model", "[editor][bridge]") {
   const SceneDocument doc;
   const SceneProjectModel model = BuildSceneProjectModel(doc);
   REQUIRE(model.scene.nodes.empty());
   REQUIRE(model.scene.assets.empty());
 }
 
-TEST_CASE("SceneProjectBridge: Panel node has Panel kind in model",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: Panel node has Panel kind in model", "[editor][bridge]") {
   SceneDocument doc;
   SceneObject panel;
   panel.id = "wall";
@@ -2837,9 +2718,7 @@ TEST_CASE("SceneProjectBridge: Panel node has Panel kind in model",
   REQUIRE_FALSE(model.scene.nodes[0].light.has_value());
 }
 
-TEST_CASE("SceneProjectBridge: malformed scalar/vector props fall back to "
-          "defaults",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: malformed scalar/vector props fall back to defaults", "[editor][bridge]") {
   SceneDocument baselineDoc;
   SceneObject baselineCam;
   baselineCam.id = "cam_base";
@@ -2892,9 +2771,7 @@ TEST_CASE("SceneProjectBridge: malformed scalar/vector props fall back to "
           Approx(baselineModel.scene.nodes[1].light->radius));
 }
 
-TEST_CASE("SceneProjectBridge: round-trip preserves extra props and extra "
-          "components",
-          "[editor][bridge]") {
+TEST_CASE("SceneProjectBridge: round-trip preserves extra props and extra components", "[editor][bridge]") {
   SceneDocument doc;
   doc.sceneId = "bridge_extra_roundtrip";
   SceneObject object;
@@ -2929,9 +2806,7 @@ TEST_CASE("SceneProjectBridge: round-trip preserves extra props and extra "
 // EditorSceneGraph coverage tests
 // ============================================================
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta moves child with "
-          "parent",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta moves child with parent", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "root_panel";
@@ -2962,9 +2837,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta moves child with "
   REQUIRE(doc.objects[1].position.z == Approx(0.0f));
 }
 
-TEST_CASE(
-    "EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "root";
@@ -2990,9 +2863,7 @@ TEST_CASE(
   REQUIRE(doc.objects[1].position.x == Approx(2.0f)); // unchanged
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid "
-          "parentIdx is no-op",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid parentIdx is no-op", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "solo";
@@ -3005,9 +2876,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid "
   REQUIRE(doc.objects[0].position.x == Approx(3.0f)); // unchanged
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback "
-          "for moved child",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback for moved child", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "parent";
@@ -3031,8 +2900,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback "
   REQUIRE(callbackCount == 1);
 }
 
-TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences updates parentId",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences updates parentId", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject child;
   child.id = "child";
@@ -3043,9 +2911,7 @@ TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences updates parentId",
   REQUIRE(doc.objects[0].props.at("parentId") == "new_parent");
 }
 
-TEST_CASE(
-    "EditorSceneGraph: RewriteObjectIdReferences is a no-op for empty oldId",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op for empty oldId", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj";
@@ -3056,9 +2922,7 @@ TEST_CASE(
   REQUIRE(doc.objects[0].props.at("parentId") == "some_id");
 }
 
-TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op when old "
-          "equals new",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op when old equals new", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj";
@@ -3069,9 +2933,7 @@ TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences is a no-op when old "
   REQUIRE(doc.objects[0].props.at("parentId") == "same_id");
 }
 
-TEST_CASE(
-    "EditorSceneGraph: LogDanglingObjectReferences does not crash on clean doc",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences does not crash on clean doc", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "parent";
@@ -3086,8 +2948,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences warns on dangling ref",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences warns on dangling ref", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject orphan;
   orphan.id = "orphan";
@@ -3099,8 +2960,7 @@ TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences warns on dangling ref",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorSceneGraph: SanitizePrefabStem handles various inputs",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem handles various inputs", "[editor][scene-graph]") {
   REQUIRE(SanitizePrefabStem("hello_world") == "hello_world");
   REQUIRE(SanitizePrefabStem("valid-name_123") == "valid-name_123");
   REQUIRE(SanitizePrefabStem("__hello__") == "hello");
@@ -3110,17 +2970,13 @@ TEST_CASE("EditorSceneGraph: SanitizePrefabStem handles various inputs",
   REQUIRE(SanitizePrefabStem("___") == "prefab");
 }
 
-TEST_CASE(
-    "EditorSceneGraph: SanitizePrefabStem replaces spaces and special chars",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem replaces spaces and special chars", "[editor][scene-graph]") {
   const std::string result = SanitizePrefabStem("hello world!");
   // space→'_', '!'→'_', trailing '_' stripped → "hello_world"
   REQUIRE(result == "hello_world");
 }
 
-TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes object ids and "
-          "references",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes object ids and references", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "parent_id";
@@ -3136,8 +2992,7 @@ TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes object ids and "
   REQUIRE(reserved.contains("child_id"));
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing id",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing id", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "used_id";
@@ -3147,8 +3002,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing id",
   REQUIRE_FALSE(IsReservedObjectId(doc, "free_id"));
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId with ignoreConcreteObjectId",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId with ignoreConcreteObjectId", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "rename_me";
@@ -3161,8 +3015,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId with ignoreConcreteObjectId",
   REQUIRE(IsReservedObjectId(doc, "rename_me", nullptr));
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id", "[editor][scene-graph]") {
   SceneDocument doc;
   REQUIRE_FALSE(IsReservedObjectId(doc, ""));
 }
@@ -3171,8 +3024,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
 // EditorHistory edge-case tests (exercised via MCP commands)
 // ============================================================
 
-TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3198,9 +3050,7 @@ TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
   REQUIRE(undoCount == 128);
 }
 
-TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for differing "
-          "documents",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for differing documents", "[editor][history]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.sceneId = "base";
@@ -3227,9 +3077,7 @@ TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for differing "
   REQUIRE(editor.GetDocument().objects.size() == 1);
 }
 
-TEST_CASE(
-    "EditorHistory: RefreshHistorySavedBaseline updates dirty flag after save",
-    "[editor][history]") {
+TEST_CASE("EditorHistory: RefreshHistorySavedBaseline updates dirty flag after save", "[editor][history]") {
   namespace fs = std::filesystem;
   const fs::path sceneDir =
       Monolith::Tests::SecureTempBase() / "horo_history_baseline_test";
@@ -3270,8 +3118,7 @@ TEST_CASE(
 // EditorMcpHandlers error path coverage
 // ============================================================
 
-TEST_CASE("EditorMcp: create_object with Camera type uses GenerateCameraId",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object with Camera type uses GenerateCameraId", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3300,8 +3147,7 @@ TEST_CASE("EditorMcp: create_object rejects duplicate id", "[editor][mcp]") {
   REQUIRE(second.error == "Object id already exists.");
 }
 
-TEST_CASE("EditorMcp: create_object rejects invalid scale format",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object rejects invalid scale format", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3314,8 +3160,7 @@ TEST_CASE("EditorMcp: create_object rejects invalid scale format",
   REQUIRE(res.error == "scale must be [x,y,z].");
 }
 
-TEST_CASE("EditorMcp: create_object rejects non-array components",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object rejects non-array components", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3326,8 +3171,7 @@ TEST_CASE("EditorMcp: create_object rejects non-array components",
   REQUIRE(res.error == "components must be an array of objects.");
 }
 
-TEST_CASE("EditorMcp: create_object rejects components with missing type field",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object rejects components with missing type field", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3340,8 +3184,7 @@ TEST_CASE("EditorMcp: create_object rejects components with missing type field",
   REQUIRE(res.error == "components must be an array of objects.");
 }
 
-TEST_CASE("EditorMcp: create_object rejects non-existent parentId",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object rejects non-existent parentId", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3352,8 +3195,7 @@ TEST_CASE("EditorMcp: create_object rejects non-existent parentId",
   REQUIRE(res.error == "Parent object not found.");
 }
 
-TEST_CASE("EditorMcp: create_object rejects unknown type string",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object rejects unknown type string", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3363,8 +3205,7 @@ TEST_CASE("EditorMcp: create_object rejects unknown type string",
   REQUIRE(res.error == "Invalid object type.");
 }
 
-TEST_CASE("EditorMcp: update_object returns error when object not found",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: update_object returns error when object not found", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3376,8 +3217,7 @@ TEST_CASE("EditorMcp: update_object returns error when object not found",
   REQUIRE(res.error == "Object not found.");
 }
 
-TEST_CASE("EditorMcp: editor.transform is an alias for editor.update_object",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: editor.transform is an alias for editor.update_object", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "movable";
@@ -3397,8 +3237,7 @@ TEST_CASE("EditorMcp: editor.transform is an alias for editor.update_object",
   REQUIRE(editor.GetDocument().objects[0].position.z == Approx(9.0f));
 }
 
-TEST_CASE("EditorMcp: update_object rejects bad position format",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: update_object rejects bad position format", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "fixed_obj";
@@ -3416,8 +3255,7 @@ TEST_CASE("EditorMcp: update_object rejects bad position format",
   REQUIRE(res.error == "position must be [x,y,z].");
 }
 
-TEST_CASE("EditorMcp: reparent_object rejects self-parenting",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: reparent_object rejects self-parenting", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "self_obj";
@@ -3434,8 +3272,7 @@ TEST_CASE("EditorMcp: reparent_object rejects self-parenting",
   REQUIRE(res.error == "Object cannot parent itself.");
 }
 
-TEST_CASE("EditorMcp: reparent_object rejects cycle-forming reparent",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: reparent_object rejects cycle-forming reparent", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "ancestor";
@@ -3459,8 +3296,7 @@ TEST_CASE("EditorMcp: reparent_object rejects cycle-forming reparent",
   REQUIRE(res.error == "Parent would create a cycle.");
 }
 
-TEST_CASE("EditorMcp: reparent_object rejects unknown object id",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: reparent_object rejects unknown object id", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3471,8 +3307,7 @@ TEST_CASE("EditorMcp: reparent_object rejects unknown object id",
   REQUIRE(res.error == "Object not found.");
 }
 
-TEST_CASE("EditorMcp: reparent_object unparents when parentId is empty",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: reparent_object unparents when parentId is empty", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "p";
@@ -3500,8 +3335,7 @@ TEST_CASE("EditorMcp: reparent_object unparents when parentId is empty",
   REQUIRE_FALSE(c->props.contains("parentId"));
 }
 
-TEST_CASE("EditorMcp: unknown command returns descriptive error",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: unknown command returns descriptive error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3511,8 +3345,7 @@ TEST_CASE("EditorMcp: unknown command returns descriptive error",
   REQUIRE(res.error == "Unsupported MCP command.");
 }
 
-TEST_CASE("EditorMcp: create_object with components array creates component",
-          "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object with components array creates component", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3531,9 +3364,7 @@ TEST_CASE("EditorMcp: create_object with components array creates component",
   REQUIRE(editor.GetDocument().objects[0].components[0].type == "script");
 }
 
-TEST_CASE(
-    "EditorMcp: create_object with parentId links child to existing parent",
-    "[editor][mcp]") {
+TEST_CASE("EditorMcp: create_object with parentId links child to existing parent", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject parentObj;
   parentObj.id = "existing_parent";
@@ -3561,9 +3392,7 @@ TEST_CASE(
 // EditorLayer public method coverage
 // ============================================================
 
-TEST_CASE("EditorLayer: LoadDocument migrates legacy behavior prop to script "
-          "component",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: LoadDocument migrates legacy behavior prop to script component", "[editor][layer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "legacy_prop";
@@ -3587,9 +3416,7 @@ TEST_CASE("EditorLayer: LoadDocument migrates legacy behavior prop to script "
   REQUIRE(loaded->components[0].props.at("behaviorTag") == "GuardAI");
 }
 
-TEST_CASE("EditorLayer: LoadDocument skips migration when script component "
-          "already present",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: LoadDocument skips migration when script component already present", "[editor][layer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "already_scripted";
@@ -3615,9 +3442,7 @@ TEST_CASE("EditorLayer: LoadDocument skips migration when script component "
   REQUIRE(loaded->components[0].props.at("behaviorTag") == "NewScript");
 }
 
-TEST_CASE("EditorLayer: LoadDocument with behavior=none does not create script "
-          "component",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: LoadDocument with behavior=none does not create script component", "[editor][layer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "no_script";
@@ -3637,16 +3462,14 @@ TEST_CASE("EditorLayer: LoadDocument with behavior=none does not create script "
   REQUIRE(loaded->components.empty());
 }
 
-TEST_CASE("EditorLayer: SetHotReloadOverlay stores state without crashing",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: SetHotReloadOverlay stores state without crashing", "[editor][layer]") {
   EditorLayer editor;
   editor.SetHotReloadOverlay(true, 0.5f, 45.0f, "Compiling shaders...");
   editor.SetHotReloadOverlay(false, 0.0f, 0.0f, "");
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped stores paths for deferred processing",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: OnPathsDropped stores paths for deferred processing", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3656,16 +3479,14 @@ TEST_CASE("EditorLayer: OnPathsDropped stores paths for deferred processing",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op", "[editor][layer]") {
   EditorLayer editor;
   editor.OnPathsDropped(5, nullptr, 0.0f, 0.0f);
   editor.OnPathsDropped(0, nullptr, 0.0f, 0.0f);
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload flag",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload flag", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -3678,37 +3499,32 @@ TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload flag",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: IsPlayMode returns false by default",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: IsPlayMode returns false by default", "[editor][layer]") {
   EditorLayer editor;
   REQUIRE_FALSE(editor.IsPlayMode());
 }
 
-TEST_CASE("EditorLayer: GetSelectedAssetId is empty when no asset is selected",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedAssetId is empty when no asset is selected", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   REQUIRE(editor.GetSelectedAssetId().empty());
 }
 
-TEST_CASE("EditorLayer: SetProjectBrowserRoot does not crash",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot does not crash", "[editor][layer]") {
   EditorLayer editor;
   editor.SetProjectBrowserRoot("assets/");
   editor.SetProjectBrowserRoot("");
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist does not crash",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist does not crash", "[editor][layer]") {
   EditorLayer editor;
   editor.SetProjectBrowserExtraBlocklist({"node_modules", ".git"});
   editor.SetProjectBrowserExtraBlocklist({});
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: Render with inactive editor does not crash",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: Render with inactive editor does not crash", "[editor][layer]") {
   ImGuiContextGuard imgui;
 
   EditorLayer editor;
@@ -3770,8 +3586,7 @@ static SceneDocument MakeDocWithAllObjectTypes() {
   return doc;
 }
 
-TEST_CASE("EditorLayer: Toggle makes editor active without crashing",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: Toggle makes editor active without crashing", "[editor][layer][draw]") {
   EditorLayer editor;
   REQUIRE_FALSE(editor.IsActive());
   editor.Toggle();
@@ -3780,8 +3595,7 @@ TEST_CASE("EditorLayer: Toggle makes editor active without crashing",
   REQUIRE_FALSE(editor.IsActive());
 }
 
-TEST_CASE("EditorLayer: active Render with empty document does not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with empty document does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -3793,8 +3607,7 @@ TEST_CASE("EditorLayer: active Render with empty document does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with all object types does not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with all object types does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3805,9 +3618,7 @@ TEST_CASE("EditorLayer: active Render with all object types does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with Prop selected draws properties panel",
-    "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with Prop selected draws properties panel", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3819,9 +3630,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with Panel selected draws properties panel",
-    "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with Panel selected draws properties panel", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3833,9 +3642,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with Camera selected draws camera section",
-    "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with Camera selected draws camera section", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3847,9 +3654,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with Light+components selected draws "
-          "component list",
-          "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with Light+components selected draws component list", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3861,9 +3666,7 @@ TEST_CASE("EditorLayer: active Render with Light+components selected draws "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with asset selected draws asset properties",
-    "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with asset selected draws asset properties", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3876,9 +3679,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with multiple selected draws "
-          "multi-select panel",
-          "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with multiple selected draws multi-select panel", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3892,8 +3693,7 @@ TEST_CASE("EditorLayer: active Render with multiple selected draws "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render multiple frames does not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render multiple frames does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -3908,8 +3708,7 @@ TEST_CASE("EditorLayer: active Render multiple frames does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with rigidbody component does not crash",
-          "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with rigidbody component does not crash", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   SceneObject obj;
@@ -3933,8 +3732,7 @@ TEST_CASE("EditorLayer: active Render with rigidbody component does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with script component does not crash",
-          "[editor][layer][draw][properties]") {
+TEST_CASE("EditorLayer: active Render with script component does not crash", "[editor][layer][draw][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   SceneObject obj;
@@ -3957,9 +3755,7 @@ TEST_CASE("EditorLayer: active Render with script component does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with multiple assets in document does "
-          "not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with multiple assets in document does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.assets["mesh_a"] = AssetDef{"", "1.0,1.0,1.0", "tex_a.png"};
@@ -3983,9 +3779,7 @@ TEST_CASE("EditorLayer: active Render with multiple assets in document does "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with object having parentId does not crash",
-    "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with object having parentId does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   SceneObject parent;
@@ -4009,8 +3803,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with prefab instance does not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with prefab instance does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   SceneObject obj;
@@ -4030,8 +3823,7 @@ TEST_CASE("EditorLayer: active Render with prefab instance does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: Toggle twice restores inactive state",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: Toggle twice restores inactive state", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -4045,8 +3837,7 @@ TEST_CASE("EditorLayer: Toggle twice restores inactive state",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: active Render with hot reload overlay does not crash",
-          "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with hot reload overlay does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -4058,9 +3849,7 @@ TEST_CASE("EditorLayer: active Render with hot reload overlay does not crash",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: active Render with SetProjectBrowserRoot set does not crash",
-    "[editor][layer][draw]") {
+TEST_CASE("EditorLayer: active Render with SetProjectBrowserRoot set does not crash", "[editor][layer][draw]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -4077,8 +3866,7 @@ TEST_CASE(
 // TransformGizmo math helper tests
 // ============================================================
 
-TEST_CASE("TransformGizmo: Deactivate clears mode and axes",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: Deactivate clears mode and axes", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4091,8 +3879,7 @@ TEST_CASE("TransformGizmo: Deactivate clears mode and axes",
   REQUIRE(gizmo.GetDragAxis() == GizmoAxis::None);
 }
 
-TEST_CASE("TransformGizmo: WorldToScreen projects front-facing point",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: WorldToScreen projects front-facing point", "[editor][gizmo]") {
   Camera cam;
   cam.position = {0.f, 0.f, -10.f};
   cam.target = {0.f, 0.f, 0.f};
@@ -4106,8 +3893,7 @@ TEST_CASE("TransformGizmo: WorldToScreen projects front-facing point",
   REQUIRE(sy == Approx(360.f).margin(5.f));
 }
 
-TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera", "[editor][gizmo]") {
   Camera cam;
   cam.position = {0.f, 0.f, 10.f};
   cam.target = {0.f, 0.f, 0.f};
@@ -4122,8 +3908,7 @@ TEST_CASE("TransformGizmo: WorldToScreen returns false for point behind camera",
   REQUIRE(true);
 }
 
-TEST_CASE("TransformGizmo: RayHitPlane returns hit for non-parallel ray",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: RayHitPlane returns hit for non-parallel ray", "[editor][gizmo]") {
   // Ray pointing down (negative Y), plane is horizontal (Y=0)
   Ray ray;
   ray.origin = {0.f, 5.f, 0.f};
@@ -4138,8 +3923,7 @@ TEST_CASE("TransformGizmo: RayHitPlane returns hit for non-parallel ray",
   REQUIRE(hit.z == Approx(0.f).margin(0.001f));
 }
 
-TEST_CASE("TransformGizmo: RayHitPlane returns false for parallel ray",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: RayHitPlane returns false for parallel ray", "[editor][gizmo]") {
   Ray ray;
   ray.origin = {0.f, 1.f, 0.f};
   ray.direction = {1.f, 0.f, 0.f}; // parallel to XZ plane
@@ -4150,8 +3934,7 @@ TEST_CASE("TransformGizmo: RayHitPlane returns false for parallel ray",
   REQUIRE_FALSE(TransformGizmo::RayHitPlane(ray, planeNormal, planePoint, hit));
 }
 
-TEST_CASE("TransformGizmo: RayHitPlane returns false for hit behind ray origin",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: RayHitPlane returns false for hit behind ray origin", "[editor][gizmo]") {
   // Ray pointing up, plane is below origin
   Ray ray;
   ray.origin = {0.f, 5.f, 0.f};
@@ -4163,8 +3946,7 @@ TEST_CASE("TransformGizmo: RayHitPlane returns false for hit behind ray origin",
   REQUIRE_FALSE(TransformGizmo::RayHitPlane(ray, planeNormal, planePoint, hit));
 }
 
-TEST_CASE("TransformGizmo: RayClosestOnLine finds correct point",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: RayClosestOnLine finds correct point", "[editor][gizmo]") {
   // Ray going in +Z, line going in +X at y=1
   Ray ray;
   ray.origin = {0.f, 0.f, 0.f};
@@ -4179,8 +3961,7 @@ TEST_CASE("TransformGizmo: RayClosestOnLine finds correct point",
   REQUIRE(closest.z == Approx(5.f).margin(0.001f));
 }
 
-TEST_CASE("TransformGizmo: RayClosestOnLine handles parallel lines",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: RayClosestOnLine handles parallel lines", "[editor][gizmo]") {
   // Parallel ray and line
   Ray ray;
   ray.origin = {0.f, 0.f, 0.f};
@@ -4195,8 +3976,7 @@ TEST_CASE("TransformGizmo: RayClosestOnLine handles parallel lines",
   REQUIRE(std::isfinite(closest.z));
 }
 
-TEST_CASE("TransformGizmo: HandleSize returns reasonable value",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: HandleSize returns reasonable value", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4211,9 +3991,7 @@ TEST_CASE("TransformGizmo: HandleSize returns reasonable value",
   REQUIRE(size < 100.0f);
 }
 
-TEST_CASE(
-    "TransformGizmo: HandleSize returns minimum when camera at same position",
-    "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same position", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4227,8 +4005,7 @@ TEST_CASE(
   REQUIRE(size == Approx(0.1f));
 }
 
-TEST_CASE("TransformGizmo: AxisDir returns correct directions",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: AxisDir returns correct directions", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
                  Vec3::One());
@@ -4252,8 +4029,7 @@ TEST_CASE("TransformGizmo: AxisDir returns correct directions",
   REQUIRE(none.z == Approx(0.f));
 }
 
-TEST_CASE("TransformGizmo: PickAxis returns None when no axis near cursor",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: PickAxis returns None when no axis near cursor", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4270,8 +4046,7 @@ TEST_CASE("TransformGizmo: PickAxis returns None when no axis near cursor",
   REQUIRE(true); // no crash
 }
 
-TEST_CASE("TransformGizmo: SyncTarget updates internal position",
-          "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: SyncTarget updates internal position", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4291,8 +4066,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates internal position",
 // Additional MCP handler tests (cover uncovered handlers)
 // ============================================================
 
-TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4304,8 +4078,7 @@ TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName",
   REQUIRE(editor.GetDocument().sceneName == "My New Scene");
 }
 
-TEST_CASE("EditorLayer MCP: new_scene without args creates clean scene",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: new_scene without args creates clean scene", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   SceneObject obj;
@@ -4319,8 +4092,7 @@ TEST_CASE("EditorLayer MCP: new_scene without args creates clean scene",
   REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE("EditorLayer MCP: save_scene creates directory when needed",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: save_scene creates directory when needed", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   std::filesystem::path testPath =
@@ -4347,8 +4119,7 @@ TEST_CASE("EditorLayer MCP: reload_scene loads saved scene", "[editor][mcp]") {
   REQUIRE(reloadResult.ok);
 }
 
-TEST_CASE("EditorLayer MCP: create_prefab fails without selection",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_prefab fails without selection", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4360,8 +4131,7 @@ TEST_CASE("EditorLayer MCP: create_prefab fails without selection",
   REQUIRE_FALSE(result.error.empty());
 }
 
-TEST_CASE("EditorLayer MCP: create_prefab with valid selection succeeds",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_prefab with valid selection succeeds", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   SceneObject obj;
@@ -4382,8 +4152,7 @@ TEST_CASE("EditorLayer MCP: create_prefab with valid selection succeeds",
   }
 }
 
-TEST_CASE("EditorLayer MCP: update_asset modifies mesh and renderScale",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset modifies mesh and renderScale", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.assets["asset1"] = AssetDef{"old.obj", "1.0,1.0,1.0"};
@@ -4403,8 +4172,7 @@ TEST_CASE("EditorLayer MCP: update_asset modifies mesh and renderScale",
   REQUIRE(editor.GetDocument().assets.at("asset1").displayName == "New Asset");
 }
 
-TEST_CASE("EditorLayer MCP: update_asset with null values clears fields",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset with null values clears fields", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.assets["asset1"] = AssetDef{"old.obj", "1.0,1.0,1.0", "tex.png"};
@@ -4421,8 +4189,7 @@ TEST_CASE("EditorLayer MCP: update_asset with null values clears fields",
   REQUIRE(editor.GetDocument().assets.at("asset1").albedoMap.empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_asset fails for unknown asset",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset fails for unknown asset", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4443,8 +4210,7 @@ TEST_CASE("EditorLayer MCP: delete_asset removes the asset", "[editor][mcp]") {
   REQUIRE_FALSE(editor.GetDocument().assets.contains("asset1"));
 }
 
-TEST_CASE("EditorLayer MCP: delete_asset fails for unknown asset",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: delete_asset fails for unknown asset", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4465,8 +4231,7 @@ TEST_CASE("EditorLayer MCP: create_object with all types", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.size() == 3u);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with invalid type fails",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid type fails", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4475,8 +4240,7 @@ TEST_CASE("EditorLayer MCP: create_object with invalid type fails",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with custom id and position",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with custom id and position", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4492,8 +4256,7 @@ TEST_CASE("EditorLayer MCP: create_object with custom id and position",
   REQUIRE(editor.GetDocument().objects.back().position.x == Approx(1.f));
 }
 
-TEST_CASE("EditorLayer MCP: create_object with invalid position fails",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid position fails", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4523,8 +4286,7 @@ TEST_CASE("EditorLayer MCP: create_object with components", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.back().components.size() == 1u);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with invalid components fails",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid components fails", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4549,8 +4311,7 @@ TEST_CASE("EditorLayer MCP: create_object with parentId", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.back().props.at("parentId") == "parent");
 }
 
-TEST_CASE("EditorLayer MCP: create_object with unknown parentId fails",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with unknown parentId fails", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4560,8 +4321,7 @@ TEST_CASE("EditorLayer MCP: create_object with unknown parentId fails",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: rename_object changes id and updates references",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object changes id and updates references", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4581,8 +4341,7 @@ TEST_CASE("EditorLayer MCP: rename_object changes id and updates references",
   REQUIRE(editor.GetDocument().objects[1].props.at("parentId") == "new_name");
 }
 
-TEST_CASE("EditorLayer MCP: rename_object fails for unknown id",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object fails for unknown id", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4592,8 +4351,7 @@ TEST_CASE("EditorLayer MCP: rename_object fails for unknown id",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: rename_object fails with empty newId",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object fails with empty newId", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4604,8 +4362,7 @@ TEST_CASE("EditorLayer MCP: rename_object fails with empty newId",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: rename_object fails when newId already exists",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object fails when newId already exists", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4632,8 +4389,7 @@ TEST_CASE("EditorLayer MCP: reparent_object sets parentId", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects[1].props.at("parentId") == "p");
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4648,8 +4404,7 @@ TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
   REQUIRE_FALSE(editor.GetDocument().objects[1].props.contains("parentId"));
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object fails for self-parent",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object fails for self-parent", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4691,8 +4446,7 @@ TEST_CASE("EditorLayer MCP: duplicate multiple objects", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.size() == 4u);
 }
 
-TEST_CASE("EditorLayer MCP: duplicate with count creates multiple copies",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: duplicate with count creates multiple copies", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4722,8 +4476,7 @@ TEST_CASE("EditorLayer MCP: delete multiple objects by ids", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects[0].id == "b");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with components updates them",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with components updates them", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4742,8 +4495,7 @@ TEST_CASE("EditorLayer MCP: update_object with components updates them",
           "2.5");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with null assetId clears it",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with null assetId clears it", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   SceneObject obj;
@@ -4760,8 +4512,7 @@ TEST_CASE("EditorLayer MCP: update_object with null assetId clears it",
   REQUIRE(editor.GetDocument().objects[0].assetId.empty());
 }
 
-TEST_CASE("EditorLayer MCP: transform alias works same as update_object",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: transform alias works same as update_object", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.create_object",
@@ -4777,8 +4528,7 @@ TEST_CASE("EditorLayer MCP: transform alias works same as update_object",
   REQUIRE(editor.GetDocument().objects[0].yaw == Approx(90.f));
 }
 
-TEST_CASE("EditorLayer MCP: select_asset fails for unknown asset",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select_asset fails for unknown asset", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4787,8 +4537,7 @@ TEST_CASE("EditorLayer MCP: select_asset fails for unknown asset",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: select_asset with empty id clears selection",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select_asset with empty id clears selection", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.assets["a"] = AssetDef{"a.obj", "1,1,1"};
@@ -4819,8 +4568,7 @@ TEST_CASE("EditorLayer MCP: undo and redo after create", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.size() == 1u);
 }
 
-TEST_CASE("EditorLayer MCP: create_object_from_asset with unknown asset fails",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object_from_asset with unknown asset fails", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4830,9 +4578,7 @@ TEST_CASE("EditorLayer MCP: create_object_from_asset with unknown asset fails",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object_from_asset with invalid position fails",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object_from_asset with invalid position fails", "[editor][mcp]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.assets["asset1"] = AssetDef{"cube.obj", "1,1,1"};
@@ -4847,8 +4593,7 @@ TEST_CASE(
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: unsupported command returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: unsupported command returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -4955,9 +4700,7 @@ static SceneDocument MakeRichDocument() {
 
 // ---- Select AFTER Toggle: light component -----------------------------------
 
-TEST_CASE("EditorLayer render: light component selected after Toggle covers "
-          "DrawLightComponentFields",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: light component selected after Toggle covers DrawLightComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -4973,9 +4716,7 @@ TEST_CASE("EditorLayer render: light component selected after Toggle covers "
 
 // ---- Select AFTER Toggle: rigidbody component ------------------------------
 
-TEST_CASE("EditorLayer render: rigidbody component selected after Toggle "
-          "covers DrawRigidBodyComponentFields",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers DrawRigidBodyComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -4990,9 +4731,7 @@ TEST_CASE("EditorLayer render: rigidbody component selected after Toggle "
 
 // ---- Select AFTER Toggle: script component ---------------------------------
 
-TEST_CASE("EditorLayer render: script component selected after Toggle covers "
-          "DrawScriptComponentField",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: script component selected after Toggle covers DrawScriptComponentField", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5008,9 +4747,7 @@ TEST_CASE("EditorLayer render: script component selected after Toggle covers "
 
 // ---- Select AFTER Toggle: all 3 component types ----------------------------
 
-TEST_CASE("EditorLayer render: all component types on one object after Toggle "
-          "covers full ComponentsList",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: all component types on one object after Toggle covers full ComponentsList", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5026,9 +4763,7 @@ TEST_CASE("EditorLayer render: all component types on one object after Toggle "
 
 // ---- Select AFTER Toggle: camera with follow target -------------------------
 
-TEST_CASE("EditorLayer render: camera with followTargetId selected after "
-          "Toggle covers camera section",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle covers camera section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5044,9 +4779,7 @@ TEST_CASE("EditorLayer render: camera with followTargetId selected after "
 
 // ---- Select AFTER Toggle: camera without follow target ----------------------
 
-TEST_CASE(
-    "EditorLayer render: camera without followTargetId selected after Toggle",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: camera without followTargetId selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5062,9 +4795,7 @@ TEST_CASE(
 
 // ---- Multi-select: same assetId (covers "shared asset" path) ----------------
 
-TEST_CASE("EditorLayer render: multi-select two objects with same assetId "
-          "shows batch panel",
-          "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows batch panel", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5082,9 +4813,7 @@ TEST_CASE("EditorLayer render: multi-select two objects with same assetId "
 
 // ---- Multi-select: different assetIds (covers "Mixed" path) -----------------
 
-TEST_CASE("EditorLayer render: multi-select with different assetIds shows "
-          "Mixed label",
-          "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5103,9 +4832,7 @@ TEST_CASE("EditorLayer render: multi-select with different assetIds shows "
 
 // ---- Multi-select: objects with no assetId (covers "<none>" path) -----------
 
-TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows "
-          "none label",
-          "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows none label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5124,9 +4851,7 @@ TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows "
 
 // ---- Multi-select 3 or more objects ----------------------------------------
 
-TEST_CASE(
-    "EditorLayer render: multi-select three objects covers batch transform UI",
-    "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select three objects covers batch transform UI", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5144,9 +4869,7 @@ TEST_CASE(
 
 // ---- Asset selected after Toggle then deleted: covers asset-not-found branch
 
-TEST_CASE("EditorLayer render: asset selected then deleted triggers "
-          "asset-not-found clear in DrawPropertiesPanel",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-found clear in DrawPropertiesPanel", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "asset-not-found";
@@ -5175,9 +4898,7 @@ TEST_CASE("EditorLayer render: asset selected then deleted triggers "
 // ---- Asset selected after Toggle: valid asset covers
 // DrawPropertiesSelectedAsset fully
 
-TEST_CASE("EditorLayer render: valid asset selected after Toggle covers "
-          "DrawPropertiesSelectedAsset",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawPropertiesSelectedAsset", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "asset-valid";
@@ -5197,9 +4918,7 @@ TEST_CASE("EditorLayer render: valid asset selected after Toggle covers "
 
 // ---- Prop with no assetId selected after Toggle ----------------------------
 
-TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle "
-          "renders transform section",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle renders transform section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5215,8 +4934,7 @@ TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle "
 
 // ---- Panel object selected after Toggle ------------------------------------
 
-TEST_CASE("EditorLayer render: panel with no components selected after Toggle",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: panel with no components selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5232,9 +4950,7 @@ TEST_CASE("EditorLayer render: panel with no components selected after Toggle",
 
 // ---- Switching selection across multiple Render calls ----------------------
 
-TEST_CASE("EditorLayer render: cycling through all object types with "
-          "select-after-toggle",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: cycling through all object types with select-after-toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -5253,9 +4969,7 @@ TEST_CASE("EditorLayer render: cycling through all object types with "
 
 // ---- Overlay callback is invoked during Render ------------------------------
 
-TEST_CASE(
-    "EditorLayer render: overlay callback is invoked during active Render",
-    "[editor][render]") {
+TEST_CASE("EditorLayer render: overlay callback is invoked during active Render", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -5271,8 +4985,7 @@ TEST_CASE(
 
 // ---- Overlay callback cleared -----------------------------------------------
 
-TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -5288,9 +5001,7 @@ TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe",
 
 // ---- Script behavior options callback set ----------------------------------
 
-TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers "
-          "option list",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "script-cb";
@@ -5323,9 +5034,7 @@ TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers "
 
 // ---- Script behavior options callback with unknown behavior ----------------
 
-TEST_CASE("EditorLayer render: script component with unknown behaviorTag not "
-          "in options list",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in options list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "script-unknown";
@@ -5357,9 +5066,7 @@ TEST_CASE("EditorLayer render: script component with unknown behaviorTag not "
 
 // ---- Object selected with assetId that exists in document ------------------
 
-TEST_CASE("EditorLayer render: prop with existing assetId shows asset section "
-          "after Toggle",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with existing assetId shows asset section after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "prop-asset";
@@ -5385,9 +5092,7 @@ TEST_CASE("EditorLayer render: prop with existing assetId shows asset section "
 
 // ---- Object with parentId set — covers parent dropdown rendering -----------
 
-TEST_CASE("EditorLayer render: child object with parentId after Toggle shows "
-          "parent dropdown",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: child object with parentId after Toggle shows parent dropdown", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "parent-child";
@@ -5418,9 +5123,7 @@ TEST_CASE("EditorLayer render: child object with parentId after Toggle shows "
 
 // ---- Object with prefab instance set ----------------------------------------
 
-TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle "
-          "shows prefab label",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle shows prefab label", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "prefab-select";
@@ -5448,8 +5151,7 @@ TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle "
 // TransformGizmo::Draw — covers DrawTranslate, DrawRotate, DrawScale
 // ===========================================================================
 
-TEST_CASE("TransformGizmo: Draw with Translate mode queues axis lines",
-          "[editor][gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw with Translate mode queues axis lines", "[editor][gizmo][draw]") {
   ImGuiContextGuard imgui;
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {1.f, 2.f, 3.f}, Quaternion::Identity(),
@@ -5461,8 +5163,7 @@ TEST_CASE("TransformGizmo: Draw with Translate mode queues axis lines",
   REQUIRE(true);
 }
 
-TEST_CASE("TransformGizmo: Draw with Rotate mode queues ring lines",
-          "[editor][gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw with Rotate mode queues ring lines", "[editor][gizmo][draw]") {
   ImGuiContextGuard imgui;
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Rotate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
@@ -5474,8 +5175,7 @@ TEST_CASE("TransformGizmo: Draw with Rotate mode queues ring lines",
   REQUIRE(true);
 }
 
-TEST_CASE("TransformGizmo: Draw with Scale mode queues box handles",
-          "[editor][gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw with Scale mode queues box handles", "[editor][gizmo][draw]") {
   ImGuiContextGuard imgui;
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Scale, {-2.f, 1.f, 0.f}, Quaternion::Identity(),
@@ -5487,8 +5187,7 @@ TEST_CASE("TransformGizmo: Draw with Scale mode queues box handles",
   REQUIRE(true);
 }
 
-TEST_CASE("TransformGizmo: Draw with None mode is a no-op",
-          "[editor][gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw with None mode is a no-op", "[editor][gizmo][draw]") {
   ImGuiContextGuard imgui;
   TransformGizmo gizmo;
   // Do NOT activate — mode stays None
@@ -5499,9 +5198,7 @@ TEST_CASE("TransformGizmo: Draw with None mode is a no-op",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "TransformGizmo: Draw Translate at camera position (degenerate handleSize)",
-    "[editor][gizmo][draw]") {
+TEST_CASE("TransformGizmo: Draw Translate at camera position (degenerate handleSize)", "[editor][gizmo][draw]") {
   ImGuiContextGuard imgui;
   TransformGizmo gizmo;
   Camera cam;
@@ -5515,8 +5212,7 @@ TEST_CASE(
 
 // ---- TransformGizmo active in EditorLayer render ----------------------------
 
-TEST_CASE("EditorLayer render: active gizmo Draw is called from Render",
-          "[editor][render][gizmo]") {
+TEST_CASE("EditorLayer render: active gizmo Draw is called from Render", "[editor][render][gizmo]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "gizmo-render";
@@ -5545,8 +5241,7 @@ TEST_CASE("EditorLayer render: active gizmo Draw is called from Render",
 // AssetImporterRegistry import error paths
 // ===========================================================================
 
-TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-obj source path",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-obj source path", "[editor][importer]") {
   AssetImporterRegistry registry;
   const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
   REQUIRE(importer != nullptr);
@@ -5564,9 +5259,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-obj source path",
   REQUIRE(result.diagnostics[0].code == "asset.obj.unsupported_type");
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: OBJ importer rejects non-existent source file",
-    "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ importer rejects non-existent source file", "[editor][importer]") {
   AssetImporterRegistry registry;
   const AssetImporter *importer = registry.FindById("builtin.obj_mesh");
   REQUIRE(importer != nullptr);
@@ -5582,9 +5275,7 @@ TEST_CASE(
   REQUIRE(result.diagnostics[0].code == "asset.obj.source_missing");
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: texture importer rejects non-texture source path",
-    "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: texture importer rejects non-texture source path", "[editor][importer]") {
   AssetImporterRegistry registry;
   const AssetImporter *importer = registry.FindById("builtin.texture_copy");
   REQUIRE(importer != nullptr);
@@ -5601,9 +5292,7 @@ TEST_CASE(
   REQUIRE(result.diagnostics[0].code == "asset.texture.unsupported_type");
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: texture importer rejects non-existent source file",
-    "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: texture importer rejects non-existent source file", "[editor][importer]") {
   AssetImporterRegistry registry;
   const AssetImporter *importer = registry.FindById("builtin.texture_copy");
   REQUIRE(importer != nullptr);
@@ -5619,26 +5308,21 @@ TEST_CASE(
   REQUIRE_FALSE(result.diagnostics.empty());
 }
 
-TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown "
-          "extension",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown extension", "[editor][importer]") {
   AssetImporterRegistry registry;
   REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("data.bin") == nullptr);
   REQUIRE(registry.FindByExtension("noextension") == nullptr);
 }
 
-TEST_CASE("AssetImporterRegistry: extension lookup is case-insensitive",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: extension lookup is case-insensitive", "[editor][importer]") {
   AssetImporterRegistry registry;
   REQUIRE(registry.FindByExtension("mesh.OBJ") != nullptr);
   REQUIRE(registry.FindByExtension("ALBEDO.PNG") != nullptr);
   REQUIRE(registry.FindByExtension("roughness.JpEg") != nullptr);
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: RegisteredImporterIds returns both built-in ids",
-    "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: RegisteredImporterIds returns both built-in ids", "[editor][importer]") {
   AssetImporterRegistry registry;
   const auto ids = registry.RegisteredImporterIds();
   REQUIRE(ids.size() >= 2);
@@ -5647,9 +5331,7 @@ TEST_CASE(
           ids.end());
 }
 
-TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl "
-          "companion covers full success path",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl companion covers full success path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
       Monolith::Tests::SecureTempBase() / "horo_importer_test_obj";
@@ -5692,9 +5374,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl "
   fs::remove_all(tmpDir);
 }
 
-TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers "
-          "full success path",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers full success path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
       Monolith::Tests::SecureTempBase() / "horo_importer_test_tex";
@@ -5724,9 +5404,7 @@ TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers "
   fs::remove_all(tmpDir);
 }
 
-TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no "
-          "mtllib covers no-companion path",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no mtllib covers no-companion path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
       Monolith::Tests::SecureTempBase() / "horo_importer_test_nomtl";
@@ -5757,9 +5435,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no "
   fs::remove_all(tmpDir);
 }
 
-TEST_CASE(
-    "AssetImporterRegistry: OBJ importer with mtl that has no map_ entries",
-    "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ importer with mtl that has no map_ entries", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
       Monolith::Tests::SecureTempBase() / "horo_importer_test_nomaps";
@@ -5794,8 +5470,7 @@ TEST_CASE(
   fs::remove_all(tmpDir);
 }
 
-TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
       Monolith::Tests::SecureTempBase() / "horo_importer_dedupe_sort";
@@ -5848,8 +5523,7 @@ TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs"
   fs::remove_all(tmpDir, ec);
 }
 
-TEST_CASE("AssetImporterRegistry: OBJ reimport replaces existing destination",
-          "[editor][importer]") {
+TEST_CASE("AssetImporterRegistry: OBJ reimport replaces existing destination", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_importer_replace_dest";
@@ -5892,8 +5566,7 @@ TEST_CASE("AssetImporterRegistry: OBJ reimport replaces existing destination",
 // EditorMcpHandlers: McpHandleClearSelection and additional coverage
 // ===========================================================================
 
-TEST_CASE("EditorLayer MCP: clear_selection clears selected objects and assets",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: clear_selection clears selected objects and assets", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "sel_obj";
@@ -5919,8 +5592,7 @@ TEST_CASE("EditorLayer MCP: clear_selection clears selected objects and assets",
   REQUIRE(editor.GetSelectedAssetId().empty());
 }
 
-TEST_CASE("EditorLayer MCP: select with ids array selects multiple objects",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select with ids array selects multiple objects", "[editor][mcp]") {
   SceneDocument doc;
   for (int i = 0; i < 4; ++i) {
     SceneObject obj;
@@ -5941,8 +5613,7 @@ TEST_CASE("EditorLayer MCP: select with ids array selects multiple objects",
   REQUIRE(selectedIds.size() == 3);
 }
 
-TEST_CASE("EditorLayer MCP: select with both id and ids selects all matching",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select with both id and ids selects all matching", "[editor][mcp]") {
   SceneDocument doc;
   for (int i = 0; i < 3; ++i) {
     SceneObject obj;
@@ -5964,8 +5635,7 @@ TEST_CASE("EditorLayer MCP: select with both id and ids selects all matching",
   REQUIRE(sel.size() == 3);
 }
 
-TEST_CASE("EditorLayer MCP: select with nonexistent ids selects nothing",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select with nonexistent ids selects nothing", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -5980,9 +5650,7 @@ TEST_CASE("EditorLayer MCP: select with nonexistent ids selects nothing",
 // Additional EditorLayer render states to improve EditorLayer.cpp coverage
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: SetProjectBrowserRoot to real path renders file tiles",
-    "[editor][render][browser]") {
+TEST_CASE("EditorLayer render: SetProjectBrowserRoot to real path renders file tiles", "[editor][render][browser]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -5997,9 +5665,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: SetProjectBrowserRoot with blocklist filters entries",
-    "[editor][render][browser]") {
+TEST_CASE("EditorLayer render: SetProjectBrowserRoot with blocklist filters entries", "[editor][render][browser]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6013,9 +5679,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: document with many objects renders object list fully",
-    "[editor][render]") {
+TEST_CASE("EditorLayer render: document with many objects renders object list fully", "[editor][render]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "many-objects";
@@ -6048,8 +5712,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: dirty document shows dirty indicator in toolbar",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: dirty document shows dirty indicator in toolbar", "[editor][render]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "dirty-render";
@@ -6064,8 +5727,7 @@ TEST_CASE("EditorLayer render: dirty document shows dirty indicator in toolbar",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: scene with filePath set enables save button",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: scene with filePath set enables save button", "[editor][render]") {
   ImGuiContextGuard imgui;
   namespace fs = std::filesystem;
   const fs::path tmpDir =
@@ -6089,8 +5751,7 @@ TEST_CASE("EditorLayer render: scene with filePath set enables save button",
   fs::remove_all(tmpDir);
 }
 
-TEST_CASE("EditorLayer render: doc with all asset types renders assets panel",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: doc with all asset types renders assets panel", "[editor][render]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "assets-panel";
@@ -6107,8 +5768,7 @@ TEST_CASE("EditorLayer render: doc with all asset types renders assets panel",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: hot reload overlay active during Render",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: hot reload overlay active during Render", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6120,9 +5780,7 @@ TEST_CASE("EditorLayer render: hot reload overlay active during Render",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: multiple Toggle cycles maintain stable render state",
-    "[editor][render]") {
+TEST_CASE("EditorLayer render: multiple Toggle cycles maintain stable render state", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -6140,9 +5798,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: create_object then select and render covers "
-          "post-create flow",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: create_object then select and render covers post-create flow", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6162,8 +5818,7 @@ TEST_CASE("EditorLayer render: create_object then select and render covers "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: undo/redo during active render session",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: undo/redo during active render session", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6188,9 +5843,7 @@ TEST_CASE("EditorLayer render: undo/redo during active render session",
 // EditorLayerInternal helpers reachable through Render
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: SyncGizmoToSelection updates gizmo when object "
-          "is selected",
-          "[editor][render][internal]") {
+TEST_CASE("EditorLayer render: SyncGizmoToSelection updates gizmo when object is selected", "[editor][render][internal]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "sync-gizmo";
@@ -6216,9 +5869,7 @@ TEST_CASE("EditorLayer render: SyncGizmoToSelection updates gizmo when object "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: empty selection then object selection then "
-          "multi-select in sequence",
-          "[editor][render][internal]") {
+TEST_CASE("EditorLayer render: empty selection then object selection then multi-select in sequence", "[editor][render][internal]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -6258,8 +5909,7 @@ TEST_CASE("EditorLayer render: empty selection then object selection then "
 // EditorMcpHandlers: additional handlers coverage
 // ===========================================================================
 
-TEST_CASE("EditorLayer MCP: create_object Camera type creates camera object",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object Camera type creates camera object", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6271,8 +5921,7 @@ TEST_CASE("EditorLayer MCP: create_object Camera type creates camera object",
   REQUIRE_FALSE(editor.GetDocument().objects[0].id.empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_object with rotation updates pitch yaw roll",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with rotation updates pitch yaw roll", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "rot_obj";
@@ -6292,8 +5941,7 @@ TEST_CASE("EditorLayer MCP: update_object with rotation updates pitch yaw roll",
   REQUIRE(editor.GetDocument().objects[0].roll == Approx(45.0f));
 }
 
-TEST_CASE("EditorLayer MCP: update_object with scale updates scale vector",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with scale updates scale vector", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "scale_obj";
@@ -6313,8 +5961,7 @@ TEST_CASE("EditorLayer MCP: update_object with scale updates scale vector",
   REQUIRE(editor.GetDocument().objects[0].scale.z == Approx(4.0f));
 }
 
-TEST_CASE("EditorLayer MCP: select with ids array returns all selected",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select with ids array returns all selected", "[editor][mcp]") {
   SceneDocument doc;
   for (int i = 0; i < 3; ++i) {
     SceneObject obj;
@@ -6336,8 +5983,7 @@ TEST_CASE("EditorLayer MCP: select with ids array returns all selected",
   REQUIRE_FALSE(result.data.empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_asset modifies an existing asset",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset modifies an existing asset", "[editor][mcp]") {
   SceneDocument doc;
   doc.assets["asset_a"] = AssetDef{"", "1,1,1"};
   doc.assets["asset_b"] = AssetDef{"", "2,2,2", "tex.png"};
@@ -6357,8 +6003,7 @@ TEST_CASE("EditorLayer MCP: update_asset modifies an existing asset",
   REQUIRE(result2.ok);
 }
 
-TEST_CASE("EditorLayer MCP: select returns data about selected object",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select returns data about selected object", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "sel_get";
@@ -6392,8 +6037,7 @@ TEST_CASE("EditorLayer MCP: duplicate by id creates a copy", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects.size() == 2);
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object assigns new parent",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object assigns new parent", "[editor][mcp]") {
   SceneDocument doc;
   for (const auto &id : {"node_a", "node_b"}) {
     SceneObject obj;
@@ -6411,9 +6055,7 @@ TEST_CASE("EditorLayer MCP: reparent_object assigns new parent",
   REQUIRE(result.ok);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: update_object with position array updates transform",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with position array updates transform", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "move_obj";
@@ -6438,15 +6080,13 @@ TEST_CASE(
 // EditorLayer: additional public API and edge cases
 // ===========================================================================
 
-TEST_CASE("EditorLayer: WantsSceneReload is initially false",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: WantsSceneReload is initially false", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   REQUIRE_FALSE(editor.WantsSceneReload());
 }
 
-TEST_CASE("EditorLayer: GetDocument returns const reference to loaded document",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetDocument returns const reference to loaded document", "[editor][layer]") {
   SceneDocument doc;
   doc.sceneId = "get-doc-test";
   doc.sceneName = "Test Scene";
@@ -6458,9 +6098,7 @@ TEST_CASE("EditorLayer: GetDocument returns const reference to loaded document",
   REQUIRE(editor.GetDocument().sceneName == "Test Scene");
 }
 
-TEST_CASE(
-    "EditorLayer: SetTransformCallback is stored and not called immediately",
-    "[editor][layer]") {
+TEST_CASE("EditorLayer: SetTransformCallback is stored and not called immediately", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6470,9 +6108,7 @@ TEST_CASE(
   REQUIRE_FALSE(called);
 }
 
-TEST_CASE(
-    "EditorLayer render: transform callback is invoked when gizmo moves object",
-    "[editor][render][callback]") {
+TEST_CASE("EditorLayer render: transform callback is invoked when gizmo moves object", "[editor][render][callback]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "transform-cb";
@@ -6497,8 +6133,7 @@ TEST_CASE(
   REQUIRE(true); // callback may or may not fire (gizmo doesn't drag headlessly)
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with .obj files stores pending import",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: OnPathsDropped with .obj files stores pending import", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6507,8 +6142,7 @@ TEST_CASE("EditorLayer: OnPathsDropped with .obj files stores pending import",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: IsPlayMode stays false after multiple Toggles",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: IsPlayMode stays false after multiple Toggles", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.Toggle();
@@ -6517,8 +6151,7 @@ TEST_CASE("EditorLayer: IsPlayMode stays false after multiple Toggles",
   REQUIRE_FALSE(editor.IsPlayMode());
 }
 
-TEST_CASE("EditorLayer: GetSelectedAssetId returns id after select_asset",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedAssetId returns id after select_asset", "[editor][layer]") {
   SceneDocument doc;
   doc.assets["queried_asset"] = AssetDef{"", "1,1,1"};
 
@@ -6529,16 +6162,14 @@ TEST_CASE("EditorLayer: GetSelectedAssetId returns id after select_asset",
   REQUIRE(editor.GetSelectedAssetId() == "queried_asset");
 }
 
-TEST_CASE("EditorLayer: LoadDocument with empty document does not crash",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: LoadDocument with empty document does not crash", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   REQUIRE(editor.GetDocument().objects.empty());
   REQUIRE(editor.GetDocument().assets.empty());
 }
 
-TEST_CASE("EditorLayer render: Render with very small viewport dimensions",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: Render with very small viewport dimensions", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6549,8 +6180,7 @@ TEST_CASE("EditorLayer render: Render with very small viewport dimensions",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: Render with large viewport dimensions",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: Render with large viewport dimensions", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6563,9 +6193,7 @@ TEST_CASE("EditorLayer render: Render with large viewport dimensions",
 
 // ---- Camera search path in DrawPropertiesCameraSection FollowTarget combo ---
 
-TEST_CASE("EditorLayer render: camera followTargetId pointing to missing "
-          "object is handled gracefully",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object is handled gracefully", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "cam-missing-follow";
@@ -6590,9 +6218,7 @@ TEST_CASE("EditorLayer render: camera followTargetId pointing to missing "
 
 // ---- Prop with assetId referencing missing asset renders gracefully --------
 
-TEST_CASE("EditorLayer render: prop with assetId that is not in assets map "
-          "renders without crash",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with assetId that is not in assets map renders without crash", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "missing-asset-ref";
@@ -6618,8 +6244,7 @@ TEST_CASE("EditorLayer render: prop with assetId that is not in assets map "
 
 // ---- Light SceneObject type selection (different from light component) -----
 
-TEST_CASE("EditorLayer render: Light type object selected after Toggle",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: Light type object selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "light-type";
@@ -6645,9 +6270,7 @@ TEST_CASE("EditorLayer render: Light type object selected after Toggle",
 // ---- Inspect object renders with SyncGizmoToSelection exercised multiple
 // times
 
-TEST_CASE("EditorLayer render: selecting different objects across renders "
-          "exercises gizmo sync",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: selecting different objects across renders exercises gizmo sync", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -6667,8 +6290,7 @@ TEST_CASE("EditorLayer render: selecting different objects across renders "
 // EditorLayer: SetProjectBrowserRoot branches
 // ===========================================================================
 
-TEST_CASE("EditorLayer: SetProjectBrowserRoot with empty path clears state",
-          "[editor][layer][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with empty path clears state", "[editor][layer][browser]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   // Empty path should clear the browser root state
@@ -6676,9 +6298,7 @@ TEST_CASE("EditorLayer: SetProjectBrowserRoot with empty path clears state",
   REQUIRE(true); // no crash
 }
 
-TEST_CASE(
-    "EditorLayer: SetProjectBrowserRoot with nonexistent path records invalid",
-    "[editor][layer][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with nonexistent path records invalid", "[editor][layer][browser]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.SetProjectBrowserRoot(
@@ -6686,9 +6306,7 @@ TEST_CASE(
   REQUIRE(true); // no crash — records as invalid root
 }
 
-TEST_CASE(
-    "EditorLayer: SetProjectBrowserRoot with valid existing directory succeeds",
-    "[editor][layer][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid existing directory succeeds", "[editor][layer][browser]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6698,8 +6316,7 @@ TEST_CASE(
   REQUIRE(true); // no crash — valid root set
 }
 
-TEST_CASE("EditorLayer: SetProjectBrowserRoot called twice updates state",
-          "[editor][layer][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot called twice updates state", "[editor][layer][browser]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6709,17 +6326,14 @@ TEST_CASE("EditorLayer: SetProjectBrowserRoot called twice updates state",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist invalidates cache",
-          "[editor][layer][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserExtraBlocklist invalidates cache", "[editor][layer][browser]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.SetProjectBrowserExtraBlocklist({"node_modules", ".git", "build"});
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows "
-          "project tab",
-          "[editor][render][browser]") {
+TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows project tab", "[editor][render][browser]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6741,25 +6355,21 @@ TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows "
 // EditorLayer: Workspace state methods
 // ===========================================================================
 
-TEST_CASE("EditorLayer: SaveWorkspaceStateNow does not crash",
-          "[editor][layer][workspace]") {
+TEST_CASE("EditorLayer: SaveWorkspaceStateNow does not crash", "[editor][layer][workspace]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.SaveWorkspaceStateNow();
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: ReloadWorkspaceStateFromDisk does not crash",
-          "[editor][layer][workspace]") {
+TEST_CASE("EditorLayer: ReloadWorkspaceStateFromDisk does not crash", "[editor][layer][workspace]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ReloadWorkspaceStateFromDisk();
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: SaveWorkspaceStateNow then "
-          "ReloadWorkspaceStateFromDisk round-trip",
-          "[editor][layer][workspace]") {
+TEST_CASE("EditorLayer: SaveWorkspaceStateNow then ReloadWorkspaceStateFromDisk round-trip", "[editor][layer][workspace]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.SaveWorkspaceStateNow();
@@ -6771,9 +6381,7 @@ TEST_CASE("EditorLayer: SaveWorkspaceStateNow then "
 // EditorLayer: SyncRuntimeEntityIds
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer: SyncRuntimeEntityIds with empty registry clears _eid props",
-    "[editor][layer][sync]") {
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with empty registry clears _eid props", "[editor][layer][sync]") {
   SceneDocument doc;
   for (int i = 0; i < 3; ++i) {
     SceneObject obj;
@@ -6795,9 +6403,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-    "EditorLayer: SyncRuntimeEntityIds with matching mesh entities maps _eid",
-    "[editor][layer][sync]") {
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with matching mesh entities maps _eid", "[editor][layer][sync]") {
   SceneDocument doc;
   for (int i = 0; i < 2; ++i) {
     SceneObject obj;
@@ -6839,8 +6445,7 @@ TEST_CASE(
   REQUIRE_FALSE(panel.props.contains("_eid"));
 }
 
-TEST_CASE("EditorLayer: SyncRuntimeEntityIds skips PlayerTag entities",
-          "[editor][layer][sync]") {
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds skips PlayerTag entities", "[editor][layer][sync]") {
   SceneDocument doc;
   {
     SceneObject prop;
@@ -6864,9 +6469,7 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds skips PlayerTag entities",
   REQUIRE_FALSE(editor.GetDocument().objects[0].props.contains("_eid"));
 }
 
-TEST_CASE("EditorLayer: SyncRuntimeEntityIds with more meshes than props warns "
-          "and maps partial",
-          "[editor][layer][sync]") {
+TEST_CASE("EditorLayer: SyncRuntimeEntityIds with more meshes than props warns and maps partial", "[editor][layer][sync]") {
   SceneDocument doc;
   {
     SceneObject prop;
@@ -6894,16 +6497,14 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds with more meshes than props warns "
 // EditorLayer: OnPathsDropped and ProcessPendingPathDrops
 // ===========================================================================
 
-TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op",
-          "[editor][layer][drop]") {
+TEST_CASE("EditorLayer: OnPathsDropped with null paths is a no-op", "[editor][layer][drop]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.OnPathsDropped(0, nullptr, 0.0f, 0.0f);
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with empty path array is a no-op",
-          "[editor][layer][drop]") {
+TEST_CASE("EditorLayer: OnPathsDropped with empty path array is a no-op", "[editor][layer][drop]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   const char *paths[] = {nullptr};
@@ -6911,8 +6512,7 @@ TEST_CASE("EditorLayer: OnPathsDropped with empty path array is a no-op",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with .obj path stores pending drop",
-          "[editor][layer][drop]") {
+TEST_CASE("EditorLayer: OnPathsDropped with .obj path stores pending drop", "[editor][layer][drop]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6921,8 +6521,7 @@ TEST_CASE("EditorLayer: OnPathsDropped with .obj path stores pending drop",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with .png path stores pending drop",
-          "[editor][layer][drop]") {
+TEST_CASE("EditorLayer: OnPathsDropped with .png path stores pending drop", "[editor][layer][drop]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6931,8 +6530,7 @@ TEST_CASE("EditorLayer: OnPathsDropped with .png path stores pending drop",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: OnPathsDropped with multiple paths stores all",
-          "[editor][layer][drop]") {
+TEST_CASE("EditorLayer: OnPathsDropped with multiple paths stores all", "[editor][layer][drop]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -6945,8 +6543,7 @@ TEST_CASE("EditorLayer: OnPathsDropped with multiple paths stores all",
 // EditorLayer: SetHotReloadOverlay
 // ===========================================================================
 
-TEST_CASE("EditorLayer: SetHotReloadOverlay renders overlay during Render",
-          "[editor][render][overlay]") {
+TEST_CASE("EditorLayer: SetHotReloadOverlay renders overlay during Render", "[editor][render][overlay]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6959,9 +6556,7 @@ TEST_CASE("EditorLayer: SetHotReloadOverlay renders overlay during Render",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer: SetHotReloadOverlay with full progress renders correctly",
-    "[editor][render][overlay]") {
+TEST_CASE("EditorLayer: SetHotReloadOverlay with full progress renders correctly", "[editor][render][overlay]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6974,8 +6569,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer: SetHotReloadOverlay inactive renders no overlay",
-          "[editor][render][overlay]") {
+TEST_CASE("EditorLayer: SetHotReloadOverlay inactive renders no overlay", "[editor][render][overlay]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -6992,17 +6586,13 @@ TEST_CASE("EditorLayer: SetHotReloadOverlay inactive renders no overlay",
 // EditorLayer: GetSelectedObjectIds
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer: GetSelectedObjectIds returns empty when nothing selected",
-    "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns empty when nothing selected", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
   REQUIRE(editor.GetSelectedObjectIds().empty());
 }
 
-TEST_CASE("EditorLayer: GetSelectedObjectIds returns selected id after select "
-          "command",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns selected id after select command", "[editor][layer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "selectable";
@@ -7019,8 +6609,7 @@ TEST_CASE("EditorLayer: GetSelectedObjectIds returns selected id after select "
   REQUIRE(ids[0] == "selectable");
 }
 
-TEST_CASE("EditorLayer: GetSelectedObjectIds returns all after multi-select",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedObjectIds returns all after multi-select", "[editor][layer]") {
   SceneDocument doc;
   for (const std::string &id : {"a", "b", "c"}) {
     SceneObject obj;
@@ -7039,8 +6628,7 @@ TEST_CASE("EditorLayer: GetSelectedObjectIds returns all after multi-select",
   REQUIRE(ids.size() == 2);
 }
 
-TEST_CASE("EditorLayer: GetSelectedObjectIds clears after clear_selection",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: GetSelectedObjectIds clears after clear_selection", "[editor][layer]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "clr";
@@ -7060,9 +6648,7 @@ TEST_CASE("EditorLayer: GetSelectedObjectIds clears after clear_selection",
 // EditorLayer: Asset-not-found branch in DrawPropertiesPanel (lines 77-78)
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: selected asset deleted before Render clears selection",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: selected asset deleted before Render clears selection", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.assets["temp_asset"] = AssetDef{"model.obj", "1,1,1"};
@@ -7097,9 +6683,7 @@ TEST_CASE(
 // EditorLayer: More multi-select render tests (now correctly Toggle first)
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: multi-select 3 props triggers batch transform section",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: multi-select 3 props triggers batch transform section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -7115,9 +6699,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: multi-select panels and props triggers mixed batch",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: multi-select panels and props triggers mixed batch", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   for (int i = 0; i < 2; ++i) {
@@ -7148,9 +6730,7 @@ TEST_CASE(
 // EditorLayer: Additional MCP handler coverage
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer MCP: create_prefab with valid object creates prefab file",
-    "[editor][mcp][prefab]") {
+TEST_CASE("EditorLayer MCP: create_prefab with valid object creates prefab file", "[editor][mcp][prefab]") {
   SceneDocument doc;
   {
     SceneObject obj;
@@ -7173,9 +6753,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_prefab with nonexistent object returns error",
-    "[editor][mcp][prefab]") {
+TEST_CASE("EditorLayer MCP: create_prefab with nonexistent object returns error", "[editor][mcp][prefab]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7187,9 +6765,7 @@ TEST_CASE(
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: create_object_from_asset with nonexistent asset "
-          "returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object_from_asset with nonexistent asset returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7199,9 +6775,7 @@ TEST_CASE("EditorLayer MCP: create_object_from_asset with nonexistent asset "
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object_from_asset with valid asset creates object",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object_from_asset with valid asset creates object", "[editor][mcp]") {
   SceneDocument doc;
   doc.assets["crate"] = AssetDef{"crate.obj", "1,1,1"};
 
@@ -7214,8 +6788,7 @@ TEST_CASE(
   REQUIRE(editor.GetDocument().objects.size() == 1);
 }
 
-TEST_CASE("EditorLayer MCP: update_object with unknown id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with unknown id returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7243,8 +6816,7 @@ TEST_CASE("EditorLayer MCP: rename_object updates object id", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects[0].id == "new_name");
 }
 
-TEST_CASE("EditorLayer MCP: rename_object with duplicate id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object with duplicate id returns error", "[editor][mcp]") {
   SceneDocument doc;
   for (const std::string &id : {"obj_a", "obj_b"}) {
     SceneObject obj;
@@ -7262,8 +6834,7 @@ TEST_CASE("EditorLayer MCP: rename_object with duplicate id returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: rename_object with empty newId returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: rename_object with empty newId returns error", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "target";
@@ -7278,8 +6849,7 @@ TEST_CASE("EditorLayer MCP: rename_object with empty newId returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: delete with unknown id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: delete with unknown id returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7307,8 +6877,7 @@ TEST_CASE("EditorLayer MCP: delete removes specified object", "[editor][mcp]") {
   REQUIRE(editor.GetDocument().objects[0].id == "keep");
 }
 
-TEST_CASE("EditorLayer MCP: delete_asset removes asset from document",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: delete_asset removes asset from document", "[editor][mcp]") {
   SceneDocument doc;
   doc.assets["del_me"] = AssetDef{"x.obj", "1,1,1"};
   doc.assets["keep_me"] = AssetDef{"y.obj", "2,2,2"};
@@ -7323,8 +6892,7 @@ TEST_CASE("EditorLayer MCP: delete_asset removes asset from document",
   REQUIRE(editor.GetDocument().assets.contains("keep_me"));
 }
 
-TEST_CASE("EditorLayer MCP: delete_asset with unknown id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: delete_asset with unknown id returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7333,8 +6901,7 @@ TEST_CASE("EditorLayer MCP: delete_asset with unknown id returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: update_asset with nonexistent id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset with nonexistent id returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7344,8 +6911,7 @@ TEST_CASE("EditorLayer MCP: update_asset with nonexistent id returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: undo on empty history returns undone=false",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: undo on empty history returns undone=false", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7355,8 +6921,7 @@ TEST_CASE("EditorLayer MCP: undo on empty history returns undone=false",
   REQUIRE(result.data.value("undone", true) == false);
 }
 
-TEST_CASE("EditorLayer MCP: redo on empty history returns redone=false",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: redo on empty history returns redone=false", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7365,8 +6930,7 @@ TEST_CASE("EditorLayer MCP: redo on empty history returns redone=false",
   REQUIRE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: undo after create_object restores previous state",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: undo after create_object restores previous state", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7382,8 +6946,7 @@ TEST_CASE("EditorLayer MCP: undo after create_object restores previous state",
   REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE("EditorLayer MCP: redo after undo re-applies the change",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: redo after undo re-applies the change", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7397,8 +6960,7 @@ TEST_CASE("EditorLayer MCP: redo after undo re-applies the change",
   REQUIRE(editor.GetDocument().objects.size() == 1);
 }
 
-TEST_CASE("EditorLayer MCP: new_scene clears document and triggers reload",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: new_scene clears document and triggers reload", "[editor][mcp]") {
   SceneDocument doc;
   doc.sceneId = "old-scene";
   {
@@ -7418,8 +6980,7 @@ TEST_CASE("EditorLayer MCP: new_scene clears document and triggers reload",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer MCP: reload_scene sets WantsSceneReload",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reload_scene sets WantsSceneReload", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7429,8 +6990,7 @@ TEST_CASE("EditorLayer MCP: reload_scene sets WantsSceneReload",
   REQUIRE(editor.WantsSceneReload());
 }
 
-TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload",
-          "[editor][layer]") {
+TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload", "[editor][layer]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
   editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json::object());
@@ -7439,9 +6999,7 @@ TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload",
   REQUIRE_FALSE(editor.WantsSceneReload());
 }
 
-TEST_CASE(
-    "EditorLayer MCP: reparent_object with nonexistent child returns error",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object with nonexistent child returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7451,8 +7009,7 @@ TEST_CASE(
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object to empty parent clears parent",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object to empty parent clears parent", "[editor][mcp]") {
   SceneDocument doc;
   for (const std::string &id : {"root", "child"}) {
     SceneObject obj;
@@ -7472,8 +7029,7 @@ TEST_CASE("EditorLayer MCP: reparent_object to empty parent clears parent",
   REQUIRE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: duplicate with count>1 creates multiple copies",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: duplicate with count>1 creates multiple copies", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "multi_dup";
@@ -7489,9 +7045,7 @@ TEST_CASE("EditorLayer MCP: duplicate with count>1 creates multiple copies",
   REQUIRE(editor.GetDocument().objects.size() == 4); // original + 3 copies
 }
 
-TEST_CASE(
-    "EditorLayer MCP: duplicate with ids array duplicates multiple objects",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: duplicate with ids array duplicates multiple objects", "[editor][mcp]") {
   SceneDocument doc;
   for (const std::string &id : {"dup_a", "dup_b"}) {
     SceneObject obj;
@@ -7510,8 +7064,7 @@ TEST_CASE(
   REQUIRE(editor.GetDocument().objects.size() == 4); // 2 originals + 2 copies
 }
 
-TEST_CASE("EditorLayer MCP: duplicate with missing id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: duplicate with missing id returns error", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7520,8 +7073,7 @@ TEST_CASE("EditorLayer MCP: duplicate with missing id returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: save_scene triggers WantsSceneReload or succeeds",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: save_scene triggers WantsSceneReload or succeeds", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7532,9 +7084,7 @@ TEST_CASE("EditorLayer MCP: save_scene triggers WantsSceneReload or succeeds",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: select with unknown id returns ok with empty selection",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: select with unknown id returns ok with empty selection", "[editor][mcp]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -7544,8 +7094,7 @@ TEST_CASE(
   REQUIRE(editor.GetSelectedObjectIds().empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_object sets components field",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object sets components field", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "comp_target";
@@ -7567,9 +7116,7 @@ TEST_CASE("EditorLayer MCP: update_object sets components field",
   REQUIRE(editor.GetDocument().objects[0].components[0].type == "rigidbody");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with invalid components array "
-          "returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with invalid components array returns error", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "bad_comp";
@@ -7586,8 +7133,7 @@ TEST_CASE("EditorLayer MCP: update_object with invalid components array "
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: update_object assetId null clears asset reference",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object assetId null clears asset reference", "[editor][mcp]") {
   SceneDocument doc;
   doc.assets["myasset"] = AssetDef{"m.obj", "1,1,1"};
   SceneObject obj;
@@ -7606,8 +7152,7 @@ TEST_CASE("EditorLayer MCP: update_object assetId null clears asset reference",
   REQUIRE(editor.GetDocument().objects[0].assetId.empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_object with invalid position returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with invalid position returns error", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "pos_err";
@@ -7623,8 +7168,7 @@ TEST_CASE("EditorLayer MCP: update_object with invalid position returns error",
   REQUIRE_FALSE(result.ok);
 }
 
-TEST_CASE("EditorLayer MCP: transform alias same behavior as update_object",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: transform alias same behavior as update_object", "[editor][mcp]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "alias_obj";
@@ -7646,8 +7190,7 @@ TEST_CASE("EditorLayer MCP: transform alias same behavior as update_object",
 // EditorLayer: Render with SetLiveRegistry
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: with live registry set renders without crash",
-          "[editor][render][registry]") {
+TEST_CASE("EditorLayer render: with live registry set renders without crash", "[editor][render][registry]") {
   ImGuiContextGuard imgui;
 
   // Build a scene and a matching registry
@@ -7682,8 +7225,7 @@ TEST_CASE("EditorLayer render: with live registry set renders without crash",
 // EditorLayer render: property panel edge cases with correct Toggle ordering
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: prop with props map renders schema fields",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with props map renders schema fields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   {
@@ -7707,9 +7249,7 @@ TEST_CASE("EditorLayer render: prop with props map renders schema fields",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: camera with fov and near far props renders "
-          "camera section",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: camera with fov and near far props renders camera section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   {
@@ -7732,9 +7272,7 @@ TEST_CASE("EditorLayer render: camera with fov and near far props renders "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: prop with all component types renders all "
-          "component fields",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with all component types renders all component fields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   {
@@ -7776,9 +7314,7 @@ TEST_CASE("EditorLayer render: prop with all component types renders all "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: selecting and deselecting in sequence covers "
-          "toggle paths",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: selecting and deselecting in sequence covers toggle paths", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -7796,9 +7332,7 @@ TEST_CASE("EditorLayer render: selecting and deselecting in sequence covers "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: multi-select then single-select transition "
-          "renders correctly",
-          "[editor][render]") {
+TEST_CASE("EditorLayer render: multi-select then single-select transition renders correctly", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -7821,9 +7355,7 @@ TEST_CASE("EditorLayer render: multi-select then single-select transition "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: create objects via MCP then render with each selected",
-    "[editor][render]") {
+TEST_CASE("EditorLayer render: create objects via MCP then render with each selected", "[editor][render]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -7850,8 +7382,7 @@ TEST_CASE(
 // EditorLayer render: asset-selection paths in DrawPropertiesSelectedAsset
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: select_asset shows asset properties panel",
-          "[editor][render][properties][asset]") {
+TEST_CASE("EditorLayer render: select_asset shows asset properties panel", "[editor][render][properties][asset]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   AssetDef def;
@@ -7878,9 +7409,7 @@ TEST_CASE("EditorLayer render: select_asset shows asset properties panel",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: stale selected asset id clears selection on render",
-    "[editor][render][properties][asset]") {
+TEST_CASE("EditorLayer render: stale selected asset id clears selection on render", "[editor][render][properties][asset]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.assets["temp_mesh"] = AssetDef{"", "1.0,1.0,1.0"};
@@ -7900,9 +7429,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: clear selection then render shows no-selection text",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: clear selection then render shows no-selection text", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   {
@@ -7928,8 +7455,7 @@ TEST_CASE(
 // EditorLayer OnUpdate: exercises PublishMcpSnapshot and builder helpers
 // ===========================================================================
 
-TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with empty scene",
-          "[editor][mcp][snapshot]") {
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with empty scene", "[editor][mcp][snapshot]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -7943,9 +7469,7 @@ TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with empty scene",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer OnUpdate: exercises snapshot builders with populated scene",
-    "[editor][mcp][snapshot]") {
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with populated scene", "[editor][mcp][snapshot]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -7958,9 +7482,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with "
-          "schema-bearing document",
-          "[editor][mcp][snapshot]") {
+TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with schema-bearing document", "[editor][mcp][snapshot]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   {
@@ -7993,8 +7515,7 @@ TEST_CASE("EditorLayer OnUpdate: exercises snapshot builders with "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer OnUpdate: multiple consecutive updates stay stable",
-          "[editor][mcp][snapshot]") {
+TEST_CASE("EditorLayer OnUpdate: multiple consecutive updates stay stable", "[editor][mcp][snapshot]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -8006,8 +7527,7 @@ TEST_CASE("EditorLayer OnUpdate: multiple consecutive updates stay stable",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer OnUpdate: inactive editor skips update body",
-          "[editor][mcp][snapshot]") {
+TEST_CASE("EditorLayer OnUpdate: inactive editor skips update body", "[editor][mcp][snapshot]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -8060,9 +7580,7 @@ static SceneDocument MakeHierarchyDocument() {
   return doc;
 }
 
-TEST_CASE(
-    "EditorLayer render: parent-child hierarchy renders DrawTreeNode recursive",
-    "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: parent-child hierarchy renders DrawTreeNode recursive", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8073,9 +7591,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: select root of hierarchy renders tree with selection",
-    "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: select root of hierarchy renders tree with selection", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8088,8 +7604,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: select child node renders selected subtree leaf",
-          "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: select child node renders selected subtree leaf", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8102,8 +7617,7 @@ TEST_CASE("EditorLayer render: select child node renders selected subtree leaf",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: select grandchild renders deepest tree level",
-          "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: select grandchild renders deepest tree level", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8115,8 +7629,7 @@ TEST_CASE("EditorLayer render: select grandchild renders deepest tree level",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: cycle through all hierarchy nodes in sequence",
-          "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: cycle through all hierarchy nodes in sequence", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8131,9 +7644,7 @@ TEST_CASE("EditorLayer render: cycle through all hierarchy nodes in sequence",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: reparent via MCP then render covers reparent path",
-    "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: reparent via MCP then render covers reparent path", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "reparent-scene";
@@ -8185,9 +7696,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: create_object with parentId via MCP builds hierarchy",
-    "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: create_object with parentId via MCP builds hierarchy", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8225,9 +7734,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: multi-select across parent and child covers "
-          "batch paths",
-          "[editor][render][hierarchy][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select across parent and child covers batch paths", "[editor][render][hierarchy][multiselect]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8244,9 +7751,7 @@ TEST_CASE("EditorLayer render: multi-select across parent and child covers "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer OnUpdate: parent-child hierarchy exercises snapshot with tree",
-    "[editor][mcp][snapshot][hierarchy]") {
+TEST_CASE("EditorLayer OnUpdate: parent-child hierarchy exercises snapshot with tree", "[editor][mcp][snapshot][hierarchy]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeHierarchyDocument());
@@ -8263,8 +7768,7 @@ TEST_CASE(
 // EditorLayer render: DrawConsoleTab with log entries at various levels
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: console tab draws Info log entries",
-          "[editor][render][console]") {
+TEST_CASE("EditorLayer render: console tab draws Info log entries", "[editor][render][console]") {
   ImGuiContextGuard imgui;
 
   // Push log lines so DrawConsoleTab has content to iterate
@@ -8281,8 +7785,7 @@ TEST_CASE("EditorLayer render: console tab draws Info log entries",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: console tab draws Warn and Error log entries",
-          "[editor][render][console]") {
+TEST_CASE("EditorLayer render: console tab draws Warn and Error log entries", "[editor][render][console]") {
   ImGuiContextGuard imgui;
 
   LogBuffer::Instance().Clear();
@@ -8299,9 +7802,7 @@ TEST_CASE("EditorLayer render: console tab draws Warn and Error log entries",
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: console tab with mixed log levels renders all rows",
-    "[editor][render][console]") {
+TEST_CASE("EditorLayer render: console tab with mixed log levels renders all rows", "[editor][render][console]") {
   ImGuiContextGuard imgui;
 
   LogBuffer::Instance().Clear();
@@ -8325,9 +7826,7 @@ TEST_CASE(
 // EditorLayer render: objects with prefabInstance set
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: object with prefabInstance set renders without crash",
-    "[editor][render][prefab]") {
+TEST_CASE("EditorLayer render: object with prefabInstance set renders without crash", "[editor][render][prefab]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "prefab-scene";
@@ -8353,8 +7852,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: prefab instance selected shows properties panel",
-          "[editor][render][prefab]") {
+TEST_CASE("EditorLayer render: prefab instance selected shows properties panel", "[editor][render][prefab]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "prefab-sel-scene";
@@ -8379,8 +7877,7 @@ TEST_CASE("EditorLayer render: prefab instance selected shows properties panel",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: prefab instance with children in hierarchy",
-          "[editor][render][prefab][hierarchy]") {
+TEST_CASE("EditorLayer render: prefab instance with children in hierarchy", "[editor][render][prefab][hierarchy]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "pfb-hier-scene";
@@ -8413,9 +7910,7 @@ TEST_CASE("EditorLayer render: prefab instance with children in hierarchy",
 // EditorLayer render: duplicate then render covers duplicate code paths
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: duplicate object then render with new object selected",
-    "[editor][render][mcp]") {
+TEST_CASE("EditorLayer render: duplicate object then render with new object selected", "[editor][render][mcp]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -8439,9 +7934,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: duplicate with count creates multiple objects "
-          "then render",
-          "[editor][render][mcp]") {
+TEST_CASE("EditorLayer render: duplicate with count creates multiple objects then render", "[editor][render][mcp]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -8470,8 +7963,7 @@ TEST_CASE("EditorLayer render: duplicate with count creates multiple objects "
 // EditorLayer render: scene controls (new_scene / reload_scene) then render
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: new_scene clears and renders empty scene",
-          "[editor][render][scene]") {
+TEST_CASE("EditorLayer render: new_scene clears and renders empty scene", "[editor][render][scene]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeRichDocument());
@@ -8486,9 +7978,7 @@ TEST_CASE("EditorLayer render: new_scene clears and renders empty scene",
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: reload_scene sets WantsSceneReload then render "
-          "is safe",
-          "[editor][render][scene]") {
+TEST_CASE("EditorLayer render: reload_scene sets WantsSceneReload then render is safe", "[editor][render][scene]") {
   ImGuiContextGuard imgui;
   EditorLayer editor;
   editor.LoadDocument(MakeDocWithAllObjectTypes());
@@ -8505,9 +7995,7 @@ TEST_CASE("EditorLayer render: reload_scene sets WantsSceneReload then render "
 // EditorLayer render: large scene with many objects covers more tree nodes
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer render: large flat scene with many objects renders hierarchy",
-    "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: large flat scene with many objects renders hierarchy", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "large-flat";
@@ -8543,9 +8031,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: wide tree with multiple root siblings each "
-          "having children",
-          "[editor][render][hierarchy]") {
+TEST_CASE("EditorLayer render: wide tree with multiple root siblings each having children", "[editor][render][hierarchy]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "wide-tree";
@@ -8586,9 +8072,7 @@ TEST_CASE("EditorLayer render: wide tree with multiple root siblings each "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer OnUpdate: wide tree hierarchy exercises snapshot builders",
-    "[editor][mcp][snapshot][hierarchy]") {
+TEST_CASE("EditorLayer OnUpdate: wide tree hierarchy exercises snapshot builders", "[editor][mcp][snapshot][hierarchy]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
   doc.sceneId = "snapshot-tree";
@@ -8620,9 +8104,7 @@ TEST_CASE(
 // NEW COVERAGE TESTS — EditorPropertiesPanel.cpp
 // ===========================================================================
 
-TEST_CASE("EditorLayer render: object with prefabInstance renders prefab "
-          "identity section",
-          "[editor][render][properties][prefab]") {
+TEST_CASE("EditorLayer render: object with prefabInstance renders prefab identity section", "[editor][render][properties][prefab]") {
   // Exercises lines 402–404 in DrawPropertiesIdentitySection
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -8647,9 +8129,7 @@ TEST_CASE("EditorLayer render: object with prefabInstance renders prefab "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: camera with followTargetId renders selected "
-          "target in combo",
-          "[editor][render][properties][camera]") {
+TEST_CASE("EditorLayer render: camera with followTargetId renders selected target in combo", "[editor][render][properties][camera]") {
   // MakeRichDocument contains cam_follow with props["followTargetId"] =
   // "prop_light" Selecting it exercises the curTarget > 0 path in
   // DrawPropertiesCameraSection
@@ -8665,9 +8145,7 @@ TEST_CASE("EditorLayer render: camera with followTargetId renders selected "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: prop with stale assetId shows missing asset warning",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with stale assetId shows missing asset warning", "[editor][render][properties]") {
   // Object references assetId absent from doc.assets
   // → DrawPropertiesAssetSection renders "Missing asset:" coloured text (lines
   // 597–600)
@@ -8692,9 +8170,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: multi-select with shared non-empty assetId "
-          "shows shared asset label",
-          "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select with shared non-empty assetId shows shared asset label", "[editor][render][properties][multiselect]") {
   // All selected objects share the same non-empty assetId
   // → DrawPropertiesMultiSelect hits hasSharedAssetId=true && !empty branch
   // (line 182)
@@ -8722,9 +8198,7 @@ TEST_CASE("EditorLayer render: multi-select with shared non-empty assetId "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: multi-select with all-empty assetIds shows none label",
-    "[editor][render][properties][multiselect]") {
+TEST_CASE("EditorLayer render: multi-select with all-empty assetIds shows none label", "[editor][render][properties][multiselect]") {
   // All selected objects have empty assetId
   // → DrawPropertiesMultiSelect hits hasSharedAssetId=true && empty branch
   // (line 180)
@@ -8751,9 +8225,7 @@ TEST_CASE(
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: camera with fov nearClip farClip props renders "
-          "full camera section",
-          "[editor][render][properties][camera]") {
+TEST_CASE("EditorLayer render: camera with fov nearClip farClip props renders full camera section", "[editor][render][properties][camera]") {
   // Exercises drawCamFloatProp for fov, nearClip, farClip with valid string
   // values
   ImGuiContextGuard imgui;
@@ -8783,9 +8255,7 @@ TEST_CASE("EditorLayer render: camera with fov nearClip farClip props renders "
   REQUIRE(true);
 }
 
-TEST_CASE("EditorLayer render: prop with unknown component type renders "
-          "generic header",
-          "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with unknown component type renders generic header", "[editor][render][properties]") {
   // A component whose type is neither 'light', 'rigidbody', nor 'script'
   // → DrawPropertiesComponentsList uses headerLabel = comp.type (line 786)
   ImGuiContextGuard imgui;
@@ -8812,9 +8282,7 @@ TEST_CASE("EditorLayer render: prop with unknown component type renders "
   REQUIRE(true);
 }
 
-TEST_CASE(
-    "EditorLayer render: prop with known assetId renders asset info lines",
-    "[editor][render][properties]") {
+TEST_CASE("EditorLayer render: prop with known assetId renders asset info lines", "[editor][render][properties]") {
   // Covers DrawPropertiesAssetSection with a valid matching asset
   // (mesh/renderScale lines)
   ImGuiContextGuard imgui;
@@ -8843,9 +8311,7 @@ TEST_CASE(
 // NEW COVERAGE TESTS — EditorMcpHandlers.cpp
 // ===========================================================================
 
-TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName sets them on "
-          "document",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName sets them on document", "[editor][mcp]") {
   // Exercises lines 866–873 in McpHandleNewScene (sceneId/sceneName branches)
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8860,9 +8326,7 @@ TEST_CASE("EditorLayer MCP: new_scene with sceneId and sceneName sets them on "
   REQUIRE(editor.GetDocument().sceneName == "Brand New Scene");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object with Camera type auto-generates camera id",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with Camera type auto-generates camera id", "[editor][mcp]") {
   // When no id is provided and type is Camera, GenerateCameraId is used (lines
   // 468–469)
   EditorLayer editor;
@@ -8877,8 +8341,7 @@ TEST_CASE(
   REQUIRE(objects.back().type == SceneObjectType::Camera);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with valid parentId links to parent",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with valid parentId links to parent", "[editor][mcp]") {
   // Exercises lines 501–507 (parentId branch, valid parent)
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8898,8 +8361,7 @@ TEST_CASE("EditorLayer MCP: create_object with valid parentId links to parent",
   REQUIRE(childIt->props.at("parentId") == "parent_obj");
 }
 
-TEST_CASE("EditorLayer MCP: create_object with invalid parentId returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid parentId returns error", "[editor][mcp]") {
   // Exercises lines 501–506 (parentId branch, parent not found)
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8912,9 +8374,7 @@ TEST_CASE("EditorLayer MCP: create_object with invalid parentId returns error",
   REQUIRE(!result.error.empty());
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object with invalid position array returns error",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid position array returns error", "[editor][mcp]") {
   // Exercises lines 477–482 in McpHandleCreateObject
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8926,9 +8386,7 @@ TEST_CASE(
   REQUIRE(result.error.find("position") != std::string::npos);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object with invalid scale array returns error",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid scale array returns error", "[editor][mcp]") {
   // Exercises lines 483–488 in McpHandleCreateObject
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8940,8 +8398,7 @@ TEST_CASE(
   REQUIRE(result.error.find("scale") != std::string::npos);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with duplicate id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with duplicate id returns error", "[editor][mcp]") {
   // Exercises lines 471–474 in McpHandleCreateObject
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8955,9 +8412,7 @@ TEST_CASE("EditorLayer MCP: create_object with duplicate id returns error",
   REQUIRE(!result.error.empty());
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object with invalid type string returns error",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with invalid type string returns error", "[editor][mcp]") {
   // Exercises lines 457–461 in McpHandleCreateObject (ParseSceneObjectType
   // failure)
   EditorLayer editor;
@@ -8969,9 +8424,7 @@ TEST_CASE(
   REQUIRE(result.error.find("Invalid") != std::string::npos);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with props and components creates "
-          "full object",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: create_object with props and components creates full object", "[editor][mcp]") {
   // Exercises lines 493–500 in McpHandleCreateObject
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -8996,9 +8449,7 @@ TEST_CASE("EditorLayer MCP: create_object with props and components creates "
   REQUIRE(it->components[0].type == "script");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with yaw pitch roll updates rotation "
-          "fields",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with yaw pitch roll updates rotation fields", "[editor][mcp]") {
   // Exercises lines 607–612 in McpHandleUpdateObject (yaw/pitch/roll branches)
   SceneDocument doc;
   SceneObject obj;
@@ -9019,9 +8470,7 @@ TEST_CASE("EditorLayer MCP: update_object with yaw pitch roll updates rotation "
   REQUIRE(editor.GetDocument().objects[0].roll == Approx(15.0f));
 }
 
-TEST_CASE(
-    "EditorLayer MCP: update_object with props field merges into object props",
-    "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with props field merges into object props", "[editor][mcp]") {
   // Exercises lines 618–621 in McpHandleUpdateObject (props merge branch)
   SceneDocument doc;
   SceneObject obj;
@@ -9044,8 +8493,7 @@ TEST_CASE(
   REQUIRE(props.at("added_key") == "added");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with invalid scale returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with invalid scale returns error", "[editor][mcp]") {
   // Exercises lines 601–606 in McpHandleUpdateObject (scale validation error
   // path)
   SceneDocument doc;
@@ -9064,8 +8512,7 @@ TEST_CASE("EditorLayer MCP: update_object with invalid scale returns error",
   REQUIRE(result.error.find("scale") != std::string::npos);
 }
 
-TEST_CASE("EditorLayer MCP: update_object with nonexistent id returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_object with nonexistent id returns error", "[editor][mcp]") {
   // Exercises lines 590–592 in McpHandleUpdateObject
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -9077,8 +8524,7 @@ TEST_CASE("EditorLayer MCP: update_object with nonexistent id returns error",
   REQUIRE(!result.error.empty());
 }
 
-TEST_CASE("EditorLayer MCP: update_asset with displayName updates display name",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: update_asset with displayName updates display name", "[editor][mcp]") {
   // Exercises lines 831–835 in McpHandleUpdateAsset (displayName branch)
   SceneDocument doc;
   AssetDef def;
@@ -9096,8 +8542,7 @@ TEST_CASE("EditorLayer MCP: update_asset with displayName updates display name",
           "Updated Name");
 }
 
-TEST_CASE("EditorLayer MCP: delete with ids array removes multiple objects",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: delete with ids array removes multiple objects", "[editor][mcp]") {
   // Exercises lines 769–776 in McpHandleDelete (ids array branch)
   SceneDocument doc;
   for (int i = 0; i < 4; ++i) {
@@ -9119,8 +8564,7 @@ TEST_CASE("EditorLayer MCP: delete with ids array removes multiple objects",
   REQUIRE(editor.GetDocument().objects.size() == 2);
 }
 
-TEST_CASE("EditorLayer MCP: unsupported command returns error with message",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: unsupported command returns error with message", "[editor][mcp]") {
   // Exercises lines 384–388 in ExecuteMcpCommand (fallthrough case)
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
@@ -9131,8 +8575,7 @@ TEST_CASE("EditorLayer MCP: unsupported command returns error with message",
   REQUIRE(!result.error.empty());
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object to self returns error",
-          "[editor][mcp]") {
+TEST_CASE("EditorLayer MCP: reparent_object to self returns error", "[editor][mcp]") {
   // Exercises lines 685–688 in McpHandleReparentObject (self-parent cycle
   // check)
   SceneDocument doc;
@@ -9155,9 +8598,7 @@ TEST_CASE("EditorLayer MCP: reparent_object to self returns error",
 // NEW COVERAGE TESTS — AssetImportService.cpp
 // ===========================================================================
 
-TEST_CASE(
-    "AssetImportService: ImportTextureForAsset with null asset returns false",
-    "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset with null asset returns false", "[editor][asset-import]") {
   // Exercises lines 260–265: null asset guard in ImportTextureForAsset
   AssetImportService service;
   std::string err;
@@ -9167,9 +8608,7 @@ TEST_CASE(
   REQUIRE(err == "Asset is required.");
 }
 
-TEST_CASE("AssetImportService: ReimportAssetWithDependents with null document "
-          "returns error",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with null document returns error", "[editor][asset-import][reimport]") {
   // Exercises lines 334–337: null doc guard in ReimportAssetWithDependents
   AssetImportService service;
   const AssetReimportResult result =
@@ -9179,9 +8618,7 @@ TEST_CASE("AssetImportService: ReimportAssetWithDependents with null document "
   REQUIRE(!result.records.empty());
 }
 
-TEST_CASE("AssetImportService: ReimportAssetWithDependents with unknown guid "
-          "returns error",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with unknown guid returns error", "[editor][asset-import][reimport]") {
   // Exercises lines 346–349: rootAssetGuid not found in assetIdByGuid
   SceneDocument doc;
   AssetDef def;
@@ -9196,9 +8633,7 @@ TEST_CASE("AssetImportService: ReimportAssetWithDependents with unknown guid "
   REQUIRE(!result.error.empty());
 }
 
-TEST_CASE("AssetImportService: ReimportAssetWithDependents on unimported asset "
-          "hits metadata-missing branch",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: ReimportAssetWithDependents on unimported asset hits metadata-missing branch", "[editor][asset-import][reimport]") {
   // The asset exists in the document but was never imported:
   // LoadOrBuildMetadata produces empty importerId + sourcePath
   // → ReimportSingleAsset hits "no importer metadata" branch (lines 409–421)
@@ -9225,8 +8660,7 @@ TEST_CASE("AssetImportService: ReimportAssetWithDependents on unimported asset "
   REQUIRE_FALSE(result.records[0].ok);
 }
 
-TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk", "[editor][asset-import]") {
   // Exercises lines 313–327: SaveMetadataForAsset writes metadata that can be
   // reloaded
   const std::filesystem::path root =
@@ -9254,8 +8688,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk",
   REQUIRE(loaded.displayName == "Save Meta Asset");
 }
 
-TEST_CASE("AssetImportService: SaveMetadataForAsset reports empty metadata path",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: SaveMetadataForAsset reports empty metadata path", "[editor][asset-import]") {
   AssetImportService service;
   AssetDef asset;
   asset.displayName = "No Guid Asset";
@@ -9265,9 +8698,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset reports empty metadata path"
   REQUIRE(err == "Asset metadata path is empty.");
 }
 
-TEST_CASE("AssetImportService: ImportTextureForAsset unsupported type includes "
-          "message",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset unsupported type includes message", "[editor][asset-import]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_texture_unsupported_message";
   std::error_code ec;
@@ -9292,9 +8723,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset unsupported type includes "
 // AssetImportService.cpp — additional error-path tests
 // ===========================================================================
 
-TEST_CASE("AssetImportService: ReimportSingleAsset fails when saved importer "
-          "id is no longer registered",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: ReimportSingleAsset fails when saved importer id is no longer registered", "[editor][asset-import][reimport]") {
   // Covers AssetImportService.cpp lines ~437-450:
   // FindById(metadata.importerId) and FindByExtension(metadata.sourcePath)
   // both return nullptr → "Registered importer not found." error path.
@@ -9337,9 +8766,7 @@ TEST_CASE("AssetImportService: ReimportSingleAsset fails when saved importer "
   REQUIRE_FALSE(result.records.back().ok);
 }
 
-TEST_CASE("AssetImportService: ReimportSingleAsset covers albedo source path "
-          "reimport branch",
-          "[editor][asset-import][reimport]") {
+TEST_CASE("AssetImportService: ReimportSingleAsset covers albedo source path reimport branch", "[editor][asset-import][reimport]") {
   // Covers AssetImportService.cpp lines ~462-480:
   // metadata.settings["albedoSourcePath"] is non-empty → the texture re-import
   // branch executes.  The texture file need not exist; a failed texture import
@@ -9392,9 +8819,7 @@ TEST_CASE("AssetImportService: ReimportSingleAsset covers albedo source path "
 // schema JSON that exercises all five FieldDef::Widget values.
 // ===========================================================================
 
-TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises "
-          "FieldWidgetToString and BuildMcpSchemaFieldSnapshot",
-          "[editor][mcp][schema]") {
+TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises FieldWidgetToString and BuildMcpSchemaFieldSnapshot", "[editor][mcp][schema]") {
   namespace fs = std::filesystem;
 
   // Build a temp SDK root whose assets/editor_schema.json exercises every
@@ -9492,8 +8917,7 @@ TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises "
 // of the inline functions, and the coverage instrumentation records hits here.
 // ===========================================================================
 
-TEST_CASE("EditorLayerInternal: FindEnumOptionIndex returns correct index or 0",
-          "[editor][internal][schema]") {
+TEST_CASE("EditorLayerInternal: FindEnumOptionIndex returns correct index or 0", "[editor][internal][schema]") {
   // lines 88-94 in EditorLayerInternal.h
   const std::vector<std::string> opts = {"alpha", "beta", "gamma"};
   CHECK(FindEnumOptionIndex(opts, "alpha") == 0);
@@ -9505,9 +8929,7 @@ TEST_CASE("EditorLayerInternal: FindEnumOptionIndex returns correct index or 0",
   CHECK(FindEnumOptionIndex({}, "any") == 0);
 }
 
-TEST_CASE(
-    "EditorLayerInternal: BuildImGuiComboItems produces null-separated string",
-    "[editor][internal][schema]") {
+TEST_CASE("EditorLayerInternal: BuildImGuiComboItems produces null-separated string", "[editor][internal][schema]") {
   // lines 97-105 in EditorLayerInternal.h
   {
     // Multi-item case.
@@ -9536,8 +8958,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE("EditorLayerInternal: helper edge cases are safe",
-          "[editor][internal][schema]") {
+TEST_CASE("EditorLayerInternal: helper edge cases are safe", "[editor][internal][schema]") {
   {
     SceneDocument doc;
     REQUIRE_NOTHROW(SyncAssetScaleMetadata(nullptr));
@@ -9568,9 +8989,7 @@ TEST_CASE("EditorLayerInternal: helper edge cases are safe",
   }
 }
 
-TEST_CASE(
-    "EditorLayerInternal: unavailable texture dialog button renders safely",
-    "[editor][internal][imgui]") {
+TEST_CASE("EditorLayerInternal: unavailable texture dialog button renders safely", "[editor][internal][imgui]") {
   ImGuiContextGuard ctx;
   ImGui::NewFrame();
   ImGui::Begin("test-window");
@@ -9579,9 +8998,7 @@ TEST_CASE(
   ImGui::EndFrame();
 }
 
-TEST_CASE(
-    "EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo filter",
-    "[editor][internal][schema]") {
+TEST_CASE("EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo filter", "[editor][internal][schema]") {
   // lines 118-137 in EditorLayerInternal.h
   // Empty appliesTo → applies to all types.
   CHECK(SchemaAppliesToObjectType({}, SceneObjectType::Prop));
@@ -9615,8 +9032,7 @@ TEST_CASE(
 #include "editor/EditorPropertyRules.h"
 #include "editor/EditorSelectionRules.h"
 
-TEST_CASE("ValidateRenameCandidate: empty draft returns error",
-          "[editor][selection-rules]") {
+TEST_CASE("ValidateRenameCandidate: empty draft returns error", "[editor][selection-rules]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "existing_obj";
@@ -9627,16 +9043,14 @@ TEST_CASE("ValidateRenameCandidate: empty draft returns error",
   CHECK(err.find("empty") != std::string::npos);
 }
 
-TEST_CASE("ValidateRenameCandidate: out-of-range index returns error",
-          "[editor][selection-rules]") {
+TEST_CASE("ValidateRenameCandidate: out-of-range index returns error", "[editor][selection-rules]") {
   SceneDocument doc;
 
   CHECK_FALSE(ValidateRenameCandidate(doc, 0, "new_id").empty());
   CHECK_FALSE(ValidateRenameCandidate(doc, -1, "new_id").empty());
 }
 
-TEST_CASE("ValidateRenameCandidate: ID already used by another object is rejected",
-          "[editor][selection-rules]") {
+TEST_CASE("ValidateRenameCandidate: ID already used by another object is rejected", "[editor][selection-rules]") {
   SceneDocument doc;
   SceneObject a;
   a.id = "obj_a";
@@ -9650,8 +9064,7 @@ TEST_CASE("ValidateRenameCandidate: ID already used by another object is rejecte
   CHECK(err.find("exists") != std::string::npos);
 }
 
-TEST_CASE("ValidateRenameCandidate: renaming to own current ID succeeds",
-          "[editor][selection-rules]") {
+TEST_CASE("ValidateRenameCandidate: renaming to own current ID succeeds", "[editor][selection-rules]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "same_id";
@@ -9660,8 +9073,7 @@ TEST_CASE("ValidateRenameCandidate: renaming to own current ID succeeds",
   CHECK(ValidateRenameCandidate(doc, 0, "same_id").empty());
 }
 
-TEST_CASE("ValidateRenameCandidate: fresh unique ID succeeds",
-          "[editor][selection-rules]") {
+TEST_CASE("ValidateRenameCandidate: fresh unique ID succeeds", "[editor][selection-rules]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj_000";
@@ -9670,8 +9082,7 @@ TEST_CASE("ValidateRenameCandidate: fresh unique ID succeeds",
   CHECK(ValidateRenameCandidate(doc, 0, "obj_new_name").empty());
 }
 
-TEST_CASE("CollectParentCandidates: excludes self and descendants",
-          "[editor][selection-rules]") {
+TEST_CASE("CollectParentCandidates: excludes self and descendants", "[editor][selection-rules]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "parent";
@@ -9690,8 +9101,7 @@ TEST_CASE("CollectParentCandidates: excludes self and descendants",
   CHECK(std::ranges::find(candidates, "other") != candidates.end());
 }
 
-TEST_CASE("GenerateUniqueId: produces unique ID not in document",
-          "[editor][selection-rules]") {
+TEST_CASE("GenerateUniqueId: produces unique ID not in document", "[editor][selection-rules]") {
   SceneDocument doc;
   for (int i = 0; i < 5; ++i) {
     SceneObject obj;
@@ -9709,8 +9119,7 @@ TEST_CASE("GenerateUniqueId: produces unique ID not in document",
 // EditorPropertyRules
 // ===========================================================================
 
-TEST_CASE("MakeObjectFromAsset: creates Prop with correct assetId",
-          "[editor][property-rules]") {
+TEST_CASE("MakeObjectFromAsset: creates Prop with correct assetId", "[editor][property-rules]") {
   SceneDocument doc;
   AssetDef asset;
   asset.displayName = "Barrel";
@@ -9727,8 +9136,7 @@ TEST_CASE("MakeObjectFromAsset: creates Prop with correct assetId",
   CHECK(obj.props.at("_assetRenderScale") == "1.0,1.0,1.0");
 }
 
-TEST_CASE("MakeObjectFromAsset: uses default render scale when empty",
-          "[editor][property-rules]") {
+TEST_CASE("MakeObjectFromAsset: uses default render scale when empty", "[editor][property-rules]") {
   SceneDocument doc;
   AssetDef asset;
   asset.displayName = "Box";
@@ -9742,8 +9150,7 @@ TEST_CASE("MakeObjectFromAsset: uses default render scale when empty",
   CHECK(obj.props.at("_assetRenderScale") == "1.0000,1.0000,1.0000");
 }
 
-TEST_CASE("MakeObjectFromAsset: no _assetRenderScale when asset not found",
-          "[editor][property-rules]") {
+TEST_CASE("MakeObjectFromAsset: no _assetRenderScale when asset not found", "[editor][property-rules]") {
   SceneDocument doc;
   EditorSchema schema;
   const SceneObject obj = MakeObjectFromAsset(doc, "missing_asset", schema);
@@ -9751,8 +9158,7 @@ TEST_CASE("MakeObjectFromAsset: no _assetRenderScale when asset not found",
   CHECK_FALSE(obj.props.contains("_assetRenderScale"));
 }
 
-TEST_CASE("ApplySchemaFieldDefaults: sets missing fields from schema",
-          "[editor][property-rules]") {
+TEST_CASE("ApplySchemaFieldDefaults: sets missing fields from schema", "[editor][property-rules]") {
   const std::string json = R"({
     "types": {
       "Light": {
@@ -9772,8 +9178,7 @@ TEST_CASE("ApplySchemaFieldDefaults: sets missing fields from schema",
   CHECK(obj.props.at("color") == "1.0,1.0,1.0");
 }
 
-TEST_CASE("ApplySchemaFieldDefaults: does not overwrite existing values",
-          "[editor][property-rules]") {
+TEST_CASE("ApplySchemaFieldDefaults: does not overwrite existing values", "[editor][property-rules]") {
   const std::string json = R"({
     "types": {
       "Light": {
@@ -9794,8 +9199,7 @@ TEST_CASE("ApplySchemaFieldDefaults: does not overwrite existing values",
   CHECK(obj.props.at("intensity") == "5.0");
 }
 
-TEST_CASE("ApplyComponentFieldDefaults: sets missing component fields",
-          "[editor][property-rules]") {
+TEST_CASE("ApplyComponentFieldDefaults: sets missing component fields", "[editor][property-rules]") {
   const std::string json = R"({
     "components": {
       "rigidbody": {
@@ -9816,8 +9220,7 @@ TEST_CASE("ApplyComponentFieldDefaults: sets missing component fields",
   CHECK(comp.props.at("mass") == "1.0");
 }
 
-TEST_CASE("ApplyCameraBuiltinDefaults: sets fov/nearClip/farClip/followTargetId",
-          "[editor][property-rules]") {
+TEST_CASE("ApplyCameraBuiltinDefaults: sets fov/nearClip/farClip/followTargetId", "[editor][property-rules]") {
   SceneObject obj;
   obj.type = SceneObjectType::Camera;
   ApplyCameraBuiltinDefaults(obj);
@@ -9828,8 +9231,7 @@ TEST_CASE("ApplyCameraBuiltinDefaults: sets fov/nearClip/farClip/followTargetId"
   CHECK(obj.props.contains("followTargetId"));
 }
 
-TEST_CASE("ApplyCameraBuiltinDefaults: does not overwrite existing values",
-          "[editor][property-rules]") {
+TEST_CASE("ApplyCameraBuiltinDefaults: does not overwrite existing values", "[editor][property-rules]") {
   SceneObject obj;
   obj.type = SceneObjectType::Camera;
   obj.props["fov"] = "90";

@@ -24,9 +24,7 @@ public:
 };
 } // namespace
 
-TEST_CASE(
-    "SceneRuntimeConversion: typed model converts to runtime scene definition",
-    "[scene][runtime-conversion]") {
+TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definition", "[scene][runtime-conversion]") {
   SceneProjectModel model;
   model.scene.metadata.sceneId = "world";
   model.scene.settings.spawnPoint = {1.0f, 2.0f, 3.0f};
@@ -121,9 +119,7 @@ TEST_CASE(
   REQUIRE(build.definition.sceneCamera->pitch == Approx(89.0f));
 }
 
-TEST_CASE(
-    "SceneRuntimeBridge: authoring document follows canonical runtime pipeline",
-    "[scene][runtime-conversion][bridge]") {
+TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipeline", "[scene][runtime-conversion][bridge]") {
   SceneDocument doc;
   doc.sceneId = "bridge_scene";
   doc.sceneName = "Bridge Scene";
@@ -166,9 +162,7 @@ TEST_CASE(
   REQUIRE(build.definition.spawnPoint.z == Approx(-4.0f));
 }
 
-TEST_CASE("SceneRuntimeConversion: missing asset references surface "
-          "deterministic errors",
-          "[scene][runtime-conversion][validation]") {
+TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministic errors", "[scene][runtime-conversion][validation]") {
   SceneProjectModel model;
   model.scene.metadata.sceneId = "broken_scene";
 
@@ -188,8 +182,7 @@ TEST_CASE("SceneRuntimeConversion: missing asset references surface "
   REQUIRE(build.definition.rooms[0].props[0].meshTag == "box");
 }
 
-TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned",
-          "[scene][runtime-conversion][behavior]") {
+TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned", "[scene][runtime-conversion][behavior]") {
   RuntimeBehaviorFactory factory =
       [](std::string_view tag) -> std::unique_ptr<Behavior> {
     if (tag == "Inspect")
@@ -204,8 +197,7 @@ TEST_CASE("RuntimeBehaviorFactory: script resolution stays consumer-owned",
   REQUIRE(missing == nullptr);
 }
 
-TEST_CASE("RuntimeSceneBuildResult: WarningCount counts severity Warning only",
-          "[scene][runtime-conversion][warnings]") {
+TEST_CASE("RuntimeSceneBuildResult: WarningCount counts severity Warning only", "[scene][runtime-conversion][warnings]") {
   using enum RuntimeSceneBuildIssue::Severity;
   RuntimeSceneBuildResult result;
   CHECK(result.WarningCount() == 0);

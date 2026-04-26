@@ -147,31 +147,27 @@ SceneDocument MakeMinimalDoc(std::string_view sceneId = "s1") {
 // AssetImporterRegistry — uncovered branches
 // ===========================================================================
 
-TEST_CASE("AssetImporterRegistry: Register nullptr is a no-op",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: Register nullptr is a no-op", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   // Registering null must not crash or alter existing entries
   registry.Register(nullptr);
   REQUIRE(registry.FindByExtension("mesh.obj") != nullptr);
 }
 
-TEST_CASE("AssetImporterRegistry: FindByExtension returns null for unknown ext",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: FindByExtension returns null for unknown ext", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("doc.pdf") == nullptr);
   REQUIRE(registry.FindByExtension("noext") == nullptr);
 }
 
-TEST_CASE("AssetImporterRegistry: FindById returns null for unknown id",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: FindById returns null for unknown id", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   REQUIRE(registry.FindById("nonexistent.importer") == nullptr);
   REQUIRE(registry.FindById("") == nullptr);
 }
 
-TEST_CASE("AssetImporterRegistry: RegisteredImporterIds lists built-ins",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: RegisteredImporterIds lists built-ins", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   const auto ids = registry.RegisteredImporterIds();
   REQUIRE(ids.size() >= 2);
@@ -182,8 +178,7 @@ TEST_CASE("AssetImporterRegistry: RegisteredImporterIds lists built-ins",
   REQUIRE(hasTex);
 }
 
-TEST_CASE("AssetImporterRegistry: FindByExtension is case-insensitive",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: FindByExtension is case-insensitive", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   REQUIRE(registry.FindByExtension("mesh.OBJ") != nullptr);
   REQUIRE(registry.FindByExtension("tex.PNG") != nullptr);
@@ -195,8 +190,7 @@ TEST_CASE("AssetImporterRegistry: FindByExtension is case-insensitive",
   REQUIRE(registry.FindByExtension("tex.HDR") != nullptr);
 }
 
-TEST_CASE("AssetImporterRegistry: ObjImporter metadata correct",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: ObjImporter metadata correct", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
   REQUIRE(imp != nullptr);
@@ -205,8 +199,7 @@ TEST_CASE("AssetImporterRegistry: ObjImporter metadata correct",
   REQUIRE(std::find(exts.begin(), exts.end(), ".obj") != exts.end());
 }
 
-TEST_CASE("AssetImporterRegistry: TextureCopyImporter metadata correct",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: TextureCopyImporter metadata correct", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   const AssetImporter *imp = registry.FindById("builtin.texture_copy");
   REQUIRE(imp != nullptr);
@@ -216,8 +209,7 @@ TEST_CASE("AssetImporterRegistry: TextureCopyImporter metadata correct",
   CHECK(std::find(exts.begin(), exts.end(), ".hdr") != exts.end());
 }
 
-TEST_CASE("AssetImporterRegistry: ObjImporter rejects non-obj source",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: ObjImporter rejects non-obj source", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
   REQUIRE(imp != nullptr);
@@ -232,8 +224,7 @@ TEST_CASE("AssetImporterRegistry: ObjImporter rejects non-obj source",
   CHECK_FALSE(result.diagnostics.empty());
 }
 
-TEST_CASE("AssetImporterRegistry: ObjImporter rejects missing source file",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: ObjImporter rejects missing source file", "[editor][importer-registry]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_imp_obj_missing";
   std::error_code ec;
@@ -255,8 +246,7 @@ TEST_CASE("AssetImporterRegistry: ObjImporter rejects missing source file",
   CHECK(result.diagnostics[0].severity == AssetDiagnosticSeverity::Error);
 }
 
-TEST_CASE("AssetImporterRegistry: TextureCopy rejects unsupported type",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: TextureCopy rejects unsupported type", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
   const AssetImporter *imp = registry.FindById("builtin.texture_copy");
   REQUIRE(imp != nullptr);
@@ -270,8 +260,7 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects unsupported type",
   CHECK_FALSE(result.diagnostics.empty());
 }
 
-TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file",
-          "[editor][importer-registry]") {
+TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file", "[editor][importer-registry]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_imp_tex_missing";
   std::error_code ec;
@@ -296,8 +285,7 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file",
 // AssetImportService — ImportTextureForAsset + SaveMetadataForAsset
 // ===========================================================================
 
-TEST_CASE("AssetImportService: ImportTextureForAsset null asset returns false",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset null asset returns false", "[editor][asset-import]") {
   AssetImportService service;
   std::string err;
   const std::string source =
@@ -307,8 +295,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset null asset returns false",
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("AssetImportService: ImportTextureForAsset succeeds with real PNG",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset succeeds with real PNG", "[editor][asset-import]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_tex_import";
   std::error_code ec;
@@ -345,9 +332,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset succeeds with real PNG",
   CHECK_FALSE(asset.albedoMap.empty());
 }
 
-TEST_CASE(
-    "AssetImportService: ImportTextureForAsset fails for unsupported type",
-    "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset fails for unsupported type", "[editor][asset-import]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_tex_import_bad";
   std::error_code ec;
@@ -369,8 +354,7 @@ TEST_CASE(
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("AssetImportService: SaveMetadataForAsset null-asset returns false",
-          "[editor][asset-import]") {
+TEST_CASE("AssetImportService: SaveMetadataForAsset null-asset returns false", "[editor][asset-import]") {
   // SaveMetadataForAsset(assetId, asset, outError) — test missing guid
   AssetImportService service;
   AssetDef emptyAsset;
@@ -381,9 +365,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset null-asset returns false",
   // No crash is the primary assertion; error state is implementation-defined
 }
 
-TEST_CASE(
-    "AssetImportService: ReimportAssetWithDependents unknown guid is noop",
-    "[editor][asset-import]") {
+TEST_CASE("AssetImportService: ReimportAssetWithDependents unknown guid is noop", "[editor][asset-import]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_reimport_noop";
   std::error_code ec;
@@ -409,18 +391,15 @@ TEST_CASE(
 // EditorImGuiBackend — IsSupportedEditorImGuiBackend
 // ===========================================================================
 
-TEST_CASE("IsSupportedEditorImGuiBackend: OpenGL is supported",
-          "[editor][imgui-backend]") {
+TEST_CASE("IsSupportedEditorImGuiBackend: OpenGL is supported", "[editor][imgui-backend]") {
   CHECK(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
 }
 
-TEST_CASE("IsSupportedEditorImGuiBackend: Auto is supported",
-          "[editor][imgui-backend]") {
+TEST_CASE("IsSupportedEditorImGuiBackend: Auto is supported", "[editor][imgui-backend]") {
   CHECK(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
 }
 
-TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional",
-          "[editor][imgui-backend]") {
+TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional", "[editor][imgui-backend]") {
   // Just call it to ensure the switch branch and return are exercised.
   const bool result = IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan);
 #if defined(MONOLITH_HAS_VULKAN)
@@ -434,8 +413,7 @@ TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional",
 // EditorDebugTrace — EditorTraceEnabled and EditorTrace
 // ===========================================================================
 
-TEST_CASE("EditorDebugTrace: EditorTraceEnabled reads env var",
-          "[editor][debug-trace]") {
+TEST_CASE("EditorDebugTrace: EditorTraceEnabled reads env var", "[editor][debug-trace]") {
   // In release builds it always returns false
   // In debug builds it reads MONOLITH_EDITOR_TRACE
   const bool enabled = EditorTraceEnabled();
@@ -443,8 +421,7 @@ TEST_CASE("EditorDebugTrace: EditorTraceEnabled reads env var",
   CHECK(true);   // no crash
 }
 
-TEST_CASE("EditorDebugTrace: EditorTrace does not throw",
-          "[editor][debug-trace]") {
+TEST_CASE("EditorDebugTrace: EditorTrace does not throw", "[editor][debug-trace]") {
   // If tracing is off this is a no-op; if on it writes to stderr. Either way
   // it must not crash.
   REQUIRE_NOTHROW(EditorTrace("test message {} {}", 42, "hello"));
@@ -455,23 +432,20 @@ TEST_CASE("EditorDebugTrace: EditorTrace does not throw",
 // SceneRuntimeBridge — BuildRuntimeSceneDefinition
 // ===========================================================================
 
-TEST_CASE("SceneRuntimeBridge: valid doc builds without errors",
-          "[editor][runtime-bridge]") {
+TEST_CASE("SceneRuntimeBridge: valid doc builds without errors", "[editor][runtime-bridge]") {
   const RuntimeSceneBuildResult result =
       BuildRuntimeSceneDefinition(MakeMinimalDoc("bridge_valid"));
   CHECK_FALSE(result.HasErrors());
 }
 
-TEST_CASE("SceneRuntimeBridge: doc with version=0 produces build errors",
-          "[editor][runtime-bridge]") {
+TEST_CASE("SceneRuntimeBridge: doc with version=0 produces build errors", "[editor][runtime-bridge]") {
   SceneDocument doc = MakeMinimalDoc("bridge_fail");
   doc.version = 0; // triggers schemaVersion < 1 error
   const RuntimeSceneBuildResult result = BuildRuntimeSceneDefinition(doc);
   CHECK(result.HasErrors());
 }
 
-TEST_CASE("SceneRuntimeBridge: doc with nodes builds rooms",
-          "[editor][runtime-bridge]") {
+TEST_CASE("SceneRuntimeBridge: doc with nodes builds rooms", "[editor][runtime-bridge]") {
   SceneDocument doc = MakeMinimalDoc("bridge_rooms");
   SceneObject panel;
   panel.id = "p1";
@@ -489,9 +463,7 @@ TEST_CASE("SceneRuntimeBridge: doc with nodes builds rooms",
 // SceneRuntimeCoordinatorBridge — Load / Reload with build failure
 // ===========================================================================
 
-TEST_CASE(
-    "SceneRuntimeCoordinatorBridge: LoadSceneDocument fails on build error",
-    "[editor][coordinator-bridge]") {
+TEST_CASE("SceneRuntimeCoordinatorBridge: LoadSceneDocument fails on build error", "[editor][coordinator-bridge]") {
   SceneDocument badDoc = MakeMinimalDoc("coord_fail_load");
   badDoc.version = 0; // triggers schemaVersion < 1 validation error
 
@@ -508,9 +480,7 @@ TEST_CASE(
   CHECK_FALSE(result.error.empty());
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinatorBridge: LoadSceneDocument succeeds on valid doc",
-    "[editor][coordinator-bridge]") {
+TEST_CASE("SceneRuntimeCoordinatorBridge: LoadSceneDocument succeeds on valid doc", "[editor][coordinator-bridge]") {
   SceneRuntimeCoordinator coordinator;
   bool callbackCalled = false;
   const SceneRuntimeOperationResult result = LoadSceneDocument(
@@ -523,9 +493,7 @@ TEST_CASE(
   CHECK(callbackCalled);
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinatorBridge: ReloadSceneDocument fails on build error",
-    "[editor][coordinator-bridge]") {
+TEST_CASE("SceneRuntimeCoordinatorBridge: ReloadSceneDocument fails on build error", "[editor][coordinator-bridge]") {
   SceneRuntimeCoordinator coordinator;
   // First load a valid scene so we are in Active state
   const SceneRuntimeOperationResult load = LoadSceneDocument(
@@ -548,9 +516,7 @@ TEST_CASE(
   CHECK_FALSE(reload.error.empty());
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinatorBridge: ReloadSceneDocument succeeds on valid doc",
-    "[editor][coordinator-bridge]") {
+TEST_CASE("SceneRuntimeCoordinatorBridge: ReloadSceneDocument succeeds on valid doc", "[editor][coordinator-bridge]") {
   SceneRuntimeCoordinator coordinator;
   const SceneRuntimeOperationResult load = LoadSceneDocument(
       coordinator, MakeMinimalDoc("coord_reload2"),
@@ -572,9 +538,7 @@ TEST_CASE(
 // EditorWorkspaceSettings — covered branches
 // ===========================================================================
 
-TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath uses .horo "
-          "when project root is set",
-          "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath uses .horo when project root is set", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_resolve";
   std::error_code ec;
@@ -587,9 +551,7 @@ TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath uses .horo "
   CHECK(path.string().find(".horo") != std::string::npos);
 }
 
-TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath falls back to "
-          "home dir when no project root",
-          "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath falls back to home dir when no project root", "[editor][workspace-settings]") {
   const std::filesystem::path fakeHome =
       Monolith::Tests::SecureTempBase() / "horo_ws_home";
   std::error_code ec;
@@ -603,9 +565,7 @@ TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath falls back to "
   CHECK_FALSE(path.empty());
 }
 
-TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument returns "
-          "defaults when file is absent",
-          "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument returns defaults when file is absent", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_absent";
   std::error_code ec;
@@ -627,9 +587,7 @@ TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument returns "
   CHECK(doc.state.consoleShowError);
 }
 
-TEST_CASE(
-    "EditorWorkspaceSettings: LoadEditorWorkspaceDocument parses valid JSON",
-    "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument parses valid JSON", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_valid";
   std::error_code ec;
@@ -657,9 +615,7 @@ TEST_CASE(
   CHECK(doc.state.projectBrowserCwd == "/some/path");
 }
 
-TEST_CASE(
-    "EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles invalid JSON",
-    "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles invalid JSON", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_badjson";
   std::error_code ec;
@@ -682,9 +638,7 @@ TEST_CASE(
   CHECK_FALSE(doc.error.empty());
 }
 
-TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles "
-          "non-object root",
-          "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles non-object root", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_arrayroot";
   std::error_code ec;
@@ -706,17 +660,14 @@ TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles "
   CHECK(doc.parseError);
 }
 
-TEST_CASE(
-    "EditorWorkspaceSettings: SaveEditorWorkspaceDocument null returns false",
-    "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: SaveEditorWorkspaceDocument null returns false", "[editor][workspace-settings]") {
   std::string err;
   const bool ok = SaveEditorWorkspaceDocument(nullptr, &err);
   CHECK_FALSE(ok);
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("EditorWorkspaceSettings: save then load round-trips state",
-          "[editor][workspace-settings]") {
+TEST_CASE("EditorWorkspaceSettings: save then load round-trips state", "[editor][workspace-settings]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_ws_roundtrip";
   std::error_code ec;
@@ -750,8 +701,7 @@ TEST_CASE("EditorWorkspaceSettings: save then load round-trips state",
 // TransformGizmo — edge cases not yet in test_gizmo.cpp
 // ===========================================================================
 
-TEST_CASE("TransformGizmo: AxisDir returns zero for None",
-          "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: AxisDir returns zero for None", "[gizmo][coverage]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -761,9 +711,7 @@ TEST_CASE("TransformGizmo: AxisDir returns zero for None",
   CHECK(none.z == Approx(0.0f));
 }
 
-TEST_CASE(
-    "TransformGizmo: HandleSize returns small fallback at near-zero distance",
-    "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: HandleSize returns small fallback at near-zero distance", "[gizmo][coverage]") {
   TransformGizmo g;
   // Place gizmo right at the camera position → distance ≈ 0
   Camera cam = MakeCam({0, 0, 0}, {0, 0, -1});
@@ -786,8 +734,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates position", "[gizmo][coverage]") {
   CHECK(size > 0.0f);
 }
 
-TEST_CASE("TransformGizmo: RayHitPlane returns false for behind-origin hit",
-          "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: RayHitPlane returns false for behind-origin hit", "[gizmo][coverage]") {
   // Ray pointing away from the plane — t is negative
   Ray ray;
   ray.origin = {0.0f, 5.0f, 0.0f};
@@ -799,8 +746,7 @@ TEST_CASE("TransformGizmo: RayHitPlane returns false for behind-origin hit",
   CHECK_FALSE(res);
 }
 
-TEST_CASE("TransformGizmo: PickAxis returns None for empty screen point",
-          "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: PickAxis returns None for empty screen point", "[gizmo][coverage]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, {0, 0, 0}, Quaternion::Identity(),
              Vec3::One());
@@ -814,9 +760,7 @@ TEST_CASE("TransformGizmo: PickAxis returns None for empty screen point",
 // EditorHistory — via MCP commands (no GLFW needed)
 // ===========================================================================
 
-TEST_CASE(
-    "EditorHistory: CommitHistoryChange records snapshot on object create",
-    "[editor][history]") {
+TEST_CASE("EditorHistory: CommitHistoryChange records snapshot on object create", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -834,9 +778,7 @@ TEST_CASE(
   REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE(
-    "EditorHistory: CommitHistoryChange is no-op when snapshots are equal",
-    "[editor][history]") {
+TEST_CASE("EditorHistory: CommitHistoryChange is no-op when snapshots are equal", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -856,8 +798,7 @@ TEST_CASE(
   REQUIRE_FALSE(undo2.data["undone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: UndoHistory with empty stack returns false",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: UndoHistory with empty stack returns false", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -867,8 +808,7 @@ TEST_CASE("EditorHistory: UndoHistory with empty stack returns false",
   REQUIRE_FALSE(undo.data["undone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: UndoHistory restores prior document state",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: UndoHistory restores prior document state", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -884,8 +824,7 @@ TEST_CASE("EditorHistory: UndoHistory restores prior document state",
   REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE("EditorHistory: RedoHistory after undo re-applies change",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: RedoHistory after undo re-applies change", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -902,8 +841,7 @@ TEST_CASE("EditorHistory: RedoHistory after undo re-applies change",
   REQUIRE(editor.GetDocument().objects.size() == 1);
 }
 
-TEST_CASE("EditorHistory: RedoHistory with empty stack returns false",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: RedoHistory with empty stack returns false", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -913,8 +851,7 @@ TEST_CASE("EditorHistory: RedoHistory with empty stack returns false",
   REQUIRE_FALSE(redo.data["redone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -938,9 +875,7 @@ TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries",
   REQUIRE(undoCount == 128);
 }
 
-TEST_CASE("EditorHistory: RefreshHistorySavedBaseline refreshes undo and redo "
-          "snapshots",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: RefreshHistorySavedBaseline refreshes undo and redo snapshots", "[editor][history]") {
   namespace fs = std::filesystem;
   const fs::path sceneDir =
       Monolith::Tests::SecureTempBase() / "horo_hist_unit_baseline";
@@ -974,9 +909,7 @@ TEST_CASE("EditorHistory: RefreshHistorySavedBaseline refreshes undo and redo "
   REQUIRE_FALSE(editor.GetDocument().dirty);
 }
 
-TEST_CASE(
-    "EditorHistory: HistorySnapshotsEqual returns false for changed document",
-    "[editor][history]") {
+TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for changed document", "[editor][history]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.sceneId = "snap_diff";
@@ -1002,8 +935,7 @@ TEST_CASE(
 // EditorSceneGraph — free functions
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: FindObjectIndexById returns -1 for unknown id",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: FindObjectIndexById returns -1 for unknown id", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "known";
@@ -1013,8 +945,7 @@ TEST_CASE("EditorSceneGraph: FindObjectIndexById returns -1 for unknown id",
   REQUIRE(FindObjectIndexById(doc, "") == -1);
 }
 
-TEST_CASE("EditorSceneGraph: FindObjectIndexById returns correct index",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: FindObjectIndexById returns correct index", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject a;
   a.id = "first";
@@ -1027,9 +958,7 @@ TEST_CASE("EditorSceneGraph: FindObjectIndexById returns correct index",
   REQUIRE(FindObjectIndexById(doc, "second") == 1);
 }
 
-TEST_CASE(
-    "EditorSceneGraph: IsDescendantOf returns false for out-of-bounds indices",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsDescendantOf returns false for out-of-bounds indices", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj";
@@ -1041,8 +970,7 @@ TEST_CASE(
   REQUIRE_FALSE(IsDescendantOf(doc, 0, 99));
 }
 
-TEST_CASE("EditorSceneGraph: IsDescendantOf finds ancestor via while loop",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsDescendantOf finds ancestor via while loop", "[editor][scene-graph]") {
   // grandchild -> child -> parent chain
   SceneDocument doc;
   SceneObject parent;
@@ -1065,8 +993,7 @@ TEST_CASE("EditorSceneGraph: IsDescendantOf finds ancestor via while loop",
       IsDescendantOf(doc, 0, 2)); // parent is NOT descendant of grandchild
 }
 
-TEST_CASE("EditorSceneGraph: IsDescendantOf returns false when no parent chain",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsDescendantOf returns false when no parent chain", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject a;
   a.id = "a";
@@ -1080,8 +1007,7 @@ TEST_CASE("EditorSceneGraph: IsDescendantOf returns false when no parent chain",
   REQUIRE_FALSE(IsDescendantOf(doc, 1, 0));
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta translates child",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta translates child", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "par";
@@ -1109,9 +1035,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta translates child",
   REQUIRE(doc.objects[1].position.z == Approx(0.0f));
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta applies rotation "
-          "to child",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta applies rotation to child", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "rot_par";
@@ -1147,8 +1071,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta applies rotation "
   REQUIRE(dist == Approx(1.0f).margin(1e-4f));
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "cb_par";
@@ -1173,9 +1096,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invokes callback",
   REQUIRE(cbCount == 1);
 }
 
-TEST_CASE(
-    "EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta skips listed indices", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject parent;
   parent.id = "skip_par";
@@ -1197,9 +1118,7 @@ TEST_CASE(
   REQUIRE(doc.objects[1].position.x == Approx(1.0f)); // unchanged
 }
 
-TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid "
-          "parentIdx is no-op",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid parentIdx is no-op", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "solo";
@@ -1213,9 +1132,7 @@ TEST_CASE("EditorSceneGraph: PropagateHierarchyTransformDelta invalid "
   REQUIRE(doc.objects[0].position.x == Approx(3.0f)); // unchanged
 }
 
-TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes ids and prop "
-          "references",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes ids and prop references", "[editor][scene-graph]") {
   SceneDocument doc;
 
   SceneObject parent;
@@ -1239,16 +1156,13 @@ TEST_CASE("EditorSceneGraph: CollectReservedObjectIds includes ids and prop "
   REQUIRE_FALSE(reserved.contains("nonexistent"));
 }
 
-TEST_CASE("EditorSceneGraph: CollectReservedObjectIds handles empty doc",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: CollectReservedObjectIds handles empty doc", "[editor][scene-graph]") {
   SceneDocument doc;
   const auto reserved = CollectReservedObjectIds(doc);
   REQUIRE(reserved.empty());
 }
 
-TEST_CASE(
-    "EditorSceneGraph: RewriteObjectIdReferences rewrites followTargetId too",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences rewrites followTargetId too", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "follower";
@@ -1259,14 +1173,11 @@ TEST_CASE(
   REQUIRE(doc.objects[0].props.at("followTargetId") == "new_target");
 }
 
-TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences null doc is no-op",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: RewriteObjectIdReferences null doc is no-op", "[editor][scene-graph]") {
   REQUIRE_NOTHROW(RewriteObjectIdReferences(nullptr, "old", "new"));
 }
 
-TEST_CASE(
-    "EditorSceneGraph: LogDanglingObjectReferences empty label does not crash",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences empty label does not crash", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject orphan;
   orphan.id = "orphan";
@@ -1276,9 +1187,7 @@ TEST_CASE(
   REQUIRE_NOTHROW(LogDanglingObjectReferences(doc, ""));
 }
 
-TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences skips non-ref and "
-          "empty-value props",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences skips non-ref and empty-value props", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "obj1";
@@ -1297,9 +1206,7 @@ TEST_CASE("EditorSceneGraph: LogDanglingObjectReferences skips non-ref and "
 // EditorSceneGraph — IsDescendantOf cycle detection and additional branches
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: IsDescendantOf cycle detection returns false "
-          "after guard",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsDescendantOf cycle detection returns false after guard", "[editor][scene-graph]") {
   // Build a 3-cycle: a→b→c→a, plus an unrelated object d (index 3).
   // guardLimit = 4. IsDescendantOf(doc, 0, 3) must iterate all 4 times
   // without finding ancestorIdx(3) or a dead end, then return false at line 60.
@@ -1328,8 +1235,7 @@ TEST_CASE("EditorSceneGraph: IsDescendantOf cycle detection returns false "
 // EditorSceneGraph — IsReservedObjectId
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "x";
@@ -1337,9 +1243,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId returns false for empty id",
   REQUIRE_FALSE(IsReservedObjectId(doc, ""));
 }
 
-TEST_CASE(
-    "EditorSceneGraph: IsReservedObjectId returns true for existing object id",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for existing object id", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "used";
@@ -1348,9 +1252,7 @@ TEST_CASE(
   REQUIRE_FALSE(IsReservedObjectId(doc, "unused"));
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for referenced "
-          "prop value",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for referenced prop value", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "follower";
@@ -1361,9 +1263,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId returns true for referenced "
   REQUIRE_FALSE(IsReservedObjectId(doc, "not_referenced"));
 }
 
-TEST_CASE(
-    "EditorSceneGraph: IsReservedObjectId respects ignoreConcreteObjectId",
-    "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId respects ignoreConcreteObjectId", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "rename_me";
@@ -1374,9 +1274,7 @@ TEST_CASE(
   REQUIRE(IsReservedObjectId(doc, "rename_me", nullptr));
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop references when "
-          "matching ignored id",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop references when matching ignored id", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "ref_holder";
@@ -1393,8 +1291,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop references when "
 // EditorSceneGraph — SanitizePrefabStem and BuildUniquePrefabPath
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: SanitizePrefabStem cleans special characters",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: SanitizePrefabStem cleans special characters", "[editor][scene-graph]") {
   REQUIRE(SanitizePrefabStem("hello_world") == "hello_world");
   REQUIRE(SanitizePrefabStem("valid-name_123") == "valid-name_123");
   REQUIRE(SanitizePrefabStem("__hello__") == "hello");
@@ -1405,8 +1302,7 @@ TEST_CASE("EditorSceneGraph: SanitizePrefabStem cleans special characters",
   REQUIRE(SanitizePrefabStem("hello world!") == "hello_world");
 }
 
-TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path", "[editor][scene-graph]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_prefab_path_test";
   std::error_code ec;
@@ -1426,9 +1322,7 @@ TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path",
   REQUIRE(path.stem().string().find("my_obj") != std::string::npos);
 }
 
-TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath uses sceneId when object id "
-          "is empty",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath uses sceneId when object id is empty", "[editor][scene-graph]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_prefab_path_test2";
   std::error_code ec;
@@ -1451,9 +1345,7 @@ TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath uses sceneId when object id "
 // EditorHistory — additional coverage: equal-snapshot no-op and TrimHistory
 // ===========================================================================
 
-TEST_CASE("EditorHistory: CommitHistoryChange skips when update makes no "
-          "content change",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: CommitHistoryChange skips when update makes no content change", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1483,8 +1375,7 @@ TEST_CASE("EditorHistory: CommitHistoryChange skips when update makes no "
   REQUIRE_FALSE(undo2.data["undone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: TrimHistory guard — no trim when stack within limit",
-          "[editor][history]") {
+TEST_CASE("EditorHistory: TrimHistory guard — no trim when stack within limit", "[editor][history]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1508,9 +1399,7 @@ TEST_CASE("EditorHistory: TrimHistory guard — no trim when stack within limit"
   REQUIRE_FALSE(done.data["undone"].get<bool>());
 }
 
-TEST_CASE(
-    "EditorHistory: RestoreHistorySnapshot restores selectedAssetId from undo",
-    "[editor][history]") {
+TEST_CASE("EditorHistory: RestoreHistorySnapshot restores selectedAssetId from undo", "[editor][history]") {
   EditorLayer editor;
   SceneDocument doc;
   doc.sceneId = "asset_undo_test";
@@ -1547,9 +1436,7 @@ TEST_CASE(
 // EditorSceneGraph — additional coverage for IsReservedObjectId and paths
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop value matching "
-          "ignoreConcreteObjectId",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop value matching ignoreConcreteObjectId", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "holder";
@@ -1569,9 +1456,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop value matching "
 // EditorSceneGraph — BuildUniquePrefabPath suffix loop
 // ===========================================================================
 
-TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath appends suffix when "
-          "candidate exists",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath appends suffix when candidate exists", "[editor][scene-graph]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_prefab_suffix_test";
   std::error_code ec;
@@ -1596,8 +1481,7 @@ TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath appends suffix when "
   REQUIRE(path.stem().string().find("suffix_obj_prefab_") != std::string::npos);
 }
 
-TEST_CASE("EditorSceneGraph: IsReservedObjectId skips non-reference prop keys",
-          "[editor][scene-graph]") {
+TEST_CASE("EditorSceneGraph: IsReservedObjectId skips non-reference prop keys", "[editor][scene-graph]") {
   SceneDocument doc;
   SceneObject obj;
   obj.id = "some_obj";
@@ -1619,15 +1503,12 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId skips non-reference prop keys",
 // EditorSearch — coverage for uncovered branches
 // ===========================================================================
 
-TEST_CASE(
-    "EditorSearch: ObjectTypeLabel returns 'unknown' for unrecognised type",
-    "[editor][search]") {
+TEST_CASE("EditorSearch: ObjectTypeLabel returns 'unknown' for unrecognised type", "[editor][search]") {
   const auto unknownType = static_cast<SceneObjectType>(99);
   CHECK(std::string(ObjectTypeLabel(unknownType)) == "unknown");
 }
 
-TEST_CASE("EditorSearch: ObjectTypeLabel covers all known types",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: ObjectTypeLabel covers all known types", "[editor][search]") {
   using enum SceneObjectType;
   CHECK(std::string(ObjectTypeLabel(Prop)) == "prop");
   CHECK(std::string(ObjectTypeLabel(Light)) == "light");
@@ -1635,20 +1516,17 @@ TEST_CASE("EditorSearch: ObjectTypeLabel covers all known types",
   CHECK(std::string(ObjectTypeLabel(Camera)) == "[cam]");
 }
 
-TEST_CASE("EditorSearch: ContainsCaseInsensitive returns true for empty query",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: ContainsCaseInsensitive returns true for empty query", "[editor][search]") {
   CHECK(ContainsCaseInsensitive("anything", ""));
 }
 
-TEST_CASE("EditorSearch: ContainsCaseInsensitive is case-insensitive",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: ContainsCaseInsensitive is case-insensitive", "[editor][search]") {
   CHECK(ContainsCaseInsensitive("Hello World", "hello"));
   CHECK(ContainsCaseInsensitive("UPPER", "upper"));
   CHECK_FALSE(ContainsCaseInsensitive("abc", "xyz"));
 }
 
-TEST_CASE("EditorSearch: MatchesShortcutQuery empty query always matches",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: MatchesShortcutQuery empty query always matches", "[editor][search]") {
   ShortcutRow row{"Editor", "Undo", "Ctrl+Z"};
   CHECK(MatchesShortcutQuery(row, ""));
   CHECK(MatchesShortcutQuery(row, "Editor"));
@@ -1656,8 +1534,7 @@ TEST_CASE("EditorSearch: MatchesShortcutQuery empty query always matches",
   CHECK_FALSE(MatchesShortcutQuery(row, "ZZZ_NO_MATCH"));
 }
 
-TEST_CASE("EditorSearch: MatchesCommandPaletteQuery empty query always matches",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: MatchesCommandPaletteQuery empty query always matches", "[editor][search]") {
   CommandPaletteRow row{"save_scene", "Save Scene", "Toolbar"};
   CHECK(MatchesCommandPaletteQuery(row, ""));
   CHECK(MatchesCommandPaletteQuery(row, "save"));
@@ -1665,8 +1542,7 @@ TEST_CASE("EditorSearch: MatchesCommandPaletteQuery empty query always matches",
   CHECK_FALSE(MatchesCommandPaletteQuery(row, "XYZ_NOT_FOUND"));
 }
 
-TEST_CASE("EditorSearch: ObjectMatchesQuickOpenQuery uses id and type",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: ObjectMatchesQuickOpenQuery uses id and type", "[editor][search]") {
   SceneObject obj;
   obj.id = "my_light";
   obj.type = SceneObjectType::Light;
@@ -1677,8 +1553,7 @@ TEST_CASE("EditorSearch: ObjectMatchesQuickOpenQuery uses id and type",
   CHECK_FALSE(ObjectMatchesQuickOpenQuery(obj, "camera_xyz"));
 }
 
-TEST_CASE("EditorSearch: AssetMatchesQuickOpenQuery uses assetId and mesh",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: AssetMatchesQuickOpenQuery uses assetId and mesh", "[editor][search]") {
   AssetDef asset;
   asset.mesh = "meshes/cube.obj";
   asset.albedoMap = "textures/albedo.png";
@@ -1688,41 +1563,32 @@ TEST_CASE("EditorSearch: AssetMatchesQuickOpenQuery uses assetId and mesh",
   CHECK_FALSE(AssetMatchesQuickOpenQuery("cube_asset", asset, "XYZ_NONE"));
 }
 
-TEST_CASE("EditorSearch: EvaluateFilteredListState None when shownCount > 0",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: EvaluateFilteredListState None when shownCount > 0", "[editor][search]") {
   using enum FilteredListState;
   CHECK(EvaluateFilteredListState(5, 3, "q") == None);
 }
 
-TEST_CASE(
-    "EditorSearch: EvaluateFilteredListState EmptyData when totalCount == 0",
-    "[editor][search]") {
+TEST_CASE("EditorSearch: EvaluateFilteredListState EmptyData when totalCount == 0", "[editor][search]") {
   using enum FilteredListState;
   CHECK(EvaluateFilteredListState(0, 0, "") == EmptyData);
 }
 
-TEST_CASE(
-    "EditorSearch: EvaluateFilteredListState NoMatches when query non-empty",
-    "[editor][search]") {
+TEST_CASE("EditorSearch: EvaluateFilteredListState NoMatches when query non-empty", "[editor][search]") {
   using enum FilteredListState;
   CHECK(EvaluateFilteredListState(5, 0, "nomatch") == NoMatches);
 }
 
-TEST_CASE("EditorSearch: EvaluateFilteredListState None when query empty "
-          "totalCount>0",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: EvaluateFilteredListState None when query empty totalCount>0", "[editor][search]") {
   using enum FilteredListState;
   // totalCount > 0, shown == 0, query empty → None (items exist, none filtered)
   CHECK(EvaluateFilteredListState(3, 0, "") == None);
 }
 
-TEST_CASE("EditorSearch: GetEditorShortcuts returns non-empty span",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: GetEditorShortcuts returns non-empty span", "[editor][search]") {
   CHECK(!GetEditorShortcuts().empty());
 }
 
-TEST_CASE("EditorSearch: GetEditorCommands returns non-empty span",
-          "[editor][search]") {
+TEST_CASE("EditorSearch: GetEditorCommands returns non-empty span", "[editor][search]") {
   CHECK(!GetEditorCommands().empty());
 }
 
@@ -1730,8 +1596,7 @@ TEST_CASE("EditorSearch: GetEditorCommands returns non-empty span",
 // EditorHistory — additional branch coverage via MCP commands
 // ===========================================================================
 
-TEST_CASE("EditorHistory: undo command returns false when nothing to undo",
-          "[editor][history][extra]") {
+TEST_CASE("EditorHistory: undo command returns false when nothing to undo", "[editor][history][extra]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1741,8 +1606,7 @@ TEST_CASE("EditorHistory: undo command returns false when nothing to undo",
   REQUIRE_FALSE(res.data["undone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: redo command returns false when nothing to redo",
-          "[editor][history][extra]") {
+TEST_CASE("EditorHistory: redo command returns false when nothing to redo", "[editor][history][extra]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1752,8 +1616,7 @@ TEST_CASE("EditorHistory: redo command returns false when nothing to redo",
   REQUIRE_FALSE(res.data["redone"].get<bool>());
 }
 
-TEST_CASE("EditorHistory: undo after create_object via transaction path",
-          "[editor][history][extra]") {
+TEST_CASE("EditorHistory: undo after create_object via transaction path", "[editor][history][extra]") {
   EditorLayer editor;
   editor.LoadDocument(SceneDocument{});
 
@@ -1786,9 +1649,7 @@ TEST_CASE("EditorHistory: undo after create_object via transaction path",
 // SceneProjectBridge — exercise internal helpers via public interface
 // ===========================================================================
 
-TEST_CASE("SceneProjectBridge: BuildSceneProjectModel produces model with "
-          "camera node",
-          "[editor][scene-bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel produces model with camera node", "[editor][scene-bridge]") {
   // Camera objects in SceneDocument exercise ParseFloat, ParseVec3Csv, etc.
   SceneDocument doc;
   doc.sceneId = "cam_scene";
@@ -1806,8 +1667,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneProjectModel produces model with "
   CHECK(!model.scene.nodes.empty());
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles light object",
-          "[editor][scene-bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles light object", "[editor][scene-bridge]") {
   SceneDocument doc;
   doc.sceneId = "light_scene";
 
@@ -1828,9 +1688,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles light object",
   CHECK(foundLight);
 }
 
-TEST_CASE(
-    "SceneProjectBridge: BuildSceneProjectModel handles invalid float prop",
-    "[editor][scene-bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel handles invalid float prop", "[editor][scene-bridge]") {
   // Non-parseable values should fall back to defaults without crashing.
   SceneDocument doc;
   doc.sceneId = "bad_float_scene";
@@ -1846,8 +1704,7 @@ TEST_CASE(
   CHECK(!model.scene.nodes.empty());
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document",
-          "[editor][scene-bridge]") {
+TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document", "[editor][scene-bridge]") {
   SceneDocument doc;
   doc.sceneId = "roundtrip";
   doc.sceneName = "Round Trip";
@@ -1864,9 +1721,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips basic document",
   CHECK(rebuilt.sceneId == "roundtrip");
 }
 
-TEST_CASE("SceneProjectBridge: BuildSceneProjectModel preserves light and "
-          "component props",
-          "[editor][scene-bridge][coverage]") {
+TEST_CASE("SceneProjectBridge: BuildSceneProjectModel preserves light and component props", "[editor][scene-bridge][coverage]") {
   SceneDocument doc;
   doc.sceneId = "component_scene";
 
@@ -1908,8 +1763,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneProjectModel preserves light and "
 // AssetImportService — additional error paths
 // ===========================================================================
 
-TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing",
-          "[editor][asset-metadata][coverage]") {
+TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing", "[editor][asset-metadata][coverage]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_metadata_bad_sidecar";
   std::error_code ec;
@@ -1927,8 +1781,7 @@ TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing",
   REQUIRE_FALSE(error.empty());
 }
 
-TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id",
-          "[editor][asset-metadata][coverage]") {
+TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id", "[editor][asset-metadata][coverage]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_asset_metadata_roundtrip";
   std::error_code ec;
@@ -1961,9 +1814,7 @@ TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id",
   REQUIRE(loaded.dependencies[1].value == "dep_guid");
 }
 
-TEST_CASE("AssetImportService: ImportTextureForAsset with missing source "
-          "returns false",
-          "[editor][asset-import][extra]") {
+TEST_CASE("AssetImportService: ImportTextureForAsset with missing source returns false", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_import_tex_missing";
   std::error_code ec;
@@ -1981,9 +1832,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset with missing source "
   CHECK(!err.empty());
 }
 
-TEST_CASE(
-    "AssetImportService: ImportAssetFromSource with missing file returns error",
-    "[editor][asset-import][extra]") {
+TEST_CASE("AssetImportService: ImportAssetFromSource with missing file returns error", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_import_asset_missing";
   std::error_code ec;
@@ -2000,9 +1849,7 @@ TEST_CASE(
   CHECK(!result.diagnostics.empty());
 }
 
-TEST_CASE(
-    "AssetImportService: ReimportAssetWithDependents with null doc is no-op",
-    "[editor][asset-import][extra]") {
+TEST_CASE("AssetImportService: ReimportAssetWithDependents with null doc is no-op", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
       Monolith::Tests::SecureTempBase() / "horo_reimport_null";
   std::error_code ec;

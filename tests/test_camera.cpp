@@ -13,9 +13,7 @@ using Catch::Approx;
 // Camera — GetView / GetProjection
 // ============================================================
 
-TEST_CASE("Camera GetView: eye at origin looking down -Z gives near-identity "
-          "rotation",
-          "[camera]") {
+TEST_CASE("Camera GetView: eye at origin looking down -Z gives near-identity rotation", "[camera]") {
   Camera cam;
   cam.position = {0, 0, 0};
   cam.target = {0, 0, -1};
@@ -30,8 +28,7 @@ TEST_CASE("Camera GetView: eye at origin looking down -Z gives near-identity "
   REQUIRE(pt.z < 0.0f); // -Z is in front of the camera
 }
 
-TEST_CASE("Camera GetView: translation moves eye to origin in view space",
-          "[camera]") {
+TEST_CASE("Camera GetView: translation moves eye to origin in view space", "[camera]") {
   Camera cam;
   cam.position = {10, 0, 0};
   cam.target = {0, 0, 0};
@@ -56,8 +53,7 @@ TEST_CASE("Camera GetProjection: produces non-zero determinant", "[camera]") {
   REQUIRE(P.Determinant() != Approx(0).margin(1e-6f));
 }
 
-TEST_CASE("Camera GetProjection: wider FOV gives larger field coverage",
-          "[camera]") {
+TEST_CASE("Camera GetProjection: wider FOV gives larger field coverage", "[camera]") {
   Camera narrow;
   narrow.fovY = 30.0f;
   narrow.aspect = 1.0f;
@@ -77,8 +73,7 @@ TEST_CASE("Camera GetProjection: wider FOV gives larger field coverage",
   REQUIRE(Pnarrow(0, 0) > Pwide(0, 0));
 }
 
-TEST_CASE("Camera GetViewProjection: combines view and projection",
-          "[camera]") {
+TEST_CASE("Camera GetViewProjection: combines view and projection", "[camera]") {
   Camera cam;
   cam.position = {0, 0, 5};
   cam.target = {0, 0, 0};
@@ -103,8 +98,7 @@ TEST_CASE("Camera GetViewProjection: combines view and projection",
 // Camera — GetForward / GetRight
 // ============================================================
 
-TEST_CASE("Camera GetForward: pointing along -Z when looking at origin from +Z",
-          "[camera]") {
+TEST_CASE("Camera GetForward: pointing along -Z when looking at origin from +Z", "[camera]") {
   Camera cam;
   cam.position = {0, 0, 5};
   cam.target = {0, 0, 0};

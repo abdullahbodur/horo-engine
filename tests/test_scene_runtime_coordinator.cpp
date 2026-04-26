@@ -67,9 +67,7 @@ SceneDocument MakeRuntimeSceneDocument(std::string_view sceneId,
 }
 } // namespace
 
-TEST_CASE(
-    "SceneRuntimeCoordinator: load, reload, and unload transitions succeed",
-    "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: load, reload, and unload transitions succeed", "[scene][runtime-coordinator]") {
   SceneRuntimeCoordinator coordinator;
   const RuntimeSceneDefinition initial =
       MakeRuntimeSceneDefinition("room_a", 1.0f, 55.0f);
@@ -125,9 +123,7 @@ TEST_CASE(
   REQUIRE(coordinator.GetCurrentDefinition() == nullptr);
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinator: invalid transitions fail clearly and safely",
-    "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: invalid transitions fail clearly and safely", "[scene][runtime-coordinator]") {
   SceneRuntimeCoordinator coordinator;
   const RuntimeSceneDefinition definition =
       MakeRuntimeSceneDefinition("room", 2.0f, 60.0f);
@@ -148,9 +144,7 @@ TEST_CASE(
   REQUIRE(unload.error.find("BeginUnloading") != std::string::npos);
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinator: callback failures preserve explicit error state",
-    "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: callback failures preserve explicit error state", "[scene][runtime-coordinator]") {
   SceneRuntimeCoordinator coordinator;
   const RuntimeSceneDefinition definition =
       MakeRuntimeSceneDefinition("room_a", 1.0f, 55.0f);
@@ -200,9 +194,7 @@ TEST_CASE(
   REQUIRE(failedLoadCoordinator.GetCurrentDefinition() == nullptr);
 }
 
-TEST_CASE("SceneRuntimeCoordinatorBridge: authoring document uses canonical "
-          "lifecycle-managed path",
-          "[scene][runtime-coordinator][bridge]") {
+TEST_CASE("SceneRuntimeCoordinatorBridge: authoring document uses canonical lifecycle-managed path", "[scene][runtime-coordinator][bridge]") {
   SceneRuntimeCoordinator coordinator;
   const SceneDocument initialDoc =
       MakeRuntimeSceneDocument("scene_a", "crate_asset");
@@ -251,8 +243,7 @@ TEST_CASE("SceneRuntimeCoordinatorBridge: authoring document uses canonical "
   REQUIRE(coordinator.GetCurrentDefinition()->rooms[0].id == "scene_b");
 }
 
-TEST_CASE("SceneRuntimeCoordinator: Load fails when already active",
-          "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: Load fails when already active", "[scene][runtime-coordinator]") {
   SceneRuntimeCoordinator coordinator;
   const RuntimeSceneDefinition definition =
       MakeRuntimeSceneDefinition("room", 1.0f, 60.0f);
@@ -279,9 +270,7 @@ TEST_CASE("SceneRuntimeCoordinator: Load fails when already active",
   REQUIRE(coordinator.IsActive());
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinator: GetLastOperation tracks each operation type",
-    "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: GetLastOperation tracks each operation type", "[scene][runtime-coordinator]") {
   SceneRuntimeCoordinator coordinator;
   REQUIRE(coordinator.GetLastOperation() == SceneRuntimeOperation::None);
 
@@ -300,10 +289,7 @@ TEST_CASE(
   REQUIRE(coordinator.GetLastOperation() == SceneRuntimeOperation::Unload);
 }
 
-TEST_CASE(
-    "SceneRuntimeCoordinator: Reload fails with lifecycle error when callback "
-    "succeeds but CompleteReload would be invalid",
-    "[scene][runtime-coordinator]") {
+TEST_CASE("SceneRuntimeCoordinator: Reload fails with lifecycle error when callback succeeds but CompleteReload would be invalid", "[scene][runtime-coordinator]") {
   // After a successful load, a second reload attempt that uses an empty
   // callback still exercises HasTransitionFailure reset on MakeSuccess.
   SceneRuntimeCoordinator coordinator;

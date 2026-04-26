@@ -34,8 +34,7 @@ using Catch::Approx;
 // RenderBackend — ToString
 // ===========================================================================
 
-TEST_CASE("RenderBackend: ToString returns correct string for each id",
-          "[renderer][backend]") {
+TEST_CASE("RenderBackend: ToString returns correct string for each id", "[renderer][backend]") {
   CHECK(std::string(ToString(RenderBackendId::Auto)) == "Auto");
   CHECK(std::string(ToString(RenderBackendId::OpenGL)) == "OpenGL");
   CHECK(std::string(ToString(RenderBackendId::Vulkan)) == "Vulkan");
@@ -45,22 +44,19 @@ TEST_CASE("RenderBackend: ToString returns correct string for each id",
 // RenderBackend — ResolveRequestedRenderBackend
 // ===========================================================================
 
-TEST_CASE("ResolveRequestedRenderBackend: Auto resolves to OpenGL",
-          "[renderer][backend]") {
+TEST_CASE("ResolveRequestedRenderBackend: Auto resolves to OpenGL", "[renderer][backend]") {
   RenderBackendSelection sel;
   sel.requested = RenderBackendId::Auto;
   CHECK(ResolveRequestedRenderBackend(sel) == RenderBackendId::OpenGL);
 }
 
-TEST_CASE("ResolveRequestedRenderBackend: explicit OpenGL is preserved",
-          "[renderer][backend]") {
+TEST_CASE("ResolveRequestedRenderBackend: explicit OpenGL is preserved", "[renderer][backend]") {
   RenderBackendSelection sel;
   sel.requested = RenderBackendId::OpenGL;
   CHECK(ResolveRequestedRenderBackend(sel) == RenderBackendId::OpenGL);
 }
 
-TEST_CASE("ResolveRequestedRenderBackend: explicit Vulkan is preserved",
-          "[renderer][backend]") {
+TEST_CASE("ResolveRequestedRenderBackend: explicit Vulkan is preserved", "[renderer][backend]") {
   RenderBackendSelection sel;
   sel.requested = RenderBackendId::Vulkan;
   CHECK(ResolveRequestedRenderBackend(sel) == RenderBackendId::Vulkan);
@@ -70,13 +66,11 @@ TEST_CASE("ResolveRequestedRenderBackend: explicit Vulkan is preserved",
 // RenderBackend — IsRenderBackendSupported
 // ===========================================================================
 
-TEST_CASE("IsRenderBackendSupported: OpenGL is always supported",
-          "[renderer][backend]") {
+TEST_CASE("IsRenderBackendSupported: OpenGL is always supported", "[renderer][backend]") {
   CHECK(IsRenderBackendSupported(RenderBackendId::OpenGL));
 }
 
-TEST_CASE("IsRenderBackendSupported: Auto is supported (resolves to OpenGL)",
-          "[renderer][backend]") {
+TEST_CASE("IsRenderBackendSupported: Auto is supported (resolves to OpenGL)", "[renderer][backend]") {
   // Auto resolves to OpenGL which is always present.
   CHECK(IsRenderBackendSupported(RenderBackendId::Auto));
 }
@@ -85,8 +79,7 @@ TEST_CASE("IsRenderBackendSupported: Auto is supported (resolves to OpenGL)",
 // RenderBackend — GetDefaultRenderBackendCapabilities
 // ===========================================================================
 
-TEST_CASE("GetDefaultRenderBackendCapabilities: Auto delegates to OpenGL",
-          "[renderer][backend][coverage]") {
+TEST_CASE("GetDefaultRenderBackendCapabilities: Auto delegates to OpenGL", "[renderer][backend][coverage]") {
   const RenderBackendCapabilities autoCaps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::Auto);
   const RenderBackendCapabilities glCaps =
@@ -100,8 +93,7 @@ TEST_CASE("GetDefaultRenderBackendCapabilities: Auto delegates to OpenGL",
   CHECK(autoCaps.supportsDebugHud == glCaps.supportsDebugHud);
 }
 
-TEST_CASE("GetDefaultRenderBackendCapabilities: OpenGL defaults are explicit",
-          "[renderer][backend][coverage]") {
+TEST_CASE("GetDefaultRenderBackendCapabilities: OpenGL defaults are explicit", "[renderer][backend][coverage]") {
   const RenderBackendCapabilities caps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
 
@@ -118,8 +110,7 @@ TEST_CASE("GetDefaultRenderBackendCapabilities: OpenGL defaults are explicit",
   CHECK_FALSE(caps.supportsBindlessResources);
 }
 
-TEST_CASE("GetDefaultRenderBackendCapabilities: Vulkan defaults are explicit",
-          "[renderer][backend][coverage]") {
+TEST_CASE("GetDefaultRenderBackendCapabilities: Vulkan defaults are explicit", "[renderer][backend][coverage]") {
   const RenderBackendCapabilities caps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::Vulkan);
 
@@ -140,8 +131,7 @@ TEST_CASE("GetDefaultRenderBackendCapabilities: Vulkan defaults are explicit",
 // RenderViewUtils — BuildRenderView
 // ===========================================================================
 
-TEST_CASE("BuildRenderView: copies camera position into RenderView",
-          "[renderer][view]") {
+TEST_CASE("BuildRenderView: copies camera position into RenderView", "[renderer][view]") {
   Camera cam;
   cam.position = {1.0f, 2.0f, 3.0f};
   cam.target = {0.0f, 0.0f, 0.0f};
@@ -153,9 +143,7 @@ TEST_CASE("BuildRenderView: copies camera position into RenderView",
   CHECK(rv.cameraPosition.z == Approx(3.0f));
 }
 
-TEST_CASE(
-    "BuildRenderView: view and projection matrices are non-identity by default",
-    "[renderer][view]") {
+TEST_CASE("BuildRenderView: view and projection matrices are non-identity by default", "[renderer][view]") {
   Camera cam;
   cam.position = {0.0f, 3.0f, 8.0f};
   cam.target = {0.0f, 0.0f, 0.0f};
@@ -184,8 +172,7 @@ TEST_CASE(
 // Light — struct defaults
 // ===========================================================================
 
-TEST_CASE("Light: default type is Point with valid defaults",
-          "[renderer][light]") {
+TEST_CASE("Light: default type is Point with valid defaults", "[renderer][light]") {
   Light light;
   CHECK(light.type == Light::Type::Point);
   CHECK(light.intensity == Approx(1.0f));
@@ -202,22 +189,19 @@ TEST_CASE("Light: Directional type can be assigned", "[renderer][light]") {
 // Material — HasShader
 // ===========================================================================
 
-TEST_CASE("Material: HasShader returns false when shader is null",
-          "[renderer][material][coverage]") {
+TEST_CASE("Material: HasShader returns false when shader is null", "[renderer][material][coverage]") {
   Material mat;
   CHECK_FALSE(mat.HasShader());
 }
 
-TEST_CASE("Material: HasShader returns false for invalid shader",
-          "[renderer][material][coverage]") {
+TEST_CASE("Material: HasShader returns false for invalid shader", "[renderer][material][coverage]") {
   Material mat;
   mat.shader = std::make_shared<Shader>();
   // Default-constructed Shader is not valid (no GL program loaded)
   CHECK_FALSE(mat.HasShader());
 }
 
-TEST_CASE("Shader: default and moved-from objects remain invalid",
-          "[renderer][shader]") {
+TEST_CASE("Shader: default and moved-from objects remain invalid", "[renderer][shader]") {
   Shader shader;
   CHECK_FALSE(shader.IsValid());
   CHECK(shader.GetProgramID() == 0u);
@@ -236,8 +220,7 @@ TEST_CASE("Shader: default and moved-from objects remain invalid",
   CHECK(moved.GetProgramID() == 0u);
 }
 
-TEST_CASE("Texture: default and moved-from objects remain invalid",
-          "[renderer][texture]") {
+TEST_CASE("Texture: default and moved-from objects remain invalid", "[renderer][texture]") {
   Texture texture;
   CHECK_FALSE(texture.IsValid());
   CHECK(texture.GetNativeId() == 0u);
@@ -263,8 +246,7 @@ TEST_CASE("Texture: default and moved-from objects remain invalid",
 // RenderBackend — Vulkan capability and support paths
 // ===========================================================================
 
-TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result",
-          "[renderer][backend]") {
+TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result", "[renderer][backend]") {
   // The result depends on whether MONOLITH_HAS_VULKAN is defined, but the
   // call must not crash and must exercise the Vulkan branch.
   const bool result = IsRenderBackendSupported(RenderBackendId::Vulkan);
@@ -277,16 +259,14 @@ TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result",
 // Shader / Texture / OpenGL backend deterministic paths
 // ===========================================================================
 
-TEST_CASE("Shader: FromFiles throws when shader files are missing",
-          "[renderer][shader]") {
+TEST_CASE("Shader: FromFiles throws when shader files are missing", "[renderer][shader]") {
   const auto missing = std::filesystem::path("tests/fixtures/does_not_exist");
   CHECK_THROWS_AS(Shader::FromFiles((missing / "missing.vert").string(),
                                     (missing / "missing.frag").string()),
                   ShaderException);
 }
 
-TEST_CASE("Texture: default object exposes invalid OpenGL handle metadata",
-          "[renderer][texture]") {
+TEST_CASE("Texture: default object exposes invalid OpenGL handle metadata", "[renderer][texture]") {
   Texture texture;
   const RenderTargetHandle handle = texture.GetRenderTargetHandle(true);
 
@@ -301,8 +281,7 @@ TEST_CASE("Texture: default object exposes invalid OpenGL handle metadata",
   CHECK(handle.needsYFlip);
 }
 
-TEST_CASE("OpenGLRenderBackend: readback validates dimensions and errors",
-          "[renderer][backend][opengl]") {
+TEST_CASE("OpenGLRenderBackend: readback validates dimensions and errors", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
   std::vector<uint8_t> color;
   std::vector<float> depth;
@@ -316,8 +295,7 @@ TEST_CASE("OpenGLRenderBackend: readback validates dimensions and errors",
   REQUIRE_FALSE(backend.ReadbackDepth32F(4, 0, depth, nullptr));
 }
 
-TEST_CASE("OpenGLRenderBackend: invalid readback requests preserve output buffers",
-          "[renderer][backend][opengl]") {
+TEST_CASE("OpenGLRenderBackend: invalid readback requests preserve output buffers", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
   std::vector<uint8_t> color = {1u, 2u, 3u};
   std::vector<float> depth = {0.25f, 0.5f};
@@ -333,8 +311,7 @@ TEST_CASE("OpenGLRenderBackend: invalid readback requests preserve output buffer
   CHECK(depthError.find("positive dimensions") != std::string::npos);
 }
 
-TEST_CASE("OpenGLRenderBackend: viewport target APIs remain unavailable",
-          "[renderer][backend][opengl]") {
+TEST_CASE("OpenGLRenderBackend: viewport target APIs remain unavailable", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
   std::string error;
   RenderTargetHandle handle = RenderTargetHandle::OpenGLTexture(33u);
@@ -350,8 +327,7 @@ TEST_CASE("OpenGLRenderBackend: viewport target APIs remain unavailable",
       backend.TryGetEditorViewportRenderTargetHandle(nullptr, false, nullptr));
 }
 
-TEST_CASE("OpenGLRenderBackend: capabilities mirror OpenGL defaults",
-          "[renderer][backend][opengl]") {
+TEST_CASE("OpenGLRenderBackend: capabilities mirror OpenGL defaults", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
 
   const RenderBackendCapabilities actual = backend.GetCapabilities();
@@ -375,9 +351,7 @@ TEST_CASE("OpenGLRenderBackend: capabilities mirror OpenGL defaults",
 #include "renderer/Mesh.h"
 #include "renderer/SkinnedMesh.h"
 
-TEST_CASE(
-    "Mesh: default construction gives zero index count and unit half-extents",
-    "[renderer][mesh]") {
+TEST_CASE("Mesh: default construction gives zero index count and unit half-extents", "[renderer][mesh]") {
   Mesh m;
   CHECK(m.GetIndexCount() == 0);
   const Vec3 he = m.GetHalfExtents();
@@ -403,8 +377,7 @@ TEST_CASE("Mesh: move assignment transfers state", "[renderer][mesh]") {
   CHECK(b.GetIndexCount() == 0);
 }
 
-TEST_CASE("Mesh: CreateBox generates expected CPU geometry",
-          "[renderer][mesh]") {
+TEST_CASE("Mesh: CreateBox generates expected CPU geometry", "[renderer][mesh]") {
   const Mesh mesh = Mesh::CreateBox(2.0f, 3.0f, 4.0f);
 
   CHECK(mesh.GetVertices().size() == 24);
@@ -416,8 +389,7 @@ TEST_CASE("Mesh: CreateBox generates expected CPU geometry",
   }
 }
 
-TEST_CASE("Mesh: CreatePlane and CreateQuad generate expected bounds",
-          "[renderer][mesh]") {
+TEST_CASE("Mesh: CreatePlane and CreateQuad generate expected bounds", "[renderer][mesh]") {
   const Mesh plane = Mesh::CreatePlane(5.0f);
   CHECK(plane.GetVertices().size() == 4);
   CHECK(plane.GetIndices().size() == 6);
@@ -435,8 +407,7 @@ TEST_CASE("Mesh: CreatePlane and CreateQuad generate expected bounds",
   CHECK(quad.GetVertices()[0].normal.z == Approx(1.0f));
 }
 
-TEST_CASE("Mesh: CreatePyramid generates expected CPU geometry",
-          "[renderer][mesh]") {
+TEST_CASE("Mesh: CreatePyramid generates expected CPU geometry", "[renderer][mesh]") {
   const Mesh mesh = Mesh::CreatePyramid(2.0f, 3.0f);
 
   CHECK(mesh.GetVertices().size() == 16);
@@ -448,8 +419,7 @@ TEST_CASE("Mesh: CreatePyramid generates expected CPU geometry",
   CHECK(mesh.GetLocalAabbCenter().y == Approx(0.0f));
 }
 
-TEST_CASE("Mesh: CreateCylinder generates expected CPU geometry",
-          "[renderer][mesh]") {
+TEST_CASE("Mesh: CreateCylinder generates expected CPU geometry", "[renderer][mesh]") {
   const Mesh mesh = Mesh::CreateCylinder(1.5f, 2.0f, 8);
 
   CHECK(mesh.GetVertices().size() == 52);
@@ -457,8 +427,7 @@ TEST_CASE("Mesh: CreateCylinder generates expected CPU geometry",
   CHECK(mesh.GetIndexCount() == 96);
 }
 
-TEST_CASE("Mesh: CreateSphere generates expected CPU geometry",
-          "[renderer][mesh]") {
+TEST_CASE("Mesh: CreateSphere generates expected CPU geometry", "[renderer][mesh]") {
   const Mesh mesh = Mesh::CreateSphere(2.0f, 2, 4);
 
   CHECK(mesh.GetVertices().size() == 15);
@@ -470,22 +439,19 @@ TEST_CASE("Mesh: CreateSphere generates expected CPU geometry",
 // SkinnedMesh — non-GPU paths
 // ===========================================================================
 
-TEST_CASE("SkinnedMesh: default construction is valid",
-          "[renderer][skinned-mesh]") {
+TEST_CASE("SkinnedMesh: default construction is valid", "[renderer][skinned-mesh]") {
   SkinnedMesh sm;
   CHECK(sm.GetIndexCount() == 0);
 }
 
-TEST_CASE("SkinnedMesh: move constructor transfers state",
-          "[renderer][skinned-mesh]") {
+TEST_CASE("SkinnedMesh: move constructor transfers state", "[renderer][skinned-mesh]") {
   SkinnedMesh a;
   SkinnedMesh b(std::move(a));
   CHECK(b.GetIndexCount() == 0);
   CHECK(a.GetIndexCount() == 0);
 }
 
-TEST_CASE("SkinnedMesh: move assignment transfers state",
-          "[renderer][skinned-mesh]") {
+TEST_CASE("SkinnedMesh: move assignment transfers state", "[renderer][skinned-mesh]") {
   SkinnedMesh a;
   SkinnedMesh b;
   b = std::move(a);

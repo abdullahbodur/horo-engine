@@ -141,8 +141,7 @@ TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
   REQUIRE(ProjectPath::Root().empty());
 }
 
-TEST_CASE("ProjectPath: explicit root and sdk root resolution",
-          "[core][projectpath]") {
+TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -185,8 +184,7 @@ TEST_CASE("ProjectPath: explicit root and sdk root resolution",
   REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
 }
 
-TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root",
-          "[core][projectpath]") {
+TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
@@ -210,8 +208,7 @@ TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root",
   REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
 }
 
-TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root",
-          "[core][projectpath]") {
+TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -241,9 +238,7 @@ TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root",
           normalizePath(tempRoot / "sdk_root"));
 }
 
-TEST_CASE(
-    "ProjectPath: Init fallback seeds sdk root when no project markers exist",
-    "[core][projectpath]") {
+TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exist", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -275,9 +270,7 @@ TEST_CASE(
           normalizePath(ProjectPath::SdkRoot()));
 }
 
-TEST_CASE("ProjectPath: root setters fall back to original path on "
-          "canonicalization errors",
-          "[core][projectpath]") {
+TEST_CASE("ProjectPath: root setters fall back to original path on canonicalization errors", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const std::string longName(5000, 'x');
@@ -300,8 +293,7 @@ TEST_CASE("ProjectPath: root setters fall back to original path on "
 }
 
 #ifndef _WIN32
-TEST_CASE("ProjectPath: root setters tolerate unavailable current directory",
-          "[core][projectpath]") {
+TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const fs::path savedCwd = fs::current_path();
@@ -334,9 +326,7 @@ TEST_CASE("ProjectPath: root setters tolerate unavailable current directory",
 }
 #endif
 
-TEST_CASE(
-    "WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior",
-    "[core][window]") {
+TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior", "[core][window]") {
   const WindowGraphicsApiTraits traits =
       GetWindowGraphicsApiTraits(WindowGraphicsApi::OpenGL);
 
@@ -347,9 +337,7 @@ TEST_CASE(
   REQUIRE(traits.requestsMsaaSamples);
 }
 
-TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to "
-          "the backend",
-          "[core][window]") {
+TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to the backend", "[core][window]") {
   const WindowGraphicsApiTraits traits =
       GetWindowGraphicsApiTraits(WindowGraphicsApi::Vulkan);
 
@@ -360,8 +348,7 @@ TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to "
   REQUIRE_FALSE(traits.requestsMsaaSamples);
 }
 
-TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility",
-          "[core][application]") {
+TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility", "[core][application]") {
   const AppSpec spec{"Compat App", 1280, 720, true,
                      "assets/scenes/starter_world.json"};
 
@@ -370,15 +357,13 @@ TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility",
   REQUIRE(spec.graphicsApi == WindowGraphicsApi::OpenGL);
 }
 
-TEST_CASE("Shader: FromFiles throws ShaderException for missing files",
-          "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws ShaderException for missing files", "[core][shader]") {
   REQUIRE_THROWS_AS(Shader::FromFiles("/no/such/vertex_shader.vert",
                                       "/no/such/fragment_shader.frag"),
                     ShaderException);
 }
 
-TEST_CASE("Shader: FromFiles throws when second shader file is missing",
-          "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core][shader]") {
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
@@ -399,8 +384,7 @@ TEST_CASE("Shader: FromFiles throws when second shader file is missing",
                     ShaderException);
 }
 
-TEST_CASE("Shader: FromFiles throws when first shader file is missing",
-          "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][shader]") {
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
@@ -422,9 +406,7 @@ TEST_CASE("Shader: FromFiles throws when first shader file is missing",
                     ShaderException);
 }
 
-TEST_CASE(
-    "EngineLaunchArgs: keeps previous project path when --project has no value",
-    "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: keeps previous project path when --project has no value", "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectInline = "--project=./Playable";
   std::string projectFlag = "--project";
@@ -436,8 +418,7 @@ TEST_CASE(
   REQUIRE(options.projectPath == std::filesystem::path("./Playable"));
 }
 
-TEST_CASE("EngineLaunchArgs: supports empty inline project value",
-          "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: supports empty inline project value", "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectInline = "--project=";
   std::array<char *, 2> argv = {arg0.data(), projectInline.data()};
@@ -447,9 +428,7 @@ TEST_CASE("EngineLaunchArgs: supports empty inline project value",
   REQUIRE(options.projectPath.empty());
 }
 
-TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option "
-          "parsing",
-          "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option parsing", "[core][cli]") {
   std::string arg0 = "horo";
   std::string editorArg = "--editor";
   std::string playArg = "--play";
@@ -460,8 +439,7 @@ TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option "
           EditorStartupCli::ForcePlay);
 }
 
-TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults",
-          "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults", "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::string unknown = "--ignored";
@@ -474,8 +452,7 @@ TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults",
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
 }
 
-TEST_CASE("EngineLaunchArgs: trailing --project token is ignored",
-          "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: trailing --project token is ignored", "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::array<char *, 2> argv = {arg0.data(), projectFlag.data()};
@@ -486,9 +463,7 @@ TEST_CASE("EngineLaunchArgs: trailing --project token is ignored",
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
 }
 
-TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume "
-          "the next flag",
-          "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume the next flag", "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::string editorFlag = "--editor";
@@ -643,8 +618,7 @@ TEST_CASE("LogBuffer: CopyLinesTo nullptr is a no-op", "[logbuffer]") {
   REQUIRE_NOTHROW(buf.CopyLinesTo(nullptr));
 }
 
-TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash",
-          "[logbuffer]") {
+TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash", "[logbuffer]") {
   auto &buf = Monolith::LogBuffer::Instance();
   buf.Clear();
   REQUIRE_NOTHROW(buf.GetCounts(nullptr, nullptr, nullptr));
@@ -656,8 +630,7 @@ TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash",
   REQUIRE_NOTHROW(buf.GetCounts(nullptr, nullptr, &e));
 }
 
-TEST_CASE("LogBuffer: MaxLines getter returns configured value",
-          "[logbuffer]") {
+TEST_CASE("LogBuffer: MaxLines getter returns configured value", "[logbuffer]") {
   auto &buf = Monolith::LogBuffer::Instance();
   const size_t original = buf.MaxLines();
   buf.SetMaxLines(256);
@@ -665,15 +638,13 @@ TEST_CASE("LogBuffer: MaxLines getter returns configured value",
   buf.SetMaxLines(original);
 }
 
-TEST_CASE("LogBuffer: Push with null file pointer does not crash",
-          "[logbuffer]") {
+TEST_CASE("LogBuffer: Push with null file pointer does not crash", "[logbuffer]") {
   auto &buf = Monolith::LogBuffer::Instance();
   REQUIRE_NOTHROW(
       buf.Push(Monolith::LogLevel::Info, nullptr, 0, "null-file test"));
 }
 
-TEST_CASE("LogBuffer: Revision increments after Push and Clear",
-          "[logbuffer]") {
+TEST_CASE("LogBuffer: Revision increments after Push and Clear", "[logbuffer]") {
   auto &buf = Monolith::LogBuffer::Instance();
   buf.Clear();
   const uint64_t rev0 = buf.Revision();
@@ -700,14 +671,12 @@ TEST_CASE("Screenshot: zero height returns empty string", "[screenshot]") {
   REQUIRE(Monolith::Screenshot::Save(100, 0, outDir).empty());
 }
 
-TEST_CASE("Screenshot: negative dimensions return empty string",
-          "[screenshot]") {
+TEST_CASE("Screenshot: negative dimensions return empty string", "[screenshot]") {
   const std::string outDir = Monolith::Tests::SecureTempBase().string();
   REQUIRE(Monolith::Screenshot::Save(-1, -1, outDir).empty());
 }
 
-TEST_CASE("Screenshot: backend without readback support returns empty without readback",
-          "[core][screenshot]") {
+TEST_CASE("Screenshot: backend without readback support returns empty without readback", "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = false;
   Renderer::UseBackend(&backend);
@@ -719,8 +688,7 @@ TEST_CASE("Screenshot: backend without readback support returns empty without re
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Screenshot: readback failure returns empty and captures request dimensions",
-          "[core][screenshot]") {
+TEST_CASE("Screenshot: readback failure returns empty and captures request dimensions", "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = true;
   backend.colorReadbackResult = false;
@@ -736,8 +704,7 @@ TEST_CASE("Screenshot: readback failure returns empty and captures request dimen
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Screenshot: successful save writes a BMP file with expected header",
-          "[core][screenshot]") {
+TEST_CASE("Screenshot: successful save writes a BMP file with expected header", "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = true;
   backend.colorReadbackResult = true;
@@ -779,8 +746,7 @@ TEST_CASE("Screenshot: successful save writes a BMP file with expected header",
 // StringHash — heterogeneous lookup coverage
 // ===========================================================================
 
-TEST_CASE("StringHash: operator() hashes string_view consistently",
-          "[stringhash]") {
+TEST_CASE("StringHash: operator() hashes string_view consistently", "[stringhash]") {
   Monolith::StringHash hasher;
   REQUIRE(hasher(std::string_view("hello")) ==
           hasher(std::string_view("hello")));
@@ -788,8 +754,7 @@ TEST_CASE("StringHash: operator() hashes string_view consistently",
           hasher(std::string_view("world")));
 }
 
-TEST_CASE("StringHash: heterogeneous find with string_view key",
-          "[stringhash]") {
+TEST_CASE("StringHash: heterogeneous find with string_view key", "[stringhash]") {
   std::unordered_map<std::string, int, Monolith::StringHash, std::equal_to<>> m;
   m["alpha"] = 1;
   m["beta"] = 2;
@@ -806,8 +771,7 @@ TEST_CASE("Time: FIXED_DT is 120 Hz", "[time]") {
   REQUIRE(Monolith::Time::FIXED_DT == Approx(1.0f / 120.0f));
 }
 
-TEST_CASE("Time: ConsumeFixedStep returns false when accumulator is zero",
-          "[time]") {
+TEST_CASE("Time: ConsumeFixedStep returns false when accumulator is zero", "[time]") {
   // After default construction the static accumulator is zero — no steps ready.
   REQUIRE_FALSE(Monolith::Time::ConsumeFixedStep());
 }

@@ -13,8 +13,7 @@ using Catch::Approx;
 // SemiImplicitEuler — angular integration
 // ============================================================
 
-TEST_CASE("SemiImplicitEuler: static body ignores torque",
-          "[integration][angular]") {
+TEST_CASE("SemiImplicitEuler: static body ignores torque", "[integration][angular]") {
   RigidBody b = RigidBody::MakeStatic();
   b.AddTorque({0, 100, 0});
   SemiImplicitEuler::Integrate(b, 1.0f / 60.0f);
@@ -23,8 +22,7 @@ TEST_CASE("SemiImplicitEuler: static body ignores torque",
   REQUIRE(b.angularVelocity.z == Approx(0));
 }
 
-TEST_CASE("SemiImplicitEuler: torque changes angular velocity",
-          "[integration][angular]") {
+TEST_CASE("SemiImplicitEuler: torque changes angular velocity", "[integration][angular]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   // I = (2/5)*m*r^2 = 0.4 → invI = 2.5
   b.angularVelocity = Vec3::Zero();
@@ -39,8 +37,7 @@ TEST_CASE("SemiImplicitEuler: torque changes angular velocity",
   REQUIRE(b.angularVelocity.y == Approx(expectedW).epsilon(1e-4f));
 }
 
-TEST_CASE("SemiImplicitEuler: angular velocity rotates orientation",
-          "[integration][angular]") {
+TEST_CASE("SemiImplicitEuler: angular velocity rotates orientation", "[integration][angular]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   b.angularVelocity = {0, 1, 0}; // spinning around Y
   b.orientation = Quaternion::Identity();
@@ -57,8 +54,7 @@ TEST_CASE("SemiImplicitEuler: angular velocity rotates orientation",
   REQUIRE(b.orientation.Length() == Approx(1.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("SemiImplicitEuler: orientation stays normalized under many steps",
-          "[integration][angular]") {
+TEST_CASE("SemiImplicitEuler: orientation stays normalized under many steps", "[integration][angular]") {
   RigidBody b = RigidBody::MakeSphere(0.5f, 2.0f);
   b.angularVelocity = {1, 2, 3};
   b.orientation = Quaternion::Identity();
@@ -70,8 +66,7 @@ TEST_CASE("SemiImplicitEuler: orientation stays normalized under many steps",
   REQUIRE(b.orientation.Length() == Approx(1.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("SemiImplicitEuler: linear damping reduces speed",
-          "[integration][linear]") {
+TEST_CASE("SemiImplicitEuler: linear damping reduces speed", "[integration][linear]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   b.velocity = {10, 0, 0};
   b.linearDamping = 0.1f;
@@ -84,8 +79,7 @@ TEST_CASE("SemiImplicitEuler: linear damping reduces speed",
   REQUIRE(b.velocity.x == Approx(expected).epsilon(1e-4f));
 }
 
-TEST_CASE("SemiImplicitEuler: angular damping reduces spin",
-          "[integration][angular]") {
+TEST_CASE("SemiImplicitEuler: angular damping reduces spin", "[integration][angular]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   b.angularVelocity = {0, 10, 0};
   b.angularDamping = 0.1f;
@@ -101,15 +95,13 @@ TEST_CASE("SemiImplicitEuler: angular damping reduces spin",
 // RigidBody — additional factory / inertia edge cases
 // ============================================================
 
-TEST_CASE("RigidBody::UpdateWorldInertia is callable without crash",
-          "[rigidbody]") {
+TEST_CASE("RigidBody::UpdateWorldInertia is callable without crash", "[rigidbody]") {
   auto b = RigidBody::MakeSphere(1.0f, 1.0f);
   // Currently a no-op / stub — just ensure it doesn't crash
   REQUIRE_NOTHROW(b.UpdateWorldInertia());
 }
 
-TEST_CASE("RigidBody SetSphereInertia on static body gives zero tensor",
-          "[rigidbody]") {
+TEST_CASE("RigidBody SetSphereInertia on static body gives zero tensor", "[rigidbody]") {
   RigidBody b = RigidBody::MakeStatic();
   b.SetSphereInertia(2.0f); // invMass == 0 → zero tensor
   for (int r = 0; r < 3; r++)
@@ -117,8 +109,7 @@ TEST_CASE("RigidBody SetSphereInertia on static body gives zero tensor",
       REQUIRE(b.inertiaTensorInv.m[r][c] == Approx(0).margin(1e-6f));
 }
 
-TEST_CASE("RigidBody SetBoxInertia on static body gives zero tensor",
-          "[rigidbody]") {
+TEST_CASE("RigidBody SetBoxInertia on static body gives zero tensor", "[rigidbody]") {
   RigidBody b = RigidBody::MakeStatic();
   b.SetBoxInertia({1, 1, 1}); // invMass == 0 → zero tensor
   for (int r = 0; r < 3; r++)

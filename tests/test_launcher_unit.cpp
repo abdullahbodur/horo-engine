@@ -89,28 +89,24 @@ struct HomeDirGuard {
 };
 } // namespace
 
-TEST_CASE("SanitizeProjectId normalizes names for manifest ids",
-          "[launcher][project]") {
+TEST_CASE("SanitizeProjectId normalizes names for manifest ids", "[launcher][project]") {
   REQUIRE(SanitizeProjectId("My Game") == "my_game");
   REQUIRE(SanitizeProjectId("Foo-Bar_Baz") == "foo_bar_baz");
   REQUIRE(SanitizeProjectId("!!!") == "project");
   REQUIRE(SanitizeProjectId("A  B") == "a_b");
 }
 
-TEST_CASE("SanitizeProjectId strips unsafe path characters",
-          "[launcher][project][coverage]") {
+TEST_CASE("SanitizeProjectId strips unsafe path characters", "[launcher][project][coverage]") {
   REQUIRE(SanitizeProjectId("..\\My:/Game?*") == "mygame");
   REQUIRE(SanitizeProjectId("<>|\"/\\:?*") == "project");
 }
 
-TEST_CASE("ResolveProjectManifestPath points at .horo/project.json",
-          "[launcher][project]") {
+TEST_CASE("ResolveProjectManifestPath points at .horo/project.json", "[launcher][project]") {
   const fs::path root = fs::path("workspace") / "MyProject";
   REQUIRE(ResolveProjectManifestPath(root) == root / ".horo" / "project.json");
 }
 
-TEST_CASE("IsLauncherProjectRoot is true only when manifest exists",
-          "[launcher][project]") {
+TEST_CASE("IsLauncherProjectRoot is true only when manifest exists", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_unit_manifest";
   std::error_code ec;
@@ -132,8 +128,7 @@ TEST_CASE("IsLauncherProjectRoot is true only when manifest exists",
 // LoadProjectManifestDocument
 // ===========================================================================
 
-TEST_CASE("LoadProjectManifestDocument returns parse error when file missing",
-          "[launcher][project][coverage]") {
+TEST_CASE("LoadProjectManifestDocument returns parse error when file missing", "[launcher][project][coverage]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_missing";
   std::error_code ec;
@@ -146,8 +141,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error when file missing",
   CHECK_FALSE(doc.error.empty());
 }
 
-TEST_CASE("LoadProjectManifestDocument returns parse error for invalid JSON",
-          "[launcher][project]") {
+TEST_CASE("LoadProjectManifestDocument returns parse error for invalid JSON", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_badjson";
   std::error_code ec;
@@ -160,8 +154,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for invalid JSON",
   CHECK(doc.parseError);
 }
 
-TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root",
-          "[launcher][project]") {
+TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_arrayroot";
   std::error_code ec;
@@ -174,9 +167,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root",
   CHECK(doc.parseError);
 }
 
-TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key "
-          "absent",
-          "[launcher][project][coverage]") {
+TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key absent", "[launcher][project][coverage]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_noprojectobj";
   std::error_code ec;
@@ -194,8 +185,7 @@ TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key "
   CHECK(doc.manifest.projectId == "project");
 }
 
-TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0",
-          "[launcher][project]") {
+TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_badversion";
   std::error_code ec;
@@ -210,8 +200,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0",
   CHECK(doc.parseError);
 }
 
-TEST_CASE("LoadProjectManifestDocument parses valid manifest with commands",
-          "[launcher][project]") {
+TEST_CASE("LoadProjectManifestDocument parses valid manifest with commands", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_load_valid";
   std::error_code ec;
@@ -246,8 +235,7 @@ TEST_CASE("LoadProjectManifestDocument parses valid manifest with commands",
   CHECK_FALSE(doc.manifest.runCommand.Empty());
 }
 
-TEST_CASE("LauncherProjectCommand::Empty returns true for default",
-          "[launcher][project]") {
+TEST_CASE("LauncherProjectCommand::Empty returns true for default", "[launcher][project]") {
   LauncherProjectCommand cmd;
   CHECK(cmd.Empty());
   cmd.executable = "cmake";
@@ -258,8 +246,7 @@ TEST_CASE("LauncherProjectCommand::Empty returns true for default",
 // SaveProjectManifestDocument
 // ===========================================================================
 
-TEST_CASE("SaveProjectManifestDocument returns error for null doc",
-          "[launcher][project]") {
+TEST_CASE("SaveProjectManifestDocument returns error for null doc", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_save_null";
   std::string err;
@@ -267,8 +254,7 @@ TEST_CASE("SaveProjectManifestDocument returns error for null doc",
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("SaveProjectManifestDocument round-trips manifest fields",
-          "[launcher][project]") {
+TEST_CASE("SaveProjectManifestDocument round-trips manifest fields", "[launcher][project]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_save_roundtrip";
   std::error_code ec;
@@ -301,8 +287,7 @@ TEST_CASE("SaveProjectManifestDocument round-trips manifest fields",
 // ResolveLauncherCommand
 // ===========================================================================
 
-TEST_CASE("ResolveLauncherCommand returns error for null outCommand",
-          "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand returns error for null outCommand", "[launcher][project]") {
   LauncherProjectCommand cmd;
   cmd.executable = "cmake";
   std::string err;
@@ -310,8 +295,7 @@ TEST_CASE("ResolveLauncherCommand returns error for null outCommand",
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("ResolveLauncherCommand returns error for empty executable",
-          "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand returns error for empty executable", "[launcher][project]") {
   LauncherProjectCommand cmd; // executable is empty
   ResolvedLauncherCommand out;
   std::string err;
@@ -319,8 +303,7 @@ TEST_CASE("ResolveLauncherCommand returns error for empty executable",
   CHECK_FALSE(err.empty());
 }
 
-TEST_CASE("ResolveLauncherCommand expands projectDir token in executable",
-          "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand expands projectDir token in executable", "[launcher][project]") {
   LauncherProjectCommand cmd;
   cmd.executable = "${projectDir}/bin/game";
   ResolvedLauncherCommand out;
@@ -332,8 +315,7 @@ TEST_CASE("ResolveLauncherCommand expands projectDir token in executable",
   CHECK(exeStr.find("bin/game") != std::string::npos);
 }
 
-TEST_CASE("ResolveLauncherCommand expands horoSdkRoot token in args",
-          "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand expands horoSdkRoot token in args", "[launcher][project]") {
   LauncherProjectCommand cmd;
   cmd.executable = "cmake";
   cmd.args = {"${horoSdkRoot}/cmake/toolchain.cmake"};
@@ -343,9 +325,7 @@ TEST_CASE("ResolveLauncherCommand expands horoSdkRoot token in args",
   CHECK(out.args.at(0).find("the/sdk") != std::string::npos);
 }
 
-TEST_CASE(
-    "ResolveLauncherCommand defaults working dir to project root when empty",
-    "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand defaults working dir to project root when empty", "[launcher][project]") {
   LauncherProjectCommand cmd;
   cmd.executable = "cmake";
   ResolvedLauncherCommand out;
@@ -355,8 +335,7 @@ TEST_CASE(
   CHECK(wdStr.find("my/project") != std::string::npos);
 }
 
-TEST_CASE("ResolveLauncherCommand builds non-empty debugString",
-          "[launcher][project]") {
+TEST_CASE("ResolveLauncherCommand builds non-empty debugString", "[launcher][project]") {
   LauncherProjectCommand cmd;
   cmd.executable = "cmake";
   cmd.args = {"--build", "."};
@@ -370,8 +349,7 @@ TEST_CASE("ResolveLauncherCommand builds non-empty debugString",
 // LauncherProjectTemplate
 // ===========================================================================
 
-TEST_CASE("CreateLauncherProjectTemplate writes required project files",
-          "[launcher][template]") {
+TEST_CASE("CreateLauncherProjectTemplate writes required project files", "[launcher][template]") {
   const fs::path root =
       Monolith::Tests::SecureTempBase() / "horo_launcher_template_test";
   std::error_code ec;
@@ -401,8 +379,7 @@ TEST_CASE("CreateLauncherProjectTemplate writes required project files",
 // EditorHomeSettings
 // ===========================================================================
 
-TEST_CASE("RememberRecentProject prepends and deduplicates entries",
-          "[launcher][home]") {
+TEST_CASE("RememberRecentProject prepends and deduplicates entries", "[launcher][home]") {
   const fs::path projA = Monolith::Tests::SecureTempBase() / "horo_home_projA";
   const fs::path projB = Monolith::Tests::SecureTempBase() / "horo_home_projB";
   std::error_code ec;
@@ -418,14 +395,12 @@ TEST_CASE("RememberRecentProject prepends and deduplicates entries",
   CHECK(doc.state.lastProjectPath.find("horo_home_projA") != std::string::npos);
 }
 
-TEST_CASE("RememberRecentProject with null doc does not crash",
-          "[launcher][home]") {
+TEST_CASE("RememberRecentProject with null doc does not crash", "[launcher][home]") {
   REQUIRE_NOTHROW(
       RememberRecentProject(nullptr, Monolith::Tests::SecureTempBase()));
 }
 
-TEST_CASE("PruneMissingRecentProjects removes non-existent paths",
-          "[launcher][home]") {
+TEST_CASE("PruneMissingRecentProjects removes non-existent paths", "[launcher][home]") {
   EditorHomeDocument doc;
   doc.state.recentProjects.emplace_back(
       "/nonexistent/path/that/does/not/exist");
@@ -448,8 +423,7 @@ TEST_CASE("PruneMissingRecentProjects removes non-existent paths",
         std::string::npos);
 }
 
-TEST_CASE("PruneMissingRecentProjects with null doc does not crash",
-          "[launcher][home]") {
+TEST_CASE("PruneMissingRecentProjects with null doc does not crash", "[launcher][home]") {
   REQUIRE_NOTHROW(PruneMissingRecentProjects(nullptr));
 }
 
@@ -457,8 +431,7 @@ TEST_CASE("PruneMissingRecentProjects with null doc does not crash",
 // EditorHomeSettings — LoadEditorHomeDocument error paths
 // ===========================================================================
 
-TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON",
-          "[launcher][home][coverage]") {
+TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON", "[launcher][home][coverage]") {
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_home_load_badjson";
   std::error_code ec;
@@ -474,8 +447,7 @@ TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON",
   CHECK(doc.state.recentProjects.empty());
 }
 
-TEST_CASE("LoadEditorHomeDocument: parse error for non-object root",
-          "[launcher][home]") {
+TEST_CASE("LoadEditorHomeDocument: parse error for non-object root", "[launcher][home]") {
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_home_load_arrayroot";
   std::error_code ec;
@@ -490,8 +462,7 @@ TEST_CASE("LoadEditorHomeDocument: parse error for non-object root",
   CHECK(doc.error.find("object") != std::string::npos);
 }
 
-TEST_CASE("LoadEditorHomeDocument: reads recentProjects from disk",
-          "[launcher][home]") {
+TEST_CASE("LoadEditorHomeDocument: reads recentProjects from disk", "[launcher][home]") {
   const fs::path tempHome =
       Monolith::Tests::SecureTempBase() / "horo_home_load_recent";
   std::error_code ec;
@@ -514,8 +485,7 @@ TEST_CASE("LoadEditorHomeDocument: reads recentProjects from disk",
   CHECK_FALSE(doc.state.lastProjectPath.empty());
 }
 
-TEST_CASE("SaveEditorHomeDocument: returns error for null doc",
-          "[launcher][home]") {
+TEST_CASE("SaveEditorHomeDocument: returns error for null doc", "[launcher][home]") {
   std::string err;
   CHECK_FALSE(SaveEditorHomeDocument(nullptr, &err));
   CHECK_FALSE(err.empty());

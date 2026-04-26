@@ -75,8 +75,7 @@ TEST_CASE("RigidBody::MakeStatic: invMass is 0", "[physics][rigidbody]") {
   REQUIRE(b.IsStatic());
 }
 
-TEST_CASE("RigidBody::MakeStatic: inertia tensor is zero matrix",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeStatic: inertia tensor is zero matrix", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeStatic();
   for (int r = 0; r < 3; ++r)
     for (int c = 0; c < 3; ++c)
@@ -87,8 +86,7 @@ TEST_CASE("RigidBody::MakeStatic: inertia tensor is zero matrix",
 // RigidBody — MakeSphere
 // ===========================================================================
 
-TEST_CASE("RigidBody::MakeSphere: correct mass and invMass",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeSphere: correct mass and invMass", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 2.0f);
   REQUIRE(b.mass == Approx(2.0f));
   REQUIRE(b.invMass == Approx(0.5f));
@@ -103,8 +101,7 @@ TEST_CASE("RigidBody::MakeSphere: has SphereCollider", "[physics][rigidbody]") {
   REQUIRE(sc->radius == Approx(0.5f));
 }
 
-TEST_CASE("RigidBody::MakeSphere: inertia tensor is non-zero",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeSphere: inertia tensor is non-zero", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   // Sphere inertia = 2/5 * m * r^2 diagonal, so inverse diagonal should be
   // nonzero
@@ -113,8 +110,7 @@ TEST_CASE("RigidBody::MakeSphere: inertia tensor is non-zero",
   REQUIRE(b.inertiaTensorInv.m[2][2] > 0.0f);
 }
 
-TEST_CASE("RigidBody::MakeSphere: larger radius has smaller inverse inertia",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeSphere: larger radius has smaller inverse inertia", "[physics][rigidbody]") {
   RigidBody small = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody large = RigidBody::MakeSphere(2.0f, 1.0f);
   // Larger radius → larger I → smaller I_inv
@@ -141,17 +137,14 @@ TEST_CASE("RigidBody::MakeBox: has BoxCollider", "[physics][rigidbody]") {
   REQUIRE(bc->halfExtents.z == Approx(2.0f));
 }
 
-TEST_CASE("RigidBody::MakeBox: inertia tensor non-zero",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeBox: inertia tensor non-zero", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeBox({1.0f, 1.0f, 1.0f}, 1.0f);
   REQUIRE(b.inertiaTensorInv.m[0][0] > 0.0f);
   REQUIRE(b.inertiaTensorInv.m[1][1] > 0.0f);
   REQUIRE(b.inertiaTensorInv.m[2][2] > 0.0f);
 }
 
-TEST_CASE(
-    "RigidBody::MakeBox: non-uniform extents give different inertia components",
-    "[physics][rigidbody]") {
+TEST_CASE("RigidBody::MakeBox: non-uniform extents give different inertia components", "[physics][rigidbody]") {
   // Wide flat box: large half.y, small half.x
   RigidBody b = RigidBody::MakeBox({0.1f, 5.0f, 0.1f}, 1.0f);
   // Ix ∝ (4*hy^2 + 4*hz^2), Iy ∝ (4*hx^2 + 4*hz^2)
@@ -197,8 +190,7 @@ TEST_CASE("RigidBody::AddTorque accumulates torques", "[physics][rigidbody]") {
   REQUIRE(b.torqueAccum.z == Approx(2.0f));
 }
 
-TEST_CASE("RigidBody::ClearForces resets force and torque",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::ClearForces resets force and torque", "[physics][rigidbody]") {
   RigidBody b;
   b.AddForce({5.0f, 5.0f, 5.0f});
   b.AddTorque({1.0f, 2.0f, 3.0f});
@@ -215,9 +207,7 @@ TEST_CASE("RigidBody::ClearForces resets force and torque",
 // RigidBody — AddForceAtPoint
 // ===========================================================================
 
-TEST_CASE(
-    "RigidBody::AddForceAtPoint: force applied at center generates no torque",
-    "[physics][rigidbody]") {
+TEST_CASE("RigidBody::AddForceAtPoint: force applied at center generates no torque", "[physics][rigidbody]") {
   RigidBody b;
   b.position = Vec3::Zero();
   b.AddForceAtPoint({0.0f, 10.0f, 0.0f}, {0.0f, 0.0f, 0.0f});
@@ -227,8 +217,7 @@ TEST_CASE(
   REQUIRE(b.torqueAccum.z == Approx(0.0f).margin(1e-6f));
 }
 
-TEST_CASE("RigidBody::AddForceAtPoint: off-center force generates torque",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::AddForceAtPoint: off-center force generates torque", "[physics][rigidbody]") {
   RigidBody b;
   b.position = Vec3::Zero();
   // Force in Y at point (1,0,0) → torque = (1,0,0) × (0,1,0) = (0,0,1)
@@ -246,16 +235,14 @@ TEST_CASE("ContactManifold: starts empty", "[physics][manifold]") {
   REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("ContactManifold: AddContact increments count",
-          "[physics][manifold]") {
+TEST_CASE("ContactManifold: AddContact increments count", "[physics][manifold]") {
   ContactManifold m;
   m.AddContact({0, 0, 0}, {0, 1, 0}, 0.1f);
   REQUIRE(m.count == 1);
   REQUIRE(m.hasContact());
 }
 
-TEST_CASE("ContactManifold: stores contact data correctly",
-          "[physics][manifold]") {
+TEST_CASE("ContactManifold: stores contact data correctly", "[physics][manifold]") {
   ContactManifold m;
   m.AddContact({1.0f, 2.0f, 3.0f}, {0.0f, 1.0f, 0.0f}, 0.05f);
   REQUIRE(m.contacts[0].point.x == Approx(1.0f));
@@ -285,16 +272,14 @@ TEST_CASE("ContactManifold: multiple contacts", "[physics][manifold]") {
 // ContactConstraint — basic solve paths
 // ===========================================================================
 
-TEST_CASE("ContactConstraint::Solve: null bodies is safe",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: null bodies is safe", "[physics][constraint]") {
   ContactConstraint cc;
   cc.bodyA = nullptr;
   cc.bodyB = nullptr;
   REQUIRE_NOTHROW(cc.Solve());
 }
 
-TEST_CASE("ContactConstraint::Solve: no contact is safe",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: no contact is safe", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   ContactConstraint cc;
@@ -304,8 +289,7 @@ TEST_CASE("ContactConstraint::Solve: no contact is safe",
   REQUIRE_NOTHROW(cc.Solve());
 }
 
-TEST_CASE("ContactConstraint::Solve: separating bodies not modified",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: separating bodies not modified", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.velocity = {0.0f, 1.0f, 0.0f}; // moving apart
@@ -322,8 +306,7 @@ TEST_CASE("ContactConstraint::Solve: separating bodies not modified",
   REQUIRE(b.velocity.y == Approx(-1.0f));
 }
 
-TEST_CASE("ContactConstraint::Solve: approaching bodies get impulse",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: approaching bodies get impulse", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = {0.0f, 0.1f, 0.0f};
@@ -343,8 +326,7 @@ TEST_CASE("ContactConstraint::Solve: approaching bodies get impulse",
   REQUIRE(vn_after > -4.0f);
 }
 
-TEST_CASE("ContactConstraint::Solve: static body A not moved",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: static body A not moved", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeStatic();
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   a.position = Vec3::Zero();
@@ -364,8 +346,7 @@ TEST_CASE("ContactConstraint::Solve: static body A not moved",
   REQUIRE(a.velocity.y == Approx(0.0f));
 }
 
-TEST_CASE("ContactConstraint::Solve: static body B not moved",
-          "[physics][constraint]") {
+TEST_CASE("ContactConstraint::Solve: static body B not moved", "[physics][constraint]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeStatic();
   a.velocity = {0.0f, -2.0f, 0.0f};
@@ -386,15 +367,13 @@ TEST_CASE("ContactConstraint::Solve: static body B not moved",
 // ConstraintSolver
 // ===========================================================================
 
-TEST_CASE("ConstraintSolver::Solve: empty constraints is safe",
-          "[physics][solver]") {
+TEST_CASE("ConstraintSolver::Solve: empty constraints is safe", "[physics][solver]") {
   ConstraintSolver solver;
   std::vector<ContactConstraint> constraints;
   REQUIRE_NOTHROW(solver.Solve(constraints));
 }
 
-TEST_CASE("ConstraintSolver::Solve: runs for requested iterations",
-          "[physics][solver]") {
+TEST_CASE("ConstraintSolver::Solve: runs for requested iterations", "[physics][solver]") {
   // Counter body that tracks how many times Solve() is called
   struct CountingBody : public RigidBody {
     int solveCount = 0;
@@ -415,8 +394,7 @@ TEST_CASE("ConstraintSolver::Solve: runs for requested iterations",
   REQUIRE_NOTHROW(solver.Solve(constraints, 5));
 }
 
-TEST_CASE("ConstraintSolver::Solve: zero iterations does nothing",
-          "[physics][solver]") {
+TEST_CASE("ConstraintSolver::Solve: zero iterations does nothing", "[physics][solver]") {
   RigidBody a = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(0.5f, 1.0f);
   float vy_a = -2.0f;
@@ -435,8 +413,7 @@ TEST_CASE("ConstraintSolver::Solve: zero iterations does nothing",
   REQUIRE(a.velocity.y == Approx(vy_a));
 }
 
-TEST_CASE("ConstraintSolver::Solve: multiple constraints processed",
-          "[physics][solver]") {
+TEST_CASE("ConstraintSolver::Solve: multiple constraints processed", "[physics][solver]") {
   RigidBody a1 = RigidBody::MakeSphere(0.5f, 1.0f);
   RigidBody b1 = RigidBody::MakeStatic();
   RigidBody a2 = RigidBody::MakeSphere(0.5f, 1.0f);
@@ -467,22 +444,19 @@ TEST_CASE("ConstraintSolver::Solve: multiple constraints processed",
 // RigidBody — SetSphereInertia / SetBoxInertia edge cases
 // ===========================================================================
 
-TEST_CASE("RigidBody::SetSphereInertia: static body keeps zero inertia",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::SetSphereInertia: static body keeps zero inertia", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeStatic();
   b.SetSphereInertia(1.0f);
   REQUIRE(b.inertiaTensorInv.m[0][0] == Approx(0.0f));
 }
 
-TEST_CASE("RigidBody::SetBoxInertia: static body keeps zero inertia",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::SetBoxInertia: static body keeps zero inertia", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeStatic();
   b.SetBoxInertia({1.0f, 1.0f, 1.0f});
   REQUIRE(b.inertiaTensorInv.m[0][0] == Approx(0.0f));
 }
 
-TEST_CASE("RigidBody::UpdateWorldInertia: does not crash",
-          "[physics][rigidbody]") {
+TEST_CASE("RigidBody::UpdateWorldInertia: does not crash", "[physics][rigidbody]") {
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   REQUIRE_NOTHROW(b.UpdateWorldInertia());
 }

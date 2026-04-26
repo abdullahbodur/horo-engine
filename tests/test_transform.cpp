@@ -69,8 +69,7 @@ TEST_CASE("Transform: full constructor sets all fields", "[transform]") {
 // Transform — ToMatrix
 // ===========================================================================
 
-TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix",
-          "[transform]") {
+TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix", "[transform]") {
   Transform t = Transform::Identity();
   Mat4 m = t.ToMatrix();
 
@@ -88,8 +87,7 @@ TEST_CASE("Transform::ToMatrix: identity transform gives identity matrix",
   REQUIRE(m(2, 3) == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Transform::ToMatrix: translation is embedded in last column",
-          "[transform]") {
+TEST_CASE("Transform::ToMatrix: translation is embedded in last column", "[transform]") {
   Transform t;
   t.position = {3.0f, -1.0f, 5.0f};
   Mat4 m = t.ToMatrix();
@@ -99,8 +97,7 @@ TEST_CASE("Transform::ToMatrix: translation is embedded in last column",
   REQUIRE(m.GetTranslation().z == Approx(5.0f).epsilon(1e-5f));
 }
 
-TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix",
-          "[transform]") {
+TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix", "[transform]") {
   Transform t;
   t.scale = {3.0f, 3.0f, 3.0f};
   Mat4 m = t.ToMatrix();
@@ -110,8 +107,7 @@ TEST_CASE("Transform::ToMatrix: uniform scale reflects in matrix",
   REQUIRE(scaled.Length() == Approx(3.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z",
-          "[transform]") {
+TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z", "[transform]") {
   Transform t;
   t.rotation = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
   Mat4 m = t.ToMatrix();
@@ -128,8 +124,7 @@ TEST_CASE("Transform::ToMatrix: 90-degree Y rotation rotates X to Z",
 // Transform — TransformPoint
 // ===========================================================================
 
-TEST_CASE("Transform::TransformPoint: identity leaves point unchanged",
-          "[transform]") {
+TEST_CASE("Transform::TransformPoint: identity leaves point unchanged", "[transform]") {
   Transform t = Transform::Identity();
   Vec3 pt{1.0f, 2.0f, 3.0f};
   Vec3 result = t.TransformPoint(pt);
@@ -179,8 +174,7 @@ TEST_CASE("Transform::TransformPoint: combined TRS", "[transform]") {
 // Transform — Forward / Up / Right
 // ===========================================================================
 
-TEST_CASE("Transform::Forward: identity points in default forward (-Z)",
-          "[transform]") {
+TEST_CASE("Transform::Forward: identity points in default forward (-Z)", "[transform]") {
   Transform t = Transform::Identity();
   Vec3 fwd = t.Forward();
   REQUIRE(fwd.x == Approx(0.0f).margin(1e-5f));
@@ -204,8 +198,7 @@ TEST_CASE("Transform::Right: identity points in +X", "[transform]") {
   REQUIRE(right.z == Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("Transform::Forward: 90° Y rotation changes forward direction",
-          "[transform]") {
+TEST_CASE("Transform::Forward: 90° Y rotation changes forward direction", "[transform]") {
   Transform t;
   // Rotating 90° around Y: Forward (-Z) becomes (-X) rotated
   t.rotation = Quaternion::FromAxisAngle({0.0f, 1.0f, 0.0f}, PI * 0.5f);
@@ -217,8 +210,7 @@ TEST_CASE("Transform::Forward: 90° Y rotation changes forward direction",
   REQUIRE(!(fwd.z == Approx(-1.0f).epsilon(0.1f))); // no longer -Z
 }
 
-TEST_CASE("Transform direction vectors are mutually perpendicular",
-          "[transform]") {
+TEST_CASE("Transform direction vectors are mutually perpendicular", "[transform]") {
   Transform t;
   t.rotation = Quaternion::FromEuler(0.2f, 0.5f, 0.1f);
 
@@ -274,8 +266,7 @@ TEST_CASE("WorldAabbFromLocalBox: translated unit cube", "[transform][aabb]") {
   REQUIRE(wh.z == Approx(0.5f));
 }
 
-TEST_CASE("WorldAabbFromLocalBox: offset local center expands world AABB",
-          "[transform][aabb]") {
+TEST_CASE("WorldAabbFromLocalBox: offset local center expands world AABB", "[transform][aabb]") {
   Transform t;
   t.position = {0.0f, 0.0f, 0.0f};
   Vec3 wc;

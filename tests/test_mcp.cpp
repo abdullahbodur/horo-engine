@@ -556,8 +556,7 @@ json CallTool(const McpProtocol &protocol, std::string_view name,
 
 } // namespace
 
-TEST_CASE("McpSettings loads missing values with defaults and keeps extras",
-          "[mcp][settings][coverage]") {
+TEST_CASE("McpSettings loads missing values with defaults and keeps extras", "[mcp][settings][coverage]") {
   EnvGuard env("horo_mcp_settings_coverage");
   const std::filesystem::path settingsPath = ResolveMcpSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());
@@ -585,8 +584,7 @@ TEST_CASE("McpSettings loads missing values with defaults and keeps extras",
   REQUIRE(doc.settings.autoStart == true);
 }
 
-TEST_CASE("McpSettings preserves unknown keys and uses home settings path",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings preserves unknown keys and uses home settings path", "[mcp][settings]") {
   EnvGuard env("horo_mcp_settings");
   const std::filesystem::path settingsPath = ResolveMcpSettingsPath();
   std::filesystem::create_directories(settingsPath.parent_path());
@@ -620,8 +618,7 @@ TEST_CASE("McpSettings preserves unknown keys and uses home settings path",
   REQUIRE(saved["mcp"]["port"] == 40124);
 }
 
-TEST_CASE("McpSnapshot builders cover compact MCP resources",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
 
   const json sceneSummary = BuildSceneSummaryJson(snapshot, 2);
@@ -760,8 +757,7 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources",
   REQUIRE(searchConsole["lines"][0]["level"] == "ERROR");
 }
 
-TEST_CASE("McpSnapshot builds world-space edges for rotated objects",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot builds world-space edges for rotated objects", "[mcp][snapshot]") {
   McpObjectSnapshot object;
   object.id = "box";
   object.type = "Prop";
@@ -787,9 +783,7 @@ TEST_CASE("McpSnapshot builds world-space edges for rotated objects",
   REQUIRE(NearlyEqualJsonFloat(firstCorner[2], 0.0f));
 }
 
-TEST_CASE(
-    "McpProtocol serves initialize, lists, all resources, and all read tools",
-    "[mcp][protocol][coverage]") {
+TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read tools", "[mcp][protocol][coverage]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<McpActivityRecord> activity;
   McpProtocol protocol(McpProtocolContext{
@@ -996,8 +990,7 @@ TEST_CASE(
   REQUIRE(activity.back().ok);
 }
 
-TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk",
-          "[mcp][editor]") {
+TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk", "[mcp][editor]") {
   EnvGuard env("horo_editor_mcp_consistency");
   const std::filesystem::path scenePath = Monolith::Tests::SecureTempBase() /
                                           "horo_editor_mcp_consistency" /
@@ -1091,8 +1084,7 @@ TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk",
   REQUIRE(camera->props.at("parentId") == "obj_000");
 }
 
-TEST_CASE("Editor MCP delete_asset reports managed file deletion details",
-          "[mcp][editor]") {
+TEST_CASE("Editor MCP delete_asset reports managed file deletion details", "[mcp][editor]") {
   namespace fs = std::filesystem;
 
   EnvGuard env("horo_editor_mcp_delete_asset");
@@ -1142,9 +1134,7 @@ TEST_CASE("Editor MCP delete_asset reports managed file deletion details",
   REQUIRE_FALSE(fs::exists(projectRoot / "assets" / "models" / "stone"));
 }
 
-TEST_CASE("McpProtocol dispatches write tools and gates destructive apply "
-          "behind previews",
-          "[mcp][protocol]") {
+TEST_CASE("McpProtocol dispatches write tools and gates destructive apply behind previews", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<std::string> invoked;
   McpProtocol protocol(McpProtocolContext{
@@ -1226,9 +1216,7 @@ TEST_CASE("McpProtocol dispatches write tools and gates destructive apply "
   REQUIRE(invoked.back() == "editor.reload_scene");
 }
 
-TEST_CASE("McpProtocol validates schema-backed mutations and preview tokens "
-          "before queueing",
-          "[mcp][protocol]") {
+TEST_CASE("McpProtocol validates schema-backed mutations and preview tokens before queueing", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<std::string> invoked;
   McpProtocol protocol(McpProtocolContext{
@@ -1284,9 +1272,7 @@ TEST_CASE("McpProtocol validates schema-backed mutations and preview tokens "
   REQUIRE(invoked.empty());
 }
 
-TEST_CASE("McpProtocol writes apply audit records to project root and fallback "
-          "settings path",
-          "[mcp][protocol][audit]") {
+TEST_CASE("McpProtocol writes apply audit records to project root and fallback settings path", "[mcp][protocol][audit]") {
   namespace fs = std::filesystem;
 
   EnvGuard env("horo_mcp_audit");
@@ -1369,8 +1355,7 @@ TEST_CASE("McpProtocol writes apply audit records to project root and fallback "
   REQUIRE(fallbackRecords[0]["result"] == "success");
 }
 
-TEST_CASE("McpProtocol supports the recommended inspect to audit workflow",
-          "[mcp][protocol][workflow]") {
+TEST_CASE("McpProtocol supports the recommended inspect to audit workflow", "[mcp][protocol][workflow]") {
   namespace fs = std::filesystem;
 
   EnvGuard env("horo_mcp_workflow");
@@ -1437,9 +1422,7 @@ TEST_CASE("McpProtocol supports the recommended inspect to audit workflow",
   REQUIRE(records[0]["result"] == "success");
 }
 
-TEST_CASE(
-    "McpProtocol returns expected errors for unsupported or unavailable paths",
-    "[mcp][protocol][coverage]") {
+TEST_CASE("McpProtocol returns expected errors for unsupported or unavailable paths", "[mcp][protocol][coverage]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocolWithSnapshot(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -1517,9 +1500,7 @@ TEST_CASE(
   REQUIRE(queueUnavailable.statusCode == 503);
 }
 
-TEST_CASE(
-    "McpController localhost server serves reads, writes, and status snapshots",
-    "[mcp][integration]") {
+TEST_CASE("McpController localhost server serves reads, writes, and status snapshots", "[mcp][integration]") {
   EnvGuard env("horo_mcp_controller");
   McpController controller;
   controller.Initialize();
@@ -1592,8 +1573,7 @@ TEST_CASE(
   controller.SetEditorActive(false);
 }
 
-TEST_CASE("McpProtocol accepts underscore aliases for tool names",
-          "[mcp][protocol]") {
+TEST_CASE("McpProtocol accepts underscore aliases for tool names", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -1616,8 +1596,7 @@ TEST_CASE("McpProtocol accepts underscore aliases for tool names",
 // McpSettings — edge cases: default values, sanitization, null save, home dir
 // ===========================================================================
 
-TEST_CASE("McpSettings: DefaultMcpSettings returns expected defaults",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: DefaultMcpSettings returns expected defaults", "[mcp][settings]") {
   const McpSettings s = DefaultMcpSettings();
   REQUIRE(s.enabled == false);
   REQUIRE(s.transport == std::string(kDefaultMcpTransport));
@@ -1626,9 +1605,7 @@ TEST_CASE("McpSettings: DefaultMcpSettings returns expected defaults",
   REQUIRE(s.autoStart == true);
 }
 
-TEST_CASE(
-    "McpSettings: SanitizePort clamps out-of-range values via SaveMcpSettings",
-    "[mcp][settings]") {
+TEST_CASE("McpSettings: SanitizePort clamps out-of-range values via SaveMcpSettings", "[mcp][settings]") {
   EnvGuard env("horo_mcp_sanitize_port");
   McpSettingsDocument doc;
   doc.settings = DefaultMcpSettings();
@@ -1649,8 +1626,7 @@ TEST_CASE(
   REQUIRE(doc.settings.port == 3000);
 }
 
-TEST_CASE("McpSettings: SanitizeHost enforces localhost via SaveMcpSettings",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: SanitizeHost enforces localhost via SaveMcpSettings", "[mcp][settings]") {
   EnvGuard env("horo_mcp_sanitize_host");
   McpSettingsDocument doc;
   doc.settings = DefaultMcpSettings();
@@ -1661,8 +1637,7 @@ TEST_CASE("McpSettings: SanitizeHost enforces localhost via SaveMcpSettings",
   REQUIRE(doc.settings.host == std::string(kDefaultMcpHost));
 }
 
-TEST_CASE("McpSettings: LoadMcpSettings handles bad JSON gracefully",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: LoadMcpSettings handles bad JSON gracefully", "[mcp][settings]") {
   EnvGuard env("horo_mcp_bad_json");
   const auto settingsDir = env.tempHome / ".horo";
   std::filesystem::create_directories(settingsDir);
@@ -1674,8 +1649,7 @@ TEST_CASE("McpSettings: LoadMcpSettings handles bad JSON gracefully",
   REQUIRE_FALSE(doc.error.empty());
 }
 
-TEST_CASE("McpSettings: LoadMcpSettings handles non-object JSON root",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: LoadMcpSettings handles non-object JSON root", "[mcp][settings]") {
   EnvGuard env("horo_mcp_nonobj_root");
   const auto settingsDir = env.tempHome / ".horo";
   std::filesystem::create_directories(settingsDir);
@@ -1686,27 +1660,22 @@ TEST_CASE("McpSettings: LoadMcpSettings handles non-object JSON root",
   REQUIRE(doc.parseError);
 }
 
-TEST_CASE("McpSettings: SaveMcpSettings nullptr returns false with error",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: SaveMcpSettings nullptr returns false with error", "[mcp][settings]") {
   std::string err;
   REQUIRE_FALSE(SaveMcpSettings(nullptr, &err));
   REQUIRE_FALSE(err.empty());
 }
 
-TEST_CASE("McpSettings: SaveMcpSettings nullptr outError does not crash",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: SaveMcpSettings nullptr outError does not crash", "[mcp][settings]") {
   REQUIRE_FALSE(SaveMcpSettings(nullptr, nullptr));
 }
 
-TEST_CASE("McpSettings: ResolveMcpHomeDirectory returns a non-empty path",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: ResolveMcpHomeDirectory returns a non-empty path", "[mcp][settings]") {
   const auto p = ResolveMcpHomeDirectory();
   REQUIRE_FALSE(p.empty());
 }
 
-TEST_CASE(
-    "McpSettings: ResolveMcpHomeDirectory uses current_path when HOME unset",
-    "[mcp][settings]") {
+TEST_CASE("McpSettings: ResolveMcpHomeDirectory uses current_path when HOME unset", "[mcp][settings]") {
   EnvGuard env("horo_mcp_nohome");
   // Unset HOME / USERPROFILE so the fallback branch is taken
 #ifdef _WIN32
@@ -1725,8 +1694,7 @@ TEST_CASE(
 // McpSnapshot — CloneSnapshot, Find helpers, Build helpers
 // ===========================================================================
 
-TEST_CASE("McpSnapshot: CloneSnapshot produces independent copy",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: CloneSnapshot produces independent copy", "[mcp][snapshot]") {
   McpEditorSnapshot original = MakeSnapshot();
   const auto clonePtr = CloneSnapshot(original);
   REQUIRE(clonePtr != nullptr);
@@ -1739,14 +1707,12 @@ TEST_CASE("McpSnapshot: CloneSnapshot produces independent copy",
   REQUIRE(clonePtr->objects.size() == origObjCount);
 }
 
-TEST_CASE("McpSnapshot: FindObjectById returns nullptr for unknown id",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: FindObjectById returns nullptr for unknown id", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   REQUIRE(FindObjectById(snapshot, "does_not_exist") == nullptr);
 }
 
-TEST_CASE("McpSnapshot: FindObjectById returns correct object",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: FindObjectById returns correct object", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   REQUIRE_FALSE(snapshot.objects.empty());
   const std::string firstId = snapshot.objects[0].id;
@@ -1755,14 +1721,12 @@ TEST_CASE("McpSnapshot: FindObjectById returns correct object",
   REQUIRE(obj->id == firstId);
 }
 
-TEST_CASE("McpSnapshot: FindAssetById returns nullptr for unknown id",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: FindAssetById returns nullptr for unknown id", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   REQUIRE(FindAssetById(snapshot, "ghost_asset") == nullptr);
 }
 
-TEST_CASE("McpSnapshot: FindAssetById returns correct asset",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: FindAssetById returns correct asset", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   REQUIRE_FALSE(snapshot.assets.empty());
   const std::string firstId = snapshot.assets[0].id;
@@ -1771,8 +1735,7 @@ TEST_CASE("McpSnapshot: FindAssetById returns correct asset",
   REQUIRE(asset->id == firstId);
 }
 
-TEST_CASE("McpSnapshot: BuildBuildStatusJson with no issues",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: BuildBuildStatusJson with no issues", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   snapshot.build.issues.clear();
   snapshot.build.status = "idle";
@@ -1780,8 +1743,7 @@ TEST_CASE("McpSnapshot: BuildBuildStatusJson with no issues",
   REQUIRE(status.contains("status"));
 }
 
-TEST_CASE("McpSnapshot: BuildConsoleJson with non-zero offset trims lines",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: BuildConsoleJson with non-zero offset trims lines", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   // Add several console entries
   snapshot.consoleEntries.clear();
@@ -1796,8 +1758,7 @@ TEST_CASE("McpSnapshot: BuildConsoleJson with non-zero offset trims lines",
   REQUIRE(offset["lines"].size() < full["lines"].size());
 }
 
-TEST_CASE("McpSnapshot: SearchConsoleSnapshot returns matching lines",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: SearchConsoleSnapshot returns matching lines", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   snapshot.consoleEntries.clear();
   McpConsoleEntry err;
@@ -1812,17 +1773,14 @@ TEST_CASE("McpSnapshot: SearchConsoleSnapshot returns matching lines",
   REQUIRE(result["matchedLines"] >= 1);
 }
 
-TEST_CASE("McpSnapshot: SearchAssetsSnapshot returns matching assets",
-          "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: SearchAssetsSnapshot returns matching assets", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   const json result = SearchAssetsSnapshot(snapshot, "crate", 5);
   REQUIRE(result["matchedAssets"] >= 1);
   REQUIRE(result["assets"][0]["id"] == "crate");
 }
 
-TEST_CASE(
-    "McpSnapshot: BuildSelectionJson with empty selection has no asset key",
-    "[mcp][snapshot]") {
+TEST_CASE("McpSnapshot: BuildSelectionJson with empty selection has no asset key", "[mcp][snapshot]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   snapshot.selectedObjectIds.clear();
   snapshot.selectedAssetId.clear();
@@ -1835,8 +1793,7 @@ TEST_CASE(
 // McpController — config snippets, ClearActivityLog, SettingsDocument
 // ===========================================================================
 
-TEST_CASE("McpController: BuildClaudeConfigSnippet returns non-empty JSON",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildClaudeConfigSnippet returns non-empty JSON", "[mcp][controller]") {
   EnvGuard env("horo_mcp_claude_snippet");
   McpController controller;
   const std::string snippet = controller.BuildClaudeConfigSnippet();
@@ -1845,8 +1802,7 @@ TEST_CASE("McpController: BuildClaudeConfigSnippet returns non-empty JSON",
   REQUIRE(j.contains("mcpServers"));
 }
 
-TEST_CASE("McpController: BuildCodexConfigSnippet returns non-empty config",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildCodexConfigSnippet returns non-empty config", "[mcp][controller]") {
   EnvGuard env("horo_mcp_codex_snippet");
   McpController controller;
   const std::string snippet = controller.BuildCodexConfigSnippet();
@@ -1856,8 +1812,7 @@ TEST_CASE("McpController: BuildCodexConfigSnippet returns non-empty config",
   REQUIRE(snippet.find("url") != std::string::npos);
 }
 
-TEST_CASE("McpController: BuildVsCodeConfigSnippet returns non-empty JSON",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildVsCodeConfigSnippet returns non-empty JSON", "[mcp][controller]") {
   EnvGuard env("horo_mcp_vscode_snippet");
   McpController controller;
   const std::string snippet = controller.BuildVsCodeConfigSnippet();
@@ -1866,16 +1821,14 @@ TEST_CASE("McpController: BuildVsCodeConfigSnippet returns non-empty JSON",
   REQUIRE(j.is_object());
 }
 
-TEST_CASE("McpController: ClearActivityLog does not crash",
-          "[mcp][controller]") {
+TEST_CASE("McpController: ClearActivityLog does not crash", "[mcp][controller]") {
   EnvGuard env("horo_mcp_clear_log");
   McpController controller;
   REQUIRE_NOTHROW(controller.ClearActivityLog());
   REQUIRE_NOTHROW(controller.ClearActivityLog()); // idempotent
 }
 
-TEST_CASE("McpController: SettingsDocument reflects defaults before Initialize",
-          "[mcp][controller]") {
+TEST_CASE("McpController: SettingsDocument reflects defaults before Initialize", "[mcp][controller]") {
   EnvGuard env("horo_mcp_settings_doc");
   McpController controller;
   const McpSettingsDocument &doc = controller.SettingsDocument();
@@ -1883,8 +1836,7 @@ TEST_CASE("McpController: SettingsDocument reflects defaults before Initialize",
   REQUIRE_FALSE(doc.settings.enabled);
 }
 
-TEST_CASE("McpController: Initialize is idempotent when not started",
-          "[mcp][controller]") {
+TEST_CASE("McpController: Initialize is idempotent when not started", "[mcp][controller]") {
   EnvGuard env("horo_mcp_idempotent_init");
   McpController controller;
   REQUIRE_NOTHROW(controller.Initialize());
@@ -1895,8 +1847,7 @@ TEST_CASE("McpController: Initialize is idempotent when not started",
 // McpProtocol — additional field-validation and protocol paths
 // ===========================================================================
 
-TEST_CASE("McpProtocol: notifications are accepted with 202 and no body",
-          "[mcp][protocol]") {
+TEST_CASE("McpProtocol: notifications are accepted with 202 and no body", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); }, nullptr, {}});
@@ -1911,10 +1862,7 @@ TEST_CASE("McpProtocol: notifications are accepted with 202 and no body",
   REQUIRE(resp.body.empty());
 }
 
-TEST_CASE(
-    "McpProtocol: field validation rejects bad enum, float, bool and color "
-    "values",
-    "[mcp][protocol]") {
+TEST_CASE("McpProtocol: field validation rejects bad enum, float, bool and color values", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -2010,9 +1958,7 @@ TEST_CASE(
               "color3") != std::string::npos);
 }
 
-TEST_CASE(
-    "McpProtocol: ParseMutationMode rejects non-string and unknown mode values",
-    "[mcp][protocol]") {
+TEST_CASE("McpProtocol: ParseMutationMode rejects non-string and unknown mode values", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -2035,10 +1981,7 @@ TEST_CASE(
           "mode must be \"preview\" or \"apply\".");
 }
 
-TEST_CASE(
-    "McpProtocol: reparent_object rejects self-parent, cycles, and invalid "
-    "parentId types",
-    "[mcp][protocol]") {
+TEST_CASE("McpProtocol: reparent_object rejects self-parent, cycles, and invalid parentId types", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -2070,9 +2013,7 @@ TEST_CASE(
   REQUIRE(cycle["error"]["message"] == "Parent would create a cycle.");
 }
 
-TEST_CASE(
-    "McpProtocol: freeform props accepted for types without a schema entry",
-    "[mcp][protocol]") {
+TEST_CASE("McpProtocol: freeform props accepted for types without a schema entry", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -2092,9 +2033,7 @@ TEST_CASE(
           "editor.create_object");
 }
 
-TEST_CASE(
-    "McpProtocol: NormalizeComponentList rejects items without type field",
-    "[mcp][protocol]") {
+TEST_CASE("McpProtocol: NormalizeComponentList rejects items without type field", "[mcp][protocol]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -2129,9 +2068,7 @@ TEST_CASE(
 // (as opposed to protocol tests which use mock command callbacks).
 // ===========================================================================
 
-TEST_CASE(
-    "EditorLayer MCP: clear_selection clears state and returns cleared=true",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: clear_selection clears state and returns cleared=true", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.sceneName = "ClearSel";
@@ -2157,8 +2094,7 @@ TEST_CASE(
   REQUIRE(editor.GetSelectedObjectIds().empty());
 }
 
-TEST_CASE("EditorLayer MCP: undo with no history returns ok with undone=false",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: undo with no history returns ok with undone=false", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.sceneName = "UndoTest";
@@ -2174,9 +2110,7 @@ TEST_CASE("EditorLayer MCP: undo with no history returns ok with undone=false",
   REQUIRE(result.data.contains("dirty"));
 }
 
-TEST_CASE(
-    "EditorLayer MCP: undo/redo after create_object toggle document state",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: undo/redo after create_object toggle document state", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.sceneName = "UndoRedoTest";
@@ -2204,9 +2138,7 @@ TEST_CASE(
   REQUIRE(redoResult.data.contains("dirty"));
 }
 
-TEST_CASE(
-    "EditorLayer MCP: redo with nothing to redo returns ok with redone=false",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: redo with nothing to redo returns ok with redone=false", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2219,9 +2151,7 @@ TEST_CASE(
   REQUIRE_FALSE(result.data["redone"].get<bool>());
 }
 
-TEST_CASE("EditorLayer MCP: update_object sets pitch, roll, and clears assetId "
-          "with null",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object sets pitch, roll, and clears assetId with null", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
@@ -2246,9 +2176,7 @@ TEST_CASE("EditorLayer MCP: update_object sets pitch, roll, and clears assetId "
   REQUIRE(updated["assetId"] == "");
 }
 
-TEST_CASE("EditorLayer MCP: update_object with assetId string updates asset "
-          "reference",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object with assetId string updates asset reference", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
@@ -2271,9 +2199,7 @@ TEST_CASE("EditorLayer MCP: update_object with assetId string updates asset "
   REQUIRE(result.data["updated"]["assetId"] == "sphere");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: update_object with props containing non-string values",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object with props containing non-string values", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2304,9 +2230,7 @@ TEST_CASE(
   REQUIRE(found);
 }
 
-TEST_CASE("EditorLayer MCP: update_object with valid components list updates "
-          "components",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object with valid components list updates components", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2334,8 +2258,7 @@ TEST_CASE("EditorLayer MCP: update_object with valid components list updates "
   }
 }
 
-TEST_CASE("EditorLayer MCP: update_object rejects invalid components array",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object rejects invalid components array", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2355,8 +2278,7 @@ TEST_CASE("EditorLayer MCP: update_object rejects invalid components array",
   REQUIRE(result.error == "components must be an array of objects.");
 }
 
-TEST_CASE("EditorLayer MCP: update_object rejects invalid scale",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object rejects invalid scale", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2374,9 +2296,7 @@ TEST_CASE("EditorLayer MCP: update_object rejects invalid scale",
   REQUIRE(result.error == "scale must be [x,y,z].");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: update_object with transform callback fires callback",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_object with transform callback fires callback", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2397,8 +2317,7 @@ TEST_CASE(
   REQUIRE(callbackFired);
 }
 
-TEST_CASE("EditorLayer MCP: delete by single id removes the object",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: delete by single id removes the object", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject a;
@@ -2416,8 +2335,7 @@ TEST_CASE("EditorLayer MCP: delete by single id removes the object",
   REQUIRE(editor.GetDocument().objects.empty());
 }
 
-TEST_CASE("EditorLayer MCP: delete by ids array removes multiple objects",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: delete by ids array removes multiple objects", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   for (int i = 0; i < 3; ++i) {
@@ -2439,8 +2357,7 @@ TEST_CASE("EditorLayer MCP: delete by ids array removes multiple objects",
   REQUIRE(editor.GetDocument().objects[0].id == "multi_del_1");
 }
 
-TEST_CASE("EditorLayer MCP: delete skips non-string items in ids array",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: delete skips non-string items in ids array", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject o;
@@ -2458,8 +2375,7 @@ TEST_CASE("EditorLayer MCP: delete skips non-string items in ids array",
   REQUIRE(result.data["deletedCount"] == 1);
 }
 
-TEST_CASE("EditorLayer MCP: delete with no matching objects returns error",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: delete with no matching objects returns error", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2472,8 +2388,7 @@ TEST_CASE("EditorLayer MCP: delete with no matching objects returns error",
   REQUIRE(result.error == "No matching objects to delete.");
 }
 
-TEST_CASE("EditorLayer MCP: select_asset rejects unknown asset id",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: select_asset rejects unknown asset id", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2486,9 +2401,7 @@ TEST_CASE("EditorLayer MCP: select_asset rejects unknown asset id",
   REQUIRE(result.error == "Asset not found.");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: update_asset updates fields and returns asset summary",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_asset updates fields and returns asset summary", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.assets["prop_asset"] = AssetDef{"assets/prop.obj", "1,1,1", ""};
@@ -2513,8 +2426,7 @@ TEST_CASE(
   REQUIRE(result.data["asset"]["objectReferenceCount"] == 1);
 }
 
-TEST_CASE("EditorLayer MCP: update_asset clears fields with null values",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_asset clears fields with null values", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.assets["clearable"] =
@@ -2533,8 +2445,7 @@ TEST_CASE("EditorLayer MCP: update_asset clears fields with null values",
   REQUIRE(result.data["asset"]["mesh"] == "");
 }
 
-TEST_CASE("EditorLayer MCP: update_asset rejects unknown asset id",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: update_asset rejects unknown asset id", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2547,9 +2458,7 @@ TEST_CASE("EditorLayer MCP: update_asset rejects unknown asset id",
   REQUIRE(result.error == "Asset not found.");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: new_scene resets doc with custom sceneId and sceneName",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: new_scene resets doc with custom sceneId and sceneName", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "old_scene";
   doc.sceneName = "Old Scene";
@@ -2575,8 +2484,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE("EditorLayer MCP: new_scene without args uses defaults",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: new_scene without args uses defaults", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "old";
 
@@ -2591,8 +2499,7 @@ TEST_CASE("EditorLayer MCP: new_scene without args uses defaults",
   REQUIRE(result.data.contains("dirty"));
 }
 
-TEST_CASE("EditorLayer MCP: save_scene saves document and returns filePath",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: save_scene saves document and returns filePath", "[mcp][handler]") {
   namespace fs = std::filesystem;
 
   EnvGuard env("horo_mcp_save_scene_handler");
@@ -2636,8 +2543,7 @@ TEST_CASE("EditorLayer MCP: save_scene handles valid path", "[mcp][handler]") {
   REQUIRE(result.data["saved"].get<bool>());
 }
 
-TEST_CASE("EditorLayer MCP: reload_scene works with saved scene",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: reload_scene works with saved scene", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "reload_scene";
   std::filesystem::path testPath = std::filesystem::temp_directory_path() /
@@ -2656,9 +2562,7 @@ TEST_CASE("EditorLayer MCP: reload_scene works with saved scene",
   REQUIRE(reloadResult.ok);
 }
 
-TEST_CASE(
-    "EditorLayer MCP: duplicate with ids array creates one copy per source",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: duplicate with ids array creates one copy per source", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject a;
@@ -2679,8 +2583,7 @@ TEST_CASE(
   REQUIRE(result.data["duplicates"].size() == 2);
 }
 
-TEST_CASE("EditorLayer MCP: duplicate ids array skips non-string items",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: duplicate ids array skips non-string items", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject a;
@@ -2699,8 +2602,7 @@ TEST_CASE("EditorLayer MCP: duplicate ids array skips non-string items",
   REQUIRE(result.data["duplicates"].size() == 1);
 }
 
-TEST_CASE("EditorLayer MCP: duplicate with no matching id returns error",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: duplicate with no matching id returns error", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2713,8 +2615,7 @@ TEST_CASE("EditorLayer MCP: duplicate with no matching id returns error",
   REQUIRE(result.error == "Object not found.");
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object rejects unknown parent id",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: reparent_object rejects unknown parent id", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject obj;
@@ -2732,8 +2633,7 @@ TEST_CASE("EditorLayer MCP: reparent_object rejects unknown parent id",
   REQUIRE(result.error == "Parent object not found.");
 }
 
-TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   SceneObject parent;
@@ -2755,9 +2655,7 @@ TEST_CASE("EditorLayer MCP: reparent_object with empty parentId removes parent",
   REQUIRE(result.data["parentId"] == "");
 }
 
-TEST_CASE(
-    "EditorLayer MCP: create_object with non-string prop values uses dump()",
-    "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: create_object with non-string prop values uses dump()", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2782,9 +2680,7 @@ TEST_CASE(
   REQUIRE(found);
 }
 
-TEST_CASE("EditorLayer MCP: create_object with props null value triggers early "
-          "return",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: create_object with props null value triggers early return", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2806,8 +2702,7 @@ TEST_CASE("EditorLayer MCP: create_object with props null value triggers early "
   }
 }
 
-TEST_CASE("EditorLayer MCP: create_object_from_asset fires transform callback",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: create_object_from_asset fires transform callback", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
   doc.assets["box"] = AssetDef{"assets/box.obj", "1,1,1", ""};
@@ -2826,8 +2721,7 @@ TEST_CASE("EditorLayer MCP: create_object_from_asset fires transform callback",
   REQUIRE(callbackFired);
 }
 
-TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool",
-          "[mcp][handler]") {
+TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool", "[mcp][handler]") {
   SceneDocument doc;
   doc.sceneId = "scene";
 
@@ -2844,8 +2738,7 @@ TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool",
 // McpServer.cpp error-path tests
 // ===========================================================================
 
-TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure",
-          "[mcp][server]") {
+TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure", "[mcp][server]") {
   // Covers McpServer.cpp lines 278-286: inet_pton returns != 1 for a
   // syntactically invalid IPv4 address, setting result.error and not binding.
   using namespace Monolith::Mcp;
@@ -2861,9 +2754,7 @@ TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure",
   REQUIRE_FALSE(server.IsRunning());
 }
 
-TEST_CASE(
-    "McpHttpServer: Start with non-numeric host triggers inet_pton failure",
-    "[mcp][server]") {
+TEST_CASE("McpHttpServer: Start with non-numeric host triggers inet_pton failure", "[mcp][server]") {
   // Second variant — a hostname (not an IP) also fails inet_pton.
   using namespace Monolith::Mcp;
   McpHttpServer server;
@@ -2878,9 +2769,7 @@ TEST_CASE(
   REQUIRE_FALSE(server.IsRunning());
 }
 
-TEST_CASE(
-    "McpHttpServer: parses request headers and dispatches one complete body",
-    "[mcp][server]") {
+TEST_CASE("McpHttpServer: parses request headers and dispatches one complete body", "[mcp][server]") {
   McpHttpServer server;
   int beginCount = 0;
   int endCount = 0;
@@ -2922,9 +2811,7 @@ TEST_CASE(
   REQUIRE(captured.headers.at("x-trace") == "abc");
 }
 
-TEST_CASE(
-    "McpHttpServer: malformed request returns bad request without handler",
-    "[mcp][server]") {
+TEST_CASE("McpHttpServer: malformed request returns bad request without handler", "[mcp][server]") {
   McpHttpServer server;
   bool handlerCalled = false;
   int beginCount = 0;
@@ -2960,9 +2847,7 @@ TEST_CASE(
 // McpSettings.cpp error-path tests
 // ===========================================================================
 
-TEST_CASE("McpSettings: SaveMcpSettings returns error when directory cannot "
-          "be created (HOME points inside a file)",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: SaveMcpSettings returns error when directory cannot be created (HOME points inside a file)", "[mcp][settings]") {
   // Covers McpSettings.cpp lines 151-155: create_directories sets an error_code
   // when the parent path is not a real directory (e.g. /dev/null on
   // macOS/Linux).
@@ -2990,9 +2875,7 @@ TEST_CASE("McpSettings: SaveMcpSettings returns error when directory cannot "
 #endif
 }
 
-TEST_CASE("McpSettings: SaveMcpSettings returns error when settings file "
-          "path is occupied by a directory",
-          "[mcp][settings]") {
+TEST_CASE("McpSettings: SaveMcpSettings returns error when settings file path is occupied by a directory", "[mcp][settings]") {
   // Covers McpSettings.cpp lines 156-161: ofstream::is_open() returns false
   // when the target path is an existing directory rather than a regular file.
   EnvGuard env("horo_mcp_ofstream_fail");
@@ -3011,9 +2894,7 @@ TEST_CASE("McpSettings: SaveMcpSettings returns error when settings file "
   REQUIRE_FALSE(error.empty());
 }
 
-TEST_CASE("McpProtocol: preview mode for "
-          "create/update/rename/reparent/duplicate tools",
-          "[mcp][protocol][preview]") {
+TEST_CASE("McpProtocol: preview mode for create/update/rename/reparent/duplicate tools", "[mcp][protocol][preview]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<std::string> invoked;
   McpProtocol protocol(McpProtocolContext{
@@ -3124,9 +3005,7 @@ TEST_CASE("McpProtocol: preview mode for "
   REQUIRE(invoked[0] == "editor.create_object");
 }
 
-TEST_CASE(
-    "McpProtocol: editor.update_asset and editor.delete_asset preview mode",
-    "[mcp][protocol][preview]") {
+TEST_CASE("McpProtocol: editor.update_asset and editor.delete_asset preview mode", "[mcp][protocol][preview]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   std::vector<std::string> invoked;
   McpProtocol protocol(McpProtocolContext{
@@ -3175,8 +3054,7 @@ TEST_CASE(
   REQUIRE(invoked.empty());
 }
 
-TEST_CASE("McpProtocol: create_object preview with parentId and position set",
-          "[mcp][protocol][preview]") {
+TEST_CASE("McpProtocol: create_object preview with parentId and position set", "[mcp][protocol][preview]") {
   McpEditorSnapshot snapshot = MakeSnapshot();
   McpProtocol protocol(McpProtocolContext{
       [&snapshot]() { return CloneSnapshot(snapshot); },
@@ -3225,8 +3103,7 @@ TEST_CASE("McpProtocol: create_object preview with parentId and position set",
 // McpController — additional branch coverage
 // ===========================================================================
 
-TEST_CASE("McpController: Initialize and Shutdown are idempotent",
-          "[mcp][controller]") {
+TEST_CASE("McpController: Initialize and Shutdown are idempotent", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerInitShutdown");
 
   McpController ctrl;
@@ -3238,8 +3115,7 @@ TEST_CASE("McpController: Initialize and Shutdown are idempotent",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: DrainCommands with null executor returns 0",
-          "[mcp][controller]") {
+TEST_CASE("McpController: DrainCommands with null executor returns 0", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerDrainNull");
 
   McpController ctrl;
@@ -3249,9 +3125,7 @@ TEST_CASE("McpController: DrainCommands with null executor returns 0",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: DrainCommands with executor returns 0 when no "
-          "commands queued",
-          "[mcp][controller]") {
+TEST_CASE("McpController: DrainCommands with executor returns 0 when no commands queued", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerDrainEmpty");
 
   McpController ctrl;
@@ -3264,8 +3138,7 @@ TEST_CASE("McpController: DrainCommands with executor returns 0 when no "
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: BuildClaudeConfigSnippet contains url key",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildClaudeConfigSnippet contains url key", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerClaudeSnippet");
 
   McpController ctrl;
@@ -3275,8 +3148,7 @@ TEST_CASE("McpController: BuildClaudeConfigSnippet contains url key",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: BuildCodexConfigSnippet contains url key",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildCodexConfigSnippet contains url key", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerCodexSnippet");
 
   McpController ctrl;
@@ -3286,8 +3158,7 @@ TEST_CASE("McpController: BuildCodexConfigSnippet contains url key",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: BuildVsCodeConfigSnippet contains url key",
-          "[mcp][controller]") {
+TEST_CASE("McpController: BuildVsCodeConfigSnippet contains url key", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerVsCodeSnippet");
 
   McpController ctrl;
@@ -3297,8 +3168,7 @@ TEST_CASE("McpController: BuildVsCodeConfigSnippet contains url key",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: GetStatusSnapshot toolCatalog populated on init",
-          "[mcp][controller]") {
+TEST_CASE("McpController: GetStatusSnapshot toolCatalog populated on init", "[mcp][controller]") {
   EnvGuard env("horo_mcp_controller_status_default");
   ProjectRootGuard guard("McpControllerStatusDefault");
 
@@ -3310,8 +3180,7 @@ TEST_CASE("McpController: GetStatusSnapshot toolCatalog populated on init",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: ClearActivityLog is idempotent",
-          "[mcp][controller]") {
+TEST_CASE("McpController: ClearActivityLog is idempotent", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerClearLog");
 
   McpController ctrl;
@@ -3321,8 +3190,7 @@ TEST_CASE("McpController: ClearActivityLog is idempotent",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: SetEditorActive does not crash",
-          "[mcp][controller]") {
+TEST_CASE("McpController: SetEditorActive does not crash", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerSetEditorActive");
 
   McpController ctrl;
@@ -3332,8 +3200,7 @@ TEST_CASE("McpController: SetEditorActive does not crash",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController: PublishSnapshot with empty snapshot does not crash",
-          "[mcp][controller]") {
+TEST_CASE("McpController: PublishSnapshot with empty snapshot does not crash", "[mcp][controller]") {
   ProjectRootGuard guard("McpControllerPublishEmpty");
 
   McpController ctrl;
@@ -3343,8 +3210,7 @@ TEST_CASE("McpController: PublishSnapshot with empty snapshot does not crash",
   ctrl.Shutdown();
 }
 
-TEST_CASE("McpController captures executor JSON exceptions as tool errors",
-          "[mcp][controller]") {
+TEST_CASE("McpController captures executor JSON exceptions as tool errors", "[mcp][controller]") {
   EnvGuard env("horo_mcp_controller_executor_exception");
   McpController controller;
   controller.Initialize();
@@ -3392,8 +3258,7 @@ TEST_CASE("McpController captures executor JSON exceptions as tool errors",
   controller.SetEditorActive(false);
 }
 
-TEST_CASE("McpController activity stats track top targets and clear cleanly",
-          "[mcp][controller]") {
+TEST_CASE("McpController activity stats track top targets and clear cleanly", "[mcp][controller]") {
   EnvGuard env("horo_mcp_controller_activity_stats");
   McpController controller;
   controller.Initialize();

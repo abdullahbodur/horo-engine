@@ -102,8 +102,7 @@ std::unique_ptr<Window> CreateWindowIfAvailable(const WindowSpec &spec) {
 }
 } // namespace
 
-TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks",
-          "[core][window][opengl]") {
+TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", "[core][window][opengl]") {
   const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
 
@@ -158,8 +157,7 @@ TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks",
     REQUIRE(resizeEvents >= 1);
 }
 
-TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation",
-          "[core][window][vulkan]") {
+TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[core][window][vulkan]") {
   const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
 
   WindowSpec spec;
@@ -193,8 +191,7 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation",
   REQUIRE(first->GetHeight() >= 1);
 }
 
-TEST_CASE("Window GLFW callback hooks dispatch to user handlers",
-          "[core][window][callbacks]") {
+TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window][callbacks]") {
   const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
 
@@ -278,8 +275,7 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers",
   REQUIRE(droppedPathCount == 1);
 }
 
-TEST_CASE("Window env parsing falls back when variables are unset",
-          "[core][window][env_unset]") {
+TEST_CASE("Window env parsing falls back when variables are unset", "[core][window][env_unset]") {
   const ScopedEnvVar unsetVisible("MONOLITH_GLFW_VISIBLE", nullptr);
   const ScopedEnvVar unsetSamples("MONOLITH_GLFW_SAMPLES", nullptr);
 
@@ -298,8 +294,7 @@ TEST_CASE("Window env parsing falls back when variables are unset",
   REQUIRE(window->GetNativeHandle() != nullptr);
 }
 
-TEST_CASE("Window env parsing handles bool and sample fallback variants",
-          "[core][window][env]") {
+TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core][window][env]") {
   WindowSpec spec;
   spec.title = "window-env-test";
   spec.width = 128;
@@ -324,8 +319,7 @@ TEST_CASE("Window env parsing handles bool and sample fallback variants",
   REQUIRE(third != nullptr);
 }
 
-TEST_CASE("Window reports init failures for invalid dimensions",
-          "[core][window][errors]") {
+TEST_CASE("Window reports init failures for invalid dimensions", "[core][window][errors]") {
   const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
 
@@ -360,8 +354,7 @@ TEST_CASE("Window reports init failures for invalid dimensions",
   REQUIRE(sawInitFailure);
 }
 
-TEST_CASE("Window bootstrap still works when info logs are filtered",
-          "[core][window][logfilter]") {
+TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][window][logfilter]") {
   const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
 
@@ -389,8 +382,7 @@ TEST_CASE("Window bootstrap still works when info logs are filtered",
   vkWindow->SetVSync(false);
 }
 
-TEST_CASE("Window exposes glfwInit failure path when no display is available",
-          "[core][window][glfw-init-fail]") {
+TEST_CASE("Window exposes glfwInit failure path when no display is available", "[core][window][glfw-init-fail]") {
   if (ShouldSkipWindowBootstrapOnThisRunner()) {
     SUCCEED("Window bootstrap skipped on this CI runner");
     return;

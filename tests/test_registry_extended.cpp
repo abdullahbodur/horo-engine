@@ -98,8 +98,7 @@ TEST_CASE("Registry: entity can have multiple component types", "[registry]") {
   REQUIRE(reg.Get<Mana>(e).value == Catch::Approx(30.0f));
 }
 
-TEST_CASE("Registry: different entities have independent components",
-          "[registry]") {
+TEST_CASE("Registry: different entities have independent components", "[registry]") {
   Registry reg;
   Entity a = reg.Create();
   Entity b = reg.Create();
@@ -114,8 +113,7 @@ TEST_CASE("Registry: different entities have independent components",
   REQUIRE(reg.Get<Health>(b).value == Catch::Approx(50.0f));
 }
 
-TEST_CASE("Registry: Remove<T> removes only that component type",
-          "[registry]") {
+TEST_CASE("Registry: Remove<T> removes only that component type", "[registry]") {
   Registry reg;
   Entity e = reg.Create();
   reg.Add<Health>(e, {100.0f});
@@ -133,8 +131,7 @@ TEST_CASE("Registry: Remove on non-existent component is safe", "[registry]") {
   REQUIRE_NOTHROW(reg.Remove<Health>(e));
 }
 
-TEST_CASE("Registry: Destroy removes all components from entity",
-          "[registry]") {
+TEST_CASE("Registry: Destroy removes all components from entity", "[registry]") {
   Registry reg;
   Entity e = reg.Create();
   reg.Add<Health>(e);
@@ -152,8 +149,7 @@ TEST_CASE("Registry: Destroy removes all components from entity",
 // Registry — GetEntities iteration
 // ===========================================================================
 
-TEST_CASE("Registry::GetEntities: returns all entities with component",
-          "[registry]") {
+TEST_CASE("Registry::GetEntities: returns all entities with component", "[registry]") {
   Registry reg;
   Entity a = reg.Create();
   Entity b = reg.Create();
@@ -176,8 +172,7 @@ TEST_CASE("Registry::GetEntities: returns all entities with component",
   REQUIRE(hasB);
 }
 
-TEST_CASE("Registry::GetEntities: empty if no component ever added",
-          "[registry]") {
+TEST_CASE("Registry::GetEntities: empty if no component ever added", "[registry]") {
   Registry reg;
   reg.Create();
   reg.Create();
@@ -225,8 +220,7 @@ TEST_CASE("Registry::Clear: no entities remain alive", "[registry]") {
   REQUIRE_FALSE(reg.IsAlive(b));
 }
 
-TEST_CASE("Registry::Clear: component pools are empty after clear",
-          "[registry]") {
+TEST_CASE("Registry::Clear: component pools are empty after clear", "[registry]") {
   Registry reg;
   Entity e = reg.Create();
   reg.Add<Health>(e);
@@ -262,8 +256,7 @@ TEST_CASE("Registry::Clear then repopulate works correctly", "[registry]") {
 // ComponentPool — dense packing after Remove
 // ===========================================================================
 
-TEST_CASE("ComponentPool: Remove from middle keeps others intact",
-          "[registry][pool]") {
+TEST_CASE("ComponentPool: Remove from middle keeps others intact", "[registry][pool]") {
   ComponentPool<Health> pool;
   Entity a = 0;
   Entity b = 1;

@@ -36,8 +36,7 @@ TEST_CASE("GJK: separated spheres produce no contact", "[gjk][sphere]") {
   REQUIRE_FALSE(m.hasContact());
 }
 
-TEST_CASE("GJK: touching spheres (distance == sum of radii) produce no contact",
-          "[gjk][sphere]") {
+TEST_CASE("GJK: touching spheres (distance == sum of radii) produce no contact", "[gjk][sphere]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 0, 0};
@@ -59,8 +58,7 @@ TEST_CASE("GJK: contact normal points from B toward A", "[gjk][sphere]") {
   REQUIRE(m.contacts[0].normal.x < 0.0f);
 }
 
-TEST_CASE("GJK: co-located spheres use Up as fallback normal",
-          "[gjk][sphere]") {
+TEST_CASE("GJK: co-located spheres use Up as fallback normal", "[gjk][sphere]") {
   RigidBody a = RigidBody::MakeSphere(1.0f, 1.0f);
   RigidBody b = RigidBody::MakeSphere(1.0f, 1.0f);
   a.position = {0, 0, 0};

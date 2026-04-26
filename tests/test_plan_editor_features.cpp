@@ -55,8 +55,7 @@ TEST_CASE("EngineLaunchArgs: last flag wins", "[engine][cli]") {
           EditorStartupCli::ForceEditor);
 }
 
-TEST_CASE("ShouldStartWithEditor: force and release/debug defaults",
-          "[engine][cli]") {
+TEST_CASE("ShouldStartWithEditor: force and release/debug defaults", "[engine][cli]") {
   REQUIRE(ShouldStartWithEditor(EditorStartupCli::ForceEditor, true));
   REQUIRE(ShouldStartWithEditor(EditorStartupCli::ForceEditor, false));
   REQUIRE_FALSE(ShouldStartWithEditor(EditorStartupCli::ForcePlay, true));

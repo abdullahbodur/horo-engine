@@ -50,8 +50,7 @@ public:
   }
 };
 
-TEST_CASE("BehaviorSystem: behavior receives correct dt each frame",
-          "[behavior]") {
+TEST_CASE("BehaviorSystem: behavior receives correct dt each frame", "[behavior]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -68,8 +67,7 @@ TEST_CASE("BehaviorSystem: behavior receives correct dt each frame",
   REQUIRE(bPtr->dtSum == Approx(0.065f).epsilon(1e-5f));
 }
 
-TEST_CASE("BehaviorSystem: behavior can modify registry components",
-          "[behavior]") {
+TEST_CASE("BehaviorSystem: behavior can modify registry components", "[behavior]") {
   Registry reg;
   Entity e = reg.Create();
   reg.Add<ValueComponent>(e, {0.0f});
@@ -84,8 +82,7 @@ TEST_CASE("BehaviorSystem: behavior can modify registry components",
   REQUIRE(reg.Get<ValueComponent>(e).value == Approx(3.0f));
 }
 
-TEST_CASE("BehaviorSystem: multiple entities each run their own behavior",
-          "[behavior]") {
+TEST_CASE("BehaviorSystem: multiple entities each run their own behavior", "[behavior]") {
   Registry reg;
 
   auto b1 = std::make_unique<MultiCallBehavior>();
@@ -112,9 +109,7 @@ TEST_CASE("BehaviorSystem: multiple entities each run their own behavior",
   REQUIRE(b3Ptr->callCount == 1);
 }
 
-TEST_CASE("BehaviorSystem: entity without behavior not affected by removal of "
-          "another",
-          "[behavior]") {
+TEST_CASE("BehaviorSystem: entity without behavior not affected by removal of another", "[behavior]") {
   Registry reg;
   Entity e1 = reg.Create();
   Entity e2 = reg.Create(); // no behavior
@@ -135,8 +130,7 @@ TEST_CASE("BehaviorSystem: entity without behavior not affected by removal of "
 // CameraSystem — additional coverage
 // ===========================================================================
 
-TEST_CASE("CameraSystem: multiple cameras — only active ones update",
-          "[camera-system]") {
+TEST_CASE("CameraSystem: multiple cameras — only active ones update", "[camera-system]") {
   Registry reg;
 
   // Active camera
@@ -171,8 +165,7 @@ TEST_CASE("CameraSystem: multiple cameras — only active ones update",
   REQUIRE(reg.Get<CameraComponent>(e2).camera.position.y == Approx(0.0f));
 }
 
-TEST_CASE("CameraSystem: active camera target uses forward from transform",
-          "[camera-system]") {
+TEST_CASE("CameraSystem: active camera target uses forward from transform", "[camera-system]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -195,8 +188,7 @@ TEST_CASE("CameraSystem: active camera target uses forward from transform",
   REQUIRE(updated.camera.target.z == Approx(expectedTarget.z).margin(1e-5f));
 }
 
-TEST_CASE("CameraSystem: multiple updates track moving transform",
-          "[camera-system]") {
+TEST_CASE("CameraSystem: multiple updates track moving transform", "[camera-system]") {
   Registry reg;
   Entity e = reg.Create();
 
@@ -223,8 +215,7 @@ TEST_CASE("CameraSystem: multiple updates track moving transform",
 // PhysicsSystem — additional coverage
 // ===========================================================================
 
-TEST_CASE("PhysicsSystem: multiple entities with bodies all sync",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem: multiple entities with bodies all sync", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 
@@ -261,8 +252,7 @@ TEST_CASE("PhysicsSystem: multiple entities with bodies all sync",
           Approx(3.0f).epsilon(1e-4f));
 }
 
-TEST_CASE("PhysicsSystem: orientation is synced from body",
-          "[physics-system]") {
+TEST_CASE("PhysicsSystem: orientation is synced from body", "[physics-system]") {
   PhysicsWorld world;
   Registry reg;
 
@@ -338,8 +328,7 @@ TEST_CASE("Scene: Clear preserves registered systems", "[scene]") {
   REQUIRE(callCount == 2);
 }
 
-TEST_CASE("Scene: CreateEntity sets same position in current and previous",
-          "[scene]") {
+TEST_CASE("Scene: CreateEntity sets same position in current and previous", "[scene]") {
   Scene scene;
   Vec3 pos{7.0f, -3.0f, 2.5f};
   Entity e = scene.CreateEntity(pos);
@@ -351,8 +340,7 @@ TEST_CASE("Scene: CreateEntity sets same position in current and previous",
   REQUIRE(tc.previous.position.y == Approx(-3.0f));
 }
 
-TEST_CASE("Scene: multiple CreateEntity calls produce unique entities",
-          "[scene]") {
+TEST_CASE("Scene: multiple CreateEntity calls produce unique entities", "[scene]") {
   Scene scene;
   const int N = 50;
   std::vector<Entity> entities;

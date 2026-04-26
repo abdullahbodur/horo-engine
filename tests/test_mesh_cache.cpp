@@ -28,8 +28,7 @@ using namespace Monolith;
 // MeshCache — cache miss: non-existent OBJ falls back to box mesh
 // ===========================================================================
 
-TEST_CASE("MeshCache: Get with non-existent OBJ returns a valid fallback mesh",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Get with non-existent OBJ returns a valid fallback mesh", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/nonexistent/path/no_such_file.obj");
 
@@ -37,8 +36,7 @@ TEST_CASE("MeshCache: Get with non-existent OBJ returns a valid fallback mesh",
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: fallback mesh from non-existent OBJ has CPU vertex data",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: fallback mesh from non-existent OBJ has CPU vertex data", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/nonexistent/box.obj");
 
@@ -50,8 +48,7 @@ TEST_CASE("MeshCache: fallback mesh from non-existent OBJ has CPU vertex data",
 // MeshCache — cache hit: same path returns identical shared_ptr
 // ===========================================================================
 
-TEST_CASE("MeshCache: Get the same path twice returns the same shared_ptr",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Get the same path twice returns the same shared_ptr", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> a = cache.Get("/does/not/exist/crate.obj");
   std::shared_ptr<Mesh> b = cache.Get("/does/not/exist/crate.obj");
@@ -64,8 +61,7 @@ TEST_CASE("MeshCache: Get the same path twice returns the same shared_ptr",
 // MeshCache — Clear: post-clear Get creates a new mesh instance
 // ===========================================================================
 
-TEST_CASE("MeshCache: Clear invalidates cached entries so next Get is fresh",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Clear invalidates cached entries so next Get is fresh", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> before = cache.Get("/does/not/exist/sphere.obj");
   cache.Clear();
@@ -76,8 +72,7 @@ TEST_CASE("MeshCache: Clear invalidates cached entries so next Get is fresh",
   REQUIRE(after != nullptr);
 }
 
-TEST_CASE("MeshCache: Clear leaves cache empty so subsequent Get is a miss",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Clear leaves cache empty so subsequent Get is a miss", "[renderer][mesh_cache]") {
   MeshCache cache;
   cache.Get("virtual/any.obj"); // populate
   cache.Clear();                // clear
@@ -92,8 +87,7 @@ TEST_CASE("MeshCache: Clear leaves cache empty so subsequent Get is a miss",
 // MeshCache — extension redirects: .fbx / .glb / .gltf → .obj
 // ===========================================================================
 
-TEST_CASE("MeshCache: Get with .fbx extension succeeds (redirected to .obj)",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Get with .fbx extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
   MeshCache cache;
   // .fbx triggers ResolveRuntimeMeshPath which rewrites to .obj.
   // The redirected .obj is also missing, so the fallback box is returned.
@@ -103,8 +97,7 @@ TEST_CASE("MeshCache: Get with .fbx extension succeeds (redirected to .obj)",
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: Get with .glb extension succeeds (redirected to .obj)",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Get with .glb extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.glb");
 
@@ -112,8 +105,7 @@ TEST_CASE("MeshCache: Get with .glb extension succeeds (redirected to .obj)",
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: Get with .gltf extension succeeds (redirected to .obj)",
-          "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: Get with .gltf extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.gltf");
 
@@ -121,9 +113,7 @@ TEST_CASE("MeshCache: Get with .gltf extension succeeds (redirected to .obj)",
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE(
-    "MeshCache: .fbx and equivalent .obj path share the same cached entry",
-    "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .fbx and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
   // .fbx → /assets/models/rock.obj (resolved internally)
   // Direct .obj request should hit the same cache slot.
   MeshCache cache;
@@ -133,9 +123,7 @@ TEST_CASE(
   REQUIRE(via_fbx == via_obj);
 }
 
-TEST_CASE(
-    "MeshCache: .glb and equivalent .obj path share the same cached entry",
-    "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .glb and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> via_glb = cache.Get("/assets/models/barrel.glb");
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/barrel.obj");
@@ -143,9 +131,7 @@ TEST_CASE(
   REQUIRE(via_glb == via_obj);
 }
 
-TEST_CASE(
-    "MeshCache: .gltf and equivalent .obj path share the same cached entry",
-    "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .gltf and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> via_gltf = cache.Get("/assets/models/pillar.gltf");
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/pillar.obj");

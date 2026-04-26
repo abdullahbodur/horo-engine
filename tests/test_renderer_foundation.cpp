@@ -384,9 +384,7 @@ void CaptureOverlayRenderProbe(void *userData, void *commandBufferHandle) {
 #endif
 } // namespace
 
-TEST_CASE(
-    "Renderer routes explicit frame and pass commands through backend seam",
-    "[renderer][foundation]") {
+TEST_CASE("Renderer routes explicit frame and pass commands through backend seam", "[renderer][foundation]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -429,8 +427,7 @@ TEST_CASE(
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Renderer forwards frame output config through the backend seam",
-          "[renderer][foundation][frame-output]") {
+TEST_CASE("Renderer forwards frame output config through the backend seam", "[renderer][foundation][frame-output]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -449,9 +446,7 @@ TEST_CASE("Renderer forwards frame output config through the backend seam",
   Renderer::ResetBackend();
 }
 
-TEST_CASE(
-    "Renderer initializes the default OpenGL backend through a typed selection",
-    "[renderer][foundation][backend]") {
+TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection", "[renderer][foundation][backend]") {
   const RenderBackendInitResult init =
       Renderer::InitializeBackend({RenderBackendId::Auto});
 
@@ -471,9 +466,7 @@ TEST_CASE(
   REQUIRE_FALSE(caps.supportsComputePasses);
 }
 
-TEST_CASE("Renderer rejects unsupported backend requests without replacing the "
-          "active backend",
-          "[renderer][foundation][backend]") {
+TEST_CASE("Renderer rejects unsupported backend requests without replacing the active backend", "[renderer][foundation][backend]") {
   REQUIRE(Renderer::InitializeBackend({RenderBackendId::OpenGL}).ok);
 
   const RenderBackendInitResult init =
@@ -504,9 +497,7 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the "
 #endif
 }
 
-TEST_CASE("RenderBackendSelection preserves native window handles for backend "
-          "bootstrap",
-          "[renderer][foundation][backend][selection]") {
+TEST_CASE("RenderBackendSelection preserves native window handles for backend bootstrap", "[renderer][foundation][backend][selection]") {
   RenderBackendSelection selection;
   selection.requested = RenderBackendId::Vulkan;
   selection.nativeWindowHandle = &selection;
@@ -515,8 +506,7 @@ TEST_CASE("RenderBackendSelection preserves native window handles for backend "
   REQUIRE(selection.nativeWindowHandle == &selection);
 }
 
-TEST_CASE("Backend capability defaults express the current parity matrix",
-          "[renderer][foundation][backend][parity]") {
+TEST_CASE("Backend capability defaults express the current parity matrix", "[renderer][foundation][backend][parity]") {
   const RenderBackendCapabilities glCaps =
       GetDefaultRenderBackendCapabilities(RenderBackendId::OpenGL);
   REQUIRE(glCaps.supportsDebugDraw);
@@ -538,8 +528,7 @@ TEST_CASE("Backend capability defaults express the current parity matrix",
   REQUIRE_FALSE(vkCaps.supportsDebugHud);
 }
 
-TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
-          "[renderer][foundation][handles]") {
+TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata", "[renderer][foundation][handles]") {
   const RenderTargetHandle glHandle =
       RenderTargetHandle::OpenGLTexture(42u, true);
   REQUIRE(glHandle.IsValid());
@@ -568,9 +557,7 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata",
 }
 
 #if defined(MONOLITH_HAS_VULKAN)
-TEST_CASE(
-    "Vulkan material translation snapshots backend-relevant material state",
-    "[renderer][foundation][vulkan][translation]") {
+TEST_CASE("Vulkan material translation snapshots backend-relevant material state", "[renderer][foundation][vulkan][translation]") {
   Material material;
   material.color = {0.2f, 0.4f, 0.6f, 1.0f};
   material.roughness = 0.25f;
@@ -590,8 +577,7 @@ TEST_CASE(
   REQUIRE_FALSE(translated.usesCustomShader);
 }
 
-TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
-          "[renderer][foundation][vulkan][pipeline]") {
+TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage", "[renderer][foundation][vulkan][pipeline]") {
   VulkanRenderBackend::TranslatedMaterialState materialState;
   materialState.usesAlbedoMap = true;
   materialState.usesCustomShader = false;
@@ -605,9 +591,7 @@ TEST_CASE("Vulkan opaque pipeline keys track translated material feature usage",
   REQUIRE(key.depthTestEnabled);
 }
 
-TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with "
-          "a window",
-          "[renderer][foundation][vulkan][scaffold]") {
+TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with a window", "[renderer][foundation][vulkan][scaffold]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -661,9 +645,7 @@ TEST_CASE("Vulkan backend exposes opaque raster scaffold once initialized with "
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized "
-          "with a window handle",
-          "[renderer][foundation][vulkan][opaque]") {
+TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized with a window handle", "[renderer][foundation][vulkan][opaque]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -711,9 +693,7 @@ TEST_CASE("Vulkan backend accepts opaque-scene submissions when initialized "
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan backend executes opaque indexed draws when shader pipeline "
-          "is ready",
-          "[renderer][foundation][vulkan][opaque][draw-indexed]") {
+TEST_CASE("Vulkan backend executes opaque indexed draws when shader pipeline is ready", "[renderer][foundation][vulkan][opaque][draw-indexed]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -759,9 +739,7 @@ TEST_CASE("Vulkan backend executes opaque indexed draws when shader pipeline "
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan backend executes queued overlay callbacks while recording "
-          "frame commands",
-          "[renderer][foundation][vulkan][overlay]") {
+TEST_CASE("Vulkan backend executes queued overlay callbacks while recording frame commands", "[renderer][foundation][vulkan][overlay]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -801,9 +779,7 @@ TEST_CASE("Vulkan backend executes queued overlay callbacks while recording "
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan backend manages offscreen render-target lifecycle and resize "
-          "metadata",
-          "[renderer][foundation][vulkan][offscreen]") {
+TEST_CASE("Vulkan backend manages offscreen render-target lifecycle and resize metadata", "[renderer][foundation][vulkan][offscreen]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -907,9 +883,7 @@ TEST_CASE("Vulkan backend manages offscreen render-target lifecycle and resize "
   glfwTerminate();
 }
 
-TEST_CASE("Vulkan editor viewport target stays stable across frame recording "
-          "and resize",
-          "[renderer][foundation][vulkan][viewport]") {
+TEST_CASE("Vulkan editor viewport target stays stable across frame recording and resize", "[renderer][foundation][vulkan][viewport]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -1016,9 +990,7 @@ TEST_CASE("Vulkan editor viewport target stays stable across frame recording "
   glfwTerminate();
 }
 
-TEST_CASE(
-    "Vulkan backend reports and executes readback support deterministically",
-    "[renderer][foundation][vulkan][readback]") {
+TEST_CASE("Vulkan backend reports and executes readback support deterministically", "[renderer][foundation][vulkan][readback]") {
   if (!glfwInit())
     SKIP("GLFW initialization failed on this machine");
 
@@ -1144,8 +1116,7 @@ TEST_CASE(
 }
 #endif
 
-TEST_CASE("Renderer supports multiple explicit passes within a single frame",
-          "[renderer][foundation]") {
+TEST_CASE("Renderer supports multiple explicit passes within a single frame", "[renderer][foundation]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -1180,9 +1151,7 @@ TEST_CASE("Renderer supports multiple explicit passes within a single frame",
   Renderer::ResetBackend();
 }
 
-TEST_CASE(
-    "RenderSystem submits visible mesh entities into the active explicit pass",
-    "[renderer][foundation][scene]") {
+TEST_CASE("RenderSystem submits visible mesh entities into the active explicit pass", "[renderer][foundation][scene]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -1222,8 +1191,7 @@ TEST_CASE(
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Material copies share shader and texture resource handles",
-          "[renderer][foundation][ownership]") {
+TEST_CASE("Material copies share shader and texture resource handles", "[renderer][foundation][ownership]") {
   auto shader = std::make_shared<Shader>();
   auto texture = std::make_shared<Texture>();
 
@@ -1238,8 +1206,7 @@ TEST_CASE("Material copies share shader and texture resource handles",
   REQUIRE_FALSE(copy.HasShader());
 }
 
-TEST_CASE("Mesh::CreateSphere produces non-empty CPU geometry",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreateSphere produces non-empty CPU geometry", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreateSphere(1.0f, 4, 4);
   REQUIRE_FALSE(m.GetVertices().empty());
   REQUIRE_FALSE(m.GetIndices().empty());
@@ -1249,24 +1216,21 @@ TEST_CASE("Mesh::CreateSphere produces non-empty CPU geometry",
   REQUIRE(ext.z > 0.0f);
 }
 
-TEST_CASE("Mesh::CreateBox produces 24 vertices and 36 indices",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreateBox produces 24 vertices and 36 indices", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreateBox(1.0f, 2.0f, 3.0f);
   REQUIRE(m.GetVertices().size() == 24u);
   REQUIRE(m.GetIndices().size() == 36u);
   REQUIRE(m.GetIndexCount() == 36);
 }
 
-TEST_CASE("Mesh::CreateCylinder produces non-empty CPU geometry",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreateCylinder produces non-empty CPU geometry", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreateCylinder(0.5f, 1.0f, 6);
   REQUIRE_FALSE(m.GetVertices().empty());
   REQUIRE_FALSE(m.GetIndices().empty());
   REQUIRE(m.GetHalfExtents().y == Catch::Approx(1.0f).epsilon(0.01f));
 }
 
-TEST_CASE("Mesh::CreatePyramid produces correct vertex count and half-extents",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreatePyramid produces correct vertex count and half-extents", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreatePyramid(0.5f, 1.0f);
   REQUIRE_FALSE(m.GetVertices().empty());
   REQUIRE_FALSE(m.GetIndices().empty());
@@ -1275,31 +1239,27 @@ TEST_CASE("Mesh::CreatePyramid produces correct vertex count and half-extents",
   REQUIRE(ext.y > 0.0f);
 }
 
-TEST_CASE("Mesh::CreatePlane produces 4 vertices and 6 indices",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreatePlane produces 4 vertices and 6 indices", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreatePlane(5.0f);
   REQUIRE(m.GetVertices().size() == 4u);
   REQUIRE(m.GetIndices().size() == 6u);
   REQUIRE(m.GetIndexCount() == 6);
 }
 
-TEST_CASE("Mesh::CreateQuad produces 4 vertices",
-          "[renderer][mesh][procedural]") {
+TEST_CASE("Mesh::CreateQuad produces 4 vertices", "[renderer][mesh][procedural]") {
   Mesh m = Mesh::CreateQuad();
   REQUIRE(m.GetVertices().size() == 4u);
   REQUIRE(m.GetIndices().size() == 6u);
 }
 
-TEST_CASE("Mesh move construction transfers CPU geometry",
-          "[renderer][mesh][move]") {
+TEST_CASE("Mesh move construction transfers CPU geometry", "[renderer][mesh][move]") {
   const size_t vertCount =
       Mesh::CreateBox(1.0f, 1.0f, 1.0f).GetVertices().size();
   Mesh b = Mesh::CreateBox(1.0f, 1.0f, 1.0f);
   REQUIRE(b.GetVertices().size() == vertCount);
 }
 
-TEST_CASE("Mesh move assignment transfers CPU geometry",
-          "[renderer][mesh][move]") {
+TEST_CASE("Mesh move assignment transfers CPU geometry", "[renderer][mesh][move]") {
   const size_t vertCount =
       Mesh::CreateCylinder(0.5f, 1.0f, 4).GetVertices().size();
   Mesh b;
@@ -1307,8 +1267,7 @@ TEST_CASE("Mesh move assignment transfers CPU geometry",
   REQUIRE(b.GetVertices().size() == vertCount);
 }
 
-TEST_CASE("Mesh SetData computes AABB from vertex positions",
-          "[renderer][mesh][aabb]") {
+TEST_CASE("Mesh SetData computes AABB from vertex positions", "[renderer][mesh][aabb]") {
   std::vector<Vertex> verts = {
       {{-2.0f, 0.0f, 0.0f}, {0, 1, 0}, {0, 0}},
       {{2.0f, 0.0f, 0.0f}, {0, 1, 0}, {1, 0}},
@@ -1324,8 +1283,7 @@ TEST_CASE("Mesh SetData computes AABB from vertex positions",
   REQUIRE(center.y == Catch::Approx(2.0f).epsilon(0.01f));
 }
 
-TEST_CASE("SkinnedMesh default state is not valid and has zero index count",
-          "[renderer][skinnedmesh]") {
+TEST_CASE("SkinnedMesh default state is not valid and has zero index count", "[renderer][skinnedmesh]") {
   SkinnedMesh sm;
   REQUIRE_FALSE(sm.IsValid());
   REQUIRE(sm.GetIndexCount() == 0);
@@ -1334,22 +1292,19 @@ TEST_CASE("SkinnedMesh default state is not valid and has zero index count",
   REQUIRE(sm.GetLocalAabbCenter().x == Catch::Approx(0.0f).epsilon(0.01f));
 }
 
-TEST_CASE("SkinnedMesh move construction leaves source empty",
-          "[renderer][skinnedmesh][move]") {
+TEST_CASE("SkinnedMesh move construction leaves source empty", "[renderer][skinnedmesh][move]") {
   SkinnedMesh b;
   REQUIRE_FALSE(b.IsValid());
   REQUIRE(b.GetIndexCount() == 0);
 }
 
-TEST_CASE("SkinnedMesh move assignment from default leaves target not valid",
-          "[renderer][skinnedmesh][move]") {
+TEST_CASE("SkinnedMesh move assignment from default leaves target not valid", "[renderer][skinnedmesh][move]") {
   SkinnedMesh b;
   b = SkinnedMesh{};
   REQUIRE_FALSE(b.IsValid());
 }
 
-TEST_CASE("GltfLoader::Load returns empty result for nonexistent .glb path",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load returns empty result for nonexistent .glb path", "[renderer][gltf]") {
   using namespace Monolith;
   const GltfLoadResult result = GltfLoader::Load("/no/such/file.glb");
   REQUIRE(result.mesh == nullptr);
@@ -1357,16 +1312,14 @@ TEST_CASE("GltfLoader::Load returns empty result for nonexistent .glb path",
   REQUIRE(result.clips.empty());
 }
 
-TEST_CASE("GltfLoader::Load returns empty result for nonexistent .gltf path",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load returns empty result for nonexistent .gltf path", "[renderer][gltf]") {
   using namespace Monolith;
   const GltfLoadResult result = GltfLoader::Load("/no/such/file.gltf");
   REQUIRE(result.mesh == nullptr);
   REQUIRE(result.skeleton == nullptr);
 }
 
-TEST_CASE("GltfLoader::Load parses skinned animated ascii glTF fixtures",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load parses skinned animated ascii glTF fixtures", "[renderer][gltf]") {
   const std::filesystem::path gltfPath = WriteSkinnedAnimatedFixture();
   const GltfLoadResult result = GltfLoader::Load(gltfPath.string());
 
@@ -1386,8 +1339,7 @@ TEST_CASE("GltfLoader::Load parses skinned animated ascii glTF fixtures",
   CHECK(result.albedoTexture == nullptr);
 }
 
-TEST_CASE("GltfLoader::Load skips non-triangle primitives",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load skips non-triangle primitives", "[renderer][gltf]") {
   const std::filesystem::path gltfPath =
       WritePrimitiveFixture("renderer_gltf_lines", 1, true);
   const GltfLoadResult result = GltfLoader::Load(gltfPath.string());
@@ -1397,8 +1349,7 @@ TEST_CASE("GltfLoader::Load skips non-triangle primitives",
   CHECK(result.clips.empty());
 }
 
-TEST_CASE("GltfLoader::Load skips primitives missing POSITION",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load skips primitives missing POSITION", "[renderer][gltf]") {
   const std::filesystem::path gltfPath =
       WritePrimitiveFixture("renderer_gltf_missing_pos", 4, false);
   const GltfLoadResult result = GltfLoader::Load(gltfPath.string());
@@ -1412,8 +1363,7 @@ TEST_CASE("GltfLoader::Load skips primitives missing POSITION",
 // GltfLoader: embedded base64 PNG image (covers GltfLoader.cpp lines 43-60)
 // ===========================================================================
 
-TEST_CASE("GltfLoader::Load handles embedded base64 PNG image",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load handles embedded base64 PNG image", "[renderer][gltf]") {
   // Minimal GLTF with a 1x1 red-pixel PNG embedded as a data URI.
   // Exercises LoadImageDataCallback → stbi_load_from_memory (lines 43-60).
   namespace fs = std::filesystem;
@@ -1469,8 +1419,7 @@ TEST_CASE("GltfLoader::Load handles embedded base64 PNG image",
 // GltfLoader: rotation + scale animation channels (covers lines 548-562)
 // ===========================================================================
 
-TEST_CASE("GltfLoader::Load parses rotation and scale animation channels",
-          "[renderer][gltf]") {
+TEST_CASE("GltfLoader::Load parses rotation and scale animation channels", "[renderer][gltf]") {
   // Covers the "rotation" and "scale" branches in LoadGltfAnimations
   // (GltfLoader.cpp lines 547-561).
   namespace fs = std::filesystem;
@@ -1659,8 +1608,7 @@ TEST_CASE("GltfLoader::Load parses rotation and scale animation channels",
   CHECK(track.positionTimes.size() == 2u);
 }
 
-TEST_CASE("DebugHUD early-outs safely when backend does not support HUD",
-          "[renderer][debughud]") {
+TEST_CASE("DebugHUD early-outs safely when backend does not support HUD", "[renderer][debughud]") {
   DebugHudUnsupportedBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -1676,9 +1624,7 @@ TEST_CASE("DebugHUD early-outs safely when backend does not support HUD",
   Renderer::ResetBackend();
 }
 
-TEST_CASE(
-    "DebugHUD update path is deterministic without initialization side effects",
-    "[renderer][debughud]") {
+TEST_CASE("DebugHUD update path is deterministic without initialization side effects", "[renderer][debughud]") {
   FakeRenderBackend backend;
   Renderer::UseBackend(&backend);
 
@@ -1701,8 +1647,7 @@ TEST_CASE(
   Renderer::ResetBackend();
 }
 
-TEST_CASE("DebugDraw gracefully ignores submissions when backend support is disabled",
-          "[renderer][debugdraw]") {
+TEST_CASE("DebugDraw gracefully ignores submissions when backend support is disabled", "[renderer][debugdraw]") {
   DebugDrawUnsupportedBackend backend;
   Renderer::UseBackend(&backend);
   DebugDraw::Shutdown();

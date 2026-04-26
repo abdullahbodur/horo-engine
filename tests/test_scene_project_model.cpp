@@ -31,8 +31,7 @@ const SceneAssetDefinition *FindAsset(const SceneProjectModel &model,
 }
 } // namespace
 
-TEST_CASE("SceneProjectModel: defaults validate cleanly",
-          "[scene][project-model]") {
+TEST_CASE("SceneProjectModel: defaults validate cleanly", "[scene][project-model]") {
   SceneProjectModel model;
 
   const SceneProjectValidationResult validation =
@@ -47,9 +46,7 @@ TEST_CASE("SceneProjectModel: defaults validate cleanly",
   REQUIRE(model.scene.settings.spawnPoint.z == Approx(3.0f));
 }
 
-TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring "
-          "document",
-          "[scene][project-model][bridge]") {
+TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring document", "[scene][project-model][bridge]") {
   SceneDocument doc;
   doc.version = 3;
   doc.sceneId = "world";
@@ -169,9 +166,7 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring "
   REQUIRE(typedSun->light->color.z == Approx(0.4f));
 }
 
-TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through "
-          "typed model",
-          "[scene][project-model][bridge]") {
+TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed model", "[scene][project-model][bridge]") {
   SceneDocument doc;
   doc.version = 2;
   doc.sceneId = "test_scene";
@@ -221,9 +216,7 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through "
           "Inspect");
 }
 
-TEST_CASE("SceneProjectModel: validation catches broken references and invalid "
-          "versions",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: validation catches broken references and invalid versions", "[scene][project-model][validation]") {
   SceneProjectModel model;
   model.scene.metadata.schemaVersion = 0;
   model.project.schemaVersion = 0;
@@ -245,8 +238,7 @@ TEST_CASE("SceneProjectModel: validation catches broken references and invalid "
   REQUIRE(validation.WarningCount() >= 1);
 }
 
-TEST_CASE("SceneProjectModel: duplicate asset GUID is an error",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: duplicate asset GUID is an error", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneAssetDefinition a1;
   a1.id = "asset_a";
@@ -264,8 +256,7 @@ TEST_CASE("SceneProjectModel: duplicate asset GUID is an error",
   REQUIRE(v.ErrorCount() >= 1);
 }
 
-TEST_CASE("SceneProjectModel: empty asset id is an error",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: empty asset id is an error", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneAssetDefinition asset;
   asset.id = ""; // empty!
@@ -277,8 +268,7 @@ TEST_CASE("SceneProjectModel: empty asset id is an error",
   REQUIRE(v.HasErrors());
 }
 
-TEST_CASE("SceneProjectModel: Camera node without camera props is a warning",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: Camera node without camera props is a warning", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneNodeDefinition cam;
   cam.id = "cam_no_props";
@@ -290,8 +280,7 @@ TEST_CASE("SceneProjectModel: Camera node without camera props is a warning",
   REQUIRE(v.WarningCount() >= 1);
 }
 
-TEST_CASE("SceneProjectModel: Camera node with camera props has no warning",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: Camera node with camera props has no warning", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneNodeDefinition cam;
   cam.id = "cam_with_props";
@@ -307,8 +296,7 @@ TEST_CASE("SceneProjectModel: Camera node with camera props has no warning",
   REQUIRE_FALSE(v.HasErrors());
 }
 
-TEST_CASE("SceneProjectModel: prefab instance with empty prefabId is an error",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: prefab instance with empty prefabId is an error", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneNodeDefinition node;
   node.id = "prefab_node";
@@ -322,9 +310,7 @@ TEST_CASE("SceneProjectModel: prefab instance with empty prefabId is an error",
   REQUIRE(v.HasErrors());
 }
 
-TEST_CASE(
-    "SceneProjectModel: prefab instance with empty sourcePath is an error",
-    "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: prefab instance with empty sourcePath is an error", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneNodeDefinition node;
   node.id = "prefab_node2";
@@ -338,8 +324,7 @@ TEST_CASE(
   REQUIRE(v.HasErrors());
 }
 
-TEST_CASE("SceneProjectModel: parentId resolving to known node is valid",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: parentId resolving to known node is valid", "[scene][project-model][validation]") {
   SceneProjectModel model;
   SceneNodeDefinition parent;
   parent.id = "parent_000";
@@ -355,8 +340,7 @@ TEST_CASE("SceneProjectModel: parentId resolving to known node is valid",
   REQUIRE_FALSE(v.HasErrors());
 }
 
-TEST_CASE("SceneProjectModel: ErrorCount and WarningCount are precise",
-          "[scene][project-model][validation]") {
+TEST_CASE("SceneProjectModel: ErrorCount and WarningCount are precise", "[scene][project-model][validation]") {
   SceneProjectModel model;
   // One error: empty node id; one warning: Camera without props
   SceneNodeDefinition emptyId;

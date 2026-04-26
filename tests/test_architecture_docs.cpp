@@ -34,8 +34,7 @@ std::filesystem::path RepoRootFromSource(
 }
 } // namespace
 
-TEST_CASE("Architecture docs exist and are discoverable from README",
-          "[architecture][docs]") {
+TEST_CASE("Architecture docs exist and are discoverable from README", "[architecture][docs]") {
   const std::filesystem::path root = RepoRootFromSource();
   const std::filesystem::path docsRoot = root / "docs" / "architecture";
   const std::filesystem::path devDocsRoot = root / "docs" / "development";
@@ -113,9 +112,7 @@ TEST_CASE("Architecture docs exist and are discoverable from README",
                       "Vulkan-enabled build");
 }
 
-TEST_CASE("Renderer foundation isolates backend-specific details from "
-          "higher-level systems",
-          "[architecture][renderer]") {
+TEST_CASE("Renderer foundation isolates backend-specific details from higher-level systems", "[architecture][renderer]") {
   const std::filesystem::path root = RepoRootFromSource();
 
   const std::string backend =
@@ -183,8 +180,7 @@ TEST_CASE("Renderer foundation isolates backend-specific details from "
   REQUIRE(debugHud.find("supportsDepthReadback") != std::string::npos);
 }
 
-TEST_CASE("McpController lifecycle calls are safe to repeat",
-          "[architecture][lifecycle][mcp]") {
+TEST_CASE("McpController lifecycle calls are safe to repeat", "[architecture][lifecycle][mcp]") {
   McpController controller;
 
   REQUIRE_NOTHROW(controller.Shutdown());

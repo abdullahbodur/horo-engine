@@ -6,8 +6,7 @@
 
 using namespace Monolith;
 
-TEST_CASE("ParseUiAutomationBoolValue handles empty and numeric values",
-          "[launcher][ui-automation]") {
+TEST_CASE("ParseUiAutomationBoolValue handles empty and numeric values", "[launcher][ui-automation]") {
   REQUIRE(ParseUiAutomationBoolValue({}, false) == false);
   REQUIRE(ParseUiAutomationBoolValue({}, true) == true);
   REQUIRE(ParseUiAutomationBoolValue("0", true) == false);
@@ -15,8 +14,7 @@ TEST_CASE("ParseUiAutomationBoolValue handles empty and numeric values",
   REQUIRE(ParseUiAutomationBoolValue("true", false) == true);
 }
 
-TEST_CASE("ParseUiAutomationNonNegativeIntValue validates input",
-          "[launcher][ui-automation]") {
+TEST_CASE("ParseUiAutomationNonNegativeIntValue validates input", "[launcher][ui-automation]") {
   REQUIRE(ParseUiAutomationNonNegativeIntValue("", 7) == 7);
   REQUIRE(ParseUiAutomationNonNegativeIntValue("0", 7) == 0);
   REQUIRE(ParseUiAutomationNonNegativeIntValue("42", 7) == 42);
@@ -25,8 +23,7 @@ TEST_CASE("ParseUiAutomationNonNegativeIntValue validates input",
   REQUIRE(ParseUiAutomationNonNegativeIntValue("12x", 7) == 7);
 }
 
-TEST_CASE("ResolveUiCaptureOutputDir obeys capture flag and env",
-          "[launcher][ui-automation]") {
+TEST_CASE("ResolveUiCaptureOutputDir obeys capture flag and env", "[launcher][ui-automation]") {
   const auto cwd = std::filesystem::path("workspace/work");
 
   REQUIRE(ResolveUiCaptureOutputDir(false, "custom", cwd).empty());
@@ -35,8 +32,7 @@ TEST_CASE("ResolveUiCaptureOutputDir obeys capture flag and env",
   REQUIRE(ResolveUiCaptureOutputDir(true, "", cwd) == cwd / "ui_test_output");
 }
 
-TEST_CASE("SelectUiAutomationBaseDir prefers platform-specific home roots",
-          "[launcher][ui-automation]") {
+TEST_CASE("SelectUiAutomationBaseDir prefers platform-specific home roots", "[launcher][ui-automation]") {
   const auto cwd = std::filesystem::path("/cwd");
 
   REQUIRE(SelectUiAutomationBaseDir("/home/user", "C:/Users/User", cwd, true) ==
