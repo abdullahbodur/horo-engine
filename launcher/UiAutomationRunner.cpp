@@ -420,7 +420,8 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
 }
 
 void UiAutomationRunner::StartIfRequested(
-    bool runUiAutomation, Launcher::LauncherEditorShell *shellContext) const {
+    bool runUiAutomation, Launcher::LauncherEditorShell *shellContext,
+    Editor::EditorLayer *editorContext) const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   if (!runUiAutomation)
     return;
@@ -446,6 +447,7 @@ void UiAutomationRunner::StartIfRequested(
       ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
   m_impl->heartbeatLogEnabled = ParseBoolEnv("HORO_UI_TEST_HEARTBEAT");
   m_impl->state.shellContext = shellContext;
+  m_impl->state.editorContext = editorContext;
   LogInfo(
       "UI automation config: suite='{}', filter='{}', recording={}, capture={}, "
       "video={}",
@@ -515,6 +517,7 @@ void UiAutomationRunner::StartIfRequested(
 #else
   (void)runUiAutomation;
   (void)shellContext;
+  (void)editorContext;
 #endif
 }
 

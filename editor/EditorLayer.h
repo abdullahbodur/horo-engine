@@ -104,6 +104,16 @@ namespace Horo {
             bool IsPlayMode() const { return m_playMode; }
             bool WantsSceneReload() const { return m_wantsReload; }
 
+#ifdef HORO_STANDALONE_UI_AUTOMATION
+            void UiAutomationAddObject(SceneObjectType type) { AddObject(type); }
+            void UiAutomationSelectAllObjects() {
+                m_selectedIndices.clear();
+                for (int index = 0; index < static_cast<int>(m_document.objects.size());
+                     ++index)
+                    m_selectedIndices.push_back(index);
+            }
+#endif
+
             // Development overlay shown regardless of editor active state.
             void SetHotReloadOverlay(bool active, float progress01, float spinnerAngleRad,
                                      std::string_view label);

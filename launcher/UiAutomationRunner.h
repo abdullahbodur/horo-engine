@@ -8,6 +8,10 @@ namespace Horo::Launcher {
     class LauncherEditorShell;
 }
 
+namespace Horo::Editor {
+    class EditorLayer;
+}
+
 namespace Horo {
     class UiAutomationRunner {
     public:
@@ -22,7 +26,8 @@ namespace Horo {
         UiAutomationRunner &operator=(const UiAutomationRunner &) = delete;
 
         void StartIfRequested(bool runUiAutomation,
-                              Launcher::LauncherEditorShell *shellContext) const;
+                              Launcher::LauncherEditorShell *shellContext,
+                              Editor::EditorLayer *editorContext) const;
 
         void PostRenderFrame(GLFWwindow *nativeWindowHandle) const;
 

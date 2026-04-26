@@ -165,7 +165,8 @@ namespace {
                 LogInfo("UI automation mode: vsync disabled for test run.");
             }
             if (m_runUiAutomation) {
-                m_uiAutomation->StartIfRequested(m_runUiAutomation, &m_shell);
+                m_uiAutomation->StartIfRequested(m_runUiAutomation, &m_shell,
+                                                 &m_editor);
             }
 #endif
             LogInfo("HoroEditorApp::OnInit end");

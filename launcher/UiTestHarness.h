@@ -11,6 +11,10 @@ namespace Horo::Launcher {
     class LauncherEditorShell;
 }
 
+namespace Horo::Editor {
+    class EditorLayer;
+}
+
 namespace Horo {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
     struct UiAutomationRunState {
@@ -23,6 +27,7 @@ namespace Horo {
         bool videoCaptureOpen = false;
 
         Launcher::LauncherEditorShell *shellContext = nullptr;
+        Editor::EditorLayer *editorContext = nullptr;
     };
 
     bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
