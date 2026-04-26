@@ -11,7 +11,7 @@
 #include "core/StringHash.h"
 #include "editor/AssetIdentity.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         void RemoveDependenciesOfKind(AssetMetadata *metadata,
                                       AssetDependencyKind kind) {
@@ -517,4 +517,4 @@ namespace Monolith::Editor {
                                     std::string{});
         return true;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

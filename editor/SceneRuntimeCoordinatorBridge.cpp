@@ -4,7 +4,7 @@
 
 #include "editor/SceneRuntimeBridge.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         std::string SummarizeBuildIssues(const RuntimeSceneBuildResult &buildResult) {
             std::ostringstream stream;
@@ -59,4 +59,4 @@ namespace Monolith::Editor {
         }
         return coordinator.Reload(buildResult.definition, applyCallback);
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

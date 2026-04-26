@@ -30,7 +30,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         // ---- Issue key helpers (used only by BuildMcpBuildSnapshot) ----
 
@@ -79,7 +79,7 @@ namespace Monolith::Editor {
             }
 
             const RuntimeSceneBuildResult runtimeBuild =
-                    Monolith::BuildRuntimeSceneDefinition(model);
+                    Horo::BuildRuntimeSceneDefinition(model);
             snapshot.roomCount = runtimeBuild.definition.rooms.size();
             snapshot.lightCount = runtimeBuild.definition.lights.size();
             snapshot.hasSceneCamera = runtimeBuild.definition.sceneCamera.has_value();
@@ -930,4 +930,4 @@ namespace Monolith::Editor {
             std::string()
         };
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

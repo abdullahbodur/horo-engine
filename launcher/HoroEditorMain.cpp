@@ -30,9 +30,9 @@ extern "C" void __gcov_dump();
 #endif
 
 namespace {
-    using namespace Monolith;
+    using namespace Horo;
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
     bool HasArg(int argc, char **argv, const char *expected) {
         if (!expected || !*expected)
             return false;
@@ -52,14 +52,14 @@ namespace {
     class HoroEditorApp final : public Application {
     public:
         explicit HoroEditorApp(const EngineLaunchOptions &launchOptions
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
             ,
             const bool runUiAutomation
 #endif
         )
             : Application(BuildSpec()), m_launchOptions(launchOptions),
               m_runtime(std::make_unique<SceneReferenceRuntime>(&m_scene))
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
         ,
         m_runUiAutomation(runUiAutomation)
 #endif
@@ -133,7 +133,7 @@ namespace {
                     m_shell.SetLauncherError(openError);
             }
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
             if (m_runUiAutomation) {
                 // CI runners may heavily throttle vsynced, unfocused windows and make
                 // frame-based UI tests appear stalled. Disable vsync for automation.
@@ -177,7 +177,7 @@ namespace {
             }
             m_editor.Render(m_camera, GetWindow().GetWidth(), GetWindow().GetHeight());
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
             if (m_runUiAutomation && m_uiAutomation)
                 m_uiAutomation->PostRenderFrame(GetWindow().GetNativeHandle());
             if (m_runUiAutomation &&
@@ -193,7 +193,7 @@ namespace {
 
         void OnShutdown() override {
             LogInfo("HoroEditorApp::OnShutdown begin");
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
             if (m_uiAutomation) {
                 // Keep a valid GL context current while Dear ImGui test engine finalizes.
                 glfwMakeContextCurrent(GetWindow().GetNativeHandle());
@@ -206,7 +206,7 @@ namespace {
             m_shell.Shutdown();
             m_editor.Shutdown();
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
             if (m_uiAutomation) {
                 // ImGui test engine expects ImGui context to be destroyed first.
                 m_uiAutomation->DestroyContext();
@@ -220,7 +220,7 @@ namespace {
         }
 
     public:
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
         bool DidUiAutomationPass() const {
             return !m_runUiAutomation || m_uiAutomationPassed;
         }
@@ -237,7 +237,7 @@ namespace {
         float m_renderAlpha = 0.0f;
         int m_renderFrameCount = 0;
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
         bool m_runUiAutomation = false;
         bool m_uiAutomationPassed = true;
         std::unique_ptr<UiAutomationRunner> m_uiAutomation =
@@ -247,11 +247,11 @@ namespace {
 } // namespace
 
 int main(int argc, char **argv) {
-    const Monolith::EngineLaunchOptions launchOptions =
-            Monolith::ParseEngineLaunchOptions(argc, argv);
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+    const Horo::EngineLaunchOptions launchOptions =
+            Horo::ParseEngineLaunchOptions(argc, argv);
+#ifdef HORO_STANDALONE_UI_AUTOMATION
     const bool runUiAutomation = HasArg(argc, argv, "--run-ui-tests");
-    Monolith::UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
+    Horo::UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
         runUiAutomation);
     HoroEditorApp app(launchOptions, runUiAutomation);
 #else
@@ -260,13 +260,13 @@ int main(int argc, char **argv) {
     app.ParseArgs(argc, argv);
     app.Run();
     const int exitCode = app.DidUiAutomationPass() ? 0 : 1;
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
     if (runUiAutomation) {
         // CI UI automation mode: avoid late process-teardown crashes from external
         // teardown chains.
         std::fflush(nullptr);
 #if defined(__GNUC__) || defined(__clang__)
-#if MONOLITH_ENGINE_COVERAGE
+#if HORO_ENGINE_COVERAGE
     // Flush gcov/llvm-profdata coverage data before bypassing atexit.
     __gcov_dump();
 #endif

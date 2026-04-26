@@ -2,7 +2,7 @@
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
-namespace Monolith {
+namespace Horo {
     // Stateless first-person camera controller.
     // Owns yaw/pitch/position state; reads Input::GetMouseDelta() internally on
     // Update().
@@ -36,4 +36,4 @@ namespace Monolith {
         float m_pitch = 0.0f;
         Vec3 m_position{0.0f, 0.0f, 0.0f};
     };
-} // namespace Monolith
+} // namespace Horo

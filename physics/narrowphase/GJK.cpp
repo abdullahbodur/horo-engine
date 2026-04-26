@@ -8,7 +8,7 @@
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 
-namespace Monolith::GJK {
+namespace Horo::GJK {
     // Support function: furthest point in direction d for a convex shape
     static Vec3 Support(const RigidBody &body, const Vec3 &d) {
         if (!body.collider)
@@ -68,4 +68,4 @@ namespace Monolith::GJK {
         (void) &MinkowskiSupport; // suppress unused warning until full impl
         return result;
     }
-} // namespace Monolith::GJK
+} // namespace Horo::GJK

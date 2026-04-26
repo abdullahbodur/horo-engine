@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Monolith {
+namespace Horo {
     constexpr float PI = 3.14159265358979323846f;
     constexpr float TWO_PI = 2.0f * PI;
     constexpr float HALF_PI = 0.5f * PI;
@@ -38,4 +38,4 @@ namespace Monolith {
     }
 
     inline bool NearlyZero(float v, float eps = EPSILON) { return Abs(v) <= eps; }
-} // namespace Monolith
+} // namespace Horo

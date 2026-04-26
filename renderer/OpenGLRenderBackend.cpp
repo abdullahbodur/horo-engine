@@ -12,7 +12,7 @@
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         constexpr float kWireframeOverlayLineWidth = 1.5f;
 
@@ -95,7 +95,7 @@ namespace Monolith {
     }
 
     void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig &frame) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !m_frameActive,
             "OpenGLRenderBackend::BeginFrame called while a frame is active");
         glEnable(GL_DEPTH_TEST);
@@ -132,10 +132,10 @@ namespace Monolith {
     }
 
     void OpenGLRenderBackend::BeginPass(const RenderPassConfig &pass) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             m_frameActive,
             "OpenGLRenderBackend::BeginPass called without an active frame");
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !m_passActive,
             "OpenGLRenderBackend::BeginPass called while a pass is active");
         if (!m_frameActive || m_passActive)
@@ -255,4 +255,4 @@ namespace Monolith {
         command.mesh->DrawWireframe();
         ++m_drawCalls;
     }
-} // namespace Monolith
+} // namespace Horo

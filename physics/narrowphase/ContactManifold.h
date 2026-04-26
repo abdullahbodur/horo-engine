@@ -2,7 +2,7 @@
 #include "math/Vec3.h"
 #include <array>
 
-namespace Monolith {
+namespace Horo {
     struct ContactPoint {
         Vec3 point; // contact position in world space
         Vec3 normal; // collision normal, pointing from B toward A
@@ -27,4 +27,4 @@ namespace Monolith {
             }
         }
     };
-} // namespace Monolith
+} // namespace Horo

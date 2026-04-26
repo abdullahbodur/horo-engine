@@ -11,7 +11,7 @@
 #include "renderer/Light.h"
 #include "scene/components/BehaviorComponent.h"
 
-namespace Monolith {
+namespace Horo {
     struct RuntimeScenePanel {
         Vec3 center = Vec3::Zero();
         Vec3 half = Vec3::One();
@@ -75,4 +75,4 @@ namespace Monolith {
 
         std::size_t WarningCount() const;
     };
-} // namespace Monolith
+} // namespace Horo

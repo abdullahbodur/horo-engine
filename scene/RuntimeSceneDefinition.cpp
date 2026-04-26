@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace Monolith {
+namespace Horo {
     bool RuntimeSceneBuildResult::HasErrors() const {
         return std::ranges::any_of(issues, [](const auto &issue) {
             return issue.severity == RuntimeSceneBuildIssue::Severity::Error;
@@ -26,4 +26,4 @@ namespace Monolith {
         }
         return count;
     }
-} // namespace Monolith
+} // namespace Horo

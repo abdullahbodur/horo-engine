@@ -8,11 +8,11 @@
 #include "core/LogBuffer.h"
 #include "editor/ProjectEntryFilter.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 
 TEST_CASE("EngineLaunchArgs: default when no flags", "[engine][cli]") {
-  std::vector<std::string> args = {"MonolithApp"};
+  std::vector<std::string> args = {"HoroApp"};
   std::vector<char *> argv;
   argv.reserve(args.size());
   for (std::string &arg : args)
@@ -109,7 +109,7 @@ TEST_CASE("ProjectEntryFilter: dot files and blocklist", "[editor][project]") {
   REQUIRE_FALSE(IsBlockedProjectDirName("assets", nullptr));
   REQUIRE(IsBlockedProjectDirName("cmake-build-debug", nullptr));
 
-  std::unordered_set<std::string, Monolith::StringHash, std::equal_to<>> extra{
+  std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> extra{
       {"vendor"}};
   REQUIRE(IsBlockedProjectDirName("vendor", &extra));
   REQUIRE_FALSE(IsBlockedProjectDirName("vendor", nullptr));

@@ -6,7 +6,7 @@
 
 #include "math/Mat4.h"
 
-namespace Monolith {
+namespace Horo {
     // Bone — a single joint in the skeleton hierarchy.
     //
     // parentIndex == -1 indicates a root bone (no parent).
@@ -50,4 +50,4 @@ namespace Monolith {
     private:
         std::vector<Bone> m_bones;
     };
-} // namespace Monolith
+} // namespace Horo

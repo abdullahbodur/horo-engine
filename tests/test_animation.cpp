@@ -34,7 +34,7 @@
 #include "scene/components/AnimationComponent.h"
 #include "scene/systems/AnimationSystem.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------

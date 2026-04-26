@@ -7,7 +7,7 @@
 
 #include "launcher/LauncherProject.h"
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     struct ExternalProcessStatus {
         bool active = false;
         bool finished = false;
@@ -47,4 +47,4 @@ namespace Monolith::Launcher {
 
         void Finish(int exitCode, bool terminatedByUser, std::string error = {});
     };
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

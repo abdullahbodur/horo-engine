@@ -19,7 +19,7 @@
 #include <unistd.h>
 #endif
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     namespace {
 #ifdef _WIN32
         using SocketHandle = SOCKET;
@@ -320,4 +320,4 @@ namespace Monolith::Mcp {
         if (m_impl->worker.joinable())
             m_impl->worker.join();
     }
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

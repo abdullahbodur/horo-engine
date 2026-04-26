@@ -8,7 +8,7 @@
 #include "math/Vec3.h"
 #include "renderer/Shader.h"
 
-namespace Monolith {
+namespace Horo {
     struct HUDStats {
         float fps;
         float frameTimeMs;
@@ -111,4 +111,4 @@ namespace Monolith {
         static void DrawLabelsWithDepthCull();
 #endif
     };
-} // namespace Monolith
+} // namespace Horo

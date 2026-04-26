@@ -63,12 +63,12 @@ else:\n\
         $<BUILD_INTERFACE:${glfw_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include/vendor/glfw>
     )
-    set(MONOLITH_VENDOR_GLFW_INCLUDE_DIR "${glfw_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
+    set(HORO_VENDOR_GLFW_INCLUDE_DIR "${glfw_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
 endif()
 
 # ---- Optional Vulkan headers + loader scaffolding ----
-if(MONOLITH_ENGINE_ENABLE_VULKAN)
-    if(NOT TARGET monolith_vulkan_headers)
+if(HORO_ENGINE_ENABLE_VULKAN)
+    if(NOT TARGET horo_vulkan_headers)
         FetchContent_Declare(
             vulkan_headers
             GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
@@ -77,13 +77,13 @@ if(MONOLITH_ENGINE_ENABLE_VULKAN)
         )
         FetchContent_Populate(vulkan_headers)
 
-        add_library(monolith_vulkan_headers INTERFACE)
-        target_include_directories(monolith_vulkan_headers INTERFACE
+        add_library(horo_vulkan_headers INTERFACE)
+        target_include_directories(horo_vulkan_headers INTERFACE
             ${vulkan_headers_SOURCE_DIR}/include
         )
     endif()
 
-    if(NOT TARGET monolith_volk)
+    if(NOT TARGET horo_volk)
         FetchContent_Declare(
             volk
             GIT_REPOSITORY https://github.com/zeux/volk.git
@@ -92,11 +92,11 @@ if(MONOLITH_ENGINE_ENABLE_VULKAN)
         )
         FetchContent_Populate(volk)
 
-        add_library(monolith_volk STATIC ${volk_SOURCE_DIR}/volk.c)
-        target_include_directories(monolith_volk PUBLIC ${volk_SOURCE_DIR})
-        target_link_libraries(monolith_volk PUBLIC monolith_vulkan_headers)
-        target_compile_definitions(monolith_volk PUBLIC VK_NO_PROTOTYPES)
-        target_compile_options(monolith_volk PRIVATE
+        add_library(horo_volk STATIC ${volk_SOURCE_DIR}/volk.c)
+        target_include_directories(horo_volk PUBLIC ${volk_SOURCE_DIR})
+        target_link_libraries(horo_volk PUBLIC horo_vulkan_headers)
+        target_compile_definitions(horo_volk PUBLIC VK_NO_PROTOTYPES)
+        target_compile_options(horo_volk PRIVATE
             $<$<CXX_COMPILER_ID:MSVC>:/W0>
             $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
         )
@@ -136,7 +136,7 @@ if(NOT TARGET imgui_lib)
     )
     FetchContent_MakeAvailable(imgui)
 
-    set(MONOLITH_IMGUI_SOURCES
+    set(HORO_IMGUI_SOURCES
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -145,18 +145,18 @@ if(NOT TARGET imgui_lib)
         ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     )
 
-    if(MONOLITH_ENGINE_ENABLE_VULKAN)
-        list(APPEND MONOLITH_IMGUI_SOURCES
+    if(HORO_ENGINE_ENABLE_VULKAN)
+        list(APPEND HORO_IMGUI_SOURCES
             ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
         )
     endif()
 
-    function(monolith_add_imgui_target target_name)
+    function(horo_add_imgui_target target_name)
         set(options ENABLE_TEST_ENGINE)
         set(oneValueArgs USER_CONFIG_DIR USER_CONFIG_HEADER)
-        cmake_parse_arguments(MONOLITH_IMGUI "${options}" "${oneValueArgs}" "" ${ARGN})
+        cmake_parse_arguments(HORO_IMGUI "${options}" "${oneValueArgs}" "" ${ARGN})
 
-        add_library(${target_name} STATIC ${MONOLITH_IMGUI_SOURCES})
+        add_library(${target_name} STATIC ${HORO_IMGUI_SOURCES})
         target_include_directories(${target_name} PUBLIC
             $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
             $<BUILD_INTERFACE:${imgui_SOURCE_DIR}/backends>
@@ -165,17 +165,17 @@ if(NOT TARGET imgui_lib)
         )
         target_link_libraries(${target_name} PUBLIC glfw glad)
 
-        if(MONOLITH_ENGINE_ENABLE_VULKAN)
+        if(HORO_ENGINE_ENABLE_VULKAN)
             target_compile_definitions(${target_name} PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
-            target_link_libraries(${target_name} PUBLIC monolith_volk monolith_vulkan_headers)
+            target_link_libraries(${target_name} PUBLIC horo_volk horo_vulkan_headers)
         endif()
 
-        if(MONOLITH_IMGUI_ENABLE_TEST_ENGINE)
-            if(NOT MONOLITH_IMGUI_USER_CONFIG_DIR OR NOT MONOLITH_IMGUI_USER_CONFIG_HEADER)
-                message(FATAL_ERROR "monolith_add_imgui_target(... ENABLE_TEST_ENGINE ...) requires USER_CONFIG_DIR and USER_CONFIG_HEADER")
+        if(HORO_IMGUI_ENABLE_TEST_ENGINE)
+            if(NOT HORO_IMGUI_USER_CONFIG_DIR OR NOT HORO_IMGUI_USER_CONFIG_HEADER)
+                message(FATAL_ERROR "horo_add_imgui_target(... ENABLE_TEST_ENGINE ...) requires USER_CONFIG_DIR and USER_CONFIG_HEADER")
             endif()
 
-            if(NOT TARGET monolith_imgui_test_engine)
+            if(NOT TARGET horo_imgui_test_engine)
                 FetchContent_Declare(
                     imgui_test_engine
                     GIT_REPOSITORY https://github.com/ocornut/imgui_test_engine.git
@@ -185,7 +185,7 @@ if(NOT TARGET imgui_lib)
                 FetchContent_MakeAvailable(imgui_test_engine)
                 find_package(Threads REQUIRED)
 
-                add_library(monolith_imgui_test_engine STATIC
+                add_library(horo_imgui_test_engine STATIC
                     ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_capture_tool.cpp
                     ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_context.cpp
                     ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_coroutine.cpp
@@ -195,31 +195,31 @@ if(NOT TARGET imgui_lib)
                     ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_ui.cpp
                     ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_utils.cpp
                 )
-                target_include_directories(monolith_imgui_test_engine PUBLIC
+                target_include_directories(horo_imgui_test_engine PUBLIC
                     $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
                     $<BUILD_INTERFACE:${imgui_test_engine_SOURCE_DIR}>
                 )
-                target_link_libraries(monolith_imgui_test_engine PUBLIC Threads::Threads)
-                target_compile_definitions(monolith_imgui_test_engine PUBLIC
-                    IMGUI_USER_CONFIG=\"${MONOLITH_IMGUI_USER_CONFIG_HEADER}\"
+                target_link_libraries(horo_imgui_test_engine PUBLIC Threads::Threads)
+                target_compile_definitions(horo_imgui_test_engine PUBLIC
+                    IMGUI_USER_CONFIG=\"${HORO_IMGUI_USER_CONFIG_HEADER}\"
                 )
-                target_include_directories(monolith_imgui_test_engine PUBLIC
-                    $<BUILD_INTERFACE:${MONOLITH_IMGUI_USER_CONFIG_DIR}>
+                target_include_directories(horo_imgui_test_engine PUBLIC
+                    $<BUILD_INTERFACE:${HORO_IMGUI_USER_CONFIG_DIR}>
                 )
-                target_compile_options(monolith_imgui_test_engine PRIVATE
+                target_compile_options(horo_imgui_test_engine PRIVATE
                     $<$<CXX_COMPILER_ID:MSVC>:/W0>
                     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
                 )
-                set(MONOLITH_VENDOR_IMGUI_TEST_ENGINE_INCLUDE_DIR "${imgui_test_engine_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
+                set(HORO_VENDOR_IMGUI_TEST_ENGINE_INCLUDE_DIR "${imgui_test_engine_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
             endif()
 
             target_compile_definitions(${target_name} PUBLIC
-                IMGUI_USER_CONFIG=\"${MONOLITH_IMGUI_USER_CONFIG_HEADER}\"
+                IMGUI_USER_CONFIG=\"${HORO_IMGUI_USER_CONFIG_HEADER}\"
             )
             target_include_directories(${target_name} PUBLIC
-                $<BUILD_INTERFACE:${MONOLITH_IMGUI_USER_CONFIG_DIR}>
+                $<BUILD_INTERFACE:${HORO_IMGUI_USER_CONFIG_DIR}>
             )
-            target_link_libraries(${target_name} PUBLIC monolith_imgui_test_engine)
+            target_link_libraries(${target_name} PUBLIC horo_imgui_test_engine)
         endif()
 
         # Suppress vendor warnings (MSVC -WX, GCC/Clang -Werror)
@@ -229,11 +229,11 @@ if(NOT TARGET imgui_lib)
         )
     endfunction()
 
-    monolith_add_imgui_target(imgui_lib)
-    set(MONOLITH_VENDOR_IMGUI_INCLUDE_DIR "${imgui_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
+    horo_add_imgui_target(imgui_lib)
+    set(HORO_VENDOR_IMGUI_INCLUDE_DIR "${imgui_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
 
-    if(MONOLITH_ENGINE_BUILD_TESTS AND NOT TARGET imgui_test_lib)
-        monolith_add_imgui_target(
+    if(HORO_ENGINE_BUILD_TESTS AND NOT TARGET imgui_test_lib)
+        horo_add_imgui_target(
             imgui_test_lib
             ENABLE_TEST_ENGINE
             USER_CONFIG_DIR "${CMAKE_CURRENT_LIST_DIR}/../tests"
@@ -260,7 +260,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
         )
         set_property(TARGET nlohmann_json PROPERTY SOURCES "")
     endif()
-    set(MONOLITH_VENDOR_NLOHMANN_INCLUDE_DIR "${nlohmann_json_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
+    set(HORO_VENDOR_NLOHMANN_INCLUDE_DIR "${nlohmann_json_SOURCE_DIR}/include" CACHE INTERNAL "" FORCE)
 endif()
 
 # ---- tinygltf (header-only glTF 2.0 / GLB loader) ----
@@ -293,8 +293,8 @@ if(NOT TARGET tinygltf)
         $<BUILD_INTERFACE:${tinygltf_SOURCE_DIR}>
         $<INSTALL_INTERFACE:include/vendor/tinygltf>
     )
-    set(MONOLITH_VENDOR_TINYGLTF_INCLUDE_DIR "${tinygltf_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
+    set(HORO_VENDOR_TINYGLTF_INCLUDE_DIR "${tinygltf_SOURCE_DIR}" CACHE INTERNAL "" FORCE)
 endif()
 
-set(MONOLITH_VENDOR_GLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm" CACHE INTERNAL "" FORCE)
-set(MONOLITH_VENDOR_STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb" CACHE INTERNAL "" FORCE)
+set(HORO_VENDOR_GLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm" CACHE INTERNAL "" FORCE)
+set(HORO_VENDOR_STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb" CACHE INTERNAL "" FORCE)

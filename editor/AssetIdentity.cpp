@@ -7,7 +7,7 @@
 #include <random>
 #include <string>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         std::string Trim(std::string text) {
             const auto first = std::ranges::find_if_not(
@@ -77,4 +77,4 @@ namespace Monolith::Editor {
         for (auto &[assetId, assetDef]: doc->assets)
             EnsureAssetIdentity(assetId, &assetDef);
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

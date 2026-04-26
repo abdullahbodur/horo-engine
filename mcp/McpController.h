@@ -17,7 +17,7 @@
 #include "mcp/McpServer.h"
 #include "mcp/McpSettings.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     struct McpActivityEntry {
         std::string timeText;
         std::string timestampText;
@@ -127,4 +127,4 @@ namespace Monolith::Mcp {
         std::unique_ptr<McpProtocol> m_protocol;
         McpHttpServer m_server;
     };
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

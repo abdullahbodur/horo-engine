@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-namespace Monolith {
+namespace Horo {
     /// Transparent hasher enabling heterogeneous lookup in unordered containers.
     /// Use as: std::unordered_map<std::string, V, StringHash, std::equal_to<>>
     /// This allows find/count/erase with std::string_view or const char* keys
@@ -15,4 +15,4 @@ namespace Monolith {
             return std::hash<std::string_view>{}(sv);
         }
     };
-} // namespace Monolith
+} // namespace Horo

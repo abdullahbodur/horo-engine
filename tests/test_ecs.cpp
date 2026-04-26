@@ -5,7 +5,7 @@
 #include "scene/Entity.h"
 #include "scene/Registry.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 // Simple test components — no dependencies on ECS components
 struct Position {

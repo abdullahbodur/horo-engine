@@ -19,13 +19,13 @@
 #include "launcher/LauncherProjectTemplate.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
-using namespace Monolith::Launcher;
+using namespace Horo;
+using namespace Horo::Editor;
+using namespace Horo::Launcher;
 
 namespace {
 std::filesystem::path MakeTempRoot(const std::string &name) {
-  return Monolith::Tests::SecureTempBase() / "horo_launcher_tests" / name;
+  return Horo::Tests::SecureTempBase() / "horo_launcher_tests" / name;
 }
 
 std::string NormalizeComparablePath(const std::filesystem::path &path) {
@@ -272,7 +272,7 @@ TEST_CASE("Launcher manifest load reports structured parse failures", "[launcher
 TEST_CASE("Launcher manifest save validates inputs", "[launcher][manifest]") {
   std::string error;
   REQUIRE_FALSE(SaveProjectManifestDocument(
-      Monolith::Tests::SecureTempBase() / "unused", nullptr, &error));
+      Horo::Tests::SecureTempBase() / "unused", nullptr, &error));
   REQUIRE(error.find("document is null") != std::string::npos);
 }
 
@@ -358,7 +358,7 @@ TEST_CASE("Launcher project template creates manifest, source, and scene scaffol
 TEST_CASE("External process runner starts, completes, and records exit status", "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
-  command.workingDirectory = Monolith::Tests::SecureTempBase();
+  command.workingDirectory = Horo::Tests::SecureTempBase();
 #ifdef _WIN32
   command.executable = "cmd";
   command.args = {"/c", "echo horo-launcher"};
@@ -384,7 +384,7 @@ TEST_CASE("External process runner starts, completes, and records exit status", 
 TEST_CASE("External process runner stop marks user-terminated commands as finished", "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
-  command.workingDirectory = Monolith::Tests::SecureTempBase();
+  command.workingDirectory = Horo::Tests::SecureTempBase();
 #ifdef _WIN32
   command.executable = "cmd";
   command.args = {"/c", "ping -n 6 127.0.0.1 >nul"};
@@ -408,7 +408,7 @@ TEST_CASE("External process runner stop marks user-terminated commands as finish
 TEST_CASE("External process runner rejects Start while process is active", "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand slowCommand;
-  slowCommand.workingDirectory = Monolith::Tests::SecureTempBase();
+  slowCommand.workingDirectory = Horo::Tests::SecureTempBase();
 #ifdef _WIN32
   slowCommand.executable = "cmd";
   slowCommand.args = {"/c", "ping -n 6 127.0.0.1 >nul"};
@@ -435,7 +435,7 @@ TEST_CASE("External process runner rejects Start while process is active", "[lau
 TEST_CASE("External process runner reports non-zero exit from child process", "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
-  command.workingDirectory = Monolith::Tests::SecureTempBase();
+  command.workingDirectory = Horo::Tests::SecureTempBase();
 #ifdef _WIN32
   command.executable = "cmd";
   command.args = {"/c", "exit /b 7"};

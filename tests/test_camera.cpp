@@ -6,7 +6,7 @@
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

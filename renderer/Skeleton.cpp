@@ -4,7 +4,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Monolith {
+namespace Horo {
     void Skeleton::AddBone(Bone bone) { m_bones.push_back(std::move(bone)); }
 
     int Skeleton::BoneCount() const { return static_cast<int>(m_bones.size()); }
@@ -24,4 +24,4 @@ namespace Monolith {
     }
 
     bool Skeleton::IsValid() const { return !m_bones.empty(); }
-} // namespace Monolith
+} // namespace Horo

@@ -6,7 +6,7 @@
  * STARTER TEMPLATE GUIDE
  *
  * This demonstrates the engine-owned scene loading path from authoring JSON
- * into a plain Monolith scene runtime.
+ * into a plain Horo scene runtime.
  *
  * FILE STRUCTURE:
  *   my-game/
@@ -42,7 +42,7 @@ namespace MyGame {
     };
 
     // STEP 1: Create a minimal app class.
-    class MyGameApp : public Monolith::Application {
+    class MyGameApp : public Horo::Application {
     public:
         MyGameApp() : Application(BuildAppSpec()) {
         }
@@ -50,18 +50,18 @@ namespace MyGame {
     protected:
         // STEP 2: Setup (called once at startup).
         void OnInit() override {
-            Monolith::RenderBackendSelection backendSelection;
-            backendSelection.requested = Monolith::RenderBackendId::OpenGL;
+            Horo::RenderBackendSelection backendSelection;
+            backendSelection.requested = Horo::RenderBackendId::OpenGL;
             backendSelection.nativeWindowHandle = GetWindow().GetNativeHandle();
-            if (const Monolith::RenderBackendInitResult backendInit =
-                        Monolith::Renderer::InitializeBackend(backendSelection);
+            if (const Horo::RenderBackendInitResult backendInit =
+                        Horo::Renderer::InitializeBackend(backendSelection);
                 !backendInit.ok)
                 throw StarterTemplateBackendInitException(
                     "Failed to initialize renderer backend: " + backendInit.error);
 
-            Monolith::DebugDraw::Init();
+            Horo::DebugDraw::Init();
             m_referenceRuntime =
-                    std::make_unique<Monolith::SceneReferenceRuntime>(&m_scene);
+                    std::make_unique<Horo::SceneReferenceRuntime>(&m_scene);
 
             if (!GetDefaultSceneFilePath().empty())
                 LoadSceneFromFile(GetDefaultSceneFilePath());
@@ -75,15 +75,15 @@ namespace MyGame {
 
         // STEP 5: Rendering (variable framerate).
         void OnRender(float alpha) override {
-            Monolith::Renderer::BeginFrame({{}, "starter-template-frame"});
-            Monolith::Renderer::BeginPass({
-                Monolith::RenderPassId::OpaqueScene,
-                Monolith::BuildRenderView(m_camera),
+            Horo::Renderer::BeginFrame({{}, "starter-template-frame"});
+            Horo::Renderer::BeginPass({
+                Horo::RenderPassId::OpaqueScene,
+                Horo::BuildRenderView(m_camera),
                 "starter-template-scene"
             });
             m_scene.RenderSystems(alpha);
-            Monolith::Renderer::EndPass();
-            Monolith::Renderer::EndFrame();
+            Horo::Renderer::EndPass();
+            Horo::Renderer::EndFrame();
         }
 
         void OnShutdown() override {
@@ -92,25 +92,25 @@ namespace MyGame {
         }
 
     private:
-        Monolith::Scene m_scene;
-        std::unique_ptr<Monolith::SceneReferenceRuntime> m_referenceRuntime;
-        Monolith::Camera m_camera;
+        Horo::Scene m_scene;
+        std::unique_ptr<Horo::SceneReferenceRuntime> m_referenceRuntime;
+        Horo::Camera m_camera;
 
-        static Monolith::AppSpec BuildAppSpec() {
-            Monolith::AppSpec spec;
+        static Horo::AppSpec BuildAppSpec() {
+            Horo::AppSpec spec;
             spec.name = "My Game";
             spec.width = 1280;
             spec.height = 720;
             spec.vsync = true;
-            spec.graphicsApi = Monolith::WindowGraphicsApi::OpenGL;
+            spec.graphicsApi = Horo::WindowGraphicsApi::OpenGL;
             spec.defaultSceneFile = "assets/scenes/level.json";
             return spec;
         }
 
         void LoadSceneFromFile(const std::string &path) {
-            const Monolith::Editor::SceneDocument doc =
-                    Monolith::Editor::SceneSerializer::LoadFromFile(path);
-            const Monolith::SceneRuntimeOperationResult result =
+            const Horo::Editor::SceneDocument doc =
+                    Horo::Editor::SceneSerializer::LoadFromFile(path);
+            const Horo::SceneRuntimeOperationResult result =
                     m_referenceRuntime->LoadDocument(doc);
             if (!result.ok) {
                 throw StarterTemplateSceneLoadException("Failed to load scene: " +
@@ -151,7 +151,7 @@ namespace MyGame {
  *       src/MyGame.h
  *       src/MyGame.cpp
  *   )
- *   target_link_libraries(MyGame PRIVATE MonolithEngine)
+ *   target_link_libraries(MyGame PRIVATE HoroEngine)
  *
  *   # Copy assets to build directory
  *   add_custom_command(TARGET MyGame POST_BUILD

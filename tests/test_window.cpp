@@ -12,7 +12,7 @@
 
 #include "core/Window.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 namespace {
 std::string ReadEnvValue(const char *name) {
@@ -103,8 +103,8 @@ std::unique_ptr<Window> CreateWindowIfAvailable(const WindowSpec &spec) {
 } // namespace
 
 TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", "[core][window][opengl]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec spec;
   spec.title = "window-opengl-test";
@@ -158,7 +158,7 @@ TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", 
 }
 
 TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[core][window][vulkan]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
 
   WindowSpec spec;
   spec.title = "window-vulkan-test";
@@ -192,8 +192,8 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[cor
 }
 
 TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window][callbacks]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec spec;
   spec.title = "window-callback-test";
@@ -276,8 +276,8 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
 }
 
 TEST_CASE("Window env parsing falls back when variables are unset", "[core][window][env_unset]") {
-  const ScopedEnvVar unsetVisible("MONOLITH_GLFW_VISIBLE", nullptr);
-  const ScopedEnvVar unsetSamples("MONOLITH_GLFW_SAMPLES", nullptr);
+  const ScopedEnvVar unsetVisible("HORO_GLFW_VISIBLE", nullptr);
+  const ScopedEnvVar unsetSamples("HORO_GLFW_SAMPLES", nullptr);
 
   WindowSpec spec;
   spec.title = "window-env-unset-test";
@@ -301,27 +301,27 @@ TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core
   spec.height = 96;
   spec.graphicsApi = WindowGraphicsApi::OpenGL;
 
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar invalidSamples("MONOLITH_GLFW_SAMPLES", "abc");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar invalidSamples("HORO_GLFW_SAMPLES", "abc");
   if (auto first = CreateWindowIfAvailable(spec); !first) {
     SUCCEED("Window initialization is unavailable on this machine");
     return;
   }
 
-  const ScopedEnvVar visibleWindow("MONOLITH_GLFW_VISIBLE", "1");
-  const ScopedEnvVar negativeSamples("MONOLITH_GLFW_SAMPLES", "-2");
+  const ScopedEnvVar visibleWindow("HORO_GLFW_VISIBLE", "1");
+  const ScopedEnvVar negativeSamples("HORO_GLFW_SAMPLES", "-2");
   auto second = CreateWindowIfAvailable(spec);
   REQUIRE(second != nullptr);
 
-  const ScopedEnvVar emptyVisible("MONOLITH_GLFW_VISIBLE", "");
-  const ScopedEnvVar tooLargeSamples("MONOLITH_GLFW_SAMPLES", "99");
+  const ScopedEnvVar emptyVisible("HORO_GLFW_VISIBLE", "");
+  const ScopedEnvVar tooLargeSamples("HORO_GLFW_SAMPLES", "99");
   auto third = CreateWindowIfAvailable(spec);
   REQUIRE(third != nullptr);
 }
 
 TEST_CASE("Window reports init failures for invalid dimensions", "[core][window][errors]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec probe;
   probe.title = "window-probe";
@@ -355,8 +355,8 @@ TEST_CASE("Window reports init failures for invalid dimensions", "[core][window]
 }
 
 TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][window][logfilter]") {
-  const ScopedEnvVar hiddenWindow("MONOLITH_GLFW_VISIBLE", "0");
-  const ScopedEnvVar disableMsaa("MONOLITH_GLFW_SAMPLES", "0");
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
   WindowSpec glSpec;
   glSpec.title = "window-logfilter-gl";

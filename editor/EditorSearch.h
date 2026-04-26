@@ -5,7 +5,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct ShortcutRow {
         const char *category;
         const char *command;
@@ -47,4 +47,4 @@ namespace Monolith::Editor {
 
     FilteredListState EvaluateFilteredListState(size_t totalCount, int shownCount,
                                                 std::string_view queryRaw);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

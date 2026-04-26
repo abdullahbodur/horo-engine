@@ -3,7 +3,7 @@
 
 #include "physics/constraints/ContactConstraint.h"
 
-namespace Monolith {
+namespace Horo {
     class ConstraintSolver {
     public:
         static constexpr int DEFAULT_ITERATIONS = 15;
@@ -11,4 +11,4 @@ namespace Monolith {
         void Solve(std::vector<ContactConstraint> &constraints,
                    int iterations = DEFAULT_ITERATIONS) const;
     };
-} // namespace Monolith
+} // namespace Horo

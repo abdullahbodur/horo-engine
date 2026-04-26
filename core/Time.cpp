@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace Monolith {
+namespace Horo {
     double Time::s_lastTime = 0.0;
     float Time::s_deltaTime = 0.0f;
     float Time::s_elapsed = 0.0f;
@@ -33,4 +33,4 @@ namespace Monolith {
         }
         return false;
     }
-} // namespace Monolith
+} // namespace Horo

@@ -46,7 +46,7 @@
 #include "renderer/Texture.h"
 #include "scene/SceneRuntimeConversion.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 void EditorLayer::DrawPropertiesPanel() {
   // NOSONAR: cpp:S3776 properties panel
   // integrates multiple section editors
@@ -922,4 +922,4 @@ void EditorLayer::DrawPropertiesAddComponentMenu(SceneObject &obj) {
 
 // ---- Picking
 // -----------------------------------------------------------------
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

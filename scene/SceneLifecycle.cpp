@@ -1,6 +1,6 @@
 #include "scene/SceneLifecycle.h"
 
-namespace Monolith {
+namespace Horo {
     bool SceneLifecycle::BeginLoading() {
         using enum SceneLifecycleState;
         if (m_state != Uninitialized && m_state != Unloading) {
@@ -66,4 +66,4 @@ namespace Monolith {
         SetError("");
         return true;
     }
-} // namespace Monolith
+} // namespace Horo

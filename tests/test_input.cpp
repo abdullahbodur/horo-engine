@@ -26,7 +26,7 @@
 #include "math/MathUtils.h"
 #include "renderer/Camera.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ===========================================================================

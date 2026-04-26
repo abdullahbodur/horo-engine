@@ -8,7 +8,7 @@
 #include "scene/Registry.h"
 #include "scene/components/AnimationComponent.h"
 
-namespace Monolith {
+namespace Horo {
     void AnimationSystem::OnUpdate(Registry &registry, float dt) {
         for (Entity e: registry.GetEntities<AnimationComponent>()) {
             auto &ac = registry.Get<AnimationComponent>(e);
@@ -60,4 +60,4 @@ namespace Monolith {
                         globalTransforms[i] * ac.skeleton->GetBone(i).inverseBindMatrix;
         }
     }
-} // namespace Monolith
+} // namespace Horo

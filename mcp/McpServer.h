@@ -8,7 +8,7 @@
 
 #include "mcp/McpProtocol.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     struct McpServerStartResult {
         bool ok = false;
         std::string error;
@@ -35,4 +35,4 @@ namespace Monolith::Mcp {
         std::unique_ptr<Impl> m_impl;
         std::atomic<bool> m_running{false};
     };
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

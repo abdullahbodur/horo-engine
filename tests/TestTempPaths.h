@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string_view>
 
-namespace Monolith::Tests {
+namespace Horo::Tests {
 inline std::filesystem::path SecureTempBase() {
   namespace fs = std::filesystem;
 
@@ -38,4 +38,4 @@ inline std::filesystem::path SecureTempBase() {
 inline std::filesystem::path SecureTempPath(std::string_view name) {
   return SecureTempBase() / std::filesystem::path(name);
 }
-} // namespace Monolith::Tests
+} // namespace Horo::Tests

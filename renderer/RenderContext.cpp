@@ -2,7 +2,7 @@
 
 #include "renderer/Renderer.h"
 
-namespace Monolith {
+namespace Horo {
     void RenderContext::Init() {
         // Nothing to initialize; RenderContext delegates directly to Renderer.
     }
@@ -30,4 +30,4 @@ namespace Monolith {
         frame.clearDepthBuffer = clearDepthBuffer;
         return frame;
     }
-} // namespace Monolith
+} // namespace Horo

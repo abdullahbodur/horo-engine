@@ -8,7 +8,7 @@
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

@@ -3,7 +3,7 @@
 #include "math/MathUtils.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         void ApplyFrictionImpulse(RigidBody *bodyA, RigidBody *bodyB, const Vec3 &rA,
                                   const Vec3 &rB, const Vec3 &relV, const Vec3 &n,
@@ -110,4 +110,4 @@ namespace Monolith {
                 bodyB->position -= corrVec * bodyB->invMass;
         }
     }
-} // namespace Monolith
+} // namespace Horo

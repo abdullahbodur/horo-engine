@@ -4,7 +4,7 @@
 #include <format>
 #include <unordered_set>
 
-namespace Monolith {
+namespace Horo {
     namespace {
         void ValidateSceneAssets(
             const SceneProjectModel &model,
@@ -199,4 +199,4 @@ namespace Monolith {
 
         return result;
     }
-} // namespace Monolith
+} // namespace Horo

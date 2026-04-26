@@ -4,7 +4,7 @@
 
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
     Vec4::Vec4(const Vec3 &v, float w) : x(v.x), y(v.y), z(v.z), w(w) {
     }
 
@@ -15,4 +15,4 @@ namespace Monolith {
         ss << "Vec4(" << x << ", " << y << ", " << z << ", " << w << ")";
         return ss.str();
     }
-} // namespace Monolith
+} // namespace Horo

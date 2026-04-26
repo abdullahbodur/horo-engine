@@ -3,8 +3,8 @@
 #include "editor/SceneProjectBridge.h"
 #include "scene/SceneRuntimeConversion.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     RuntimeSceneBuildResult BuildRuntimeSceneDefinition(const SceneDocument &doc) {
-        return Monolith::BuildRuntimeSceneDefinition(BuildSceneProjectModel(doc));
+        return Horo::BuildRuntimeSceneDefinition(BuildSceneProjectModel(doc));
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -8,7 +8,7 @@
 #include "scene/Entity.h"
 #include "scene/Registry.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 // ---------------------------------------------------------------------------
 // Test components

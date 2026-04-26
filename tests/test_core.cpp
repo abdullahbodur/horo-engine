@@ -26,7 +26,7 @@
 #include "renderer/Shader.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 namespace {
@@ -155,7 +155,7 @@ TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectp
   };
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_projectpath_explicit";
+      Horo::Tests::SecureTempBase() / "horo_projectpath_explicit";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot / "project" / "assets", ec);
@@ -188,7 +188,7 @@ TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", 
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_projectpath_init";
+      Horo::Tests::SecureTempBase() / "horo_projectpath_init";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot / "repo" / "assets", ec);
@@ -222,7 +222,7 @@ TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root", "[core][projectp
   };
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_projectpath_fallback";
+      Horo::Tests::SecureTempBase() / "horo_projectpath_fallback";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot / "bin" / "nested", ec);
@@ -252,7 +252,7 @@ TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exi
   };
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_projectpath_no_markers";
+      Horo::Tests::SecureTempBase() / "horo_projectpath_no_markers";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot / "bin" / "nested", ec);
@@ -298,7 +298,7 @@ TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[
 
   const fs::path savedCwd = fs::current_path();
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_projectpath_deleted_cwd";
+      Horo::Tests::SecureTempBase() / "horo_projectpath_deleted_cwd";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot, ec);
@@ -367,7 +367,7 @@ TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core]
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_shader_io";
+      Horo::Tests::SecureTempBase() / "horo_shader_io";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot, ec);
@@ -388,7 +388,7 @@ TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
-      Monolith::Tests::SecureTempBase() / "horo_shader_io_first_missing";
+      Horo::Tests::SecureTempBase() / "horo_shader_io_first_missing";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot, ec);
@@ -613,13 +613,13 @@ TEST_CASE("MathUtils: Pow", "[mathutils]") {
 // ===========================================================================
 
 TEST_CASE("LogBuffer: CopyLinesTo nullptr is a no-op", "[logbuffer]") {
-  auto &buf = Monolith::LogBuffer::Instance();
+  auto &buf = Horo::LogBuffer::Instance();
   buf.Clear();
   REQUIRE_NOTHROW(buf.CopyLinesTo(nullptr));
 }
 
 TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash", "[logbuffer]") {
-  auto &buf = Monolith::LogBuffer::Instance();
+  auto &buf = Horo::LogBuffer::Instance();
   buf.Clear();
   REQUIRE_NOTHROW(buf.GetCounts(nullptr, nullptr, nullptr));
   int i = 0;
@@ -631,7 +631,7 @@ TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash", "[logbuffer]"
 }
 
 TEST_CASE("LogBuffer: MaxLines getter returns configured value", "[logbuffer]") {
-  auto &buf = Monolith::LogBuffer::Instance();
+  auto &buf = Horo::LogBuffer::Instance();
   const size_t original = buf.MaxLines();
   buf.SetMaxLines(256);
   REQUIRE(buf.MaxLines() == 256);
@@ -639,17 +639,17 @@ TEST_CASE("LogBuffer: MaxLines getter returns configured value", "[logbuffer]") 
 }
 
 TEST_CASE("LogBuffer: Push with null file pointer does not crash", "[logbuffer]") {
-  auto &buf = Monolith::LogBuffer::Instance();
+  auto &buf = Horo::LogBuffer::Instance();
   REQUIRE_NOTHROW(
-      buf.Push(Monolith::LogLevel::Info, nullptr, 0, "null-file test"));
+      buf.Push(Horo::LogLevel::Info, nullptr, 0, "null-file test"));
 }
 
 TEST_CASE("LogBuffer: Revision increments after Push and Clear", "[logbuffer]") {
-  auto &buf = Monolith::LogBuffer::Instance();
+  auto &buf = Horo::LogBuffer::Instance();
   buf.Clear();
   const uint64_t rev0 = buf.Revision();
   const auto loc = std::source_location::current();
-  buf.Push(Monolith::LogLevel::Warn, loc.file_name(),
+  buf.Push(Horo::LogLevel::Warn, loc.file_name(),
            static_cast<int>(loc.line()), "rev test");
   REQUIRE(buf.Revision() > rev0);
   const uint64_t rev1 = buf.Revision();
@@ -662,18 +662,18 @@ TEST_CASE("LogBuffer: Revision increments after Push and Clear", "[logbuffer]") 
 // ===========================================================================
 
 TEST_CASE("Screenshot: zero width returns empty string", "[screenshot]") {
-  const std::string outDir = Monolith::Tests::SecureTempBase().string();
-  REQUIRE(Monolith::Screenshot::Save(0, 100, outDir).empty());
+  const std::string outDir = Horo::Tests::SecureTempBase().string();
+  REQUIRE(Horo::Screenshot::Save(0, 100, outDir).empty());
 }
 
 TEST_CASE("Screenshot: zero height returns empty string", "[screenshot]") {
-  const std::string outDir = Monolith::Tests::SecureTempBase().string();
-  REQUIRE(Monolith::Screenshot::Save(100, 0, outDir).empty());
+  const std::string outDir = Horo::Tests::SecureTempBase().string();
+  REQUIRE(Horo::Screenshot::Save(100, 0, outDir).empty());
 }
 
 TEST_CASE("Screenshot: negative dimensions return empty string", "[screenshot]") {
-  const std::string outDir = Monolith::Tests::SecureTempBase().string();
-  REQUIRE(Monolith::Screenshot::Save(-1, -1, outDir).empty());
+  const std::string outDir = Horo::Tests::SecureTempBase().string();
+  REQUIRE(Horo::Screenshot::Save(-1, -1, outDir).empty());
 }
 
 TEST_CASE("Screenshot: backend without readback support returns empty without readback", "[core][screenshot]") {
@@ -681,7 +681,7 @@ TEST_CASE("Screenshot: backend without readback support returns empty without re
   backend.capabilities.supportsReadback = false;
   Renderer::UseBackend(&backend);
 
-  const std::string outDir = Monolith::Tests::SecureTempBase().string();
+  const std::string outDir = Horo::Tests::SecureTempBase().string();
   REQUIRE(Screenshot::Save(2, 2, outDir).empty());
   CHECK(backend.readbackColorCalls == 0);
 
@@ -695,7 +695,7 @@ TEST_CASE("Screenshot: readback failure returns empty and captures request dimen
   backend.colorReadbackError = "readback unavailable in test backend";
   Renderer::UseBackend(&backend);
 
-  const std::string outDir = Monolith::Tests::SecureTempBase().string();
+  const std::string outDir = Horo::Tests::SecureTempBase().string();
   REQUIRE(Screenshot::Save(7, 3, outDir).empty());
   CHECK(backend.readbackColorCalls == 1);
   CHECK(backend.lastReadbackWidth == 7);
@@ -717,7 +717,7 @@ TEST_CASE("Screenshot: successful save writes a BMP file with expected header", 
   Renderer::UseBackend(&backend);
 
   const std::filesystem::path outDir =
-      Monolith::Tests::SecureTempPath("screenshot_success_path");
+      Horo::Tests::SecureTempPath("screenshot_success_path");
   std::error_code ec;
   std::filesystem::create_directories(outDir, ec);
   REQUIRE_FALSE(ec);
@@ -747,7 +747,7 @@ TEST_CASE("Screenshot: successful save writes a BMP file with expected header", 
 // ===========================================================================
 
 TEST_CASE("StringHash: operator() hashes string_view consistently", "[stringhash]") {
-  Monolith::StringHash hasher;
+  Horo::StringHash hasher;
   REQUIRE(hasher(std::string_view("hello")) ==
           hasher(std::string_view("hello")));
   REQUIRE(hasher(std::string_view("hello")) !=
@@ -755,7 +755,7 @@ TEST_CASE("StringHash: operator() hashes string_view consistently", "[stringhash
 }
 
 TEST_CASE("StringHash: heterogeneous find with string_view key", "[stringhash]") {
-  std::unordered_map<std::string, int, Monolith::StringHash, std::equal_to<>> m;
+  std::unordered_map<std::string, int, Horo::StringHash, std::equal_to<>> m;
   m["alpha"] = 1;
   m["beta"] = 2;
   REQUIRE(m.find(std::string_view("alpha")) != m.end());
@@ -768,10 +768,10 @@ TEST_CASE("StringHash: heterogeneous find with string_view key", "[stringhash]")
 // ===========================================================================
 
 TEST_CASE("Time: FIXED_DT is 120 Hz", "[time]") {
-  REQUIRE(Monolith::Time::FIXED_DT == Approx(1.0f / 120.0f));
+  REQUIRE(Horo::Time::FIXED_DT == Approx(1.0f / 120.0f));
 }
 
 TEST_CASE("Time: ConsumeFixedStep returns false when accumulator is zero", "[time]") {
   // After default construction the static accumulator is zero — no steps ready.
-  REQUIRE_FALSE(Monolith::Time::ConsumeFixedStep());
+  REQUIRE_FALSE(Horo::Time::ConsumeFixedStep());
 }

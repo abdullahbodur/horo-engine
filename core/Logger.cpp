@@ -10,20 +10,20 @@
 #include <string>
 #include <vector>
 
-namespace Monolith {
+namespace Horo {
     namespace {
         LogLevel ParseLogLevelFromEnv() {
 #ifdef _WIN32
             size_t len = 0;
-            if (getenv_s(&len, nullptr, 0, "MONOLITH_LOG_LEVEL") != 0 || len <= 1)
+            if (getenv_s(&len, nullptr, 0, "HORO_LOG_LEVEL") != 0 || len <= 1)
                 return LogLevel::Info;
             std::vector<char> value(len);
-            if (getenv_s(&len, value.data(), value.size(), "MONOLITH_LOG_LEVEL") != 0 ||
+            if (getenv_s(&len, value.data(), value.size(), "HORO_LOG_LEVEL") != 0 ||
                 len <= 1)
                 return LogLevel::Info;
             std::string level(value.data());
 #else
-            const char *raw = std::getenv("MONOLITH_LOG_LEVEL");
+            const char *raw = std::getenv("HORO_LOG_LEVEL");
             if (!raw || !*raw)
                 return LogLevel::Info;
             std::string level(raw);
@@ -95,4 +95,4 @@ namespace Monolith {
 
         LogBuffer::Instance().Push(level, slash, line, message);
     }
-} // namespace Monolith
+} // namespace Horo

@@ -2,7 +2,7 @@
 
 #include "scene/System.h"
 
-namespace Monolith {
+namespace Horo {
     class Camera;
 
     class SkinnedRenderSystem : public System {
@@ -17,4 +17,4 @@ namespace Monolith {
         Camera &m_camera;
         float &m_alpha;
     };
-} // namespace Monolith
+} // namespace Horo

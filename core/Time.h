@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Monolith {
+namespace Horo {
     class Time {
     public:
         static constexpr float FIXED_DT = 1.0f / 120.0f; // 120 Hz physics
@@ -31,4 +31,4 @@ namespace Monolith {
         static float s_accumulator;
         static uint64_t s_frameCount;
     };
-} // namespace Monolith
+} // namespace Horo

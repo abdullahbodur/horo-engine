@@ -7,7 +7,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 
 // Validates a proposed rename of the object at targetIndex to draftId.
 // Returns an empty string on success; returns a human-readable error message
@@ -25,4 +25,4 @@ std::vector<std::string> CollectParentCandidates(const SceneDocument &doc,
 // Falls back to "<prefix>_new" if the space is exhausted.
 std::string GenerateUniqueId(const SceneDocument &doc, std::string_view prefix);
 
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -4,7 +4,7 @@
 #include "editor/EditorSelectionRules.h"
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 
 SceneObject MakeObjectFromAsset(const SceneDocument &doc,
                                 const std::string &assetId,
@@ -63,4 +63,4 @@ void ApplyCameraBuiltinDefaults(SceneObject &obj) {
     obj.props["followTargetId"] = "";
 }
 
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

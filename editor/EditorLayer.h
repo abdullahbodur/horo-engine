@@ -23,7 +23,7 @@
 
 struct GLFWwindow;
 
-namespace Monolith {
+namespace Horo {
     class Registry;
 
     namespace Editor {
@@ -713,4 +713,4 @@ namespace Monolith {
             Mcp::McpCommandResult McpHandleReloadScene(const nlohmann::json &);
         };
     } // namespace Editor
-} // namespace Monolith
+} // namespace Horo

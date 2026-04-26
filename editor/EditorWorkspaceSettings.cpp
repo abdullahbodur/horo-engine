@@ -5,7 +5,7 @@
 #include "core/ProjectPath.h"
 #include "mcp/McpSettings.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
@@ -113,4 +113,4 @@ namespace Monolith::Editor {
         doc->error.clear();
         return true;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

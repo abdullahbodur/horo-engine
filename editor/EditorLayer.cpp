@@ -75,7 +75,7 @@
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
 #include "renderer/Texture.h"
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 #include "renderer/VulkanRenderBackend.h"
 #endif
 #include "scene/Entity.h"
@@ -87,7 +87,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 namespace {
 // Some shared constants and inline helpers live in EditorLayerInternal.h
 // (included via EditorLayer.cpp's top-level include list).
@@ -500,7 +500,7 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
       !caps.supportsOffscreenTargets || !caps.supportsNativeTextureHandles)
     return {};
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
   if (Renderer::GetBackendId() == RenderBackendId::Vulkan) {
     auto *backend =
         dynamic_cast<VulkanRenderBackend *>(Renderer::GetBackendForInterop());
@@ -617,7 +617,7 @@ RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef &asset) {
     return {};
 
   auto &thumbnailRenderer = AssetThumbnailRenderer::Instance();
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
   if (const bool useVulkanOffscreen =
           Renderer::GetBackendId() == RenderBackendId::Vulkan;
       !useVulkanOffscreen && !thumbnailRenderer.Init())
@@ -5232,7 +5232,7 @@ void EditorLayer::DuplicateSelectedObjects() {
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument &doc,
                                              const std::string &assetId,
                                              const EditorSchema &schema) {
-  return Monolith::Editor::MakeObjectFromAsset(doc, assetId, schema);
+  return Horo::Editor::MakeObjectFromAsset(doc, assetId, schema);
 }
 
 SceneObject EditorLayer::DuplicateObject(const SceneDocument &doc,
@@ -5421,4 +5421,4 @@ void EditorLayer::DrawWireframeOverlay(const Camera &cam) {
   if (ownsFrame)
     Renderer::EndFrame();
 }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

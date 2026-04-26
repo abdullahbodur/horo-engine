@@ -6,7 +6,7 @@
 #include "editor/SceneDocument.h"
 #include "editor/SceneSerializer.h"
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace fs = std::filesystem;
 
     namespace {
@@ -58,7 +58,7 @@ namespace Monolith::Launcher {
                    "\n"
                    "namespace {\n"
                    "\n"
-                   "using namespace Monolith;\n"
+                   "using namespace Horo;\n"
                    "\n"
                    "std::shared_ptr<Shader> LoadDefaultShader() {\n"
                    "  static std::shared_ptr<Shader> shader;\n"
@@ -238,10 +238,10 @@ namespace Monolith::Launcher {
                    "\n"
                    "if(EXISTS \"${CMAKE_CURRENT_SOURCE_DIR}/engine/CMakeLists.txt\")\n"
                    "  add_subdirectory(engine)\n"
-                   "  set(HORO_ENGINE_TARGET MonolithEngine)\n"
+                   "  set(HORO_ENGINE_TARGET HoroEngine)\n"
                    "else()\n"
-                   "  find_package(MonolithEngine CONFIG REQUIRED)\n"
-                   "  set(HORO_ENGINE_TARGET MonolithEngine::MonolithEngine)\n"
+                   "  find_package(HoroEngine CONFIG REQUIRED)\n"
+                   "  set(HORO_ENGINE_TARGET HoroEngine::HoroEngine)\n"
                    "endif()\n"
                    "\n"
                    "add_executable(${PROJECT_NAME}\n"
@@ -422,4 +422,4 @@ namespace Monolith::Launcher {
             *outProjectDocument = doc;
         return true;
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

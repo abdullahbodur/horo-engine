@@ -12,7 +12,7 @@
 #include "core/Logger.h"
 #include "renderer/Renderer.h"
 
-namespace Monolith {
+namespace Horo {
     // Write a 24-bit BMP from bottom-up BGR pixel data (matches glReadPixels GL_BGR
     // output).
     static bool WriteBMP(const std::string &path, int w, int h,
@@ -116,4 +116,4 @@ namespace Monolith {
         LogInfo("Screenshot saved: {}", path);
         return path;
     }
-} // namespace Monolith
+} // namespace Horo

@@ -4,7 +4,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     class SceneSerializerException : public std::runtime_error {
     public:
         using std::runtime_error::runtime_error;
@@ -19,4 +19,4 @@ namespace Monolith::Editor {
         // Throws SceneSerializerException if path cannot be written.
         static void SaveToFile(const SceneDocument &doc, const std::string &path);
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

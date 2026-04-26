@@ -4,7 +4,7 @@
 
 #include "editor/AssetImporterRegistry.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct AssetReimportRecord {
         std::string assetId;
         std::string assetGuid;
@@ -54,4 +54,4 @@ namespace Monolith::Editor {
 
         AssetImporterRegistry m_registry;
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

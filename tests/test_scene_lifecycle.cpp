@@ -1,7 +1,7 @@
 #include "scene/SceneLifecycle.h"
 #include <catch2/catch_test_macros.hpp>
 
-namespace Monolith {
+namespace Horo {
 TEST_CASE("SceneLifecycle: Valid linear transitions", "[scene][lifecycle]") {
   SceneLifecycle lc;
 
@@ -127,4 +127,4 @@ TEST_CASE("SceneLifecycle: Multiple load cycles", "[scene][lifecycle]") {
   REQUIRE(lc.FinishUnloading());
   REQUIRE(lc.GetState() == SceneLifecycleState::Uninitialized);
 }
-} // namespace Monolith
+} // namespace Horo

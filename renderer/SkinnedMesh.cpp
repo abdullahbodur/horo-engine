@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 
-namespace Monolith {
+namespace Horo {
     namespace {
         bool HasCurrentGlContext() { return glfwGetCurrentContext() != nullptr; }
     } // namespace
@@ -168,4 +168,4 @@ namespace Monolith {
         }
         m_indexCount = 0;
     }
-} // namespace Monolith
+} // namespace Horo

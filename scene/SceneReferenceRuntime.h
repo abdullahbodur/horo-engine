@@ -12,7 +12,7 @@
 #include "scene/Scene.h"
 #include "scene/SceneRuntimeCoordinator.h"
 
-namespace Monolith {
+namespace Horo {
     struct SceneReferenceStats {
         int panelCount = 0;
         int propCount = 0;
@@ -98,4 +98,4 @@ namespace Monolith {
 
         void ResetReferenceState();
     };
-} // namespace Monolith
+} // namespace Horo

@@ -10,7 +10,7 @@
 #include "math/Quaternion.h"
 #include "math/Transform.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     using json = nlohmann::json;
 
     namespace {
@@ -797,4 +797,4 @@ namespace Monolith::Mcp {
             {"moreLines", totalMatches > shownLines ? totalMatches - shownLines : 0},
         };
     }
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

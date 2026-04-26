@@ -6,7 +6,7 @@
 #include "math/Quaternion.h"
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
     struct Transform {
         Vec3 position = Vec3::Zero();
         Quaternion rotation = Quaternion::Identity();
@@ -63,4 +63,4 @@ namespace Monolith {
         outWorldCenter = (wmin + wmax) * 0.5f;
         outWorldHalf = (wmax - wmin) * 0.5f;
     }
-} // namespace Monolith
+} // namespace Horo

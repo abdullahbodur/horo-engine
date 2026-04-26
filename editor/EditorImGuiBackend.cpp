@@ -10,12 +10,12 @@
 #include "renderer/Renderer.h"
 #include "renderer/VulkanRenderBackend.h"
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 #include <imgui_impl_vulkan.h>
 #endif
 
-namespace Monolith::Editor {
-#if defined(MONOLITH_HAS_VULKAN)
+namespace Horo::Editor {
+#if defined(HORO_HAS_VULKAN)
     namespace {
         struct VulkanImGuiState {
             VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -115,7 +115,7 @@ namespace Monolith::Editor {
             return true;
         }
     } // namespace
-#endif // MONOLITH_HAS_VULKAN
+#endif // HORO_HAS_VULKAN
 
     bool IsSupportedEditorImGuiBackend(RenderBackendId backendId) {
         using enum RenderBackendId;
@@ -124,7 +124,7 @@ namespace Monolith::Editor {
             case OpenGL:
                 return true;
             case Vulkan:
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 return true;
 #else
                 return false;
@@ -146,7 +146,7 @@ namespace Monolith::Editor {
                 ImGui_ImplOpenGL3_Init("#version 410");
                 return true;
             case Vulkan: {
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 auto *backend =
                         dynamic_cast<VulkanRenderBackend *>(Renderer::GetBackendForInterop());
                 if (!backend)
@@ -207,7 +207,7 @@ namespace Monolith::Editor {
                 ImGui_ImplGlfw_Shutdown();
                 return;
             case Vulkan: {
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 if (!g_vulkanImGuiState.initialized)
                     return;
 
@@ -246,7 +246,7 @@ namespace Monolith::Editor {
                 ImGui_ImplGlfw_NewFrame();
                 return;
             case Vulkan:
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 if (!g_vulkanImGuiState.initialized)
                     return;
 
@@ -294,7 +294,7 @@ namespace Monolith::Editor {
                 ImGui_ImplOpenGL3_RenderDrawData(drawData);
                 return;
             case Vulkan:
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 if (!g_vulkanImGuiState.initialized)
                     return;
                 if (!Renderer::IsFrameActive())
@@ -308,4 +308,4 @@ namespace Monolith::Editor {
                 return;
         }
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

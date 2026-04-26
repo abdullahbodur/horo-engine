@@ -7,7 +7,7 @@
 #include "math/Quaternion.h"
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
     // BoneTrack — all keyframe data for a single bone within one animation clip.
     //
     // Each channel (position, rotation, scale) has its own independent time array,
@@ -74,4 +74,4 @@ namespace Monolith {
         // Returns the interpolated scale for `t`.
         static Vec3 SampleScales(const BoneTrack &track, float time);
     };
-} // namespace Monolith
+} // namespace Horo

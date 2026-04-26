@@ -7,7 +7,7 @@
 #include "physics/constraints/ContactConstraint.h"
 #include "physics/narrowphase/ContactManifold.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

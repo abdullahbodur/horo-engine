@@ -11,7 +11,7 @@
 
 #include "math/Vec3.h"
 
-namespace Monolith {
+namespace Horo {
     enum class SceneNodeKind { Panel, Prop, Light, Camera };
 
     enum class SceneLightKind { Point, Directional };
@@ -147,4 +147,4 @@ namespace Monolith {
 
     SceneProjectValidationResult
     ValidateSceneProjectModel(const SceneProjectModel &model);
-} // namespace Monolith
+} // namespace Horo

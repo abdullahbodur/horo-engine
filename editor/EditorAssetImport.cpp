@@ -7,7 +7,7 @@
 
 #include "renderer/ObjLoader.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool IsObjFilePath(const std::string &path) {
         if (path.empty())
             return false;
@@ -47,4 +47,4 @@ namespace Monolith::Editor {
         out << scale << ',' << scale << ',' << scale;
         return out.str();
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

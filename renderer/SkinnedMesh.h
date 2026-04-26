@@ -6,7 +6,7 @@
 #include "math/Vec3.h"
 #include "renderer/SkinnedVertex.h"
 
-namespace Monolith {
+namespace Horo {
     // SkinnedMesh — GPU mesh variant that carries per-vertex bone influence data.
     //
     // VAO attribute layout:
@@ -68,4 +68,4 @@ namespace Monolith {
         // Delete GPU objects and zero all handles.
         void Release();
     };
-} // namespace Monolith
+} // namespace Horo

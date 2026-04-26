@@ -6,7 +6,7 @@
 #include "renderer/IRenderBackend.h"
 #include "renderer/RenderBackend.h"
 
-namespace Monolith {
+namespace Horo {
     struct RenderBackendCreateResult {
         std::unique_ptr<IRenderBackend> backend;
         RenderBackendId selected = RenderBackendId::Auto;
@@ -15,4 +15,4 @@ namespace Monolith {
 
     RenderBackendCreateResult
     CreateRenderBackend(const RenderBackendSelection &selection);
-} // namespace Monolith
+} // namespace Horo

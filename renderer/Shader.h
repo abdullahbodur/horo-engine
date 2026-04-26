@@ -8,7 +8,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
     class ShaderException : public std::runtime_error {
     public:
         using std::runtime_error::runtime_error;
@@ -75,4 +75,4 @@ namespace Monolith {
 
         static unsigned int LinkProgram(unsigned int vert, unsigned int frag);
     };
-} // namespace Monolith
+} // namespace Horo

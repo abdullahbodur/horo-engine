@@ -1,6 +1,6 @@
 #include "core/LogBuffer.h"
 
-namespace Monolith {
+namespace Horo {
     LogBuffer &LogBuffer::Instance() {
         static LogBuffer s;
         return s;
@@ -81,4 +81,4 @@ namespace Monolith {
         std::scoped_lock lock(m_mutex);
         return m_revision;
     }
-} // namespace Monolith
+} // namespace Horo

@@ -6,7 +6,7 @@
 #include "physics/RigidBody.h"
 #include "physics/integration/SemiImplicitEuler.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

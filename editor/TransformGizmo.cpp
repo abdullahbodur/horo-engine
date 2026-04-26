@@ -10,7 +10,7 @@
 #include "math/Vec4.h"
 #include "renderer/DebugDraw.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     // ---- Activation / sync
     // -------------------------------------------------------
 
@@ -398,4 +398,4 @@ namespace Monolith::Editor {
                 break;
         }
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

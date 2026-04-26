@@ -8,7 +8,7 @@ Runs every test_* binary in <bindir> via Catch2's JUnit reporter and writes
 results to <outdir>/*.xml.  When <builddir> is provided the script reads the
 CTest configuration (via ``ctest --show-only=json-v1``) so that binaries
 registered with per-invocation environment variables or tag filters (e.g.
-MONOLITH_LOG_LEVEL=warning for logger tests) are executed correctly.
+HORO_LOG_LEVEL=warning for logger tests) are executed correctly.
 
 After generating the XML files the script:
   1. Normalises classname: strips Catch2's "global" placeholder and replaces

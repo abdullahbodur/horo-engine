@@ -1,4 +1,4 @@
-# monolith-engine — convenience wrapper around CMake presets
+# horo-engine — convenience wrapper around CMake presets
 # Usage: make [target]
 #
 # On Windows (MSVC):  uses debug-msvc / release-msvc presets automatically
@@ -13,8 +13,8 @@ ifeq ($(OS),Windows_NT)
     PRESET_DBG  ?= debug-msvc
     PRESET_REL  ?= release-msvc
     TESTS_BIN   := $(CURDIR)/build/$(PRESET_DBG)/bin/tests
-    SENTINEL_DBG := build/$(PRESET_DBG)/MonolithEngine.sln
-    SENTINEL_REL := build/$(PRESET_REL)/MonolithEngine.sln
+    SENTINEL_DBG := build/$(PRESET_DBG)/HoroEngine.sln
+    SENTINEL_REL := build/$(PRESET_REL)/HoroEngine.sln
     BUILD_DBG   = cmake --build build/$(PRESET_DBG) --config Debug --parallel 1
     BUILD_REL   = cmake --build build/$(PRESET_REL) --config Release --parallel 1
     BUILD_LAUNCHER_UNIT = cmake --build build/$(PRESET_DBG) --config Debug --target test_launcher_unit --parallel 1
@@ -85,18 +85,18 @@ $(SENTINEL_DBG):
 
 ## Build + run all 23 engine unit tests (debug)
 test: build
-	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) $(TEST_CMD)
+	$(CMAKE_E) env HORO_LOG_LEVEL=$(TEST_LOG_LEVEL) $(TEST_CMD)
 
 ## Build + run launcher unit tests (Catch2; no window)
 ui-test: $(SENTINEL_DBG)
 	$(BUILD_LAUNCHER_UNIT)
-	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_unit
+	$(CMAKE_E) env HORO_LOG_LEVEL=$(TEST_LOG_LEVEL) ctest --test-dir build/$(PRESET_DBG) -C Debug --output-on-failure -R test_launcher_unit
 
 ## Build + run windowed launcher UI automation (optional capture/delay)
 ui-test-windowed: $(SENTINEL_DBG)
 	$(BUILD_UI_WINDOWED)
 	$(MKDIR_P) "$(UI_TEST_OUTPUT_DIR)"
-	$(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) MONOLITH_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
+	$(CMAKE_E) env HORO_LOG_LEVEL=$(TEST_LOG_LEVEL) HORO_UI_TEST_CAPTURE=$(UI_TEST_CAPTURE) HORO_UI_TEST_DELAY_MS=$(UI_TEST_DELAY_MS) HORO_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" $(RUN_UI_WINDOWED)
 
 ## Build release library
 release: $(SENTINEL_REL)
@@ -134,7 +134,7 @@ coverage: build
 	    --cover_children \
 	    --export_type html:"$(COV_DIR)/html" \
 	    --export_type cobertura:"$(COV_DIR)/cobertura.xml" \
-	    -- $(CMAKE_E) env MONOLITH_LOG_LEVEL=$(TEST_LOG_LEVEL) MONOLITH_UI_TEST_CAPTURE=0 MONOLITH_UI_TEST_DELAY_MS=0 MONOLITH_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' $(RUN_UI_WINDOWED)
+	    -- $(CMAKE_E) env HORO_LOG_LEVEL=$(TEST_LOG_LEVEL) HORO_UI_TEST_CAPTURE=0 HORO_UI_TEST_DELAY_MS=0 HORO_UI_TEST_OUTPUT_DIR="$(UI_TEST_OUTPUT_DIR)" HORO_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' $(RUN_UI_WINDOWED)
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
@@ -154,7 +154,7 @@ coverage: $(SENTINEL_COV)
 	@$(MKDIR_P) "$(COV_DIR)"
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure
 	@echo "[coverage] running UI test scenarios ..."
-	MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests
+	HORO_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests
 	lcov --capture \
 	     --directory build/$(PRESET_COV) \
 	     --output-file "$(COV_DIR)/raw.info" \
@@ -166,7 +166,7 @@ coverage: $(SENTINEL_COV)
 	genhtml "$(COV_DIR)/filtered.info" \
 	        --output-directory "$(COV_DIR)/html" \
 	        --branch-coverage \
-	        --title "MonolithEngine Coverage"
+	        --title "HoroEngine Coverage"
 	@echo ""
 	@echo "Coverage report: $(COV_REPORT)"
 
@@ -183,7 +183,7 @@ coverage-source-summary: $(SENTINEL_COV)
 	ctest --test-dir build/$(PRESET_COV) --output-on-failure; \
 	test_rc=$$?; \
 	if [ $$test_rc -ne 0 ]; then exit $$test_rc; fi; \
-	MONOLITH_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests; \
+	HORO_UI_TEST_FILTER='$(COVERAGE_UI_FILTER)' build/$(PRESET_COV)/bin/HoroEditorUiTest --run-ui-tests; \
 	ui_rc=$$?; \
 	if [ $$ui_rc -ne 0 ]; then exit $$ui_rc; fi; \
 	lcov --capture \

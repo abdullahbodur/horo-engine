@@ -20,7 +20,7 @@
 #include "editor/EditorUiLogic.h"
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 namespace Internal {
 // ---- Layout constants ----
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
@@ -295,4 +295,4 @@ using Internal::SceneObjectTypeToString;
 using Internal::SchemaAppliesToObjectType;
 using Internal::ToLowerAscii;
 using Internal::SyncAssetScaleMetadata;
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

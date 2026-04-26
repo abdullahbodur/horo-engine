@@ -15,7 +15,7 @@
 #include "launcher/LauncherProjectTemplate.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith::Launcher;
+using namespace Horo::Launcher;
 
 namespace {
 namespace fs = std::filesystem;
@@ -108,7 +108,7 @@ TEST_CASE("ResolveProjectManifestPath points at .horo/project.json", "[launcher]
 
 TEST_CASE("IsLauncherProjectRoot is true only when manifest exists", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_unit_manifest";
+      Horo::Tests::SecureTempBase() / "horo_launcher_unit_manifest";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -130,7 +130,7 @@ TEST_CASE("IsLauncherProjectRoot is true only when manifest exists", "[launcher]
 
 TEST_CASE("LoadProjectManifestDocument returns parse error when file missing", "[launcher][project][coverage]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_missing";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_missing";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root, ec);
@@ -143,7 +143,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error when file missing", "
 
 TEST_CASE("LoadProjectManifestDocument returns parse error for invalid JSON", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_badjson";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_badjson";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -156,7 +156,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for invalid JSON", "[
 
 TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_arrayroot";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_arrayroot";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -169,7 +169,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for non-object root",
 
 TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key absent", "[launcher][project][coverage]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_noprojectobj";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_noprojectobj";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -187,7 +187,7 @@ TEST_CASE("LoadProjectManifestDocument uses manifest defaults when project key a
 
 TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_badversion";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_badversion";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -202,7 +202,7 @@ TEST_CASE("LoadProjectManifestDocument returns parse error for schemaVersion 0",
 
 TEST_CASE("LoadProjectManifestDocument parses valid manifest with commands", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_load_valid";
+      Horo::Tests::SecureTempBase() / "horo_launcher_load_valid";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / ".horo", ec);
@@ -248,7 +248,7 @@ TEST_CASE("LauncherProjectCommand::Empty returns true for default", "[launcher][
 
 TEST_CASE("SaveProjectManifestDocument returns error for null doc", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_save_null";
+      Horo::Tests::SecureTempBase() / "horo_launcher_save_null";
   std::string err;
   CHECK_FALSE(SaveProjectManifestDocument(root, nullptr, &err));
   CHECK_FALSE(err.empty());
@@ -256,7 +256,7 @@ TEST_CASE("SaveProjectManifestDocument returns error for null doc", "[launcher][
 
 TEST_CASE("SaveProjectManifestDocument round-trips manifest fields", "[launcher][project]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_save_roundtrip";
+      Horo::Tests::SecureTempBase() / "horo_launcher_save_roundtrip";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root, ec);
@@ -351,7 +351,7 @@ TEST_CASE("ResolveLauncherCommand builds non-empty debugString", "[launcher][pro
 
 TEST_CASE("CreateLauncherProjectTemplate writes required project files", "[launcher][template]") {
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_launcher_template_test";
+      Horo::Tests::SecureTempBase() / "horo_launcher_template_test";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root, ec);
@@ -359,7 +359,7 @@ TEST_CASE("CreateLauncherProjectTemplate writes required project files", "[launc
   LauncherProjectTemplateRequest req;
   req.projectRoot = root;
   req.projectName = "TemplateGame";
-  req.sdkRoot = Monolith::Tests::SecureTempBase() / "fake_sdk";
+  req.sdkRoot = Horo::Tests::SecureTempBase() / "fake_sdk";
 
   LauncherProjectDocument outDoc;
   std::string err;
@@ -380,8 +380,8 @@ TEST_CASE("CreateLauncherProjectTemplate writes required project files", "[launc
 // ===========================================================================
 
 TEST_CASE("RememberRecentProject prepends and deduplicates entries", "[launcher][home]") {
-  const fs::path projA = Monolith::Tests::SecureTempBase() / "horo_home_projA";
-  const fs::path projB = Monolith::Tests::SecureTempBase() / "horo_home_projB";
+  const fs::path projA = Horo::Tests::SecureTempBase() / "horo_home_projA";
+  const fs::path projB = Horo::Tests::SecureTempBase() / "horo_home_projB";
   std::error_code ec;
   fs::create_directories(projA, ec);
   fs::create_directories(projB, ec);
@@ -397,7 +397,7 @@ TEST_CASE("RememberRecentProject prepends and deduplicates entries", "[launcher]
 
 TEST_CASE("RememberRecentProject with null doc does not crash", "[launcher][home]") {
   REQUIRE_NOTHROW(
-      RememberRecentProject(nullptr, Monolith::Tests::SecureTempBase()));
+      RememberRecentProject(nullptr, Horo::Tests::SecureTempBase()));
 }
 
 TEST_CASE("PruneMissingRecentProjects removes non-existent paths", "[launcher][home]") {
@@ -407,7 +407,7 @@ TEST_CASE("PruneMissingRecentProjects removes non-existent paths", "[launcher][h
 
   // Create a real project root so IsLauncherProjectRoot passes
   const fs::path existing =
-      Monolith::Tests::SecureTempBase() / "horo_prune_test_proj";
+      Horo::Tests::SecureTempBase() / "horo_prune_test_proj";
   std::error_code ec;
   fs::remove_all(existing, ec);
   fs::create_directories(existing / ".horo", ec);
@@ -433,7 +433,7 @@ TEST_CASE("PruneMissingRecentProjects with null doc does not crash", "[launcher]
 
 TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON", "[launcher][home][coverage]") {
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_home_load_badjson";
+      Horo::Tests::SecureTempBase() / "horo_home_load_badjson";
   std::error_code ec;
   fs::remove_all(tempHome, ec);
   fs::create_directories(tempHome / ".horo", ec);
@@ -449,7 +449,7 @@ TEST_CASE("LoadEditorHomeDocument: parse error for invalid JSON", "[launcher][ho
 
 TEST_CASE("LoadEditorHomeDocument: parse error for non-object root", "[launcher][home]") {
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_home_load_arrayroot";
+      Horo::Tests::SecureTempBase() / "horo_home_load_arrayroot";
   std::error_code ec;
   fs::remove_all(tempHome, ec);
   fs::create_directories(tempHome / ".horo", ec);
@@ -464,7 +464,7 @@ TEST_CASE("LoadEditorHomeDocument: parse error for non-object root", "[launcher]
 
 TEST_CASE("LoadEditorHomeDocument: reads recentProjects from disk", "[launcher][home]") {
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_home_load_recent";
+      Horo::Tests::SecureTempBase() / "horo_home_load_recent";
   std::error_code ec;
   fs::remove_all(tempHome, ec);
   fs::create_directories(tempHome / ".horo", ec);

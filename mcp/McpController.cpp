@@ -8,7 +8,7 @@
 
 #include "core/StringHash.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     namespace {
         std::string FormatNowTime() {
             using clock = std::chrono::system_clock;
@@ -335,4 +335,4 @@ namespace Monolith::Mcp {
                 << m_settingsDocument.settings.port << "/mcp";
         return out.str();
     }
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

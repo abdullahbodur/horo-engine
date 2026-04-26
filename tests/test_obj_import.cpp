@@ -11,9 +11,9 @@
 #include "renderer/ObjLoader.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
-using namespace Monolith::ObjLoader;
+using namespace Horo;
+using namespace Horo::Editor;
+using namespace Horo::ObjLoader;
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ using Catch::Approx;
 // ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
-  return (Monolith::Tests::SecureTempBase() / name).string();
+  return (Horo::Tests::SecureTempBase() / name).string();
 }
 
 static void WriteFile(const std::string &path, const std::string &content) {
@@ -225,7 +225,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for nonexistent OBJ", "[o
 
 TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for OBJ without mtllib", "[objloader][texture]") {
   const std::string path =
-      Monolith::Tests::SecureTempBase().string() + "/test_no_mtllib.obj";
+      Horo::Tests::SecureTempBase().string() + "/test_no_mtllib.obj";
   WriteFile(path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
   REQUIRE(ObjLoader::FindDiffuseTexture(path).empty());
   std::remove(path.c_str());
@@ -233,7 +233,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty for OBJ without mtllib", 
 
 TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL file missing", "[objloader][texture]") {
   const std::string path =
-      Monolith::Tests::SecureTempBase().string() + "/test_missing_mtl.obj";
+      Horo::Tests::SecureTempBase().string() + "/test_missing_mtl.obj";
   WriteFile(path, "mtllib missing_material.mtl\nv 0 0 0\n");
   REQUIRE(ObjLoader::FindDiffuseTexture(path).empty());
   std::remove(path.c_str());
@@ -241,7 +241,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL file missing", "
 
 TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL has no map_Kd", "[objloader][texture]") {
   namespace fs = std::filesystem;
-  const std::string dir = Monolith::Tests::SecureTempBase().string();
+  const std::string dir = Horo::Tests::SecureTempBase().string();
   const std::string objPath = dir + "/test_no_diffuse.obj";
   const std::string mtlPath = dir + "/test_no_diffuse.mtl";
   WriteFile(objPath, "mtllib test_no_diffuse.mtl\nv 0 0 0\n");
@@ -253,7 +253,7 @@ TEST_CASE("ObjLoader::FindDiffuseTexture returns empty when MTL has no map_Kd", 
 
 TEST_CASE("ObjLoader::FindDiffuseTexture resolves map_Kd from MTL", "[objloader][texture]") {
   namespace fs = std::filesystem;
-  const std::string dir = Monolith::Tests::SecureTempBase().string();
+  const std::string dir = Horo::Tests::SecureTempBase().string();
   const std::string objPath = dir + "/test_diffuse.obj";
   const std::string mtlPath = dir + "/test_diffuse.mtl";
   WriteFile(objPath, "mtllib test_diffuse.mtl\nv 0 0 0\n");

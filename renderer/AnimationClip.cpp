@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace Monolith {
+namespace Horo {
     // ---------------------------------------------------------------------------
     // AnimationClip — public interface
     // ---------------------------------------------------------------------------
@@ -153,4 +153,4 @@ namespace Monolith {
         return Vec3::Lerp(values[static_cast<size_t>(lo)],
                           values[static_cast<size_t>(hi)], t);
     }
-} // namespace Monolith
+} // namespace Horo

@@ -1,7 +1,7 @@
 #pragma once
 #include <filesystem>
 
-namespace Monolith {
+namespace Horo {
     // Parsed from argv before Application construction side effects.
     // Used by Application::ParseArgs and unit tests (with explicit release-default
     // flag).
@@ -19,4 +19,4 @@ namespace Monolith {
     // If isReleaseBuildDefault is true (NDEBUG), Default means start in game (no
     // editor). If false (Debug), Default means start with editor.
     bool ShouldStartWithEditor(EditorStartupCli cli, bool isReleaseBuildDefault);
-} // namespace Monolith
+} // namespace Horo

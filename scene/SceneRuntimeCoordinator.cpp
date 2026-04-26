@@ -1,6 +1,6 @@
 #include "scene/SceneRuntimeCoordinator.h"
 
-namespace Monolith {
+namespace Horo {
     SceneRuntimeCoordinator::SceneRuntimeCoordinator() = default;
 
     const RuntimeSceneDefinition *
@@ -69,4 +69,4 @@ namespace Monolith {
             std::string()
         };
     }
-} // namespace Monolith
+} // namespace Horo

@@ -10,7 +10,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         std::string DiagnosticSeverityToString(AssetDiagnosticSeverity severity) {
             using enum AssetDiagnosticSeverity;
@@ -313,4 +313,4 @@ namespace Monolith::Editor {
         }
         return true;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

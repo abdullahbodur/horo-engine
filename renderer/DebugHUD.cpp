@@ -22,7 +22,7 @@
 // headers; local undef avoids symbol collision in this TU
 #endif
 
-namespace Monolith {
+namespace Horo {
     // ---- Static member definitions ----
 
     unsigned int DebugHUD::s_vao = 0;
@@ -1697,4 +1697,4 @@ void main() {
         glBindVertexArray(0);
         s_glyphCount = 0;
     }
-} // namespace Monolith
+} // namespace Horo

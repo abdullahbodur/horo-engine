@@ -22,7 +22,7 @@
 #include <unistd.h>
 #endif
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace {
         void LogProcessLine(const std::string &label, const std::string &line) {
             if (line.empty())
@@ -405,4 +405,4 @@ namespace Monolith::Launcher {
         else
             LogInfo("[{}] exited with code {}", m_status.label, m_status.exitCode);
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

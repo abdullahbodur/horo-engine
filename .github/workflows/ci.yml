@@ -68,7 +68,7 @@ jobs:
         run: |
           ctest --preset debug --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
 
       - name: Generate scenario-level JUnit reports
         if: always()
@@ -113,14 +113,14 @@ jobs:
         run: |
           build/debug/bin/HoroEditorUiTest --run-ui-tests
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
 
       - name: Setup tmate session
         if: failure() && github.event_name == 'workflow_dispatch'
@@ -181,7 +181,7 @@ jobs:
           ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
         shell: pwsh
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
 
       - name: Generate scenario-level JUnit reports
         if: always()
@@ -273,14 +273,14 @@ jobs:
           $code = if ($proc.HasExited) { $proc.ExitCode } else { -1 }
           if ($code -ne 0) { Write-Error "HoroEditorUiTest exited $code"; exit 1 }
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
           # No GALLIUM_DRIVER — mesa 25.x WGL uses D3D12/WARP by default
           LIBGL_DEBUG: "verbose"
           MESA_DEBUG: "1"
@@ -366,7 +366,7 @@ jobs:
         run: |
           ctest --preset debug --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_LOG_LEVEL: "debug"
 
       - name: Generate scenario-level JUnit reports
         if: always()
@@ -407,16 +407,16 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             build/debug/bin/HoroEditorUiTest --run-ui-tests
         env:
-          MONOLITH_UI_TEST_CAPTURE: "1"
-          MONOLITH_UI_TEST_VIDEO: "1"
-          MONOLITH_UI_TEST_RECORDING: "1"
-          MONOLITH_UI_TEST_DELAY_MS: "0"
-          MONOLITH_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          MONOLITH_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
-          MONOLITH_LOG_LEVEL: "debug"
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          HORO_LOG_LEVEL: "debug"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_GLFW_SAMPLES: "0"
 
       - name: Setup tmate session on failure
         if: failure() && github.event_name == 'workflow_dispatch'
@@ -457,8 +457,8 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             ctest --preset coverage --output-on-failure
         env:
-          MONOLITH_LOG_LEVEL: "debug"
-          MONOLITH_GLFW_SAMPLES: "0"
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
 

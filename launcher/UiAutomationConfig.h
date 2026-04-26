@@ -3,7 +3,10 @@
 #include <filesystem>
 #include <string_view>
 
-namespace Monolith {
+namespace Horo {
+    inline constexpr int kUiAutomationDefaultMaxFrames = 300000;
+    inline constexpr bool kUiAutomationHeartbeatLogEnabled = false;
+
     // Parses UI automation boolean env-like values.
     // Empty value => fallback.
     // "0" => false, anything else => true.
@@ -22,4 +25,4 @@ namespace Monolith {
     std::filesystem::path SelectUiAutomationBaseDir(
         std::string_view homePath, std::string_view userProfilePath,
         const std::filesystem::path &currentPath, bool isWindows);
-} // namespace Monolith
+} // namespace Horo

@@ -4,7 +4,7 @@
 
 #include "renderer/Mesh.h"
 
-namespace Monolith::ObjLoader {
+namespace Horo::ObjLoader {
     class ObjLoaderException : public std::runtime_error {
     public:
         using std::runtime_error::runtime_error;
@@ -28,4 +28,4 @@ namespace Monolith::ObjLoader {
     // the map_Kd (diffuse) texture, resolved relative to the OBJ directory.
     // Returns empty string if the MTL is absent or has no map_Kd.
     std::string FindDiffuseTexture(const std::string &objPath);
-} // namespace Monolith::ObjLoader
+} // namespace Horo::ObjLoader

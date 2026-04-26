@@ -34,9 +34,9 @@
 ## Example
 
 ```cpp
-Monolith::Transform t({0.0f, 2.0f, 5.0f},
-                      Monolith::Quaternion::FromEuler(0.0f, 0.7f, 0.0f),
+Horo::Transform t({0.0f, 2.0f, 5.0f},
+                      Horo::Quaternion::FromEuler(0.0f, 0.7f, 0.0f),
                       {1.0f, 1.0f, 1.0f});
 
-Monolith::Mat4 model = t.ToMatrix();
+Horo::Mat4 model = t.ToMatrix();
 ```

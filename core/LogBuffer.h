@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace Monolith {
+namespace Horo {
     struct LogLine {
         std::chrono::system_clock::time_point time{};
         LogLevel level = LogLevel::Info;
@@ -57,4 +57,4 @@ namespace Monolith {
         int m_countError = 0;
         uint64_t m_revision = 0;
     };
-} // namespace Monolith
+} // namespace Horo

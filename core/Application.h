@@ -5,9 +5,9 @@
 #include "core/EngineLaunchArgs.h"
 #include "core/Window.h"
 
-namespace Monolith {
+namespace Horo {
     struct AppSpec {
-        std::string name = "Monolith App";
+        std::string name = "Horo App";
         int width = 1280;
         int height = 720;
         bool vsync = true;
@@ -78,4 +78,4 @@ namespace Monolith {
         EditorStartupCli m_editorStartupCli = EditorStartupCli::Default;
         std::string m_defaultSceneFilePath;
     };
-} // namespace Monolith
+} // namespace Horo

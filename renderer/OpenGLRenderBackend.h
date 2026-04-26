@@ -5,7 +5,7 @@
 
 #include "renderer/IRenderBackend.h"
 
-namespace Monolith {
+namespace Horo {
     class OpenGLRenderBackend : public IRenderBackend {
     public:
         void BeginFrame(const RenderFrameConfig &frame) override;
@@ -56,4 +56,4 @@ namespace Monolith {
         bool m_previousDepthTestEnabled = true;
         bool m_hasPassStateOverride = false;
     };
-} // namespace Monolith
+} // namespace Horo

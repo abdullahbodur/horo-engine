@@ -1,6 +1,6 @@
 #include "editor/ProjectEntryFilter.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool IsHiddenDotEntry(std::string_view filenameUtf8) {
         return !filenameUtf8.empty() && filenameUtf8.front() == '.';
     }
@@ -23,4 +23,4 @@ namespace Monolith::Editor {
             return true;
         return false;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

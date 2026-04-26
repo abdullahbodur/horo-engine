@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
     // Mirror of GLFW key codes — avoids including GLFW in game code
     enum class Key : int {
         Unknown = -1,
@@ -69,4 +69,4 @@ namespace Monolith {
         RightControl = 345,
         RightAlt = 346,
     };
-} // namespace Monolith
+} // namespace Horo

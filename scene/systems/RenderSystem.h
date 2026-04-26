@@ -1,7 +1,7 @@
 #pragma once
 #include "scene/System.h"
 
-namespace Monolith {
+namespace Horo {
     class Camera;
 
     class RenderSystem : public System {
@@ -16,4 +16,4 @@ namespace Monolith {
         Camera &m_camera;
         float &m_alpha;
     };
-} // namespace Monolith
+} // namespace Horo

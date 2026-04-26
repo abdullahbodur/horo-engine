@@ -10,8 +10,8 @@
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 // ---- Helpers

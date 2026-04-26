@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
     class Registry;
 
     class System {
@@ -9,4 +9,4 @@ namespace Monolith {
 
         virtual void OnUpdate(Registry &registry, float dt) = 0;
     };
-} // namespace Monolith
+} // namespace Horo

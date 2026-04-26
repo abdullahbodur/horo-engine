@@ -11,7 +11,7 @@
 #include <cstdio>
 #endif
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace fs = std::filesystem;
 
 #if defined(_WIN32) || defined(__APPLE__)
@@ -163,4 +163,4 @@ namespace Monolith::Launcher {
         return {};
 #endif
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

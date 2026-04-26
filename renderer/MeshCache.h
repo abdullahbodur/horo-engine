@@ -6,7 +6,7 @@
 
 #include "renderer/Mesh.h"
 
-namespace Monolith {
+namespace Horo {
     struct MeshCacheStringHash {
         using is_transparent = void;
 
@@ -29,4 +29,4 @@ namespace Monolith {
             std::equal_to<> >
         m_cache;
     };
-} // namespace Monolith
+} // namespace Horo

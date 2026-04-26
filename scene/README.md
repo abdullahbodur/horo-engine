@@ -71,10 +71,10 @@
 ## Example
 
 ```cpp
-Monolith::Scene scene;
-Monolith::Entity e = scene.CreateEntity({0, 1, 0});
+Horo::Scene scene;
+Horo::Entity e = scene.CreateEntity({0, 1, 0});
 
-scene.registry.Add<Monolith::CameraComponent>(e, {});
+scene.registry.Add<Horo::CameraComponent>(e, {});
 scene.UpdateSystems(dt);
 scene.RenderSystems(alpha);
 ```

@@ -1,7 +1,7 @@
 #pragma once
 #include "physics/Collider.h"
 
-namespace Monolith {
+namespace Horo {
     struct SphereCollider : Collider {
         float radius;
 
@@ -9,4 +9,4 @@ namespace Monolith {
             : Collider(ColliderType::Sphere), radius(r) {
         }
     };
-} // namespace Monolith
+} // namespace Horo

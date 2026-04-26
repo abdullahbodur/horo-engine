@@ -5,7 +5,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         const char *TypeName(SceneObjectType t) {
             using enum SceneObjectType;
@@ -157,4 +157,4 @@ namespace Monolith::Editor {
         const auto it = m_componentSchemas.find(componentType);
         return (it != m_componentSchemas.end()) ? &it->second : nullptr;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

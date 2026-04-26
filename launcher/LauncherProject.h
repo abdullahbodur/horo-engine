@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     struct LauncherProjectCommand {
         std::string executable;
         std::vector<std::string> args;
@@ -60,4 +60,4 @@ namespace Monolith::Launcher {
                                 const std::filesystem::path &sdkRoot,
                                 ResolvedLauncherCommand *outCommand,
                                 std::string *outError);
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

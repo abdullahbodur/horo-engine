@@ -5,7 +5,7 @@
 #include "renderer/OpenGLRenderBackend.h"
 #include "renderer/VulkanRenderBackend.h"
 
-namespace Monolith {
+namespace Horo {
     RenderBackendCreateResult
     CreateRenderBackend(const RenderBackendSelection &selection) {
         const RenderBackendId resolvedBackend =
@@ -15,7 +15,7 @@ namespace Monolith {
             case OpenGL:
                 return {std::make_unique<OpenGLRenderBackend>(), OpenGL, {}};
             case Vulkan:
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 {
                     std::unique_ptr<VulkanRenderBackend> backend =
                             std::make_unique<VulkanRenderBackend>(selection.nativeWindowHandle);
@@ -33,7 +33,7 @@ namespace Monolith {
                 return {
                     nullptr, Vulkan,
                     "Vulkan backend support is not compiled in. Enable "
-                    "MONOLITH_ENGINE_ENABLE_VULKAN to build it."
+                    "HORO_ENGINE_ENABLE_VULKAN to build it."
                 };
 #endif
             case Auto:
@@ -45,4 +45,4 @@ namespace Monolith {
             "Failed to resolve a supported render backend."
         };
     }
-} // namespace Monolith
+} // namespace Horo

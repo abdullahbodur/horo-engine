@@ -7,7 +7,7 @@
 #include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
 
-namespace Monolith {
+namespace Horo {
     class IRenderBackend {
     public:
         virtual ~IRenderBackend() = default;
@@ -48,4 +48,4 @@ namespace Monolith {
                                                bool needsYFlip,
                                                std::string *outError) = 0;
     };
-} // namespace Monolith
+} // namespace Horo

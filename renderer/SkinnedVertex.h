@@ -5,7 +5,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
     // SkinnedVertex — same memory layout as Vertex with bone influence data
     // appended.
     //
@@ -26,4 +26,4 @@ namespace Monolith {
         std::array<int, 4> boneIndices{}; // bone slot indices; -1 = unused
         Vec4 boneWeights; // corresponding weights (active weights must sum to 1.0)
     };
-} // namespace Monolith
+} // namespace Horo

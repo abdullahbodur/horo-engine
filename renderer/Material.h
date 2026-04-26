@@ -5,7 +5,7 @@
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"
 
-namespace Monolith {
+namespace Horo {
     class Material {
     public:
         Vec4 color = {1, 1, 1, 1};
@@ -21,4 +21,4 @@ namespace Monolith {
 
         bool HasShader() const { return shader && shader->IsValid(); }
     };
-} // namespace Monolith
+} // namespace Horo

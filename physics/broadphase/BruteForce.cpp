@@ -5,7 +5,7 @@
 #include "physics/RigidBody.h"
 #include "physics/SphereCollider.h"
 
-namespace Monolith::BruteForce {
+namespace Horo::BruteForce {
     // Returns AABB half-extents for a body
     static Vec3 GetAABBHalf(const RigidBody &b) {
         if (!b.collider)
@@ -47,4 +47,4 @@ namespace Monolith::BruteForce {
         }
         return pairs;
     }
-} // namespace Monolith::BruteForce
+} // namespace Horo::BruteForce

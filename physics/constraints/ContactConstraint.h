@@ -1,7 +1,7 @@
 #pragma once
 #include "physics/narrowphase/ContactManifold.h"
 
-namespace Monolith {
+namespace Horo {
     class RigidBody;
 
     struct ContactConstraint {
@@ -17,4 +17,4 @@ namespace Monolith {
         // Solve the normal + friction impulse for this contact
         void Solve();
     };
-} // namespace Monolith
+} // namespace Horo

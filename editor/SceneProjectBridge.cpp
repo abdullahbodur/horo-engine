@@ -10,7 +10,7 @@
 #include "editor/AssetIdentity.h"
 #include "editor/SceneSerializer.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         float ParseFloat(std::string_view value, float fallback) {
             if (value.empty())
@@ -492,4 +492,4 @@ namespace Monolith::Editor {
 
         return doc;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

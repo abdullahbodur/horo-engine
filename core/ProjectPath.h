@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <string>
 
-namespace Monolith {
+namespace Horo {
     // Locates the project root and resolves asset paths relative to it.
     // Initialized once by Application constructor; call Resolve() from anywhere.
     //
@@ -46,4 +46,4 @@ namespace Monolith {
         static std::filesystem::path s_sdkRoot;
         static bool s_hasExplicitProjectRoot;
     };
-} // namespace Monolith
+} // namespace Horo

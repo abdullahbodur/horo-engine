@@ -19,7 +19,7 @@
 #include "scene/Scene.h"
 #include "scene/SceneReferenceRuntime.h"
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     struct StringHash {
         using is_transparent = void;
 
@@ -120,4 +120,4 @@ namespace Monolith::Launcher {
 
         std::shared_ptr<Texture> LoadTexture(const std::string &rawPath);
     };
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

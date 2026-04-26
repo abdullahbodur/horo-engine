@@ -6,7 +6,7 @@
 #include "launcher/LauncherProject.h"
 #include "mcp/McpSettings.h"
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
@@ -31,7 +31,7 @@ namespace Monolith::Launcher {
     } // namespace
 
     fs::path ResolveEditorHomePath() {
-        return Monolith::Mcp::ResolveMcpSettingsDirectory() / "editor_home.json";
+        return Horo::Mcp::ResolveMcpSettingsDirectory() / "editor_home.json";
     }
 
     EditorHomeDocument LoadEditorHomeDocument() {
@@ -161,4 +161,4 @@ namespace Monolith::Launcher {
             !IsLauncherProjectRoot(doc->state.lastProjectPath))
             doc->state.lastProjectPath.clear();
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

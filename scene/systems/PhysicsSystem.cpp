@@ -5,7 +5,7 @@
 #include "scene/components/RigidBodyComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
     void PhysicsSystem::OnUpdate(Registry &registry, float dt) {
         m_world.Step(dt);
 
@@ -24,4 +24,4 @@ namespace Monolith {
             tc.current.rotation = body->orientation;
         }
     }
-} // namespace Monolith
+} // namespace Horo

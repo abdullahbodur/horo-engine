@@ -5,7 +5,7 @@
 
 #include <vector>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool EditorLayer::HistorySnapshotsEqual(const EditorHistorySnapshot &lhs,
                                             const EditorHistorySnapshot &rhs) {
         return lhs.document == rhs.document &&
@@ -128,4 +128,4 @@ namespace Monolith::Editor {
         RestoreHistorySnapshot(target);
         return true;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

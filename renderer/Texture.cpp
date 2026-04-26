@@ -11,7 +11,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
     struct Texture::TextureStorage {
         unsigned int id = 0;
     };
@@ -105,4 +105,4 @@ namespace Monolith {
     void Texture::Unbind() const {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
-} // namespace Monolith
+} // namespace Horo

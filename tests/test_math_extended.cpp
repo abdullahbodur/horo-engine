@@ -12,7 +12,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 TEST_CASE("Vec2 default constructor is zero", "[math][vec2]") {

@@ -4,7 +4,7 @@
 
 #include "launcher/UiAutomationConfig.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 TEST_CASE("ParseUiAutomationBoolValue handles empty and numeric values", "[launcher][ui-automation]") {
   REQUIRE(ParseUiAutomationBoolValue({}, false) == false);
@@ -30,6 +30,11 @@ TEST_CASE("ResolveUiCaptureOutputDir obeys capture flag and env", "[launcher][ui
   REQUIRE(ResolveUiCaptureOutputDir(true, "custom", cwd) ==
           std::filesystem::path("custom"));
   REQUIRE(ResolveUiCaptureOutputDir(true, "", cwd) == cwd / "ui_test_output");
+}
+
+TEST_CASE("UI automation defaults avoid heartbeat spam and allow long runs", "[launcher][ui-automation]") {
+  REQUIRE(kUiAutomationDefaultMaxFrames == 300000);
+  REQUIRE_FALSE(kUiAutomationHeartbeatLogEnabled);
 }
 
 TEST_CASE("SelectUiAutomationBaseDir prefers platform-specific home roots", "[launcher][ui-automation]") {

@@ -9,7 +9,7 @@
 #include "scene/RuntimeSceneDefinition.h"
 #include "scene/SceneLifecycle.h"
 
-namespace Monolith {
+namespace Horo {
     using RuntimeSceneApplyCallback = std::function<bool(
         const RuntimeSceneDefinition &definition, std::string *error)>;
     using RuntimeSceneUnloadCallback = std::function<bool(std::string *error)>;
@@ -141,4 +141,4 @@ namespace Monolith {
 
         SceneRuntimeOperationResult MakeSuccess(SceneRuntimeOperation operation);
     };
-} // namespace Monolith
+} // namespace Horo

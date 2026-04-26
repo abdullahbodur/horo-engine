@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     inline constexpr int kDefaultMcpPort = 39281;
     inline constexpr const char *kDefaultMcpHost = "127.0.0.1";
     inline constexpr const char *kMcpUrlScheme = "http";
@@ -38,4 +38,4 @@ namespace Monolith::Mcp {
     McpSettingsDocument LoadMcpSettings();
 
     bool SaveMcpSettings(McpSettingsDocument *doc, std::string *outError);
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

@@ -3,7 +3,7 @@
 ## Current Reality on `main`
 
 - The repo is organized into module-shaped directories: `core`, `math`, `scene`, `renderer`, `physics`, `input`, `editor`, and `mcp`.
-- The build currently compiles those directories into a single `MonolithEngine` target.
+- The build currently compiles those directories into a single `HoroEngine` target.
 - The repo root is exported as a public include root, so cross-module includes are easy and are not yet strongly enforced by the build.
 - Because of that, this document is the canonical review policy for boundaries until deeper build-time enforcement is added later.
 
@@ -161,6 +161,6 @@ Forbidden direction by policy:
 
 ## Follow-Up Work Beyond This Issue
 
-- Split the single `MonolithEngine` target into more explicit subtargets only when the cost is justified.
+- Split the single `HoroEngine` target into more explicit subtargets only when the cost is justified.
 - Tighten include visibility per module.
 - Move editor/MCP orchestration behind narrower interfaces where practical.

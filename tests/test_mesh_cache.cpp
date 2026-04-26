@@ -22,7 +22,7 @@
 #include "renderer/Mesh.h"
 #include "renderer/MeshCache.h"
 
-using namespace Monolith;
+using namespace Horo;
 
 // ===========================================================================
 // MeshCache — cache miss: non-existent OBJ falls back to box mesh

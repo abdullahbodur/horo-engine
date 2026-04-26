@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Monolith {
+namespace Horo {
     enum class ColliderType { Sphere, Box, Capsule, Plane };
 
     struct Collider {
@@ -11,4 +11,4 @@ namespace Monolith {
 
         virtual ~Collider() = default;
     };
-} // namespace Monolith
+} // namespace Horo

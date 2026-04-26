@@ -17,15 +17,15 @@
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #include <volk.h>
 #endif
 
-namespace Monolith {
-#if defined(MONOLITH_HAS_VULKAN)
+namespace Horo {
+#if defined(HORO_HAS_VULKAN)
 
     namespace {
         constexpr uint32_t kInvalidQueueFamily = std::numeric_limits<uint32_t>::max();
@@ -1231,9 +1231,9 @@ namespace Monolith {
         const VkApplicationInfo appInfo{
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .pNext = nullptr,
-            .pApplicationName = "MonolithEngine",
+            .pApplicationName = "HoroEngine",
             .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-            .pEngineName = "MonolithEngine",
+            .pEngineName = "HoroEngine",
             .engineVersion = VK_MAKE_VERSION(0, 1, 0),
             .apiVersion = VK_API_VERSION_1_1,
         };
@@ -3200,10 +3200,10 @@ namespace Monolith {
     }
 
     void VulkanRenderBackend::BeginFrame(const RenderFrameConfig &frame) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             IsInitialized(),
             "VulkanRenderBackend::BeginFrame called before initialization");
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !m_frameActive,
             "VulkanRenderBackend::BeginFrame called while a frame is active");
         if (!IsInitialized() || m_frameActive)
@@ -3223,7 +3223,7 @@ namespace Monolith {
                                       &m_context->activeImageIndex);
         if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR ||
             acquireResult == VK_SUBOPTIMAL_KHR) {
-            MONOLITH_ASSERT(RecreateSwapchain(), m_lastError.c_str());
+            HORO_ASSERT(RecreateSwapchain(), m_lastError.c_str());
             acquireResult =
                     vkAcquireNextImageKHR(m_context->device, m_context->swapchain,
                                           UINT64_MAX, m_context->imageAvailableSemaphore,
@@ -3252,7 +3252,7 @@ namespace Monolith {
     }
 
     void VulkanRenderBackend::EndFrame() {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             m_frameActive,
             "VulkanRenderBackend::EndFrame called without an active frame");
         if (!m_frameActive)
@@ -3262,7 +3262,7 @@ namespace Monolith {
             EndPass();
 
         if (!m_context->frameCommandsRecorded) {
-            MONOLITH_ASSERT(RecordFrameCommands(m_activeFrame), m_lastError.c_str());
+            HORO_ASSERT(RecordFrameCommands(m_activeFrame), m_lastError.c_str());
         }
 
         if (m_context->frameCommandsRecorded) {
@@ -3302,7 +3302,7 @@ namespace Monolith {
                     vkQueuePresentKHR(m_context->presentQueue, &presentInfo);
             if (presentResult == VK_ERROR_OUT_OF_DATE_KHR ||
                 presentResult == VK_SUBOPTIMAL_KHR) {
-                MONOLITH_ASSERT(RecreateSwapchain(), m_lastError.c_str());
+                HORO_ASSERT(RecreateSwapchain(), m_lastError.c_str());
             } else if (presentResult != VK_SUCCESS) {
                 m_lastError = "vkQueuePresentKHR failed during EndFrame: " +
                               std::string(VkResultName(presentResult));
@@ -3321,10 +3321,10 @@ namespace Monolith {
     }
 
     void VulkanRenderBackend::BeginPass(const RenderPassConfig &pass) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             m_frameActive,
             "VulkanRenderBackend::BeginPass called without an active frame");
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !m_passActive,
             "VulkanRenderBackend::BeginPass called while a pass is active");
         if (!m_frameActive || m_passActive)
@@ -3336,7 +3336,7 @@ namespace Monolith {
     }
 
     void VulkanRenderBackend::EndPass() {
-        MONOLITH_ASSERT(m_passActive,
+        HORO_ASSERT(m_passActive,
                         "VulkanRenderBackend::EndPass called without an active pass");
         if (!m_passActive)
             return;
@@ -3752,4 +3752,4 @@ namespace Monolith {
     }
 
 #endif
-} // namespace Monolith
+} // namespace Horo

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 #include <GLFW/glfw3.h>
 #endif
 
@@ -32,7 +32,7 @@
 #include "scene/systems/RenderSystem.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
+using namespace Horo;
 using json = nlohmann::json;
 
 namespace {
@@ -160,7 +160,7 @@ void PadToAlignment(std::vector<uint8_t> *out, size_t alignment) {
 
 std::filesystem::path BuildGltfFixturePath(const std::string &name) {
   namespace fs = std::filesystem;
-  const fs::path dir = Monolith::Tests::SecureTempPath(name);
+  const fs::path dir = Horo::Tests::SecureTempPath(name);
   std::error_code ec;
   fs::remove_all(dir, ec);
   ec.clear();
@@ -368,7 +368,7 @@ std::filesystem::path WritePrimitiveFixture(const std::string &name, int mode,
   return gltfPath;
 }
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 struct OverlayRenderProbe {
   bool invoked = false;
   void *commandBufferHandle = nullptr;
@@ -472,7 +472,7 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
   const RenderBackendInitResult init =
       Renderer::InitializeBackend({RenderBackendId::Vulkan});
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
   REQUIRE_FALSE(init.ok);
   REQUIRE(init.selected == RenderBackendId::Vulkan);
   REQUIRE(init.error.find("window handle") != std::string::npos);
@@ -556,7 +556,7 @@ TEST_CASE("RenderTargetHandle constructors preserve backend-native metadata", "[
   REQUIRE_FALSE(vkHandle.needsYFlip);
 }
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
 TEST_CASE("Vulkan material translation snapshots backend-relevant material state", "[renderer][foundation][vulkan][translation]") {
   Material material;
   material.color = {0.2f, 0.4f, 0.6f, 1.0f};
@@ -1305,7 +1305,7 @@ TEST_CASE("SkinnedMesh move assignment from default leaves target not valid", "[
 }
 
 TEST_CASE("GltfLoader::Load returns empty result for nonexistent .glb path", "[renderer][gltf]") {
-  using namespace Monolith;
+  using namespace Horo;
   const GltfLoadResult result = GltfLoader::Load("/no/such/file.glb");
   REQUIRE(result.mesh == nullptr);
   REQUIRE(result.skeleton == nullptr);
@@ -1313,7 +1313,7 @@ TEST_CASE("GltfLoader::Load returns empty result for nonexistent .glb path", "[r
 }
 
 TEST_CASE("GltfLoader::Load returns empty result for nonexistent .gltf path", "[renderer][gltf]") {
-  using namespace Monolith;
+  using namespace Horo;
   const GltfLoadResult result = GltfLoader::Load("/no/such/file.gltf");
   REQUIRE(result.mesh == nullptr);
   REQUIRE(result.skeleton == nullptr);

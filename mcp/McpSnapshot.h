@@ -12,7 +12,7 @@
 #include "core/StringHash.h"
 #include "math/Vec3.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     struct McpComponentSnapshot {
         std::string type;
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
@@ -185,4 +185,4 @@ namespace Monolith::Mcp {
 
     nlohmann::json SearchConsoleSnapshot(const McpEditorSnapshot &snapshot,
                                          const std::string &query, size_t limit);
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

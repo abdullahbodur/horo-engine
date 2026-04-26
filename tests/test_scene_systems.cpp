@@ -18,7 +18,7 @@
 #include "scene/systems/CameraSystem.h"
 #include "scene/systems/PhysicsSystem.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ===========================================================================

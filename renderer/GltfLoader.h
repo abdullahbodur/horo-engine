@@ -7,7 +7,7 @@
 #include "renderer/Skeleton.h"
 #include "renderer/SkinnedMesh.h"
 
-namespace Monolith {
+namespace Horo {
     class Texture;
 
     // Result of loading a single .glb / .gltf file.
@@ -25,4 +25,4 @@ namespace Monolith {
         // Returns an empty GltfLoadResult (null mesh) on failure; logs to stderr.
         GltfLoadResult Load(const std::string &path);
     } // namespace GltfLoader
-} // namespace Monolith
+} // namespace Horo

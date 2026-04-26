@@ -7,7 +7,7 @@
 #include "renderer/AnimationClip.h"
 #include "renderer/Skeleton.h"
 
-namespace Monolith {
+namespace Horo {
     struct AnimationComponent {
         std::shared_ptr<Skeleton> skeleton;
         std::shared_ptr<AnimationClip> currentClip;
@@ -21,4 +21,4 @@ namespace Monolith {
         // Contains the final skinning matrices (globalTransform * inverseBindMatrix).
         std::vector<Mat4> boneMatrices;
     };
-} // namespace Monolith
+} // namespace Horo

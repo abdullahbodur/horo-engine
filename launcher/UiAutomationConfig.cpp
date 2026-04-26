@@ -2,7 +2,7 @@
 
 #include <charconv>
 
-namespace Monolith {
+namespace Horo {
     bool ParseUiAutomationBoolValue(std::string_view value, bool fallback) {
         if (value.empty())
             return fallback;
@@ -48,4 +48,4 @@ namespace Monolith {
             return std::filesystem::path(homePath);
         return currentPath;
     }
-} // namespace Monolith
+} // namespace Horo

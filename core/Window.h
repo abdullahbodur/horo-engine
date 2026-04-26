@@ -5,7 +5,7 @@
 
 struct GLFWwindow;
 
-namespace Monolith {
+namespace Horo {
     enum class CursorMode {
         Normal,
         Hidden,
@@ -31,7 +31,7 @@ namespace Monolith {
     GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi);
 
     struct WindowSpec {
-        std::string title = "Monolith";
+        std::string title = "Horo";
         int width = 1280;
         int height = 720;
         bool vsync = true;
@@ -109,4 +109,4 @@ namespace Monolith {
 
         static void DropPathsThunk(GLFWwindow *win, int count, const char **paths);
     };
-} // namespace Monolith
+} // namespace Horo

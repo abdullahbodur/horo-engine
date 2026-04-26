@@ -10,7 +10,7 @@
 #include "physics/narrowphase/GJK.h"
 #include "physics/narrowphase/SAT.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ===========================================================================

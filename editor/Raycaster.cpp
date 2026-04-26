@@ -7,7 +7,7 @@
 #include "math/Mat4.h"
 #include "math/Vec4.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH,
                     const Camera &cam) {
         // Convert pixel coords to NDC [-1, 1].
@@ -125,4 +125,4 @@ namespace Monolith::Editor {
         };
         return true;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

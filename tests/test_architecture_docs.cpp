@@ -9,8 +9,8 @@
 
 #include "mcp/McpController.h"
 
-using namespace Monolith;
-using namespace Monolith::Mcp;
+using namespace Horo;
+using namespace Horo::Mcp;
 
 namespace {
 std::string ReadTextFile(const std::filesystem::path &path) {

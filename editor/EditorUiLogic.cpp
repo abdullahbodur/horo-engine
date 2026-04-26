@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 namespace {
 constexpr EditorViewGimbalMetrics kEditorViewGimbalMetrics{};
 } // namespace
@@ -180,4 +180,4 @@ bool TryParseVec3Csv(const std::string &text, Vec3 *outValue) {
   *outValue = {x, y, z};
   return true;
 }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

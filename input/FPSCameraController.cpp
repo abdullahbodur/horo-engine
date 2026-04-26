@@ -6,7 +6,7 @@
 #include "input/Input.h"
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
     void FPSCameraController::Update(float /*dt*/) {
         Vec2 delta = Input::GetMouseDelta();
         m_yaw -= delta.x * m_mouseSensitivity;
@@ -35,4 +35,4 @@ namespace Monolith {
         camera.position = m_position;
         camera.target = m_position + lookDir;
     }
-} // namespace Monolith
+} // namespace Horo

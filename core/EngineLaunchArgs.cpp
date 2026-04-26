@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace Monolith {
+namespace Horo {
     EngineLaunchOptions ParseEngineLaunchOptions(int argc, char **argv) {
         EngineLaunchOptions out;
         for (int i = 1; i < argc;) {
@@ -44,4 +44,4 @@ namespace Monolith {
         }
         return false;
     }
-} // namespace Monolith
+} // namespace Horo

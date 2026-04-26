@@ -7,7 +7,7 @@
 struct GLFWwindow;
 struct TransformGizmoTestAccessor; // forward declaration for test seam
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     enum class GizmoMode { None, Translate, Rotate, Scale };
 
     enum class GizmoAxis { None, X, Y, Z };
@@ -95,4 +95,4 @@ namespace Monolith::Editor {
         // Test seam: grants test code access to private drag state and methods.
         friend struct ::TransformGizmoTestAccessor;
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

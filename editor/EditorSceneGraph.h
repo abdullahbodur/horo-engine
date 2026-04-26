@@ -15,7 +15,7 @@
 #include "math/Quaternion.h"
 #include "math/Vec3.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     // Returns true when propKey is a prop that holds a reference to another
     // scene object's id (e.g. "parentId", "followTargetId").
     bool IsObjectReferencePropKey(std::string_view key);
@@ -73,4 +73,4 @@ namespace Monolith::Editor {
     // Returns a unique .horo path in assets/prefabs/ for the given object.
     std::filesystem::path BuildUniquePrefabPath(const SceneDocument &doc,
                                                 const SceneObject &object);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

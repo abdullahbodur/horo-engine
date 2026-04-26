@@ -18,7 +18,7 @@
 #include "launcher/UiAutomationConfig.h"
 #include "launcher/UiTestHarness.h"
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_test_engine/imgui_te_context.h>
@@ -31,8 +31,8 @@
 #include <unistd.h>
 #endif
 
-namespace Monolith {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+namespace Horo {
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 namespace {
 namespace fs = std::filesystem;
 constexpr const char *kFfmpegVideoParams =
@@ -167,11 +167,11 @@ const fs::path &UiAutomationTempRoot() {
 
 void LogUiAutomationEnv() {
   static constexpr std::array<const char *, 10> kEnvVars = {
-      "MONOLITH_UI_TEST_CAPTURE",     "MONOLITH_UI_TEST_VIDEO",
-      "MONOLITH_UI_TEST_RECORDING",   "MONOLITH_UI_TEST_FILTER",
-      "MONOLITH_UI_TEST_DELAY_MS",    "MONOLITH_UI_TEST_OUTPUT_DIR",
-      "MONOLITH_UI_TEST_FFMPEG_PATH", "MONOLITH_UI_TEST_CLEAN_TEMP",
-      "MONOLITH_GLFW_SAMPLES",        "MONOLITH_GLFW_VISIBLE",
+      "HORO_UI_TEST_CAPTURE",     "HORO_UI_TEST_VIDEO",
+      "HORO_UI_TEST_RECORDING",   "HORO_UI_TEST_FILTER",
+      "HORO_UI_TEST_DELAY_MS",    "HORO_UI_TEST_OUTPUT_DIR",
+      "HORO_UI_TEST_FFMPEG_PATH", "HORO_UI_TEST_CLEAN_TEMP",
+      "HORO_GLFW_SAMPLES",        "HORO_GLFW_VISIBLE",
   };
   for (const char *name : kEnvVars)
     LogUiEnvVar(name);
@@ -187,7 +187,7 @@ void PrepareUiAutomationDirectories(const UiAutomationRunState *state) {
   if (!state)
     return;
   const bool cleanTempRoot =
-      ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_CLEAN_TEMP");
+      ParseBoolEnvDefaultTrue("HORO_UI_TEST_CLEAN_TEMP");
   std::error_code ec;
   if (state->tempRoot.empty()) {
     LogError("UI temp root path is empty.");
@@ -250,7 +250,7 @@ void ConfigureUiVideoCapture(UiAutomationRunState *state,
   if (!state || !testIo || !state->captureEnabled || !state->videoEnabled)
     return;
 
-  const std::string ffmpegPath = ReadEnvString("MONOLITH_UI_TEST_FFMPEG_PATH");
+  const std::string ffmpegPath = ReadEnvString("HORO_UI_TEST_FFMPEG_PATH");
   const fs::path encoderPath =
       !ffmpegPath.empty() ? fs::path(ffmpegPath) : fs::path("/usr/bin/ffmpeg");
   LogDebug("UI video encoder candidate path: '{}'", encoderPath.string());
@@ -284,6 +284,9 @@ struct UiHeartbeatSnapshot {
 };
 
 void LogUiHeartbeat(const UiHeartbeatSnapshot &snapshot) {
+  if (!kUiAutomationHeartbeatLogEnabled)
+    return;
+
   const int frameCount = snapshot.frameCount;
   if (frameCount != 1 && (frameCount % snapshot.heartbeatInterval) != 0)
     return;
@@ -359,8 +362,7 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
 #endif
 
 struct UiAutomationRunner::Impl {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
-  static constexpr int kDefaultUiMaxFrames = 75000;
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   static constexpr float kActionDelayShortSec =
       0.05f; // 50 ms between short actions
   static constexpr float kActionDelayStandardSec =
@@ -372,7 +374,7 @@ struct UiAutomationRunner::Impl {
   bool passed = true;
   bool timedOut = false;
   int frameCount = 0;
-  int maxFrames = kDefaultUiMaxFrames;
+  int maxFrames = kUiAutomationDefaultMaxFrames;
   int testsRun = 0;
   int testsSucceeded = 0;
   bool lastRunningState = false;
@@ -390,7 +392,7 @@ UiAutomationRunner::~UiAutomationRunner() = default;
 
 void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
     bool runUiAutomation) {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   if (!runUiAutomation)
     return;
 
@@ -419,7 +421,7 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
 
 void UiAutomationRunner::StartIfRequested(
     bool runUiAutomation, Launcher::LauncherEditorShell *shellContext) const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   if (!runUiAutomation)
     return;
 
@@ -430,13 +432,13 @@ void UiAutomationRunner::StartIfRequested(
            static_cast<const void *>(shellContext));
   LogUiAutomationEnv();
   const bool recordingEnabled =
-      ParseBoolEnvDefaultTrue("MONOLITH_UI_TEST_RECORDING");
+      ParseBoolEnvDefaultTrue("HORO_UI_TEST_RECORDING");
   m_impl->state.captureEnabled =
-      recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_CAPTURE");
+      recordingEnabled && ParseBoolEnv("HORO_UI_TEST_CAPTURE");
   m_impl->state.videoEnabled =
-      recordingEnabled && ParseBoolEnv("MONOLITH_UI_TEST_VIDEO");
-  const std::string uiFilter = ReadEnvString("MONOLITH_UI_TEST_FILTER");
-  const std::string outputDirEnv = ReadEnvString("MONOLITH_UI_TEST_OUTPUT_DIR");
+      recordingEnabled && ParseBoolEnv("HORO_UI_TEST_VIDEO");
+  const std::string uiFilter = ReadEnvString("HORO_UI_TEST_FILTER");
+  const std::string outputDirEnv = ReadEnvString("HORO_UI_TEST_OUTPUT_DIR");
   m_impl->state.uiCaptureOutputDir =
       ResolveCaptureOutputDir(m_impl->state.captureEnabled, outputDirEnv);
   m_impl->state.shellContext = shellContext;
@@ -451,7 +453,7 @@ void UiAutomationRunner::StartIfRequested(
           ? "<disabled>"
           : m_impl->state.uiCaptureOutputDir.string());
   PrepareUiAutomationDirectories(&m_impl->state);
-  m_impl->maxFrames = Impl::kDefaultUiMaxFrames;
+  m_impl->maxFrames = kUiAutomationDefaultMaxFrames;
   m_impl->frameCount = 0;
   m_impl->timedOut = false;
   m_impl->startTimeSeconds = glfwGetTime();
@@ -512,7 +514,7 @@ void UiAutomationRunner::StartIfRequested(
 }
 
 void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   if (!m_impl->active || m_impl->engine == nullptr)
     return;
 
@@ -571,7 +573,7 @@ void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
 }
 
 void UiAutomationRunner::Shutdown() const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
     return;
 
@@ -617,7 +619,7 @@ void UiAutomationRunner::Shutdown() const {
 }
 
 void UiAutomationRunner::DestroyContext() const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
     return;
   LogDebug("Destroying UI automation engine context.");
@@ -627,7 +629,7 @@ void UiAutomationRunner::DestroyContext() const {
 }
 
 bool UiAutomationRunner::DidPass() const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   return m_impl->passed;
 #else
   return true;
@@ -635,10 +637,10 @@ bool UiAutomationRunner::DidPass() const {
 }
 
 bool UiAutomationRunner::IsActive() const {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
   return m_impl->active;
 #else
   return false;
 #endif
 }
-} // namespace Monolith
+} // namespace Horo

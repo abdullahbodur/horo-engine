@@ -7,11 +7,11 @@
 #include "core/Assert.h"
 #include "renderer/RenderBackendFactory.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         std::unique_ptr<IRenderBackend> CreateDefaultOwnedBackend() {
             RenderBackendCreateResult createResult = CreateRenderBackend({});
-            MONOLITH_ASSERT(createResult.backend != nullptr,
+            HORO_ASSERT(createResult.backend != nullptr,
                             "Failed to create the default OpenGL render backend");
             return std::move(createResult.backend);
         }
@@ -43,14 +43,14 @@ namespace Monolith {
     bool Renderer::s_passActive = false;
 
     IRenderBackend *Renderer::ActiveBackend() {
-        MONOLITH_ASSERT(ActiveBackendImpl() != nullptr,
+        HORO_ASSERT(ActiveBackendImpl() != nullptr,
                         "Renderer backend pointer should never be null");
         return ActiveBackendImpl();
     }
 
     RenderBackendInitResult
     Renderer::InitializeBackend(const RenderBackendSelection &selection) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !s_frameActive && !s_passActive,
             "Cannot initialize render backend while a frame or pass is active");
 
@@ -82,11 +82,11 @@ namespace Monolith {
     IRenderBackend *Renderer::GetBackendForInterop() { return ActiveBackend(); }
 
     bool Renderer::IsBackendSupported(RenderBackendId backendId) {
-        return Monolith::IsRenderBackendSupported(backendId);
+        return Horo::IsRenderBackendSupported(backendId);
     }
 
     void Renderer::UseBackend(IRenderBackend *backend) {
-        MONOLITH_ASSERT(!s_frameActive && !s_passActive,
+        HORO_ASSERT(!s_frameActive && !s_passActive,
                         "Cannot swap render backend while a frame or pass is active");
         if (backend) {
             OwnedBackend().reset();
@@ -97,14 +97,14 @@ namespace Monolith {
     }
 
     void Renderer::ResetBackend() {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !s_frameActive && !s_passActive,
             "Cannot reset render backend while a frame or pass is active");
         ResetToDefaultBackend();
     }
 
     void Renderer::BeginFrame(const RenderFrameConfig &frame) {
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !s_frameActive,
             "Renderer::BeginFrame called while a frame is already active");
 
@@ -113,7 +113,7 @@ namespace Monolith {
     }
 
     void Renderer::EndFrame() {
-        MONOLITH_ASSERT(s_frameActive,
+        HORO_ASSERT(s_frameActive,
                         "Renderer::EndFrame called without an active frame");
         if (!s_frameActive)
             return;
@@ -126,9 +126,9 @@ namespace Monolith {
     }
 
     void Renderer::BeginPass(const RenderPassConfig &pass) {
-        MONOLITH_ASSERT(s_frameActive,
+        HORO_ASSERT(s_frameActive,
                         "Renderer::BeginPass called without an active frame");
-        MONOLITH_ASSERT(
+        HORO_ASSERT(
             !s_passActive,
             "Renderer::BeginPass called while another pass is still active");
         if (!s_frameActive || s_passActive)
@@ -139,7 +139,7 @@ namespace Monolith {
     }
 
     void Renderer::EndPass() {
-        MONOLITH_ASSERT(s_passActive,
+        HORO_ASSERT(s_passActive,
                         "Renderer::EndPass called without an active pass");
         if (!s_passActive)
             return;
@@ -196,4 +196,4 @@ namespace Monolith {
         return ActiveBackend()->TryGetEditorViewportRenderTargetHandle(
             outHandle, needsYFlip, outError);
     }
-} // namespace Monolith
+} // namespace Horo

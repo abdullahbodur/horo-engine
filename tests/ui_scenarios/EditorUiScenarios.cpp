@@ -1,6 +1,6 @@
 #include "launcher/UiTestHarness.h"
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 
 #include <algorithm>
 #include <array>
@@ -38,7 +38,7 @@
 #include "launcher/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
-namespace Monolith {
+namespace Horo {
 namespace {
 template <typename Predicate>
 bool WaitForCondition(ImGuiTestContext *ctx, int maxFrames,
@@ -4686,6 +4686,6 @@ void RegisterEditorUiScenarioSet() {
   RegisterUiScenario("editor/close_editor_returns_to_launcher",
                      &RegisterCloseEditorReturnsToLauncher);
 }
-} // namespace Monolith
+} // namespace Horo
 
 #endif

@@ -1,9 +1,9 @@
 #pragma once
 #include "scene/System.h"
 
-namespace Monolith {
+namespace Horo {
     class BehaviorSystem : public System {
     public:
         void OnUpdate(Registry &registry, float dt) override;
     };
-} // namespace Monolith
+} // namespace Horo

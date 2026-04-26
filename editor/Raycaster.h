@@ -2,7 +2,7 @@
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct Ray {
         Vec3 origin;
         Vec3 direction; // normalised
@@ -27,4 +27,4 @@ namespace Monolith::Editor {
     float RayVsAABB(const Ray &ray, const Vec3 &center, const Vec3 &half);
 
     bool TryIntersectGroundPlane(const Ray &ray, Vec3 *outHitPoint);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -7,7 +7,7 @@
 #include "editor/EditorSchema.h"
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 
 // Creates a new SceneObject of type Prop bound to assetId.
 // Applies TypeSchema field defaults from schema and sets _assetRenderScale from
@@ -30,4 +30,4 @@ void ApplyComponentFieldDefaults(ComponentDesc &comp,
 // followTargetId) when they are not already present.
 void ApplyCameraBuiltinDefaults(SceneObject &obj);
 
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

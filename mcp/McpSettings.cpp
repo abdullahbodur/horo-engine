@@ -6,7 +6,7 @@
 #include <system_error>
 #include <vector>
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
@@ -174,4 +174,4 @@ namespace Monolith::Mcp {
         doc->error.clear();
         return true;
     }
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

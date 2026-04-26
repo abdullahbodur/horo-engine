@@ -6,7 +6,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
     // Submits all visible mesh entities into whichever explicit renderer pass is
     // currently active. Frame/pass orchestration stays with the scene owner.
     void RenderSystem::OnUpdate(Registry &registry, float dt) {
@@ -31,4 +31,4 @@ namespace Monolith {
             Renderer::Submit(*mc.mesh, model, *mc.material);
         }
     }
-} // namespace Monolith
+} // namespace Horo

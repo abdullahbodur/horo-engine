@@ -2,7 +2,7 @@
 
 #include <system_error>
 
-namespace Monolith {
+namespace Horo {
     namespace fs = std::filesystem;
 
     fs::path ProjectPath::s_root;
@@ -89,4 +89,4 @@ namespace Monolith {
     fs::path ProjectPath::ResolveSdk(const std::string &relPath) {
         return SdkRoot() / relPath;
     }
-} // namespace Monolith
+} // namespace Horo

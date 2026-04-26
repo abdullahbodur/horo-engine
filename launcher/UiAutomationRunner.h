@@ -4,11 +4,11 @@
 
 struct GLFWwindow;
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     class LauncherEditorShell;
 }
 
-namespace Monolith {
+namespace Horo {
     class UiAutomationRunner {
     public:
         static void PrepareEnvironmentBeforeAppStart(bool runUiAutomation);
@@ -38,4 +38,4 @@ namespace Monolith {
         struct Impl;
         std::unique_ptr<Impl> m_impl;
     };
-} // namespace Monolith
+} // namespace Horo

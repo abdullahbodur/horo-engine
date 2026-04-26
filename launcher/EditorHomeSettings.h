@@ -6,7 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     struct EditorHomeState {
         std::vector<std::string> recentProjects;
         std::string lastProjectPath;
@@ -30,4 +30,4 @@ namespace Monolith::Launcher {
                                const std::filesystem::path &projectRoot);
 
     void PruneMissingRecentProjects(EditorHomeDocument *doc);
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

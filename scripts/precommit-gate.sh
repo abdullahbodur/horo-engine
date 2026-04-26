@@ -13,10 +13,10 @@ make ui-test
 
 echo "[pre-commit] Running launcher UI automation tests..."
 if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
-  MONOLITH_UI_TEST_FILTER='launcher/*' make ui-test-windowed
+  HORO_UI_TEST_FILTER='launcher/*' make ui-test-windowed
 elif command -v xvfb-run >/dev/null 2>&1; then
   xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-    env MONOLITH_UI_TEST_FILTER='launcher/*' make ui-test-windowed
+    env HORO_UI_TEST_FILTER='launcher/*' make ui-test-windowed
 else
   echo "[pre-commit] ERROR: UI automation requires DISPLAY/WAYLAND_DISPLAY or xvfb-run." >&2
   echo "[pre-commit] Install xvfb (Linux) or run from a desktop session." >&2

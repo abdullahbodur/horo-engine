@@ -14,13 +14,13 @@
 #include "scene/components/TransformComponent.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 namespace {
 std::string TmpPath(const std::string &name) {
-  return (Monolith::Tests::SecureTempBase() / "horo_scene_reference_loading" /
+  return (Horo::Tests::SecureTempBase() / "horo_scene_reference_loading" /
           name)
       .string();
 }

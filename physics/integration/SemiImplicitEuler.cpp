@@ -3,7 +3,7 @@
 #include "math/MathUtils.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith::SemiImplicitEuler {
+namespace Horo::SemiImplicitEuler {
     void Integrate(RigidBody &body, float dt) {
         if (body.IsStatic())
             return;
@@ -35,4 +35,4 @@ namespace Monolith::SemiImplicitEuler {
         body.orientation.w += 0.5f * dq.w * dt;
         body.orientation = body.orientation.Normalized();
     }
-} // namespace Monolith::SemiImplicitEuler
+} // namespace Horo::SemiImplicitEuler

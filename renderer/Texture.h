@@ -4,7 +4,7 @@
 
 #include "renderer/RenderTargetHandle.h"
 
-namespace Monolith {
+namespace Horo {
     class Texture {
     public:
         Texture();
@@ -43,4 +43,4 @@ namespace Monolith {
         int m_width = 0;
         int m_height = 0;
     };
-} // namespace Monolith
+} // namespace Horo

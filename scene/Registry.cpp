@@ -1,6 +1,6 @@
 #include "scene/Registry.h"
 
-namespace Monolith {
+namespace Horo {
     Entity Registry::Create() {
         Entity e;
         if (!m_freeList.empty()) {
@@ -30,4 +30,4 @@ namespace Monolith {
             m_freeList.pop();
         m_nextId = 0;
     }
-} // namespace Monolith
+} // namespace Horo

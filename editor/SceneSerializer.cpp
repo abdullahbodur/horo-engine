@@ -11,7 +11,7 @@
 
 using json = nlohmann::json;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     static SceneObjectType TypeFromString(std::string_view s) {
         using enum SceneObjectType;
         if (s == "Prop")
@@ -272,4 +272,4 @@ namespace Monolith::Editor {
                                            "'");
         f << j.dump(2);
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -4,7 +4,7 @@
 #include <array>
 #include <cctype>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         constexpr std::array<ShortcutRow, 17> kEditorShortcuts = {
             {
@@ -124,4 +124,4 @@ namespace Monolith::Editor {
             return NoMatches;
         return None;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -18,7 +18,7 @@
 #include "core/Time.h"
 #include "input/Input.h"
 
-namespace Monolith {
+namespace Horo {
     namespace fs = std::filesystem;
 
     static fs::path GetExePath() {
@@ -91,7 +91,7 @@ namespace Monolith {
 #else
         constexpr bool kReleaseDefaults = false;
 #endif
-        return Monolith::ShouldStartWithEditor(m_editorStartupCli, kReleaseDefaults);
+        return Horo::ShouldStartWithEditor(m_editorStartupCli, kReleaseDefaults);
     }
 
     void Application::Run() {
@@ -121,4 +121,4 @@ namespace Monolith {
         OnShutdown();
         LogInfo("Application shut down cleanly.");
     }
-} // namespace Monolith
+} // namespace Horo

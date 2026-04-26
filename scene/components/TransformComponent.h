@@ -1,9 +1,9 @@
 #pragma once
 #include "math/Transform.h"
 
-namespace Monolith {
+namespace Horo {
     struct TransformComponent {
         Transform current;
         Transform previous; // for interpolated rendering
     };
-} // namespace Monolith
+} // namespace Horo

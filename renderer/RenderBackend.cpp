@@ -1,6 +1,6 @@
 #include "renderer/RenderBackend.h"
 
-namespace Monolith {
+namespace Horo {
     const char *ToString(RenderBackendId backendId) {
         using enum RenderBackendId;
         switch (backendId) {
@@ -66,7 +66,7 @@ namespace Monolith {
             case OpenGL:
                 return true;
             case Vulkan:
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
                 return true;
 #else
                 return false;
@@ -77,4 +77,4 @@ namespace Monolith {
 
         return false;
     }
-} // namespace Monolith
+} // namespace Horo

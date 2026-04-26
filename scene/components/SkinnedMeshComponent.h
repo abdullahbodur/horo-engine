@@ -6,7 +6,7 @@
 #include "renderer/Material.h"
 #include "renderer/SkinnedMesh.h"
 
-namespace Monolith {
+namespace Horo {
     // Mirrors MeshComponent but for skinned geometry.
     struct SkinnedMeshComponent {
         std::shared_ptr<SkinnedMesh> mesh;
@@ -14,4 +14,4 @@ namespace Monolith {
         bool visible = true;
         std::string meshTag; // source identifier (e.g. asset path), informational
     };
-} // namespace Monolith
+} // namespace Horo

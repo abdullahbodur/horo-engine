@@ -10,7 +10,7 @@
 #include "core/StringHash.h"
 #include "math/Vec3.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     enum class SceneObjectType { Panel, Prop, Light, Camera };
 
     // A single component attached to a SceneObject (like Unity Inspector
@@ -94,4 +94,4 @@ namespace Monolith::Editor {
 
         bool operator==(const SceneDocument &) const = default;
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

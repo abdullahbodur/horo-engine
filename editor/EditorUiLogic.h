@@ -7,7 +7,7 @@
 
 #include "math/Vec3.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct EditorViewportRect {
         float minX = 0.0f;
         float minY = 0.0f;
@@ -122,4 +122,4 @@ namespace Monolith::Editor {
                                 float toolbarHeight);
 
     bool TryParseVec3Csv(const std::string &text, Vec3 *outValue);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

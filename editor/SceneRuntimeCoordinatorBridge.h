@@ -3,7 +3,7 @@
 #include "editor/SceneDocument.h"
 #include "scene/SceneRuntimeCoordinator.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     SceneRuntimeOperationResult
     LoadSceneDocument(SceneRuntimeCoordinator &coordinator,
                       const SceneDocument &document,
@@ -13,4 +13,4 @@ namespace Monolith::Editor {
     ReloadSceneDocument(SceneRuntimeCoordinator &coordinator,
                         const SceneDocument &document,
                         const RuntimeSceneApplyCallback &applyCallback);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

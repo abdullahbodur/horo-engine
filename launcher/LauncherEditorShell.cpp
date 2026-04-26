@@ -21,7 +21,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace fs = std::filesystem;
 
     namespace {
@@ -75,8 +75,8 @@ namespace Monolith::Launcher {
                 return false;
 
             std::error_code ec;
-            return fs::is_regular_file(candidate / "lib" / "cmake" / "MonolithEngine" /
-                                       "MonolithEngineConfig.cmake",
+            return fs::is_regular_file(candidate / "lib" / "cmake" / "HoroEngine" /
+                                       "HoroEngineConfig.cmake",
                                        ec) &&
                    !ec;
         }
@@ -87,10 +87,10 @@ namespace Monolith::Launcher {
 
             std::error_code ec;
             const bool hasConfig =
-                    fs::is_regular_file(candidate / "MonolithEngineConfig.cmake", ec) && !ec;
+                    fs::is_regular_file(candidate / "HoroEngineConfig.cmake", ec) && !ec;
             ec.clear();
             const bool hasTargets =
-                    fs::is_regular_file(candidate / "MonolithEngineTargets.cmake", ec) && !ec;
+                    fs::is_regular_file(candidate / "HoroEngineTargets.cmake", ec) && !ec;
             return hasConfig && hasTargets;
         }
 
@@ -846,4 +846,4 @@ namespace Monolith::Launcher {
         m_textureCache[key] = texture;
         return texture;
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

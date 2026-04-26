@@ -6,7 +6,7 @@
 
 #include "core/StringHash.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     // Pure helpers for Project browser listing (unit-testable).
     bool IsHiddenDotEntry(std::string_view filenameUtf8);
 
@@ -16,4 +16,4 @@ namespace Monolith::Editor {
         std::string_view dirname,
         const std::unordered_set<std::string, StringHash, std::equal_to<> >
         *extraBlocklist = nullptr);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

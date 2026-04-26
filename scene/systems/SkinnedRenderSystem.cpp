@@ -12,7 +12,7 @@
 #include "scene/components/SkinnedMeshComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
     // Submits all visible skinned-mesh entities into the active explicit renderer
     // pass. Frame/pass orchestration stays with the scene owner.
     void SkinnedRenderSystem::OnUpdate(Registry &registry, float dt) {
@@ -54,4 +54,4 @@ namespace Monolith {
             Renderer::SubmitSkinned(*mc.mesh, model, *mc.material, *bones);
         }
     }
-} // namespace Monolith
+} // namespace Horo

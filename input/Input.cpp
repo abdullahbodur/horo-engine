@@ -2,7 +2,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace Monolith {
+namespace Horo {
     GLFWwindow *Input::s_window = nullptr;
     std::array<bool, Input::MAX_KEYS> Input::s_keys = {};
     std::array<bool, Input::MAX_KEYS> Input::s_keysLast = {};
@@ -77,4 +77,4 @@ namespace Monolith {
     void Input::ScrollCallback(GLFWwindow *, double, double yOffset) {
         s_scrollDelta += static_cast<float>(yOffset);
     }
-} // namespace Monolith
+} // namespace Horo

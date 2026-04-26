@@ -28,7 +28,7 @@
 #include "renderer/SkinnedVertex.h"
 #include "renderer/Texture.h"
 
-namespace Monolith {
+namespace Horo {
     // ---------------------------------------------------------------------------
     // Custom stb_image callback for tinygltf
     // (TINYGLTF_NO_STB_IMAGE suppresses the built-in one)
@@ -661,4 +661,4 @@ namespace Monolith {
 
         return result;
     }
-} // namespace Monolith
+} // namespace Horo

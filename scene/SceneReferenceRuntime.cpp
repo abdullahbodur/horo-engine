@@ -12,7 +12,7 @@
 #include "scene/components/BehaviorComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         std::vector<std::string>
         ExtractLightObjectIds(const Editor::SceneDocument &document) {
@@ -239,4 +239,4 @@ namespace Monolith {
         m_panels.clear();
         m_stats = SceneReferenceStats{};
     }
-} // namespace Monolith
+} // namespace Horo

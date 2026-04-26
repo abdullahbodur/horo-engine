@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string_view>
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
@@ -260,4 +260,4 @@ namespace Monolith::Launcher {
         *outCommand = std::move(resolved);
         return true;
     }
-} // namespace Monolith::Launcher
+} // namespace Horo::Launcher

@@ -7,7 +7,7 @@
 #include "core/Logger.h"
 #include "renderer/ObjLoader.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         bool EndsWithInsensitive(std::string_view s, std::string_view suffix) {
             if (s.size() < suffix.size())
@@ -51,4 +51,4 @@ namespace Monolith {
 
         return m_cache.try_emplace(resolvedPath, mesh).first->second;
     }
-} // namespace Monolith
+} // namespace Horo

@@ -6,7 +6,7 @@
 #include "scene/Registry.h"
 #include "scene/System.h"
 
-namespace Monolith {
+namespace Horo {
     class Scene {
     public:
         Registry &GetRegistry() { return m_registry; }
@@ -36,4 +36,4 @@ namespace Monolith {
         std::vector<std::unique_ptr<System> > m_systems;
         std::vector<std::unique_ptr<System> > m_renderSystems;
     };
-} // namespace Monolith
+} // namespace Horo

@@ -12,7 +12,7 @@
 #include "physics/narrowphase/ContactManifold.h"
 #include "physics/narrowphase/SAT.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

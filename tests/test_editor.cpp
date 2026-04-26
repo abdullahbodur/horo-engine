@@ -51,24 +51,24 @@
 // not reachable via EditorLayer's public surface.
 #include "editor/EditorLayerInternal.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 
 namespace {
-Monolith::Editor::SceneObject
-MakeObjectFromAssetForTest(const Monolith::Editor::SceneDocument &,
+Horo::Editor::SceneObject
+MakeObjectFromAssetForTest(const Horo::Editor::SceneDocument &,
                            std::string_view assetId) {
-  Monolith::Editor::SceneObject obj;
+  Horo::Editor::SceneObject obj;
   obj.id = "generated";
-  obj.type = Monolith::Editor::SceneObjectType::Prop;
+  obj.type = Horo::Editor::SceneObjectType::Prop;
   obj.assetId = std::string(assetId);
   return obj;
 }
 
-Monolith::Editor::SceneObject
-DuplicateObjectForTest(const Monolith::Editor::SceneDocument &doc,
-                       const Monolith::Editor::SceneObject &src) {
-  Monolith::Editor::SceneObject clone = src;
+Horo::Editor::SceneObject
+DuplicateObjectForTest(const Horo::Editor::SceneDocument &doc,
+                       const Horo::Editor::SceneObject &src) {
+  Horo::Editor::SceneObject clone = src;
   clone.id = std::format("copy_{}", doc.objects.size());
   clone.props.erase("_eid");
   return clone;
@@ -81,7 +81,7 @@ using Catch::Approx;
 // ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
-  return (Monolith::Tests::SecureTempBase() / name).string();
+  return (Horo::Tests::SecureTempBase() / name).string();
 }
 
 static std::filesystem::path RepoRootFromTestSource() {
@@ -117,7 +117,7 @@ NormalizePathForComparison(const std::filesystem::path &path) {
 }
 
 struct ProjectPathGuard {
-  std::filesystem::path previousRoot = Monolith::ProjectPath::Root();
+  std::filesystem::path previousRoot = Horo::ProjectPath::Root();
 
   ProjectPathGuard(const ProjectPathGuard &) = delete;
 
@@ -128,10 +128,10 @@ struct ProjectPathGuard {
   ProjectPathGuard &operator=(ProjectPathGuard &&) = delete;
 
   explicit ProjectPathGuard(const std::filesystem::path &nextRoot) {
-    Monolith::ProjectPath::Init(nextRoot);
+    Horo::ProjectPath::Init(nextRoot);
   }
 
-  ~ProjectPathGuard() { Monolith::ProjectPath::Init(previousRoot); }
+  ~ProjectPathGuard() { Horo::ProjectPath::Init(previousRoot); }
 };
 
 struct HomeDirGuard {
@@ -272,7 +272,7 @@ TEST_CASE("EditorImGuiBackend: backend support reflects build capabilities", "[e
   REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::OpenGL));
   REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Auto));
 
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
   REQUIRE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
 #else
   REQUIRE_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan));
@@ -751,7 +751,7 @@ TEST_CASE("SceneSerializer: legacy asset entries gain guid and display name on l
 
 TEST_CASE("AssetMetadata: EnsureAssetMetadataForDocument writes sidecar files", "[editor][asset-metadata]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_metadata_case";
+      Horo::Tests::SecureTempBase() / "horo_asset_metadata_case";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -794,7 +794,7 @@ TEST_CASE("AssetImporterRegistry: built-in importers resolve by extension and id
 
 TEST_CASE("AssetImportService: imports OBJ and persists importer metadata", "[editor][asset-import]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_import_obj";
+      Horo::Tests::SecureTempBase() / "horo_asset_import_obj";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -841,7 +841,7 @@ TEST_CASE("AssetImportService: unsupported source yields structured diagnostics"
 
 TEST_CASE("AssetImportService: reimport propagation follows deterministic topological order", "[editor][asset-import][reimport]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_reimport_graph";
+      Horo::Tests::SecureTempBase() / "horo_asset_reimport_graph";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -903,7 +903,7 @@ TEST_CASE("AssetImportService: reimport propagation follows deterministic topolo
 
 TEST_CASE("AssetImportService: cyclic dependencies fail reimport with actionable error", "[editor][asset-import][reimport]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_reimport_cycle";
+      Horo::Tests::SecureTempBase() / "horo_asset_reimport_cycle";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -1209,7 +1209,7 @@ TEST_CASE("Editor MCP delete_asset removes managed imported asset folders", "[ed
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
-      Monolith::Tests::SecureTempBase() / "horo_editor_delete_asset_managed";
+      Horo::Tests::SecureTempBase() / "horo_editor_delete_asset_managed";
   fs::remove_all(projectRoot);
   fs::create_directories(projectRoot / "assets" / "models" / "crate");
   WriteFile(
@@ -1252,7 +1252,7 @@ TEST_CASE("Editor MCP delete_asset keeps manual asset files and removes only reg
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
-      Monolith::Tests::SecureTempBase() / "horo_editor_delete_asset_manual";
+      Horo::Tests::SecureTempBase() / "horo_editor_delete_asset_manual";
   fs::remove_all(projectRoot);
   fs::create_directories(projectRoot / "assets" / "models");
   WriteFile((projectRoot / "assets" / "models" / "crate.obj").string(),
@@ -1553,7 +1553,7 @@ TEST_CASE("Editor MCP create_prefab writes prefab file and links selected instan
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
-      Monolith::Tests::SecureTempBase() / "horo_editor_create_prefab";
+      Horo::Tests::SecureTempBase() / "horo_editor_create_prefab";
   fs::remove_all(projectRoot);
   fs::create_directories(projectRoot / "assets" / "prefabs");
 
@@ -1599,7 +1599,7 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "
   namespace fs = std::filesystem;
 
   const fs::path projectRoot =
-      Monolith::Tests::SecureTempBase() / "horo_runtime_prefab_instance";
+      Horo::Tests::SecureTempBase() / "horo_runtime_prefab_instance";
   fs::remove_all(projectRoot);
   fs::create_directories(projectRoot / "assets" / "prefabs");
 
@@ -1637,7 +1637,7 @@ TEST_CASE("Runtime bridge resolves linked prefab instances to concrete props", "
   REQUIRE(model.scene.nodes[0].prefabInstance.has_value());
 
   const RuntimeSceneBuildResult runtime =
-      Monolith::Editor::BuildRuntimeSceneDefinition(doc);
+      Horo::Editor::BuildRuntimeSceneDefinition(doc);
   REQUIRE(runtime.issues.empty());
   REQUIRE(runtime.definition.rooms.size() == 1);
   REQUIRE(runtime.definition.rooms[0].props.size() == 1);
@@ -2319,7 +2319,7 @@ TEST_CASE("Editor viewport asset drop target stays inactive during play mode", "
 TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_editor_workspace_missing";
+      Horo::Tests::SecureTempBase() / "horo_editor_workspace_missing";
   fs::remove_all(tempHome);
   fs::create_directories(tempHome);
   HomeDirGuard homeGuard(tempHome);
@@ -2340,7 +2340,7 @@ TEST_CASE("Editor workspace settings: missing file falls back to defaults", "[ed
 TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_editor_workspace_invalid";
+      Horo::Tests::SecureTempBase() / "horo_editor_workspace_invalid";
   fs::remove_all(tempHome);
   fs::create_directories(tempHome / ".horo");
   HomeDirGuard homeGuard(tempHome);
@@ -2357,7 +2357,7 @@ TEST_CASE("Editor workspace settings: invalid JSON reports parse fallback", "[ed
 TEST_CASE("Editor workspace settings: round-trip console filters and cwd", "[editor][workspace]") {
   namespace fs = std::filesystem;
   const fs::path tempHome =
-      Monolith::Tests::SecureTempBase() / "horo_editor_workspace_roundtrip";
+      Horo::Tests::SecureTempBase() / "horo_editor_workspace_roundtrip";
   fs::remove_all(tempHome);
   fs::create_directories(tempHome);
   HomeDirGuard homeGuard(tempHome);
@@ -3080,7 +3080,7 @@ TEST_CASE("EditorHistory: HistorySnapshotsEqual returns false for differing docu
 TEST_CASE("EditorHistory: RefreshHistorySavedBaseline updates dirty flag after save", "[editor][history]") {
   namespace fs = std::filesystem;
   const fs::path sceneDir =
-      Monolith::Tests::SecureTempBase() / "horo_history_baseline_test";
+      Horo::Tests::SecureTempBase() / "horo_history_baseline_test";
   fs::create_directories(sceneDir);
   const fs::path scenePath = sceneDir / "test_scene.json";
 
@@ -5334,7 +5334,7 @@ TEST_CASE("AssetImporterRegistry: RegisteredImporterIds returns both built-in id
 TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl companion covers full success path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_importer_test_obj";
+      Horo::Tests::SecureTempBase() / "horo_importer_test_obj";
   fs::create_directories(tmpDir);
 
   // Write a minimal OBJ referencing an MTL with a diffuse texture map
@@ -5377,7 +5377,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer with valid file and mtl companion
 TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers full success path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_importer_test_tex";
+      Horo::Tests::SecureTempBase() / "horo_importer_test_tex";
   fs::create_directories(tmpDir);
 
   const fs::path texPath = tmpDir / "albedo.png";
@@ -5407,7 +5407,7 @@ TEST_CASE("AssetImporterRegistry: texture importer with valid png file covers fu
 TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no mtllib covers no-companion path", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_importer_test_nomtl";
+      Horo::Tests::SecureTempBase() / "horo_importer_test_nomtl";
   fs::create_directories(tmpDir);
 
   // OBJ without mtllib line
@@ -5438,7 +5438,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer with obj file that has no mtllib 
 TEST_CASE("AssetImporterRegistry: OBJ importer with mtl that has no map_ entries", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_importer_test_nomaps";
+      Horo::Tests::SecureTempBase() / "horo_importer_test_nomaps";
   fs::create_directories(tmpDir);
 
   const fs::path objPath = tmpDir / "untextured.obj";
@@ -5473,7 +5473,7 @@ TEST_CASE("AssetImporterRegistry: OBJ importer with mtl that has no map_ entries
 TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_importer_dedupe_sort";
+      Horo::Tests::SecureTempBase() / "horo_importer_dedupe_sort";
   std::error_code ec;
   fs::remove_all(tmpDir, ec);
   fs::create_directories(tmpDir, ec);
@@ -5526,7 +5526,7 @@ TEST_CASE("AssetImporterRegistry: OBJ import dedupes and sorts produced outputs"
 TEST_CASE("AssetImporterRegistry: OBJ reimport replaces existing destination", "[editor][importer]") {
   namespace fs = std::filesystem;
   const fs::path root =
-      Monolith::Tests::SecureTempBase() / "horo_importer_replace_dest";
+      Horo::Tests::SecureTempBase() / "horo_importer_replace_dest";
   std::error_code ec;
   fs::remove_all(root, ec);
   fs::create_directories(root / "src", ec);
@@ -5731,7 +5731,7 @@ TEST_CASE("EditorLayer render: scene with filePath set enables save button", "[e
   ImGuiContextGuard imgui;
   namespace fs = std::filesystem;
   const fs::path tmpDir =
-      Monolith::Tests::SecureTempBase() / "horo_render_filepath";
+      Horo::Tests::SecureTempBase() / "horo_render_filepath";
   fs::create_directories(tmpDir);
   const fs::path scenePath = tmpDir / "test.json";
 
@@ -6339,7 +6339,7 @@ TEST_CASE("EditorLayer: SetProjectBrowserRoot with valid dir then render shows p
   editor.LoadDocument(SceneDocument{});
 
   const auto tmp =
-      Monolith::Tests::SecureTempBase() / "horo_editor_project_browser_render";
+      Horo::Tests::SecureTempBase() / "horo_editor_project_browser_render";
   std::filesystem::remove_all(tmp);
   std::filesystem::create_directories(tmp / "assets");
   std::ofstream(tmp / "assets" / "scene.json") << "{}";
@@ -6395,7 +6395,7 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds with empty registry clears _eid pro
   editor.LoadDocument(doc);
 
   // Empty registry — all _eid props should be erased
-  Monolith::Registry reg;
+  Horo::Registry reg;
   editor.SyncRuntimeEntityIds(reg);
 
   for (const auto &obj : editor.GetDocument().objects) {
@@ -6423,13 +6423,13 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds with matching mesh entities maps _e
   editor.LoadDocument(doc);
 
   // Create registry with 2 mesh entities (no PlayerTag)
-  Monolith::Registry reg;
+  Horo::Registry reg;
   const auto e0 = reg.Create();
   const auto e1 = reg.Create();
-  reg.Add<Monolith::MeshComponent>(e0);
-  reg.Add<Monolith::MeshComponent>(e1);
-  reg.Add<Monolith::TransformComponent>(e0);
-  reg.Add<Monolith::TransformComponent>(e1);
+  reg.Add<Horo::MeshComponent>(e0);
+  reg.Add<Horo::MeshComponent>(e1);
+  reg.Add<Horo::TransformComponent>(e0);
+  reg.Add<Horo::TransformComponent>(e1);
 
   editor.SyncRuntimeEntityIds(reg);
 
@@ -6457,10 +6457,10 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds skips PlayerTag entities", "[editor
   EditorLayer editor;
   editor.LoadDocument(doc);
 
-  Monolith::Registry reg;
+  Horo::Registry reg;
   const auto player = reg.Create();
-  reg.Add<Monolith::MeshComponent>(player);
-  reg.Add<Monolith::PlayerTagComponent>(player); // should be skipped
+  reg.Add<Horo::MeshComponent>(player);
+  reg.Add<Horo::PlayerTagComponent>(player); // should be skipped
 
   // No non-player mesh entities → prop count(1) != mesh count(0) → warning path
   editor.SyncRuntimeEntityIds(reg);
@@ -6482,10 +6482,10 @@ TEST_CASE("EditorLayer: SyncRuntimeEntityIds with more meshes than props warns a
   editor.LoadDocument(doc);
 
   // 3 mesh entities but only 1 prop → should warn and map 1
-  Monolith::Registry reg;
+  Horo::Registry reg;
   for (int i = 0; i < 3; ++i) {
     const auto e = reg.Create();
-    reg.Add<Monolith::MeshComponent>(e);
+    reg.Add<Horo::MeshComponent>(e);
   }
 
   editor.SyncRuntimeEntityIds(reg);
@@ -7205,10 +7205,10 @@ TEST_CASE("EditorLayer render: with live registry set renders without crash", "[
   EditorLayer editor;
   editor.LoadDocument(doc);
 
-  Monolith::Registry reg;
+  Horo::Registry reg;
   const auto e = reg.Create();
-  reg.Add<Monolith::MeshComponent>(e);
-  reg.Add<Monolith::TransformComponent>(e);
+  reg.Add<Horo::MeshComponent>(e);
+  reg.Add<Horo::TransformComponent>(e);
 
   editor.SyncRuntimeEntityIds(reg);
   editor.SetLiveRegistry(&reg);
@@ -8638,7 +8638,7 @@ TEST_CASE("AssetImportService: ReimportAssetWithDependents on unimported asset h
   // LoadOrBuildMetadata produces empty importerId + sourcePath
   // → ReimportSingleAsset hits "no importer metadata" branch (lines 409–421)
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_reimport_no_meta_branch";
+      Horo::Tests::SecureTempBase() / "horo_reimport_no_meta_branch";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -8664,7 +8664,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset persists metadata to disk", 
   // Exercises lines 313–327: SaveMetadataForAsset writes metadata that can be
   // reloaded
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_save_meta_for_asset";
+      Horo::Tests::SecureTempBase() / "horo_save_meta_for_asset";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -8700,7 +8700,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset reports empty metadata path"
 
 TEST_CASE("AssetImportService: ImportTextureForAsset unsupported type includes message", "[editor][asset-import]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_texture_unsupported_message";
+      Horo::Tests::SecureTempBase() / "horo_texture_unsupported_message";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -8728,7 +8728,7 @@ TEST_CASE("AssetImportService: ReimportSingleAsset fails when saved importer id 
   // FindById(metadata.importerId) and FindByExtension(metadata.sourcePath)
   // both return nullptr → "Registered importer not found." error path.
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_reimport_bad_importer";
+      Horo::Tests::SecureTempBase() / "horo_reimport_bad_importer";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -8772,7 +8772,7 @@ TEST_CASE("AssetImportService: ReimportSingleAsset covers albedo source path rei
   // branch executes.  The texture file need not exist; a failed texture import
   // is silently ignored and the overall reimport still succeeds.
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_reimport_albedo_branch";
+      Horo::Tests::SecureTempBase() / "horo_reimport_albedo_branch";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root / "assets" / "models", ec);
@@ -8825,7 +8825,7 @@ TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises Fie
   // Build a temp SDK root whose assets/editor_schema.json exercises every
   // FieldDef::Widget branch: Float, Bool, Enum, Color3, String.
   const fs::path sdkRoot =
-      Monolith::Tests::SecureTempBase() / "horo_mcp_schema_widget_types";
+      Horo::Tests::SecureTempBase() / "horo_mcp_schema_widget_types";
   std::error_code ec;
   fs::remove_all(sdkRoot, ec);
   fs::create_directories(sdkRoot / "assets", ec);
@@ -8870,10 +8870,10 @@ TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises Fie
   // glCreateShader() which crashes without an OpenGL context.  Redirecting
   // Root() to a dir with no shaders makes ReadFile() throw ShaderException,
   // which Init() already catches and logs — no crash.
-  const fs::path prevSdkRoot = Monolith::ProjectPath::SdkRoot();
-  const fs::path prevProjectRoot = Monolith::ProjectPath::Root();
-  Monolith::ProjectPath::SetSdkRoot(sdkRoot);
-  Monolith::ProjectPath::SetProjectRoot(sdkRoot);
+  const fs::path prevSdkRoot = Horo::ProjectPath::SdkRoot();
+  const fs::path prevProjectRoot = Horo::ProjectPath::Root();
+  Horo::ProjectPath::SetSdkRoot(sdkRoot);
+  Horo::ProjectPath::SetProjectRoot(sdkRoot);
 
   SceneDocument doc;
   {
@@ -8904,8 +8904,8 @@ TEST_CASE("EditorLayer Init+OnUpdate: schema with all widget types exercises Fie
     editor.Shutdown(); // destroys ImGui context created by Init()
   }
 
-  Monolith::ProjectPath::SetSdkRoot(prevSdkRoot);
-  Monolith::ProjectPath::SetProjectRoot(prevProjectRoot);
+  Horo::ProjectPath::SetSdkRoot(prevSdkRoot);
+  Horo::ProjectPath::SetProjectRoot(prevProjectRoot);
   REQUIRE(true);
 }
 
@@ -9009,7 +9009,7 @@ TEST_CASE("EditorLayerInternal: placement and path helpers cover deterministic b
 
   CHECK(ToLowerAscii("AbC123!") == "abc123!");
 
-  const std::filesystem::path root = Monolith::Tests::SecureTempBase() / "horo_editor_layer_internal_paths";
+  const std::filesystem::path root = Horo::Tests::SecureTempBase() / "horo_editor_layer_internal_paths";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);

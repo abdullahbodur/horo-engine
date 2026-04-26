@@ -4,7 +4,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     std::string GenerateAssetGuid();
 
     std::string MakeAssetDisplayName(const std::string &assetId,
@@ -13,4 +13,4 @@ namespace Monolith::Editor {
     void EnsureAssetIdentity(const std::string &assetId, AssetDef *asset);
 
     void EnsureAssetIdentity(SceneDocument *doc);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

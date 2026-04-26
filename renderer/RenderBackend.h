@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace Monolith {
+namespace Horo {
     enum class RenderBackendId {
         Auto,
         OpenGL,
@@ -45,4 +45,4 @@ namespace Monolith {
     GetDefaultRenderBackendCapabilities(RenderBackendId backendId);
 
     bool IsRenderBackendSupported(RenderBackendId backendId);
-} // namespace Monolith
+} // namespace Horo

@@ -1,6 +1,6 @@
 #include "launcher/UiTestHarness.h"
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 
 #include <algorithm>
 #include <string>
@@ -15,7 +15,7 @@
 #include "launcher/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
-namespace Monolith {
+namespace Horo {
 namespace {
 namespace fs = std::filesystem;
 
@@ -541,6 +541,6 @@ void RegisterLauncherUiScenarioSet() {
   RegisterUiScenario("launcher/launcher_create_and_verify_toolbar",
                      &RegisterLauncherCreateAndVerifyToolbarTest);
 }
-} // namespace Monolith
+} // namespace Horo
 
 #endif

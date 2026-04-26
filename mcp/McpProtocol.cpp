@@ -20,7 +20,7 @@
 #include "core/StringHash.h"
 #include "mcp/McpSettings.h"
 
-namespace Monolith::Mcp {
+namespace Horo::Mcp {
     using json = nlohmann::json;
 
     namespace {
@@ -293,7 +293,7 @@ namespace Monolith::Mcp {
 
         std::filesystem::path ResolveMcpAuditPath() {
             namespace fs = std::filesystem;
-            if (const fs::path projectRoot = Monolith::ProjectPath::Root();
+            if (const fs::path projectRoot = Horo::ProjectPath::Root();
                 !projectRoot.empty()) {
                 if (std::error_code ec; fs::exists(projectRoot, ec) && !ec)
                     return projectRoot / ".horo" / "mcp-audit.jsonl";
@@ -2574,4 +2574,4 @@ namespace Monolith::Mcp {
                {false, 200, "Method not found.", &result, {}});
         return MakeJsonResponse(200, "OK", result);
     }
-} // namespace Monolith::Mcp
+} // namespace Horo::Mcp

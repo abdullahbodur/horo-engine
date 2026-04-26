@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct EditorWorkspaceState {
         bool consoleShowInfo = true;
         bool consoleShowWarn = true;
@@ -29,4 +29,4 @@ namespace Monolith::Editor {
 
     bool SaveEditorWorkspaceDocument(EditorWorkspaceDocument *doc,
                                      std::string *outError);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

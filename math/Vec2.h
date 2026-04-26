@@ -2,7 +2,7 @@
 #include <cmath>
 #include <string>
 
-namespace Monolith {
+namespace Horo {
     struct Vec2 {
         float x, y;
 
@@ -84,4 +84,4 @@ namespace Monolith {
 
         std::string ToString() const;
     };
-} // namespace Monolith
+} // namespace Horo

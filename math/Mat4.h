@@ -4,7 +4,7 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 
-namespace Monolith {
+namespace Horo {
     struct Quaternion;
 
     // Column-major 4x4 matrix — matches OpenGL convention.
@@ -67,4 +67,4 @@ namespace Monolith {
 
         std::string ToString() const;
     };
-} // namespace Monolith
+} // namespace Horo

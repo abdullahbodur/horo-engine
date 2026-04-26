@@ -7,7 +7,7 @@
 #include "renderer/Camera.h"
 #include "renderer/Shader.h"
 
-namespace Monolith {
+namespace Horo {
     class DebugDraw {
     public:
         static void Init();
@@ -41,4 +41,4 @@ namespace Monolith {
         static unsigned int s_vbo;
         static bool s_initialized;
     };
-} // namespace Monolith
+} // namespace Horo

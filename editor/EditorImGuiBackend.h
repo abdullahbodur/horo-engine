@@ -5,7 +5,7 @@
 struct GLFWwindow;
 struct ImDrawData;
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool IsSupportedEditorImGuiBackend(RenderBackendId backendId);
 
     bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId);
@@ -15,4 +15,4 @@ namespace Monolith::Editor {
     void BeginEditorImGuiFrame(RenderBackendId backendId);
 
     void RenderEditorImGuiDrawData(RenderBackendId backendId, ImDrawData *drawData);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

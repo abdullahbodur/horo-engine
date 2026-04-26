@@ -1,9 +1,9 @@
 #pragma once
 #include "renderer/Camera.h"
 
-namespace Monolith {
+namespace Horo {
     struct CameraComponent {
         Camera camera;
         bool isActive = false;
     };
-} // namespace Monolith
+} // namespace Horo

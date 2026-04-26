@@ -4,7 +4,7 @@
 #include "physics/BoxCollider.h"
 #include "physics/SphereCollider.h"
 
-namespace Monolith {
+namespace Horo {
     RigidBody RigidBody::MakeStatic() {
         RigidBody b;
         b.mass = 0.0f;
@@ -71,4 +71,4 @@ namespace Monolith {
         forceAccum += f;
         torqueAccum += Vec3::Cross(worldPoint - position, f);
     }
-} // namespace Monolith
+} // namespace Horo

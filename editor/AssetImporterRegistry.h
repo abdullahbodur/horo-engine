@@ -8,7 +8,7 @@
 
 #include "editor/AssetMetadata.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct AssetImportRequest {
         std::string assetId;
         std::string assetGuid;
@@ -54,4 +54,4 @@ namespace Monolith::Editor {
     private:
         std::vector<std::unique_ptr<AssetImporter> > m_importers;
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

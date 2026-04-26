@@ -27,7 +27,7 @@
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ===========================================================================
@@ -247,7 +247,7 @@ TEST_CASE("Texture: default and moved-from objects remain invalid", "[renderer][
 // ===========================================================================
 
 TEST_CASE("IsRenderBackendSupported: Vulkan returns a defined result", "[renderer][backend]") {
-  // The result depends on whether MONOLITH_HAS_VULKAN is defined, but the
+  // The result depends on whether HORO_HAS_VULKAN is defined, but the
   // call must not crash and must exercise the Vulkan branch.
   const bool result = IsRenderBackendSupported(RenderBackendId::Vulkan);
   // Either true (Vulkan present) or false (not compiled in) — both are valid.

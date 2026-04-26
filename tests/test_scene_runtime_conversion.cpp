@@ -11,8 +11,8 @@
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeConversion.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 namespace {
@@ -79,7 +79,7 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   model.scene.nodes = {panel, prop, inlineProp, light, camera};
 
   const RuntimeSceneBuildResult build =
-      Monolith::BuildRuntimeSceneDefinition(model);
+      Horo::BuildRuntimeSceneDefinition(model);
 
   REQUIRE_FALSE(build.HasErrors());
   REQUIRE(build.definition.rooms.size() == 1);
@@ -173,7 +173,7 @@ TEST_CASE("SceneRuntimeConversion: missing asset references surface deterministi
   model.scene.nodes.push_back(prop);
 
   const RuntimeSceneBuildResult build =
-      Monolith::BuildRuntimeSceneDefinition(model);
+      Horo::BuildRuntimeSceneDefinition(model);
 
   REQUIRE(build.HasErrors());
   REQUIRE(build.ErrorCount() >= 1);

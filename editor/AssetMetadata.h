@@ -7,7 +7,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     enum class AssetDependencyKind {
         Source,
         ProducedOutput,
@@ -65,4 +65,4 @@ namespace Monolith::Editor {
                                      const AssetDef &asset);
 
     bool EnsureAssetMetadataForDocument(SceneDocument *doc, std::string *outError);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -5,7 +5,7 @@
 #include "math/Vec3.h"
 #include "physics/constraints/ConstraintSolver.h"
 
-namespace Monolith {
+namespace Horo {
     class RigidBody;
 
     class PhysicsWorld {
@@ -46,4 +46,4 @@ namespace Monolith {
         void SolveBoxPlane(RigidBody &box, float planeY,
                            std::vector<ContactConstraint> &contacts) const;
     };
-} // namespace Monolith
+} // namespace Horo

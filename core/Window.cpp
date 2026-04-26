@@ -83,7 +83,7 @@ namespace {
     public:
         static void Init() {
             if (s_refCount++ == 0 && !glfwInit())
-                throw Monolith::WindowInitException("glfwInit failed");
+                throw Horo::WindowInitException("glfwInit failed");
         }
 
         static void Shutdown() {
@@ -97,7 +97,7 @@ namespace {
     };
 } // namespace
 
-namespace Monolith {
+namespace Horo {
     WindowGraphicsApiTraits
     GetWindowGraphicsApiTraits(WindowGraphicsApi graphicsApi) {
         switch (graphicsApi) {
@@ -152,13 +152,13 @@ namespace Monolith {
         }
 
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-        const bool visible = ReadEnvBool("MONOLITH_GLFW_VISIBLE", true);
+        const bool visible = ReadEnvBool("HORO_GLFW_VISIBLE", true);
         glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
         LogInfo("GLFW window hint: visible={}", visible ? 1 : 0);
         if (traits.requestsMsaaSamples) {
-            // Default 4x MSAA; set MONOLITH_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to
+            // Default 4x MSAA; set HORO_GLFW_SAMPLES=0 in headless/CI (llvmpipe) to
             // avoid driver crashes.
-            const int samples = ReadEnvNonNegativeInt("MONOLITH_GLFW_SAMPLES", 4);
+            const int samples = ReadEnvNonNegativeInt("HORO_GLFW_SAMPLES", 4);
             glfwWindowHint(GLFW_SAMPLES, samples);
             LogInfo("GLFW window hint: samples={}", samples);
         }
@@ -242,7 +242,7 @@ namespace Monolith {
     }
 
     WindowGraphicsApiTraits Window::GetGraphicsApiTraits() const {
-        return Monolith::GetWindowGraphicsApiTraits(m_graphicsApi);
+        return Horo::GetWindowGraphicsApiTraits(m_graphicsApi);
     }
 
     bool Window::OwnsPresentation() const {
@@ -294,4 +294,4 @@ namespace Monolith {
         if (self->m_fileDropCb)
             self->m_fileDropCb(count, paths);
     }
-} // namespace Monolith
+} // namespace Horo

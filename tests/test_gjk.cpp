@@ -7,7 +7,7 @@
 #include "physics/SphereCollider.h"
 #include "physics/narrowphase/GJK.h"
 
-using namespace Monolith;
+using namespace Horo;
 using Catch::Approx;
 
 // ============================================================

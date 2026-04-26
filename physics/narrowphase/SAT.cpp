@@ -8,7 +8,7 @@
 #include "physics/BoxCollider.h"
 #include "physics/RigidBody.h"
 
-namespace Monolith::SAT {
+namespace Horo::SAT {
     // Project extent of OBB onto axis
     static float ProjectOBB(const Vec3 &halfExtents, const Mat3 &rot,
                             const Vec3 &axis) {
@@ -157,4 +157,4 @@ namespace Monolith::SAT {
 
         return result;
     }
-} // namespace Monolith::SAT
+} // namespace Horo::SAT

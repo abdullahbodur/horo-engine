@@ -10,7 +10,7 @@
 #include "math/MathUtils.h"
 #include "renderer/Renderer.h"
 
-namespace Monolith {
+namespace Horo {
     std::vector<DebugDraw::LineVertex> DebugDraw::s_lines;
     std::unique_ptr<Shader> DebugDraw::s_shader;
     unsigned int DebugDraw::s_vao = 0;
@@ -168,4 +168,4 @@ void main() { FragColor = v_color; }
         glBindVertexArray(0);
         s_lines.clear();
     }
-} // namespace Monolith
+} // namespace Horo

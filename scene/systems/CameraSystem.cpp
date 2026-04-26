@@ -4,7 +4,7 @@
 #include "scene/components/CameraComponent.h"
 #include "scene/components/TransformComponent.h"
 
-namespace Monolith {
+namespace Horo {
     void CameraSystem::OnUpdate(Registry &registry, float dt) {
         (void) dt;
 
@@ -20,4 +20,4 @@ namespace Monolith {
             }
         }
     }
-} // namespace Monolith
+} // namespace Horo

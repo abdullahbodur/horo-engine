@@ -4,7 +4,7 @@
 
 #include "renderer/RenderBackend.h"
 
-namespace Monolith {
+namespace Horo {
     enum class RenderNativeHandleType {
         None,
         OpenGLTexture2D,
@@ -61,4 +61,4 @@ namespace Monolith {
             };
         }
     };
-} // namespace Monolith
+} // namespace Horo

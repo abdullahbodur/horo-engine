@@ -2,7 +2,7 @@
 #include <utility>
 #include <vector>
 
-namespace Monolith {
+namespace Horo {
     class RigidBody;
 
     namespace BruteForce {
@@ -11,4 +11,4 @@ namespace Monolith {
         std::vector<std::pair<int, int> >
         FindOverlappingPairs(const std::vector<RigidBody *> &bodies);
     } // namespace BruteForce
-} // namespace Monolith
+} // namespace Horo

@@ -5,7 +5,7 @@
 
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     struct FieldDef {
         enum class Widget { String, Float, Bool, Enum, Color3 };
 
@@ -72,4 +72,4 @@ namespace Monolith::Editor {
         std::unordered_map<std::string, ComponentSchema, StringHash, std::equal_to<> >
         m_componentSchemas;
     };
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

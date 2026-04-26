@@ -7,7 +7,7 @@
 #include "renderer/Light.h"
 #include "renderer/RenderTypes.h"
 
-namespace Monolith {
+namespace Horo {
     // Compatibility helper for assembling frame-level output configuration.
     // Graphics API state is owned by the active render backend, not by this type.
     class RenderContext {
@@ -26,4 +26,4 @@ namespace Monolith {
                         const Vec4 &clearColor = {0.1f, 0.1f, 0.15f, 1.0f},
                         bool clearColorBuffer = true, bool clearDepthBuffer = true);
     };
-} // namespace Monolith
+} // namespace Horo

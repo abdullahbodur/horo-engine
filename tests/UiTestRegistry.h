@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 
 #include <functional>
 #include <string>
@@ -9,7 +9,7 @@
 
 #include "launcher/UiTestHarness.h"
 
-namespace Monolith {
+namespace Horo {
 using UiScenarioRegisterFn =
     std::function<ImGuiTest *(ImGuiTestEngine *, UiAutomationRunState *)>;
 
@@ -20,6 +20,6 @@ void InitializeUiScenarioRegistry();
 bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
                                 UiAutomationRunState *state,
                                 const std::string &filter, int *outQueuedCount);
-} // namespace Monolith
+} // namespace Horo
 
 #endif

@@ -9,7 +9,7 @@
 #include "renderer/IRenderBackend.h"
 #include "renderer/RenderTargetHandle.h"
 
-namespace Monolith {
+namespace Horo {
     class VulkanRenderBackend : public IRenderBackend {
     public:
         using OverlayRenderCallback =
@@ -223,4 +223,4 @@ namespace Monolith {
         bool m_frameActive = false;
         bool m_passActive = false;
     };
-} // namespace Monolith
+} // namespace Horo

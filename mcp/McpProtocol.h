@@ -11,7 +11,7 @@
 
 #include "mcp/McpSnapshot.h"
 
-namespace Monolith {
+namespace Horo {
     namespace Mcp {
         struct McpHttpRequest {
             std::string method;
@@ -89,4 +89,4 @@ namespace Monolith {
             mutable std::unordered_map<std::string, PreviewRecord> m_previewRecords;
         };
     } // namespace Mcp
-} // namespace Monolith
+} // namespace Horo

@@ -14,7 +14,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
     namespace {
         bool HasCurrentGlContext() { return glfwGetCurrentContext() != nullptr; }
     } // namespace
@@ -416,4 +416,4 @@ namespace Monolith {
         m.Upload(verts, inds);
         return m;
     }
-} // namespace Monolith
+} // namespace Horo

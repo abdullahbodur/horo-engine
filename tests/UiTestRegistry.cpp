@@ -1,6 +1,6 @@
 #include "tests/UiTestRegistry.h"
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 
 #include <algorithm>
 #include <cctype>
@@ -12,7 +12,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
 void RegisterLauncherUiScenarioSet();
 void RegisterEditorUiScenarioSet();
 
@@ -129,6 +129,6 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
     *outQueuedCount = queued;
   return queued > 0;
 }
-} // namespace Monolith
+} // namespace Horo
 
 #endif

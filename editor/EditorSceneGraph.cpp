@@ -16,7 +16,7 @@
 #include "math/Quaternion.h"
 #include "math/Vec3.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool IsObjectReferencePropKey(std::string_view key) {
         return key == "parentId" || key == "followTargetId";
     }
@@ -188,4 +188,4 @@ namespace Monolith::Editor {
         }
         return candidate;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

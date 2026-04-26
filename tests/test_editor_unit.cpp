@@ -42,8 +42,8 @@
 #include "scene/SceneRuntimeCoordinator.h"
 #include "tests/TestTempPaths.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ TEST_CASE("AssetImporterRegistry: ObjImporter rejects non-obj source", "[editor]
   req.assetId = "x";
   req.assetGuid = "guid_x";
   req.sourcePath =
-      (Monolith::Tests::SecureTempBase() / "notanobj.txt").string();
+      (Horo::Tests::SecureTempBase() / "notanobj.txt").string();
   const AssetImportResult result = imp->Import(req);
   CHECK_FALSE(result.ok);
   CHECK_FALSE(result.error.empty());
@@ -226,7 +226,7 @@ TEST_CASE("AssetImporterRegistry: ObjImporter rejects non-obj source", "[editor]
 
 TEST_CASE("AssetImporterRegistry: ObjImporter rejects missing source file", "[editor][importer-registry]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_imp_obj_missing";
+      Horo::Tests::SecureTempBase() / "horo_imp_obj_missing";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -254,7 +254,7 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects unsupported type", "[edito
   req.assetId = "t";
   req.assetGuid = "guid_t";
   req.sourcePath =
-      (Monolith::Tests::SecureTempBase() / "notanimage.txt").string();
+      (Horo::Tests::SecureTempBase() / "notanimage.txt").string();
   const AssetImportResult result = imp->Import(req);
   CHECK_FALSE(result.ok);
   CHECK_FALSE(result.diagnostics.empty());
@@ -262,7 +262,7 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects unsupported type", "[edito
 
 TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file", "[editor][importer-registry]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_imp_tex_missing";
+      Horo::Tests::SecureTempBase() / "horo_imp_tex_missing";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -289,7 +289,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset null asset returns false", 
   AssetImportService service;
   std::string err;
   const std::string source =
-      (Monolith::Tests::SecureTempBase() / "x.png").string();
+      (Horo::Tests::SecureTempBase() / "x.png").string();
   const bool ok = service.ImportTextureForAsset(source, "a", nullptr, &err);
   CHECK_FALSE(ok);
   CHECK_FALSE(err.empty());
@@ -297,7 +297,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset null asset returns false", 
 
 TEST_CASE("AssetImportService: ImportTextureForAsset succeeds with real PNG", "[editor][asset-import]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_tex_import";
+      Horo::Tests::SecureTempBase() / "horo_tex_import";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -334,7 +334,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset succeeds with real PNG", "[
 
 TEST_CASE("AssetImportService: ImportTextureForAsset fails for unsupported type", "[editor][asset-import]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_tex_import_bad";
+      Horo::Tests::SecureTempBase() / "horo_tex_import_bad";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -347,7 +347,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset fails for unsupported type"
   AssetImportService service;
   std::string err;
   const std::string source =
-      (Monolith::Tests::SecureTempBase() / "document.pdf").string();
+      (Horo::Tests::SecureTempBase() / "document.pdf").string();
   const bool ok =
       service.ImportTextureForAsset(source, "bad_tex", &asset, &err);
   CHECK_FALSE(ok);
@@ -367,7 +367,7 @@ TEST_CASE("AssetImportService: SaveMetadataForAsset null-asset returns false", "
 
 TEST_CASE("AssetImportService: ReimportAssetWithDependents unknown guid is noop", "[editor][asset-import]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_reimport_noop";
+      Horo::Tests::SecureTempBase() / "horo_reimport_noop";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -402,7 +402,7 @@ TEST_CASE("IsSupportedEditorImGuiBackend: Auto is supported", "[editor][imgui-ba
 TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional", "[editor][imgui-backend]") {
   // Just call it to ensure the switch branch and return are exercised.
   const bool result = IsSupportedEditorImGuiBackend(RenderBackendId::Vulkan);
-#if defined(MONOLITH_HAS_VULKAN)
+#if defined(HORO_HAS_VULKAN)
   CHECK(result == true);
 #else
   CHECK(result == false);
@@ -415,7 +415,7 @@ TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional", "
 
 TEST_CASE("EditorDebugTrace: EditorTraceEnabled reads env var", "[editor][debug-trace]") {
   // In release builds it always returns false
-  // In debug builds it reads MONOLITH_EDITOR_TRACE
+  // In debug builds it reads HORO_EDITOR_TRACE
   const bool enabled = EditorTraceEnabled();
   (void)enabled; // exercising the code path is sufficient
   CHECK(true);   // no crash
@@ -540,7 +540,7 @@ TEST_CASE("SceneRuntimeCoordinatorBridge: ReloadSceneDocument succeeds on valid 
 
 TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath uses .horo when project root is set", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_resolve";
+      Horo::Tests::SecureTempBase() / "horo_ws_resolve";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -553,7 +553,7 @@ TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath uses .horo when p
 
 TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath falls back to home dir when no project root", "[editor][workspace-settings]") {
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_home";
   std::error_code ec;
   std::filesystem::remove_all(fakeHome, ec);
   std::filesystem::create_directories(fakeHome, ec);
@@ -567,14 +567,14 @@ TEST_CASE("EditorWorkspaceSettings: ResolveEditorWorkspacePath falls back to hom
 
 TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument returns defaults when file is absent", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_absent";
+      Horo::Tests::SecureTempBase() / "horo_ws_absent";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_absent_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_absent_home";
   std::filesystem::remove_all(fakeHome, ec);
   std::filesystem::create_directories(fakeHome, ec);
   HomeDirGuard homeGuard(fakeHome);
@@ -589,14 +589,14 @@ TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument returns defaults
 
 TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument parses valid JSON", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_valid";
+      Horo::Tests::SecureTempBase() / "horo_ws_valid";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_valid_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_valid_home";
   std::filesystem::create_directories(fakeHome, ec);
   HomeDirGuard homeGuard(fakeHome);
 
@@ -617,14 +617,14 @@ TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument parses valid JSO
 
 TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles invalid JSON", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_badjson";
+      Horo::Tests::SecureTempBase() / "horo_ws_badjson";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_badjson_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_badjson_home";
   std::filesystem::create_directories(fakeHome, ec);
   HomeDirGuard homeGuard(fakeHome);
 
@@ -640,14 +640,14 @@ TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles invalid 
 
 TEST_CASE("EditorWorkspaceSettings: LoadEditorWorkspaceDocument handles non-object root", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_arrayroot";
+      Horo::Tests::SecureTempBase() / "horo_ws_arrayroot";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_arrayroot_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_arrayroot_home";
   std::filesystem::create_directories(fakeHome, ec);
   HomeDirGuard homeGuard(fakeHome);
 
@@ -669,14 +669,14 @@ TEST_CASE("EditorWorkspaceSettings: SaveEditorWorkspaceDocument null returns fal
 
 TEST_CASE("EditorWorkspaceSettings: save then load round-trips state", "[editor][workspace-settings]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_ws_roundtrip";
+      Horo::Tests::SecureTempBase() / "horo_ws_roundtrip";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
   WriteFile(root / "CMakePresets.json", "{}");
   ProjectPathGuard guard(root);
   const std::filesystem::path fakeHome =
-      Monolith::Tests::SecureTempBase() / "horo_ws_rt_home";
+      Horo::Tests::SecureTempBase() / "horo_ws_rt_home";
   std::filesystem::create_directories(fakeHome, ec);
   HomeDirGuard homeGuard(fakeHome);
 
@@ -878,7 +878,7 @@ TEST_CASE("EditorHistory: TrimHistory caps undo stack at 128 entries", "[editor]
 TEST_CASE("EditorHistory: RefreshHistorySavedBaseline refreshes undo and redo snapshots", "[editor][history]") {
   namespace fs = std::filesystem;
   const fs::path sceneDir =
-      Monolith::Tests::SecureTempBase() / "horo_hist_unit_baseline";
+      Horo::Tests::SecureTempBase() / "horo_hist_unit_baseline";
   std::error_code ec;
   fs::remove_all(sceneDir, ec);
   fs::create_directories(sceneDir, ec);
@@ -1304,7 +1304,7 @@ TEST_CASE("EditorSceneGraph: SanitizePrefabStem cleans special characters", "[ed
 
 TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path", "[editor][scene-graph]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_prefab_path_test";
+      Horo::Tests::SecureTempBase() / "horo_prefab_path_test";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1324,7 +1324,7 @@ TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath returns .horo path", "[editor
 
 TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath uses sceneId when object id is empty", "[editor][scene-graph]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_prefab_path_test2";
+      Horo::Tests::SecureTempBase() / "horo_prefab_path_test2";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1458,7 +1458,7 @@ TEST_CASE("EditorSceneGraph: IsReservedObjectId ignores prop value matching igno
 
 TEST_CASE("EditorSceneGraph: BuildUniquePrefabPath appends suffix when candidate exists", "[editor][scene-graph]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_prefab_suffix_test";
+      Horo::Tests::SecureTempBase() / "horo_prefab_suffix_test";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1765,7 +1765,7 @@ TEST_CASE("SceneProjectBridge: BuildSceneProjectModel preserves light and compon
 
 TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing", "[editor][asset-metadata][coverage]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_metadata_bad_sidecar";
+      Horo::Tests::SecureTempBase() / "horo_asset_metadata_bad_sidecar";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(
@@ -1783,7 +1783,7 @@ TEST_CASE("AssetMetadata: malformed sidecar reports error without throwing", "[e
 
 TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id", "[editor][asset-metadata][coverage]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_asset_metadata_roundtrip";
+      Horo::Tests::SecureTempBase() / "horo_asset_metadata_roundtrip";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(
@@ -1816,7 +1816,7 @@ TEST_CASE("AssetMetadata: round-trip preserves dependencies and importer id", "[
 
 TEST_CASE("AssetImportService: ImportTextureForAsset with missing source returns false", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_import_tex_missing";
+      Horo::Tests::SecureTempBase() / "horo_import_tex_missing";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1834,7 +1834,7 @@ TEST_CASE("AssetImportService: ImportTextureForAsset with missing source returns
 
 TEST_CASE("AssetImportService: ImportAssetFromSource with missing file returns error", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_import_asset_missing";
+      Horo::Tests::SecureTempBase() / "horo_import_asset_missing";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1851,7 +1851,7 @@ TEST_CASE("AssetImportService: ImportAssetFromSource with missing file returns e
 
 TEST_CASE("AssetImportService: ReimportAssetWithDependents with null doc is no-op", "[editor][asset-import][extra]") {
   const std::filesystem::path root =
-      Monolith::Tests::SecureTempBase() / "horo_reimport_null";
+      Horo::Tests::SecureTempBase() / "horo_reimport_null";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);

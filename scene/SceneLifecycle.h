@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Monolith {
+namespace Horo {
     // Strict scene lifecycle state machine.
     // Enforces valid transitions to catch loading/unloading bugs early.
     // States:
@@ -75,4 +75,4 @@ namespace Monolith {
 
         void SetError(const char *msg) { m_errorMsg = msg; }
     };
-} // namespace Monolith
+} // namespace Horo

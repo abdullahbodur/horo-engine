@@ -3,8 +3,8 @@
 #include "editor/SceneDocument.h"
 #include "scene/RuntimeSceneDefinition.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     // Convenience bridge for the canonical authoring path:
     // SceneDocument -> SceneProjectModel -> RuntimeSceneDefinition.
     RuntimeSceneBuildResult BuildRuntimeSceneDefinition(const SceneDocument &doc);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

@@ -12,7 +12,7 @@
 
 #include "core/Logger.h"
 
-namespace Monolith {
+namespace Horo {
     struct StringHash {
         using is_transparent = void;
 
@@ -180,4 +180,4 @@ namespace Monolith {
             return;
         glUniformMatrix4fv(loc, count, GL_FALSE, data);
     }
-} // namespace Monolith
+} // namespace Horo

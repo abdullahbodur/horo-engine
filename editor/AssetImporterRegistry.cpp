@@ -11,7 +11,7 @@
 #include "editor/EditorAssetImport.h"
 #include "renderer/ObjLoader.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     namespace {
         std::string ToLowerAscii(std::string text) {
             std::ranges::transform(text, text.begin(), [](unsigned char c) {
@@ -369,4 +369,4 @@ namespace Monolith::Editor {
             ids.emplace_back(importer->ImporterId());
         return ids;
     }
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

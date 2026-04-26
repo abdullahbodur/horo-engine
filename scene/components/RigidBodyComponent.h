@@ -1,9 +1,9 @@
 #pragma once
 #include "physics/RigidBody.h"
 
-namespace Monolith {
+namespace Horo {
     // Stores a pointer to the RigidBody owned by PhysicsWorld
     struct RigidBodyComponent {
         RigidBody *body = nullptr;
     };
-} // namespace Monolith
+} // namespace Horo

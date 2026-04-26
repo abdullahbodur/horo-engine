@@ -3,16 +3,16 @@
 #include <filesystem>
 #include <string>
 
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+#ifdef HORO_STANDALONE_UI_AUTOMATION
 #include <imgui_test_engine/imgui_te_engine.h>
 #endif
 
-namespace Monolith::Launcher {
+namespace Horo::Launcher {
     class LauncherEditorShell;
 }
 
-namespace Monolith {
-#ifdef MONOLITH_STANDALONE_UI_AUTOMATION
+namespace Horo {
+#ifdef HORO_STANDALONE_UI_AUTOMATION
     struct UiAutomationRunState {
         std::filesystem::path tempRoot;
         std::filesystem::path projectRoot;
@@ -38,4 +38,4 @@ namespace Monolith {
         return false;
     }
 #endif
-} // namespace Monolith
+} // namespace Horo

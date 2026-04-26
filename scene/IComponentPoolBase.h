@@ -1,7 +1,7 @@
 #pragma once
 #include "scene/Entity.h"
 
-namespace Monolith {
+namespace Horo {
     // Non-template base for ComponentPool<T>, used by Registry::Destroy to remove
     // a component from all pools without knowing the type.
     class IComponentPoolBase {
@@ -12,4 +12,4 @@ namespace Monolith {
 
         virtual void ClearAll() = 0;
     };
-} // namespace Monolith
+} // namespace Horo

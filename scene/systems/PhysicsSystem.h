@@ -1,7 +1,7 @@
 #pragma once
 #include "scene/System.h"
 
-namespace Monolith {
+namespace Horo {
     class PhysicsWorld;
 
     class PhysicsSystem : public System {
@@ -14,4 +14,4 @@ namespace Monolith {
     private:
         PhysicsWorld &m_world;
     };
-} // namespace Monolith
+} // namespace Horo

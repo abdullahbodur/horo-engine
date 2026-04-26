@@ -8,7 +8,7 @@
 #include "math/Vec4.h"
 #include "renderer/Light.h"
 
-namespace Monolith {
+namespace Horo {
     class Material;
     class Mesh;
     class Shader;
@@ -60,4 +60,4 @@ namespace Monolith {
         Mat4 modelMatrix = Mat4::Identity();
         Vec4 color = {0.2f, 0.8f, 0.2f, 1.0f};
     };
-} // namespace Monolith
+} // namespace Horo

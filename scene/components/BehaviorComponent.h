@@ -3,7 +3,7 @@
 
 #include "scene/Entity.h"
 
-namespace Monolith {
+namespace Horo {
     class Registry;
 
     // Abstract per-entity behavior.
@@ -18,4 +18,4 @@ namespace Monolith {
     struct BehaviorComponent {
         std::unique_ptr<Behavior> behavior;
     };
-} // namespace Monolith
+} // namespace Horo

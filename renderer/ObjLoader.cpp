@@ -10,7 +10,7 @@
 
 #include "math/Vec2.h"
 
-namespace Monolith::ObjLoader {
+namespace Horo::ObjLoader {
     // Resolve a 1-based OBJ index (negative = relative to end) to a 0-based index.
     // Returns -1 when the index is out of range.
     static int ResolveIndex(int rawIdx, int size) {
@@ -233,4 +233,4 @@ namespace Monolith::ObjLoader {
         // 4. Resolve texture path relative to MTL directory (same as OBJ dir)
         return (objDir / texName).generic_string();
     }
-} // namespace Monolith::ObjLoader
+} // namespace Horo::ObjLoader

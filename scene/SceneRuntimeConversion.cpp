@@ -7,7 +7,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace Monolith {
+namespace Horo {
     namespace {
         Vec3 ParseVec3Csv(std::string_view value, const Vec3 &fallback) {
             if (value.empty())
@@ -183,4 +183,4 @@ namespace Monolith {
         result.definition.rooms.push_back(std::move(room));
         return result;
     }
-} // namespace Monolith
+} // namespace Horo

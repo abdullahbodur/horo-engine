@@ -9,7 +9,7 @@
 #include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
 
-namespace Monolith {
+namespace Horo {
     class Mesh;
     class Shader;
     class Material;
@@ -85,4 +85,4 @@ namespace Monolith {
         static bool s_frameActive;
         static bool s_passActive;
     };
-} // namespace Monolith
+} // namespace Horo

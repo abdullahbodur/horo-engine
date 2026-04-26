@@ -5,7 +5,7 @@
 
 #include "math/MathUtils.h"
 
-namespace Monolith {
+namespace Horo {
     Mat3::Mat3() {
         for (auto &col: m)
             col.fill(0.0f);
@@ -98,4 +98,4 @@ namespace Monolith {
         ss << "]";
         return ss.str();
     }
-} // namespace Monolith
+} // namespace Horo

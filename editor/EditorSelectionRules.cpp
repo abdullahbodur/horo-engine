@@ -7,7 +7,7 @@
 #include "editor/EditorSceneGraph.h"
 #include "editor/SceneDocument.h"
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
 
 std::string ValidateRenameCandidate(const SceneDocument &doc, int targetIndex,
                                     const std::string &draftId) {
@@ -46,4 +46,4 @@ std::string GenerateUniqueId(const SceneDocument &doc,
   return std::format("{}_new", prefix);
 }
 
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

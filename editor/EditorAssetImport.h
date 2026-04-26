@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace Monolith::Editor {
+namespace Horo::Editor {
     bool IsObjFilePath(const std::string &path);
 
     std::string AssetIdFromImportedPath(const std::string &path);
@@ -14,4 +14,4 @@ namespace Monolith::Editor {
     // cannot be parsed or if the mesh has zero height.
     std::string SuggestRenderScale(const std::string &meshTag,
                                    float targetHeight = 2.0f);
-} // namespace Monolith::Editor
+} // namespace Horo::Editor

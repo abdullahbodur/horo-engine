@@ -37,5 +37,5 @@ ctest --preset debug --output-on-failure
 
 1. Create `tests/test_<feature>.cpp`
 2. Register executable in `tests/CMakeLists.txt`
-3. Link against `MonolithEngine` and `Catch2::Catch2WithMain`
+3. Link against `HoroEngine` and `Catch2::Catch2WithMain`
 4. Add `add_test(...)` entry

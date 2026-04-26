@@ -9,8 +9,8 @@
 #include "scene/RuntimeSceneDefinition.h"
 #include "scene/SceneRuntimeCoordinator.h"
 
-using namespace Monolith;
-using namespace Monolith::Editor;
+using namespace Horo;
+using namespace Horo::Editor;
 using Catch::Approx;
 
 namespace {

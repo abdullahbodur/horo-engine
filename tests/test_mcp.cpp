@@ -37,8 +37,8 @@
 #include "tests/TestTempPaths.h"
 
 using json = nlohmann::json;
-using namespace Monolith::Mcp;
-using namespace Monolith::Editor;
+using namespace Horo::Mcp;
+using namespace Horo::Editor;
 
 namespace {
 #ifdef _WIN32
@@ -96,7 +96,7 @@ struct EnvGuard {
   std::string oldHome;
 
   explicit EnvGuard(std::string_view name) {
-    tempHome = Monolith::Tests::SecureTempBase() / name;
+    tempHome = Horo::Tests::SecureTempBase() / name;
     std::filesystem::remove_all(tempHome);
     std::filesystem::create_directories(tempHome);
 #ifdef _WIN32
@@ -138,13 +138,13 @@ struct ProjectRootGuard {
 
   ProjectRootGuard &operator=(const ProjectRootGuard &) = delete;
 
-  std::filesystem::path previousRoot = Monolith::ProjectPath::Root();
+  std::filesystem::path previousRoot = Horo::ProjectPath::Root();
 
   explicit ProjectRootGuard(const std::filesystem::path &nextRoot) {
-    Monolith::ProjectPath::Init(nextRoot);
+    Horo::ProjectPath::Init(nextRoot);
   }
 
-  ~ProjectRootGuard() { Monolith::ProjectPath::Init(previousRoot); }
+  ~ProjectRootGuard() { Horo::ProjectPath::Init(previousRoot); }
 };
 
 struct HttpResponse {
@@ -352,8 +352,8 @@ McpEditorSnapshot MakeSnapshot() {
   McpObjectSnapshot root;
   root.id = "obj_root";
   root.type = "Prop";
-  root.position = Monolith::Vec3(1.0f, 2.0f, 3.0f);
-  root.scale = Monolith::Vec3(2.0f, 2.0f, 2.0f);
+  root.position = Horo::Vec3(1.0f, 2.0f, 3.0f);
+  root.scale = Horo::Vec3(2.0f, 2.0f, 2.0f);
   root.yaw = 45.0f;
   root.assetId = "crate";
   root.props["mesh"] = "crate.obj";
@@ -373,7 +373,7 @@ McpEditorSnapshot MakeSnapshot() {
   McpObjectSnapshot camera;
   camera.id = "obj_camera";
   camera.type = "Camera";
-  camera.position = Monolith::Vec3(0.0f, 5.0f, -10.0f);
+  camera.position = Horo::Vec3(0.0f, 5.0f, -10.0f);
   camera.components.push_back({"Camera", {{"fov", "60"}}});
   snapshot.objects.push_back(camera);
 
@@ -761,8 +761,8 @@ TEST_CASE("McpSnapshot builds world-space edges for rotated objects", "[mcp][sna
   McpObjectSnapshot object;
   object.id = "box";
   object.type = "Prop";
-  object.position = Monolith::Vec3(10.0f, 2.0f, 3.0f);
-  object.scale = Monolith::Vec3(4.0f, 2.0f, 6.0f);
+  object.position = Horo::Vec3(10.0f, 2.0f, 3.0f);
+  object.scale = Horo::Vec3(4.0f, 2.0f, 6.0f);
   object.yaw = 90.0f;
 
   const json edges = BuildObjectEdgesJson(object);
@@ -992,7 +992,7 @@ TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read too
 
 TEST_CASE("Editor MCP commands preserve reserved ids and reload from disk", "[mcp][editor]") {
   EnvGuard env("horo_editor_mcp_consistency");
-  const std::filesystem::path scenePath = Monolith::Tests::SecureTempBase() /
+  const std::filesystem::path scenePath = Horo::Tests::SecureTempBase() /
                                           "horo_editor_mcp_consistency" /
                                           "world.json";
   std::filesystem::create_directories(scenePath.parent_path());
@@ -2503,7 +2503,7 @@ TEST_CASE("EditorLayer MCP: save_scene saves document and returns filePath", "[m
   namespace fs = std::filesystem;
 
   EnvGuard env("horo_mcp_save_scene_handler");
-  const fs::path scenePath = Monolith::Tests::SecureTempBase() /
+  const fs::path scenePath = Horo::Tests::SecureTempBase() /
                              "horo_mcp_save_scene_handler" / "scene.json";
   fs::create_directories(scenePath.parent_path());
 
@@ -2741,7 +2741,7 @@ TEST_CASE("EditorLayer MCP: ExecuteMcpCommand returns error for unknown tool", "
 TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure", "[mcp][server]") {
   // Covers McpServer.cpp lines 278-286: inet_pton returns != 1 for a
   // syntactically invalid IPv4 address, setting result.error and not binding.
-  using namespace Monolith::Mcp;
+  using namespace Horo::Mcp;
   McpHttpServer server;
   const McpServerStartResult result = server.Start(
       "999.999.999.999", 9999,
@@ -2756,7 +2756,7 @@ TEST_CASE("McpHttpServer: Start with invalid host triggers inet_pton failure", "
 
 TEST_CASE("McpHttpServer: Start with non-numeric host triggers inet_pton failure", "[mcp][server]") {
   // Second variant — a hostname (not an IP) also fails inet_pton.
-  using namespace Monolith::Mcp;
+  using namespace Horo::Mcp;
   McpHttpServer server;
   const McpServerStartResult result = server.Start(
       "not-an-ip-address", 9999,
