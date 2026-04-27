@@ -2,7 +2,8 @@
 
 Horo Engine is an open-source C++20 game engine focused on **clarity, embeddability, and fast iteration**.
 
-It is designed to be added directly to your repo (typically as a submodule) so your game code, engine code, tooling, and CI all live in one visible workspace.
+It is designed to be added directly to your repo (typically as a submodule) so your game code, engine code, tooling, and
+CI all live in one visible workspace.
 
 ## Use Cases
 
@@ -106,9 +107,11 @@ ctest --preset debug --output-on-failure
 
 - Architecture: [docs/architecture/README.md](./docs/architecture/README.md)
 - Module docs: `core/`, `editor/`, `scene/`, `renderer/`, `launcher/`, `tests/`
-- Renderer parity tracking: [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md)
+- Renderer parity
+  tracking: [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md)
 
 Architecture policy reminders:
+
 - new headers are internal by default
 - every new public type should clearly identify its owning module
 

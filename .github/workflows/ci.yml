@@ -77,7 +77,7 @@ jobs:
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
           bindir="${{ github.workspace }}/build/debug/bin/tests"
           builddir="${{ github.workspace }}/build/debug"
-          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+          python3 "${{ github.workspace }}/scripts/ci.py" junit "$outdir" "$bindir" "$builddir"
 
       - name: Publish test results
         if: always()
@@ -199,7 +199,7 @@ jobs:
           $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
           $binDir = "${{ github.workspace }}\build\debug-msvc\bin\tests"
           $buildDir = "${{ github.workspace }}\build\debug-msvc"
-          python3 "${{ github.workspace }}\scripts\patch_junit_tags.py" $outDir $binDir $buildDir
+          python3 "${{ github.workspace }}\scripts\ci.py" junit $outDir $binDir $buildDir
 
       - name: Publish test results
         if: always()
@@ -381,7 +381,7 @@ jobs:
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
           bindir="${{ github.workspace }}/build/debug/bin/tests"
           builddir="${{ github.workspace }}/build/debug"
-          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+          python3 "${{ github.workspace }}/scripts/ci.py" junit "$outdir" "$bindir" "$builddir"
 
       - name: Publish test results
         if: always()
@@ -481,40 +481,17 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
 
-      - name: Run UI automation (coverage build)
-        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        run: |
-          set -euo pipefail
-          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
-          for suite in "${suites[@]}"; do
-            echo "::group::Coverage UI test suite ${suite}"
-            HORO_UI_TEST_SUITE="${suite}" \
-            HORO_UI_TEST_CAPTURE=0 \
-            HORO_UI_TEST_VIDEO=0 \
-            HORO_UI_TEST_RECORDING=0 \
-            HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/coverage-${suite}" \
-              xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-                build/coverage/bin/HoroEditorUiTest --run-ui-tests
-            echo "::endgroup::"
-          done
-        env:
-          HORO_LOG_LEVEL: "info"
-          HORO_GLFW_SAMPLES: "0"
-          LIBGL_ALWAYS_SOFTWARE: "1"
-          GALLIUM_DRIVER: "llvmpipe"
-
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
+          set -f
           python3 -m gcovr build/coverage \
             --root "${{ github.workspace }}" \
             --sonarqube build/coverage/sonar-coverage.xml \
             --sonarqube-metric line \
             --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
-            --exclude '.*/vendor/.*' \
-            --exclude '.*/_deps/.*' \
-            --exclude '.*/tests/.*'
+            $(python3 "${{ github.workspace }}/scripts/ci.py" coverage-exclusions gcovr "${{ github.workspace }}")
 
       - name: SonarCloud scan
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
