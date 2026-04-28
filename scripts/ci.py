@@ -92,9 +92,27 @@ def load_ctest_entries(builddir: str) -> dict[str, list[dict]]:
             continue
         stem = Path(cmd[0]).stem
         entry: dict = {"name": test.get("name", stem), "args": cmd[1:], "env": {}}
+
+        for prop in test.get("properties", []):
+            if prop.get("name") != "ENVIRONMENT":
+                continue
+            raw_value = prop.get("value", [])
+            if isinstance(raw_value, str):
+                values = [item.replace(r"\;", ";") for item in re.split(r"(?<!\\);", raw_value) if item]
+            elif isinstance(raw_value, list):
+                values = [item for item in raw_value if isinstance(item, str)]
+            else:
+                values = []
+
+            for ev in values:
+                k, _, v = ev.partition("=")
+                if k:
+                    entry["env"][k] = v
+
         for ev in test.get("environment", []):
             k, _, v = ev.partition("=")
-            entry["env"][k] = v
+            if k:
+                entry["env"][k] = v
         by_stem.setdefault(stem, []).append(entry)
     return by_stem
 

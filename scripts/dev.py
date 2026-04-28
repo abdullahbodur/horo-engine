@@ -118,19 +118,47 @@ def _run_windows_coverage(preset: str, cov_dir: Path) -> int:
     return 0
 
 def _run_lcov_coverage(preset: str, cov_dir: Path) -> int:
-    if _run(_ctest_cmd(preset), cwd=REPO_ROOT) != 0:
+    filtered_info = _collect_lcov_info(preset, cov_dir)
+    if filtered_info is None:
         return 1
-         
+
+    if _run(
+        [
+            "genhtml",
+            filtered_info,
+            "--output-directory",
+            cov_dir / "html",
+            "--branch-coverage",
+            "--title",
+            "HoroEngine Coverage",
+        ],
+        cwd=REPO_ROOT,
+    ) != 0:
+        return 1
+
+    print(f"Coverage report: {cov_dir / 'html' / 'index.html'}")
+    return 0
+
+
+def _collect_lcov_info(preset: str, cov_dir: Path) -> Path | None:
+    if _run(_ctest_cmd(preset), cwd=REPO_ROOT) != 0:
+        return None
+
     excludes = _coverage_exclusions("lcov")
     raw_info = cov_dir / "raw.info"
     filtered_info = cov_dir / "filtered.info"
-    
-    if _run(["lcov", "--capture", "--directory", _build_dir(preset), "--output-file", raw_info, "--rc", "lcov_branch_coverage=1"], cwd=REPO_ROOT) != 0: return 1
-    if _run(["lcov", "--remove", raw_info, *excludes, "--output-file", filtered_info, "--rc", "lcov_branch_coverage=1"], cwd=REPO_ROOT) != 0: return 1
-    if _run(["genhtml", filtered_info, "--output-directory", cov_dir / "html", "--branch-coverage", "--title", "HoroEngine Coverage"], cwd=REPO_ROOT) != 0: return 1
-    
-    print(f"Coverage report: {cov_dir / 'html' / 'index.html'}")
-    return 0
+
+    if _run(
+        ["lcov", "--capture", "--directory", _build_dir(preset), "--output-file", raw_info, "--rc", "lcov_branch_coverage=1"],
+        cwd=REPO_ROOT,
+    ) != 0:
+        return None
+    if _run(
+        ["lcov", "--remove", raw_info, *excludes, "--output-file", filtered_info, "--rc", "lcov_branch_coverage=1"],
+        cwd=REPO_ROOT,
+    ) != 0:
+        return None
+    return filtered_info
 
 # --- Command Handlers ---
 
@@ -185,12 +213,27 @@ def cmd_coverage(_: argparse.Namespace) -> int:
     return _run_lcov_coverage(preset, cov_dir)
 
 def cmd_coverage_source_summary(_: argparse.Namespace) -> int:
-    # (Left mostly intact for brevity, but could also be refactored into a helper similar to _run_lcov_coverage)
     if IS_WINDOWS:
         print("coverage-source-summary is not supported on Windows/MSVC yet", file=sys.stderr)
         return 1
-    # ... Rest of your original lcov summary logic ...
-    return 0 # Placeholder for brevity 
+
+    preset = _env("PRESET_COV", "coverage")
+    if _ensure_configured(preset) != 0:
+        return 1
+    if _run(_cmake_build(preset), cwd=REPO_ROOT) != 0:
+        return 1
+
+    cov_dir = REPO_ROOT / "build" / "coverage"
+    cov_dir.mkdir(parents=True, exist_ok=True)
+
+    filtered_info = _collect_lcov_info(preset, cov_dir)
+    if filtered_info is None:
+        return 1
+
+    return _run(
+        ["lcov", "--summary", filtered_info, "--rc", "lcov_branch_coverage=1"],
+        cwd=REPO_ROOT,
+    )
 
 def cmd_clean(_: argparse.Namespace) -> int:
     return _run(["cmake", "-E", "rm", "-rf", _build_dir(_preset_debug())], cwd=REPO_ROOT)

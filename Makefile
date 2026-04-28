@@ -8,4 +8,4 @@ all:
 	$(PYTHON) scripts/dev.py build
 
 $(TARGETS):
-	$(PYTHON) scripts/dev.py $@
+	$(PYTHON) scripts/dev.py $(if $(filter help,$@),,$@)
