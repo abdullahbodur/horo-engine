@@ -9,3 +9,4 @@ ui_test_output/
 .scannerwork/
 bw-output/
 compile_commands.json
+.opencode

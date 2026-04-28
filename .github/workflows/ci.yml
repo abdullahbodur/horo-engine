@@ -77,7 +77,7 @@ jobs:
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
           bindir="${{ github.workspace }}/build/debug/bin/tests"
           builddir="${{ github.workspace }}/build/debug"
-          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+          python3 "${{ github.workspace }}/scripts/ci.py" junit "$outdir" "$bindir" "$builddir"
 
       - name: Publish test results
         if: always()
@@ -199,7 +199,7 @@ jobs:
           $outDir = "${{ github.workspace }}\build\debug-msvc\test-results\scenarios"
           $binDir = "${{ github.workspace }}\build\debug-msvc\bin\tests"
           $buildDir = "${{ github.workspace }}\build\debug-msvc"
-          python3 "${{ github.workspace }}\scripts\patch_junit_tags.py" $outDir $binDir $buildDir
+          python3 "${{ github.workspace }}\scripts\ci.py" junit $outDir $binDir $buildDir
 
       - name: Publish test results
         if: always()
@@ -313,6 +313,7 @@ jobs:
     timeout-minutes: 45
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      BUILD_WRAPPER_OUT_DIR: bw-output
     steps:
       - uses: actions/checkout@v4
         with:
@@ -380,7 +381,7 @@ jobs:
           outdir="${{ github.workspace }}/build/debug/test-results/scenarios"
           bindir="${{ github.workspace }}/build/debug/bin/tests"
           builddir="${{ github.workspace }}/build/debug"
-          python3 "${{ github.workspace }}/scripts/patch_junit_tags.py" "$outdir" "$bindir" "$builddir"
+          python3 "${{ github.workspace }}/scripts/ci.py" junit "$outdir" "$bindir" "$builddir"
 
       - name: Publish test results
         if: always()
@@ -466,7 +467,7 @@ jobs:
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           build-wrapper-linux-x86-64 \
-            --out-dir bw-output \
+            --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
             cmake --build --preset coverage --parallel
 
       - name: Run tests (coverage build)
@@ -483,15 +484,14 @@ jobs:
       - name: Generate Sonar coverage report
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
+          set -f
           python3 -m gcovr build/coverage \
             --root "${{ github.workspace }}" \
             --sonarqube build/coverage/sonar-coverage.xml \
             --sonarqube-metric line \
             --merge-mode-functions=merge-use-line-min \
             --exclude-directories '.*/_deps($|/.*)' \
-            --exclude '.*/vendor/.*' \
-            --exclude '.*/_deps/.*' \
-            --exclude '.*/tests/.*'
+            $(python3 "${{ github.workspace }}/scripts/ci.py" coverage-exclusions gcovr "${{ github.workspace }}")
 
       - name: SonarCloud scan
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -503,6 +503,8 @@ jobs:
           args: >
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.coverageReportPaths=build/coverage/sonar-coverage.xml
+            -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
             -Dsonar.qualitygate.wait=true
 
   # ----------------------------------------------------------------

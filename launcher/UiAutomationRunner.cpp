@@ -1,12 +1,16 @@
 #include "launcher/UiAutomationRunner.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <unordered_set>
 
 // clang-format off
 #include <glad/glad.h>
@@ -134,6 +138,102 @@ std::string ReadEnvString(const char *name) {
 }
 
 void LogUiEnvVar(const char *name);
+
+const char *UiTestStatusName(const ImGuiTestStatus status) {
+  switch (status) {
+  case ImGuiTestStatus_Unknown:
+    return "Unknown";
+  case ImGuiTestStatus_Success:
+    return "Success";
+  case ImGuiTestStatus_Queued:
+    return "Queued";
+  case ImGuiTestStatus_Running:
+    return "Running";
+  case ImGuiTestStatus_Error:
+    return "Error";
+  case ImGuiTestStatus_Suspended:
+    return "Suspended";
+  case ImGuiTestStatus_COUNT:
+    break;
+  }
+  return "Invalid";
+}
+
+std::string UiTestFullName(const ImGuiTest &test) {
+  return std::format("{}/{}", test.Category ? test.Category : "<unknown>",
+                     test.Name ? test.Name : "<unknown>");
+}
+
+std::string BuildProgressBar(const int completed, const int total) {
+  constexpr int kWidth = 20;
+  if (total <= 0)
+    return std::string(kWidth, '-');
+  const int filled = std::clamp((completed * kWidth) / total, 0, kWidth);
+  return std::string(static_cast<size_t>(filled), '#') +
+         std::string(static_cast<size_t>(kWidth - filled), '-');
+}
+
+struct TransparentStringHash {
+  using is_transparent = void;
+
+  size_t operator()(std::string_view value) const noexcept {
+    return std::hash<std::string_view>{}(value);
+  }
+
+  size_t operator()(const std::string &value) const noexcept {
+    return (*this)(std::string_view(value));
+  }
+
+  size_t operator()(const char *value) const noexcept {
+    return (*this)(std::string_view(value ? value : ""));
+  }
+};
+
+std::string ExtractUiTestFailureLog(ImGuiTest &test) {
+  ImGuiTextBuffer buffer;
+  test.Output.Log.ExtractLinesForVerboseLevels(ImGuiTestVerboseLevel_Error,
+                                               ImGuiTestVerboseLevel_Error,
+                                               &buffer);
+  if (!buffer.empty())
+    return buffer.c_str();
+
+  test.Output.Log.ExtractLinesForVerboseLevels(ImGuiTestVerboseLevel_Warning,
+                                               ImGuiTestVerboseLevel_Warning,
+                                               &buffer);
+  return buffer.empty() ? std::string("<no failure log captured>")
+                        : std::string(buffer.c_str());
+}
+
+struct UiAutomationProgressSnapshot {
+  int completed = 0;
+  int succeeded = 0;
+  int failed = 0;
+  std::string currentTest;
+};
+
+UiAutomationProgressSnapshot CollectUiAutomationProgress(
+    ImGuiTestEngine *engine, const int totalQueued) {
+  UiAutomationProgressSnapshot snapshot{};
+  if (!engine)
+    return snapshot;
+
+  ImVector<ImGuiTest *> tests;
+  ImGuiTestEngine_GetTestList(engine, &tests);
+  for (const ImGuiTest *test : tests) {
+    if (!test)
+      continue;
+    const ImGuiTestStatus status = test->Output.Status;
+    if (status == ImGuiTestStatus_Running || status == ImGuiTestStatus_Suspended)
+      snapshot.currentTest = UiTestFullName(*test);
+    if (status == ImGuiTestStatus_Success)
+      ++snapshot.succeeded;
+    else if (status == ImGuiTestStatus_Error)
+      ++snapshot.failed;
+  }
+  snapshot.completed = snapshot.succeeded + snapshot.failed;
+  snapshot.completed = std::min(snapshot.completed, std::max(0, totalQueued));
+  return snapshot;
+}
 
 class UiAutomationInitException final : public std::runtime_error {
 public:
@@ -374,6 +474,8 @@ struct UiAutomationRunner::Impl {
   bool timedOut = false;
   int frameCount = 0;
   int maxFrames = kUiAutomationDefaultMaxFrames;
+  int totalQueued = 0;
+  int lastProgressCompleted = -1;
   int testsRun = 0;
   int testsSucceeded = 0;
   bool heartbeatLogEnabled = false;
@@ -383,6 +485,124 @@ struct UiAutomationRunner::Impl {
   double lastFrameTimeSeconds = 0.0;
   UiAutomationRunState state{};
   ImGuiTestEngine *engine = nullptr;
+  std::unordered_set<std::string, TransparentStringHash, std::equal_to<>>
+      loggedFailureTests;
+
+  void LogStateChange(bool running, bool queueEmpty, double elapsedSec) {
+    if (running == lastRunningState && queueEmpty == lastQueueEmptyState)
+      return;
+    LogDebug("UI automation state change: frame={} elapsed={:.2f}s running={} "
+             "queue_empty={}",
+             frameCount, elapsedSec, running ? 1 : 0, queueEmpty ? 1 : 0);
+    lastRunningState = running;
+    lastQueueEmptyState = queueEmpty;
+  }
+
+  void LogProgress(double elapsedSec) {
+    if (const UiAutomationProgressSnapshot progress =
+            CollectUiAutomationProgress(engine, totalQueued);
+        progress.completed != lastProgressCompleted) {
+      const int percent = totalQueued > 0 ? (progress.completed * 100) / totalQueued
+                                         : 0;
+      const std::string current = progress.currentTest.empty()
+                                      ? std::string("<idle>")
+                                      : progress.currentTest;
+      LogInfo("UI automation progress: [{}] {}/{} ({}%) passed={} failed={} "
+              "current='{}' elapsed={:.2f}s",
+              BuildProgressBar(progress.completed, totalQueued), progress.completed,
+              totalQueued, percent, progress.succeeded, progress.failed, current,
+              elapsedSec);
+      lastProgressCompleted = progress.completed;
+    }
+  }
+
+  void LogNewFailures(double elapsedSec) {
+    ImVector<ImGuiTest *> tests;
+    ImGuiTestEngine_GetTestList(engine, &tests);
+    for (ImGuiTest *test : tests) {
+      if (!test || test->Output.Status != ImGuiTestStatus_Error)
+        continue;
+      const std::string fullName = UiTestFullName(*test);
+      if (!loggedFailureTests.insert(fullName).second)
+        continue;
+      LogError("UI automation scenario failed: name='{}' status={} frame={} "
+               "elapsed={:.2f}s; detailed failure log will be printed at shutdown.",
+               fullName, UiTestStatusName(test->Output.Status), frameCount,
+               elapsedSec);
+    }
+  }
+
+  void RequestWindowCloseIfFinished(GLFWwindow *nativeWindowHandle, bool done,
+                                    bool timeout, double elapsedSec) {
+    if (!done && !timeout)
+      return;
+    if (timeout) {
+      timedOut = true;
+      passed = false;
+      ImGuiTestEngine_TryAbortEngine(engine);
+      LogError("UI automation timed out after {} frames (elapsed={:.2f}s).",
+               frameCount, elapsedSec);
+    }
+    if (nativeWindowHandle != nullptr) {
+      LogDebug("UI automation requesting window close: done={} timeout={} "
+               "frame={} elapsed={:.2f}s",
+               done ? 1 : 0, timeout ? 1 : 0, frameCount, elapsedSec);
+      glfwSetWindowShouldClose(nativeWindowHandle, GLFW_TRUE);
+    } else {
+      LogWarn("UI automation finished but native window handle is null; "
+              "skipping window close request.");
+    }
+  }
+
+  void LogIncompleteScenarios() {
+    ImVector<ImGuiTest *> tests;
+    ImGuiTestEngine_GetTestList(engine, &tests);
+    for (ImGuiTest *test : tests) {
+      if (!test)
+        continue;
+      const ImGuiTestStatus status = test->Output.Status;
+      if (status == ImGuiTestStatus_Unknown || status == ImGuiTestStatus_Queued ||
+          status == ImGuiTestStatus_Success)
+        continue;
+      const std::string failureLog =
+          status == ImGuiTestStatus_Error
+              ? std::format("\n{}", ExtractUiTestFailureLog(*test))
+              : std::string();
+      LogError("UI automation incomplete scenario: name='{}' status={}{}",
+               UiTestFullName(*test), UiTestStatusName(status), failureLog);
+    }
+  }
+
+  bool StopIfIncomplete(const ImGuiTestEngineIO &testIo) {
+    const bool stillRunning = testIo.IsRunningTests ||
+                              !ImGuiTestEngine_IsTestQueueEmpty(engine);
+    if (!timedOut && !stillRunning)
+      return false;
+    passed = false;
+    LogError("UI automation did not finish cleanly before shutdown: "
+             "timed_out={}, running={}, queued={}",
+             timedOut ? 1 : 0, testIo.IsRunningTests ? 1 : 0,
+             ImGuiTestEngine_IsTestQueueEmpty(engine) ? 0 : 1);
+    LogDebug("UI automation stopping engine after timeout/incomplete run.");
+    LogIncompleteScenarios();
+    ImGuiTestEngine_Stop(engine);
+    active = false;
+    return true;
+  }
+
+  void LogFailedScenarioSummaries() {
+    ImVector<ImGuiTest *> tests;
+    ImGuiTestEngine_GetTestList(engine, &tests);
+    for (ImGuiTest *test : tests) {
+      if (!test || test->Output.Status == ImGuiTestStatus_Success ||
+          test->Output.Status == ImGuiTestStatus_Unknown ||
+          test->Output.Status == ImGuiTestStatus_Queued)
+        continue;
+      LogError("UI automation failed scenario summary: name='{}' status={}\n{}",
+               UiTestFullName(*test), UiTestStatusName(test->Output.Status),
+               ExtractUiTestFailureLog(*test));
+    }
+  }
 #endif
 };
 
@@ -462,6 +682,9 @@ void UiAutomationRunner::StartIfRequested(
   PrepareUiAutomationDirectories(&m_impl->state);
   m_impl->maxFrames = kUiAutomationDefaultMaxFrames;
   m_impl->frameCount = 0;
+  m_impl->totalQueued = 0;
+  m_impl->lastProgressCompleted = -1;
+  m_impl->loggedFailureTests.clear();
   m_impl->timedOut = false;
   m_impl->startTimeSeconds = glfwGetTime();
   m_impl->lastFrameTimeSeconds = m_impl->startTimeSeconds;
@@ -508,6 +731,7 @@ void UiAutomationRunner::StartIfRequested(
     ImGuiTestEngine_Stop(m_impl->engine);
     return;
   }
+  m_impl->totalQueued = queuedCount;
   LogInfo("Queued {} UI scenario(s) with filter '{}'.", queuedCount, uiFilter);
   LogInfo(
       "Running Dear ImGui test suite in Normal mode "
@@ -538,15 +762,10 @@ void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
   const double elapsedSec = nowSec - m_impl->startTimeSeconds;
   const double frameDeltaSec = nowSec - m_impl->lastFrameTimeSeconds;
   m_impl->lastFrameTimeSeconds = nowSec;
-  if (running != m_impl->lastRunningState ||
-      queueEmpty != m_impl->lastQueueEmptyState) {
-    LogDebug("UI automation state change: frame={} elapsed={:.2f}s running={} "
-             "queue_empty={}",
-             m_impl->frameCount, elapsedSec, running ? 1 : 0,
-             queueEmpty ? 1 : 0);
-    m_impl->lastRunningState = running;
-    m_impl->lastQueueEmptyState = queueEmpty;
-  }
+  m_impl->LogStateChange(running, queueEmpty, elapsedSec);
+  m_impl->LogProgress(elapsedSec);
+  m_impl->LogNewFailures(elapsedSec);
+
   LogUiHeartbeat(UiHeartbeatSnapshot{
       .frameCount = m_impl->frameCount,
       .maxFrames = m_impl->maxFrames,
@@ -558,24 +777,8 @@ void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
       .running = running,
       .queueEmpty = queueEmpty,
   });
-  if (done || timeout) {
-    if (timeout) {
-      m_impl->timedOut = true;
-      m_impl->passed = false;
-      ImGuiTestEngine_TryAbortEngine(m_impl->engine);
-      LogError("UI automation timed out after {} frames (elapsed={:.2f}s).",
-               m_impl->frameCount, elapsedSec);
-    }
-    if (nativeWindowHandle != nullptr) {
-      LogDebug("UI automation requesting window close: done={} timeout={} "
-               "frame={} elapsed={:.2f}s",
-               done ? 1 : 0, timeout ? 1 : 0, m_impl->frameCount, elapsedSec);
-      glfwSetWindowShouldClose(nativeWindowHandle, GLFW_TRUE);
-    } else {
-      LogWarn("UI automation finished but native window handle is null; "
-              "skipping window close request.");
-    }
-  }
+  m_impl->RequestWindowCloseIfFinished(nativeWindowHandle, done, timeout,
+                                       elapsedSec);
 #else
   (void)nativeWindowHandle;
 #endif
@@ -599,20 +802,8 @@ void UiAutomationRunner::Shutdown() const {
   if (m_impl->state.videoCaptureOpen)
     LogWarn("Video capture still marked open during shutdown; letting test "
             "engine close capture on stop.");
-  if (const bool stillRunning =
-          testIo.IsRunningTests ||
-          !ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine);
-      m_impl->timedOut || stillRunning) {
-    m_impl->passed = false;
-    LogError("UI automation did not finish cleanly before shutdown: "
-             "timed_out={}, running={}, queued={}",
-             m_impl->timedOut ? 1 : 0, testIo.IsRunningTests ? 1 : 0,
-             ImGuiTestEngine_IsTestQueueEmpty(m_impl->engine) ? 0 : 1);
-    LogDebug("UI automation stopping engine after timeout/incomplete run.");
-    ImGuiTestEngine_Stop(m_impl->engine);
-    m_impl->active = false;
+  if (m_impl->StopIfIncomplete(testIo))
     return;
-  }
 
   ImGuiTestEngine_GetResult(m_impl->engine, m_impl->testsRun,
                             m_impl->testsSucceeded);
@@ -620,6 +811,8 @@ void UiAutomationRunner::Shutdown() const {
       (m_impl->testsRun > 0) && (m_impl->testsRun == m_impl->testsSucceeded);
   LogInfo("UI automation results: tests_run={}, tests_succeeded={}",
           m_impl->testsRun, m_impl->testsSucceeded);
+  if (!m_impl->passed)
+    m_impl->LogFailedScenarioSummaries();
 
   LogDebug("UI automation stopping engine after successful completion.");
   ImGuiTestEngine_Stop(m_impl->engine);

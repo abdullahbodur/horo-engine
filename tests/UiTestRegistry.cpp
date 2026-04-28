@@ -4,12 +4,16 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <imgui_test_engine/imgui_te_context.h>
 
 #include "core/Logger.h"
 
@@ -22,6 +26,13 @@ struct UiScenarioRegistration {
   std::string fullName;
   UiScenarioRegisterFn fn = nullptr;
 };
+
+using UiTestFunc = decltype(ImGuiTest::TestFunc);
+
+std::unordered_map<ImGuiTest *, UiTestFunc> &WrappedTestFuncs() {
+  static std::unordered_map<ImGuiTest *, UiTestFunc> funcs;
+  return funcs;
+}
 
 std::vector<UiScenarioRegistration> &Registry() {
   static std::vector<UiScenarioRegistration> scenarios;
@@ -61,6 +72,106 @@ bool MatchesPattern(std::string_view value, std::string_view pattern) {
   return value.size() >= prefix.size() + suffix.size();
 }
 
+std::string SanitizeCapturePathComponent(std::string_view value) {
+  std::string sanitized;
+  sanitized.reserve(value.size());
+  for (const char ch : value) {
+    const auto uch = static_cast<unsigned char>(ch);
+    if (std::isalnum(uch) || ch == '-' || ch == '_') {
+      sanitized.push_back(ch);
+    } else {
+      sanitized.push_back('_');
+    }
+  }
+  return sanitized.empty() ? std::string("unnamed") : sanitized;
+}
+
+std::string BuildScenarioVideoFilename(const ImGuiTest &test) {
+  return std::format("{}__{}__run.mp4",
+                     SanitizeCapturePathComponent(test.Category ? test.Category
+                                                                 : "unknown"),
+                     SanitizeCapturePathComponent(test.Name ? test.Name
+                                                             : "unknown"));
+}
+
+bool BeginScenarioVideoCapture(ImGuiTestContext *ctx,
+                               UiAutomationRunState *state,
+                               const ImGuiTest &test) {
+  if (!ctx || !state || !state->videoEnabled || state->videoCaptureOpen ||
+      state->uiCaptureOutputDir.empty() || !ctx->CaptureArgs) {
+    return false;
+  }
+
+  const std::string filename = BuildScenarioVideoFilename(test);
+  const std::string full = (state->uiCaptureOutputDir / filename).string();
+  if (full.size() >= IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile)) {
+    LogWarn("UI scenario video path is too long, skipping recording: {}", full);
+    return false;
+  }
+
+  ctx->CaptureReset();
+  ImStrncpy(ctx->CaptureArgs->InOutputFile, full.c_str(),
+            IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
+  const bool started = ctx->CaptureBeginVideo();
+  state->videoCaptureOpen = started;
+  state->videoCaptureOwnedByRegistry = started;
+  if (started) {
+    LogInfo("UI scenario recording start: {}/{} -> {}",
+            test.Category ? test.Category : "unknown",
+            test.Name ? test.Name : "unknown", full);
+  } else {
+    LogWarn("UI scenario recording failed to start: {}/{}",
+            test.Category ? test.Category : "unknown",
+            test.Name ? test.Name : "unknown");
+  }
+  return started;
+}
+
+void EndScenarioVideoCapture(ImGuiTestContext *ctx, UiAutomationRunState *state,
+                             const bool started) {
+  if (!started || !ctx || !state || !state->videoCaptureOpen)
+    return;
+  ctx->CaptureEndVideo();
+  ctx->CaptureReset();
+  state->videoCaptureOpen = false;
+  state->videoCaptureOwnedByRegistry = false;
+  LogInfo("UI scenario recording end.");
+}
+
+struct ScenarioVideoCaptureScope {
+  ImGuiTestContext *ctx = nullptr;
+  UiAutomationRunState *state = nullptr;
+  bool started = false;
+
+  ScenarioVideoCaptureScope(ImGuiTestContext *inCtx,
+                            UiAutomationRunState *inState,
+                            const ImGuiTest &test)
+      : ctx(inCtx), state(inState),
+        started(BeginScenarioVideoCapture(inCtx, inState, test)) {}
+
+  ~ScenarioVideoCaptureScope() {
+    EndScenarioVideoCapture(ctx, state, started);
+  }
+
+  ScenarioVideoCaptureScope(const ScenarioVideoCaptureScope &) = delete;
+  ScenarioVideoCaptureScope &
+  operator=(const ScenarioVideoCaptureScope &) = delete;
+};
+
+void RunScenarioWithVideoCapture(ImGuiTestContext *ctx) {
+  if (!ctx || !ctx->Test)
+    return;
+
+  const auto funcIt = WrappedTestFuncs().find(ctx->Test);
+  if (funcIt == WrappedTestFuncs().end() || !funcIt->second)
+    return;
+
+  UiAutomationRunState *state =
+      static_cast<UiAutomationRunState *>(ctx->Test->UserData);
+  ScenarioVideoCaptureScope captureScope(ctx, state, *ctx->Test);
+  funcIt->second(ctx);
+}
+
 std::vector<std::string> SplitFilterTokens(std::string_view rawFilter) {
   std::vector<std::string> tokens;
   const std::string filter = Trim(std::string(rawFilter));
@@ -86,6 +197,10 @@ bool QueueScenario(ImGuiTestEngine *engine, UiAutomationRunState *state,
   ImGuiTest *test = entry.fn(engine, state);
   if (!test)
     return false;
+  if (test->TestFunc) {
+    WrappedTestFuncs()[test] = test->TestFunc;
+    test->TestFunc = &RunScenarioWithVideoCapture;
+  }
   ImGuiTestEngine_QueueTest(engine, test);
   ++(*queued);
   return true;
@@ -116,6 +231,7 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
   if (!engine || !state)
     return false;
   InitializeUiScenarioRegistry();
+  WrappedTestFuncs().clear();
 
   int queued = 0;
   const std::vector<std::string> filterTokens = SplitFilterTokens(filter);
@@ -133,11 +249,6 @@ bool QueueRegisteredUiScenarios(ImGuiTestEngine *engine,
         if (QueueScenario(engine, state, entry, &queued))
           queuedNames.insert(entry.fullName);
       }
-    }
-    for (const UiScenarioRegistration &entry : Registry()) {
-      if (!queuedNames.contains(entry.fullName))
-        LogDebug("UI scenario skipped by filter: '{}' (filter='{}')",
-                 entry.fullName, filter);
     }
   }
   LogInfo(
