@@ -3367,6 +3367,59 @@ namespace Horo {
     void VulkanRenderBackend::DrawWireframe(const WireframeDrawCommand &) {
     }
 
+    std::shared_ptr<IShader> VulkanRenderBackend::CreateShader(
+        const std::string &, const std::string &) {
+        // TODO(vulkan): implement Vulkan shader creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IShader> VulkanRenderBackend::CreateShaderFromFile(
+        const std::string &, const std::string &) {
+        // TODO(vulkan): implement Vulkan shader creation from file
+        return nullptr;
+    }
+
+    std::shared_ptr<ITexture> VulkanRenderBackend::CreateTexture(
+        const TextureSpec &) {
+        // TODO(vulkan): implement Vulkan texture creation
+        return nullptr;
+    }
+
+    std::shared_ptr<ITexture> VulkanRenderBackend::CreateTextureFromFile(
+        const std::string &) {
+        // TODO(vulkan): implement Vulkan texture creation from file
+        return nullptr;
+    }
+
+    std::shared_ptr<IFramebuffer> VulkanRenderBackend::CreateFramebuffer(
+        const FramebufferSpec &) {
+        // TODO(vulkan): implement Vulkan framebuffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexBuffer> VulkanRenderBackend::CreateVertexBuffer(
+        float *, uint32_t) {
+        // TODO(vulkan): implement Vulkan vertex buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexBuffer> VulkanRenderBackend::CreateVertexBuffer(
+        uint32_t) {
+        // TODO(vulkan): implement Vulkan dynamic vertex buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IIndexBuffer> VulkanRenderBackend::CreateIndexBuffer(
+        uint32_t *, uint32_t) {
+        // TODO(vulkan): implement Vulkan index buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexArray> VulkanRenderBackend::CreateVertexArray() {
+        // TODO(vulkan): implement Vulkan vertex array creation
+        return nullptr;
+    }
+
 #else
 
     struct VulkanRenderBackend::Context {
@@ -3749,6 +3802,59 @@ namespace Horo {
     void VulkanRenderBackend::DrawWireframe(const WireframeDrawCommand &) {
         // NOSONAR: cpp:S5817 real implementation mutates state
         // Not implemented: Vulkan backend is a stub
+    }
+
+    std::shared_ptr<IShader> VulkanRenderBackend::CreateShader(
+        const std::string &, const std::string &) {
+        // TODO(vulkan): implement Vulkan shader creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IShader> VulkanRenderBackend::CreateShaderFromFile(
+        const std::string &, const std::string &) {
+        // TODO(vulkan): implement Vulkan shader creation from file
+        return nullptr;
+    }
+
+    std::shared_ptr<ITexture> VulkanRenderBackend::CreateTexture(
+        const TextureSpec &) {
+        // TODO(vulkan): implement Vulkan texture creation
+        return nullptr;
+    }
+
+    std::shared_ptr<ITexture> VulkanRenderBackend::CreateTextureFromFile(
+        const std::string &) {
+        // TODO(vulkan): implement Vulkan texture creation from file
+        return nullptr;
+    }
+
+    std::shared_ptr<IFramebuffer> VulkanRenderBackend::CreateFramebuffer(
+        const FramebufferSpec &) {
+        // TODO(vulkan): implement Vulkan framebuffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexBuffer> VulkanRenderBackend::CreateVertexBuffer(
+        float *, uint32_t) {
+        // TODO(vulkan): implement Vulkan vertex buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexBuffer> VulkanRenderBackend::CreateVertexBuffer(
+        uint32_t) {
+        // TODO(vulkan): implement Vulkan dynamic vertex buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IIndexBuffer> VulkanRenderBackend::CreateIndexBuffer(
+        uint32_t *, uint32_t) {
+        // TODO(vulkan): implement Vulkan index buffer creation
+        return nullptr;
+    }
+
+    std::shared_ptr<IVertexArray> VulkanRenderBackend::CreateVertexArray() {
+        // TODO(vulkan): implement Vulkan vertex array creation
+        return nullptr;
     }
 
 #endif

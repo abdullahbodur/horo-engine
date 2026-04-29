@@ -1,10 +1,17 @@
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "math/Mat4.h"
+#include "renderer/IFramebuffer.h"
+#include "renderer/IIndexBuffer.h"
 #include "renderer/IRenderBackend.h"
+#include "renderer/IShader.h"
+#include "renderer/ITexture.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
@@ -78,6 +85,17 @@ namespace Horo {
         TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                bool needsYFlip = false,
                                                std::string *outError = nullptr);
+
+        // ── Resource Factory ────────────────────────────────────────────────────
+        static std::shared_ptr<IShader>       CreateShader(const std::string& vert, const std::string& frag);
+        static std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath, const std::string& fragPath);
+        static std::shared_ptr<ITexture>      CreateTexture(const TextureSpec& spec);
+        static std::shared_ptr<ITexture>      CreateTextureFromFile(const std::string& path);
+        static std::shared_ptr<IFramebuffer>  CreateFramebuffer(const FramebufferSpec& spec);
+        static std::shared_ptr<IVertexBuffer> CreateVertexBuffer(float* vertices, uint32_t size);
+        static std::shared_ptr<IVertexBuffer> CreateVertexBuffer(uint32_t size);
+        static std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count);
+        static std::shared_ptr<IVertexArray>  CreateVertexArray();
 
     private:
         static IRenderBackend *ActiveBackend();

@@ -1,8 +1,16 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
+#include "renderer/IFramebuffer.h"
+#include "renderer/IIndexBuffer.h"
+#include "renderer/IShader.h"
+#include "renderer/ITexture.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
 #include "renderer/RenderBackend.h"
 #include "renderer/RenderTargetHandle.h"
 #include "renderer/RenderTypes.h"
@@ -47,5 +55,18 @@ namespace Horo {
         TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                bool needsYFlip,
                                                std::string *outError) = 0;
+
+        // ── Resource Factory ────────────────────────────────────────────────────
+        virtual std::shared_ptr<IShader>       CreateShader(const std::string& vertSrc,
+                                                             const std::string& fragSrc) = 0;
+        virtual std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath,
+                                                                     const std::string& fragPath) = 0;
+        virtual std::shared_ptr<ITexture>      CreateTexture(const TextureSpec& spec) = 0;
+        virtual std::shared_ptr<ITexture>      CreateTextureFromFile(const std::string& path) = 0;
+        virtual std::shared_ptr<IFramebuffer>  CreateFramebuffer(const FramebufferSpec& spec) = 0;
+        virtual std::shared_ptr<IVertexBuffer> CreateVertexBuffer(float* vertices, uint32_t size) = 0;
+        virtual std::shared_ptr<IVertexBuffer> CreateVertexBuffer(uint32_t size) = 0; // dynamic
+        virtual std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count) = 0;
+        virtual std::shared_ptr<IVertexArray>  CreateVertexArray() = 0;
     };
 } // namespace Horo

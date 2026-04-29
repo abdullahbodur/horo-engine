@@ -198,4 +198,46 @@ namespace Horo {
         return ActiveBackend()->TryGetEditorViewportRenderTargetHandle(
             outHandle, needsYFlip, outError);
     }
+
+    std::shared_ptr<IShader> Renderer::CreateShader(const std::string &vert,
+                                                     const std::string &frag) {
+        return ActiveBackend()->CreateShader(vert, frag);
+    }
+
+    std::shared_ptr<IShader> Renderer::CreateShaderFromFile(
+        const std::string &vertPath, const std::string &fragPath) {
+        return ActiveBackend()->CreateShaderFromFile(vertPath, fragPath);
+    }
+
+    std::shared_ptr<ITexture> Renderer::CreateTexture(const TextureSpec &spec) {
+        return ActiveBackend()->CreateTexture(spec);
+    }
+
+    std::shared_ptr<ITexture> Renderer::CreateTextureFromFile(
+        const std::string &path) {
+        return ActiveBackend()->CreateTextureFromFile(path);
+    }
+
+    std::shared_ptr<IFramebuffer> Renderer::CreateFramebuffer(
+        const FramebufferSpec &spec) {
+        return ActiveBackend()->CreateFramebuffer(spec);
+    }
+
+    std::shared_ptr<IVertexBuffer> Renderer::CreateVertexBuffer(float *vertices,
+                                                                  uint32_t size) {
+        return ActiveBackend()->CreateVertexBuffer(vertices, size);
+    }
+
+    std::shared_ptr<IVertexBuffer> Renderer::CreateVertexBuffer(uint32_t size) {
+        return ActiveBackend()->CreateVertexBuffer(size);
+    }
+
+    std::shared_ptr<IIndexBuffer> Renderer::CreateIndexBuffer(uint32_t *indices,
+                                                               uint32_t count) {
+        return ActiveBackend()->CreateIndexBuffer(indices, count);
+    }
+
+    std::shared_ptr<IVertexArray> Renderer::CreateVertexArray() {
+        return ActiveBackend()->CreateVertexArray();
+    }
 } // namespace Horo

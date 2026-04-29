@@ -54,6 +54,19 @@ namespace Horo {
                                                     bool needsYFlip,
                                                     std::string *outError) override;
 
+        // ── Resource Factory ────────────────────────────────────────────────────
+        std::shared_ptr<IShader>       CreateShader(const std::string& vertSrc,
+                                                     const std::string& fragSrc) override;
+        std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath,
+                                                             const std::string& fragPath) override;
+        std::shared_ptr<ITexture>      CreateTexture(const TextureSpec& spec) override;
+        std::shared_ptr<ITexture>      CreateTextureFromFile(const std::string& path) override;
+        std::shared_ptr<IFramebuffer>  CreateFramebuffer(const FramebufferSpec& spec) override;
+        std::shared_ptr<IVertexBuffer> CreateVertexBuffer(float* vertices, uint32_t size) override;
+        std::shared_ptr<IVertexBuffer> CreateVertexBuffer(uint32_t size) override;
+        std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count) override;
+        std::shared_ptr<IVertexArray>  CreateVertexArray() override;
+
         RenderBackendId GetBackendId() const override {
             return RenderBackendId::Vulkan;
         }
