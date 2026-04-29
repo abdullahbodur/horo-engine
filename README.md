@@ -17,8 +17,7 @@ CI all live in one visible workspace.
 
 ## Screenshots
 
-<!-- Drop editor/renderer screenshots here once captured. -->
-<!-- Example: ![Editor overview](docs/screenshots/editor.png) -->
+![Editor overview](docs/screenshots/editor.png)
 
 ## Use Cases
 
