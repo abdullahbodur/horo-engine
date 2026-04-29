@@ -31,6 +31,10 @@ public:
         return m_indexBuffer;
     }
 
+    void DrawIndexed(uint32_t) const override {}
+    void DrawArrays(uint32_t) const override {}
+    void DrawArraysLines(uint32_t) const override {}
+
 private:
     std::vector<std::shared_ptr<IVertexBuffer>> m_vertexBuffers;
     std::shared_ptr<IIndexBuffer>               m_indexBuffer;
