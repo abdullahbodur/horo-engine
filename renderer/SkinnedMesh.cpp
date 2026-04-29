@@ -114,14 +114,12 @@ namespace Horo {
         };
 
         auto vbo = std::make_shared<OpenGLVertexBuffer>(
-            reinterpret_cast<float *>(
-                const_cast<SkinnedVertex *>(vertices.data())),
+            vertices.data(),
             static_cast<uint32_t>(vertices.size() * sizeof(SkinnedVertex)));
         vbo->SetLayout(layout);
 
         auto ibo = std::make_shared<OpenGLIndexBuffer>(
-            const_cast<uint32_t *>(
-                reinterpret_cast<const uint32_t *>(indices.data())),
+            indices.data(),
             static_cast<uint32_t>(indices.size()));
 
         auto vao = std::make_shared<OpenGLVertexArray>();

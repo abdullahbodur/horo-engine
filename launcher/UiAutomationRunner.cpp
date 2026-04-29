@@ -441,9 +441,8 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
   if (x < 0 || y < 0 || x + w > viewport[2] || y + h > viewport[3])
     return false;
 
-  std::string readError;
-  if (!Renderer::ReadbackRegionRgba8(x, y, w, h,
-                                     reinterpret_cast<uint32_t *>(pixels),
+  if (std::string readError; !Renderer::ReadbackRegionRgba8(x, y, w, h,
+                                     pixels,
                                      &readError))
     return false;
 

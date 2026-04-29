@@ -58,16 +58,16 @@ namespace Horo {
                                                std::string *outError) = 0;
 
         // ── Viewport ────────────────────────────────────────────────────────────
-        virtual void SetViewport(int, int, int, int) {}
+        virtual void SetViewport(int, int, int, int) { /* default no-op */ }
         virtual std::array<int, 4> GetViewport() const { return {0, 0, 0, 0}; }
 
         // ── 2-D overlay state ────────────────────────────────────────────────────
-        virtual void Begin2dOverlay() {}
-        virtual void End2dOverlay() {}
+        virtual void Begin2dOverlay() { /* default no-op */ }
+        virtual void End2dOverlay()   { /* default no-op */ }
 
         // ── Offscreen / thumbnail helpers ────────────────────────────────────────
-        virtual void SetupOpaqueRenderState() {}
-        virtual void ClearColorAndDepth(float, float, float, float) {}
+        virtual void SetupOpaqueRenderState()              { /* default no-op */ }
+        virtual void ClearColorAndDepth(float, float, float, float) { /* default no-op */ }
 
         // Read a sub-region of the currently bound READ framebuffer as RGBA8.
         // Returns false on failure (e.g. invalid coords or no GL context).

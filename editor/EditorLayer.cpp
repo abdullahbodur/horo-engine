@@ -556,8 +556,7 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
   // image.  ReadbackRegionRgba8 only runs once per mesh (then cached).
   std::vector<uint32_t> pixels(
       static_cast<size_t>(renderer.width * renderer.height));
-  std::string readError;
-  if (!Renderer::ReadbackRegionRgba8(0, 0, renderer.width, renderer.height,
+  if (std::string readError; !Renderer::ReadbackRegionRgba8(0, 0, renderer.width, renderer.height,
                                      pixels.data(), &readError)) {
     LogWarn("AssetThumbnailRenderer: readback failed: {}", readError);
     renderer.fbo->Unbind();
