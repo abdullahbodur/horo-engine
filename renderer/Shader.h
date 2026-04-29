@@ -1,78 +1,27 @@
 #pragma once
-#include <memory>
-#include <stdexcept>
-#include <string>
 
-#include "math/Mat3.h"
-#include "math/Mat4.h"
-#include "math/Vec3.h"
-#include "math/Vec4.h"
+// OpenGL shader implementation.  Shader inherits from OpenGLShader so that
+// existing forward declarations (`class Shader;`) and call sites remain valid.
+// TODO(renderer-abstraction): Goal 5 will collapse call sites to IShader&.
+#include "renderer/opengl/OpenGLShader.h"
 
 namespace Horo {
-    class ShaderException : public std::runtime_error {
-    public:
-        using std::runtime_error::runtime_error;
-    };
 
-    class Shader {
-    public:
-        Shader();
+class Shader : public OpenGLShader {
+public:
+    Shader() = default;
 
-        ~Shader();
+    // Converting move-constructor from the base factory result.
+    explicit Shader(OpenGLShader&& base) : OpenGLShader(std::move(base)) {}
 
-        Shader(const Shader &) = delete;
+    static Shader FromFiles(const std::string& vertPath,
+                            const std::string& fragPath) {
+        return Shader(OpenGLShader::FromFiles(vertPath, fragPath));
+    }
+    static Shader FromSource(const std::string& vertSrc,
+                             const std::string& fragSrc) {
+        return Shader(OpenGLShader::FromSource(vertSrc, fragSrc));
+    }
+};
 
-        Shader &operator=(const Shader &) = delete;
-
-        Shader(Shader &&o) noexcept;
-
-        Shader &operator=(Shader &&o) noexcept;
-
-        // Load from files on disk
-        static Shader FromFiles(const std::string &vertPath,
-                                const std::string &fragPath);
-
-        // Load from inline source strings
-        static Shader FromSource(const std::string &vertSrc,
-                                 const std::string &fragSrc);
-
-        void Bind() const;
-
-        void Unbind() const;
-
-        bool IsValid() const;
-
-        unsigned int GetProgramID() const;
-
-        // Uniform setters
-        void SetInt(const std::string &name, int v) const;
-
-        void SetFloat(const std::string &name, float v) const;
-
-        void SetVec2(const std::string &name, float x, float y) const;
-
-        void SetVec3(const std::string &name, const Vec3 &v) const;
-
-        void SetVec4(const std::string &name, const Vec4 &v) const;
-
-        void SetMat3(const std::string &name, const Mat3 &m) const;
-
-        void SetMat4(const std::string &name, const Mat4 &m) const;
-
-        // Upload an array of count matrices to uniform `name[0]` through
-        // `name[count-1]`. Uses glUniformMatrix4fv for a single GL call (efficient
-        // for bone palettes).
-        void SetMat4Array(const std::string &name, int count,
-                          const float *data) const;
-
-    private:
-        struct ProgramStorage;
-        std::unique_ptr<ProgramStorage> m_programStorage;
-
-        int GetUniformLocation(const std::string &name) const;
-
-        static unsigned int CompileShader(unsigned int type, const std::string &src);
-
-        static unsigned int LinkProgram(unsigned int vert, unsigned int frag);
-    };
 } // namespace Horo

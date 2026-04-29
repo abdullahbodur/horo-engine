@@ -1,6 +1,8 @@
 #include "renderer/Mesh.h"
 
 // clang-format off
+// TODO(renderer-abstraction): Goal 5 will replace these call sites with
+//   OpenGLVertexArray / OpenGLVertexBuffer / OpenGLIndexBuffer.
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // clang-format on

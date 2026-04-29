@@ -81,6 +81,14 @@ PFNGLRENDERBUFFERSTORAGEPROC glad_glRenderbufferStorage = NULL;
 PFNGLFRAMEBUFFERRENDERBUFFERPROC glad_glFramebufferRenderbuffer = NULL;
 PFNGLREADPIXELSPROC glad_glReadPixels = NULL;
 
+/* Additional GL 4.1 Core functions needed by renderer/opengl/ */
+PFNGLDRAWBUFFERSPROC     glad_glDrawBuffers     = NULL;
+PFNGLDRAWBUFFERPROC      glad_glDrawBuffer      = NULL;
+PFNGLREADBUFFERPROC      glad_glReadBuffer      = NULL;
+PFNGLTEXSUBIMAGE2DPROC   glad_glTexSubImage2D   = NULL;
+PFNGLVERTEXATTRIBDIVISORPROC glad_glVertexAttribDivisor = NULL;
+PFNGLCLEARBUFFERIVPROC   glad_glClearBufferiv   = NULL;
+
 /* ---- Loader ---- */
 static GLADloadproc s_load = NULL;
 
@@ -167,6 +175,12 @@ int gladLoadGLLoader(GLADloadproc load) {
   LOAD(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage)
   LOAD(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer)
   LOAD(PFNGLREADPIXELSPROC, glReadPixels)
+  LOAD(PFNGLDRAWBUFFERSPROC, glDrawBuffers)
+  LOAD(PFNGLDRAWBUFFERPROC, glDrawBuffer)
+  LOAD(PFNGLREADBUFFERPROC, glReadBuffer)
+  LOAD(PFNGLTEXSUBIMAGE2DPROC, glTexSubImage2D)
+  LOAD(PFNGLVERTEXATTRIBDIVISORPROC, glVertexAttribDivisor)
+  LOAD(PFNGLCLEARBUFFERIVPROC, glClearBufferiv)
 
 #undef LOAD
 

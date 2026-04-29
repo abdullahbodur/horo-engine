@@ -1,5 +1,7 @@
 #include "renderer/DebugDraw.h"
 
+// TODO(renderer-abstraction): Goal 5 will replace these call sites with
+//   OpenGLVertexArray / OpenGLVertexBuffer.
 #include <glad/glad.h>
 
 #include <array>
