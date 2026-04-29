@@ -11,14 +11,13 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
-  actions: read            # needed to query previous workflow runs
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ── 1. Detect commits since the last successful run ──────────────────────
   report-commits:
     name: Commits since last run
     runs-on: ubuntu-latest
@@ -65,7 +64,6 @@ jobs:
           echo "$COMMITS" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-  # ── 2a. Build — Linux ────────────────────────────────────────────────────
   build-linux:
     name: Build · Linux / GCC
     runs-on: ubuntu-24.04
@@ -127,7 +125,6 @@ jobs:
             build/debug/bin/HoroEditorUiTest
           retention-days: 1
 
-  # ── 2b. Build — macOS ────────────────────────────────────────────────────
   build-macos:
     name: Build · macOS / Clang
     runs-on: macos-latest

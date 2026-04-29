@@ -1,8 +1,5 @@
 name: Release Binaries
 
-# Triggered automatically when release-please merges a release PR and
-# publishes a GitHub Release. Builds HoroEditor for all platforms and
-# uploads the archives to the release assets.
 on:
   release:
     types: [published]
@@ -14,10 +11,9 @@ on:
         type: string
 
 permissions:
-  contents: write   # needed to upload release assets
+  contents: write
 
 jobs:
-  # ── Linux ─────────────────────────────────────────────────────────────────
   build-linux:
     name: Build · Linux / GCC
     runs-on: ubuntu-24.04
@@ -76,7 +72,6 @@ jobs:
           TAG=${{ github.event.release.tag_name || inputs.tag }}
           gh release upload "$TAG" HoroEngine-linux-x86_64.tar.gz --clobber
 
-  # ── macOS ─────────────────────────────────────────────────────────────────
   build-macos:
     name: Build · macOS / Clang
     runs-on: macos-latest
@@ -125,7 +120,6 @@ jobs:
           TAG=${{ github.event.release.tag_name || inputs.tag }}
           gh release upload "$TAG" HoroEngine-macos-universal.tar.gz --clobber
 
-  # ── Windows ───────────────────────────────────────────────────────────────
   build-windows:
     name: Build · Windows / MSVC
     runs-on: windows-latest
