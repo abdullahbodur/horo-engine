@@ -183,14 +183,13 @@ if(HORO_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
     horo_configure_engine_target(HoroEngineImGuiTest imgui_test_lib)
 
     # Add the OpenGL backend sources so HoroEngineImGuiTest is self-contained.
-    # glad is already PRIVATE via horo_configure_engine_target above.
-    if(HORO_RENDERER STREQUAL "opengl")
-        target_sources(HoroEngineImGuiTest PRIVATE ${HORO_RENDERER_OPENGL_SOURCES})
-        target_include_directories(HoroEngineImGuiTest PRIVATE
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        )
-        target_compile_definitions(HoroEngineImGuiTest PUBLIC HORO_RENDERER_OPENGL=1)
-    endif()
+    # RenderBackendFactory.cpp unconditionally references OpenGLRenderBackend,
+    # so the sources must be present regardless of the selected renderer.
+    target_sources(HoroEngineImGuiTest PRIVATE ${HORO_RENDERER_OPENGL_SOURCES})
+    target_include_directories(HoroEngineImGuiTest PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    )
+    target_compile_definitions(HoroEngineImGuiTest PUBLIC HORO_RENDERER_OPENGL=1)
 endif()
 
 # Copy GLSL shaders to bin/shaders alongside the executable
@@ -214,10 +213,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
         target_link_libraries(HoroEditor PRIVATE HoroEngine horo-renderer-opengl)
     elseif(HORO_RENDERER STREQUAL "vulkan")
         target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_VULKAN=1)
-        target_link_libraries(HoroEditor PRIVATE HoroEngine)
+        target_link_libraries(HoroEditor PRIVATE HoroEngine horo-renderer-opengl)
     elseif(HORO_RENDERER STREQUAL "null")
         target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_NULL=1)
-        target_link_libraries(HoroEditor PRIVATE horo-renderer-null)
+        target_link_libraries(HoroEditor PRIVATE horo-renderer-null horo-renderer-opengl)
     else()
         target_link_libraries(HoroEditor PRIVATE HoroEngine)
     endif()

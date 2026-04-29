@@ -22,7 +22,7 @@ namespace Horo {
 class NullRenderBackend final : public IRenderBackend {
 public:
     // ── Lifecycle ──────────────────────────────────────────────────────────────
-    void BeginFrame(const RenderFrameConfig &) override {}
+    void BeginFrame(const RenderFrameConfig &) override { m_drawCalls = 0; }
     void EndFrame()                            override {}
     void BeginPass(const RenderPassConfig &)   override {}
     void EndPass()                             override {}
