@@ -121,8 +121,13 @@ option(HORO_ENGINE_COVERAGE "Add coverage flags to HoroEngine (for reports after
 
 horo_configure_engine_target(HoroEngine imgui_lib)
 # core/Window.cpp and editor files include <glad/glad.h> directly; add glad
-# as PRIVATE so its headers are available at compile time but not re-exported.
+# as PRIVATE so the library isn't forced on consumers, but expose the include
+# directory so consumers (e.g. starter app) can call gl* functions directly.
 target_link_libraries(HoroEngine PRIVATE glad)
+target_include_directories(HoroEngine PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glad/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/vendor/glad>
+)
 
 # ---- horo-renderer-opengl: PRIVATE glad + OpenGL ----
 # Dedicated backend marker/consumer target.  The sources compiled here
