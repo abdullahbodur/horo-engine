@@ -163,7 +163,8 @@ if(NOT TARGET imgui_lib)
             $<INSTALL_INTERFACE:include/vendor/imgui>
             $<INSTALL_INTERFACE:include/vendor/imgui/backends>
         )
-        target_link_libraries(${target_name} PUBLIC glfw glad)
+        target_link_libraries(${target_name} PUBLIC glfw)
+        target_link_libraries(${target_name} PRIVATE glad)
 
         if(HORO_ENGINE_ENABLE_VULKAN)
             target_compile_definitions(${target_name} PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
