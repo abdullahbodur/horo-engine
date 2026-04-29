@@ -43,14 +43,14 @@ public:
     bool ReadbackColorBgr8(int w, int h, std::vector<uint8_t> &out,
                            std::string *) override {
         if (w <= 0 || h <= 0) return false;
-        out.assign(static_cast<size_t>(w * h * 3), 0u);
+        out.assign(static_cast<size_t>(w) * static_cast<size_t>(h) * 3u, 0u);
         return true;
     }
 
     bool ReadbackDepth32F(int w, int h, std::vector<float> &out,
                           std::string *) override {
         if (w <= 0 || h <= 0) return false;
-        out.assign(static_cast<size_t>(w * h), 1.0f);
+        out.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 1.0f);
         return true;
     }
 
