@@ -262,17 +262,4 @@ namespace Horo {
         ++m_drawCalls;
     }
 
-    // ── Resource Factory stubs — full implementations in renderer/opengl/ ──
-    // These are wired up in PR #200 (feat/renderer-opengl-resource-classes).
-    // Stubs here satisfy the pure-virtual contract so the build is not broken.
-    std::shared_ptr<IShader> OpenGLRenderBackend::CreateShader(const std::string&, const std::string&) { return nullptr; }
-    std::shared_ptr<IShader> OpenGLRenderBackend::CreateShaderFromFile(const std::string&, const std::string&) { return nullptr; }
-    std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTexture(const TextureSpec&) { return nullptr; }
-    std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTextureFromFile(const std::string&) { return nullptr; }
-    std::shared_ptr<IFramebuffer> OpenGLRenderBackend::CreateFramebuffer(const FramebufferSpec&) { return nullptr; }
-    std::shared_ptr<IVertexBuffer> OpenGLRenderBackend::CreateVertexBuffer(float*, uint32_t) { return nullptr; }
-    std::shared_ptr<IVertexBuffer> OpenGLRenderBackend::CreateVertexBuffer(uint32_t) { return nullptr; }
-    std::shared_ptr<IIndexBuffer> OpenGLRenderBackend::CreateIndexBuffer(uint32_t*, uint32_t) { return nullptr; }
-    std::shared_ptr<IVertexArray> OpenGLRenderBackend::CreateVertexArray() { return nullptr; }
-
 } // namespace Horo

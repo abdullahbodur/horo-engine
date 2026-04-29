@@ -1662,3 +1662,55 @@ TEST_CASE("DebugDraw gracefully ignores submissions when backend support is disa
   DebugDraw::Shutdown();
   Renderer::ResetBackend();
 }
+
+// ============================================================================
+// Renderer resource-factory API — verifies delegators compile and route calls
+// ============================================================================
+
+TEST_CASE("Renderer::CreateShader delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  // FakeRenderBackend inherits the default nullptr implementation.
+  REQUIRE(Renderer::CreateShader("v", "f") == nullptr);
+  REQUIRE(Renderer::CreateShaderFromFile("v.glsl", "f.glsl") == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateTexture delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  TextureSpec spec{};
+  REQUIRE(Renderer::CreateTexture(spec) == nullptr);
+  REQUIRE(Renderer::CreateTextureFromFile("img.png") == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateFramebuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  FramebufferSpec spec{};
+  REQUIRE(Renderer::CreateFramebuffer(spec) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateVertexBuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateVertexBuffer(nullptr, 0u) == nullptr);
+  REQUIRE(Renderer::CreateVertexBuffer(0u) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateIndexBuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateIndexBuffer(nullptr, 0u) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateVertexArray delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateVertexArray() == nullptr);
+  Renderer::ResetBackend();
+}
