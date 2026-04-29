@@ -240,9 +240,13 @@ def _starter_binary(config_name: str) -> Path:
 
     Assumes this script lives at <starter_root>/engine/scripts/dev.py,
     so REPO_ROOT.parent == starter_root.
+
+    On Windows (MSVC multi-config), CMake places the binary under bin/Debug/
+    or bin/Release/ rather than directly under bin/.
     """
     suffix = ".exe" if IS_WINDOWS else ""
-    return REPO_ROOT.parent / "build" / config_name / "bin" / f"HoroStarterApp{suffix}"
+    msvc_subdir = "Debug" if IS_WINDOWS else ""
+    return REPO_ROOT.parent / "build" / config_name / "bin" / msvc_subdir / f"HoroStarterApp{suffix}"
 
 def cmd_run_editor(args: argparse.Namespace) -> int:
     config = args.config if args.config else _preset_debug()
