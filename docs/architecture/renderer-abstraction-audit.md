@@ -2,7 +2,7 @@
 
 ## Summary
 
-The HoroEngine renderer currently has pervasive OpenGL coupling spread across eight source files
+The HoroEngine renderer currently has pervasive OpenGL coupling spread across nine source files
 outside any dedicated backend layer. Every geometric primitive type (`Mesh`, `SkinnedMesh`,
 `DebugDraw`, `DebugHUD`) allocates and manages raw OpenGL VAO/VBO/EBO/texture IDs directly in
 their implementation files. The `Shader` and `Texture` classes are fully GL-specific: they wrap
