@@ -2,7 +2,7 @@
 // Method definitions are in this file; declarations remain in EditorLayer.h.
 
 // clang-format off
-#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 // clang-format on
 

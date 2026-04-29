@@ -3857,5 +3857,24 @@ namespace Horo {
         return nullptr;
     }
 
+    // ── Backend-agnostic state helpers (no-op stubs for Vulkan) ─────────────
+
+    void VulkanRenderBackend::SetViewport(int, int, int, int) {}
+
+    std::array<int, 4> VulkanRenderBackend::GetViewport() const {
+        return {0, 0, 0, 0};
+    }
+
+    void VulkanRenderBackend::Begin2dOverlay() {}
+    void VulkanRenderBackend::End2dOverlay() {}
+    void VulkanRenderBackend::SetupOpaqueRenderState() {}
+    void VulkanRenderBackend::ClearColorAndDepth(float, float, float, float) {}
+
+    bool VulkanRenderBackend::ReadbackRegionRgba8(int, int, int, int, uint32_t *,
+                                                   std::string *outError) {
+        if (outError) *outError = "ReadbackRegionRgba8 not supported on Vulkan.";
+        return false;
+    }
+
 #endif
 } // namespace Horo

@@ -17,7 +17,7 @@
 #endif
 
 // clang-format off
-#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 // clang-format on
 #include <imgui.h>
@@ -68,6 +68,8 @@
 #include "math/Transform.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/GltfLoader.h"
+#include "renderer/IFramebuffer.h"
+#include "renderer/ITexture.h"
 #include "renderer/Mesh.h"
 #include "renderer/ObjLoader.h"
 #include "renderer/RenderViewUtils.h"
@@ -290,9 +292,7 @@ Mat4 BuildObjectModelMatrix(const SceneDocument &doc, const SceneObject &obj) {
 // Framebuffer object for offscreen mesh rendering (shared across all asset
 // previews).
 struct AssetThumbnailRenderer {
-  unsigned int fbo = 0;
-  unsigned int colorTexture = 0;
-  unsigned int depthRenderBuffer = 0;
+  std::shared_ptr<IFramebuffer> fbo;
   int width = 512;
   int height = 512;
   Shader shader; // Basic lighting shader for thumbnail
@@ -310,7 +310,8 @@ struct AssetThumbnailRenderer {
   std::unordered_set<std::string, StringHash, std::equal_to<>> noPreviewKeys;
   // Per-mesh rendered texture cache: each mesh gets its own texture so all
   // thumbnails don't overwrite each other by sharing a single FBO attachment.
-  std::unordered_map<std::string, unsigned int, StringHash, std::equal_to<>>
+  std::unordered_map<std::string, std::shared_ptr<ITexture>, StringHash,
+                     std::equal_to<>>
       renderedTextureCache;
 
   static AssetThumbnailRenderer &Instance() {
@@ -319,39 +320,19 @@ struct AssetThumbnailRenderer {
   }
 
   bool Init() {
-    if (fbo != 0)
+    if (fbo != nullptr)
       return IsValid();
 
-    // Create FBO
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    FramebufferSpec spec;
+    spec.width  = static_cast<uint32_t>(width);
+    spec.height = static_cast<uint32_t>(height);
+    spec.attachmentSpec = {
+        {{FramebufferTextureFormat::RGBA8},
+         {FramebufferTextureFormat::DEPTH24STENCIL8}}};
+    fbo = Renderer::CreateFramebuffer(spec);
 
-    // Create color texture
-    glGenTextures(1, &colorTexture);
-    glBindTexture(GL_TEXTURE_2D, colorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                           colorTexture, 0);
-
-    // Create depth renderbuffer
-    glGenRenderbuffers(1, &depthRenderBuffer);
-    glBindRenderbuffer(GL_RENDERBUFFER, depthRenderBuffer);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                              GL_RENDERBUFFER, depthRenderBuffer);
-
-    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-      LogError("AssetThumbnailRenderer: FBO incomplete, status={}",
-               static_cast<int>(status));
-      Cleanup();
+    if (!fbo) {
+      LogError("AssetThumbnailRenderer: CreateFramebuffer returned nullptr.");
       return false;
     }
 
@@ -373,30 +354,14 @@ struct AssetThumbnailRenderer {
   }
 
   bool IsValid() const {
-    return fbo != 0 && colorTexture != 0 && depthRenderBuffer != 0 &&
-           shader.IsValid();
+    return fbo != nullptr && shader.IsValid();
   }
 
   void Cleanup() {
     meshCache.clear();
     noPreviewKeys.clear();
-    for (const auto &[key, texId] : renderedTextureCache) {
-      if (texId != 0)
-        glDeleteTextures(1, &texId);
-    }
     renderedTextureCache.clear();
-    if (colorTexture != 0) {
-      glDeleteTextures(1, &colorTexture);
-      colorTexture = 0;
-    }
-    if (depthRenderBuffer != 0) {
-      glDeleteRenderbuffers(1, &depthRenderBuffer);
-      depthRenderBuffer = 0;
-    }
-    if (fbo != 0) {
-      glDeleteFramebuffers(1, &fbo);
-      fbo = 0;
-    }
+    fbo.reset();
   }
 
   ~AssetThumbnailRenderer() { Cleanup(); }
@@ -535,26 +500,23 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
 
   // Return existing per-mesh texture if already rendered this session.
   if (const auto cacheIt = renderer.renderedTextureCache.find(meshKey);
-      cacheIt != renderer.renderedTextureCache.end())
-    return RenderTargetHandle::OpenGLTexture(cacheIt->second, true);
+      cacheIt != renderer.renderedTextureCache.end()) {
+    const auto &tex = cacheIt->second;
+    return tex ? tex->GetRenderTargetHandle(true) : RenderTargetHandle{};
+  }
 
   if (!renderer.IsValid())
     return {};
 
-  // Save GL state (viewport)
-  std::array<GLint, 4> prevViewport{0, 0, 1, 1};
-  glGetIntegerv(GL_VIEWPORT, prevViewport.data());
+  // Save viewport, bind FBO, set viewport
+  const auto prevViewport = Renderer::GetViewport();
 
-  // Bind FBO and set viewport
-  glBindFramebuffer(GL_FRAMEBUFFER, renderer.fbo);
-  glViewport(0, 0, renderer.width, renderer.height);
+  renderer.fbo->Bind();
+  Renderer::SetViewport(0, 0, renderer.width, renderer.height);
 
   // Clear and setup rendering
-  glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glEnable(GL_DEPTH_TEST);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
+  Renderer::ClearColorAndDepth(0.15f, 0.15f, 0.15f, 1.0f);
+  Renderer::SetupOpaqueRenderState();
 
   // Setup camera matrices
   Mat4 view;
@@ -591,29 +553,37 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
   }
 
   // Copy FBO contents into a new per-mesh texture so each asset keeps its own
-  // image.
-  unsigned int destTex = 0;
-  glGenTextures(1, &destTex);
-  glBindTexture(GL_TEXTURE_2D, destTex);
-  // glReadPixels only runs once per mesh (then cached); CPU cost is acceptable.
-  std::vector<unsigned char> pixels(
-      static_cast<size_t>(renderer.width * renderer.height * 3));
-  glReadPixels(0, 0, renderer.width, renderer.height, GL_RGB, GL_UNSIGNED_BYTE,
-               pixels.data());
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, renderer.width, renderer.height, 0,
-               GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  // image.  ReadbackRegionRgba8 only runs once per mesh (then cached).
+  std::vector<uint32_t> pixels(
+      static_cast<size_t>(renderer.width * renderer.height));
+  std::string readError;
+  if (!Renderer::ReadbackRegionRgba8(0, 0, renderer.width, renderer.height,
+                                     pixels.data(), &readError)) {
+    LogWarn("AssetThumbnailRenderer: readback failed: {}", readError);
+    renderer.fbo->Unbind();
+    Renderer::SetViewport(prevViewport[0], prevViewport[1],
+                          prevViewport[2], prevViewport[3]);
+    return {};
+  }
+
+  TextureSpec texSpec;
+  texSpec.width        = static_cast<uint32_t>(renderer.width);
+  texSpec.height       = static_cast<uint32_t>(renderer.height);
+  texSpec.format       = TextureFormat::RGBA8;
+  texSpec.filter       = TextureFilter::Linear;
+  texSpec.wrap         = TextureWrap::ClampToEdge;
+  texSpec.generateMips = false;
+  auto destTex = Renderer::CreateTexture(texSpec);
+  destTex->SetData(pixels.data(),
+                   static_cast<uint32_t>(pixels.size() * sizeof(uint32_t)));
   renderer.renderedTextureCache[meshKey] = destTex;
 
-  // Restore GL state
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glViewport(prevViewport[0], prevViewport[1], prevViewport[2],
-             prevViewport[3]);
+  // Restore state
+  renderer.fbo->Unbind();
+  Renderer::SetViewport(prevViewport[0], prevViewport[1],
+                        prevViewport[2], prevViewport[3]);
 
-  return RenderTargetHandle::OpenGLTexture(destTex, true);
+  return destTex->GetRenderTargetHandle(true);
 }
 
 RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef &asset) {

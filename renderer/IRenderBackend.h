@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -55,6 +56,29 @@ namespace Horo {
         TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                bool needsYFlip,
                                                std::string *outError) = 0;
+
+        // ── Viewport ────────────────────────────────────────────────────────────
+        virtual void SetViewport(int x, int y, int w, int h) = 0;
+        virtual std::array<int, 4> GetViewport() const = 0;
+
+        // ── 2-D overlay state ────────────────────────────────────────────────────
+        // Saves current depth / blend / cull state, then disables depth + cull and
+        // enables alpha blending — suitable for HUD / text overlay rendering.
+        virtual void Begin2dOverlay() = 0;
+        // Restores the state saved by the matching Begin2dOverlay call.
+        virtual void End2dOverlay() = 0;
+
+        // ── Offscreen / thumbnail helpers ────────────────────────────────────────
+        // Enable depth test + back-face culling; used before thumbnail render passes.
+        virtual void SetupOpaqueRenderState() = 0;
+        // Clear color and depth of the currently bound framebuffer.
+        virtual void ClearColorAndDepth(float r, float g, float b, float a) = 0;
+
+        // Read a sub-region of the currently bound READ framebuffer as RGBA8.
+        // Returns false on failure (e.g. invalid coords or no GL context).
+        virtual bool ReadbackRegionRgba8(int x, int y, int w, int h,
+                                         uint32_t *pixels,
+                                         std::string *outError) = 0;
 
         // ── Resource Factory ────────────────────────────────────────────────────
         // Default implementations return nullptr; concrete backends override these.

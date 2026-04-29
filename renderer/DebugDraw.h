@@ -5,6 +5,8 @@
 #include "math/Vec3.h"
 #include "math/Vec4.h"
 #include "renderer/Camera.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
 #include "renderer/Shader.h"
 
 namespace Horo {
@@ -37,8 +39,8 @@ namespace Horo {
 
         static std::vector<LineVertex> s_lines;
         static std::unique_ptr<Shader> s_shader;
-        static unsigned int s_vao;
-        static unsigned int s_vbo;
+        static std::shared_ptr<IVertexArray>  s_vao;
+        static std::shared_ptr<IVertexBuffer> s_vbo;
         static bool s_initialized;
     };
 } // namespace Horo

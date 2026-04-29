@@ -13,7 +13,7 @@
 #include <unordered_set>
 
 // clang-format off
-#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 // clang-format on
 
@@ -21,6 +21,7 @@
 #include "launcher/LauncherEditorShell.h"
 #include "launcher/UiAutomationConfig.h"
 #include "launcher/UiTestHarness.h"
+#include "renderer/Renderer.h"
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
 #include <imgui.h>
@@ -433,14 +434,17 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
     return false;
   if (glfwGetCurrentContext() == nullptr)
     return false;
-  std::array<GLint, 4> viewport{0, 0, 0, 0};
-  glGetIntegerv(GL_VIEWPORT, viewport.data());
+
+  const auto viewport = Renderer::GetViewport();
   if (viewport[2] <= 0 || viewport[3] <= 0)
     return false;
   if (x < 0 || y < 0 || x + w > viewport[2] || y + h > viewport[3])
     return false;
-  glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  if (glGetError() != GL_NO_ERROR)
+
+  std::string readError;
+  if (!Renderer::ReadbackRegionRgba8(x, y, w, h,
+                                     reinterpret_cast<uint32_t *>(pixels),
+                                     &readError))
     return false;
 
   for (int row = 0; row < h / 2; ++row) {
