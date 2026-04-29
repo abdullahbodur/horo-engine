@@ -235,6 +235,37 @@ def cmd_coverage_source_summary(_: argparse.Namespace) -> int:
         cwd=REPO_ROOT,
     )
 
+def _starter_binary(config_name: str) -> Path:
+    """Resolves the starter app binary when engine is used as a submodule.
+
+    Assumes this script lives at <starter_root>/engine/scripts/dev.py,
+    so REPO_ROOT.parent == starter_root.
+
+    On Windows (MSVC multi-config), CMake places the binary under bin/Debug/
+    or bin/Release/ rather than directly under bin/.
+    """
+    suffix = ".exe" if IS_WINDOWS else ""
+    msvc_subdir = "Debug" if IS_WINDOWS else ""
+    return REPO_ROOT.parent / "build" / config_name / "bin" / msvc_subdir / f"HoroStarterApp{suffix}"
+
+def cmd_run_editor(args: argparse.Namespace) -> int:
+    config = args.config if args.config else _preset_debug()
+    binary = _starter_binary(config)
+    if not binary.exists():
+        print(f"Binary not found: {binary}", file=sys.stderr)
+        print("Build first: make build CONFIG=" + config, file=sys.stderr)
+        return 1
+    return _run([binary, "--editor"])
+
+def cmd_run_play(args: argparse.Namespace) -> int:
+    config = args.config if args.config else _preset_debug()
+    binary = _starter_binary(config)
+    if not binary.exists():
+        print(f"Binary not found: {binary}", file=sys.stderr)
+        print("Build first: make build CONFIG=" + config, file=sys.stderr)
+        return 1
+    return _run([binary, "--play"])
+
 def cmd_clean(_: argparse.Namespace) -> int:
     return _run(["cmake", "-E", "rm", "-rf", _build_dir(_preset_debug())], cwd=REPO_ROOT)
 
@@ -286,11 +317,16 @@ UI automation vars:
         "clean-all": (cmd_clean_all, "Remove all build dirs"),
         "format": (cmd_format, "Format all tracked C++ sources"),
         "format-check": (cmd_format_check, "Check formatting"),
+        "run-editor": (cmd_run_editor, "Run starter app in editor mode (submodule use)"),
+        "run-play": (cmd_run_play, "Run starter app in play mode (submodule use)"),
     }
 
     for name, (func, help_text) in commands.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=func)
+        if name in ("run-editor", "run-play"):
+            p.add_argument("--config", default=None,
+                           help="Build config name (default: debug / debug-msvc on Windows)")
 
     # Automatically print help if no arguments are provided
     if len(sys.argv) == 1:

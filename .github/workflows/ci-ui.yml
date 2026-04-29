@@ -1,0 +1,449 @@
+name: UI Automation
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  actions: read            # needed to query previous workflow runs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Detect commits since the last successful run ──────────────────────
+  report-commits:
+    name: Commits since last run
+    runs-on: ubuntu-latest
+    outputs:
+      commit_list: ${{ steps.commits.outputs.commit_list }}
+      since_sha:   ${{ steps.commits.outputs.since_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find commits since last successful run
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find the SHA of the last successful UI Automation run on this branch
+          LAST_SHA=$(
+            gh run list \
+              --workflow ci-ui.yml \
+              --branch main \
+              --status success \
+              --limit 1 \
+              --json headSha \
+              --jq '.[0].headSha // ""'
+          )
+
+          if [ -z "$LAST_SHA" ]; then
+            echo "No previous successful run found — showing last 10 commits."
+            COMMITS=$(git log --oneline -10)
+            LAST_SHA="$(git rev-list --max-parents=0 HEAD)"
+          else
+            echo "Last successful run was at: $LAST_SHA"
+            COMMITS=$(git log --oneline "${LAST_SHA}..HEAD" 2>/dev/null || git log --oneline -10)
+          fi
+
+          # Escape newlines for GITHUB_OUTPUT multiline value
+          COMMITS_ESCAPED="${COMMITS//$'\n'/'%0A'}"
+          echo "commit_list=$COMMITS_ESCAPED" >> "$GITHUB_OUTPUT"
+          echo "since_sha=$LAST_SHA"          >> "$GITHUB_OUTPUT"
+
+          echo "### Commits to test" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$COMMITS" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 2a. Build — Linux ────────────────────────────────────────────────────
+  build-linux:
+    name: Build · Linux / GCC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: report-commits
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ui-build-linux
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            xvfb \
+            ffmpeg \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-ui-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-ui-linux-
+
+      - name: Configure
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build UI Automation Target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-binary-linux
+          path: |
+            build/debug/bin/HoroEditorUiTest
+          retention-days: 1
+
+  # ── 2b. Build — macOS ────────────────────────────────────────────────────
+  build-macos:
+    name: Build · macOS / Clang
+    runs-on: macos-latest
+    timeout-minutes: 25
+    needs: report-commits
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: ui-build-macos
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-ui-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-ui-macos-
+
+      - name: Configure
+        run: >
+          cmake --preset debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ~/.cmake/fetchcontent
+
+      - name: Build UI Automation Target
+        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-binary-macos
+          path: |
+            build/debug/bin/HoroEditorUiTest
+          retention-days: 1
+
+  # ── 2c. Build — Windows ──────────────────────────────────────────────────
+  build-windows:
+    name: Build · Windows / MSVC
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: report-commits
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-ui-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: sccache-ui-windows-
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-ui-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-ui-windows-
+
+      - name: Configure
+        run: >
+          cmake --preset debug-msvc
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_EXE_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+          -DCMAKE_SHARED_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+          -DCMAKE_MODULE_LINKER_FLAGS_DEBUG=/DEBUG:FASTLINK
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build UI Automation Target
+        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
+
+      - name: Install Mesa3D (software OpenGL for headless CI)
+        shell: pwsh
+        run: |
+          $ver = "25.3.6"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
+          Invoke-WebRequest -Uri $url -OutFile mesa3d.7z -UseBasicParsing
+          7z x mesa3d.7z -omesa3d -y | Out-Null
+          $dest = "build\debug-msvc\bin\Debug"
+          Copy-Item "mesa3d\x64\*.dll" $dest -Force
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-binary-windows
+          path: |
+            build/debug-msvc/bin/Debug/HoroEditorUiTest.exe
+            build/debug-msvc/bin/Debug/*.dll
+          retention-days: 1
+
+  # ── 3a. UI suites — Linux ─────────────────────────────────────────────────
+  ui-linux:
+    name: "UI · Linux / ${{ matrix.suite }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - launcher-basic
+          - properties-workflows
+          - mcp-project
+          - modals-mcp
+          - properties-close
+    steps:
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            xvfb ffmpeg \
+            libwayland-dev libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-binary-linux
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/HoroEditorUiTest
+
+      - name: Run suite
+        run: |
+          mkdir -p ui_test_output
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            bin/HoroEditorUiTest --run-ui-tests
+        env:
+          HORO_UI_TEST_SUITE: ${{ matrix.suite }}
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
+          HORO_LOG_LEVEL: "debug"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
+          HORO_GLFW_SAMPLES: "0"
+
+      - name: Upload suite artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-results-linux-${{ matrix.suite }}
+          path: ui_test_output/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ── 3b. UI suites — macOS ─────────────────────────────────────────────────
+  ui-macos:
+    name: "UI · macOS / ${{ matrix.suite }}"
+    runs-on: macos-latest
+    timeout-minutes: 15
+    needs: build-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - launcher-basic
+          - properties-workflows
+          - mcp-project
+          - modals-mcp
+          - properties-close
+    steps:
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-binary-macos
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/HoroEditorUiTest
+
+      - name: Resolve ffmpeg path
+        run: echo "FFMPEG_PATH=$(which ffmpeg)" >> "$GITHUB_ENV"
+
+      - name: Run suite
+        run: |
+          mkdir -p ui_test_output
+          bin/HoroEditorUiTest --run-ui-tests
+        env:
+          HORO_UI_TEST_SUITE: ${{ matrix.suite }}
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
+
+      - name: Upload suite artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-results-macos-${{ matrix.suite }}
+          path: ui_test_output/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ── 3c. UI suites — Windows ───────────────────────────────────────────────
+  ui-windows:
+    name: "UI · Windows / ${{ matrix.suite }}"
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: build-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - launcher-basic
+          - properties-workflows
+          - mcp-project
+          - modals-mcp
+          - properties-close
+    steps:
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-binary-windows
+          path: bin
+
+      - name: Resolve ffmpeg path
+        shell: pwsh
+        run: |
+          $ffmpeg = (Get-Command ffmpeg).Source
+          echo "FFMPEG_PATH=$ffmpeg" >> $env:GITHUB_ENV
+
+      - name: Run suite
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ui_test_output | Out-Null
+          .\bin\HoroEditorUiTest.exe --run-ui-tests
+          exit $LASTEXITCODE
+        env:
+          HORO_UI_TEST_SUITE: ${{ matrix.suite }}
+          HORO_UI_TEST_CAPTURE: "1"
+          HORO_UI_TEST_VIDEO: "1"
+          HORO_UI_TEST_RECORDING: "1"
+          HORO_UI_TEST_DELAY_MS: "0"
+          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
+          HORO_LOG_LEVEL: "debug"
+          HORO_GLFW_SAMPLES: "0"
+          LIBGL_DEBUG: "verbose"
+          MESA_DEBUG: "1"
+
+      - name: Upload suite artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-results-windows-${{ matrix.suite }}
+          path: ui_test_output\
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ── 4. Summary ─────────────────────────────────────────────────────────────
+  summary:
+    name: UI Test Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - report-commits
+      - ui-linux
+      - ui-macos
+      - ui-windows
+    steps:
+      - name: Write summary
+        env:
+          COMMIT_LIST: ${{ needs.report-commits.outputs.commit_list }}
+          RESULT_LINUX:   ${{ needs.ui-linux.result }}
+          RESULT_MACOS:   ${{ needs.ui-macos.result }}
+          RESULT_WINDOWS: ${{ needs.ui-windows.result }}
+        run: |
+          icon() { [ "$1" = "success" ] && echo "✅" || echo "❌"; }
+
+          {
+            echo "## UI Automation — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "### Commits tested"
+            echo '```'
+            echo "${COMMIT_LIST//%0A/$'\n'}"
+            echo '```'
+            echo ""
+            echo "### Platform results"
+            echo ""
+            echo "| Platform | Result |"
+            echo "|----------|--------|"
+            echo "| Linux / GCC   | $(icon "$RESULT_LINUX") $RESULT_LINUX |"
+            echo "| macOS / Clang | $(icon "$RESULT_MACOS") $RESULT_MACOS |"
+            echo "| Windows / MSVC | $(icon "$RESULT_WINDOWS") $RESULT_WINDOWS |"
+            echo ""
+            echo "> Artifacts: per-suite videos and screenshots are attached to this run."
+          } >> "$GITHUB_STEP_SUMMARY"

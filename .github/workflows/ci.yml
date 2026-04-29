@@ -33,7 +33,7 @@ jobs:
   test-macos:
     name: Test · macOS / Clang
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -42,9 +42,6 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2.22
         with:
           key: ${{ github.job }}-${{ runner.os }}
-
-      - name: Install ffmpeg
-        run: brew install ffmpeg
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -98,56 +95,14 @@ jobs:
           path: build/debug/test-results/
           retention-days: 14
 
-      - name: Prepare UI test output directory
-        run: mkdir -p ui_test_output
-
-      - name: Build UI Automation Target
-        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-
-      - name: Resolve ffmpeg path
-        shell: bash
-        run: echo "FFMPEG_PATH=$(which ffmpeg)" >> $GITHUB_ENV
-
-      - name: Run UI Automation
-        shell: bash
-        run: |
-          set -euo pipefail
-          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
-          for suite in "${suites[@]}"; do
-            echo "::group::UI test suite ${suite}"
-            mkdir -p "ui_test_output/${suite}"
-            HORO_UI_TEST_SUITE="${suite}" \
-              HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
-              build/debug/bin/HoroEditorUiTest --run-ui-tests
-            echo "::endgroup::"
-          done
-        env:
-          HORO_UI_TEST_CAPTURE: "1"
-          HORO_UI_TEST_VIDEO: "1"
-          HORO_UI_TEST_RECORDING: "1"
-          HORO_UI_TEST_DELAY_MS: "0"
-          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          HORO_LOG_LEVEL: "debug"
-          HORO_GLFW_SAMPLES: "0"
-
       - name: Setup tmate session
         if: failure() && github.event_name == 'workflow_dispatch'
         uses: mxschmitt/action-tmate@v3
 
-      - name: Upload UI Test Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results-macos
-          path: ui_test_output/
-          if-no-files-found: ignore
-          retention-days: 30
-
   test-windows:
     name: Test · Windows / MSVC
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
 
@@ -220,88 +175,9 @@ jobs:
           path: build/debug-msvc/test-results/
           retention-days: 14
 
-      - name: Install ffmpeg
-        run: choco install ffmpeg -y --no-progress
-        shell: pwsh
-
-      - name: Prepare UI test output directory
-        run: New-Item -ItemType Directory -Force -Path ui_test_output
-        shell: pwsh
-
-      - name: Build UI Automation Target
-        run: cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
-
-      - name: Resolve ffmpeg path
-        run: |
-          $ffmpeg = (Get-Command ffmpeg).Source
-          echo "FFMPEG_PATH=$ffmpeg" >> $env:GITHUB_ENV
-        shell: pwsh
-
-      - name: Install Mesa3D (software OpenGL for headless CI)
-        shell: pwsh
-        run: |
-          # mesa-dist-win 25.x: opengl32.dll stub → libgallium_wgl.dll (D3D12 backend).
-          # D3D12 WARP (Windows Advanced Rasterization Platform) is Microsoft's
-          # built-in pure-software D3D12 renderer — no GPU or driver required.
-          # DO NOT set GALLIUM_DRIVER=softpipe here; mesa 25.x WGL only has D3D12.
-          $ver = "25.3.6"
-          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
-          Invoke-WebRequest -Uri $url -OutFile mesa3d.7z -UseBasicParsing
-          7z x mesa3d.7z -omesa3d -y | Out-Null
-          $dest = "build\debug-msvc\bin\Debug"
-          # Copy all x64 DLLs so transitive dependencies of libgallium_wgl.dll
-          # (e.g. spirv_to_dxil.dll for shader compilation) are available.
-          Copy-Item "mesa3d\x64\*.dll" $dest -Force
-          Write-Host "=== Mesa WGL DLLs installed (opengl32 + libgallium_wgl) ==="
-          Get-ChildItem "$dest\opengl32.dll", "$dest\libgallium_wgl.dll" |
-            Select-Object Name, Length | Format-Table
-
-      - name: Run UI Automation
-        shell: pwsh
-        timeout-minutes: 20
-        run: |
-          $suites = @(
-            "launcher-basic",
-            "properties-workflows",
-            "mcp-project",
-            "modals-mcp",
-            "properties-close"
-          )
-          foreach ($suite in $suites) {
-            Write-Host "::group::UI test suite $suite"
-            $env:HORO_UI_TEST_SUITE = $suite
-            $env:HORO_UI_TEST_OUTPUT_DIR = "${{ github.workspace }}\ui_test_output\$suite"
-            New-Item -ItemType Directory -Force -Path $env:HORO_UI_TEST_OUTPUT_DIR | Out-Null
-            .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
-            $code = $LASTEXITCODE
-            Write-Host "::endgroup::"
-            if ($code -ne 0) { exit $code }
-          }
-        env:
-          HORO_UI_TEST_CAPTURE: "1"
-          HORO_UI_TEST_VIDEO: "1"
-          HORO_UI_TEST_RECORDING: "1"
-          HORO_UI_TEST_DELAY_MS: "0"
-          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
-          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
-          HORO_LOG_LEVEL: "debug"
-          HORO_GLFW_SAMPLES: "0"
-          # No GALLIUM_DRIVER — mesa 25.x WGL uses D3D12/WARP by default
-          LIBGL_DEBUG: "verbose"
-          MESA_DEBUG: "1"
-
       - name: Setup tmate session
         if: failure() && github.event_name == 'workflow_dispatch'
         uses: mxschmitt/action-tmate@v3
-
-      - name: Upload UI Test Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results-windows
-          path: ui_test_output\
-          if-no-files-found: ignore
-          retention-days: 30
 
       - name: Show sccache stats
         if: always()
@@ -310,7 +186,7 @@ jobs:
   test-linux:
     name: Test · Linux / GCC
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       BUILD_WRAPPER_OUT_DIR: bw-output
@@ -333,8 +209,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             ninja-build \
             gcovr \
-            xvfb \
-            ffmpeg \
             libwayland-dev \
             wayland-protocols \
             libxkbcommon-dev \
@@ -402,53 +276,9 @@ jobs:
           path: build/debug/test-results/
           retention-days: 14
 
-      - name: Prepare UI test output directory
-        run: mkdir -p ui_test_output
-
-      - name: Build UI Automation Target
-        run: cmake --build --preset debug --target HoroEditorUiTest --parallel
-
-      - name: Run UI Automation
-        run: |
-          set -euo pipefail
-          suites=(launcher-basic properties-workflows mcp-project modals-mcp properties-close)
-          status=0
-          for suite in "${suites[@]}"; do
-            echo "::group::UI test suite ${suite}"
-            mkdir -p "ui_test_output/${suite}"
-            if ! HORO_UI_TEST_SUITE="${suite}" \
-              HORO_UI_TEST_OUTPUT_DIR="${{ github.workspace }}/ui_test_output/${suite}" \
-              xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-                build/debug/bin/HoroEditorUiTest --run-ui-tests; then
-              status=1
-            fi
-            echo "::endgroup::"
-          done
-          exit "${status}"
-        env:
-          HORO_UI_TEST_CAPTURE: "1"
-          HORO_UI_TEST_VIDEO: "1"
-          HORO_UI_TEST_RECORDING: "1"
-          HORO_UI_TEST_DELAY_MS: "0"
-          HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          HORO_UI_TEST_FFMPEG_PATH: "/usr/bin/ffmpeg"
-          HORO_LOG_LEVEL: "debug"
-          LIBGL_ALWAYS_SOFTWARE: "1"
-          GALLIUM_DRIVER: "llvmpipe"
-          HORO_GLFW_SAMPLES: "0"
-
       - name: Setup tmate session on failure
         if: failure() && github.event_name == 'workflow_dispatch'
         uses: mxschmitt/action-tmate@v3
-
-      - name: Upload UI Test Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results-linux
-          path: ui_test_output/
-          if-no-files-found: ignore
-          retention-days: 30
 
       - name: Install Build Wrapper
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
