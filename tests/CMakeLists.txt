@@ -11,8 +11,10 @@ FetchContent_MakeAvailable(Catch2)
 
 # All tests link HoroEngine first so OpenGLRenderBackend vtable symbols are
 # resolved when the linker subsequently processes horo-renderer-opengl.
-if(TARGET horo-renderer-opengl AND HORO_RENDERER STREQUAL "opengl")
+if(TARGET horo-renderer-opengl)
     set(HORO_ENGINE_LINK HoroEngine horo-renderer-opengl)
+elseif(TARGET horo-renderer-null)
+    set(HORO_ENGINE_LINK HoroEngine horo-renderer-null)
 else()
     set(HORO_ENGINE_LINK HoroEngine)
 endif()
@@ -309,3 +311,21 @@ add_executable(test_renderer_unit test_renderer_unit.cpp)
 target_link_libraries(test_renderer_unit PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
 horo_set_test_output_dir(test_renderer_unit)
 add_test(NAME test_renderer_unit COMMAND $<TARGET_FILE:test_renderer_unit>)
+
+# ---- test_null_renderer ----
+add_executable(test_null_renderer test_null_renderer.cpp)
+target_link_libraries(test_null_renderer PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+horo_set_test_output_dir(test_null_renderer)
+add_test(NAME test_null_renderer COMMAND $<TARGET_FILE:test_null_renderer>)
+
+# ---- test_vertex_buffer ----
+add_executable(test_vertex_buffer test_vertex_buffer.cpp)
+target_link_libraries(test_vertex_buffer PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+horo_set_test_output_dir(test_vertex_buffer)
+add_test(NAME test_vertex_buffer COMMAND $<TARGET_FILE:test_vertex_buffer>)
+
+# ---- test_renderer_facade ----
+add_executable(test_renderer_facade test_renderer_facade.cpp)
+target_link_libraries(test_renderer_facade PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+horo_set_test_output_dir(test_renderer_facade)
+add_test(NAME test_renderer_facade COMMAND $<TARGET_FILE:test_renderer_facade>)
