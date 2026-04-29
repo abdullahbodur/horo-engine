@@ -321,6 +321,9 @@ jobs:
       - name: Make binary executable
         run: chmod +x bin/HoroEditorUiTest
 
+      - name: Resolve ffmpeg path
+        run: echo "FFMPEG_PATH=$(which ffmpeg)" >> "$GITHUB_ENV"
+
       - name: Run suite
         run: |
           mkdir -p ui_test_output
@@ -332,7 +335,7 @@ jobs:
           HORO_UI_TEST_RECORDING: "1"
           HORO_UI_TEST_DELAY_MS: "0"
           HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}/ui_test_output
-          HORO_UI_TEST_FFMPEG_PATH: ${{ steps.ffmpeg.outputs.path }}
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
           HORO_LOG_LEVEL: "debug"
           HORO_GLFW_SAMPLES: "0"
 
@@ -371,6 +374,12 @@ jobs:
           name: ui-binary-windows
           path: bin
 
+      - name: Resolve ffmpeg path
+        shell: pwsh
+        run: |
+          $ffmpeg = (Get-Command ffmpeg).Source
+          echo "FFMPEG_PATH=$ffmpeg" >> $env:GITHUB_ENV
+
       - name: Run suite
         shell: pwsh
         run: |
@@ -384,6 +393,7 @@ jobs:
           HORO_UI_TEST_RECORDING: "1"
           HORO_UI_TEST_DELAY_MS: "0"
           HORO_UI_TEST_OUTPUT_DIR: ${{ github.workspace }}\ui_test_output
+          HORO_UI_TEST_FFMPEG_PATH: ${{ env.FFMPEG_PATH }}
           HORO_LOG_LEVEL: "debug"
           HORO_GLFW_SAMPLES: "0"
           LIBGL_DEBUG: "verbose"
