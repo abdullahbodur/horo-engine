@@ -2,8 +2,10 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "package-name": "horo-engine",
+      "package-name": "HoroEngine",
       "changelog-path": "CHANGELOG.md",
+      "pull-request-title-pattern": "chore: release HoroEngine v${version}",
+      "pull-request-header": "## :rocket: Release HoroEngine v${version}\n\nThis is an automated release PR. Review the changelog below, then merge to publish the release on GitHub.\n\nOnce merged, binaries for **Linux**, **macOS**, and **Windows** will be built and attached to the GitHub Release automatically.",
       "extra-files": [
         "CMakeLists.txt"
       ]
