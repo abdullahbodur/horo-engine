@@ -6,8 +6,6 @@
       "changelog-path": "CHANGELOG.md",
       "pull-request-title-pattern": "chore: release HoroEngine v${version}",
       "pull-request-header": "## :rocket: HoroEngine Release\n\nThis is an automated release PR. Review the changelog below, then merge to publish the release on GitHub.\n\nOnce merged, binaries for **Linux**, **macOS**, and **Windows** will be built and attached to the GitHub Release automatically.",
-      "pull-request-title-pattern": "chore: release v${version}",
-      "pull-request-header": "## Release v${version}\n\nThis is an automated release PR. Review the changelog below, then merge to publish the release on GitHub.\n\nOnce merged, binaries for **Linux**, **macOS**, and **Windows** will be built and attached to the GitHub Release automatically.",
       "changelog-sections": [
         { "type": "feat",     "section": "Features" },
         { "type": "fix",      "section": "Bug Fixes" },
