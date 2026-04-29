@@ -1,5 +1,6 @@
 #include "renderer/Shader.h"
 
+// TODO(renderer-abstraction): Goal 3 will move this to renderer/opengl/OpenGLShader.cpp
 #include <glad/glad.h>
 
 #include <array>
