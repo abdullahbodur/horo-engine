@@ -22,6 +22,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     option(HORO_ENGINE_ENABLE_VULKAN "Fetch Vulkan headers/loader and compile Vulkan backend scaffolding" OFF)
     option(HORO_ENGINE_BUILD_STANDALONE_EDITOR "Build HoroEditor (SDK launcher + editor shell executable)" ON)
 
+    set(HORO_RENDERER "opengl" CACHE STRING "Renderer backend: opengl | vulkan | null")
+    set_property(CACHE HORO_RENDERER PROPERTY STRINGS opengl vulkan null)
+
     if(MSVC)
         add_compile_options(/W4 /WX /Zc:preprocessor)
     else()
@@ -33,6 +36,21 @@ endif()
 # Guards in vendor/CMakeLists.txt prevent duplicate target errors if a parent
 # project already defined any of these targets.
 add_subdirectory(vendor)
+
+# ---- OpenGL backend source files (PRIVATE glad isolation) ----
+# These are the renderer translation units that include <glad/glad.h>.
+# They are compiled into the dedicated horo-renderer-opengl STATIC target so
+# that glad's include directories are PRIVATE to that target and cannot reach
+# the core-engine or editor translation units.
+set(HORO_RENDERER_OPENGL_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/DebugDraw.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/DebugHUD.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Mesh.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/OpenGLRenderBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Shader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/SkinnedMesh.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Texture.cpp
+)
 
 # ---- HoroEngine static library ----
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
@@ -48,6 +66,9 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
 )
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
+# Exclude the OpenGL backend files; they live in horo-renderer-opengl.
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX
+    "[/\\\\]renderer[/\\\\](DebugDraw|DebugHUD|Mesh|OpenGLRenderBackend|Shader|SkinnedMesh|Texture)\\.cpp$")
 
 add_library(HoroEngine STATIC ${ENGINE_SOURCES})
 add_library(HoroEngine::HoroEngine ALIAS HoroEngine)
@@ -64,9 +85,9 @@ function(horo_configure_engine_target target_name imgui_target)
     target_link_libraries(${target_name}
         PUBLIC
             glfw
-            glad
             ${imgui_target}
         PRIVATE
+            glad
             glm
             stb
             nlohmann_json
@@ -78,12 +99,14 @@ function(horo_configure_engine_target target_name imgui_target)
         target_compile_definitions(${target_name} PUBLIC HORO_HAS_VULKAN=1)
     endif()
 
-    if(APPLE)
-        target_link_libraries(${target_name} PUBLIC "-framework OpenGL")
-    elseif(WIN32)
-        target_link_libraries(${target_name} PUBLIC opengl32 comdlg32 ole32 shell32 ws2_32)
+    if(WIN32)
+        # Windows system libs needed for GLFW and general app infrastructure.
+        target_link_libraries(${target_name} PUBLIC comdlg32 ole32 shell32 ws2_32)
+        target_link_libraries(${target_name} PRIVATE opengl32)
+    elseif(APPLE)
+        target_link_libraries(${target_name} PRIVATE "-framework OpenGL")
     else()
-        target_link_libraries(${target_name} PUBLIC GL)
+        target_link_libraries(${target_name} PRIVATE GL)
     endif()
 
     target_compile_features(${target_name} PUBLIC cxx_std_20)
@@ -102,6 +125,45 @@ endfunction()
 option(HORO_ENGINE_COVERAGE "Add coverage flags to HoroEngine (for reports after ctest)" OFF)
 
 horo_configure_engine_target(HoroEngine imgui_lib)
+# core/Window.cpp and editor files include <glad/glad.h> directly; add glad
+# as PRIVATE so its headers are available at compile time but not re-exported.
+target_link_libraries(HoroEngine PRIVATE glad)
+
+# ---- horo-renderer-opengl: PRIVATE glad + OpenGL ----
+# Dedicated backend marker/consumer target.  The sources compiled here
+# include <glad/glad.h>, and glad is kept PRIVATE so its include directories
+# cannot transitively reach HoroEditor or test translation units.
+# HoroEngine also uses glad PRIVATE (Window.cpp, EditorLayer.cpp, etc.) but
+# the PUBLIC interface of both targets is glad-free.
+add_library(horo-renderer-opengl STATIC ${HORO_RENDERER_OPENGL_SOURCES})
+add_library(HoroEngine::RendererOpenGL ALIAS horo-renderer-opengl)
+
+target_include_directories(horo-renderer-opengl PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(horo-renderer-opengl
+    PUBLIC  HoroEngine
+    PRIVATE glad stb
+)
+if(APPLE)
+    target_link_libraries(horo-renderer-opengl PRIVATE "-framework OpenGL")
+elseif(WIN32)
+    target_link_libraries(horo-renderer-opengl PRIVATE opengl32)
+else()
+    target_link_libraries(horo-renderer-opengl PRIVATE GL)
+endif()
+target_compile_definitions(horo-renderer-opengl INTERFACE HORO_RENDERER_OPENGL=1)
+
+if(HORO_ENGINE_COVERAGE AND NOT MSVC)
+    target_compile_options(horo-renderer-opengl PUBLIC --coverage -O0 -g)
+    target_link_options(horo-renderer-opengl PUBLIC --coverage)
+endif()
+
+# ---- horo-renderer-null: no GPU dependency (headless / CI unit tests) ----
+add_library(horo-renderer-null INTERFACE)
+add_library(HoroEngine::RendererNull ALIAS horo-renderer-null)
+target_link_libraries(horo-renderer-null INTERFACE HoroEngine)
+target_compile_definitions(horo-renderer-null INTERFACE HORO_RENDERER_NULL=1)
 
 if(HORO_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
     set(HORO_UI_TEST_SOURCES
@@ -119,6 +181,16 @@ if(HORO_ENGINE_BUILD_TESTS AND TARGET imgui_test_lib)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
     horo_configure_engine_target(HoroEngineImGuiTest imgui_test_lib)
+
+    # Add the OpenGL backend sources so HoroEngineImGuiTest is self-contained.
+    # glad is already PRIVATE via horo_configure_engine_target above.
+    if(HORO_RENDERER STREQUAL "opengl")
+        target_sources(HoroEngineImGuiTest PRIVATE ${HORO_RENDERER_OPENGL_SOURCES})
+        target_include_directories(HoroEngineImGuiTest PRIVATE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        )
+        target_compile_definitions(HoroEngineImGuiTest PUBLIC HORO_RENDERER_OPENGL=1)
+    endif()
 endif()
 
 # Copy GLSL shaders to bin/shaders alongside the executable
@@ -131,11 +203,23 @@ add_custom_command(TARGET HoroEngine POST_BUILD
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STANDALONE_EDITOR)
     add_executable(HoroEditor launcher/HoroEditorMain.cpp)
-    target_link_libraries(HoroEditor PRIVATE HoroEngine)
     target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
     if(WIN32)
         target_compile_definitions(HoroEditor PRIVATE NOMINMAX)
+    endif()
+
+    if(HORO_RENDERER STREQUAL "opengl")
+        target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_OPENGL=1)
+        target_link_libraries(HoroEditor PRIVATE horo-renderer-opengl)
+    elseif(HORO_RENDERER STREQUAL "vulkan")
+        target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_VULKAN=1)
+        target_link_libraries(HoroEditor PRIVATE HoroEngine)
+    elseif(HORO_RENDERER STREQUAL "null")
+        target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_NULL=1)
+        target_link_libraries(HoroEditor PRIVATE horo-renderer-null)
+    else()
+        target_link_libraries(HoroEditor PRIVATE HoroEngine)
     endif()
 
     add_custom_command(TARGET HoroEditor POST_BUILD
@@ -175,7 +259,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    install(TARGETS HoroEngine glad imgui_lib glfw glm stb tinygltf nlohmann_json
+    install(TARGETS HoroEngine horo-renderer-opengl glad imgui_lib glfw glm stb tinygltf nlohmann_json
         EXPORT HoroEngineTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

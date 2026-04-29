@@ -17,7 +17,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "HORO_ENGINE_BUILD_TESTS": "ON"
+        "HORO_ENGINE_BUILD_TESTS": "ON",
+        "HORO_RENDERER": "opengl"
       }
     },
     {
@@ -26,7 +27,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "HORO_ENGINE_BUILD_TESTS": "OFF"
+        "HORO_ENGINE_BUILD_TESTS": "OFF",
+        "HORO_RENDERER": "opengl"
       }
     },
     {
@@ -65,9 +67,19 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "HORO_ENGINE_BUILD_TESTS": "ON",
+        "HORO_RENDERER": "opengl",
         "CMAKE_CXX_FLAGS": "--coverage -O0",
         "CMAKE_C_FLAGS": "--coverage -O0",
         "CMAKE_EXE_LINKER_FLAGS": "--coverage"
+      }
+    },
+    {
+      "name": "null-renderer",
+      "displayName": "Null Renderer (headless)",
+      "inherits": "release",
+      "cacheVariables": {
+        "HORO_RENDERER": "null",
+        "HORO_ENGINE_BUILD_TESTS": "ON"
       }
     }
   ],
@@ -85,6 +97,10 @@
       "configurePreset": "coverage"
     },
     {
+      "name": "null-renderer",
+      "configurePreset": "null-renderer"
+    },
+    {
       "name": "debug-msvc",
       "configurePreset": "debug-msvc"
     },
@@ -97,6 +113,11 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "null-renderer",
+      "configurePreset": "null-renderer",
       "output": { "outputOnFailure": true }
     },
     {
