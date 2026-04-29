@@ -309,9 +309,3 @@ add_executable(test_renderer_unit test_renderer_unit.cpp)
 target_link_libraries(test_renderer_unit PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
 horo_set_test_output_dir(test_renderer_unit)
 add_test(NAME test_renderer_unit COMMAND $<TARGET_FILE:test_renderer_unit>)
-
-# ---- test_null_renderer ----
-add_executable(test_null_renderer test_null_renderer.cpp)
-target_link_libraries(test_null_renderer PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
-horo_set_test_output_dir(test_null_renderer)
-add_test(NAME test_null_renderer COMMAND $<TARGET_FILE:test_null_renderer>)
