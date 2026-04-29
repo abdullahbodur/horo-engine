@@ -1,9 +1,24 @@
 # Horo Engine
 
+[![CI](https://github.com/abdullahbodur/horo-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/abdullahbodur/horo-engine/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=docktail_horo-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=docktail_horo-engine)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=docktail_horo-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=docktail_horo-engine)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=docktail_horo-engine&metric=bugs)](https://sonarcloud.io/summary/new_code?id=docktail_horo-engine)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=docktail_horo-engine&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=docktail_horo-engine)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue?style=flat&logo=cplusplus)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+[![Release](https://img.shields.io/github/v/release/abdullahbodur/horo-engine)](https://github.com/abdullahbodur/horo-engine/releases)
+
 Horo Engine is an open-source C++20 game engine focused on **clarity, embeddability, and fast iteration**.
 
 It is designed to be added directly to your repo (typically as a submodule) so your game code, engine code, tooling, and
 CI all live in one visible workspace.
+
+## Screenshots
+
+<!-- Drop editor/renderer screenshots here once captured. -->
+<!-- Example: ![Editor overview](docs/screenshots/editor.png) -->
 
 ## Use Cases
 
@@ -36,19 +51,47 @@ Horo may not be the best choice if you need:
 - A source-available engine intended for direct integration, not opaque SDK consumption
 - A practical platform for gameplay, editor workflows, and automation tests
 
-## High-Level Features
+## Features
 
-- Runtime engine + in-repo editor workflow
-- ECS-based scene/runtime architecture
-- Asset import + scene serialization pipeline
-- Built-in test suite (unit + launcher UI automation)
-- Built-in MCP endpoint for editor automation workflows
+| Module | Status | Notes |
+|---|---|---|
+| Core (ECS, scene, serialization) | ✅ Production | |
+| OpenGL renderer | ✅ Production | |
+| Asset import pipeline | ✅ Production | |
+| Unit test suite (Catch2) | ✅ Production | |
+| UI automation tests | ✅ Production | Launcher + editor flows |
+| MCP server (editor AI tooling) | ✅ Production | HTTP endpoint, opt-in |
+| Vulkan renderer | 🔧 In progress | Not parity-complete yet |
+| Backend resource factory API | 🔧 In progress | Active PRs |
+| Physics | 🔧 In progress | Module scaffolded |
+| GI / reflections | 📋 Planned | Architecture defined |
 
-## Current Renderer Status
+## Architecture
 
-- **OpenGL backend:** production-ready path today
-- **Vulkan backend:** actively in progress (not parity-complete yet)
-- **Render architecture:** backend-boundary work is in place so renderer can evolve beyond a single API
+```
+┌─────────────────────────────────────────────┐
+│                  Launcher                   │
+│          (editor shell + main loop)         │
+└──────────────────┬──────────────────────────┘
+                   │
+          ┌────────▼────────┐
+          │     Editor      │◄──── MCP server
+          │  (scene / UI)   │
+          └────────┬────────┘
+                   │
+          ┌────────▼────────┐
+          │      Scene      │
+          │  (ECS runtime)  │
+          └──┬──────────┬───┘
+             │          │
+    ┌────────▼───┐  ┌───▼────────────┐
+    │  Renderer  │  │      Core      │
+    │ (GL/Vulkan)│  │ math · input   │
+    └────────────┘  │   physics      │
+                    └────────────────┘
+```
+
+See [docs/architecture/README.md](./docs/architecture/README.md) for full module documentation.
 
 ## Quick Start
 
@@ -127,12 +170,8 @@ See [docs/mcp.md](./docs/mcp.md) for setup and usage.
 
 ## Contributing
 
-1. Fork and create a feature branch
-2. Install git hooks: `pre-commit install`
-3. Run `make test`
-4. Run `make format-check`
-5. Open a pull request
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for setup, branch naming, commit conventions, and the PR checklist.
 
 ## License
 
-Source code in this repository is open source. See vendor subdirectories for third-party licenses.
+[MIT](LICENSE) — source code in this repository. See `vendor/` subdirectories for third-party licenses.
