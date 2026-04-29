@@ -38,18 +38,13 @@ endif()
 add_subdirectory(vendor)
 
 # ---- OpenGL backend source files (PRIVATE glad isolation) ----
-# These are the renderer translation units that include <glad/glad.h>.
-# They are compiled into the dedicated horo-renderer-opengl STATIC target so
-# that glad's include directories are PRIVATE to that target and cannot reach
-# the core-engine or editor translation units.
+# Only files that directly include <glad/glad.h> belong here.
+# renderer/Mesh.cpp, SkinnedMesh.cpp, DebugDraw.cpp, DebugHUD.cpp,
+# Shader.cpp and Texture.cpp do NOT include glad directly (they use the
+# clean OpenGL* headers) so they remain in HoroEngine to avoid a circular
+# dependency (EditorLayer.cpp in HoroEngine calls Mesh).
 set(HORO_RENDERER_OPENGL_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/DebugDraw.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/DebugHUD.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Mesh.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/OpenGLRenderBackend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Shader.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/SkinnedMesh.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/Texture.cpp
 )
 
 # ---- HoroEngine static library ----
@@ -66,9 +61,9 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
 )
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
-# Exclude the OpenGL backend files; they live in horo-renderer-opengl.
+# Exclude only the file that directly includes <glad/glad.h>; it lives in horo-renderer-opengl.
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX
-    "[/\\\\]renderer[/\\\\](DebugDraw|DebugHUD|Mesh|OpenGLRenderBackend|Shader|SkinnedMesh|Texture)\\.cpp$")
+    "[/\\\\]renderer[/\\\\]OpenGLRenderBackend\\.cpp$")
 
 add_library(HoroEngine STATIC ${ENGINE_SOURCES})
 add_library(HoroEngine::HoroEngine ALIAS HoroEngine)
