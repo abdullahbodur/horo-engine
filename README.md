@@ -68,27 +68,20 @@ Horo may not be the best choice if you need:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────┐
-│                  Launcher                   │
-│          (editor shell + main loop)         │
-└──────────────────┬──────────────────────────┘
-                   │
-          ┌────────▼────────┐
-          │     Editor      │◄──── MCP server
-          │  (scene / UI)   │
-          └────────┬────────┘
-                   │
-          ┌────────▼────────┐
-          │      Scene      │
-          │  (ECS runtime)  │
-          └──┬──────────┬───┘
-             │          │
-    ┌────────▼───┐  ┌───▼────────────┐
-    │  Renderer  │  │      Core      │
-    │ (GL/Vulkan)│  │ math · input   │
-    └────────────┘  │   physics      │
-                    └────────────────┘
+```mermaid
+graph TD
+    Launcher["🚀 Launcher\neditor shell · main loop"]
+    Editor["🖊️ Editor\nscene · UI"]
+    MCP["🤖 MCP Server\nAI tooling · HTTP endpoint"]
+    Scene["🎬 Scene\nECS runtime"]
+    Renderer["🎨 Renderer\nOpenGL · Vulkan"]
+    Core["⚙️ Core\nmath · input · physics"]
+
+    Launcher --> Editor
+    MCP --> Editor
+    Editor --> Scene
+    Scene --> Renderer
+    Scene --> Core
 ```
 
 See [docs/architecture/README.md](./docs/architecture/README.md) for full module documentation.
