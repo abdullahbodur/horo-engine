@@ -2,6 +2,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "renderer/Texture.h"
 
+// TODO(renderer-abstraction): Goal 3 will move this to renderer/opengl/OpenGLTexture.cpp
 #include <glad/glad.h>
 #include <stb_image.h>
 

@@ -1,5 +1,7 @@
 #include "renderer/Renderer.h"
 
+// TODO(renderer-abstraction): CreateDefaultOwnedBackend assert message below references
+// "OpenGL" by name — update to "default render backend" in Goal 3.
 #include <functional>
 #include <memory>
 #include <optional>
