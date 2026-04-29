@@ -137,7 +137,7 @@ target_include_directories(horo-renderer-opengl PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(horo-renderer-opengl
-    PUBLIC  HoroEngine
+    PRIVATE HoroEngine
     PRIVATE glad stb
 )
 if(APPLE)
@@ -206,7 +206,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
 
     if(HORO_RENDERER STREQUAL "opengl")
         target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_OPENGL=1)
-        target_link_libraries(HoroEditor PRIVATE horo-renderer-opengl)
+        target_link_libraries(HoroEditor PRIVATE HoroEngine horo-renderer-opengl)
     elseif(HORO_RENDERER STREQUAL "vulkan")
         target_compile_definitions(HoroEditor PRIVATE HORO_RENDERER_VULKAN=1)
         target_link_libraries(HoroEditor PRIVATE HoroEngine)

@@ -9,11 +9,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-# All tests link against the full engine bundle: horo-renderer-opengl PUBLIC-links
-# HoroEngine and carries the OpenGL implementation objects with PRIVATE glad.
-# Tests compiled without HORO_RENDERER=opengl fall back to plain HoroEngine.
+# All tests link HoroEngine first so OpenGLRenderBackend vtable symbols are
+# resolved when the linker subsequently processes horo-renderer-opengl.
 if(TARGET horo-renderer-opengl AND HORO_RENDERER STREQUAL "opengl")
-    set(HORO_ENGINE_LINK horo-renderer-opengl)
+    set(HORO_ENGINE_LINK HoroEngine horo-renderer-opengl)
 else()
     set(HORO_ENGINE_LINK HoroEngine)
 endif()
