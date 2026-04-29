@@ -70,18 +70,35 @@ Horo may not be the best choice if you need:
 
 ```mermaid
 graph TD
-    Launcher["🚀 Launcher\neditor shell · main loop"]
-    Editor["🖊️ Editor\nscene · UI"]
-    MCP["🤖 MCP Server\nAI tooling · HTTP endpoint"]
-    Scene["🎬 Scene\nECS runtime"]
-    Renderer["🎨 Renderer\nOpenGL · Vulkan"]
-    Core["⚙️ Core\nmath · input · physics"]
+    subgraph Entry["Entry Point"]
+        Launcher
+    end
+
+    subgraph Authoring["Authoring Layer"]
+        Editor
+        MCP["MCP Server"]
+    end
+
+    subgraph Runtime["Runtime Layer"]
+        Scene["Scene / ECS"]
+        Renderer["Renderer\nOpenGL · Vulkan"]
+        Physics
+        Input
+    end
+
+    subgraph Foundation["Foundation"]
+        Core["Core\napplication · window · logging · paths"]
+        Math["Math\nvectors · matrices · transforms"]
+    end
 
     Launcher --> Editor
-    MCP --> Editor
-    Editor --> Scene
-    Scene --> Renderer
-    Scene --> Core
+    Editor --> Scene & Renderer & Physics & Input & MCP
+    MCP --> Scene & Core
+    Renderer --> Scene & Core & Math
+    Physics --> Scene & Core & Math
+    Scene --> Core & Math
+    Input --> Core
+    Core --> Math
 ```
 
 See [docs/architecture/README.md](./docs/architecture/README.md) for full module documentation.
