@@ -68,9 +68,9 @@ jobs:
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          TAG=${{ github.event.release.tag_name || inputs.tag }}
-          gh release upload "$TAG" HoroEngine-linux-x86_64.tar.gz --clobber
+          gh release upload "$RELEASE_TAG" HoroEngine-linux-x86_64.tar.gz --clobber
 
   build-macos:
     name: Build · macOS / Clang
@@ -107,7 +107,7 @@ jobs:
 
       - name: Package
         run: |
-          DIST=HoroEngine-macos-universal
+          DIST=HoroEngine-macos-arm64
           mkdir -p "$DIST"
           cp build/release/bin/HoroEditor "$DIST/"
           cp -r build/release/sdk "$DIST/" 2>/dev/null || true
@@ -116,9 +116,9 @@ jobs:
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          TAG=${{ github.event.release.tag_name || inputs.tag }}
-          gh release upload "$TAG" HoroEngine-macos-universal.tar.gz --clobber
+          gh release upload "$RELEASE_TAG" HoroEngine-macos-arm64.tar.gz --clobber
 
   build-windows:
     name: Build · Windows / MSVC
@@ -172,10 +172,9 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          $tag = "${{ github.event.release.tag_name }}"
-          if (-not $tag) { $tag = "${{ inputs.tag }}" }
-          gh release upload $tag HoroEngine-windows-x64.zip --clobber
+          gh release upload $env:RELEASE_TAG HoroEngine-windows-x64.zip --clobber
 
       - name: Show sccache stats
         if: always()
