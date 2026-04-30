@@ -1,9 +1,5 @@
 #include "renderer/DebugHUD.h"
 
-// TODO(renderer-abstraction): Goal 5 will replace these call sites with
-//   OpenGLVertexArray / OpenGLVertexBuffer.
-#include <glad/glad.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,19 +13,12 @@
 #include "input/KeyCodes.h"
 #include "renderer/Renderer.h"
 
-// Windows headers (pulled in by glad) define DrawText as DrawTextA — undefine
-// to avoid collision
-#ifdef DrawText
-#undef DrawText // NOSONAR: cpp:S959 DrawText macro originates in platform
-// headers; local undef avoids symbol collision in this TU
-#endif
-
 namespace Horo {
     // ---- Static member definitions ----
 
-    unsigned int DebugHUD::s_vao = 0;
-    unsigned int DebugHUD::s_vbo = 0;
-    unsigned int DebugHUD::s_fontTex = 0;
+    std::shared_ptr<IVertexArray>  DebugHUD::s_vao;
+    std::shared_ptr<IVertexBuffer> DebugHUD::s_vbo;
+    std::shared_ptr<ITexture>      DebugHUD::s_fontTex;
     std::unique_ptr<Shader> DebugHUD::s_shader;
     bool DebugHUD::s_initialized = false;
     bool DebugHUD::s_visible = false;
@@ -1255,49 +1244,24 @@ void main() {
 
         BuildFontAtlas();
 
-        glGenVertexArrays(1, &s_vao);
-        glBindVertexArray(s_vao);
+        s_vbo = Renderer::CreateVertexBuffer(
+            static_cast<uint32_t>(sizeof(GlyphVertex) * MAX_GLYPHS * 6));
+        s_vbo->SetLayout({
+            {ShaderDataType::Float2, "a_pos"},
+            {ShaderDataType::Float2, "a_uv"},
+            {ShaderDataType::Float4, "a_color"},
+        });
 
-        glGenBuffers(1, &s_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GlyphVertex) * MAX_GLYPHS * 6, nullptr,
-                     GL_DYNAMIC_DRAW);
-
-        // a_pos  (location 0): 2 floats
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GlyphVertex),
-                              static_cast<const void *>(nullptr));
-        // a_uv   (location 1): 2 floats
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(
-            1, 2, GL_FLOAT, GL_FALSE, sizeof(GlyphVertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      2 * sizeof(float)));
-        // a_color (location 2): 4 floats
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(
-            2, 4, GL_FLOAT, GL_FALSE, sizeof(GlyphVertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      4 * sizeof(float)));
-
-        glBindVertexArray(0);
+        s_vao = Renderer::CreateVertexArray();
+        s_vao->AddVertexBuffer(s_vbo);
 
         s_initialized = true;
     }
 
     void DebugHUD::Shutdown() {
-        if (s_fontTex) {
-            glDeleteTextures(1, &s_fontTex);
-            s_fontTex = 0;
-        }
-        if (s_vbo) {
-            glDeleteBuffers(1, &s_vbo);
-            s_vbo = 0;
-        }
-        if (s_vao) {
-            glDeleteVertexArrays(1, &s_vao);
-            s_vao = 0;
-        }
+        s_fontTex.reset();
+        s_vbo.reset();
+        s_vao.reset();
         s_shader.reset();
         s_initialized = false;
     }
@@ -1310,7 +1274,7 @@ void main() {
     // ---- Font atlas ----
 
     void DebugHUD::BuildFontAtlas() {
-        // 128 chars × 8 pixels wide = 1024 wide, 8 tall, GL_R8
+        // 128 chars × 8 pixels wide = 1024 wide, 8 tall, R8
         constexpr int ATLAS_W = 1024;
         constexpr int ATLAS_H = 8;
 
@@ -1328,15 +1292,17 @@ void main() {
             }
         }
 
-        glGenTextures(1, &s_fontTex);
-        glBindTexture(GL_TEXTURE_2D, s_fontTex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, ATLAS_W, ATLAS_H, 0, GL_RED,
-                     GL_UNSIGNED_BYTE, pixels.data());
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        TextureSpec spec;
+        spec.width        = ATLAS_W;
+        spec.height       = ATLAS_H;
+        spec.format       = TextureFormat::R8;
+        spec.filter       = TextureFilter::Nearest;
+        spec.wrap         = TextureWrap::ClampToEdge;
+        spec.generateMips = false;
+
+        s_fontTex = Renderer::CreateTexture(spec);
+        s_fontTex->SetData(pixels.data(),
+                           static_cast<uint32_t>(pixels.size() * sizeof(uint8_t)));
     }
 
 #ifndef NDEBUG
@@ -1419,15 +1385,7 @@ void main() {
             return;
 #endif
 
-        // Save GL state
-        GLboolean depthWas = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean blendWas = glIsEnabled(GL_BLEND);
-        GLboolean cullWas = glIsEnabled(GL_CULL_FACE);
-
-        glDisable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_CULL_FACE);
+        Renderer::Begin2dOverlay();
 
         s_glyphCount = 0;
 
@@ -1566,19 +1524,7 @@ void main() {
 
         FlushGlyphs();
 
-        // Restore GL state
-        if (depthWas)
-            glEnable(GL_DEPTH_TEST);
-        else
-            glDisable(GL_DEPTH_TEST);
-        if (blendWas)
-            glEnable(GL_BLEND);
-        else
-            glDisable(GL_BLEND);
-        if (cullWas)
-            glEnable(GL_CULL_FACE);
-        else
-            glDisable(GL_CULL_FACE);
+        Renderer::End2dOverlay();
     }
 
 #ifndef NDEBUG
@@ -1683,20 +1629,16 @@ void main() {
         s_shader->SetVec2("u_screenSize", static_cast<float>(s_screenW),
                           static_cast<float>(s_screenH));
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, s_fontTex);
+        s_fontTex->Bind(0);
         s_shader->SetInt("u_font", 0);
 
-        glBindVertexArray(s_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
-        glBufferSubData(
-            GL_ARRAY_BUFFER, 0,
-            static_cast<GLsizeiptr>(s_glyphCount * 6 * sizeof(GlyphVertex)),
-            s_glyphBuf.data());
+        s_vbo->SetData(s_glyphBuf.data(),
+                       static_cast<uint32_t>(s_glyphCount * 6 * sizeof(GlyphVertex)));
 
-        glDrawArrays(GL_TRIANGLES, 0, s_glyphCount * 6);
+        s_vao->Bind();
+        s_vao->DrawArrays(static_cast<uint32_t>(s_glyphCount * 6));
+        s_vao->Unbind();
 
-        glBindVertexArray(0);
         s_glyphCount = 0;
     }
 } // namespace Horo

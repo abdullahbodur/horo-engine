@@ -28,6 +28,10 @@ public:
     const std::vector<std::shared_ptr<IVertexBuffer>>& GetVertexBuffers() const override { return m_vertexBuffers; }
     const std::shared_ptr<IIndexBuffer>&               GetIndexBuffer()   const override { return m_indexBuffer;   }
 
+    void DrawIndexed(uint32_t count) const override;
+    void DrawArrays(uint32_t count)      const override;
+    void DrawArraysLines(uint32_t count) const override;
+
 private:
     uint32_t m_rendererId = 0;
     uint32_t m_vertexBufferIndex = 0;

@@ -147,4 +147,17 @@ void OpenGLVertexArray::SetIndexBuffer(
     glBindVertexArray(0);
 }
 
+void OpenGLVertexArray::DrawIndexed(uint32_t count) const {
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(count), GL_UNSIGNED_INT,
+                   nullptr);
+}
+
+void OpenGLVertexArray::DrawArrays(uint32_t count) const {
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(count));
+}
+
+void OpenGLVertexArray::DrawArraysLines(uint32_t count) const {
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(count));
+}
+
 } // namespace Horo

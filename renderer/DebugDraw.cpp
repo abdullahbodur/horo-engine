@@ -1,9 +1,5 @@
 #include "renderer/DebugDraw.h"
 
-// TODO(renderer-abstraction): Goal 5 will replace these call sites with
-//   OpenGLVertexArray / OpenGLVertexBuffer.
-#include <glad/glad.h>
-
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -15,8 +11,8 @@
 namespace Horo {
     std::vector<DebugDraw::LineVertex> DebugDraw::s_lines;
     std::unique_ptr<Shader> DebugDraw::s_shader;
-    unsigned int DebugDraw::s_vao = 0;
-    unsigned int DebugDraw::s_vbo = 0;
+    std::shared_ptr<IVertexArray>  DebugDraw::s_vao;
+    std::shared_ptr<IVertexBuffer> DebugDraw::s_vbo;
     bool DebugDraw::s_initialized = false;
 
     // Inline GLSL source for debug lines
@@ -48,37 +44,23 @@ void main() { FragColor = v_color; }
         s_shader =
                 std::make_unique<Shader>(Shader::FromSource(DEBUG_VERT, DEBUG_FRAG));
 
-        glGenVertexArrays(1, &s_vao);
-        glBindVertexArray(s_vao);
+        // Dynamic vertex buffer — refilled every frame
+        s_vbo = Renderer::CreateVertexBuffer(
+            static_cast<uint32_t>(sizeof(LineVertex) * 65536));
+        s_vbo->SetLayout({
+            {ShaderDataType::Float3, "a_pos"},
+            {ShaderDataType::Float4, "a_color"},
+        });
 
-        glGenBuffers(1, &s_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
-        // Allocate a large buffer — will be refilled each frame
-        glBufferData(GL_ARRAY_BUFFER, sizeof(LineVertex) * 65536, nullptr,
-                     GL_DYNAMIC_DRAW);
+        s_vao = Renderer::CreateVertexArray();
+        s_vao->AddVertexBuffer(s_vbo);
 
-        // pos (location 0)
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(
-            0, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(LineVertex, pos)));
-        // color (location 1)
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(
-            1, 4, GL_FLOAT, GL_FALSE, sizeof(LineVertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(LineVertex, col)));
-
-        glBindVertexArray(0);
         s_initialized = true;
     }
 
     void DebugDraw::Shutdown() {
-        if (s_vbo)
-            glDeleteBuffers(1, &s_vbo);
-        if (s_vao)
-            glDeleteVertexArrays(1, &s_vao);
+        s_vao.reset();
+        s_vbo.reset();
         s_shader.reset();
         s_initialized = false;
     }
@@ -159,15 +141,13 @@ void main() { FragColor = v_color; }
         s_shader->Bind();
         s_shader->SetMat4("u_vp", camera.GetViewProjection());
 
-        glBindVertexArray(s_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(s_lines.size() * sizeof(LineVertex)),
-                        s_lines.data());
+        s_vbo->SetData(s_lines.data(),
+                       static_cast<uint32_t>(s_lines.size() * sizeof(LineVertex)));
 
-        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(s_lines.size()));
+        s_vao->Bind();
+        s_vao->DrawArraysLines(static_cast<uint32_t>(s_lines.size()));
+        s_vao->Unbind();
 
-        glBindVertexArray(0);
         s_lines.clear();
     }
 } // namespace Horo

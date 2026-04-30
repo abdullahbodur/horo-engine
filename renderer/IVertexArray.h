@@ -19,6 +19,16 @@ public:
 
     virtual const std::vector<std::shared_ptr<IVertexBuffer>>& GetVertexBuffers() const = 0;
     virtual const std::shared_ptr<IIndexBuffer>&               GetIndexBuffer()   const = 0;
+
+    // Issue a draw call for indexed triangle primitives (the VAO must be bound).
+    virtual void DrawIndexed(uint32_t count) const = 0;
+
+    // Issue a non-indexed draw call for the given vertex count using GL_TRIANGLES
+    // (the VAO must be bound).
+    virtual void DrawArrays(uint32_t count) const = 0;
+
+    // Issue a non-indexed draw call using GL_LINES (two vertices per line segment).
+    virtual void DrawArraysLines(uint32_t count) const = 0;
 };
 
 } // namespace Horo

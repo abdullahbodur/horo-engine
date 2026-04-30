@@ -2,6 +2,7 @@
 
 // TODO(renderer-abstraction): CreateDefaultOwnedBackend assert message below references
 // "OpenGL" by name — update to "default render backend" in Goal 3.
+#include <array>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -239,5 +240,26 @@ namespace Horo {
 
     std::shared_ptr<IVertexArray> Renderer::CreateVertexArray() {
         return ActiveBackend()->CreateVertexArray();
+    }
+
+    void Renderer::SetViewport(int x, int y, int w, int h) {
+        ActiveBackend()->SetViewport(x, y, w, h);
+    }
+
+    std::array<int, 4> Renderer::GetViewport() {
+        return ActiveBackend()->GetViewport();
+    }
+
+    void Renderer::Begin2dOverlay()         { ActiveBackend()->Begin2dOverlay(); }
+    void Renderer::End2dOverlay()           { ActiveBackend()->End2dOverlay(); }
+    void Renderer::SetupOpaqueRenderState() { ActiveBackend()->SetupOpaqueRenderState(); }
+
+    void Renderer::ClearColorAndDepth(float r, float g, float b, float a) {
+        ActiveBackend()->ClearColorAndDepth(r, g, b, a);
+    }
+
+    bool Renderer::ReadbackRegionRgba8(int x, int y, int w, int h,
+                                        uint32_t *pixels, std::string *outError) {
+        return ActiveBackend()->ReadbackRegionRgba8(x, y, w, h, pixels, outError);
     }
 } // namespace Horo
