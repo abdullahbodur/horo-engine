@@ -102,6 +102,33 @@ bool OpenGLTexture::operator==(const ITexture& other) const {
     return false;
 }
 
+OpenGLTexture OpenGLTexture::FromSpec(const TextureSpec& spec) {
+    OpenGLTexture t;
+    t.m_textureStorage = std::make_unique<TextureStorage>();
+    t.m_width          = static_cast<int>(spec.width);
+    t.m_height         = static_cast<int>(spec.height);
+    t.m_spec           = spec;
+
+    const GLenum internalFmt = TextureFormatToInternalFormat(spec.format);
+    const GLenum dataFmt     = TextureFormatToDataFormat(spec.format);
+
+    glGenTextures(1, &t.m_textureStorage->id);
+    glBindTexture(GL_TEXTURE_2D, t.m_textureStorage->id);
+    glTexImage2D(GL_TEXTURE_2D, 0,
+                 static_cast<GLint>(internalFmt),
+                 static_cast<GLsizei>(spec.width),
+                 static_cast<GLsizei>(spec.height),
+                 0, dataFmt, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                    TextureFilterToGL(spec.filter));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                    TextureFilterToGL(spec.filter));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, TextureWrapToGL(spec.wrap));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, TextureWrapToGL(spec.wrap));
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return t;
+}
+
 OpenGLTexture OpenGLTexture::FromFile(const std::string& path, bool flipY) {
     stbi_set_flip_vertically_on_load(flipY ? 1 : 0);
     int w, h, ch;

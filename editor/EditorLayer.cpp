@@ -573,6 +573,13 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
   texSpec.wrap         = TextureWrap::ClampToEdge;
   texSpec.generateMips = false;
   auto destTex = Renderer::CreateTexture(texSpec);
+  if (!destTex) {
+    LogWarn("AssetThumbnailRenderer: texture creation failed");
+    renderer.fbo->Unbind();
+    Renderer::SetViewport(prevViewport[0], prevViewport[1],
+                          prevViewport[2], prevViewport[3]);
+    return {};
+  }
   destTex->SetData(pixels.data(),
                    static_cast<uint32_t>(pixels.size() * sizeof(uint32_t)));
   renderer.renderedTextureCache[meshKey] = destTex;

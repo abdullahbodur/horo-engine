@@ -18,6 +18,7 @@ public:
     OpenGLTexture(OpenGLTexture&& o) noexcept;
     OpenGLTexture& operator=(OpenGLTexture&& o) noexcept;
 
+    static OpenGLTexture FromSpec(const TextureSpec& spec);
     static OpenGLTexture FromFile(const std::string& path, bool flipY = true);
     static OpenGLTexture CreateWhite1x1();
 

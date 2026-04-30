@@ -354,12 +354,7 @@ namespace Horo {
 
     std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTexture(
         const TextureSpec &spec) {
-        auto tex = std::make_shared<OpenGLTexture>();
-        // The spec encodes width/height/format; SetData must be called separately
-        // to upload pixel data.  We store the spec but don't allocate storage
-        // until the first SetData call (lazy allocation is handled by the texture).
-        (void)spec; // spec forwarding deferred; caller must call SetData
-        return tex;
+        return std::make_shared<OpenGLTexture>(OpenGLTexture::FromSpec(spec));
     }
 
     std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTextureFromFile(
