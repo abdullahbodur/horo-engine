@@ -36,7 +36,7 @@ namespace Horo {
         }
 
         void BindMaterial(const Material &material) {
-            const Shader *shader = ResolveMaterialShader(material);
+            Shader *shader = ResolveMaterialShader(material);
             if (!shader)
                 return;
 
@@ -182,7 +182,7 @@ namespace Horo {
         m_lastLightProgram = 0;
     }
 
-    void OpenGLRenderBackend::UploadLights(const Shader &shader) {
+    void OpenGLRenderBackend::UploadLights(Shader &shader) {
         const unsigned int programId = shader.GetProgramID();
         if (programId == m_lastLightProgram)
             return;
@@ -210,7 +210,7 @@ namespace Horo {
             return;
 
         BindMaterial(*command.material);
-        const Shader *shader = ResolveMaterialShader(*command.material);
+        Shader *shader = ResolveMaterialShader(*command.material);
         if (!shader)
             return;
 
@@ -230,7 +230,7 @@ namespace Horo {
             return;
 
         BindMaterial(*command.material);
-        const Shader *shader = ResolveMaterialShader(*command.material);
+        Shader *shader = ResolveMaterialShader(*command.material);
         if (!shader)
             return;
 

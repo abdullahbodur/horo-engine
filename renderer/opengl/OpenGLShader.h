@@ -47,21 +47,6 @@ public:
                       const float* data)                     override;
     bool IsValid() const override;
 
-    // Const overloads for backward compatibility — existing call sites use
-    // const Shader& / const Shader* and will continue to compile when
-    //   using Shader = OpenGLShader;
-    // NOTE(renderer-abstraction): Goal 5 will remove these overloads once all
-    //   call sites are ported to IShader&.
-    void SetInt(const std::string& name, int value)          const;
-    void SetFloat(const std::string& name, float value)      const;
-    void SetVec2(const std::string& name, float x, float y)  const;
-    void SetVec3(const std::string& name, const Vec3& v)     const;
-    void SetVec4(const std::string& name, const Vec4& v)     const;
-    void SetMat3(const std::string& name, const Mat3& m)     const;
-    void SetMat4(const std::string& name, const Mat4& m)     const;
-    void SetMat4Array(const std::string& name, int count,
-                      const float* data)                     const;
-
     unsigned int GetProgramID() const;
 
 private:

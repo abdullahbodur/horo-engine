@@ -168,7 +168,7 @@ namespace Horo {
     }
 
     void Renderer::SubmitWireframe(const Mesh &mesh, const Mat4 &model,
-                                   const Shader &shader, float r, float g,
+                                   Shader &shader, float r, float g,
                                    float b) {
         ActiveBackend()->DrawWireframe(
             WireframeDrawCommand{&mesh, &shader, model, {r, g, b, 1.0f}});

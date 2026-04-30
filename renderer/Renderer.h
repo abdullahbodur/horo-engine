@@ -66,7 +66,7 @@ namespace Horo {
 
         // Submit a mesh in wireframe mode using a plain color
         static void SubmitWireframe(const Mesh &mesh, const Mat4 &modelMatrix,
-                                    const Shader &shader, float r = 0.2f,
+                                    Shader &shader, float r = 0.2f,
                                     float g = 0.8f, float b = 0.2f);
 
         static int GetDrawCallCount();

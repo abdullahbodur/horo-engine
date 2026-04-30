@@ -69,7 +69,7 @@ namespace Horo {
                                  std::string *outError) override;
 
     private:
-        void UploadLights(const Shader &shader);
+        void UploadLights(Shader &shader);
 
         RenderView m_activeView;
         RenderPassId m_activePassId = RenderPassId::OpaqueScene;
