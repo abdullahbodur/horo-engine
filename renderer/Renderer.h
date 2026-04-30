@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -65,7 +66,7 @@ namespace Horo {
 
         // Submit a mesh in wireframe mode using a plain color
         static void SubmitWireframe(const Mesh &mesh, const Mat4 &modelMatrix,
-                                    const Shader &shader, float r = 0.2f,
+                                    Shader &shader, float r = 0.2f,
                                     float g = 0.8f, float b = 0.2f);
 
         static int GetDrawCallCount();
@@ -96,6 +97,17 @@ namespace Horo {
         static std::shared_ptr<IVertexBuffer> CreateVertexBuffer(uint32_t size);
         static std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count);
         static std::shared_ptr<IVertexArray>  CreateVertexArray();
+
+        // ── Backend-agnostic render helpers ─────────────────────────────────────
+        static void SetViewport(int x, int y, int w, int h);
+        static std::array<int, 4> GetViewport();
+        static void Begin2dOverlay();
+        static void End2dOverlay();
+        static void SetupOpaqueRenderState();
+        static void ClearColorAndDepth(float r, float g, float b, float a = 1.f);
+        static bool ReadbackRegionRgba8(int x, int y, int w, int h,
+                                        uint32_t *pixels,
+                                        std::string *outError = nullptr);
 
     private:
         static IRenderBackend *ActiveBackend();

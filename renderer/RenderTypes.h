@@ -56,7 +56,7 @@ namespace Horo {
 
     struct WireframeDrawCommand {
         const Mesh *mesh = nullptr;
-        const Shader *shader = nullptr;
+        Shader *shader = nullptr;
         Mat4 modelMatrix = Mat4::Identity();
         Vec4 color = {0.2f, 0.8f, 0.2f, 1.0f};
     };
