@@ -4,7 +4,7 @@
 
 namespace Horo::OpenGLContext {
 
-bool InitGlad(GLADloadproc getProcAddress) {
+bool InitGlad(GLADloadproc getProcAddress) { // NOSONAR: GLADloadproc is a required C API function pointer typedef
     return gladLoadGLLoader(getProcAddress) != 0;
 }
 

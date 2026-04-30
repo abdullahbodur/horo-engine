@@ -43,10 +43,9 @@ GLenum TextureFormatToDataFormat(TextureFormat format) {
 
 GLenum TextureFormatToDataType(TextureFormat format) {
     using enum TextureFormat;
-    switch (format) {
-        case Depth24Stencil8:  return GL_UNSIGNED_INT_24_8;
-        default:               return GL_UNSIGNED_BYTE;
-    }
+    if (format == Depth24Stencil8)
+        return GL_UNSIGNED_INT_24_8;
+    return GL_UNSIGNED_BYTE;
 }
 
 GLenum TextureFilterToGL(TextureFilter filter) {
