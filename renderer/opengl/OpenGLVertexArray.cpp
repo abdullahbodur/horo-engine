@@ -24,7 +24,7 @@ GLenum ShaderDataTypeToGLBaseType(ShaderDataType type) {
         case Int2:
         case Int3:
         case Int4:   return GL_INT;
-        case Bool:   return GL_BOOL;
+        case Bool:   return GL_UNSIGNED_BYTE; // bool is 1 byte; GL_BOOL is not valid for vertex attrib pointers
         case None:   return GL_NONE;
     }
     return GL_NONE;
