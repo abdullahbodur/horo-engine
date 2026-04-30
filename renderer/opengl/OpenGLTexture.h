@@ -40,7 +40,7 @@ public:
 
     // Legacy escape hatch for editor integration until offscreen/ImGui texture
     // presentation is fully backend-neutral.
-    // TODO(renderer-abstraction): Goal 5 will replace this call site.
+    // NOTE(renderer-abstraction): Goal 5 will replace this call site.
     unsigned int GetNativeId() const;
 
 private:

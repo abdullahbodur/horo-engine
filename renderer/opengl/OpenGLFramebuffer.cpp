@@ -128,8 +128,8 @@ void OpenGLFramebuffer::Create() {
                                GL_TEXTURE_2D, m_depthAttachment, 0);
     }
 
-    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE)
+    if (const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        status != GL_FRAMEBUFFER_COMPLETE)
         LogError("OpenGLFramebuffer: FBO incomplete, status=0x{:x}",
                  static_cast<unsigned>(status));
 

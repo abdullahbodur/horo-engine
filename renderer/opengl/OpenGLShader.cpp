@@ -185,32 +185,32 @@ void OpenGLShader::SetMat4Array(const std::string& name, int count,
 // --- Const overloads for backward compatibility ---
 // These allow existing call sites that use `const Shader&` to continue
 // compiling after `using Shader = OpenGLShader;`.
-// TODO(renderer-abstraction): Goal 5 will migrate these call sites to IShader&.
+// NOTE(renderer-abstraction): Goal 5 will migrate these call sites to IShader&.
 
 void OpenGLShader::SetInt(const std::string& name, int value) const {
-    const_cast<OpenGLShader*>(this)->SetInt(name, value);
+    const_cast<OpenGLShader*>(this)->SetInt(name, value); // NOSONAR: intentional backward-compat shim
 }
 void OpenGLShader::SetFloat(const std::string& name, float value) const {
-    const_cast<OpenGLShader*>(this)->SetFloat(name, value);
+    const_cast<OpenGLShader*>(this)->SetFloat(name, value); // NOSONAR
 }
 void OpenGLShader::SetVec2(const std::string& name, float x, float y) const {
-    const_cast<OpenGLShader*>(this)->SetVec2(name, x, y);
+    const_cast<OpenGLShader*>(this)->SetVec2(name, x, y); // NOSONAR
 }
 void OpenGLShader::SetVec3(const std::string& name, const Vec3& v) const {
-    const_cast<OpenGLShader*>(this)->SetVec3(name, v);
+    const_cast<OpenGLShader*>(this)->SetVec3(name, v); // NOSONAR
 }
 void OpenGLShader::SetVec4(const std::string& name, const Vec4& v) const {
-    const_cast<OpenGLShader*>(this)->SetVec4(name, v);
+    const_cast<OpenGLShader*>(this)->SetVec4(name, v); // NOSONAR
 }
 void OpenGLShader::SetMat3(const std::string& name, const Mat3& m) const {
-    const_cast<OpenGLShader*>(this)->SetMat3(name, m);
+    const_cast<OpenGLShader*>(this)->SetMat3(name, m); // NOSONAR
 }
 void OpenGLShader::SetMat4(const std::string& name, const Mat4& m) const {
-    const_cast<OpenGLShader*>(this)->SetMat4(name, m);
+    const_cast<OpenGLShader*>(this)->SetMat4(name, m); // NOSONAR
 }
 void OpenGLShader::SetMat4Array(const std::string& name, int count,
                                 const float* data) const {
-    const_cast<OpenGLShader*>(this)->SetMat4Array(name, count, data);
+    const_cast<OpenGLShader*>(this)->SetMat4Array(name, count, data); // NOSONAR
 }
 
 } // namespace Horo

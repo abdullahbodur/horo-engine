@@ -12,19 +12,20 @@ namespace Horo {
 namespace {
 
 GLenum ShaderDataTypeToGLBaseType(ShaderDataType type) {
+    using enum ShaderDataType;
     switch (type) {
-        case ShaderDataType::Float:
-        case ShaderDataType::Float2:
-        case ShaderDataType::Float3:
-        case ShaderDataType::Float4:
-        case ShaderDataType::Mat3:
-        case ShaderDataType::Mat4:   return GL_FLOAT;
-        case ShaderDataType::Int:
-        case ShaderDataType::Int2:
-        case ShaderDataType::Int3:
-        case ShaderDataType::Int4:   return GL_INT;
-        case ShaderDataType::Bool:   return GL_BOOL;
-        case ShaderDataType::None:   return GL_NONE;
+        case Float:
+        case Float2:
+        case Float3:
+        case Float4:
+        case Mat3:
+        case Mat4:   return GL_FLOAT;
+        case Int:
+        case Int2:
+        case Int3:
+        case Int4:   return GL_INT;
+        case Bool:   return GL_BOOL;
+        case None:   return GL_NONE;
     }
     return GL_NONE;
 }
@@ -80,11 +81,12 @@ void OpenGLVertexArray::AddVertexBuffer(
 
     const auto& layout = vertexBuffer->GetLayout();
     for (const auto& element : layout) {
+        using enum ShaderDataType;
         switch (element.type) {
-            case ShaderDataType::Float:
-            case ShaderDataType::Float2:
-            case ShaderDataType::Float3:
-            case ShaderDataType::Float4: {
+            case Float:
+            case Float2:
+            case Float3:
+            case Float4: {
                 glEnableVertexAttribArray(m_vertexBufferIndex);
                 glVertexAttribPointer(
                     m_vertexBufferIndex,
@@ -92,27 +94,27 @@ void OpenGLVertexArray::AddVertexBuffer(
                     ShaderDataTypeToGLBaseType(element.type),
                     element.normalized ? GL_TRUE : GL_FALSE,
                     static_cast<GLsizei>(layout.GetStride()),
-                    reinterpret_cast<const void*>(element.offset));
+                    reinterpret_cast<const void*>(element.offset)); // NOSONAR: required by OpenGL API
                 ++m_vertexBufferIndex;
                 break;
             }
-            case ShaderDataType::Int:
-            case ShaderDataType::Int2:
-            case ShaderDataType::Int3:
-            case ShaderDataType::Int4:
-            case ShaderDataType::Bool: {
+            case Int:
+            case Int2:
+            case Int3:
+            case Int4:
+            case Bool: {
                 glEnableVertexAttribArray(m_vertexBufferIndex);
                 glVertexAttribIPointer(
                     m_vertexBufferIndex,
                     static_cast<GLint>(element.GetComponentCount()),
                     ShaderDataTypeToGLBaseType(element.type),
                     static_cast<GLsizei>(layout.GetStride()),
-                    reinterpret_cast<const void*>(element.offset));
+                    reinterpret_cast<const void*>(element.offset)); // NOSONAR: required by OpenGL API
                 ++m_vertexBufferIndex;
                 break;
             }
-            case ShaderDataType::Mat3:
-            case ShaderDataType::Mat4: {
+            case Mat3:
+            case Mat4: {
                 // Matrix attributes occupy multiple consecutive attribute slots
                 const uint32_t count = element.GetComponentCount();
                 for (uint32_t col = 0; col < count; ++col) {
@@ -123,7 +125,7 @@ void OpenGLVertexArray::AddVertexBuffer(
                         GL_FLOAT,
                         element.normalized ? GL_TRUE : GL_FALSE,
                         static_cast<GLsizei>(layout.GetStride()),
-                        reinterpret_cast<const void*>(
+                        reinterpret_cast<const void*>( // NOSONAR: required by OpenGL API
                             element.offset + sizeof(float) * count * col));
                     glVertexAttribDivisor(m_vertexBufferIndex, 1);
                     ++m_vertexBufferIndex;

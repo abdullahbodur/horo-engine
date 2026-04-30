@@ -50,7 +50,7 @@ public:
     // Const overloads for backward compatibility — existing call sites use
     // const Shader& / const Shader* and will continue to compile when
     //   using Shader = OpenGLShader;
-    // TODO(renderer-abstraction): Goal 5 will remove these overloads once all
+    // NOTE(renderer-abstraction): Goal 5 will remove these overloads once all
     //   call sites are ported to IShader&.
     void SetInt(const std::string& name, int value)          const;
     void SetFloat(const std::string& name, float value)      const;

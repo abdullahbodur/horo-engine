@@ -8,7 +8,7 @@ namespace Horo {
 
 // --- OpenGLVertexBuffer ------------------------------------------------------
 
-OpenGLVertexBuffer::OpenGLVertexBuffer(const void* data, uint32_t size) {
+OpenGLVertexBuffer::OpenGLVertexBuffer(const void* data, uint32_t size) { // NOSONAR: void* required by OpenGL API
     glGenBuffers(1, &m_rendererId);
     glBindBuffer(GL_ARRAY_BUFFER, m_rendererId);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(size), data,
@@ -53,7 +53,7 @@ void OpenGLVertexBuffer::Unbind() const {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void OpenGLVertexBuffer::SetData(const void* data, uint32_t size) {
+void OpenGLVertexBuffer::SetData(const void* data, uint32_t size) { // NOSONAR: void* required by OpenGL API
     glBindBuffer(GL_ARRAY_BUFFER, m_rendererId);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(size), data);
     glBindBuffer(GL_ARRAY_BUFFER, 0);

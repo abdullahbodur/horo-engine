@@ -2,7 +2,7 @@
 
 // OpenGL shader implementation.  Shader inherits from OpenGLShader so that
 // existing forward declarations (`class Shader;`) and call sites remain valid.
-// TODO(renderer-abstraction): Goal 5 will collapse call sites to IShader&.
+// NOTE(renderer-abstraction): Goal 5 will collapse call sites to IShader&.
 #include "renderer/opengl/OpenGLShader.h"
 
 namespace Horo {

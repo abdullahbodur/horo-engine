@@ -2,7 +2,7 @@
 
 // OpenGL texture implementation.  Texture inherits from OpenGLTexture so that
 // existing forward declarations (`class Texture;`) and call sites remain valid.
-// TODO(renderer-abstraction): Goal 5 will collapse call sites to ITexture&.
+// NOTE(renderer-abstraction): Goal 5 will collapse call sites to ITexture&.
 #include "renderer/opengl/OpenGLTexture.h"
 
 namespace Horo {

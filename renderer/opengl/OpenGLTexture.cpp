@@ -20,29 +20,32 @@ struct OpenGLTexture::TextureStorage {
 namespace {
 
 GLenum TextureFormatToInternalFormat(TextureFormat format) {
+    using enum TextureFormat;
     switch (format) {
-        case TextureFormat::RGBA8:            return GL_RGBA8;
-        case TextureFormat::RGB8:             return GL_RGB8;
-        case TextureFormat::R8:               return GL_R8;
-        case TextureFormat::Depth24Stencil8:  return GL_DEPTH24_STENCIL8;
+        case RGBA8:            return GL_RGBA8;
+        case RGB8:             return GL_RGB8;
+        case R8:               return GL_R8;
+        case Depth24Stencil8:  return GL_DEPTH24_STENCIL8;
     }
     return GL_RGBA8;
 }
 
 GLenum TextureFormatToDataFormat(TextureFormat format) {
+    using enum TextureFormat;
     switch (format) {
-        case TextureFormat::RGBA8:            return GL_RGBA;
-        case TextureFormat::RGB8:             return GL_RGB;
-        case TextureFormat::R8:               return GL_RED;
-        case TextureFormat::Depth24Stencil8:  return GL_DEPTH_STENCIL;
+        case RGBA8:            return GL_RGBA;
+        case RGB8:             return GL_RGB;
+        case R8:               return GL_RED;
+        case Depth24Stencil8:  return GL_DEPTH_STENCIL;
     }
     return GL_RGBA;
 }
 
 GLenum TextureFormatToDataType(TextureFormat format) {
+    using enum TextureFormat;
     switch (format) {
-        case TextureFormat::Depth24Stencil8:  return GL_UNSIGNED_INT_24_8;
-        default:                              return GL_UNSIGNED_BYTE;
+        case Depth24Stencil8:  return GL_UNSIGNED_INT_24_8;
+        default:               return GL_UNSIGNED_BYTE;
     }
 }
 
@@ -51,10 +54,11 @@ GLenum TextureFilterToGL(TextureFilter filter) {
 }
 
 GLenum TextureWrapToGL(TextureWrap wrap) {
+    using enum TextureWrap;
     switch (wrap) {
-        case TextureWrap::Repeat:         return GL_REPEAT;
-        case TextureWrap::ClampToEdge:    return GL_CLAMP_TO_EDGE;
-        case TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
+        case Repeat:         return GL_REPEAT;
+        case ClampToEdge:    return GL_CLAMP_TO_EDGE;
+        case MirroredRepeat: return GL_MIRRORED_REPEAT;
     }
     return GL_REPEAT;
 }
@@ -139,7 +143,9 @@ OpenGLTexture OpenGLTexture::FromSpec(const TextureSpec& spec) {
 
 OpenGLTexture OpenGLTexture::FromFile(const std::string& path, bool flipY) {
     stbi_set_flip_vertically_on_load(flipY ? 1 : 0);
-    int w, h, ch;
+    int w;
+    int h;
+    int ch;
     unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
     if (!data) {
         LogWarn("OpenGLTexture::FromFile — failed to load '{}': {}", path,
@@ -196,7 +202,7 @@ void OpenGLTexture::Unbind() const {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void OpenGLTexture::SetData(const void* data, uint32_t /*size*/) {
+void OpenGLTexture::SetData(const void* data, uint32_t /*size*/) { // NOSONAR: void* required by ITexture interface
     if (!m_textureStorage || !m_textureStorage->id)
         return;
 
