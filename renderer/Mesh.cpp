@@ -56,7 +56,12 @@ namespace Horo {
     bool Mesh::IsValid() const { return m_gpu && m_gpu->vao != nullptr; }
 
     void Mesh::Release() {
-        m_gpu.reset();
+        if (m_gpu) {
+            if (HasCurrentGlContext())
+                m_gpu.reset();
+            else
+                (void)m_gpu.release();
+        }
         m_indexCount = 0;
         m_cpuVertices.clear();
         m_cpuIndices.clear();

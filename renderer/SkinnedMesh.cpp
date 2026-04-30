@@ -129,7 +129,12 @@ namespace Horo {
     }
 
     void SkinnedMesh::Release() {
-        m_gpu.reset();
+        if (m_gpu) {
+            if (HasCurrentGlContext())
+                m_gpu.reset();
+            else
+                (void)m_gpu.release();
+        }
         m_indexCount = 0;
     }
 } // namespace Horo
