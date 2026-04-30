@@ -39,6 +39,13 @@ GLenum TextureFormatToDataFormat(TextureFormat format) {
     return GL_RGBA;
 }
 
+GLenum TextureFormatToDataType(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::Depth24Stencil8:  return GL_UNSIGNED_INT_24_8;
+        default:                              return GL_UNSIGNED_BYTE;
+    }
+}
+
 GLenum TextureFilterToGL(TextureFilter filter) {
     return filter == TextureFilter::Linear ? GL_LINEAR : GL_NEAREST;
 }
@@ -111,6 +118,7 @@ OpenGLTexture OpenGLTexture::FromSpec(const TextureSpec& spec) {
 
     const GLenum internalFmt = TextureFormatToInternalFormat(spec.format);
     const GLenum dataFmt     = TextureFormatToDataFormat(spec.format);
+    const GLenum dataType    = TextureFormatToDataType(spec.format);
 
     glGenTextures(1, &t.m_textureStorage->id);
     glBindTexture(GL_TEXTURE_2D, t.m_textureStorage->id);
@@ -118,7 +126,7 @@ OpenGLTexture OpenGLTexture::FromSpec(const TextureSpec& spec) {
                  static_cast<GLint>(internalFmt),
                  static_cast<GLsizei>(spec.width),
                  static_cast<GLsizei>(spec.height),
-                 0, dataFmt, GL_UNSIGNED_BYTE, nullptr);
+                 0, dataFmt, dataType, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                     TextureFilterToGL(spec.filter));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
@@ -192,17 +200,17 @@ void OpenGLTexture::SetData(const void* data, uint32_t /*size*/) {
     if (!m_textureStorage || !m_textureStorage->id)
         return;
 
-    const GLenum internalFmt = TextureFormatToInternalFormat(m_spec.format);
     const GLenum dataFmt     = TextureFormatToDataFormat(m_spec.format);
+    const GLenum dataType    = TextureFormatToDataType(m_spec.format);
 
     // Suppress unused-variable warning for internalFmt in non-debug builds
-    (void)internalFmt;
+    (void)TextureFormatToInternalFormat(m_spec.format);
 
     glBindTexture(GL_TEXTURE_2D, m_textureStorage->id);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
                     static_cast<GLsizei>(m_spec.width),
                     static_cast<GLsizei>(m_spec.height),
-                    dataFmt, GL_UNSIGNED_BYTE, data);
+                    dataFmt, dataType, data);
     if (m_spec.generateMips)
         glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
