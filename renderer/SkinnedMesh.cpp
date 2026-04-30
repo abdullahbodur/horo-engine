@@ -1,14 +1,19 @@
 #include "renderer/SkinnedMesh.h"
 
-// clang-format off
-#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-// clang-format on
 
 #include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <utility>
+
+#include "renderer/IIndexBuffer.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
+#include "renderer/opengl/OpenGLIndexBuffer.h"
+#include "renderer/opengl/OpenGLVertexArray.h"
+#include "renderer/opengl/OpenGLVertexBuffer.h"
 
 namespace Horo {
     namespace {
@@ -16,9 +21,7 @@ namespace Horo {
     } // namespace
 
     struct SkinnedMesh::GpuStorage {
-        unsigned int vao = 0;
-        unsigned int vbo = 0;
-        unsigned int ebo = 0;
+        std::shared_ptr<IVertexArray> vao;
     };
 
     SkinnedMesh::SkinnedMesh() = default;
@@ -47,7 +50,7 @@ namespace Horo {
         return *this;
     }
 
-    bool SkinnedMesh::IsValid() const { return m_gpu && m_gpu->vao != 0; }
+    bool SkinnedMesh::IsValid() const { return m_gpu && m_gpu->vao != nullptr; }
 
     // ---------------------------------------------------------------------------
     // Public API
@@ -60,11 +63,11 @@ namespace Horo {
     }
 
     void SkinnedMesh::Draw() const {
-        if (!m_gpu)
+        if (!m_gpu || !m_gpu->vao)
             return;
-        glBindVertexArray(m_gpu->vao);
-        glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
+        m_gpu->vao->Bind();
+        m_gpu->vao->DrawIndexed(static_cast<uint32_t>(m_indexCount));
+        m_gpu->vao->Unbind();
     }
 
     // ---------------------------------------------------------------------------
@@ -96,76 +99,39 @@ namespace Horo {
 
         m_gpu = std::make_unique<GpuStorage>();
 
-        glGenVertexArrays(1, &m_gpu->vao);
-        glBindVertexArray(m_gpu->vao);
+        // SkinnedVertex layout:
+        //   location 0 — position     (Float3)
+        //   location 1 — normal       (Float3)
+        //   location 2 — uv           (Float2)
+        //   location 3 — boneIndices  (Int4)
+        //   location 4 — boneWeights  (Float4)
+        BufferLayout layout = {
+            {ShaderDataType::Float3, "a_position"},
+            {ShaderDataType::Float3, "a_normal"},
+            {ShaderDataType::Float2, "a_uv"},
+            {ShaderDataType::Int4,   "a_boneIndices"},
+            {ShaderDataType::Float4, "a_boneWeights"},
+        };
 
-        // --- VBO ---
-        glGenBuffers(1, &m_gpu->vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, m_gpu->vbo);
-        glBufferData(GL_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(vertices.size() * sizeof(SkinnedVertex)),
-                     vertices.data(), GL_STATIC_DRAW);
+        auto vbo = std::make_shared<OpenGLVertexBuffer>(
+            vertices.data(),
+            static_cast<uint32_t>(vertices.size() * sizeof(SkinnedVertex)));
+        vbo->SetLayout(layout);
 
-        // --- EBO ---
-        glGenBuffers(1, &m_gpu->ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_gpu->ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
-                     indices.data(), GL_STATIC_DRAW);
+        auto ibo = std::make_shared<OpenGLIndexBuffer>(
+            indices.data(),
+            static_cast<uint32_t>(indices.size()));
 
-        const auto stride = static_cast<GLsizei>(sizeof(SkinnedVertex));
-
-        // Location 0 — position (vec3)
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(
-            0, 3, GL_FLOAT, GL_FALSE, stride,
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(SkinnedVertex, position)));
-
-        // Location 1 — normal (vec3)
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(
-            1, 3, GL_FLOAT, GL_FALSE, stride,
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(SkinnedVertex, normal)));
-
-        // Location 2 — uv (vec2)
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(
-            2, 2, GL_FLOAT, GL_FALSE, stride,
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(SkinnedVertex, uv)));
-
-        // Location 3 — boneIndices (ivec4)
-        // Must use glVertexAttribIPointer so the integers are not converted to float.
-        glEnableVertexAttribArray(3);
-        glVertexAttribIPointer(
-            3, 4, GL_INT, stride,
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(SkinnedVertex, boneIndices)));
-
-        // Location 4 — boneWeights (vec4)
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(
-            4, 4, GL_FLOAT, GL_FALSE, stride,
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(SkinnedVertex, boneWeights)));
-
-        glBindVertexArray(0);
+        auto vao = std::make_shared<OpenGLVertexArray>();
+        vao->AddVertexBuffer(vbo);
+        vao->SetIndexBuffer(ibo);
+        m_gpu->vao = std::move(vao);
     }
 
     void SkinnedMesh::Release() {
-        if (m_gpu) {
-            if (HasCurrentGlContext()) {
-                if (m_gpu->ebo)
-                    glDeleteBuffers(1, &m_gpu->ebo);
-                if (m_gpu->vbo)
-                    glDeleteBuffers(1, &m_gpu->vbo);
-                if (m_gpu->vao)
-                    glDeleteVertexArrays(1, &m_gpu->vao);
-            }
-            m_gpu.reset();
-        }
+        if (m_gpu && !HasCurrentGlContext())
+            m_gpu->vao = nullptr; // prevent GL calls without a valid context
+        m_gpu.reset();
         m_indexCount = 0;
     }
 } // namespace Horo

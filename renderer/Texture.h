@@ -1,46 +1,25 @@
 #pragma once
-#include <memory>
-#include <string>
 
-#include "renderer/RenderTargetHandle.h"
+// OpenGL texture implementation.  Texture inherits from OpenGLTexture so that
+// existing forward declarations (`class Texture;`) and call sites remain valid.
+// NOTE(renderer-abstraction): Goal 5 will collapse call sites to ITexture&.
+#include "renderer/opengl/OpenGLTexture.h"
 
 namespace Horo {
-    class Texture {
-    public:
-        Texture();
 
-        ~Texture();
+class Texture : public OpenGLTexture {
+public:
+    Texture() = default;
 
-        Texture(const Texture &) = delete;
+    // Converting move-constructor from the base factory result.
+    explicit Texture(OpenGLTexture&& base) : OpenGLTexture(std::move(base)) {}
 
-        Texture &operator=(const Texture &) = delete;
+    static Texture FromFile(const std::string& path, bool flipY = true) {
+        return Texture(OpenGLTexture::FromFile(path, flipY));
+    }
+    static Texture CreateWhite1x1() {
+        return Texture(OpenGLTexture::CreateWhite1x1());
+    }
+};
 
-        Texture(Texture &&o) noexcept;
-
-        Texture &operator=(Texture &&o) noexcept;
-
-        static Texture FromFile(const std::string &path, bool flipY = true);
-
-        static Texture CreateWhite1x1();
-
-        void Bind(unsigned int slot = 0) const;
-
-        void Unbind() const;
-
-        bool IsValid() const;
-
-        int GetWidth() const { return m_width; }
-        int GetHeight() const { return m_height; }
-        // Temporary OpenGL escape hatch used by editor integration until
-        // offscreen/ImGui texture presentation is fully backend-neutral.
-        unsigned int GetNativeId() const;
-
-        RenderTargetHandle GetRenderTargetHandle(bool needsYFlip = false) const;
-
-    private:
-        struct TextureStorage;
-        std::unique_ptr<TextureStorage> m_textureStorage;
-        int m_width = 0;
-        int m_height = 0;
-    };
 } // namespace Horo

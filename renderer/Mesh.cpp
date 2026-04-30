@@ -1,9 +1,7 @@
 #include "renderer/Mesh.h"
 
-// clang-format off
-#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-// clang-format on
 
 #include <algorithm>
 #include <array>
@@ -13,6 +11,12 @@
 #include <utility>
 
 #include "math/MathUtils.h"
+#include "renderer/IIndexBuffer.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
+#include "renderer/opengl/OpenGLIndexBuffer.h"
+#include "renderer/opengl/OpenGLVertexArray.h"
+#include "renderer/opengl/OpenGLVertexBuffer.h"
 
 namespace Horo {
     namespace {
@@ -20,9 +24,7 @@ namespace Horo {
     } // namespace
 
     struct Mesh::GpuStorage {
-        unsigned int vao = 0;
-        unsigned int vbo = 0;
-        unsigned int ebo = 0;
+        std::shared_ptr<IVertexArray> vao;
     };
 
     Mesh::Mesh() = default;
@@ -51,20 +53,12 @@ namespace Horo {
         return *this;
     }
 
-    bool Mesh::IsValid() const { return m_gpu && m_gpu->vao != 0; }
+    bool Mesh::IsValid() const { return m_gpu && m_gpu->vao != nullptr; }
 
     void Mesh::Release() {
-        if (m_gpu) {
-            if (HasCurrentGlContext()) {
-                if (m_gpu->ebo)
-                    glDeleteBuffers(1, &m_gpu->ebo);
-                if (m_gpu->vbo)
-                    glDeleteBuffers(1, &m_gpu->vbo);
-                if (m_gpu->vao)
-                    glDeleteVertexArrays(1, &m_gpu->vao);
-            }
-            m_gpu.reset();
-        }
+        if (m_gpu && !HasCurrentGlContext())
+            m_gpu->vao = nullptr; // prevent GL calls without a valid context
+        m_gpu.reset();
         m_indexCount = 0;
         m_cpuVertices.clear();
         m_cpuIndices.clear();
@@ -102,43 +96,25 @@ namespace Horo {
 
         m_gpu = std::make_unique<GpuStorage>();
 
-        glGenVertexArrays(1, &m_gpu->vao);
-        glBindVertexArray(m_gpu->vao);
+        BufferLayout layout = {
+            {ShaderDataType::Float3, "a_position"},
+            {ShaderDataType::Float3, "a_normal"},
+            {ShaderDataType::Float2, "a_uv"},
+        };
 
-        glGenBuffers(1, &m_gpu->vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, m_gpu->vbo);
-        glBufferData(GL_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-                     vertices.data(), GL_STATIC_DRAW);
+        auto vbo = std::make_shared<OpenGLVertexBuffer>(
+            vertices.data(),
+            static_cast<uint32_t>(vertices.size() * sizeof(Vertex)));
+        vbo->SetLayout(layout);
 
-        glGenBuffers(1, &m_gpu->ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_gpu->ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
-                     indices.data(), GL_STATIC_DRAW);
+        auto ibo = std::make_shared<OpenGLIndexBuffer>(
+            indices.data(),
+            static_cast<uint32_t>(indices.size()));
 
-        // Position (location 0)
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(
-            0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(Vertex, position)));
-
-        // Normal (location 1)
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(
-            1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(Vertex, normal)));
-
-        // UV (location 2)
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(
-            2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-            static_cast<const void *>(static_cast<const std::byte *>(nullptr) +
-                                      offsetof(Vertex, uv)));
-
-        glBindVertexArray(0);
+        auto vao = std::make_shared<OpenGLVertexArray>();
+        vao->AddVertexBuffer(vbo);
+        vao->SetIndexBuffer(ibo);
+        m_gpu->vao = std::move(vao);
 
         if (!vertices.empty()) {
             Vec3 lo = vertices[0].position;
@@ -157,17 +133,16 @@ namespace Horo {
     }
 
     void Mesh::Draw() const {
-        if (!m_gpu)
+        if (!m_gpu || !m_gpu->vao)
             return;
-        glBindVertexArray(m_gpu->vao);
-        glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
+        m_gpu->vao->Bind();
+        m_gpu->vao->DrawIndexed(static_cast<uint32_t>(m_indexCount));
+        m_gpu->vao->Unbind();
     }
 
     void Mesh::DrawWireframe() const {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        // Polygon-mode state is set by OpenGLRenderBackend::DrawWireframe.
         Draw();
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // ---- Procedural generators ----

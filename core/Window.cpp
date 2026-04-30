@@ -1,7 +1,7 @@
 #include "core/Window.h"
 
 // clang-format off
-#include <glad/glad.h>   // must precede GLFW
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 // clang-format on
 
@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "core/Logger.h"
+#include "renderer/Renderer.h"
+#include "renderer/opengl/OpenGLContext.h"
 
 namespace {
 #ifdef _WIN32
@@ -178,7 +180,7 @@ namespace Horo {
             LogInfo("Making GL context current...");
             glfwMakeContextCurrent(m_window);
             LogInfo("Loading GL via glad...");
-            if (!gladLoadGLLoader(GladLoadProcBridge)) {
+            if (!OpenGLContext::InitGlad(GladLoadProcBridge)) {
                 glfwDestroyWindow(m_window);
                 GlfwContext::Shutdown();
                 throw WindowInitException("gladLoadGLLoader failed");
@@ -186,9 +188,8 @@ namespace Horo {
             LogInfo("gladLoadGLLoader succeeded.");
             SetVSync(spec.vsync);
             LogInfo("SetVSync complete: enabled={}", spec.vsync ? 1 : 0);
-            LogInfo("OpenGL {} — {}",
-                    reinterpret_cast<const char *>(glGetString(GL_VERSION)),
-                    reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
+            LogInfo("OpenGL {} — {}", OpenGLContext::GetGLVersion(),
+                    OpenGLContext::GetGLRenderer());
         } else {
             // Vulkan presentation pacing is backend-owned; the window stores the
             // preference.
@@ -278,7 +279,7 @@ namespace Horo {
         self->m_width = w;
         self->m_height = h;
         if (self->OwnsViewportResize())
-            glViewport(0, 0, w, h);
+            Renderer::SetViewport(0, 0, w, h);
         if (self->m_resizeCb)
             self->m_resizeCb(w, h);
     }
