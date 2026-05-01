@@ -1,5 +1,6 @@
 #include "renderer/opengl/OpenGLIndexBuffer.h"
 
+#include "core/Assert.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
@@ -33,8 +34,12 @@ OpenGLIndexBuffer::OpenGLIndexBuffer(OpenGLIndexBuffer&& o) noexcept
 
 OpenGLIndexBuffer& OpenGLIndexBuffer::operator=(OpenGLIndexBuffer&& o) noexcept {
     if (this != &o) {
-        if (m_rendererId && glfwGetCurrentContext())
-            glDeleteBuffers(1, &m_rendererId);
+        if (m_rendererId) {
+            HORO_ASSERT(glfwGetCurrentContext(),
+                "Move-assigning over a live GL index buffer requires an active context");
+            if (glfwGetCurrentContext())
+                glDeleteBuffers(1, &m_rendererId);
+        }
         m_rendererId   = o.m_rendererId;
         m_count        = o.m_count;
         o.m_rendererId = 0;

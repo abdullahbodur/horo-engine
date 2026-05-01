@@ -43,8 +43,12 @@ OpenGLVertexBuffer::OpenGLVertexBuffer(OpenGLVertexBuffer&& o) noexcept
 
 OpenGLVertexBuffer& OpenGLVertexBuffer::operator=(OpenGLVertexBuffer&& o) noexcept {
     if (this != &o) {
-        if (m_rendererId && glfwGetCurrentContext())
-            glDeleteBuffers(1, &m_rendererId);
+        if (m_rendererId) {
+            HORO_ASSERT(glfwGetCurrentContext(),
+                "Move-assigning over a live GL vertex buffer requires an active context");
+            if (glfwGetCurrentContext())
+                glDeleteBuffers(1, &m_rendererId);
+        }
         m_rendererId   = o.m_rendererId;
         m_capacity     = o.m_capacity;
         m_layout       = std::move(o.m_layout);
