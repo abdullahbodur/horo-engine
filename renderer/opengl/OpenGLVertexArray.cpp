@@ -1,5 +1,7 @@
 #include "renderer/opengl/OpenGLVertexArray.h"
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
 #include <cassert>
@@ -37,7 +39,7 @@ OpenGLVertexArray::OpenGLVertexArray() {
 }
 
 OpenGLVertexArray::~OpenGLVertexArray() {
-    if (m_rendererId)
+    if (m_rendererId && glfwGetCurrentContext())
         glDeleteVertexArrays(1, &m_rendererId);
 }
 
@@ -115,18 +117,19 @@ void OpenGLVertexArray::AddVertexBuffer(
             }
             case Mat3:
             case Mat4: {
-                // Matrix attributes occupy multiple consecutive attribute slots
-                const uint32_t count = element.GetComponentCount();
-                for (uint32_t col = 0; col < count; ++col) {
+                // Matrix attributes occupy multiple consecutive attribute slots.
+                // Each column is a separate vec3/vec4 attribute.
+                const uint32_t cols = (element.type == Mat4) ? 4u : 3u;
+                for (uint32_t col = 0; col < cols; ++col) {
                     glEnableVertexAttribArray(m_vertexBufferIndex);
                     glVertexAttribPointer(
                         m_vertexBufferIndex,
-                        static_cast<GLint>(count),
+                        static_cast<GLint>(cols),   // 3 or 4 components per column
                         GL_FLOAT,
                         element.normalized ? GL_TRUE : GL_FALSE,
                         static_cast<GLsizei>(layout.GetStride()),
                         reinterpret_cast<const void*>( // NOSONAR: required by OpenGL API
-                            element.offset + sizeof(float) * count * col));
+                            element.offset + sizeof(float) * cols * col));
                     glVertexAttribDivisor(m_vertexBufferIndex, 1);
                     ++m_vertexBufferIndex;
                 }

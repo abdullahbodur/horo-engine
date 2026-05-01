@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "core/Logger.h"
+#include "core/Assert.h"
 
 namespace Horo {
 
@@ -50,6 +51,17 @@ GLenum TextureFormatToDataType(TextureFormat format) {
 
 GLenum TextureFilterToGL(TextureFilter filter) {
     return filter == TextureFilter::Linear ? GL_LINEAR : GL_NEAREST;
+}
+
+uint32_t TextureFormatBytesPerPixel(TextureFormat format) {
+    using enum TextureFormat;
+    switch (format) {
+        case RGBA8:            return 4;
+        case RGB8:             return 3;
+        case R8:               return 1;
+        case Depth24Stencil8:  return 4;
+    }
+    return 4;
 }
 
 GLenum TextureWrapToGL(TextureWrap wrap) {
@@ -146,6 +158,7 @@ OpenGLTexture OpenGLTexture::FromFile(const std::string& path, bool flipY) {
     int h;
     int ch;
     unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
+    stbi_set_flip_vertically_on_load(0); // restore default to avoid leaking into other loads
     if (!data) {
         LogWarn("OpenGLTexture::FromFile — failed to load '{}': {}", path,
                 stbi_failure_reason());
@@ -201,9 +214,13 @@ void OpenGLTexture::Unbind() const {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void OpenGLTexture::SetData(const void* data, uint32_t /*size*/) { // NOSONAR: void* required by ITexture interface
+void OpenGLTexture::SetData(const void* data, uint32_t size) { // NOSONAR: void* required by ITexture interface
     if (!m_textureStorage || !m_textureStorage->id)
         return;
+
+    const uint32_t expectedSize = m_spec.width * m_spec.height
+                                  * TextureFormatBytesPerPixel(m_spec.format);
+    HORO_ASSERT(size == expectedSize, "SetData size does not match texture dimensions and format");
 
     const GLenum dataFmt     = TextureFormatToDataFormat(m_spec.format);
     const GLenum dataType    = TextureFormatToDataType(m_spec.format);

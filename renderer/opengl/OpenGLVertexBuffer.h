@@ -31,6 +31,7 @@ public:
 
 private:
     uint32_t    m_rendererId = 0;
+    uint32_t    m_capacity   = 0;
     BufferLayout m_layout;
 };
 

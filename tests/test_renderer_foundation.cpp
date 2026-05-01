@@ -446,6 +446,7 @@ TEST_CASE("Renderer forwards frame output config through the backend seam", "[re
   Renderer::ResetBackend();
 }
 
+#if defined(HORO_RENDERER_OPENGL)
 TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection", "[renderer][foundation][backend]") {
   const RenderBackendInitResult init =
       Renderer::InitializeBackend({RenderBackendId::Auto});
@@ -496,6 +497,7 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
   REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
 #endif
 }
+#endif // HORO_RENDERER_OPENGL
 
 TEST_CASE("RenderBackendSelection preserves native window handles for backend bootstrap", "[renderer][foundation][backend][selection]") {
   RenderBackendSelection selection;

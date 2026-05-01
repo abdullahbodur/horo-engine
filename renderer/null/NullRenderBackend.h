@@ -55,7 +55,10 @@ public:
     }
 
     bool EnsureEditorViewportRenderTarget(uint32_t, uint32_t,
-                                          std::string *) override { return true; }
+                                          std::string *outError) override {
+        if (outError) *outError = "NullRenderBackend does not support viewport render targets";
+        return false;
+    }
 
     bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                 bool,

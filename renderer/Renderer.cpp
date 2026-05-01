@@ -243,7 +243,9 @@ namespace Horo {
     }
 
     void Renderer::SetViewport(int x, int y, int w, int h) {
-        ActiveBackend()->SetViewport(x, y, w, h);
+        // Guard against resize callbacks firing before a backend is set.
+        if (auto *backend = ActiveBackendImpl())
+            backend->SetViewport(x, y, w, h);
     }
 
     std::array<int, 4> Renderer::GetViewport() {

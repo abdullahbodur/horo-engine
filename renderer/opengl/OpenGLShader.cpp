@@ -74,7 +74,8 @@ OpenGLShader OpenGLShader::FromSource(const std::string& vertSrc,
     s.m_programStorage = std::make_unique<ProgramStorage>();
     unsigned int vert = CompileShader(GL_VERTEX_SHADER, vertSrc);
     unsigned int frag = CompileShader(GL_FRAGMENT_SHADER, fragSrc);
-    s.m_programStorage->program = LinkProgram(vert, frag);
+    if (vert && frag)
+        s.m_programStorage->program = LinkProgram(vert, frag);
     glDeleteShader(vert);
     glDeleteShader(frag);
     return s;

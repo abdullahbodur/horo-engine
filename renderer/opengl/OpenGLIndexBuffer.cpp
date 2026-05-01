@@ -1,5 +1,7 @@
 #include "renderer/opengl/OpenGLIndexBuffer.h"
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
 #include <utility>
@@ -19,7 +21,7 @@ OpenGLIndexBuffer::OpenGLIndexBuffer(const uint32_t* indices, uint32_t count)
 }
 
 OpenGLIndexBuffer::~OpenGLIndexBuffer() {
-    if (m_rendererId)
+    if (m_rendererId && glfwGetCurrentContext())
         glDeleteBuffers(1, &m_rendererId);
 }
 
@@ -31,7 +33,7 @@ OpenGLIndexBuffer::OpenGLIndexBuffer(OpenGLIndexBuffer&& o) noexcept
 
 OpenGLIndexBuffer& OpenGLIndexBuffer::operator=(OpenGLIndexBuffer&& o) noexcept {
     if (this != &o) {
-        if (m_rendererId)
+        if (m_rendererId && glfwGetCurrentContext())
             glDeleteBuffers(1, &m_rendererId);
         m_rendererId   = o.m_rendererId;
         m_count        = o.m_count;

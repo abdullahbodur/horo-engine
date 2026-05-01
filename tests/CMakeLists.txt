@@ -11,7 +11,9 @@ FetchContent_MakeAvailable(Catch2)
 
 # All tests link HoroEngine first so OpenGLRenderBackend vtable symbols are
 # resolved when the linker subsequently processes horo-renderer-opengl.
-if(TARGET horo-renderer-opengl)
+# In null-renderer builds, horo-renderer-opengl is intentionally excluded so
+# that tests reflect the same backend availability as the null HoroEditor binary.
+if(TARGET horo-renderer-opengl AND NOT HORO_RENDERER STREQUAL "null")
     set(HORO_ENGINE_LINK HoroEngine horo-renderer-opengl)
 else()
     set(HORO_ENGINE_LINK HoroEngine)
