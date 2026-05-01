@@ -88,7 +88,7 @@ TEST_CASE("NullTexture: Bind is tracked", "[null-renderer][null-texture]") {
 
     auto *null = dynamic_cast<NullTexture *>(tex.get());
     REQUIRE(null != nullptr);
-    CHECK(null->bindCount == 2);
+    CHECK(null->GetBindCount() == 2);
 }
 
 TEST_CASE("NullTexture: dimensions from spec", "[null-renderer][null-texture]") {
@@ -110,8 +110,8 @@ TEST_CASE("NullVertexArray: Bind is tracked", "[null-renderer][null-varray]") {
 
     auto *null = dynamic_cast<NullVertexArray *>(va.get());
     REQUIRE(null != nullptr);
-    CHECK(null->bindCount   == 2);
-    CHECK(null->unbindCount == 1);
+    CHECK(null->GetBindCount()   == 2);
+    CHECK(null->GetUnbindCount() == 1);
 }
 
 // ── Backend identity / capabilities ──────────────────────────────────────────

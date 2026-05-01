@@ -23,9 +23,9 @@ class NullRenderBackend final : public IRenderBackend {
 public:
     // ── Lifecycle ──────────────────────────────────────────────────────────────
     void BeginFrame(const RenderFrameConfig &) override { m_drawCalls = 0; }
-    void EndFrame()                            override {}
-    void BeginPass(const RenderPassConfig &)   override {}
-    void EndPass()                             override {}
+    void EndFrame()                            override { /* No-op: null renderer. */ }
+    void BeginPass(const RenderPassConfig &)   override { /* No-op: null renderer. */ }
+    void EndPass()                             override { /* No-op: null renderer. */ }
 
     // ── Draw submission ────────────────────────────────────────────────────────
     void DrawMesh(const MeshDrawCommand &)               override { ++m_drawCalls; }
@@ -74,10 +74,10 @@ public:
     std::array<int, 4> GetViewport() const override { return m_viewport; }
 
     // ── 2-D overlay / offscreen helpers ───────────────────────────────────────
-    void Begin2dOverlay()        override {}
-    void End2dOverlay()          override {}
-    void SetupOpaqueRenderState() override {}
-    void ClearColorAndDepth(float, float, float, float) override {}
+    void Begin2dOverlay()        override { /* No-op: null renderer. */ }
+    void End2dOverlay()          override { /* No-op: null renderer. */ }
+    void SetupOpaqueRenderState() override { /* No-op: null renderer. */ }
+    void ClearColorAndDepth(float, float, float, float) override { /* No-op: null renderer. */ }
 
     bool ReadbackRegionRgba8(int, int, int, int,
                              uint32_t *,

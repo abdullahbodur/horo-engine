@@ -9,8 +9,8 @@ class NullIndexBuffer final : public IIndexBuffer {
 public:
     explicit NullIndexBuffer(uint32_t count = 0) : m_count(count) {}
 
-    void Bind()   const override {}
-    void Unbind() const override {}
+    void Bind()   const override { /* No-op: null renderer. */ }
+    void Unbind() const override { /* No-op: null renderer. */ }
 
     uint32_t GetCount() const override { return m_count; }
 

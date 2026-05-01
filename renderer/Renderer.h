@@ -23,7 +23,7 @@ namespace Horo {
     class Material;
     class SkinnedMesh;
 
-    class Renderer {
+    class Renderer { // NOSONAR(cxx:S1200) - Renderer is a backend-agnostic facade; splitting would fragment the public API
     public:
         static RenderBackendInitResult
         InitializeBackend(const RenderBackendSelection &selection = {});

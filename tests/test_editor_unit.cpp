@@ -409,7 +409,32 @@ TEST_CASE("IsSupportedEditorImGuiBackend: Vulkan returns compile-conditional", "
 #endif
 }
 
-// ===========================================================================
+TEST_CASE("IsSupportedEditorImGuiBackend: Null is not supported", "[editor][imgui-backend]") {
+  CHECK_FALSE(IsSupportedEditorImGuiBackend(RenderBackendId::Null));
+}
+
+TEST_CASE("InitEditorImGuiBackend: Null returns false without GLFW context", "[editor][imgui-backend]") {
+  // Null path returns false immediately without dereferencing the window.
+  auto *fakeWindow = reinterpret_cast<GLFWwindow *>(static_cast<uintptr_t>(1));
+  CHECK_FALSE(InitEditorImGuiBackend(fakeWindow, RenderBackendId::Null));
+}
+
+TEST_CASE("ShutdownEditorImGuiBackend: Null is a no-op", "[editor][imgui-backend]") {
+  // Must not crash; no GLFW context required.
+  REQUIRE_NOTHROW(ShutdownEditorImGuiBackend(RenderBackendId::Null));
+}
+
+TEST_CASE("BeginEditorImGuiFrame: Null is a no-op", "[editor][imgui-backend]") {
+  REQUIRE_NOTHROW(BeginEditorImGuiFrame(RenderBackendId::Null));
+}
+
+TEST_CASE("RenderEditorImGuiDrawData: Null is a no-op", "[editor][imgui-backend]") {
+  // Non-null drawData pointer; Null backend returns without dereferencing it.
+  auto *fakeDrawData = reinterpret_cast<ImDrawData *>(static_cast<uintptr_t>(1));
+  REQUIRE_NOTHROW(RenderEditorImGuiDrawData(RenderBackendId::Null, fakeDrawData));
+}
+
+
 // EditorDebugTrace — EditorTraceEnabled and EditorTrace
 // ===========================================================================
 

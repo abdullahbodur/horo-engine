@@ -137,7 +137,7 @@ namespace Horo::Editor {
     }
 
     bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId) {
-        if (!window || !IsSupportedEditorImGuiBackend(backendId))
+        if (!window)
             return false;
 
         using enum RenderBackendId;
@@ -200,9 +200,6 @@ namespace Horo::Editor {
     }
 
     void ShutdownEditorImGuiBackend(RenderBackendId backendId) {
-        if (!IsSupportedEditorImGuiBackend(backendId))
-            return;
-
         using enum RenderBackendId;
         switch (backendId) {
             case Auto:
@@ -241,9 +238,6 @@ namespace Horo::Editor {
     }
 
     void BeginEditorImGuiFrame(RenderBackendId backendId) {
-        if (!IsSupportedEditorImGuiBackend(backendId))
-            return;
-
         using enum RenderBackendId;
         switch (backendId) {
             case Auto:
@@ -292,7 +286,7 @@ namespace Horo::Editor {
 
     void RenderEditorImGuiDrawData(RenderBackendId backendId,
                                    ImDrawData *drawData) {
-        if (!IsSupportedEditorImGuiBackend(backendId) || !drawData)
+        if (!drawData)
             return;
 
         using enum RenderBackendId;
