@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.25)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
     # x-release-please-start-version
-    set(HORO_ENGINE_VERSION "0.1.0")
+    set(HORO_ENGINE_VERSION "0.2.0")
     # x-release-please-end
     project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
     include(GNUInstallDirs)
