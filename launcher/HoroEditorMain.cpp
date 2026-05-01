@@ -20,6 +20,9 @@
 #include "renderer/DebugDraw.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/Renderer.h"
+#if defined(HORO_RENDERER_NULL)
+#include "renderer/null/NullRenderBackend.h"
+#endif
 #include "scene/Scene.h"
 #include "scene/SceneReferenceRuntime.h"
 #include "scene/systems/BehaviorSystem.h"
@@ -101,7 +104,13 @@ namespace {
             spec.width = 1440;
             spec.height = 920;
             spec.vsync = true;
+#if defined(HORO_RENDERER_NULL)
+            // Null renderer: no OpenGL context needed; GLFW_NO_API keeps GLFW
+            // from creating one.
+            spec.graphicsApi = WindowGraphicsApi::Vulkan;
+#else
             spec.graphicsApi = WindowGraphicsApi::OpenGL;
+#endif
             return spec;
         }
 
@@ -123,6 +132,9 @@ namespace {
                 }
             }
 
+#if defined(HORO_RENDERER_NULL)
+            Renderer::UseBackend(&m_nullBackend);
+#else
             if (const RenderBackendInitResult backendInit = Renderer::InitializeBackend(
                     {
                         .requested = RenderBackendId::OpenGL,
@@ -132,6 +144,7 @@ namespace {
                 throw RendererBackendInitException(
                     "Failed to initialize renderer backend: " + backendInit.error);
             }
+#endif
 
             DebugDraw::Init();
 
@@ -262,6 +275,9 @@ namespace {
         Camera m_camera;
         float m_renderAlpha = 0.0f;
         int m_renderFrameCount = 0;
+#if defined(HORO_RENDERER_NULL)
+        NullRenderBackend m_nullBackend;
+#endif
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
         bool m_runUiAutomation = false;

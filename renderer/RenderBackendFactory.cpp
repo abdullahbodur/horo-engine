@@ -2,8 +2,11 @@
 
 #include <memory>
 
+#if defined(HORO_RENDERER_OPENGL)
 #include "renderer/OpenGLRenderBackend.h"
+#endif
 #include "renderer/VulkanRenderBackend.h"
+#include "renderer/null/NullRenderBackend.h"
 
 namespace Horo {
     RenderBackendCreateResult
@@ -13,7 +16,11 @@ namespace Horo {
         using enum RenderBackendId;
         switch (resolvedBackend) {
             case OpenGL:
+#if defined(HORO_RENDERER_OPENGL)
                 return {std::make_unique<OpenGLRenderBackend>(), OpenGL, {}};
+#else
+                return {nullptr, OpenGL, "OpenGL backend not available in this build."};
+#endif
             case Vulkan:
 #if defined(HORO_HAS_VULKAN)
                 {
@@ -36,6 +43,8 @@ namespace Horo {
                     "HORO_ENGINE_ENABLE_VULKAN to build it."
                 };
 #endif
+            case Null:
+                return {std::make_unique<NullRenderBackend>(), Null, {}};
             case Auto:
                 break;
         }

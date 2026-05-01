@@ -1,16 +1,29 @@
 #include "renderer/OpenGLRenderBackend.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <string>
 
 #include <glad/glad.h>
 
 #include "core/Assert.h"
+#include "renderer/IFramebuffer.h"
+#include "renderer/IIndexBuffer.h"
+#include "renderer/IShader.h"
+#include "renderer/ITexture.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
 #include "renderer/Material.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
 #include "renderer/SkinnedMesh.h"
+#include "renderer/opengl/OpenGLFramebuffer.h"
+#include "renderer/opengl/OpenGLIndexBuffer.h"
+#include "renderer/opengl/OpenGLShader.h"
+#include "renderer/opengl/OpenGLTexture.h"
+#include "renderer/opengl/OpenGLVertexArray.h"
+#include "renderer/opengl/OpenGLVertexBuffer.h"
 
 namespace Horo {
     namespace {
@@ -23,7 +36,7 @@ namespace Horo {
         }
 
         void BindMaterial(const Material &material) {
-            const Shader *shader = ResolveMaterialShader(material);
+            Shader *shader = ResolveMaterialShader(material);
             if (!shader)
                 return;
 
@@ -169,7 +182,7 @@ namespace Horo {
         m_lastLightProgram = 0;
     }
 
-    void OpenGLRenderBackend::UploadLights(const Shader &shader) {
+    void OpenGLRenderBackend::UploadLights(Shader &shader) {
         const unsigned int programId = shader.GetProgramID();
         if (programId == m_lastLightProgram)
             return;
@@ -197,7 +210,7 @@ namespace Horo {
             return;
 
         BindMaterial(*command.material);
-        const Shader *shader = ResolveMaterialShader(*command.material);
+        Shader *shader = ResolveMaterialShader(*command.material);
         if (!shader)
             return;
 
@@ -217,7 +230,7 @@ namespace Horo {
             return;
 
         BindMaterial(*command.material);
-        const Shader *shader = ResolveMaterialShader(*command.material);
+        Shader *shader = ResolveMaterialShader(*command.material);
         if (!shader)
             return;
 
@@ -252,7 +265,124 @@ namespace Horo {
         command.shader->SetMat4("u_projection", m_activeView.projection);
         command.shader->SetVec4("u_color", command.color);
 
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         command.mesh->DrawWireframe();
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         ++m_drawCalls;
+    }
+
+    void OpenGLRenderBackend::SetViewport(int x, int y, int w, int h) {
+        glViewport(x, y, w, h);
+    }
+
+    std::array<int, 4> OpenGLRenderBackend::GetViewport() const {
+        std::array<int, 4> vp{};
+        glGetIntegerv(GL_VIEWPORT, vp.data());
+        return vp;
+    }
+
+    void OpenGLRenderBackend::Begin2dOverlay() {
+        m_overlayDepthWas = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
+        m_overlayBlendWas = glIsEnabled(GL_BLEND) == GL_TRUE;
+        m_overlayCullWas  = glIsEnabled(GL_CULL_FACE) == GL_TRUE;
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_CULL_FACE);
+    }
+
+    void OpenGLRenderBackend::End2dOverlay() {
+        if (m_overlayDepthWas)
+            glEnable(GL_DEPTH_TEST);
+        else
+            glDisable(GL_DEPTH_TEST);
+        if (m_overlayBlendWas)
+            glEnable(GL_BLEND);
+        else
+            glDisable(GL_BLEND);
+        if (m_overlayCullWas)
+            glEnable(GL_CULL_FACE);
+        else
+            glDisable(GL_CULL_FACE);
+    }
+
+    void OpenGLRenderBackend::SetupOpaqueRenderState() {
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+    }
+
+    void OpenGLRenderBackend::ClearColorAndDepth(float r, float g, float b,
+                                                  float a) {
+        glClearColor(r, g, b, a);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
+    bool OpenGLRenderBackend::ReadbackRegionRgba8(int x, int y, int w, int h,
+                                                   uint32_t *pixels,
+                                                   std::string *outError) {
+        if (!pixels || w <= 0 || h <= 0) {
+            if (outError)
+                *outError = "ReadbackRegionRgba8: invalid parameters.";
+            return false;
+        }
+        glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        if (const GLenum err = glGetError(); err != GL_NO_ERROR) {
+            if (outError)
+                *outError =
+                    std::format("ReadbackRegionRgba8: glReadPixels failed (GL "
+                                "error 0x{:x}).",
+                                err);
+            return false;
+        }
+        return true;
+    }
+
+    // ── Resource factory ─────────────────────────────────────────────────────
+
+    std::shared_ptr<IShader> OpenGLRenderBackend::CreateShader(
+        const std::string &vertSrc, const std::string &fragSrc) {
+        return std::make_shared<OpenGLShader>(
+            OpenGLShader::FromSource(vertSrc, fragSrc));
+    }
+
+    std::shared_ptr<IShader> OpenGLRenderBackend::CreateShaderFromFile(
+        const std::string &vertPath, const std::string &fragPath) {
+        return std::make_shared<OpenGLShader>(
+            OpenGLShader::FromFiles(vertPath, fragPath));
+    }
+
+    std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTexture(
+        const TextureSpec &spec) {
+        return std::make_shared<OpenGLTexture>(OpenGLTexture::FromSpec(spec));
+    }
+
+    std::shared_ptr<ITexture> OpenGLRenderBackend::CreateTextureFromFile(
+        const std::string &path) {
+        return std::make_shared<OpenGLTexture>(OpenGLTexture::FromFile(path));
+    }
+
+    std::shared_ptr<IFramebuffer> OpenGLRenderBackend::CreateFramebuffer(
+        const FramebufferSpec &spec) {
+        return std::make_shared<OpenGLFramebuffer>(spec);
+    }
+
+    std::shared_ptr<IVertexBuffer> OpenGLRenderBackend::CreateVertexBuffer(
+        float *vertices, uint32_t size) {
+        return std::make_shared<OpenGLVertexBuffer>(vertices, size);
+    }
+
+    std::shared_ptr<IVertexBuffer> OpenGLRenderBackend::CreateVertexBuffer(
+        uint32_t size) {
+        return std::make_shared<OpenGLVertexBuffer>(size);
+    }
+
+    std::shared_ptr<IIndexBuffer> OpenGLRenderBackend::CreateIndexBuffer(
+        uint32_t *indices, uint32_t count) {
+        return std::make_shared<OpenGLIndexBuffer>(indices, count);
+    }
+
+    std::shared_ptr<IVertexArray> OpenGLRenderBackend::CreateVertexArray() {
+        return std::make_shared<OpenGLVertexArray>();
     }
 } // namespace Horo

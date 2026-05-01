@@ -10,6 +10,8 @@ namespace Horo {
                 return "OpenGL";
             case Vulkan:
                 return "Vulkan";
+            case Null:
+                return "Null";
         }
 
         return "Unknown";
@@ -55,6 +57,8 @@ namespace Horo {
                     .supportsGpuTimestamps = false,
                     .supportsBindlessResources = false
                 };
+            case RenderBackendId::Null:
+                return {};
         }
 
         return {};
@@ -71,6 +75,8 @@ namespace Horo {
 #else
                 return false;
 #endif
+            case Null:
+                return true;
             case Auto:
                 break;
         }

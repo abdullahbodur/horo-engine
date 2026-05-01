@@ -446,6 +446,7 @@ TEST_CASE("Renderer forwards frame output config through the backend seam", "[re
   Renderer::ResetBackend();
 }
 
+#if defined(HORO_RENDERER_OPENGL)
 TEST_CASE("Renderer initializes the default OpenGL backend through a typed selection", "[renderer][foundation][backend]") {
   const RenderBackendInitResult init =
       Renderer::InitializeBackend({RenderBackendId::Auto});
@@ -496,6 +497,7 @@ TEST_CASE("Renderer rejects unsupported backend requests without replacing the a
   REQUIRE_FALSE(Renderer::IsBackendSupported(RenderBackendId::Vulkan));
 #endif
 }
+#endif // HORO_RENDERER_OPENGL
 
 TEST_CASE("RenderBackendSelection preserves native window handles for backend bootstrap", "[renderer][foundation][backend][selection]") {
   RenderBackendSelection selection;
@@ -1660,5 +1662,57 @@ TEST_CASE("DebugDraw gracefully ignores submissions when backend support is disa
   Camera camera;
   REQUIRE_NOTHROW(DebugDraw::Flush(camera));
   DebugDraw::Shutdown();
+  Renderer::ResetBackend();
+}
+
+// ============================================================================
+// Renderer resource-factory API — verifies delegators compile and route calls
+// ============================================================================
+
+TEST_CASE("Renderer::CreateShader delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  // FakeRenderBackend inherits the default nullptr implementation.
+  REQUIRE(Renderer::CreateShader("v", "f") == nullptr);
+  REQUIRE(Renderer::CreateShaderFromFile("v.glsl", "f.glsl") == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateTexture delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  TextureSpec spec{};
+  REQUIRE(Renderer::CreateTexture(spec) == nullptr);
+  REQUIRE(Renderer::CreateTextureFromFile("img.png") == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateFramebuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  FramebufferSpec spec{};
+  REQUIRE(Renderer::CreateFramebuffer(spec) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateVertexBuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateVertexBuffer(nullptr, 0u) == nullptr);
+  REQUIRE(Renderer::CreateVertexBuffer(0u) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateIndexBuffer delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateIndexBuffer(nullptr, 0u) == nullptr);
+  Renderer::ResetBackend();
+}
+
+TEST_CASE("Renderer::CreateVertexArray delegates to active backend", "[renderer][factory]") {
+  FakeRenderBackend backend;
+  Renderer::UseBackend(&backend);
+  REQUIRE(Renderer::CreateVertexArray() == nullptr);
   Renderer::ResetBackend();
 }

@@ -6,6 +6,9 @@
 
 #include "math/Mat4.h"
 #include "math/Vec3.h"
+#include "renderer/ITexture.h"
+#include "renderer/IVertexArray.h"
+#include "renderer/IVertexBuffer.h"
 #include "renderer/Shader.h"
 
 namespace Horo {
@@ -64,9 +67,9 @@ namespace Horo {
             float a;
         };
 
-        static unsigned int s_vao;
-        static unsigned int s_vbo;
-        static unsigned int s_fontTex;
+        static std::shared_ptr<IVertexArray>  s_vao;
+        static std::shared_ptr<IVertexBuffer> s_vbo;
+        static std::shared_ptr<ITexture>      s_fontTex;
         static std::unique_ptr<Shader> s_shader;
         static bool s_initialized;
         static bool s_visible;

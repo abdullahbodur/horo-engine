@@ -21,7 +21,9 @@
 #include "renderer/Camera.h"
 #include "renderer/Light.h"
 #include "renderer/Material.h"
+#if defined(HORO_RENDERER_OPENGL)
 #include "renderer/OpenGLRenderBackend.h"
+#endif
 #include "renderer/RenderBackend.h"
 #include "renderer/RenderViewUtils.h"
 #include "renderer/Shader.h"
@@ -281,6 +283,7 @@ TEST_CASE("Texture: default object exposes invalid OpenGL handle metadata", "[re
   CHECK(handle.needsYFlip);
 }
 
+#if defined(HORO_RENDERER_OPENGL)
 TEST_CASE("OpenGLRenderBackend: readback validates dimensions and errors", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
   std::vector<uint8_t> color;
@@ -343,6 +346,7 @@ TEST_CASE("OpenGLRenderBackend: capabilities mirror OpenGL defaults", "[renderer
   CHECK(actual.supportsDepthReadback == expected.supportsDepthReadback);
   CHECK(actual.supportsDebugHud == expected.supportsDebugHud);
 }
+#endif // HORO_RENDERER_OPENGL
 
 // ===========================================================================
 // Mesh — non-GPU paths

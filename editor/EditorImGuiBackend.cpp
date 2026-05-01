@@ -129,13 +129,15 @@ namespace Horo::Editor {
 #else
                 return false;
 #endif
+            case Null:
+                return false;
         }
 
         return false;
     }
 
     bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId) {
-        if (!window || !IsSupportedEditorImGuiBackend(backendId))
+        if (!window)
             return false;
 
         using enum RenderBackendId;
@@ -190,15 +192,14 @@ namespace Horo::Editor {
                 return false;
 #endif
             }
+            case Null:
+                return false;
         }
 
         return false;
     }
 
     void ShutdownEditorImGuiBackend(RenderBackendId backendId) {
-        if (!IsSupportedEditorImGuiBackend(backendId))
-            return;
-
         using enum RenderBackendId;
         switch (backendId) {
             case Auto:
@@ -231,13 +232,12 @@ namespace Horo::Editor {
 #endif
                 return;
             }
+            case Null:
+                return;
         }
     }
 
     void BeginEditorImGuiFrame(RenderBackendId backendId) {
-        if (!IsSupportedEditorImGuiBackend(backendId))
-            return;
-
         using enum RenderBackendId;
         switch (backendId) {
             case Auto:
@@ -279,12 +279,14 @@ namespace Horo::Editor {
                 ImGui_ImplGlfw_NewFrame();
 #endif
                 return;
+            case Null:
+                return;
         }
     }
 
     void RenderEditorImGuiDrawData(RenderBackendId backendId,
                                    ImDrawData *drawData) {
-        if (!IsSupportedEditorImGuiBackend(backendId) || !drawData)
+        if (!drawData)
             return;
 
         using enum RenderBackendId;
@@ -305,6 +307,8 @@ namespace Horo::Editor {
                                                         drawData);
                 }
 #endif
+                return;
+            case Null:
                 return;
         }
     }

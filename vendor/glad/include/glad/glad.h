@@ -556,6 +556,42 @@ GLAPI PFNGLFRAMEBUFFERRENDERBUFFERPROC glad_glFramebufferRenderbuffer;
 #define glRenderbufferStorage glad_glRenderbufferStorage
 #define glFramebufferRenderbuffer glad_glFramebufferRenderbuffer
 
+/* ---- GL constants not originally in this minimal header ---- */
+#define GL_BOOL           0x8B56
+#define GL_R8             0x8229
+#define GL_R32I           0x8235
+#define GL_RED_INTEGER    0x8D94
+#define GL_COLOR          0x1800
+#define GL_UNSIGNED_INT_24_8 0x84FA
+#define GL_COLOR_ATTACHMENT1  0x8CE1
+#define GL_COLOR_ATTACHMENT2  0x8CE2
+#define GL_COLOR_ATTACHMENT3  0x8CE3
+
+/* ---- Additional GL 4.1 Core functions needed by renderer/opengl/ ---- */
+typedef void (APIENTRYP PFNGLDRAWBUFFERSPROC)(GLsizei n, const GLenum *bufs);
+typedef void (APIENTRYP PFNGLDRAWBUFFERPROC)(GLenum buf);
+typedef void (APIENTRYP PFNGLREADBUFFERPROC)(GLenum src);
+typedef void (APIENTRYP PFNGLTEXSUBIMAGE2DPROC)(GLenum target, GLint level,
+    GLint xoffset, GLint yoffset, GLsizei width, GLsizei height,
+    GLenum format, GLenum type, const void *pixels);
+typedef void (APIENTRYP PFNGLVERTEXATTRIBDIVISORPROC)(GLuint index, GLuint divisor);
+typedef void (APIENTRYP PFNGLCLEARBUFFERIVPROC)(GLenum buffer, GLint drawbuffer,
+    const GLint *value);
+
+GLAPI PFNGLDRAWBUFFERSPROC     glad_glDrawBuffers;
+GLAPI PFNGLDRAWBUFFERPROC      glad_glDrawBuffer;
+GLAPI PFNGLREADBUFFERPROC      glad_glReadBuffer;
+GLAPI PFNGLTEXSUBIMAGE2DPROC   glad_glTexSubImage2D;
+GLAPI PFNGLVERTEXATTRIBDIVISORPROC glad_glVertexAttribDivisor;
+GLAPI PFNGLCLEARBUFFERIVPROC   glad_glClearBufferiv;
+
+#define glDrawBuffers        glad_glDrawBuffers
+#define glDrawBuffer         glad_glDrawBuffer
+#define glReadBuffer         glad_glReadBuffer
+#define glTexSubImage2D      glad_glTexSubImage2D
+#define glVertexAttribDivisor glad_glVertexAttribDivisor
+#define glClearBufferiv      glad_glClearBufferiv
+
 /* ---- Loader ---- */
 typedef void *(*GLADloadproc)(const char *name);
 int gladLoadGLLoader(GLADloadproc load);

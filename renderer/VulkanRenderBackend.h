@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -53,6 +54,29 @@ namespace Horo {
         bool TryGetEditorViewportRenderTargetHandle(RenderTargetHandle *outHandle,
                                                     bool needsYFlip,
                                                     std::string *outError) override;
+
+        // ── Resource Factory ────────────────────────────────────────────────────
+        std::shared_ptr<IShader>       CreateShader(const std::string& vertSrc,
+                                                     const std::string& fragSrc) override;
+        std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath,
+                                                             const std::string& fragPath) override;
+        std::shared_ptr<ITexture>      CreateTexture(const TextureSpec& spec) override;
+        std::shared_ptr<ITexture>      CreateTextureFromFile(const std::string& path) override;
+        std::shared_ptr<IFramebuffer>  CreateFramebuffer(const FramebufferSpec& spec) override;
+        std::shared_ptr<IVertexBuffer> CreateVertexBuffer(float* vertices, uint32_t size) override;
+        std::shared_ptr<IVertexBuffer> CreateVertexBuffer(uint32_t size) override;
+        std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count) override;
+        std::shared_ptr<IVertexArray>  CreateVertexArray() override;
+
+        // ── Backend-agnostic state helpers ───────────────────────────────────
+        void SetViewport(int x, int y, int w, int h) override;
+        std::array<int, 4> GetViewport() const override;
+        void Begin2dOverlay() override;
+        void End2dOverlay() override;
+        void SetupOpaqueRenderState() override;
+        void ClearColorAndDepth(float r, float g, float b, float a) override;
+        bool ReadbackRegionRgba8(int x, int y, int w, int h, uint32_t *pixels,
+                                 std::string *outError) override;
 
         RenderBackendId GetBackendId() const override {
             return RenderBackendId::Vulkan;
