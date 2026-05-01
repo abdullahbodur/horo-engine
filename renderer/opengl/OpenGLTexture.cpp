@@ -221,6 +221,8 @@ void OpenGLTexture::SetData(const void* data, uint32_t size) { // NOSONAR: void*
     const uint32_t expectedSize = m_spec.width * m_spec.height
                                   * TextureFormatBytesPerPixel(m_spec.format);
     HORO_ASSERT(size == expectedSize, "SetData size does not match texture dimensions and format");
+    (void)size;
+    (void)expectedSize;
 
     const GLenum dataFmt     = TextureFormatToDataFormat(m_spec.format);
     const GLenum dataType    = TextureFormatToDataType(m_spec.format);
