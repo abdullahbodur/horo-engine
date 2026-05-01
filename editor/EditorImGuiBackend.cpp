@@ -129,6 +129,8 @@ namespace Horo::Editor {
 #else
                 return false;
 #endif
+            case Null:
+                return false;
         }
 
         return false;
@@ -190,6 +192,8 @@ namespace Horo::Editor {
                 return false;
 #endif
             }
+            case Null:
+                return false;
         }
 
         return false;
@@ -231,6 +235,8 @@ namespace Horo::Editor {
 #endif
                 return;
             }
+            case Null:
+                return;
         }
     }
 
@@ -279,6 +285,8 @@ namespace Horo::Editor {
                 ImGui_ImplGlfw_NewFrame();
 #endif
                 return;
+            case Null:
+                return;
         }
     }
 
@@ -305,6 +313,8 @@ namespace Horo::Editor {
                                                         drawData);
                 }
 #endif
+                return;
+            case Null:
                 return;
         }
     }

@@ -33,7 +33,7 @@ public:
     void DrawWireframe(const WireframeDrawCommand &)     override { ++m_drawCalls; }
 
     // ── Identity / capabilities ────────────────────────────────────────────────
-    RenderBackendId GetBackendId() const override { return RenderBackendId::Auto; }
+    RenderBackendId GetBackendId() const override { return RenderBackendId::Null; }
 
     RenderBackendCapabilities GetCapabilities() const override { return {}; }
 

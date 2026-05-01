@@ -7,6 +7,7 @@ namespace Horo {
         Auto,
         OpenGL,
         Vulkan,
+        Null,
     };
 
     struct RenderBackendCapabilities {

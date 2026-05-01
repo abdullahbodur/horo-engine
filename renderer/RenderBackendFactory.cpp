@@ -6,6 +6,7 @@
 #include "renderer/OpenGLRenderBackend.h"
 #endif
 #include "renderer/VulkanRenderBackend.h"
+#include "renderer/null/NullRenderBackend.h"
 
 namespace Horo {
     RenderBackendCreateResult
@@ -42,6 +43,8 @@ namespace Horo {
                     "HORO_ENGINE_ENABLE_VULKAN to build it."
                 };
 #endif
+            case Null:
+                return {std::make_unique<NullRenderBackend>(), Null, {}};
             case Auto:
                 break;
         }
