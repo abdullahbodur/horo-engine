@@ -117,12 +117,18 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
+      - name: Stage artifact
+        run: |
+          mkdir -p artifact/bin/renderer/shaders artifact/bin/assets
+          cp build/debug/bin/HoroEditorUiTest artifact/bin/
+          cp build/debug/sdk/renderer/shaders/* artifact/bin/renderer/shaders/
+          cp build/debug/sdk/assets/editor_schema.json artifact/bin/assets/
+
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: ui-binary-linux
-          path: |
-            build/debug/bin/HoroEditorUiTest
+          path: artifact/bin/
           retention-days: 1
 
   build-macos:
@@ -159,12 +165,18 @@ jobs:
       - name: Build UI Automation Target
         run: cmake --build --preset debug --target HoroEditorUiTest --parallel
 
+      - name: Stage artifact
+        run: |
+          mkdir -p artifact/bin/renderer/shaders artifact/bin/assets
+          cp build/debug/bin/HoroEditorUiTest artifact/bin/
+          cp build/debug/sdk/renderer/shaders/* artifact/bin/renderer/shaders/
+          cp build/debug/sdk/assets/editor_schema.json artifact/bin/assets/
+
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: ui-binary-macos
-          path: |
-            build/debug/bin/HoroEditorUiTest
+          path: artifact/bin/
           retention-days: 1
 
   # ── 2c. Build — Windows ──────────────────────────────────────────────────
@@ -219,13 +231,20 @@ jobs:
           $dest = "build\debug-msvc\bin\Debug"
           Copy-Item "mesa3d\x64\*.dll" $dest -Force
 
+      - name: Stage artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact/bin/renderer/shaders, artifact/bin/assets | Out-Null
+          Copy-Item build/debug-msvc/bin/Debug/HoroEditorUiTest.exe artifact/bin/
+          Copy-Item build/debug-msvc/bin/Debug/*.dll artifact/bin/ -ErrorAction SilentlyContinue
+          Copy-Item build/debug-msvc/bin/sdk/renderer/shaders/* artifact/bin/renderer/shaders/
+          Copy-Item build/debug-msvc/bin/sdk/assets/editor_schema.json artifact/bin/assets/
+
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: ui-binary-windows
-          path: |
-            build/debug-msvc/bin/Debug/HoroEditorUiTest.exe
-            build/debug-msvc/bin/Debug/*.dll
+          path: artifact/bin/
           retention-days: 1
 
   # ── 3a. UI suites — Linux ─────────────────────────────────────────────────
