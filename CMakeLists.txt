@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 3.25)
 
+# x-release-please-start-version
+set(HORO_ENGINE_VERSION "0.2.0")
+# x-release-please-end
+
 # Detect if this is a launcher build or embedded via add_subdirectory()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
-    # x-release-please-start-version
-    set(HORO_ENGINE_VERSION "0.2.0")
-    # x-release-please-end
     project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
@@ -105,7 +106,7 @@ function(horo_configure_engine_target target_name imgui_target)
     endif()
 
     target_compile_features(${target_name} PUBLIC cxx_std_20)
-    target_compile_definitions(${target_name} PUBLIC HORO_ENGINE_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(${target_name} PUBLIC HORO_ENGINE_VERSION="${HORO_ENGINE_VERSION}")
 
     if(WIN32)
         target_compile_definitions(${target_name} PUBLIC NOMINMAX)
