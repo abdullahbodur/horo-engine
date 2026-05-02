@@ -31,3 +31,13 @@ extern "C" void ApplyDarkTitleBarMac(GLFWwindow *glfwWindow) {
                            blue:17.0 / 255.0
                           alpha:1.0];
 }
+
+extern "C" void ApplyAppIconMac(const char *iconPath) {
+  if (!iconPath || !*iconPath)
+    return;
+
+  NSString *path = [NSString stringWithUTF8String:iconPath];
+  NSImage *icon = [[NSImage alloc] initWithContentsOfFile:path];
+  if (icon)
+    [NSApp setApplicationIconImage:icon];
+}

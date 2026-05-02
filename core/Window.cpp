@@ -21,7 +21,8 @@
 #endif
 #endif
 #ifdef __APPLE__
-extern "C" void ApplyDarkTitleBarMac(GLFWwindow *window);
+extern "C" void ApplyDarkTitleBarMac(GLFWwindow *glfwWindow);
+extern "C" void ApplyAppIconMac(const char *iconPath);
 #endif
 // clang-format on
 
@@ -272,6 +273,11 @@ Window::Window(const WindowSpec &spec)
   ApplyDarkTitleBar(m_window);
 #elif defined(__APPLE__)
   ApplyDarkTitleBarMac(m_window);
+  {
+    const std::filesystem::path iconPath = ResolveWindowIconPath(spec.iconFile);
+    if (!iconPath.empty())
+      ApplyAppIconMac(iconPath.string().c_str());
+  }
 #endif
 
   if (traits.createsClientContext) {
