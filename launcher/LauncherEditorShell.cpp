@@ -939,7 +939,6 @@ void LauncherEditorShell::RenderLauncher() {
   DrawBackdrop(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
                ImGui::GetWindowSize());
 
-  const LauncherTheme &theme = GetLauncherTheme();
   const float outerPadding = 24.0f;
   const float sidebarWidth =
       std::max(180.0f, std::min(252.0f, viewport->Size.x * 0.19f));
