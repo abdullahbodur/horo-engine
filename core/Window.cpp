@@ -10,6 +10,15 @@
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+#ifndef DWMWA_BORDER_COLOR
+#define DWMWA_BORDER_COLOR 34
+#endif
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
+#endif
+#ifndef DWMWA_TEXT_COLOR
+#define DWMWA_TEXT_COLOR 36
+#endif
 #endif
 // clang-format on
 
@@ -151,6 +160,15 @@ void ApplyDarkTitleBar(GLFWwindow *window) {
     DwmSetWindowAttribute(hwnd, kLegacyDarkModeAttribute, &useDarkMode,
                           sizeof(useDarkMode));
   }
+
+  const COLORREF captionColor = RGB(1, 7, 17);
+  const COLORREF textColor = RGB(245, 247, 255);
+  const COLORREF borderColor = RGB(20, 42, 70);
+  DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &captionColor,
+                        sizeof(captionColor));
+  DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &textColor, sizeof(textColor));
+  DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &borderColor,
+                        sizeof(borderColor));
 }
 #endif
 } // namespace
