@@ -248,6 +248,20 @@ def _starter_binary(config_name: str) -> Path:
     msvc_subdir = "Debug" if IS_WINDOWS else ""
     return REPO_ROOT.parent / "build" / config_name / "bin" / msvc_subdir / f"HoroStarterApp{suffix}"
 
+def _launcher_binary(preset: str, build_config: str | None = None) -> Path:
+    suffix = ".exe" if IS_WINDOWS else ""
+    config_dir = build_config or ("Debug" if IS_WINDOWS else "")
+    return _build_dir(preset) / "bin" / config_dir / f"HoroEditor{suffix}"
+
+def cmd_run_launcher(_: argparse.Namespace) -> int:
+    preset = _preset_debug()
+    build_config = "Debug" if IS_WINDOWS else None
+    if _ensure_configured(preset) != 0:
+        return 1
+    if _run(_cmake_build(preset, config=build_config, target="HoroEditor"), cwd=REPO_ROOT) != 0:
+        return 1
+    return _run([_launcher_binary(preset, build_config)])
+
 def cmd_run_editor(args: argparse.Namespace) -> int:
     config = args.config if args.config else _preset_debug()
     binary = _starter_binary(config)
@@ -308,6 +322,7 @@ UI automation vars:
         "configure": (cmd_configure, "Run CMake preset only"),
         "build": (cmd_build, "Build debug"),
         "test": (cmd_test, "Build & run engine tests"),
+        "run-launcher": (cmd_run_launcher, "Build & run in-repo launcher (HoroEditor)"),
         "ui-test": (cmd_ui_test, "Build & run launcher unit tests"),
         "ui-test-windowed": (cmd_ui_test_windowed, "Build & run windowed launcher UI automation"),
         "release": (cmd_release, "Build release library"),

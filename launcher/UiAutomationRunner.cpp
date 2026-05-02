@@ -67,18 +67,8 @@ struct HomeDirGuard {
   static std::string ReadEnv(const char *name) {
     if (!name || !*name)
       return {};
-#ifdef _WIN32
-    char *value = nullptr;
-    size_t len = 0;
-    if (_dupenv_s(&value, &len, name) != 0 || !value)
-      return {};
-    std::string result(value);
-    std::free(value);
-    return result;
-#else
     const char *value = std::getenv(name);
     return value ? std::string(value) : std::string();
-#endif
   }
 
   explicit HomeDirGuard(const fs::path &nextHome) {
@@ -192,15 +182,13 @@ struct TransparentStringHash {
 
 std::string ExtractUiTestFailureLog(ImGuiTest &test) {
   ImGuiTextBuffer buffer;
-  test.Output.Log.ExtractLinesForVerboseLevels(ImGuiTestVerboseLevel_Error,
-                                               ImGuiTestVerboseLevel_Error,
-                                               &buffer);
+  test.Output.Log.ExtractLinesForVerboseLevels(
+      ImGuiTestVerboseLevel_Error, ImGuiTestVerboseLevel_Error, &buffer);
   if (!buffer.empty())
     return buffer.c_str();
 
-  test.Output.Log.ExtractLinesForVerboseLevels(ImGuiTestVerboseLevel_Warning,
-                                               ImGuiTestVerboseLevel_Warning,
-                                               &buffer);
+  test.Output.Log.ExtractLinesForVerboseLevels(
+      ImGuiTestVerboseLevel_Warning, ImGuiTestVerboseLevel_Warning, &buffer);
   return buffer.empty() ? std::string("<no failure log captured>")
                         : std::string(buffer.c_str());
 }
@@ -212,8 +200,8 @@ struct UiAutomationProgressSnapshot {
   std::string currentTest;
 };
 
-UiAutomationProgressSnapshot CollectUiAutomationProgress(
-    ImGuiTestEngine *engine, const int totalQueued) {
+UiAutomationProgressSnapshot
+CollectUiAutomationProgress(ImGuiTestEngine *engine, const int totalQueued) {
   UiAutomationProgressSnapshot snapshot{};
   if (!engine)
     return snapshot;
@@ -224,7 +212,8 @@ UiAutomationProgressSnapshot CollectUiAutomationProgress(
     if (!test)
       continue;
     const ImGuiTestStatus status = test->Output.Status;
-    if (status == ImGuiTestStatus_Running || status == ImGuiTestStatus_Suspended)
+    if (status == ImGuiTestStatus_Running ||
+        status == ImGuiTestStatus_Suspended)
       snapshot.currentTest = UiTestFullName(*test);
     if (status == ImGuiTestStatus_Success)
       ++snapshot.succeeded;
@@ -268,11 +257,11 @@ const fs::path &UiAutomationTempRoot() {
 
 void LogUiAutomationEnv() {
   static constexpr std::array<const char *, 11> kEnvVars = {
-      "HORO_UI_TEST_CAPTURE",     "HORO_UI_TEST_VIDEO",
-      "HORO_UI_TEST_RECORDING",   "HORO_UI_TEST_FILTER",
+      "HORO_UI_TEST_CAPTURE",    "HORO_UI_TEST_VIDEO",
+      "HORO_UI_TEST_RECORDING",  "HORO_UI_TEST_FILTER",
       "HORO_UI_TEST_SUITE",      "HORO_UI_TEST_DELAY_MS",
-      "HORO_UI_TEST_OUTPUT_DIR",  "HORO_UI_TEST_FFMPEG_PATH",
-      "HORO_UI_TEST_CLEAN_TEMP",  "HORO_GLFW_SAMPLES",
+      "HORO_UI_TEST_OUTPUT_DIR", "HORO_UI_TEST_FFMPEG_PATH",
+      "HORO_UI_TEST_CLEAN_TEMP", "HORO_GLFW_SAMPLES",
       "HORO_GLFW_VISIBLE",
   };
   for (const char *name : kEnvVars)
@@ -288,8 +277,7 @@ fs::path ResolveCaptureOutputDir(bool captureEnabled,
 void PrepareUiAutomationDirectories(const UiAutomationRunState *state) {
   if (!state)
     return;
-  const bool cleanTempRoot =
-      ParseBoolEnvDefaultTrue("HORO_UI_TEST_CLEAN_TEMP");
+  const bool cleanTempRoot = ParseBoolEnvDefaultTrue("HORO_UI_TEST_CLEAN_TEMP");
   std::error_code ec;
   if (state->tempRoot.empty()) {
     LogError("UI temp root path is empty.");
@@ -441,9 +429,8 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
   if (x < 0 || y < 0 || x + w > viewport[2] || y + h > viewport[3])
     return false;
 
-  if (std::string readError; !Renderer::ReadbackRegionRgba8(x, y, w, h,
-                                     pixels,
-                                     &readError))
+  if (std::string readError;
+      !Renderer::ReadbackRegionRgba8(x, y, w, h, pixels, &readError))
     return false;
 
   for (int row = 0; row < h / 2; ++row) {
@@ -505,16 +492,16 @@ struct UiAutomationRunner::Impl {
     if (const UiAutomationProgressSnapshot progress =
             CollectUiAutomationProgress(engine, totalQueued);
         progress.completed != lastProgressCompleted) {
-      const int percent = totalQueued > 0 ? (progress.completed * 100) / totalQueued
-                                         : 0;
+      const int percent =
+          totalQueued > 0 ? (progress.completed * 100) / totalQueued : 0;
       const std::string current = progress.currentTest.empty()
                                       ? std::string("<idle>")
                                       : progress.currentTest;
       LogInfo("UI automation progress: [{}] {}/{} ({}%) passed={} failed={} "
               "current='{}' elapsed={:.2f}s",
-              BuildProgressBar(progress.completed, totalQueued), progress.completed,
-              totalQueued, percent, progress.succeeded, progress.failed, current,
-              elapsedSec);
+              BuildProgressBar(progress.completed, totalQueued),
+              progress.completed, totalQueued, percent, progress.succeeded,
+              progress.failed, current, elapsedSec);
       lastProgressCompleted = progress.completed;
     }
   }
@@ -528,10 +515,11 @@ struct UiAutomationRunner::Impl {
       const std::string fullName = UiTestFullName(*test);
       if (!loggedFailureTests.insert(fullName).second)
         continue;
-      LogError("UI automation scenario failed: name='{}' status={} frame={} "
-               "elapsed={:.2f}s; detailed failure log will be printed at shutdown.",
-               fullName, UiTestStatusName(test->Output.Status), frameCount,
-               elapsedSec);
+      LogError(
+          "UI automation scenario failed: name='{}' status={} frame={} "
+          "elapsed={:.2f}s; detailed failure log will be printed at shutdown.",
+          fullName, UiTestStatusName(test->Output.Status), frameCount,
+          elapsedSec);
     }
   }
 
@@ -564,8 +552,8 @@ struct UiAutomationRunner::Impl {
       if (!test)
         continue;
       const ImGuiTestStatus status = test->Output.Status;
-      if (status == ImGuiTestStatus_Unknown || status == ImGuiTestStatus_Queued ||
-          status == ImGuiTestStatus_Success)
+      if (status == ImGuiTestStatus_Unknown ||
+          status == ImGuiTestStatus_Queued || status == ImGuiTestStatus_Success)
         continue;
       const std::string failureLog =
           status == ImGuiTestStatus_Error
@@ -577,8 +565,8 @@ struct UiAutomationRunner::Impl {
   }
 
   bool StopIfIncomplete(const ImGuiTestEngineIO &testIo) {
-    const bool stillRunning = testIo.IsRunningTests ||
-                              !ImGuiTestEngine_IsTestQueueEmpty(engine);
+    const bool stillRunning =
+        testIo.IsRunningTests || !ImGuiTestEngine_IsTestQueueEmpty(engine);
     if (!timedOut && !stillRunning)
       return false;
     passed = false;
@@ -671,11 +659,12 @@ void UiAutomationRunner::StartIfRequested(
   m_impl->heartbeatLogEnabled = ParseBoolEnv("HORO_UI_TEST_HEARTBEAT");
   m_impl->state.shellContext = shellContext;
   m_impl->state.editorContext = editorContext;
-  LogInfo(
-      "UI automation config: suite='{}', filter='{}', recording={}, capture={}, "
-      "video={}",
-      uiSuite, uiFilter, recordingEnabled ? 1 : 0,
-      m_impl->state.captureEnabled ? 1 : 0, m_impl->state.videoEnabled ? 1 : 0);
+  LogInfo("UI automation config: suite='{}', filter='{}', recording={}, "
+          "capture={}, "
+          "video={}",
+          uiSuite, uiFilter, recordingEnabled ? 1 : 0,
+          m_impl->state.captureEnabled ? 1 : 0,
+          m_impl->state.videoEnabled ? 1 : 0);
   LogDebug(
       "UI automation paths: temp_root='{}', project_root='{}', output_dir='{}'",
       m_impl->state.tempRoot.string(), m_impl->state.projectRoot.string(),

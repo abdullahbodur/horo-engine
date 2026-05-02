@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -327,7 +328,8 @@ TEST_CASE("Launcher project template creates manifest, source, and scene scaffol
   LauncherProjectDocument doc;
   std::string error;
   REQUIRE(CreateLauncherProjectTemplate(
-      {projectRoot, "TemplateGame", MakeTempRoot("sdk")}, &doc, &error));
+      {projectRoot, "TemplateGame", MakeTempRoot("sdk"), "null"}, &doc,
+      &error));
 
   REQUIRE(IsLauncherProjectRoot(projectRoot));
   REQUIRE(std::filesystem::exists(projectRoot / "src" / "main.cpp"));
@@ -336,6 +338,10 @@ TEST_CASE("Launcher project template creates manifest, source, and scene scaffol
                                   "level.json"));
   REQUIRE(doc.manifest.projectName == "TemplateGame");
   REQUIRE(doc.manifest.defaultScene == "assets/scenes/level.json");
+  REQUIRE(std::find(doc.manifest.configureCommand.args.begin(),
+                    doc.manifest.configureCommand.args.end(),
+                    "-DHORO_RENDERER=null") !=
+          doc.manifest.configureCommand.args.end());
 
   const std::string mainCpp = ReadTextFile(projectRoot / "src" / "main.cpp");
   REQUIRE(mainCpp.find("m_camera.target = camera.position + forward;") !=

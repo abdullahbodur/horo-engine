@@ -10,6 +10,7 @@ namespace Horo::Launcher {
         std::filesystem::path projectRoot;
         std::string projectName;
         std::filesystem::path sdkRoot;
+        std::string rendererBackend = "opengl";
     };
 
     bool CreateLauncherProjectTemplate(

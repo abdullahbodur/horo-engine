@@ -1,5 +1,7 @@
 #include "launcher/LauncherProjectTemplate.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <stdexcept>
 
@@ -273,6 +275,17 @@ namespace Horo::Launcher {
                    ")\n";
         }
 
+        std::string NormalizeRendererBackend(std::string rendererBackend) {
+            std::ranges::transform(rendererBackend, rendererBackend.begin(),
+                                   [](unsigned char c) {
+                                       return static_cast<char>(std::tolower(c));
+                                   });
+            if (rendererBackend == "opengl" || rendererBackend == "vulkan" ||
+                rendererBackend == "null")
+                return rendererBackend;
+            return "opengl";
+        }
+
         Editor::SceneDocument BuildTemplateScene() {
             Editor::SceneDocument doc;
             doc.version = 1;
@@ -335,6 +348,8 @@ namespace Horo::Launcher {
         const fs::path normalizedRoot = fs::weakly_canonical(request.projectRoot, ec);
         const fs::path projectRoot = ec ? request.projectRoot : normalizedRoot;
         const std::string projectId = SanitizeProjectId(request.projectName);
+        const std::string rendererBackend =
+                NormalizeRendererBackend(request.rendererBackend);
         const std::string exeName =
 #ifdef _WIN32
                 request.projectName + ".exe";
@@ -352,7 +367,8 @@ namespace Horo::Launcher {
             {
                 "-S", "${projectDir}", "-B",
                 "${projectDir}/build",
-                "-DCMAKE_PREFIX_PATH=${horoSdkRoot}"
+                "-DCMAKE_PREFIX_PATH=${horoSdkRoot}",
+                "-DHORO_RENDERER=" + rendererBackend
             },
             "${projectDir}"
         };
