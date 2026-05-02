@@ -18,7 +18,16 @@ extern "C" void ApplyDarkTitleBarMac(GLFWwindow *glfwWindow) {
   if (!window)
     return;
 
-  // Force the dark appearance so the title bar matches the engine's dark navy
-  // launcher background instead of inheriting the system appearance.
+  // Force dark appearance base.
   window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+
+  // Make the title bar transparent so the window's backgroundColor shows
+  // through it, giving the exact dark navy color used by the launcher
+  // (RGB 1, 7, 17 = #01070F) instead of the generic system dark chrome.
+  window.titlebarAppearsTransparent = YES;
+  window.backgroundColor =
+      [NSColor colorWithSRGBRed:1.0 / 255.0
+                          green:7.0 / 255.0
+                           blue:17.0 / 255.0
+                          alpha:1.0];
 }
