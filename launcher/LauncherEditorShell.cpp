@@ -23,6 +23,10 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 
+#ifndef HORO_ENGINE_VERSION
+#define HORO_ENGINE_VERSION "0.0.0"
+#endif
+
 namespace Horo::Launcher {
 namespace fs = std::filesystem;
 
@@ -986,7 +990,7 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
   RenderSidebarFooterImageItem("Join Community", EnsureDiscordIconTexture());
   RenderSidebarFooterItem("Documentation", SidebarFooterIcon::Documentation);
   ImGui::Dummy(ImVec2(0.0f, 6.0f));
-  ImGui::TextDisabled("Horo Engine v0.1.0");
+  ImGui::TextDisabled("Horo Engine v%s", HORO_ENGINE_VERSION);
   ImGui::EndChild();
   ImGui::PopStyleColor();
   ImGui::PopStyleVar(3);

@@ -105,6 +105,7 @@ function(horo_configure_engine_target target_name imgui_target)
     endif()
 
     target_compile_features(${target_name} PUBLIC cxx_std_20)
+    target_compile_definitions(${target_name} PUBLIC HORO_ENGINE_VERSION="${PROJECT_VERSION}")
 
     if(WIN32)
         target_compile_definitions(${target_name} PUBLIC NOMINMAX)
