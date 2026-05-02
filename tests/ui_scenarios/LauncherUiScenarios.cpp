@@ -310,7 +310,7 @@ bool EnsureProjectCreatedFromLauncher(ImGuiTestContext *ctx,
   if (const bool launcherReady =
           WaitForCondition(ctx, 180,
                            [ctx]() {
-                             return ctx->ItemExists("Open Existing Project") &&
+                             return ctx->ItemExists("##open-existing-project-action") &&
                                     ctx->ItemExists("Create New Project");
                            });
       !launcherReady) {
@@ -435,7 +435,7 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   IM_CHECK(ctx->ItemExists("Create Project"));
 
   SetLauncherHomeRef(ctx);
-  IM_CHECK(ctx->ItemExists("Open Existing Project"));
+  IM_CHECK(ctx->ItemExists("##open-existing-project-action"));
 
   CaptureIfEnabled(ctx, testState,
                    "launcher_ui__launcher_home_layout__expect_home.png");
