@@ -50,6 +50,9 @@ public:
 
   void RenderOverlay();
 
+  void OnPathsDropped(int pathCount, const char **utf8Paths, float dropX,
+                      float dropY);
+
   bool HasActiveProject() const { return !m_projectRoot.empty(); }
 
   void SetLauncherError(std::string error) {
@@ -82,6 +85,11 @@ private:
   std::array<char, 512> m_newProjectPathInput{};
   int m_newProjectRendererBackendIndex = 0;
   bool m_newProjectAdvancedSettingsOpen = false;
+  bool m_importProjectDropTargetValid = false;
+  float m_importProjectDropMinX = 0.0f;
+  float m_importProjectDropMinY = 0.0f;
+  float m_importProjectDropMaxX = 0.0f;
+  float m_importProjectDropMaxY = 0.0f;
 
   void ConfigureRuntimeCallbacks();
 
@@ -95,6 +103,8 @@ private:
                              const Editor::SceneDocument &sceneDocument);
 
   bool OpenProjectFromPicker(std::string *outError);
+
+  bool IsInsideImportProjectDropTarget(float dropX, float dropY) const;
 
   void RenderLauncher();
 

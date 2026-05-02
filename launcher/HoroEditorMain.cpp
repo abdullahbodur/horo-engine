@@ -144,11 +144,18 @@ private:
 
     GetWindow().SetFileDropCallback([this](int pathCount,
                                            const char **utf8Paths) {
-      if (!m_editor.IsActive() || !utf8Paths)
+      if (!utf8Paths)
         return;
       double dropX = 0.0;
       double dropY = 0.0;
       glfwGetCursorPos(GetWindow().GetNativeHandle(), &dropX, &dropY);
+      if (!m_shell.HasActiveProject()) {
+        m_shell.OnPathsDropped(pathCount, utf8Paths, static_cast<float>(dropX),
+                               static_cast<float>(dropY));
+        return;
+      }
+      if (!m_editor.IsActive())
+        return;
       m_editor.OnPathsDropped(pathCount, utf8Paths, static_cast<float>(dropX),
                               static_cast<float>(dropY));
     });

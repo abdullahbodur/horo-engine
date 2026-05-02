@@ -928,6 +928,33 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string *outError) {
   return OpenProject(pickedPath, outError);
 }
 
+void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
+                                         float dropX, float dropY) {
+  if (HasActiveProject() || pathCount <= 0 || !utf8Paths ||
+      !IsInsideImportProjectDropTarget(dropX, dropY))
+    return;
+
+  for (int i = 0; i < pathCount; ++i) {
+    if (!utf8Paths[i] || !*utf8Paths[i])
+      continue;
+
+    std::string openError;
+    if (OpenProject(fs::path(utf8Paths[i]), &openError)) {
+      m_launcherError.clear();
+      return;
+    }
+    if (!openError.empty())
+      m_launcherError = openError;
+  }
+}
+
+bool LauncherEditorShell::IsInsideImportProjectDropTarget(float dropX,
+                                                          float dropY) const {
+  return m_importProjectDropTargetValid && dropX >= m_importProjectDropMinX &&
+         dropX <= m_importProjectDropMaxX && dropY >= m_importProjectDropMinY &&
+         dropY <= m_importProjectDropMaxY;
+}
+
 void LauncherEditorShell::RenderLauncher() {
   const ImGuiViewport *viewport = ImGui::GetMainViewport();
   ImGui::SetNextWindowPos(viewport->Pos);
@@ -1034,6 +1061,7 @@ void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
 
 void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const LauncherTheme &theme = GetLauncherTheme();
+  m_importProjectDropTargetValid = false;
   const float heroHeight = 152.0f;
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
@@ -1073,6 +1101,13 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
     if (!OpenProjectFromPicker(&openError) && !openError.empty())
       m_launcherError = openError;
   }
+  const ImVec2 importMin = ImGui::GetItemRectMin();
+  const ImVec2 importMax = ImGui::GetItemRectMax();
+  m_importProjectDropTargetValid = true;
+  m_importProjectDropMinX = importMin.x;
+  m_importProjectDropMinY = importMin.y;
+  m_importProjectDropMaxX = importMax.x;
+  m_importProjectDropMaxY = importMax.y;
 
   ImGui::EndChild();
 }
