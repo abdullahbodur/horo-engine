@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <stdexcept>
 #include <string_view>
@@ -405,24 +406,31 @@ bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
   const bool hovered = enabled && ImGui::IsItemHovered();
   const ImVec2 min = ImGui::GetItemRectMin();
   const ImVec2 max = ImGui::GetItemRectMax();
-  const ImVec4 fill = !enabled   ? ImVec4(0.08f, 0.11f, 0.16f, 0.72f)
-                      : selected ? ImVec4(0.10f, 0.18f, 0.30f, 1.0f)
-                      : hovered  ? ImVec4(0.13f, 0.19f, 0.28f, 1.0f)
-                                 : ImVec4(0.09f, 0.13f, 0.20f, 1.0f);
-  const ImVec4 border = !enabled   ? ImVec4(0.13f, 0.20f, 0.29f, 0.42f)
-                        : selected ? theme.accent
-                                   : ImVec4(0.15f, 0.24f, 0.35f, 0.60f);
+  ImVec4 fill(0.09f, 0.13f, 0.20f, 1.0f);
+  if (!enabled)
+    fill = ImVec4(0.08f, 0.11f, 0.16f, 0.72f);
+  else if (selected)
+    fill = ImVec4(0.10f, 0.18f, 0.30f, 1.0f);
+  else if (hovered)
+    fill = ImVec4(0.13f, 0.19f, 0.28f, 1.0f);
+
+  ImVec4 border(0.15f, 0.24f, 0.35f, 0.60f);
+  if (!enabled)
+    border = ImVec4(0.13f, 0.20f, 0.29f, 0.42f);
+  else if (selected)
+    border = theme.accent;
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
   drawList->AddRect(min, max, ImGui::ColorConvertFloat4ToU32(border), 6.0f, 0,
                     selected ? 1.5f : 1.0f);
-  const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(
-      !enabled ? ImVec4(theme.textMuted.x, theme.textMuted.y, theme.textMuted.z,
-                        0.52f)
-      : selected ? theme.accentHover
-                 : theme.textMuted);
+  ImVec4 iconColor = theme.textMuted;
+  if (!enabled)
+    iconColor =
+        ImVec4(theme.textMuted.x, theme.textMuted.y, theme.textMuted.z, 0.52f);
+  else if (selected)
+    iconColor = theme.accentHover;
   DrawTemplateTileIcon(drawList, ImVec2((min.x + max.x) * 0.5f, min.y + 27.0f),
-                       icon, iconColor);
+                       icon, ImGui::ColorConvertFloat4ToU32(iconColor));
   const ImVec2 textSize = ImGui::CalcTextSize(label);
   drawList->AddText(
       ImVec2((min.x + max.x - textSize.x) * 0.5f, max.y - textSize.y - 10.0f),
@@ -483,9 +491,11 @@ bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
   const bool active = ImGui::IsItemActive();
   const ImVec2 min = ImGui::GetItemRectMin();
   const ImVec2 max = ImGui::GetItemRectMax();
-  const ImVec4 fill = active    ? ImVec4(0.12f, 0.18f, 0.27f, 0.90f)
-                      : hovered ? ImVec4(0.12f, 0.18f, 0.27f, 0.76f)
-                                : ImVec4(0.10f, 0.14f, 0.20f, 0.54f);
+  ImVec4 fill(0.10f, 0.14f, 0.20f, 0.54f);
+  if (active)
+    fill = ImVec4(0.12f, 0.18f, 0.27f, 0.90f);
+  else if (hovered)
+    fill = ImVec4(0.12f, 0.18f, 0.27f, 0.76f);
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
   const ImU32 dotColor = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
@@ -689,9 +699,11 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
   ImGui::InvisibleButton(id, size);
   const bool hovered = ImGui::IsItemHovered();
   const bool active = ImGui::IsItemActive();
-  const ImVec4 fill = active    ? ImVec4(0.08f, 0.14f, 0.23f, 0.88f)
-                      : hovered ? ImVec4(0.08f, 0.15f, 0.25f, 0.84f)
-                                : ImVec4(0.05f, 0.10f, 0.17f, 0.76f);
+  ImVec4 fill(0.05f, 0.10f, 0.17f, 0.76f);
+  if (active)
+    fill = ImVec4(0.08f, 0.14f, 0.23f, 0.88f);
+  else if (hovered)
+    fill = ImVec4(0.08f, 0.15f, 0.25f, 0.84f);
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
                           ImGui::ColorConvertFloat4ToU32(fill), 8.0f);
@@ -930,8 +942,11 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string *outError) {
 
 void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
                                          float dropX, float dropY) {
-  if (HasActiveProject() || pathCount <= 0 || !utf8Paths ||
-      !IsInsideImportProjectDropTarget(dropX, dropY))
+  const ImportProjectDropTarget &target = m_importProjectDropTarget;
+  const bool insideImportTarget = target.valid && dropX >= target.minX &&
+                                  dropX <= target.maxX &&
+                                  dropY >= target.minY && dropY <= target.maxY;
+  if (HasActiveProject() || pathCount <= 0 || !utf8Paths || !insideImportTarget)
     return;
 
   for (int i = 0; i < pathCount; ++i) {
@@ -946,13 +961,6 @@ void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
     if (!openError.empty())
       m_launcherError = openError;
   }
-}
-
-bool LauncherEditorShell::IsInsideImportProjectDropTarget(float dropX,
-                                                          float dropY) const {
-  return m_importProjectDropTargetValid && dropX >= m_importProjectDropMinX &&
-         dropX <= m_importProjectDropMaxX && dropY >= m_importProjectDropMinY &&
-         dropY <= m_importProjectDropMaxY;
 }
 
 void LauncherEditorShell::RenderLauncher() {
@@ -1061,7 +1069,7 @@ void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
 
 void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const LauncherTheme &theme = GetLauncherTheme();
-  m_importProjectDropTargetValid = false;
+  m_importProjectDropTarget.valid = false;
   const float heroHeight = 152.0f;
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
@@ -1103,11 +1111,13 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   }
   const ImVec2 importMin = ImGui::GetItemRectMin();
   const ImVec2 importMax = ImGui::GetItemRectMax();
-  m_importProjectDropTargetValid = true;
-  m_importProjectDropMinX = importMin.x;
-  m_importProjectDropMinY = importMin.y;
-  m_importProjectDropMaxX = importMax.x;
-  m_importProjectDropMaxY = importMax.y;
+  m_importProjectDropTarget = {
+      .valid = true,
+      .minX = importMin.x,
+      .minY = importMin.y,
+      .maxX = importMax.x,
+      .maxY = importMax.y,
+  };
 
   ImGui::EndChild();
 }
@@ -1305,7 +1315,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   if (title.empty())
     title = recentPath;
 
-  const std::string cardId = "RecentProjectCard##" + std::to_string(cardIndex);
+  const std::string cardId = std::format("RecentProjectCard##{}", cardIndex);
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.07f, 0.11f, 0.17f, 0.72f));
   ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.15f, 0.24f, 0.35f, 0.62f));
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.cardRounding);
@@ -1342,71 +1352,20 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   ImGui::EndGroup();
 
   ImGui::SetCursorPos(ImVec2(openButtonX, actionY));
-  const std::string openLabel =
-      "Open##recent-open-" + std::to_string(cardIndex);
-  if (RenderRecentProjectButton(openLabel.c_str(),
+  if (const std::string openLabel =
+          std::format("Open##recent-open-{}", cardIndex);
+      RenderRecentProjectButton(openLabel.c_str(),
                                 ImVec2(openButtonWidth, openButtonHeight))) {
     if (std::string openError; !OpenProject(path, &openError))
       m_launcherError = openError;
   }
 
   ImGui::SetCursorPos(ImVec2(menuButtonX, actionY));
-  const std::string menuLabel = "##recent-menu-" + std::to_string(cardIndex);
+  const std::string menuLabel = std::format("##recent-menu-{}", cardIndex);
   RenderRecentProjectMenuButton(menuLabel.c_str(),
                                 ImVec2(menuButtonWidth, openButtonHeight));
   ImGui::EndChild();
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
-}
-
-void LauncherEditorShell::RenderProjectToolbar() {
-  ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_Always);
-  ImGui::SetNextWindowBgAlpha(0.92f);
-  const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize |
-                                 ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoSavedSettings;
-  ImGui::Begin("Launcher Project", nullptr, flags);
-
-  ImGui::TextUnformatted(m_projectDocument.manifest.projectName.c_str());
-  ImGui::TextDisabled("%s", m_projectRoot.string().c_str());
-  ImGui::Separator();
-
-  if (!m_processRunner.IsActive()) {
-    if (ImGui::Button("Configure"))
-      ExecuteManifestCommand(m_projectDocument.manifest.configureCommand,
-                             "configure");
-    ImGui::SameLine();
-    if (ImGui::Button("Build"))
-      ExecuteManifestCommand(m_projectDocument.manifest.buildCommand, "build");
-    ImGui::SameLine();
-    if (ImGui::Button("Run Game"))
-      ExecuteManifestCommand(m_projectDocument.manifest.runCommand, "run");
-  } else {
-    if (ImGui::Button("Stop Process"))
-      m_processRunner.Stop();
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Back To Home"))
-    CloseProject();
-
-  if (const ExternalProcessStatus &status = m_processRunner.GetStatus();
-      !status.label.empty()) {
-    ImGui::Separator();
-    ImGui::Text("Last command: %s", status.label.c_str());
-    if (!status.commandLine.empty())
-      ImGui::TextWrapped("%s", status.commandLine.c_str());
-    if (status.active)
-      ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.55f, 1.0f), "Running");
-    else if (status.finished && status.terminatedByUser)
-      ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.0f), "Stopped by user");
-    else if (status.finished)
-      ImGui::Text("Exit code: %d", status.exitCode);
-    if (!status.error.empty())
-      ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.45f, 1.0f), "%s",
-                         status.error.c_str());
-  }
-
-  ImGui::End();
 }
 
 std::shared_ptr<Texture> LauncherEditorShell::EnsureLauncherLogoTexture() {
@@ -1439,21 +1398,6 @@ std::shared_ptr<Texture> LauncherEditorShell::EnsureDiscordIconTexture() {
   m_discordIconTexture =
       std::make_shared<Texture>(Texture::FromFile(iconPath.string(), false));
   return m_discordIconTexture;
-}
-
-void LauncherEditorShell::ExecuteManifestCommand(
-    const LauncherProjectCommand &command, const std::string &label) {
-  std::string resolveError;
-  ResolvedLauncherCommand resolved;
-  if (!ResolveLauncherCommand(command, m_projectRoot, ResolveCommandSdkRoot(),
-                              &resolved, &resolveError)) {
-    m_launcherError = resolveError;
-    return;
-  }
-
-  std::string startError;
-  if (!m_processRunner.Start(resolved, label, &startError))
-    m_launcherError = startError;
 }
 
 bool LauncherEditorShell::CreateProjectFromLauncher(std::string *outError) {

@@ -32,6 +32,14 @@ struct StringHash {
   }
 };
 
+struct ImportProjectDropTarget {
+  bool valid = false;
+  float minX = 0.0f;
+  float minY = 0.0f;
+  float maxX = 0.0f;
+  float maxY = 0.0f;
+};
+
 class LauncherEditorShell {
 public:
   void Attach(Editor::EditorLayer *editor, Scene *scene,
@@ -85,11 +93,7 @@ private:
   std::array<char, 512> m_newProjectPathInput{};
   int m_newProjectRendererBackendIndex = 0;
   bool m_newProjectAdvancedSettingsOpen = false;
-  bool m_importProjectDropTargetValid = false;
-  float m_importProjectDropMinX = 0.0f;
-  float m_importProjectDropMinY = 0.0f;
-  float m_importProjectDropMaxX = 0.0f;
-  float m_importProjectDropMaxY = 0.0f;
+  ImportProjectDropTarget m_importProjectDropTarget;
 
   void ConfigureRuntimeCallbacks();
 
@@ -103,8 +107,6 @@ private:
                              const Editor::SceneDocument &sceneDocument);
 
   bool OpenProjectFromPicker(std::string *outError);
-
-  bool IsInsideImportProjectDropTarget(float dropX, float dropY) const;
 
   void RenderLauncher();
 
@@ -126,14 +128,9 @@ private:
 
   void RenderRecentProjectCard(const std::string &recentPath, int cardIndex);
 
-  void RenderProjectToolbar();
-
   std::shared_ptr<Texture> EnsureLauncherLogoTexture();
 
   std::shared_ptr<Texture> EnsureDiscordIconTexture();
-
-  void ExecuteManifestCommand(const LauncherProjectCommand &command,
-                              const std::string &label);
 
   bool CreateProjectFromLauncher(std::string *outError);
 

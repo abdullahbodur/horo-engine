@@ -120,8 +120,8 @@ std::filesystem::path ResolveEditorFontPath() {
 
 void LoadEditorFonts(ImGuiIO &io) {
   constexpr float kUiFontSize = 16.0f;
-  const std::filesystem::path fontPath = ResolveEditorFontPath();
-  if (!fontPath.empty()) {
+  if (const std::filesystem::path fontPath = ResolveEditorFontPath();
+      !fontPath.empty()) {
     if (ImFont *font = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
                                                     kUiFontSize))
       io.FontDefault = font;
