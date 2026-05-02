@@ -433,6 +433,48 @@ TEST_CASE("Window exposes glfwInit failure path when no display is available",
   }
 }
 
+TEST_CASE("Window icon loading covers resolve and stb paths",
+          "[core][window][icon]") {
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
+
+  // ResolveWindowIconPath + "not found" LogWarn branch.
+  {
+    WindowSpec spec;
+    spec.title = "window-icon-missing";
+    spec.width = 64;
+    spec.height = 64;
+    spec.graphicsApi = WindowGraphicsApi::OpenGL;
+    spec.iconFile = "this-icon-does-not-exist.png";
+
+    auto window = CreateWindowIfAvailable(spec);
+    if (!window) {
+      SUCCEED("Window initialization is unavailable on this machine");
+      return;
+    }
+    REQUIRE(window->GetNativeHandle() != nullptr);
+  }
+
+  // ResolveWindowIconPath absolute-path hit + stbi_load success branch.
+  {
+    WindowSpec spec;
+    spec.title = "window-icon-load";
+    spec.width = 64;
+    spec.height = 64;
+    spec.graphicsApi = WindowGraphicsApi::OpenGL;
+#ifdef HORO_TEST_SOURCE_DIR
+    spec.iconFile = HORO_TEST_SOURCE_DIR "/assets/launcher/logo.png";
+#endif
+
+    auto window = CreateWindowIfAvailable(spec);
+    if (!window) {
+      SUCCEED("Window initialization is unavailable on this machine");
+      return;
+    }
+    REQUIRE(window->GetNativeHandle() != nullptr);
+  }
+}
+
 TEST_CASE("Application bootstraps window, parses CLI, and runs lifecycle once",
           "[core][application]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");

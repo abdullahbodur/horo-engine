@@ -943,10 +943,10 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string *outError) {
 void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
                                          float dropX, float dropY) {
   const ImportProjectDropTarget &target = m_importProjectDropTarget;
-  const bool insideImportTarget = target.valid && dropX >= target.minX &&
-                                  dropX <= target.maxX &&
-                                  dropY >= target.minY && dropY <= target.maxY;
-  if (HasActiveProject() || pathCount <= 0 || !utf8Paths || !insideImportTarget)
+  if (const bool insideImportTarget = target.valid && dropX >= target.minX &&
+                                     dropX <= target.maxX &&
+                                     dropY >= target.minY && dropY <= target.maxY;
+      HasActiveProject() || pathCount <= 0 || !utf8Paths || !insideImportTarget)
     return;
 
   for (int i = 0; i < pathCount; ++i) {
