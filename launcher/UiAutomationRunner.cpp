@@ -67,8 +67,19 @@ struct HomeDirGuard {
   static std::string ReadEnv(const char *name) {
     if (!name || !*name)
       return {};
+#if defined(_MSC_VER)
+    size_t len = 0;
+    if (getenv_s(&len, nullptr, 0, name) != 0 || len <= 1)
+      return {};
+    std::string value(len, '\0');
+    if (getenv_s(&len, value.data(), value.size(), name) != 0 || len <= 1)
+      return {};
+    value.resize(len - 1);
+    return value;
+#else
     const char *value = std::getenv(name);
     return value ? std::string(value) : std::string();
+#endif
   }
 
   explicit HomeDirGuard(const fs::path &nextHome) {

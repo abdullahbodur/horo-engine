@@ -48,7 +48,9 @@ public:
   void DrawMesh(const MeshDrawCommand &) override {}
   void DrawSkinnedMesh(const SkinnedMeshDrawCommand &) override {}
   void DrawWireframe(const WireframeDrawCommand &) override {}
-  RenderBackendId GetBackendId() const override { return RenderBackendId::OpenGL; }
+  RenderBackendId GetBackendId() const override {
+    return RenderBackendId::OpenGL;
+  }
   RenderBackendCapabilities GetCapabilities() const override {
     return capabilities;
   }
@@ -68,7 +70,8 @@ public:
     return true;
   }
 
-  bool ReadbackDepth32F(int, int, std::vector<float> &, std::string *) override {
+  bool ReadbackDepth32F(int, int, std::vector<float> &,
+                        std::string *) override {
     return false;
   }
 
@@ -141,7 +144,8 @@ TEST_CASE("ProjectPath: Init accepts empty path", "[core][projectpath]") {
   REQUIRE(ProjectPath::Root().empty());
 }
 
-TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectpath]") {
+TEST_CASE("ProjectPath: explicit root and sdk root resolution",
+          "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -184,7 +188,8 @@ TEST_CASE("ProjectPath: explicit root and sdk root resolution", "[core][projectp
   REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
 }
 
-TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", "[core][projectpath]") {
+TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root",
+          "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
@@ -208,7 +213,8 @@ TEST_CASE("ProjectPath: Init discovers project root upward and seeds sdk root", 
   REQUIRE(ProjectPath::SdkRoot() == ProjectPath::Root());
 }
 
-TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root", "[core][projectpath]") {
+TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root",
+          "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -238,7 +244,9 @@ TEST_CASE("ProjectPath: Init fallback keeps explicit sdk root", "[core][projectp
           normalizePath(tempRoot / "sdk_root"));
 }
 
-TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exist", "[core][projectpath]") {
+TEST_CASE(
+    "ProjectPath: Init fallback seeds sdk root when no project markers exist",
+    "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   auto normalizePath = [](const fs::path &value) {
@@ -270,7 +278,9 @@ TEST_CASE("ProjectPath: Init fallback seeds sdk root when no project markers exi
           normalizePath(ProjectPath::SdkRoot()));
 }
 
-TEST_CASE("ProjectPath: root setters fall back to original path on canonicalization errors", "[core][projectpath]") {
+TEST_CASE("ProjectPath: root setters fall back to original path on "
+          "canonicalization errors",
+          "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const std::string longName(5000, 'x');
@@ -293,7 +303,8 @@ TEST_CASE("ProjectPath: root setters fall back to original path on canonicalizat
 }
 
 #ifndef _WIN32
-TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[core][projectpath]") {
+TEST_CASE("ProjectPath: root setters tolerate unavailable current directory",
+          "[core][projectpath]") {
   namespace fs = std::filesystem;
 
   const fs::path savedCwd = fs::current_path();
@@ -326,7 +337,9 @@ TEST_CASE("ProjectPath: root setters tolerate unavailable current directory", "[
 }
 #endif
 
-TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior", "[core][window]") {
+TEST_CASE(
+    "WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behavior",
+    "[core][window]") {
   const WindowGraphicsApiTraits traits =
       GetWindowGraphicsApiTraits(WindowGraphicsApi::OpenGL);
 
@@ -337,7 +350,9 @@ TEST_CASE("WindowGraphicsApiTraits: OpenGL keeps window-owned presentation behav
   REQUIRE(traits.requestsMsaaSamples);
 }
 
-TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to the backend", "[core][window]") {
+TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to "
+          "the backend",
+          "[core][window]") {
   const WindowGraphicsApiTraits traits =
       GetWindowGraphicsApiTraits(WindowGraphicsApi::Vulkan);
 
@@ -348,26 +363,29 @@ TEST_CASE("WindowGraphicsApiTraits: Vulkan leaves presentation and resize to the
   REQUIRE_FALSE(traits.requestsMsaaSamples);
 }
 
-TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility", "[core][application]") {
+TEST_CASE("AppSpec: aggregate initialization keeps scene path compatibility",
+          "[core][application]") {
   const AppSpec spec{"Compat App", 1280, 720, true,
                      "assets/scenes/starter_world.json"};
 
   REQUIRE(spec.name == "Compat App");
   REQUIRE(spec.defaultSceneFile == "assets/scenes/starter_world.json");
   REQUIRE(spec.graphicsApi == WindowGraphicsApi::OpenGL);
+  REQUIRE(spec.iconFile.empty());
 }
 
-TEST_CASE("Shader: FromFiles throws ShaderException for missing files", "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws ShaderException for missing files",
+          "[core][shader]") {
   REQUIRE_THROWS_AS(Shader::FromFiles("/no/such/vertex_shader.vert",
                                       "/no/such/fragment_shader.frag"),
                     ShaderException);
 }
 
-TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws when second shader file is missing",
+          "[core][shader]") {
   namespace fs = std::filesystem;
 
-  const fs::path tempRoot =
-      Horo::Tests::SecureTempBase() / "horo_shader_io";
+  const fs::path tempRoot = Horo::Tests::SecureTempBase() / "horo_shader_io";
   std::error_code ec;
   fs::remove_all(tempRoot, ec);
   fs::create_directories(tempRoot, ec);
@@ -384,7 +402,8 @@ TEST_CASE("Shader: FromFiles throws when second shader file is missing", "[core]
                     ShaderException);
 }
 
-TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][shader]") {
+TEST_CASE("Shader: FromFiles throws when first shader file is missing",
+          "[core][shader]") {
   namespace fs = std::filesystem;
 
   const fs::path tempRoot =
@@ -406,7 +425,9 @@ TEST_CASE("Shader: FromFiles throws when first shader file is missing", "[core][
                     ShaderException);
 }
 
-TEST_CASE("EngineLaunchArgs: keeps previous project path when --project has no value", "[core][cli]") {
+TEST_CASE(
+    "EngineLaunchArgs: keeps previous project path when --project has no value",
+    "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectInline = "--project=./Playable";
   std::string projectFlag = "--project";
@@ -418,7 +439,8 @@ TEST_CASE("EngineLaunchArgs: keeps previous project path when --project has no v
   REQUIRE(options.projectPath == std::filesystem::path("./Playable"));
 }
 
-TEST_CASE("EngineLaunchArgs: supports empty inline project value", "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: supports empty inline project value",
+          "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectInline = "--project=";
   std::array<char *, 2> argv = {arg0.data(), projectInline.data()};
@@ -428,7 +450,9 @@ TEST_CASE("EngineLaunchArgs: supports empty inline project value", "[core][cli]"
   REQUIRE(options.projectPath.empty());
 }
 
-TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option parsing", "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option "
+          "parsing",
+          "[core][cli]") {
   std::string arg0 = "horo";
   std::string editorArg = "--editor";
   std::string playArg = "--play";
@@ -439,7 +463,8 @@ TEST_CASE("EngineLaunchArgs: ParseEditorStartupCli delegates to launch option pa
           EditorStartupCli::ForcePlay);
 }
 
-TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults", "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults",
+          "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::string unknown = "--ignored";
@@ -452,7 +477,8 @@ TEST_CASE("EngineLaunchArgs: --project without usable value keeps defaults", "[c
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
 }
 
-TEST_CASE("EngineLaunchArgs: trailing --project token is ignored", "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: trailing --project token is ignored",
+          "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::array<char *, 2> argv = {arg0.data(), projectFlag.data()};
@@ -463,7 +489,9 @@ TEST_CASE("EngineLaunchArgs: trailing --project token is ignored", "[core][cli]"
   REQUIRE(options.editorStartup == EditorStartupCli::Default);
 }
 
-TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume the next flag", "[core][cli]") {
+TEST_CASE("EngineLaunchArgs: null argv slot after --project does not consume "
+          "the next flag",
+          "[core][cli]") {
   std::string arg0 = "horo";
   std::string projectFlag = "--project";
   std::string editorFlag = "--editor";
@@ -618,7 +646,8 @@ TEST_CASE("LogBuffer: CopyLinesTo nullptr is a no-op", "[logbuffer]") {
   REQUIRE_NOTHROW(buf.CopyLinesTo(nullptr));
 }
 
-TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash", "[logbuffer]") {
+TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash",
+          "[logbuffer]") {
   auto &buf = Horo::LogBuffer::Instance();
   buf.Clear();
   REQUIRE_NOTHROW(buf.GetCounts(nullptr, nullptr, nullptr));
@@ -630,7 +659,8 @@ TEST_CASE("LogBuffer: GetCounts with nullptr args does not crash", "[logbuffer]"
   REQUIRE_NOTHROW(buf.GetCounts(nullptr, nullptr, &e));
 }
 
-TEST_CASE("LogBuffer: MaxLines getter returns configured value", "[logbuffer]") {
+TEST_CASE("LogBuffer: MaxLines getter returns configured value",
+          "[logbuffer]") {
   auto &buf = Horo::LogBuffer::Instance();
   const size_t original = buf.MaxLines();
   buf.SetMaxLines(256);
@@ -638,19 +668,20 @@ TEST_CASE("LogBuffer: MaxLines getter returns configured value", "[logbuffer]") 
   buf.SetMaxLines(original);
 }
 
-TEST_CASE("LogBuffer: Push with null file pointer does not crash", "[logbuffer]") {
+TEST_CASE("LogBuffer: Push with null file pointer does not crash",
+          "[logbuffer]") {
   auto &buf = Horo::LogBuffer::Instance();
-  REQUIRE_NOTHROW(
-      buf.Push(Horo::LogLevel::Info, nullptr, 0, "null-file test"));
+  REQUIRE_NOTHROW(buf.Push(Horo::LogLevel::Info, nullptr, 0, "null-file test"));
 }
 
-TEST_CASE("LogBuffer: Revision increments after Push and Clear", "[logbuffer]") {
+TEST_CASE("LogBuffer: Revision increments after Push and Clear",
+          "[logbuffer]") {
   auto &buf = Horo::LogBuffer::Instance();
   buf.Clear();
   const uint64_t rev0 = buf.Revision();
   const auto loc = std::source_location::current();
-  buf.Push(Horo::LogLevel::Warn, loc.file_name(),
-           static_cast<int>(loc.line()), "rev test");
+  buf.Push(Horo::LogLevel::Warn, loc.file_name(), static_cast<int>(loc.line()),
+           "rev test");
   REQUIRE(buf.Revision() > rev0);
   const uint64_t rev1 = buf.Revision();
   buf.Clear();
@@ -671,12 +702,15 @@ TEST_CASE("Screenshot: zero height returns empty string", "[screenshot]") {
   REQUIRE(Horo::Screenshot::Save(100, 0, outDir).empty());
 }
 
-TEST_CASE("Screenshot: negative dimensions return empty string", "[screenshot]") {
+TEST_CASE("Screenshot: negative dimensions return empty string",
+          "[screenshot]") {
   const std::string outDir = Horo::Tests::SecureTempBase().string();
   REQUIRE(Horo::Screenshot::Save(-1, -1, outDir).empty());
 }
 
-TEST_CASE("Screenshot: backend without readback support returns empty without readback", "[core][screenshot]") {
+TEST_CASE("Screenshot: backend without readback support returns empty without "
+          "readback",
+          "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = false;
   Renderer::UseBackend(&backend);
@@ -688,7 +722,9 @@ TEST_CASE("Screenshot: backend without readback support returns empty without re
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Screenshot: readback failure returns empty and captures request dimensions", "[core][screenshot]") {
+TEST_CASE("Screenshot: readback failure returns empty and captures request "
+          "dimensions",
+          "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = true;
   backend.colorReadbackResult = false;
@@ -704,15 +740,26 @@ TEST_CASE("Screenshot: readback failure returns empty and captures request dimen
   Renderer::ResetBackend();
 }
 
-TEST_CASE("Screenshot: successful save writes a BMP file with expected header", "[core][screenshot]") {
+TEST_CASE("Screenshot: successful save writes a BMP file with expected header",
+          "[core][screenshot]") {
   ScreenshotTestBackend backend;
   backend.capabilities.supportsReadback = true;
   backend.colorReadbackResult = true;
   backend.colorPixels = {
       // Row 0 (bottom): BGR
-      0u, 0u, 255u, 0u, 255u, 0u,
+      0u,
+      0u,
+      255u,
+      0u,
+      255u,
+      0u,
       // Row 1 (top): BGR
-      255u, 0u, 0u, 255u, 255u, 255u,
+      255u,
+      0u,
+      0u,
+      255u,
+      255u,
+      255u,
   };
   Renderer::UseBackend(&backend);
 
@@ -746,7 +793,8 @@ TEST_CASE("Screenshot: successful save writes a BMP file with expected header", 
 // StringHash — heterogeneous lookup coverage
 // ===========================================================================
 
-TEST_CASE("StringHash: operator() hashes string_view consistently", "[stringhash]") {
+TEST_CASE("StringHash: operator() hashes string_view consistently",
+          "[stringhash]") {
   Horo::StringHash hasher;
   REQUIRE(hasher(std::string_view("hello")) ==
           hasher(std::string_view("hello")));
@@ -754,7 +802,8 @@ TEST_CASE("StringHash: operator() hashes string_view consistently", "[stringhash
           hasher(std::string_view("world")));
 }
 
-TEST_CASE("StringHash: heterogeneous find with string_view key", "[stringhash]") {
+TEST_CASE("StringHash: heterogeneous find with string_view key",
+          "[stringhash]") {
   std::unordered_map<std::string, int, Horo::StringHash, std::equal_to<>> m;
   m["alpha"] = 1;
   m["beta"] = 2;
@@ -771,7 +820,8 @@ TEST_CASE("Time: FIXED_DT is 120 Hz", "[time]") {
   REQUIRE(Horo::Time::FIXED_DT == Approx(1.0f / 120.0f));
 }
 
-TEST_CASE("Time: ConsumeFixedStep returns false when accumulator is zero", "[time]") {
+TEST_CASE("Time: ConsumeFixedStep returns false when accumulator is zero",
+          "[time]") {
   // After default construction the static accumulator is zero — no steps ready.
   REQUIRE_FALSE(Horo::Time::ConsumeFixedStep());
 }
