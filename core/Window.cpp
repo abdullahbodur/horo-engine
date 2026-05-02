@@ -20,6 +20,9 @@
 #define DWMWA_TEXT_COLOR 36
 #endif
 #endif
+#ifdef __APPLE__
+extern "C" void ApplyDarkTitleBarMac(GLFWwindow *window);
+#endif
 // clang-format on
 
 #include <array>
@@ -267,6 +270,8 @@ Window::Window(const WindowSpec &spec)
   ApplyRuntimeWindowIcon(m_window, spec.iconFile);
 #ifdef _WIN32
   ApplyDarkTitleBar(m_window);
+#elif defined(__APPLE__)
+  ApplyDarkTitleBarMac(m_window);
 #endif
 
   if (traits.createsClientContext) {
