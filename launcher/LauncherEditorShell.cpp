@@ -973,7 +973,7 @@ void LauncherEditorShell::RenderLauncher() {
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 22.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
