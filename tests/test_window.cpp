@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "core/Application.h"
 #include "core/Window.h"
 
 using namespace Horo;
@@ -100,9 +101,32 @@ std::unique_ptr<Window> CreateWindowIfAvailable(const WindowSpec &spec) {
     return nullptr;
   }
 }
+
+class TestApplication final : public Application {
+public:
+  explicit TestApplication(const AppSpec &spec) : Application(spec) {}
+
+  bool initCalled = false;
+  bool updateCalled = false;
+  bool renderCalled = false;
+  bool shutdownCalled = false;
+
+private:
+  void OnInit() override { initCalled = true; }
+
+  void OnUpdate(float) override {
+    updateCalled = true;
+    glfwSetWindowShouldClose(GetWindow().GetNativeHandle(), GLFW_TRUE);
+  }
+
+  void OnRender(float) override { renderCalled = true; }
+
+  void OnShutdown() override { shutdownCalled = true; }
+};
 } // namespace
 
-TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", "[core][window][opengl]") {
+TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks",
+          "[core][window][opengl]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
@@ -157,7 +181,8 @@ TEST_CASE("Window OpenGL bootstrap path owns presentation and basic callbacks", 
     REQUIRE(resizeEvents >= 1);
 }
 
-TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[core][window][vulkan]") {
+TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation",
+          "[core][window][vulkan]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
 
   WindowSpec spec;
@@ -191,7 +216,8 @@ TEST_CASE("Window Vulkan bootstrap path keeps backend-owned presentation", "[cor
   REQUIRE(first->GetHeight() >= 1);
 }
 
-TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window][callbacks]") {
+TEST_CASE("Window GLFW callback hooks dispatch to user handlers",
+          "[core][window][callbacks]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
@@ -275,7 +301,8 @@ TEST_CASE("Window GLFW callback hooks dispatch to user handlers", "[core][window
   REQUIRE(droppedPathCount == 1);
 }
 
-TEST_CASE("Window env parsing falls back when variables are unset", "[core][window][env_unset]") {
+TEST_CASE("Window env parsing falls back when variables are unset",
+          "[core][window][env_unset]") {
   const ScopedEnvVar unsetVisible("HORO_GLFW_VISIBLE", nullptr);
   const ScopedEnvVar unsetSamples("HORO_GLFW_SAMPLES", nullptr);
 
@@ -294,7 +321,8 @@ TEST_CASE("Window env parsing falls back when variables are unset", "[core][wind
   REQUIRE(window->GetNativeHandle() != nullptr);
 }
 
-TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core][window][env]") {
+TEST_CASE("Window env parsing handles bool and sample fallback variants",
+          "[core][window][env]") {
   WindowSpec spec;
   spec.title = "window-env-test";
   spec.width = 128;
@@ -319,7 +347,8 @@ TEST_CASE("Window env parsing handles bool and sample fallback variants", "[core
   REQUIRE(third != nullptr);
 }
 
-TEST_CASE("Window reports init failures for invalid dimensions", "[core][window][errors]") {
+TEST_CASE("Window reports init failures for invalid dimensions",
+          "[core][window][errors]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
@@ -354,7 +383,8 @@ TEST_CASE("Window reports init failures for invalid dimensions", "[core][window]
   REQUIRE(sawInitFailure);
 }
 
-TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][window][logfilter]") {
+TEST_CASE("Window bootstrap still works when info logs are filtered",
+          "[core][window][logfilter]") {
   const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
   const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
 
@@ -382,7 +412,8 @@ TEST_CASE("Window bootstrap still works when info logs are filtered", "[core][wi
   vkWindow->SetVSync(false);
 }
 
-TEST_CASE("Window exposes glfwInit failure path when no display is available", "[core][window][glfw-init-fail]") {
+TEST_CASE("Window exposes glfwInit failure path when no display is available",
+          "[core][window][glfw-init-fail]") {
   if (ShouldSkipWindowBootstrapOnThisRunner()) {
     SUCCEED("Window bootstrap skipped on this CI runner");
     return;
@@ -399,5 +430,83 @@ TEST_CASE("Window exposes glfwInit failure path when no display is available", "
     SUCCEED("glfwInit failure path unavailable on this machine");
   } catch (const WindowInitException &) {
     SUCCEED("glfwInit failure path covered");
+  }
+}
+
+TEST_CASE("Window icon loading covers resolve and stb paths",
+          "[core][window][icon]") {
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
+
+  // ResolveWindowIconPath + "not found" LogWarn branch.
+  {
+    WindowSpec spec;
+    spec.title = "window-icon-missing";
+    spec.width = 64;
+    spec.height = 64;
+    spec.graphicsApi = WindowGraphicsApi::OpenGL;
+    spec.iconFile = "this-icon-does-not-exist.png";
+
+    auto window = CreateWindowIfAvailable(spec);
+    if (!window) {
+      SUCCEED("Window initialization is unavailable on this machine");
+      return;
+    }
+    REQUIRE(window->GetNativeHandle() != nullptr);
+  }
+
+  // ResolveWindowIconPath absolute-path hit + stbi_load success branch.
+  {
+    WindowSpec spec;
+    spec.title = "window-icon-load";
+    spec.width = 64;
+    spec.height = 64;
+    spec.graphicsApi = WindowGraphicsApi::OpenGL;
+#ifdef HORO_TEST_SOURCE_DIR
+    spec.iconFile = HORO_TEST_SOURCE_DIR "/assets/launcher/logo.png";
+#endif
+
+    auto window = CreateWindowIfAvailable(spec);
+    if (!window) {
+      SUCCEED("Window initialization is unavailable on this machine");
+      return;
+    }
+    REQUIRE(window->GetNativeHandle() != nullptr);
+  }
+}
+
+TEST_CASE("Application bootstraps window, parses CLI, and runs lifecycle once",
+          "[core][application]") {
+  const ScopedEnvVar hiddenWindow("HORO_GLFW_VISIBLE", "0");
+  const ScopedEnvVar disableMsaa("HORO_GLFW_SAMPLES", "0");
+
+  AppSpec spec;
+  spec.name = "application-lifecycle-test";
+  spec.width = 96;
+  spec.height = 64;
+  spec.vsync = false;
+  spec.defaultSceneFile = "assets/scenes/level.json";
+  spec.graphicsApi = WindowGraphicsApi::OpenGL;
+
+  try {
+    TestApplication app(spec);
+    std::string arg0 = "test-app";
+    std::string playArg = "--play";
+    std::array<char *, 2> argv = {arg0.data(), playArg.data()};
+    app.ParseArgs(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE_FALSE(app.ShouldStartWithEditor());
+    REQUIRE_FALSE(app.IsEditorModeRequested());
+    REQUIRE(app.GetWindow().GetWidth() == spec.width);
+    REQUIRE(app.GetWindow().GetHeight() == spec.height);
+    REQUIRE_FALSE(app.GetDefaultSceneFilePath().empty());
+
+    app.Run();
+    REQUIRE(app.initCalled);
+    REQUIRE(app.updateCalled);
+    REQUIRE(app.renderCalled);
+    REQUIRE(app.shutdownCalled);
+  } catch (const WindowInitException &) {
+    SUCCEED("Application window bootstrap is unavailable on this machine");
   }
 }

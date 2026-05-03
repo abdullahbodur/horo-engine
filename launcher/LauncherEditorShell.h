@@ -20,104 +20,133 @@
 #include "scene/SceneReferenceRuntime.h"
 
 namespace Horo::Launcher {
-    struct StringHash {
-        using is_transparent = void;
+struct StringHash {
+  using is_transparent = void;
 
-        size_t operator()(std::string_view sv) const noexcept {
-            return std::hash<std::string_view>{}(sv);
-        }
+  size_t operator()(std::string_view sv) const noexcept {
+    return std::hash<std::string_view>{}(sv);
+  }
 
-        size_t operator()(const std::string &s) const noexcept {
-            return std::hash<std::string>{}(s);
-        }
-    };
+  size_t operator()(const std::string &s) const noexcept {
+    return std::hash<std::string>{}(s);
+  }
+};
 
-    class LauncherEditorShell {
-    public:
-        void Attach(Editor::EditorLayer *editor, Scene *scene,
-                    SceneReferenceRuntime *runtime, Camera *camera);
+struct ImportProjectDropTarget {
+  bool valid = false;
+  float minX = 0.0f;
+  float minY = 0.0f;
+  float maxX = 0.0f;
+  float maxY = 0.0f;
+};
 
-        void Initialize();
+class LauncherEditorShell {
+public:
+  void Attach(Editor::EditorLayer *editor, Scene *scene,
+              SceneReferenceRuntime *runtime, Camera *camera);
 
-        void Shutdown();
+  void Initialize();
 
-        bool OpenProject(const std::filesystem::path &projectPath,
-                         std::string *outError);
+  void Shutdown();
 
-        void CloseProject();
+  bool OpenProject(const std::filesystem::path &projectPath,
+                   std::string *outError);
 
-        void Update();
+  void CloseProject();
 
-        void RenderOverlay();
+  void Update();
 
-        bool HasActiveProject() const { return !m_projectRoot.empty(); }
+  void RenderOverlay();
 
-        void SetLauncherError(std::string error) {
-            m_launcherError = std::move(error);
-        }
+  void OnPathsDropped(int pathCount, const char **utf8Paths, float dropX,
+                      float dropY);
 
-    private:
-        Editor::EditorLayer *m_editor = nullptr;
-        Scene *m_scene = nullptr;
-        SceneReferenceRuntime *m_runtime = nullptr;
-        Camera *m_camera = nullptr;
+  bool HasActiveProject() const { return !m_projectRoot.empty(); }
 
-        EditorHomeDocument m_homeDocument;
-        LauncherProjectDocument m_projectDocument;
-        std::filesystem::path m_projectRoot;
-        ExternalProcessRunner m_processRunner;
+  void SetLauncherError(std::string error) {
+    m_launcherError = std::move(error);
+  }
 
-        std::shared_ptr<Shader> m_sceneShader;
-        std::unordered_map<std::string, std::shared_ptr<Mesh>, StringHash,
-            std::equal_to<> >
-        m_meshCache;
-        std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
-            std::equal_to<> >
-        m_textureCache;
+private:
+  Editor::EditorLayer *m_editor = nullptr;
+  Scene *m_scene = nullptr;
+  SceneReferenceRuntime *m_runtime = nullptr;
+  Camera *m_camera = nullptr;
 
-        std::string m_launcherError;
-        std::array<char, 256> m_newProjectNameInput{};
-        std::array<char, 512> m_newProjectPathInput{};
+  EditorHomeDocument m_homeDocument;
+  LauncherProjectDocument m_projectDocument;
+  std::filesystem::path m_projectRoot;
+  ExternalProcessRunner m_processRunner;
 
-        void ConfigureRuntimeCallbacks();
+  std::shared_ptr<Shader> m_sceneShader;
+  std::unordered_map<std::string, std::shared_ptr<Mesh>, StringHash,
+                     std::equal_to<>>
+      m_meshCache;
+  std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
+                     std::equal_to<>>
+      m_textureCache;
+  std::shared_ptr<Texture> m_launcherLogoTexture;
+  std::shared_ptr<Texture> m_discordIconTexture;
 
-        void HandlePendingSceneReload();
+  std::string m_launcherError;
+  std::array<char, 256> m_newProjectNameInput{};
+  std::array<char, 512> m_newProjectPathInput{};
+  int m_newProjectRendererBackendIndex = 0;
+  bool m_newProjectAdvancedSettingsOpen = false;
+  ImportProjectDropTarget m_importProjectDropTarget;
 
-        void RefreshCameraFromSceneCamera();
+  void ConfigureRuntimeCallbacks();
 
-        void UnloadCurrentProjectState();
+  void HandlePendingSceneReload();
 
-        void SetupEditorForProject(const std::filesystem::path &projectRoot,
-                                   const Editor::SceneDocument &sceneDocument);
+  void RefreshCameraFromSceneCamera();
 
-        bool OpenProjectFromPicker(std::string *outError);
+  void UnloadCurrentProjectState();
 
-        void RenderLauncher();
+  void SetupEditorForProject(const std::filesystem::path &projectRoot,
+                             const Editor::SceneDocument &sceneDocument);
 
-        void RenderNewProjectPanel(float contentWidth);
+  bool OpenProjectFromPicker(std::string *outError);
 
-        void RenderRecentProjectsList(float contentWidth, float panelHeight);
+  void RenderLauncher();
 
-        void RenderProjectToolbar();
+  void RenderLauncherSidebar(float sidebarWidth, float fullHeight);
 
-        void ExecuteManifestCommand(const LauncherProjectCommand &command,
-                                    const std::string &label);
+  void RenderLauncherMainContent(float mainWidth, float fullHeight);
 
-        bool CreateProjectFromLauncher(std::string *outError);
+  void RenderLauncherHero(float contentWidth);
 
-        std::filesystem::path ResolveCommandSdkRoot() const;
+  void RenderNewProjectPanel(float contentWidth);
 
-        std::filesystem::path
-        NormalizeProjectRootInput(const std::filesystem::path &rawPath) const;
+  void RenderNewProjectFormRow(float innerWidth, float rowStartX,
+                               float rowStartY);
 
-        std::filesystem::path ResolveAssetPath(const std::string &rawPath) const;
+  void RenderNewProjectActions(float innerWidth, float rowStartX,
+                               float advancedRowY);
 
-        std::filesystem::path ResolveShaderPath(const char *fileName) const;
+  void RenderRecentProjectsList(float contentWidth, float panelHeight);
 
-        std::shared_ptr<Shader> EnsureSceneShader();
+  void RenderRecentProjectCard(const std::string &recentPath, int cardIndex);
 
-        std::shared_ptr<Mesh> LoadMeshForTag(const std::string &meshTag);
+  std::shared_ptr<Texture> EnsureLauncherLogoTexture();
 
-        std::shared_ptr<Texture> LoadTexture(const std::string &rawPath);
-    };
+  std::shared_ptr<Texture> EnsureDiscordIconTexture();
+
+  bool CreateProjectFromLauncher(std::string *outError);
+
+  std::filesystem::path ResolveCommandSdkRoot() const;
+
+  std::filesystem::path
+  NormalizeProjectRootInput(const std::filesystem::path &rawPath) const;
+
+  std::filesystem::path ResolveAssetPath(const std::string &rawPath) const;
+
+  std::filesystem::path ResolveShaderPath(const char *fileName) const;
+
+  std::shared_ptr<Shader> EnsureSceneShader();
+
+  std::shared_ptr<Mesh> LoadMeshForTag(const std::string &meshTag);
+
+  std::shared_ptr<Texture> LoadTexture(const std::string &rawPath);
+};
 } // namespace Horo::Launcher

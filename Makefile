@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-TARGETS := configure build test ui-test ui-test-windowed release coverage coverage-source-summary clean clean-all format format-check help
+TARGETS := configure build test run-launcher ui-test ui-test-windowed release coverage coverage-source-summary clean clean-all format format-check help
 
 .PHONY: all $(TARGETS)
 

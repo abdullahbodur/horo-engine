@@ -1,12 +1,17 @@
 cmake_minimum_required(VERSION 3.25)
 
+# x-release-please-start-version
+set(HORO_ENGINE_VERSION "0.2.0")
+# x-release-please-end
+
 # Detect if this is a launcher build or embedded via add_subdirectory()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
-    # x-release-please-start-version
-    set(HORO_ENGINE_VERSION "0.2.0")
-    # x-release-please-end
     project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
+    if(APPLE)
+        set(CMAKE_ObjCXX_COMPILER ${CMAKE_CXX_COMPILER})
+        enable_language(ObjCXX)
+    endif()
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 
@@ -64,6 +69,9 @@ list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
 # Exclude only the file that directly includes <glad/glad.h>; it lives in horo-renderer-opengl.
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX
     "[/\\\\]renderer[/\\\\]OpenGLRenderBackend\\.cpp$")
+if(APPLE)
+    list(APPEND ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/core/Window_mac.mm")
+endif()
 
 add_library(HoroEngine STATIC ${ENGINE_SOURCES})
 add_library(HoroEngine::HoroEngine ALIAS HoroEngine)
@@ -96,15 +104,16 @@ function(horo_configure_engine_target target_name imgui_target)
 
     if(WIN32)
         # Windows system libs needed for GLFW and general app infrastructure.
-        target_link_libraries(${target_name} PUBLIC comdlg32 ole32 shell32 ws2_32)
+        target_link_libraries(${target_name} PUBLIC comdlg32 dwmapi ole32 shell32 ws2_32)
         target_link_libraries(${target_name} PRIVATE opengl32)
     elseif(APPLE)
-        target_link_libraries(${target_name} PRIVATE "-framework OpenGL")
+        target_link_libraries(${target_name} PRIVATE "-framework OpenGL" "-framework AppKit")
     else()
         target_link_libraries(${target_name} PRIVATE GL)
     endif()
 
     target_compile_features(${target_name} PUBLIC cxx_std_20)
+    target_compile_definitions(${target_name} PUBLIC HORO_ENGINE_VERSION="${HORO_ENGINE_VERSION}")
 
     if(WIN32)
         target_compile_definitions(${target_name} PUBLIC NOMINMAX)
@@ -212,6 +221,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
 
     if(WIN32)
         target_compile_definitions(HoroEditor PRIVATE NOMINMAX)
+        target_sources(HoroEditor PRIVATE launcher/HoroEditor.rc)
     endif()
 
     if(HORO_RENDERER STREQUAL "opengl")
@@ -233,6 +243,23 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
             $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/editor_schema.json
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/InterVariable.ttf
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/fonts/InterVariable.ttf
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/launcher
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.png
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/launcher/logo.png
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.ico
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/launcher/logo.ico
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo_with_title.png
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/launcher/logo_with_title.png
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/discord-icon.png
+            $<TARGET_FILE_DIR:HoroEditor>/../sdk/assets/launcher/discord-icon.png
         COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditor>/../sdk/renderer
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
@@ -248,6 +275,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
 
         if(WIN32)
             target_compile_definitions(HoroEditorUiTest PRIVATE NOMINMAX)
+            target_sources(HoroEditorUiTest PRIVATE launcher/HoroEditor.rc)
         endif()
 
         add_custom_command(TARGET HoroEditorUiTest POST_BUILD
@@ -255,6 +283,23 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_CURRENT_SOURCE_DIR}/assets/editor_schema.json
                 $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/editor_schema.json
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/fonts
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/InterVariable.ttf
+                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/fonts/InterVariable.ttf
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/launcher
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.png
+                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/launcher/logo.png
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.ico
+                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/launcher/logo.ico
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo_with_title.png
+                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/launcher/logo_with_title.png
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/discord-icon.png
+                $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/assets/launcher/discord-icon.png
             COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:HoroEditorUiTest>/../sdk/renderer
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders
@@ -285,6 +330,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     install(DIRECTORY assets/
         DESTINATION sdk/assets
         FILES_MATCHING PATTERN "editor_schema.json"
+    )
+    install(DIRECTORY assets/fonts/
+        DESTINATION sdk/assets/fonts
+        FILES_MATCHING PATTERN "*.ttf"
+    )
+    install(DIRECTORY assets/launcher/
+        DESTINATION sdk/assets/launcher
+        FILES_MATCHING PATTERN "*.png"
     )
     install(DIRECTORY renderer/shaders/
         DESTINATION sdk/renderer/shaders

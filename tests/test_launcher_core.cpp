@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -121,7 +122,8 @@ TEST_CASE("EngineLaunchArgs parses launcher project path", "[launcher][cli]") {
   REQUIRE(options.projectPath == projectPath);
 }
 
-TEST_CASE("EngineLaunchArgs handles inline project path and startup overrides", "[launcher][cli]") {
+TEST_CASE("EngineLaunchArgs handles inline project path and startup overrides",
+          "[launcher][cli]") {
   std::string arg0 = "HoroEditor";
   std::string editorArg = "--editor";
   std::string playArg = "--play";
@@ -149,7 +151,9 @@ TEST_CASE("EngineLaunchArgs ignores null argv entries", "[launcher][cli]") {
   REQUIRE(options.projectPath == std::filesystem::path("./SomeProject"));
 }
 
-TEST_CASE("ProjectPath explicit root switches editor workspace to project-local settings", "[launcher][workspace]") {
+TEST_CASE("ProjectPath explicit root switches editor workspace to "
+          "project-local settings",
+          "[launcher][workspace]") {
   const std::filesystem::path projectRoot = MakeTempRoot("project_workspace");
   std::filesystem::remove_all(projectRoot);
   std::filesystem::create_directories(projectRoot);
@@ -164,7 +168,8 @@ TEST_CASE("ProjectPath explicit root switches editor workspace to project-local 
   REQUIRE_FALSE(ProjectPath::HasExplicitProjectRoot());
 }
 
-TEST_CASE("Editor home settings remember and prune recent projects", "[launcher][home][coverage]") {
+TEST_CASE("Editor home settings remember and prune recent projects",
+          "[launcher][home][coverage]") {
   const std::filesystem::path tempHome = MakeTempRoot("editor_home");
   std::filesystem::remove_all(tempHome);
   std::filesystem::create_directories(tempHome);
@@ -201,7 +206,8 @@ TEST_CASE("Editor home settings remember and prune recent projects", "[launcher]
           NormalizeComparablePath(projectA));
 }
 
-TEST_CASE("Launcher project manifest resolves SDK and project tokens", "[launcher][manifest]") {
+TEST_CASE("Launcher project manifest resolves SDK and project tokens",
+          "[launcher][manifest]") {
   const std::filesystem::path projectRoot = MakeTempRoot("manifest_project");
   const std::filesystem::path sdkRoot = MakeTempRoot("manifest_sdk");
 
@@ -217,7 +223,8 @@ TEST_CASE("Launcher project manifest resolves SDK and project tokens", "[launche
   REQUIRE(resolved.workingDirectory == sdkRoot.lexically_normal());
 }
 
-TEST_CASE("Launcher manifest load reports structured parse failures", "[launcher][manifest]") {
+TEST_CASE("Launcher manifest load reports structured parse failures",
+          "[launcher][manifest]") {
   const std::filesystem::path projectRoot =
       MakeTempRoot("manifest_parse_failures");
   std::error_code ec;
@@ -276,7 +283,8 @@ TEST_CASE("Launcher manifest save validates inputs", "[launcher][manifest]") {
   REQUIRE(error.find("document is null") != std::string::npos);
 }
 
-TEST_CASE("ResolveLauncherCommand validates required fields", "[launcher][manifest]") {
+TEST_CASE("ResolveLauncherCommand validates required fields",
+          "[launcher][manifest]") {
   const std::filesystem::path projectRoot =
       MakeTempRoot("resolve_command_validation_project");
   const std::filesystem::path sdkRoot =
@@ -297,7 +305,9 @@ TEST_CASE("ResolveLauncherCommand validates required fields", "[launcher][manife
   }
 }
 
-TEST_CASE("ResolveLauncherCommand normalizes relative executable against working directory", "[launcher][manifest]") {
+TEST_CASE("ResolveLauncherCommand normalizes relative executable against "
+          "working directory",
+          "[launcher][manifest]") {
   const std::filesystem::path projectRoot =
       MakeTempRoot("resolve_command_paths_project");
   const std::filesystem::path sdkRoot =
@@ -320,14 +330,17 @@ TEST_CASE("ResolveLauncherCommand normalizes relative executable against working
   REQUIRE_FALSE(resolved.debugString.empty());
 }
 
-TEST_CASE("Launcher project template creates manifest, source, and scene scaffold", "[launcher][template]") {
+TEST_CASE(
+    "Launcher project template creates manifest, source, and scene scaffold",
+    "[launcher][template]") {
   const std::filesystem::path projectRoot = MakeTempRoot("template_project");
   std::filesystem::remove_all(projectRoot);
 
   LauncherProjectDocument doc;
   std::string error;
   REQUIRE(CreateLauncherProjectTemplate(
-      {projectRoot, "TemplateGame", MakeTempRoot("sdk")}, &doc, &error));
+      {projectRoot, "TemplateGame", MakeTempRoot("sdk"), "null"}, &doc,
+      &error));
 
   REQUIRE(IsLauncherProjectRoot(projectRoot));
   REQUIRE(std::filesystem::exists(projectRoot / "src" / "main.cpp"));
@@ -336,6 +349,10 @@ TEST_CASE("Launcher project template creates manifest, source, and scene scaffol
                                   "level.json"));
   REQUIRE(doc.manifest.projectName == "TemplateGame");
   REQUIRE(doc.manifest.defaultScene == "assets/scenes/level.json");
+  REQUIRE(std::find(doc.manifest.configureCommand.args.begin(),
+                    doc.manifest.configureCommand.args.end(),
+                    "-DHORO_RENDERER=null") !=
+          doc.manifest.configureCommand.args.end());
 
   const std::string mainCpp = ReadTextFile(projectRoot / "src" / "main.cpp");
   REQUIRE(mainCpp.find("m_camera.target = camera.position + forward;") !=
@@ -355,7 +372,62 @@ TEST_CASE("Launcher project template creates manifest, source, and scene scaffol
   REQUIRE(fragmentShader.find("u_hasAlbedoMap") == std::string::npos);
 }
 
-TEST_CASE("External process runner starts, completes, and records exit status", "[launcher][process]") {
+TEST_CASE("Launcher project template validates required request fields",
+          "[launcher][template]") {
+  std::string error;
+  LauncherProjectDocument doc;
+
+  REQUIRE_FALSE(CreateLauncherProjectTemplate(
+      {std::filesystem::path(), "TemplateGame", MakeTempRoot("sdk"), "opengl"},
+      &doc, &error));
+  REQUIRE(error.find("Project root is empty") != std::string::npos);
+
+  error.clear();
+  REQUIRE_FALSE(
+      CreateLauncherProjectTemplate({MakeTempRoot("template_missing_name"), "",
+                                     MakeTempRoot("sdk"), "opengl"},
+                                    &doc, &error));
+  REQUIRE(error.find("Project name is empty") != std::string::npos);
+}
+
+TEST_CASE("Launcher project template falls back to OpenGL for unknown renderer",
+          "[launcher][template]") {
+  const std::filesystem::path projectRoot =
+      MakeTempRoot("template_unknown_renderer");
+  std::filesystem::remove_all(projectRoot);
+
+  LauncherProjectDocument doc;
+  std::string error;
+  REQUIRE(CreateLauncherProjectTemplate(
+      {projectRoot, "RendererFallback", MakeTempRoot("sdk"), "direct3d"}, &doc,
+      &error));
+
+  REQUIRE(std::find(doc.manifest.configureCommand.args.begin(),
+                    doc.manifest.configureCommand.args.end(),
+                    "-DHORO_RENDERER=opengl") !=
+          doc.manifest.configureCommand.args.end());
+}
+
+TEST_CASE("Launcher project template reports file write failures",
+          "[launcher][template]") {
+  const std::filesystem::path projectRoot = MakeTempRoot("template_file_root");
+  std::filesystem::remove_all(projectRoot);
+  std::filesystem::create_directories(projectRoot.parent_path());
+  {
+    std::ofstream out(projectRoot);
+    REQUIRE(out.is_open());
+    out << "not a directory";
+  }
+
+  std::string error;
+  REQUIRE_FALSE(CreateLauncherProjectTemplate(
+      {projectRoot, "TemplateGame", MakeTempRoot("sdk"), "opengl"}, nullptr,
+      &error));
+  REQUIRE_FALSE(error.empty());
+}
+
+TEST_CASE("External process runner starts, completes, and records exit status",
+          "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
   command.workingDirectory = Horo::Tests::SecureTempBase();
@@ -381,7 +453,9 @@ TEST_CASE("External process runner starts, completes, and records exit status", 
   REQUIRE(runner.GetStatus().exitCode == 0);
 }
 
-TEST_CASE("External process runner stop marks user-terminated commands as finished", "[launcher][process]") {
+TEST_CASE(
+    "External process runner stop marks user-terminated commands as finished",
+    "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
   command.workingDirectory = Horo::Tests::SecureTempBase();
@@ -405,7 +479,8 @@ TEST_CASE("External process runner stop marks user-terminated commands as finish
   REQUIRE(runner.GetStatus().terminatedByUser);
 }
 
-TEST_CASE("External process runner rejects Start while process is active", "[launcher][process]") {
+TEST_CASE("External process runner rejects Start while process is active",
+          "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand slowCommand;
   slowCommand.workingDirectory = Horo::Tests::SecureTempBase();
@@ -432,7 +507,8 @@ TEST_CASE("External process runner rejects Start while process is active", "[lau
   REQUIRE_FALSE(runner.IsActive());
 }
 
-TEST_CASE("External process runner reports non-zero exit from child process", "[launcher][process]") {
+TEST_CASE("External process runner reports non-zero exit from child process",
+          "[launcher][process]") {
   ExternalProcessRunner runner;
   ResolvedLauncherCommand command;
   command.workingDirectory = Horo::Tests::SecureTempBase();

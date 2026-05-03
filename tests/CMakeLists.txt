@@ -178,6 +178,7 @@ add_test(NAME test_core COMMAND $<TARGET_FILE:test_core>)
 # ---- test_window ----
 add_executable(test_window test_window.cpp)
 target_link_libraries(test_window PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+target_compile_definitions(test_window PRIVATE HORO_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 horo_set_test_output_dir(test_window)
 add_test(NAME test_window COMMAND $<TARGET_FILE:test_window>)
 add_test(NAME test_window_logfilter COMMAND $<TARGET_FILE:test_window> "[core][window][logfilter]")

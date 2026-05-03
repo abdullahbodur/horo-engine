@@ -102,6 +102,38 @@ constexpr char kEditorViewportWindow[] = "Viewport";
 // large trees).
 constexpr uint32_t kProjectListingCacheFrames = 48;
 
+std::filesystem::path ResolveEditorFontPath() {
+  const std::array<std::filesystem::path, 4> candidates = {
+      ProjectPath::ResolveSdk("assets/fonts/InterVariable.ttf"),
+      ProjectPath::Root() / "assets" / "fonts" / "InterVariable.ttf",
+      ProjectPath::Root() / "engine" / "assets" / "fonts" / "InterVariable.ttf",
+      ProjectPath::Root() / "horo-engine" / "assets" / "fonts" /
+          "InterVariable.ttf",
+  };
+  for (const auto &candidate : candidates) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(candidate, ec) && !ec)
+      return candidate;
+  }
+  return {};
+}
+
+void LoadEditorFonts(ImGuiIO &io) {
+  constexpr float kUiFontSize = 16.0f;
+  if (const std::filesystem::path fontPath = ResolveEditorFontPath();
+      !fontPath.empty()) {
+    if (ImFont *font = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
+                                                    kUiFontSize))
+      io.FontDefault = font;
+    else
+      LogWarn("[Editor] Failed to load Inter font from '{}'",
+              fontPath.string());
+  }
+
+  if (!io.FontDefault)
+    io.FontDefault = io.Fonts->AddFontDefault();
+}
+
 void DrawUiAutomationMarker(const char *label) {
   if (!label || !*label)
     return;
@@ -126,13 +158,14 @@ bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
   if (!mc.mesh)
     return false;
   Transform wt(tc.current.position, tc.current.rotation, tc.current.scale);
-  WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(), mc.mesh->GetHalfExtents(),
-                        wt, outCenter, outHalf);
+  WorldAabbFromLocalBox(mc.mesh->GetLocalAabbCenter(),
+                        mc.mesh->GetHalfExtents(), wt, outCenter, outHalf);
   return true;
 }
 
-bool TryGetPlacementSurfaceBounds(Registry *liveRegistry, const SceneObject &obj,
-                                  Vec3 *outCenter, Vec3 *outHalf) {
+bool TryGetPlacementSurfaceBounds(Registry *liveRegistry,
+                                  const SceneObject &obj, Vec3 *outCenter,
+                                  Vec3 *outHalf) {
   using enum SceneObjectType;
   if (!outCenter || !outHalf)
     return false;
@@ -324,11 +357,10 @@ struct AssetThumbnailRenderer {
       return IsValid();
 
     FramebufferSpec spec;
-    spec.width  = static_cast<uint32_t>(width);
+    spec.width = static_cast<uint32_t>(width);
     spec.height = static_cast<uint32_t>(height);
-    spec.attachmentSpec = {
-        {{FramebufferTextureFormat::RGBA8},
-         {FramebufferTextureFormat::DEPTH24STENCIL8}}};
+    spec.attachmentSpec = {{{FramebufferTextureFormat::RGBA8},
+                            {FramebufferTextureFormat::DEPTH24STENCIL8}}};
     fbo = Renderer::CreateFramebuffer(spec);
 
     if (!fbo) {
@@ -353,9 +385,7 @@ struct AssetThumbnailRenderer {
     return IsValid();
   }
 
-  bool IsValid() const {
-    return fbo != nullptr && shader.IsValid();
-  }
+  bool IsValid() const { return fbo != nullptr && shader.IsValid(); }
 
   void Cleanup() {
     meshCache.clear();
@@ -556,28 +586,28 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
   // image.  ReadbackRegionRgba8 only runs once per mesh (then cached).
   std::vector<uint32_t> pixels(
       static_cast<size_t>(renderer.width * renderer.height));
-  if (std::string readError; !Renderer::ReadbackRegionRgba8(0, 0, renderer.width, renderer.height,
-                                     pixels.data(), &readError)) {
+  if (std::string readError; !Renderer::ReadbackRegionRgba8(
+          0, 0, renderer.width, renderer.height, pixels.data(), &readError)) {
     LogWarn("AssetThumbnailRenderer: readback failed: {}", readError);
     renderer.fbo->Unbind();
-    Renderer::SetViewport(prevViewport[0], prevViewport[1],
-                          prevViewport[2], prevViewport[3]);
+    Renderer::SetViewport(prevViewport[0], prevViewport[1], prevViewport[2],
+                          prevViewport[3]);
     return {};
   }
 
   TextureSpec texSpec;
-  texSpec.width        = static_cast<uint32_t>(renderer.width);
-  texSpec.height       = static_cast<uint32_t>(renderer.height);
-  texSpec.format       = TextureFormat::RGBA8;
-  texSpec.filter       = TextureFilter::Linear;
-  texSpec.wrap         = TextureWrap::ClampToEdge;
+  texSpec.width = static_cast<uint32_t>(renderer.width);
+  texSpec.height = static_cast<uint32_t>(renderer.height);
+  texSpec.format = TextureFormat::RGBA8;
+  texSpec.filter = TextureFilter::Linear;
+  texSpec.wrap = TextureWrap::ClampToEdge;
   texSpec.generateMips = false;
   auto destTex = Renderer::CreateTexture(texSpec);
   if (!destTex) {
     LogWarn("AssetThumbnailRenderer: texture creation failed");
     renderer.fbo->Unbind();
-    Renderer::SetViewport(prevViewport[0], prevViewport[1],
-                          prevViewport[2], prevViewport[3]);
+    Renderer::SetViewport(prevViewport[0], prevViewport[1], prevViewport[2],
+                          prevViewport[3]);
     return {};
   }
   destTex->SetData(pixels.data(),
@@ -586,8 +616,8 @@ RenderMeshToThumbnail(const AssetThumbnailRenderer::CachedMesh &mesh,
 
   // Restore state
   renderer.fbo->Unbind();
-  Renderer::SetViewport(prevViewport[0], prevViewport[1],
-                        prevViewport[2], prevViewport[3]);
+  Renderer::SetViewport(prevViewport[0], prevViewport[1], prevViewport[2],
+                        prevViewport[3]);
 
   return destTex->GetRenderTargetHandle(true);
 }
@@ -879,6 +909,7 @@ void EditorLayer::Init(GLFWwindow *window) {
   ImGui::CreateContext();
   ImGui::StyleColorsDark();
   ImGuiIO &io = ImGui::GetIO();
+  LoadEditorFonts(io);
   m_imguiIniPath = ResolveEditorLayoutPath().string();
   std::error_code settingsEc;
   std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(),
@@ -2695,7 +2726,7 @@ void EditorLayer::DrawMcpTab() {
   ImGui::SameLine();
   ImGui::Text("Enabled: %s", status.enabled ? "Yes" : "No");
   DrawUiAutomationMarker(status.enabled ? "##mcp_test/status_enabled"
-                                         : "##mcp_test/status_disabled");
+                                        : "##mcp_test/status_disabled");
   DrawUiAutomationMarker(status.running ? "##mcp_test/status_running"
                                         : "##mcp_test/status_stopped");
   DrawUiAutomationMarker(m_mcpUiClearToggle
@@ -3124,8 +3155,8 @@ static const char *ObjectTypeIcon(SceneObjectType type) {
 // ----------------------
 
 void EditorLayer::ApplyRenameObject() {
-  m_renameObjectError =
-      ValidateRenameCandidate(m_document, m_renameObjectIndex, m_renameObjectDraft);
+  m_renameObjectError = ValidateRenameCandidate(m_document, m_renameObjectIndex,
+                                                m_renameObjectDraft);
   if (!m_renameObjectError.empty())
     return;
 

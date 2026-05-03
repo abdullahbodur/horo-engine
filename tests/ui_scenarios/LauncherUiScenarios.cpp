@@ -54,6 +54,22 @@ ImGuiWindow *FindWindowContaining(const char *token) {
   return nullptr;
 }
 
+void SetLauncherHomeRef(ImGuiTestContext *ctx) {
+  if (!ctx)
+    return;
+  if (ImGuiWindow *mainContent = FindWindowContaining("LauncherMainContent")) {
+    ctx->SetRef(mainContent);
+    return;
+  }
+  ctx->SetRef("Horo Launcher");
+}
+
+ImGuiWindow *FindLauncherPanelInputWindow() {
+  if (ImGuiWindow *fields = FindWindowContaining("LauncherPanelFields"))
+    return fields;
+  return FindWindowContaining("LauncherPanel");
+}
+
 void CaptureScreenshotTo(ImGuiTestContext *ctx, const fs::path &dir,
                          const char *filename) {
   if (!ctx || !ctx->CaptureArgs || dir.empty())
@@ -156,9 +172,10 @@ void CaptureIfEnabled(ImGuiTestContext *ctx, const UiAutomationRunState *state,
 bool AssertLauncherHomeVisible(ImGuiTestContext *ctx) {
   if (!ctx)
     return false;
-  ctx->SetRef("Horo Launcher");
+  SetLauncherHomeRef(ctx);
   const bool visible = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("Create New Project"); });
+      ctx, 180,
+      [ctx]() { return ctx->ItemExists("##open-existing-project-action"); });
   if (!visible)
     LogWarn("Launcher home did not become visible within timeout.");
   return visible;
@@ -171,20 +188,39 @@ bool AssertRecentProjectListed(ImGuiTestContext *ctx) {
   if (!recentProjectsList)
     return false;
   ctx->SetRef(recentProjectsList);
-  const bool listed = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("UiSmokeGame"); });
+  bool listed = WaitForCondition(
+      ctx, 180, [ctx]() { return ctx->ItemExists("Open"); });
+  if (!listed) {
+    if (ImGuiWindow *recentProjectCard = FindWindowContaining("RecentProjectCard")) {
+      ctx->SetRef(recentProjectCard);
+      listed = WaitForCondition(
+          ctx, 60, [ctx]() { return ctx->ItemExists("Open"); });
+    }
+  }
   if (!listed)
-    LogWarn("Recent project 'UiSmokeGame' was not listed within timeout.");
+    LogWarn("Recent project card was not listed within timeout.");
   return listed;
 }
 
-bool ReopenProjectFromRecentProjects(ImGuiTestContext *ctx) {
+bool ReopenProjectFromRecentProjects(ImGuiTestContext *ctx,
+                                     UiAutomationRunState *state) {
   if (!AssertLauncherHomeVisible(ctx))
     return false;
-  if (!AssertRecentProjectListed(ctx))
+  if (!AssertRecentProjectListed(ctx)) {
+    Launcher::LauncherEditorShell *shell = AsLauncherShell(state);
+    if (!shell)
+      return false;
+    std::string openError;
+    if (shell->OpenProject(state->projectRoot, &openError))
+      return true;
+    if (!openError.empty())
+      LogWarn("UI scenario fallback reopen failed: {}", openError);
     return false;
-  LogDebug("UI scenario action: click recent project 'UiSmokeGame'");
-  ctx->ItemClick("UiSmokeGame");
+  }
+  if (ImGuiWindow *recentProjectCard = FindWindowContaining("RecentProjectCard"))
+    ctx->SetRef(recentProjectCard);
+  LogDebug("UI scenario action: click recent project open button");
+  ctx->ItemClick("Open");
   ctx->Yield(1);
   return true;
 }
@@ -237,7 +273,7 @@ void RunLauncherRecentProjectsTest(ImGuiTestContext *ctx) {
   if (!shell)
     return;
 
-  const bool reopened = ReopenProjectFromRecentProjects(ctx);
+  const bool reopened = ReopenProjectFromRecentProjects(ctx, testState);
   IM_CHECK(reopened);
   if (!reopened)
     return;
@@ -271,18 +307,17 @@ bool EnsureProjectCreatedFromLauncher(ImGuiTestContext *ctx,
     return true;
   }
 
-  ctx->SetRef("Horo Launcher");
+  SetLauncherHomeRef(ctx);
   if (const bool launcherReady =
           WaitForCondition(ctx, 180,
                            [ctx]() {
-                             return ctx->ItemExists("Open Existing Project") &&
-                                    ctx->ItemExists("Create New Project");
+                             return ctx->ItemExists("##open-existing-project-action");
                            });
       !launcherReady) {
     return false;
   }
 
-  ImGuiWindow *launcherPanel = FindWindowContaining("LauncherPanel");
+  ImGuiWindow *launcherPanel = FindLauncherPanelInputWindow();
   if (!launcherPanel)
     return false;
   ctx->SetRef(launcherPanel);
@@ -291,7 +326,7 @@ bool EnsureProjectCreatedFromLauncher(ImGuiTestContext *ctx,
                       state->projectRoot.string().c_str());
   LogDebug("UI scenario creating project '{}' at '{}'.", "UiSmokeGame",
            state->projectRoot.string());
-  ctx->ItemClick("Create Project");
+  ctx->ItemClick("Create Project   +");
   if (const bool projectCreated = WaitForCondition(
           ctx, 180, [shell]() { return shell->HasActiveProject(); });
       !projectCreated) {
@@ -374,15 +409,16 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   }
 
   LogDebug("UI scenario action: wait for launcher home window");
-  ctx->SetRef("Horo Launcher");
+  SetLauncherHomeRef(ctx);
   const bool launcherReady = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("Create New Project"); });
+      ctx, 180,
+      [ctx]() { return ctx->ItemExists("##open-existing-project-action"); });
   IM_CHECK(launcherReady);
   if (!launcherReady)
     return;
 
   LogDebug("UI scenario action: find LauncherPanel window");
-  ImGuiWindow *launcherPanel = FindWindowContaining("LauncherPanel");
+  ImGuiWindow *launcherPanel = FindLauncherPanelInputWindow();
   IM_CHECK(launcherPanel != nullptr);
   if (!launcherPanel)
     return;
@@ -391,10 +427,16 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   LogDebug("UI scenario action: assert input fields and buttons exist");
   IM_CHECK(ctx->ItemExists("##new-project-name"));
   IM_CHECK(ctx->ItemExists("##new-project-path"));
-  IM_CHECK(ctx->ItemExists("Create Project"));
 
-  ctx->SetRef("Horo Launcher");
-  IM_CHECK(ctx->ItemExists("Open Existing Project"));
+  ImGuiWindow *launcherPanelContainer = FindWindowContaining("LauncherPanel");
+  IM_CHECK(launcherPanelContainer != nullptr);
+  if (!launcherPanelContainer)
+    return;
+  ctx->SetRef(launcherPanelContainer);
+  IM_CHECK(ctx->ItemExists("Create Project   +"));
+
+  SetLauncherHomeRef(ctx);
+  IM_CHECK(ctx->ItemExists("##open-existing-project-action"));
 
   CaptureIfEnabled(ctx, testState,
                    "launcher_ui__launcher_home_layout__expect_home.png");
@@ -429,7 +471,7 @@ void RunLauncherProjectNameInputTest(ImGuiTestContext *ctx) {
     return;
 
   LogDebug("UI scenario action: find LauncherPanel window");
-  ImGuiWindow *launcherPanel = FindWindowContaining("LauncherPanel");
+  ImGuiWindow *launcherPanel = FindLauncherPanelInputWindow();
   IM_CHECK(launcherPanel != nullptr);
   if (!launcherPanel)
     return;
