@@ -17,7 +17,7 @@ CI all live in one visible workspace.
 
 ## Screenshots
 
-![Editor overview](docs/screenshots/editor.png)
+<img width="1624" height="968" alt="Screenshot 2026-05-03 at 12 07 09" src="https://github.com/user-attachments/assets/837e9454-6349-41e8-8499-011cc27862f3" />
 
 ## Use Cases
 
