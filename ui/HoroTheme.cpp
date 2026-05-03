@@ -57,6 +57,12 @@ constexpr HoroDensity kEditorDensity{
     .itemSpacing = 5.0f,
 };
 
+constexpr HoroPalette MakeEditorPalette() {
+  HoroPalette palette = kPalette;
+  palette.panel.w = 0.88f;
+  return palette;
+}
+
 } // namespace
 
 const LauncherTheme &GetLauncherTheme() {
@@ -70,28 +76,7 @@ const LauncherTheme &GetLauncherTheme() {
 
 const EditorTheme &GetEditorTheme() {
   static const EditorTheme theme{
-      .palette = HoroPalette{
-          .backgroundTop = kPalette.backgroundTop,
-          .backgroundBottom = kPalette.backgroundBottom,
-          .panel = ImVec4(kPalette.panel.x, kPalette.panel.y, kPalette.panel.z,
-                          0.88f),
-          .panelSoft = kPalette.panelSoft,
-          .card = kPalette.card,
-          .cardHover = kPalette.cardHover,
-          .border = kPalette.border,
-          .text = kPalette.text,
-          .textMuted = kPalette.textMuted,
-          .accent = kPalette.accent,
-          .accentHover = kPalette.accentHover,
-          .accentActive = kPalette.accentActive,
-          .selection = kPalette.selection,
-          .selectionHover = kPalette.selectionHover,
-          .input = kPalette.input,
-          .inputHover = kPalette.inputHover,
-          .inputActive = kPalette.inputActive,
-          .modal = kPalette.modal,
-          .destructive = kPalette.destructive,
-      },
+      .palette = MakeEditorPalette(),
       .rounding = kEditorRounding,
       .density = kEditorDensity,
   };

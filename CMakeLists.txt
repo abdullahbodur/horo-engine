@@ -324,7 +324,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         )
     endif()
 
-    install(DIRECTORY core editor input math mcp physics renderer scene launcher
+    install(DIRECTORY core editor input math mcp physics renderer scene launcher ui
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h"
     )
