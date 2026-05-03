@@ -23,6 +23,8 @@
 #include "scene/Entity.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
+#include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
 
 #ifndef HORO_ENGINE_VERSION
 #define HORO_ENGINE_VERSION "0.0.0"
@@ -198,32 +200,16 @@ void RenderCenteredEmptyState(const char *text) {
 }
 
 bool RenderPrimaryButton(const char *label, const ImVec2 &size) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 9.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.41f, 0.68f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.24f, 0.46f, 0.75f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.18f, 0.36f, 0.62f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.97f, 1.0f, 1.0f));
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
+  Ui::ScopedButtonStyle style(theme, Ui::ButtonStyleVariant::Primary);
   const bool pressed = ImGui::Button(label, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
   return pressed;
 }
 
 bool RenderSecondaryButton(const char *label, const ImVec2 &size) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 9.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.14f, 0.18f, 0.24f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.94f, 0.98f, 1.0f));
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
+  Ui::ScopedButtonStyle style(theme, Ui::ButtonStyleVariant::Secondary);
   const bool pressed = ImGui::Button(label, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
   return pressed;
 }
 
@@ -258,28 +244,6 @@ void RenderLabeledInput(const char *title, const char *id, char *buffer,
   ImGui::PopStyleVar(2);
 }
 
-struct LauncherTheme final {
-  ImVec4 backgroundTop =
-      ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f);
-  ImVec4 backgroundBottom =
-      ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f);
-  ImVec4 panel = ImVec4(0.05f, 0.09f, 0.15f, 0.94f);
-  ImVec4 panelSoft = ImVec4(0.07f, 0.11f, 0.18f, 0.90f);
-  ImVec4 border = ImVec4(0.16f, 0.27f, 0.42f, 0.68f);
-  ImVec4 textMuted = ImVec4(0.68f, 0.74f, 0.84f, 1.0f);
-  ImVec4 accent = ImVec4(0.23f, 0.54f, 0.93f, 1.0f);
-  ImVec4 accentHover = ImVec4(0.28f, 0.60f, 0.99f, 1.0f);
-  ImVec4 accentActive = ImVec4(0.18f, 0.46f, 0.82f, 1.0f);
-  float windowRounding = 16.0f;
-  float panelRounding = 12.0f;
-  float cardRounding = 10.0f;
-};
-
-const LauncherTheme &GetLauncherTheme() {
-  static const LauncherTheme theme{};
-  return theme;
-}
-
 fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
   if (relativePath.empty())
     return {};
@@ -301,13 +265,13 @@ fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
 void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
   if (!drawList)
     return;
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   static const bool hasCustomBackdrop =
       !ResolveLauncherVisualAsset("background.png").empty();
   const ImVec4 top = hasCustomBackdrop ? ImVec4(0.03f, 0.07f, 0.14f, 1.0f)
-                                       : theme.backgroundTop;
+                                       : theme.palette.backgroundTop;
   const ImVec4 bottom = hasCustomBackdrop ? ImVec4(0.02f, 0.04f, 0.09f, 1.0f)
-                                          : theme.backgroundBottom;
+                                          : theme.palette.backgroundBottom;
   const ImVec2 max(pos.x + size.x, pos.y + size.y);
   drawList->AddRectFilledMultiColor(pos, max,
                                     ImGui::ColorConvertFloat4ToU32(top),
@@ -318,21 +282,21 @@ void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
 
 bool RenderSidebarNavItem(const char *label, bool selected,
                           const ImVec2 &size = ImVec2(-1.0f, 40.0f)) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 11.0f));
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 9.0f);
   if (selected) {
-    ImGui::PushStyleColor(ImGuiCol_Button, theme.accent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.accentHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.accentActive);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.97f, 0.98f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button, theme.palette.accent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.accentHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.palette.accentActive);
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
   } else {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.08f, 0.12f, 0.19f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                           ImVec4(0.12f, 0.19f, 0.30f, 0.72f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,
                           ImVec4(0.13f, 0.21f, 0.34f, 0.86f));
-    ImGui::PushStyleColor(ImGuiCol_Text, theme.textMuted);
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.textMuted);
   }
   const bool pressed = ImGui::Button(label, size);
   ImGui::PopStyleColor(4);
@@ -400,7 +364,7 @@ void DrawTemplateTileIcon(ImDrawList *drawList, const ImVec2 &center,
 
 bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
                         bool enabled, const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   ImGui::InvisibleButton(label, size);
   const bool pressed = enabled && ImGui::IsItemClicked();
   const bool hovered = enabled && ImGui::IsItemHovered();
@@ -418,17 +382,17 @@ bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
   if (!enabled)
     border = ImVec4(0.13f, 0.20f, 0.29f, 0.42f);
   else if (selected)
-    border = theme.accent;
+    border = theme.palette.accent;
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
   drawList->AddRect(min, max, ImGui::ColorConvertFloat4ToU32(border), 6.0f, 0,
                     selected ? 1.5f : 1.0f);
-  ImVec4 iconColor = theme.textMuted;
+  ImVec4 iconColor = theme.palette.textMuted;
   if (!enabled)
-    iconColor =
-        ImVec4(theme.textMuted.x, theme.textMuted.y, theme.textMuted.z, 0.52f);
+    iconColor = ImVec4(theme.palette.textMuted.x, theme.palette.textMuted.y,
+                       theme.palette.textMuted.z, 0.52f);
   else if (selected)
-    iconColor = theme.accentHover;
+    iconColor = theme.palette.accentHover;
   DrawTemplateTileIcon(drawList, ImVec2((min.x + max.x) * 0.5f, min.y + 27.0f),
                        icon, ImGui::ColorConvertFloat4ToU32(iconColor));
   const ImVec2 textSize = ImGui::CalcTextSize(label);
@@ -450,7 +414,7 @@ void RenderVerticalDivider(float height) {
 }
 
 void RenderAdvancedSettingsToggle(bool *open) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 size(190.0f, 30.0f);
   ImGui::InvisibleButton("Advanced Settings", size);
   if (ImGui::IsItemClicked() && open)
@@ -458,7 +422,7 @@ void RenderAdvancedSettingsToggle(bool *open) {
 
   const ImVec2 min = ImGui::GetItemRectMin();
   const ImVec2 textPos(min.x + 26.0f, min.y + 7.0f);
-  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
+  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted);
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   if (open && *open) {
     drawList->AddTriangleFilled(ImVec2(min.x + 7.0f, min.y + 11.0f),
@@ -485,7 +449,7 @@ void DrawRecentProjectMetaIcon(ImDrawList *drawList, const ImVec2 &pos,
 }
 
 bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   ImGui::InvisibleButton(id, size);
   const bool hovered = ImGui::IsItemHovered();
   const bool active = ImGui::IsItemActive();
@@ -498,7 +462,7 @@ bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
     fill = ImVec4(0.12f, 0.18f, 0.27f, 0.76f);
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
-  const ImU32 dotColor = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
+  const ImU32 dotColor = ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted);
   const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
   drawList->AddCircleFilled(ImVec2(center.x, center.y - 6.0f), 1.5f, dotColor);
   drawList->AddCircleFilled(center, 1.5f, dotColor);
@@ -507,14 +471,14 @@ bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
 }
 
 void RenderCreateProjectHeader() {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 iconPos = ImGui::GetCursorScreenPos();
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   const ImVec2 iconMax(iconPos.x + 38.0f, iconPos.y + 38.0f);
   drawList->AddRectFilled(
       iconPos, iconMax,
       ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.22f, 0.40f, 1.0f)), 6.0f);
-  const ImU32 sparkleColor = ImGui::ColorConvertFloat4ToU32(theme.accentHover);
+  const ImU32 sparkleColor = ImGui::ColorConvertFloat4ToU32(theme.palette.accentHover);
   drawList->AddLine(ImVec2(iconPos.x + 19.0f, iconPos.y + 9.0f),
                     ImVec2(iconPos.x + 19.0f, iconPos.y + 18.0f), sparkleColor,
                     1.6f);
@@ -532,7 +496,7 @@ void RenderCreateProjectHeader() {
   ImGui::SameLine(0.0f, 8.0f);
   ImGui::BeginGroup();
   ImGui::TextUnformatted("Create New Project");
-  ImGui::TextColored(theme.textMuted, "Start a new project from a template");
+  ImGui::TextColored(theme.palette.textMuted, "Start a new project from a template");
   ImGui::EndGroup();
 }
 
@@ -594,13 +558,13 @@ enum class SidebarFooterIcon {
 
 static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
                                    LauncherActionIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 max(pos.x + 38.0f, pos.y + 38.0f);
   drawList->AddRectFilled(
       pos, max,
       ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.22f, 0.40f, 1.0f)), 8.0f);
 
-  const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(theme.accentHover);
+  const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(theme.palette.accentHover);
   if (icon == LauncherActionIcon::Folder) {
     const ImVec2 tabMin(pos.x + 10.0f, pos.y + 12.0f);
     drawList->AddRectFilled(tabMin, ImVec2(pos.x + 22.0f, pos.y + 17.0f),
@@ -623,8 +587,8 @@ static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
 
 static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
                                   SidebarFooterIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
-  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
+  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted);
   if (icon == SidebarFooterIcon::Discord) {
     const ImVec2 headMin(pos.x + 2.0f, pos.y + 4.0f);
     const ImVec2 headMax(pos.x + 16.0f, pos.y + 13.0f);
@@ -649,19 +613,19 @@ static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
 }
 
 static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 textPos = ImGui::GetCursorPos();
   const ImVec2 iconPos = ImGui::GetCursorScreenPos();
   DrawSidebarFooterIcon(ImGui::GetWindowDrawList(), iconPos, icon);
   ImGui::SetCursorPos(ImVec2(textPos.x + 26.0f, textPos.y));
-  ImGui::TextColored(theme.textMuted, "%s", label);
+  ImGui::TextColored(theme.palette.textMuted, "%s", label);
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
 
 static void
 RenderSidebarFooterImageItem(const char *label,
                              const std::shared_ptr<Texture> &iconTexture) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 textPos = ImGui::GetCursorPos();
   if (iconTexture && iconTexture->IsValid() &&
       iconTexture->GetNativeId() != 0) {
@@ -669,24 +633,24 @@ RenderSidebarFooterImageItem(const char *label,
     ImGui::Image(
         (ImTextureID) static_cast<intptr_t>(iconTexture->GetNativeId()),
         ImVec2(18.0f, 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
-        theme.textMuted);
+        theme.palette.textMuted);
   } else {
     DrawSidebarFooterIcon(ImGui::GetWindowDrawList(),
                           ImGui::GetCursorScreenPos(),
                           SidebarFooterIcon::Discord);
   }
   ImGui::SetCursorPos(ImVec2(textPos.x + 26.0f, textPos.y));
-  ImGui::TextColored(theme.textMuted, "%s", label);
+  ImGui::TextColored(theme.palette.textMuted, "%s", label);
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
 
 static void RenderSidebarFooterSeparator() {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 start = ImGui::GetCursorScreenPos();
   const float width = std::min(154.0f, ImGui::GetContentRegionAvail().x);
   ImGui::GetWindowDrawList()->AddLine(
       start, ImVec2(start.x + width, start.y),
-      ImGui::ColorConvertFloat4ToU32(theme.border), 1.0f);
+      ImGui::ColorConvertFloat4ToU32(theme.palette.border), 1.0f);
   ImGui::Dummy(ImVec2(0.0f, 14.0f));
 }
 
@@ -694,7 +658,7 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
                                      const char *subtitle,
                                      LauncherActionIcon icon,
                                      const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 pos = ImGui::GetCursorScreenPos();
   ImGui::InvisibleButton(id, size);
   const bool hovered = ImGui::IsItemHovered();
@@ -708,7 +672,7 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
   drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
                           ImGui::ColorConvertFloat4ToU32(fill), 8.0f);
   drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                    ImGui::ColorConvertFloat4ToU32(theme.border), 8.0f);
+                    ImGui::ColorConvertFloat4ToU32(theme.palette.border), 8.0f);
 
   const ImVec2 iconPos(pos.x + 18.0f, pos.y + 17.0f);
   DrawLauncherActionIcon(drawList, iconPos, icon);
@@ -716,7 +680,7 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
       ImVec2(pos.x + 64.0f, pos.y + 19.0f),
       ImGui::ColorConvertFloat4ToU32(ImVec4(0.96f, 0.98f, 1.0f, 1.0f)), title);
   drawList->AddText(ImVec2(pos.x + 64.0f, pos.y + 43.0f),
-                    ImGui::ColorConvertFloat4ToU32(theme.textMuted), subtitle);
+                    ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted), subtitle);
   return ImGui::IsItemClicked();
 }
 
@@ -1000,8 +964,8 @@ void LauncherEditorShell::RenderLauncher() {
 
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.windowRounding);
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 22.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -1034,8 +998,8 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
 
 void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
                                                     float fullHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.windowRounding);
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -1069,10 +1033,10 @@ void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
 }
 
 void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   m_importProjectDropTarget.valid = false;
   const float heroHeight = 152.0f;
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
   ImGui::BeginChild("LauncherHero", ImVec2(contentWidth, heroHeight), false,
@@ -1086,7 +1050,7 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   ImGui::TextUnformatted("Welcome to Horo Engine");
   ImGui::SetWindowFontScale(1.0f);
   ImGui::PopStyleColor();
-  ImGui::TextColored(theme.textMuted,
+  ImGui::TextColored(theme.palette.textMuted,
                      "Build worlds. Tell stories. Create your games.");
   ImGui::Dummy(ImVec2(0.0f, 24.0f));
 
@@ -1124,11 +1088,11 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
 }
 
 void LauncherEditorShell::RenderNewProjectPanel(float contentWidth) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const float panelHeight = m_newProjectAdvancedSettingsOpen ? 326.0f : 282.0f;
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.10f, 0.16f, 0.80f));
-  ImGui::PushStyleColor(ImGuiCol_Border, theme.border);
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
+  ImGui::PushStyleColor(ImGuiCol_Border, theme.palette.border);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 18.0f));
   ImGui::BeginChild("LauncherPanel", ImVec2(contentWidth, panelHeight), true,
                     ImGuiWindowFlags_NoScrollbar |
@@ -1277,10 +1241,10 @@ void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
 
 void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
                                                    float panelHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.10f, 0.16f, 0.80f));
-  ImGui::PushStyleColor(ImGuiCol_Border, theme.border);
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
+  ImGui::PushStyleColor(ImGuiCol_Border, theme.palette.border);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 14.0f));
   ImGui::BeginChild("RecentProjectsList", ImVec2(contentWidth, panelHeight),
                     true);
@@ -1290,7 +1254,7 @@ void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
 
   ImGui::TextUnformatted("Recent Projects");
   ImGui::SameLine(std::max(0.0f, listInnerWidth - 70.0f));
-  ImGui::TextColored(theme.textMuted, "View All  >");
+  ImGui::TextColored(theme.palette.textMuted, "View All  >");
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
   if (m_homeDocument.state.recentProjects.empty()) {
@@ -1307,7 +1271,7 @@ void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
 
 void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
                                                   int cardIndex) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const fs::path path(recentPath);
   const fs::path normalizedPath = path.lexically_normal();
   std::string title = normalizedPath.filename().string();
@@ -1319,7 +1283,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   const std::string cardId = std::format("RecentProjectCard##{}", cardIndex);
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.07f, 0.11f, 0.17f, 0.72f));
   ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.15f, 0.24f, 0.35f, 0.62f));
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.cardRounding);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.card);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
   ImGui::BeginChild(cardId.c_str(), ImVec2(-1.0f, 94.0f), true,
                     ImGuiWindowFlags_NoScrollbar |
@@ -1343,13 +1307,13 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   ImGui::BeginGroup();
   ImGui::TextUnformatted(title.c_str());
   ImGui::Dummy(ImVec2(0.0f, 1.0f));
-  ImGui::TextColored(theme.textMuted, "%s", recentPath.c_str());
+  ImGui::TextColored(theme.palette.textMuted, "%s", recentPath.c_str());
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
   DrawRecentProjectMetaIcon(ImGui::GetWindowDrawList(),
                             ImGui::GetCursorScreenPos(),
-                            ImGui::ColorConvertFloat4ToU32(theme.textMuted));
+                            ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted));
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 18.0f);
-  ImGui::TextColored(theme.textMuted, "%s", "Last opened: Recently");
+  ImGui::TextColored(theme.palette.textMuted, "%s", "Last opened: Recently");
   ImGui::EndGroup();
 
   ImGui::SetCursorPos(ImVec2(openButtonX, actionY));
