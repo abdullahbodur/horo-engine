@@ -174,7 +174,8 @@ bool AssertLauncherHomeVisible(ImGuiTestContext *ctx) {
     return false;
   SetLauncherHomeRef(ctx);
   const bool visible = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("Create New Project"); });
+      ctx, 180,
+      [ctx]() { return ctx->ItemExists("##open-existing-project-action"); });
   if (!visible)
     LogWarn("Launcher home did not become visible within timeout.");
   return visible;
@@ -310,8 +311,7 @@ bool EnsureProjectCreatedFromLauncher(ImGuiTestContext *ctx,
   if (const bool launcherReady =
           WaitForCondition(ctx, 180,
                            [ctx]() {
-                             return ctx->ItemExists("##open-existing-project-action") &&
-                                    ctx->ItemExists("Create New Project");
+                             return ctx->ItemExists("##open-existing-project-action");
                            });
       !launcherReady) {
     return false;
@@ -326,7 +326,7 @@ bool EnsureProjectCreatedFromLauncher(ImGuiTestContext *ctx,
                       state->projectRoot.string().c_str());
   LogDebug("UI scenario creating project '{}' at '{}'.", "UiSmokeGame",
            state->projectRoot.string());
-  ctx->ItemClick("Create Project");
+  ctx->ItemClick("Create Project   +");
   if (const bool projectCreated = WaitForCondition(
           ctx, 180, [shell]() { return shell->HasActiveProject(); });
       !projectCreated) {
@@ -411,7 +411,8 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   LogDebug("UI scenario action: wait for launcher home window");
   SetLauncherHomeRef(ctx);
   const bool launcherReady = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("Create New Project"); });
+      ctx, 180,
+      [ctx]() { return ctx->ItemExists("##open-existing-project-action"); });
   IM_CHECK(launcherReady);
   if (!launcherReady)
     return;
@@ -432,7 +433,7 @@ void RunLauncherHomeLayoutTest(ImGuiTestContext *ctx) {
   if (!launcherPanelContainer)
     return;
   ctx->SetRef(launcherPanelContainer);
-  IM_CHECK(ctx->ItemExists("Create Project"));
+  IM_CHECK(ctx->ItemExists("Create Project   +"));
 
   SetLauncherHomeRef(ctx);
   IM_CHECK(ctx->ItemExists("##open-existing-project-action"));
