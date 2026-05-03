@@ -37,7 +37,9 @@ extern "C" void ApplyAppIconMac(const char *iconPath) {
     return;
 
   NSString *path = [NSString stringWithUTF8String:iconPath];
-  NSImage *icon = [NSImage imageWithContentsOfFile:path];
-  if (icon)
+  NSImage *icon = [[NSImage alloc] initWithContentsOfFile:path];
+  if (icon) {
     [NSApp setApplicationIconImage:icon];
+    [icon release];
+  }
 }
