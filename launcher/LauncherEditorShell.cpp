@@ -973,7 +973,7 @@ void LauncherEditorShell::RenderLauncher() {
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 22.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -1044,7 +1044,7 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   m_importProjectDropTarget.valid = false;
   const float heroHeight = 152.0f;
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
   ImGui::BeginChild("LauncherHero", ImVec2(contentWidth, heroHeight), false,
