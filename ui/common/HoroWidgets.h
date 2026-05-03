@@ -18,4 +18,8 @@ void LabeledInput(const char* title, const char* id,
                   char* buffer, size_t bufferSize,
                   float inputWidth);
 
+// Renders centered, dimmed text in the middle of the current content region.
+// Useful for empty-state messages in panels and lists.
+void CenteredEmptyState(const char* text);
+
 } // namespace Horo::UI

@@ -65,6 +65,7 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/ui/common/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ui/launcher/*.cpp"
 )
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
 # Exclude only the file that directly includes <glad/glad.h>; it lives in horo-renderer-opengl.

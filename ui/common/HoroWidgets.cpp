@@ -46,4 +46,16 @@ void LabeledInput(const char* title, const char* id,
     ImGui::PopStyleVar(2);
 }
 
+void CenteredEmptyState(const char* text) {
+    if (const float regionHeight = ImGui::GetContentRegionAvail().y;
+        regionHeight > 40.0f)
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + regionHeight * 0.25f);
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    if (const float textWidth = ImGui::CalcTextSize(text).x;
+        textWidth < availableWidth)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                             (availableWidth - textWidth) * 0.5f);
+    ImGui::TextDisabled("%s", text);
+}
+
 } // namespace Horo::UI

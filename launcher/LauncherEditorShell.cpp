@@ -25,6 +25,7 @@
 #include "scene/components/TransformComponent.h"
 #include "ui/common/HoroTheme.h"
 #include "ui/common/HoroWidgets.h"
+#include "ui/launcher/LauncherWidgets.h"
 
 #ifndef HORO_ENGINE_VERSION
 #define HORO_ENGINE_VERSION "0.0.0"
@@ -182,315 +183,6 @@ bool CheckProjectRootValid(const fs::path &projectRoot, std::string *outError) {
   }
   return true;
 }
-
-// Styled button and layout helpers extracted from RenderLauncher() lambdas so
-// their internal branching does not inflate the enclosing function's cognitive
-// complexity (cpp:S3776).
-
-void RenderCenteredEmptyState(const char *text) {
-  if (const float regionHeight = ImGui::GetContentRegionAvail().y;
-      regionHeight > 40.0f)
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + regionHeight * 0.25f);
-  const float availableWidth = ImGui::GetContentRegionAvail().x;
-  if (const float textWidth = ImGui::CalcTextSize(text).x;
-      textWidth < availableWidth)
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                         (availableWidth - textWidth) * 0.5f);
-  ImGui::TextDisabled("%s", text);
-}
-
-
-
-bool RenderRecentProjectButton(const char *title, const ImVec2 &size) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 8.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.15f, 0.18f, 0.24f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.94f, 0.96f, 1.0f, 1.0f));
-  const bool pressed = ImGui::Button(title, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
-  return pressed;
-}
-
-
-
-
-
-fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
-  if (relativePath.empty())
-    return {};
-  const std::array<fs::path, 4> candidates = {
-      ProjectPath::ResolveSdk("assets/launcher/" + std::string(relativePath)),
-      ProjectPath::Root() / "assets" / "launcher" / std::string(relativePath),
-      ProjectPath::Root() / "engine" / "assets" / "launcher" /
-          std::string(relativePath),
-      ProjectPath::Root() / std::string(relativePath),
-  };
-  for (const fs::path &candidate : candidates) {
-    std::error_code ec;
-    if (fs::is_regular_file(candidate, ec) && !ec)
-      return candidate;
-  }
-  return {};
-}
-
-void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
-  if (!drawList)
-    return;
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  static const bool hasCustomBackdrop =
-      !ResolveLauncherVisualAsset("background.png").empty();
-  const ImVec4 top = hasCustomBackdrop ? ImVec4(0.03f, 0.07f, 0.14f, 1.0f)
-                                       : theme.backgroundTop;
-  const ImVec4 bottom = hasCustomBackdrop ? ImVec4(0.02f, 0.04f, 0.09f, 1.0f)
-                                          : theme.backgroundBottom;
-  const ImVec2 max(pos.x + size.x, pos.y + size.y);
-  drawList->AddRectFilledMultiColor(pos, max,
-                                    ImGui::ColorConvertFloat4ToU32(top),
-                                    ImGui::ColorConvertFloat4ToU32(top),
-                                    ImGui::ColorConvertFloat4ToU32(bottom),
-                                    ImGui::ColorConvertFloat4ToU32(bottom));
-}
-
-bool RenderSidebarNavItem(const char *label, bool selected,
-                          const ImVec2 &size = ImVec2(-1.0f, 40.0f)) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 11.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 9.0f);
-  if (selected) {
-    ImGui::PushStyleColor(ImGuiCol_Button, theme.accent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.accentHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.accentActive);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.97f, 0.98f, 1.0f, 1.0f));
-  } else {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.08f, 0.12f, 0.19f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                          ImVec4(0.12f, 0.19f, 0.30f, 0.72f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                          ImVec4(0.13f, 0.21f, 0.34f, 0.86f));
-    ImGui::PushStyleColor(ImGuiCol_Text, theme.textMuted);
-  }
-  const bool pressed = ImGui::Button(label, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
-  return pressed;
-}
-
-enum class TemplateTileIcon {
-  Cube,
-  Image,
-  Sandbox,
-};
-
-void DrawTemplateTileIcon(ImDrawList *drawList, const ImVec2 &center,
-                          TemplateTileIcon icon, ImU32 color) {
-  if (icon == TemplateTileIcon::Image) {
-    const ImVec2 min(center.x - 12.0f, center.y - 11.0f);
-    const ImVec2 max(center.x + 12.0f, center.y + 11.0f);
-    drawList->AddRect(min, max, color, 2.5f, 0, 2.0f);
-    drawList->AddCircleFilled(ImVec2(min.x + 7.0f, min.y + 6.0f), 2.0f, color);
-    drawList->AddLine(ImVec2(min.x + 4.0f, max.y - 4.0f),
-                      ImVec2(center.x - 2.0f, center.y + 1.0f), color, 2.0f);
-    drawList->AddLine(ImVec2(center.x - 2.0f, center.y + 1.0f),
-                      ImVec2(center.x + 4.0f, max.y - 6.0f), color, 2.0f);
-    drawList->AddLine(ImVec2(center.x + 4.0f, max.y - 6.0f),
-                      ImVec2(max.x - 4.0f, max.y - 4.0f), color, 2.0f);
-    return;
-  }
-
-  if (icon == TemplateTileIcon::Sandbox) {
-    drawList->AddTriangleFilled(ImVec2(center.x - 15.0f, center.y + 10.0f),
-                                ImVec2(center.x - 4.0f, center.y - 3.0f),
-                                ImVec2(center.x + 5.0f, center.y + 10.0f),
-                                color);
-    drawList->AddTriangleFilled(ImVec2(center.x - 2.0f, center.y + 10.0f),
-                                ImVec2(center.x + 9.0f, center.y - 1.0f),
-                                ImVec2(center.x + 17.0f, center.y + 10.0f),
-                                color);
-    drawList->AddLine(ImVec2(center.x + 8.0f, center.y - 12.0f),
-                      ImVec2(center.x + 8.0f, center.y + 2.0f), color, 2.0f);
-    drawList->AddTriangle(ImVec2(center.x + 9.0f, center.y - 12.0f),
-                          ImVec2(center.x + 17.0f, center.y - 9.0f),
-                          ImVec2(center.x + 9.0f, center.y - 6.0f), color,
-                          2.0f);
-    return;
-  }
-
-  const ImVec2 top(center.x, center.y - 14.0f);
-  const ImVec2 left(center.x - 12.0f, center.y - 7.0f);
-  const ImVec2 right(center.x + 12.0f, center.y - 7.0f);
-  const ImVec2 bottom(center.x, center.y + 0.0f);
-  const ImVec2 lowerLeft(center.x - 12.0f, center.y + 7.0f);
-  const ImVec2 lowerRight(center.x + 12.0f, center.y + 7.0f);
-  const ImVec2 base(center.x, center.y + 14.0f);
-  drawList->AddLine(top, left, color, 2.0f);
-  drawList->AddLine(top, right, color, 2.0f);
-  drawList->AddLine(left, bottom, color, 2.0f);
-  drawList->AddLine(right, bottom, color, 2.0f);
-  drawList->AddLine(bottom, base, color, 2.0f);
-  drawList->AddLine(left, lowerLeft, color, 2.0f);
-  drawList->AddLine(right, lowerRight, color, 2.0f);
-  drawList->AddLine(lowerLeft, base, color, 2.0f);
-  drawList->AddLine(lowerRight, base, color, 2.0f);
-}
-
-bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
-                        bool enabled, const ImVec2 &size) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  ImGui::InvisibleButton(label, size);
-  const bool pressed = enabled && ImGui::IsItemClicked();
-  const bool hovered = enabled && ImGui::IsItemHovered();
-  const ImVec2 min = ImGui::GetItemRectMin();
-  const ImVec2 max = ImGui::GetItemRectMax();
-  ImVec4 fill(0.09f, 0.13f, 0.20f, 1.0f);
-  if (!enabled)
-    fill = ImVec4(0.08f, 0.11f, 0.16f, 0.72f);
-  else if (selected)
-    fill = ImVec4(0.10f, 0.18f, 0.30f, 1.0f);
-  else if (hovered)
-    fill = ImVec4(0.13f, 0.19f, 0.28f, 1.0f);
-
-  ImVec4 border(0.15f, 0.24f, 0.35f, 0.60f);
-  if (!enabled)
-    border = ImVec4(0.13f, 0.20f, 0.29f, 0.42f);
-  else if (selected)
-    border = theme.accent;
-  ImDrawList *drawList = ImGui::GetWindowDrawList();
-  drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
-  drawList->AddRect(min, max, ImGui::ColorConvertFloat4ToU32(border), 6.0f, 0,
-                    selected ? 1.5f : 1.0f);
-  ImVec4 iconColor = theme.textMuted;
-  if (!enabled)
-    iconColor =
-        ImVec4(theme.textMuted.x, theme.textMuted.y, theme.textMuted.z, 0.52f);
-  else if (selected)
-    iconColor = theme.accentHover;
-  DrawTemplateTileIcon(drawList, ImVec2((min.x + max.x) * 0.5f, min.y + 27.0f),
-                       icon, ImGui::ColorConvertFloat4ToU32(iconColor));
-  const ImVec2 textSize = ImGui::CalcTextSize(label);
-  drawList->AddText(
-      ImVec2((min.x + max.x - textSize.x) * 0.5f, max.y - textSize.y - 10.0f),
-      ImGui::ColorConvertFloat4ToU32(enabled
-                                         ? ImVec4(0.92f, 0.95f, 0.99f, 1.0f)
-                                         : ImVec4(0.68f, 0.74f, 0.84f, 0.62f)),
-      label);
-  return pressed;
-}
-
-void RenderVerticalDivider(float height) {
-  const ImVec2 pos = ImGui::GetCursorScreenPos();
-  ImGui::GetWindowDrawList()->AddLine(
-      ImVec2(pos.x, pos.y + 2.0f), ImVec2(pos.x, pos.y + height - 2.0f),
-      ImGui::ColorConvertFloat4ToU32(ImVec4(0.16f, 0.25f, 0.36f, 0.58f)), 1.0f);
-  ImGui::Dummy(ImVec2(1.0f, height));
-}
-
-void RenderAdvancedSettingsToggle(bool *open) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 size(190.0f, 30.0f);
-  ImGui::InvisibleButton("Advanced Settings", size);
-  if (ImGui::IsItemClicked() && open)
-    *open = !*open;
-
-  const ImVec2 min = ImGui::GetItemRectMin();
-  const ImVec2 textPos(min.x + 26.0f, min.y + 7.0f);
-  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
-  ImDrawList *drawList = ImGui::GetWindowDrawList();
-  if (open && *open) {
-    drawList->AddTriangleFilled(ImVec2(min.x + 7.0f, min.y + 11.0f),
-                                ImVec2(min.x + 17.0f, min.y + 11.0f),
-                                ImVec2(min.x + 12.0f, min.y + 17.0f), color);
-  } else {
-    drawList->AddTriangleFilled(ImVec2(min.x + 9.0f, min.y + 10.0f),
-                                ImVec2(min.x + 9.0f, min.y + 18.0f),
-                                ImVec2(min.x + 15.0f, min.y + 14.0f), color);
-  }
-  drawList->AddText(textPos, color, "Advanced Settings");
-}
-
-void DrawRecentProjectMetaIcon(ImDrawList *drawList, const ImVec2 &pos,
-                               ImU32 color) {
-  drawList->AddRect(ImVec2(pos.x, pos.y + 2.0f),
-                    ImVec2(pos.x + 12.0f, pos.y + 14.0f), color, 2.0f, 0, 1.2f);
-  drawList->AddLine(ImVec2(pos.x, pos.y + 6.0f),
-                    ImVec2(pos.x + 12.0f, pos.y + 6.0f), color, 1.2f);
-  drawList->AddLine(ImVec2(pos.x + 3.0f, pos.y),
-                    ImVec2(pos.x + 3.0f, pos.y + 4.0f), color, 1.4f);
-  drawList->AddLine(ImVec2(pos.x + 9.0f, pos.y),
-                    ImVec2(pos.x + 9.0f, pos.y + 4.0f), color, 1.4f);
-}
-
-bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  ImGui::InvisibleButton(id, size);
-  const bool hovered = ImGui::IsItemHovered();
-  const bool active = ImGui::IsItemActive();
-  const ImVec2 min = ImGui::GetItemRectMin();
-  const ImVec2 max = ImGui::GetItemRectMax();
-  ImVec4 fill(0.10f, 0.14f, 0.20f, 0.54f);
-  if (active)
-    fill = ImVec4(0.12f, 0.18f, 0.27f, 0.90f);
-  else if (hovered)
-    fill = ImVec4(0.12f, 0.18f, 0.27f, 0.76f);
-  ImDrawList *drawList = ImGui::GetWindowDrawList();
-  drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
-  const ImU32 dotColor = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
-  const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
-  drawList->AddCircleFilled(ImVec2(center.x, center.y - 6.0f), 1.5f, dotColor);
-  drawList->AddCircleFilled(center, 1.5f, dotColor);
-  drawList->AddCircleFilled(ImVec2(center.x, center.y + 6.0f), 1.5f, dotColor);
-  return ImGui::IsItemClicked();
-}
-
-void RenderCreateProjectHeader() {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 iconPos = ImGui::GetCursorScreenPos();
-  ImDrawList *drawList = ImGui::GetWindowDrawList();
-  const ImVec2 iconMax(iconPos.x + 38.0f, iconPos.y + 38.0f);
-  drawList->AddRectFilled(
-      iconPos, iconMax,
-      ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.22f, 0.40f, 1.0f)), 6.0f);
-  const ImU32 sparkleColor = ImGui::ColorConvertFloat4ToU32(theme.accentHover);
-  drawList->AddLine(ImVec2(iconPos.x + 19.0f, iconPos.y + 9.0f),
-                    ImVec2(iconPos.x + 19.0f, iconPos.y + 18.0f), sparkleColor,
-                    1.6f);
-  drawList->AddLine(ImVec2(iconPos.x + 14.5f, iconPos.y + 13.5f),
-                    ImVec2(iconPos.x + 23.5f, iconPos.y + 13.5f), sparkleColor,
-                    1.6f);
-  drawList->AddLine(ImVec2(iconPos.x + 27.0f, iconPos.y + 22.0f),
-                    ImVec2(iconPos.x + 27.0f, iconPos.y + 28.0f), sparkleColor,
-                    1.4f);
-  drawList->AddLine(ImVec2(iconPos.x + 24.0f, iconPos.y + 25.0f),
-                    ImVec2(iconPos.x + 30.0f, iconPos.y + 25.0f), sparkleColor,
-                    1.4f);
-
-  ImGui::Dummy(ImVec2(46.0f, 38.0f));
-  ImGui::SameLine(0.0f, 8.0f);
-  ImGui::BeginGroup();
-  ImGui::TextUnformatted("Create New Project");
-  ImGui::TextColored(theme.textMuted, "Start a new project from a template");
-  ImGui::EndGroup();
-}
-
-void RenderLauncherBrand(const std::shared_ptr<Texture> &logoTexture) {
-  if (logoTexture && logoTexture->IsValid() &&
-      logoTexture->GetNativeId() != 0) {
-    const float availableWidth = ImGui::GetContentRegionAvail().x;
-    const float logoWidth = std::min(availableWidth, 184.0f);
-    constexpr float kLogoAspect = 1778.0f / 900.0f;
-    ImGui::Image(
-        (ImTextureID) static_cast<intptr_t>(logoTexture->GetNativeId()),
-        ImVec2(logoWidth, logoWidth / kLogoAspect), ImVec2(0.0f, 0.0f),
-        ImVec2(1.0f, 1.0f));
-    return;
-  }
-
-  ImGui::TextUnformatted("HORO ENGINE");
-}
 } // namespace
 
 // Loads the project manifest and default scene document for the given project
@@ -520,144 +212,6 @@ static bool LoadLauncherDocuments(const fs::path &projectRoot,
     return false;
   }
   return true;
-}
-
-enum class LauncherActionIcon {
-  Folder,
-  Import,
-};
-
-enum class SidebarFooterIcon {
-  Discord,
-  Documentation,
-};
-
-static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
-                                   LauncherActionIcon icon) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 max(pos.x + 38.0f, pos.y + 38.0f);
-  drawList->AddRectFilled(
-      pos, max,
-      ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.22f, 0.40f, 1.0f)), 8.0f);
-
-  const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(theme.accentHover);
-  if (icon == LauncherActionIcon::Folder) {
-    const ImVec2 tabMin(pos.x + 10.0f, pos.y + 12.0f);
-    drawList->AddRectFilled(tabMin, ImVec2(pos.x + 22.0f, pos.y + 17.0f),
-                            iconColor, 2.0f);
-    drawList->AddRectFilled(ImVec2(pos.x + 9.0f, pos.y + 16.0f),
-                            ImVec2(pos.x + 29.0f, pos.y + 27.0f), iconColor,
-                            3.0f);
-  } else {
-    const float centerX = pos.x + 19.0f;
-    drawList->AddLine(ImVec2(centerX, pos.y + 10.0f),
-                      ImVec2(centerX, pos.y + 24.0f), iconColor, 2.0f);
-    drawList->AddLine(ImVec2(centerX - 5.0f, pos.y + 19.0f),
-                      ImVec2(centerX, pos.y + 24.0f), iconColor, 2.0f);
-    drawList->AddLine(ImVec2(centerX + 5.0f, pos.y + 19.0f),
-                      ImVec2(centerX, pos.y + 24.0f), iconColor, 2.0f);
-    drawList->AddLine(ImVec2(pos.x + 12.0f, pos.y + 28.0f),
-                      ImVec2(pos.x + 26.0f, pos.y + 28.0f), iconColor, 2.0f);
-  }
-}
-
-static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
-                                  SidebarFooterIcon icon) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
-  if (icon == SidebarFooterIcon::Discord) {
-    const ImVec2 headMin(pos.x + 2.0f, pos.y + 4.0f);
-    const ImVec2 headMax(pos.x + 16.0f, pos.y + 13.0f);
-    drawList->AddRect(headMin, headMax, color, 4.0f, 0, 1.5f);
-    drawList->AddLine(ImVec2(pos.x + 5.0f, pos.y + 4.0f),
-                      ImVec2(pos.x + 4.0f, pos.y + 2.0f), color, 1.5f);
-    drawList->AddLine(ImVec2(pos.x + 13.0f, pos.y + 4.0f),
-                      ImVec2(pos.x + 14.0f, pos.y + 2.0f), color, 1.5f);
-    drawList->AddCircleFilled(ImVec2(pos.x + 7.0f, pos.y + 9.0f), 1.1f, color);
-    drawList->AddCircleFilled(ImVec2(pos.x + 12.0f, pos.y + 9.0f), 1.1f, color);
-  } else {
-    const ImVec2 pageMin(pos.x + 4.0f, pos.y + 2.0f);
-    const ImVec2 pageMax(pos.x + 15.0f, pos.y + 16.0f);
-    drawList->AddRect(pageMin, pageMax, color, 1.5f, 0, 1.5f);
-    drawList->AddLine(ImVec2(pos.x + 7.0f, pos.y + 7.0f),
-                      ImVec2(pos.x + 13.0f, pos.y + 7.0f), color, 1.1f);
-    drawList->AddLine(ImVec2(pos.x + 7.0f, pos.y + 10.0f),
-                      ImVec2(pos.x + 13.0f, pos.y + 10.0f), color, 1.1f);
-    drawList->AddLine(ImVec2(pos.x + 7.0f, pos.y + 13.0f),
-                      ImVec2(pos.x + 11.0f, pos.y + 13.0f), color, 1.1f);
-  }
-}
-
-static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 textPos = ImGui::GetCursorPos();
-  const ImVec2 iconPos = ImGui::GetCursorScreenPos();
-  DrawSidebarFooterIcon(ImGui::GetWindowDrawList(), iconPos, icon);
-  ImGui::SetCursorPos(ImVec2(textPos.x + 26.0f, textPos.y));
-  ImGui::TextColored(theme.textMuted, "%s", label);
-  ImGui::Dummy(ImVec2(0.0f, 4.0f));
-}
-
-static void
-RenderSidebarFooterImageItem(const char *label,
-                             const std::shared_ptr<Texture> &iconTexture) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 textPos = ImGui::GetCursorPos();
-  if (iconTexture && iconTexture->IsValid() &&
-      iconTexture->GetNativeId() != 0) {
-    ImGui::SetCursorPosY(textPos.y + 1.0f);
-    ImGui::Image(
-        (ImTextureID) static_cast<intptr_t>(iconTexture->GetNativeId()),
-        ImVec2(18.0f, 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
-        theme.textMuted);
-  } else {
-    DrawSidebarFooterIcon(ImGui::GetWindowDrawList(),
-                          ImGui::GetCursorScreenPos(),
-                          SidebarFooterIcon::Discord);
-  }
-  ImGui::SetCursorPos(ImVec2(textPos.x + 26.0f, textPos.y));
-  ImGui::TextColored(theme.textMuted, "%s", label);
-  ImGui::Dummy(ImVec2(0.0f, 4.0f));
-}
-
-static void RenderSidebarFooterSeparator() {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 start = ImGui::GetCursorScreenPos();
-  const float width = std::min(154.0f, ImGui::GetContentRegionAvail().x);
-  ImGui::GetWindowDrawList()->AddLine(
-      start, ImVec2(start.x + width, start.y),
-      ImGui::ColorConvertFloat4ToU32(theme.border), 1.0f);
-  ImGui::Dummy(ImVec2(0.0f, 14.0f));
-}
-
-static bool RenderLauncherActionCard(const char *id, const char *title,
-                                     const char *subtitle,
-                                     LauncherActionIcon icon,
-                                     const ImVec2 &size) {
-  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
-  const ImVec2 pos = ImGui::GetCursorScreenPos();
-  ImGui::InvisibleButton(id, size);
-  const bool hovered = ImGui::IsItemHovered();
-  const bool active = ImGui::IsItemActive();
-  ImVec4 fill(0.05f, 0.10f, 0.17f, 0.76f);
-  if (active)
-    fill = ImVec4(0.08f, 0.14f, 0.23f, 0.88f);
-  else if (hovered)
-    fill = ImVec4(0.08f, 0.15f, 0.25f, 0.84f);
-  ImDrawList *drawList = ImGui::GetWindowDrawList();
-  drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                          ImGui::ColorConvertFloat4ToU32(fill), 8.0f);
-  drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                    ImGui::ColorConvertFloat4ToU32(theme.border), 8.0f);
-
-  const ImVec2 iconPos(pos.x + 18.0f, pos.y + 17.0f);
-  DrawLauncherActionIcon(drawList, iconPos, icon);
-  drawList->AddText(
-      ImVec2(pos.x + 64.0f, pos.y + 19.0f),
-      ImGui::ColorConvertFloat4ToU32(ImVec4(0.96f, 0.98f, 1.0f, 1.0f)), title);
-  drawList->AddText(ImVec2(pos.x + 64.0f, pos.y + 43.0f),
-                    ImGui::ColorConvertFloat4ToU32(theme.textMuted), subtitle);
-  return ImGui::IsItemClicked();
 }
 
 void LauncherEditorShell::Attach(Editor::EditorLayer *editor, Scene *scene,
@@ -916,7 +470,7 @@ void LauncherEditorShell::RenderLauncher() {
   ImGui::Begin("Horo Launcher", nullptr, flags);
   ImGui::PopStyleVar(2);
 
-  DrawBackdrop(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+  Horo::Launcher::UI::DrawBackdrop(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
                ImGui::GetWindowSize());
 
   const float outerPadding = 24.0f;
@@ -947,13 +501,13 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
   ImGui::BeginChild("LauncherSidebar", ImVec2(sidebarWidth, fullHeight), false);
 
-  RenderLauncherBrand(EnsureLauncherLogoTexture());
+  Horo::Launcher::UI::RenderLauncherBrand(EnsureLauncherLogoTexture().get());
   ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
-  RenderSidebarNavItem("Home", true);
-  RenderSidebarNavItem("Projects", false);
-  RenderSidebarNavItem("Templates", false);
-  RenderSidebarNavItem("Learn", false);
+  Horo::Launcher::UI::SidebarNavItem("Home", true);
+  Horo::Launcher::UI::SidebarNavItem("Projects", false);
+  Horo::Launcher::UI::SidebarNavItem("Templates", false);
+  Horo::Launcher::UI::SidebarNavItem("Learn", false);
 
   const float footerHeight = 116.0f;
   if (const float remainingHeight = ImGui::GetContentRegionAvail().y;
@@ -962,9 +516,9 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
   } else {
     ImGui::Dummy(ImVec2(0.0f, 18.0f));
   }
-  RenderSidebarFooterSeparator();
-  RenderSidebarFooterImageItem("Join Community", EnsureDiscordIconTexture());
-  RenderSidebarFooterItem("Documentation", SidebarFooterIcon::Documentation);
+  Horo::Launcher::UI::SidebarFooterSeparator();
+  Horo::Launcher::UI::SidebarFooterImageItem("Join Community", EnsureDiscordIconTexture().get());
+  Horo::Launcher::UI::SidebarFooterItem("Documentation", Horo::Launcher::UI::SidebarFooterIcon::Documentation);
   ImGui::Dummy(ImVec2(0.0f, 6.0f));
   ImGui::TextDisabled("Horo Engine v%s", HORO_ENGINE_VERSION);
   ImGui::EndChild();
@@ -1034,18 +588,18 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const float actionWidth =
       std::max(260.0f, (ImGui::GetContentRegionAvail().x - actionGap) * 0.5f);
   const ImVec2 actionSize(actionWidth, 72.0f);
-  if (RenderLauncherActionCard("##open-existing-project-action",
+  if (Horo::Launcher::UI::LauncherActionCard("##open-existing-project-action",
                                "Open Existing Project",
                                "Open a project from your computer",
-                               LauncherActionIcon::Folder, actionSize)) {
+                               Horo::Launcher::UI::LauncherActionIcon::Folder, actionSize)) {
     std::string openError;
     if (!OpenProjectFromPicker(&openError) && !openError.empty())
       m_launcherError = openError;
   }
   ImGui::SameLine(0.0f, actionGap);
-  if (RenderLauncherActionCard("##import-project-action", "Import Project",
+  if (Horo::Launcher::UI::LauncherActionCard("##import-project-action", "Import Project",
                                "Import a project from disk",
-                               LauncherActionIcon::Import, actionSize)) {
+                               Horo::Launcher::UI::LauncherActionIcon::Import, actionSize)) {
     std::string openError;
     if (!OpenProjectFromPicker(&openError) && !openError.empty())
       m_launcherError = openError;
@@ -1077,7 +631,7 @@ void LauncherEditorShell::RenderNewProjectPanel(float contentWidth) {
   ImGui::PopStyleColor(2);
   const float innerWidth = ImGui::GetContentRegionAvail().x;
 
-  RenderCreateProjectHeader();
+  Horo::Launcher::UI::RenderCreateProjectHeader();
   ImGui::Dummy(ImVec2(0.0f, 14.0f));
   ImGui::GetWindowDrawList()->AddLine(
       ImGui::GetCursorScreenPos(),
@@ -1127,7 +681,7 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
   ImGui::EndGroup();
 
   ImGui::SetCursorPos(ImVec2(nameDividerX, rowStartY));
-  RenderVerticalDivider(mainRowHeight);
+  Horo::Launcher::UI::VerticalDivider(mainRowHeight);
   ImGui::SetCursorPos(ImVec2(locationX, rowStartY));
   ImGui::BeginGroup();
   const float browseWidth = 94.0f;
@@ -1152,7 +706,7 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
   ImGui::EndGroup();
 
   ImGui::SetCursorPos(ImVec2(templateDividerX, rowStartY));
-  RenderVerticalDivider(mainRowHeight);
+  Horo::Launcher::UI::VerticalDivider(mainRowHeight);
   ImGui::SetCursorPos(ImVec2(templateX, rowStartY));
   ImGui::BeginGroup();
   ImGui::TextDisabled("%s", "Template");
@@ -1161,19 +715,19 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
   const float tileGap = 8.0f;
   const float tileWidth = (templateWidth - tileGap * 3.0f) * 0.25f;
   const ImVec2 tileSize(std::max(64.0f, tileWidth), 70.0f);
-  if (RenderTemplateTile("Empty", TemplateTileIcon::Cube,
+  if (Horo::Launcher::UI::TemplateTile("Empty", Horo::Launcher::UI::TemplateTileIcon::Cube,
                          selectedTemplateIndex == 0, true, tileSize))
     selectedTemplateIndex = 0;
   ImGui::SameLine(0.0f, tileGap);
-  if (RenderTemplateTile("2D", TemplateTileIcon::Image,
+  if (Horo::Launcher::UI::TemplateTile("2D", Horo::Launcher::UI::TemplateTileIcon::Image,
                          selectedTemplateIndex == 1, false, tileSize))
     selectedTemplateIndex = 1;
   ImGui::SameLine(0.0f, tileGap);
-  if (RenderTemplateTile("3D", TemplateTileIcon::Cube,
+  if (Horo::Launcher::UI::TemplateTile("3D", Horo::Launcher::UI::TemplateTileIcon::Cube,
                          selectedTemplateIndex == 2, false, tileSize))
     selectedTemplateIndex = 2;
   ImGui::SameLine(0.0f, tileGap);
-  if (RenderTemplateTile("Sandbox", TemplateTileIcon::Sandbox,
+  if (Horo::Launcher::UI::TemplateTile("Sandbox", Horo::Launcher::UI::TemplateTileIcon::Sandbox,
                          selectedTemplateIndex == 3, false, tileSize))
     selectedTemplateIndex = 3;
   ImGui::EndGroup();
@@ -1182,7 +736,7 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
 void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
                                                   float rowStartX,
                                                   float advancedRowY) {
-  RenderAdvancedSettingsToggle(&m_newProjectAdvancedSettingsOpen);
+  Horo::Launcher::UI::AdvancedSettingsToggle(&m_newProjectAdvancedSettingsOpen);
 
   const float createButtonWidth = 210.0f;
   if (m_newProjectAdvancedSettingsOpen) {
@@ -1234,7 +788,7 @@ void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
   if (m_homeDocument.state.recentProjects.empty()) {
-    RenderCenteredEmptyState("No recent projects yet.");
+    Horo::UI::CenteredEmptyState("No recent projects yet.");
   } else {
     int cardIndex = 0;
     for (const std::string &recentPath : m_homeDocument.state.recentProjects) {
@@ -1285,7 +839,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   ImGui::Dummy(ImVec2(0.0f, 1.0f));
   ImGui::TextColored(theme.textMuted, "%s", recentPath.c_str());
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
-  DrawRecentProjectMetaIcon(ImGui::GetWindowDrawList(),
+  Horo::Launcher::UI::DrawRecentProjectMetaIcon(ImGui::GetWindowDrawList(),
                             ImGui::GetCursorScreenPos(),
                             ImGui::ColorConvertFloat4ToU32(theme.textMuted));
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 18.0f);
@@ -1295,7 +849,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   ImGui::SetCursorPos(ImVec2(openButtonX, actionY));
   if (const std::string openLabel =
           std::format("Open##recent-open-{}", cardIndex);
-      RenderRecentProjectButton(openLabel.c_str(),
+      Horo::Launcher::UI::RecentProjectButton(openLabel.c_str(),
                                 ImVec2(openButtonWidth, openButtonHeight))) {
     if (std::string openError; !OpenProject(path, &openError))
       m_launcherError = openError;
@@ -1303,7 +857,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
 
   ImGui::SetCursorPos(ImVec2(menuButtonX, actionY));
   const std::string menuLabel = std::format("##recent-menu-{}", cardIndex);
-  RenderRecentProjectMenuButton(menuLabel.c_str(),
+  Horo::Launcher::UI::RecentProjectMenuButton(menuLabel.c_str(),
                                 ImVec2(menuButtonWidth, openButtonHeight));
   ImGui::EndChild();
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
@@ -1316,7 +870,7 @@ std::shared_ptr<Texture> LauncherEditorShell::EnsureLauncherLogoTexture() {
   if (Renderer::GetBackendId() != RenderBackendId::OpenGL)
     return {};
 
-  const fs::path logoPath = ResolveLauncherVisualAsset("logo_with_title.png");
+  const fs::path logoPath = Horo::Launcher::UI::ResolveLauncherVisualAsset("logo_with_title.png");
   if (logoPath.empty())
     return {};
 
@@ -1332,7 +886,7 @@ std::shared_ptr<Texture> LauncherEditorShell::EnsureDiscordIconTexture() {
   if (Renderer::GetBackendId() != RenderBackendId::OpenGL)
     return {};
 
-  const fs::path iconPath = ResolveLauncherVisualAsset("discord-icon.png");
+  const fs::path iconPath = Horo::Launcher::UI::ResolveLauncherVisualAsset("discord-icon.png");
   if (iconPath.empty())
     return {};
 
