@@ -412,6 +412,7 @@ TEST_CASE("Launcher project template reports file write failures",
           "[launcher][template]") {
   const std::filesystem::path projectRoot = MakeTempRoot("template_file_root");
   std::filesystem::remove_all(projectRoot);
+  std::filesystem::create_directories(projectRoot.parent_path());
   {
     std::ofstream out(projectRoot);
     REQUIRE(out.is_open());

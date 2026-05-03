@@ -954,7 +954,8 @@ void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
       continue;
 
     std::string openError;
-    if (OpenProject(fs::path(utf8Paths[i]), &openError)) {
+    if (OpenProject(fs::path(reinterpret_cast<const char8_t *>(utf8Paths[i])),
+                    &openError)) {
       m_launcherError.clear();
       return;
     }
