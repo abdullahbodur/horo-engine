@@ -50,21 +50,6 @@ Horo may not be the best choice if you need:
 - A source-available engine intended for direct integration, not opaque SDK consumption
 - A practical platform for gameplay, editor workflows, and automation tests
 
-## Features
-
-| Module | Status | Notes |
-|---|---|---|
-| Core (ECS, scene, serialization) | ✅ Production | |
-| OpenGL renderer | ✅ Production | |
-| Asset import pipeline | ✅ Production | |
-| Unit test suite (Catch2) | ✅ Production | |
-| UI automation tests | ✅ Production | Launcher + editor flows |
-| MCP server (editor AI tooling) | ✅ Production | HTTP endpoint, opt-in |
-| Vulkan renderer | 🔧 In progress | Not parity-complete yet |
-| Backend resource factory API | 🔧 In progress | Active PRs |
-| Physics | 🔧 In progress | Module scaffolded |
-| GI / reflections | 📋 Planned | Architecture defined |
-
 ## Architecture
 
 ```mermaid
