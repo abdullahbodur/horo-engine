@@ -1,6 +1,7 @@
 #include "editor/EditorLayer.h"
 #include "editor/EditorLayerInternal.h"
 #include "editor/TransformGizmo.h"
+#include "ui/common/HoroTheme.h"
 
 // Windows headers must come before GLFW to avoid type redefinition conflicts
 #ifdef _WIN32
@@ -907,7 +908,7 @@ void EditorLayer::Init(GLFWwindow *window) {
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
-  ImGui::StyleColorsDark();
+  Horo::UI::ApplyHoroEditorTheme();
   ImGuiIO &io = ImGui::GetIO();
   LoadEditorFonts(io);
   m_imguiIniPath = ResolveEditorLayoutPath().string();
@@ -2194,6 +2195,7 @@ void EditorLayer::DrawSceneControls() {
 
 void EditorLayer::DrawToolbar() {
   const ImGuiIO &io = ImGui::GetIO();
+  const auto& theme = Horo::UI::GetHoroTheme();
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorToolbarH));
   ImGui::SetNextWindowBgAlpha(0.85f);
@@ -2202,7 +2204,7 @@ void EditorLayer::DrawToolbar() {
                    ImGuiWindowFlags_NoScrollbar |
                    ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-  ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "EDITOR");
+  ImGui::TextColored(theme.info, "EDITOR");
   ImGui::SameLine();
   ImGui::Separator();
   ImGui::SameLine();
@@ -2501,6 +2503,7 @@ void EditorLayer::DrawProjectBrowserTab() {
 
 void EditorLayer::DrawConsoleTab() {
   using enum LogLevel;
+  const auto& theme = Horo::UI::GetHoroTheme();
   int nInfo = 0;
   int nWarn = 0;
   int nErr = 0;
@@ -2561,9 +2564,9 @@ void EditorLayer::DrawConsoleTab() {
       levelStr = "WARN";
     ImVec4 color(0.85f, 0.9f, 1.0f, 1.0f);
     if (entry.level == Warn)
-      color = ImVec4(1.0f, 0.85f, 0.4f, 1.0f);
+      color = theme.warning;
     else if (entry.level == Error)
-      color = ImVec4(1.0f, 0.45f, 0.4f, 1.0f);
+      color = theme.error;
 
     const std::string lineLine =
         std::format("[{}] {} ({}:{}) {}", timeBuf.c_str(), levelStr, entry.file,
@@ -2596,6 +2599,7 @@ void EditorLayer::DrawMcpClientCard(const char *title, const char *pathLabel,
 }
 
 void EditorLayer::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot &status) {
+  const auto& theme = Horo::UI::GetHoroTheme();
   DrawUiAutomationMarker(
       std::format("##mcp_test/activity_rows_{}", status.recentActivity.size())
           .c_str());
@@ -2626,8 +2630,7 @@ void EditorLayer::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot &status) {
     ImGui::TableSetColumnIndex(1);
     ImGui::TextUnformatted(entry.target.c_str());
     ImGui::TableSetColumnIndex(2);
-    ImGui::TextColored(entry.ok ? ImVec4(0.75f, 0.95f, 0.75f, 1.0f)
-                                : ImVec4(1.0f, 0.55f, 0.5f, 1.0f),
+    ImGui::TextColored(entry.ok ? theme.success : theme.error,
                        "%s", entry.ok ? "OK" : "FAIL");
     ImGui::TableSetColumnIndex(3);
     ImGui::Text("%.1f", entry.durationMs);
@@ -2678,7 +2681,7 @@ void EditorLayer::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot &status) {
                              ? "##mcp_test/request_id_empty"
                              : "##mcp_test/request_id_present");
   if (!selected.error.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.error);
     ImGui::TextWrapped("Error: %s", selected.error.c_str());
     ImGui::PopStyleColor();
   }
@@ -2711,6 +2714,7 @@ void EditorLayer::DrawMcpTabCatalog(
 }
 
 void EditorLayer::DrawMcpTab() {
+  const auto& theme = Horo::UI::GetHoroTheme();
   const Mcp::McpStatusSnapshot status = m_mcpController.GetStatusSnapshot();
 
   if (m_mcpSelectedActivityIndex >=
@@ -2815,7 +2819,7 @@ void EditorLayer::DrawMcpTab() {
   }
 
   if (!status.lastError.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.error);
     ImGui::TextWrapped("%s", status.lastError.c_str());
     ImGui::PopStyleColor();
   }
@@ -2871,6 +2875,7 @@ void EditorLayer::DrawMcpTab() {
 }
 
 void EditorLayer::DrawSettingsModal() {
+  const auto& theme = Horo::UI::GetHoroTheme();
   if (m_settingsOpen)
     ImGui::OpenPopup("Editor Settings");
 
@@ -2895,7 +2900,7 @@ void EditorLayer::DrawSettingsModal() {
   ImGui::TextWrapped("Endpoint: %s", endpoint.c_str());
 
   if (!m_mcpSettingsError.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.error);
     ImGui::TextWrapped("%s", m_mcpSettingsError.c_str());
     ImGui::PopStyleColor();
   }
@@ -3174,6 +3179,7 @@ void EditorLayer::ApplyRenameObject() {
 }
 
 void EditorLayer::DrawRenameObjectModal() {
+  const auto& theme = Horo::UI::GetHoroTheme();
   if (m_renameObjectOpen) {
     ImGui::OpenPopup("Rename Object");
     m_renameObjectOpen = false;
@@ -3192,7 +3198,7 @@ void EditorLayer::DrawRenameObjectModal() {
   }
 
   if (!m_renameObjectError.empty())
-    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s",
+    ImGui::TextColored(theme.error, "%s",
                        m_renameObjectError.c_str());
 
   if (ImGui::Button("Apply"))
@@ -3584,6 +3590,7 @@ void EditorLayer::DrawObjectsTreeRootDropZone() {
 
 void EditorLayer::DrawObjectsTreeRuntimeEntities(
     const SceneDocument &doc) const {
+  const auto& theme = Horo::UI::GetHoroTheme();
   if (!m_liveRegistry)
     return;
 
@@ -3613,7 +3620,7 @@ void EditorLayer::DrawObjectsTreeRuntimeEntities(
   if (runtimeEntities.empty())
     return;
 
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme.textMuted);
   if (ImGui::TreeNodeEx("##runtime_entities",
                         ImGuiTreeNodeFlags_DefaultOpen |
                             ImGuiTreeNodeFlags_SpanAvailWidth,
@@ -3802,6 +3809,7 @@ void EditorLayer::DrawAssetsPanel() {
 void EditorLayer::DrawHelpPopup() {
   if (!m_helpOpen)
     return;
+  const auto& theme = Horo::UI::GetHoroTheme();
   const std::span<const ShortcutRow> shortcuts = GetEditorShortcuts();
 
   const ImGuiIO &io = ImGui::GetIO();
@@ -3844,7 +3852,7 @@ void EditorLayer::DrawHelpPopup() {
     ImGui::NextColumn();
     ImGui::TextUnformatted(row.command);
     ImGui::NextColumn();
-    ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "%s", row.keys);
+    ImGui::TextColored(theme.infoBright, "%s", row.keys);
     ImGui::NextColumn();
     ++shownCount;
   }
@@ -4207,6 +4215,7 @@ void EditorLayer::DrawCreateAssetModal(bool openModal) {
 // Extracted from DrawCreateAssetModal to keep the outer function below the
 // S3776 cognitive complexity threshold. Owns all widget logic for the modal.
 void EditorLayer::DrawCreateAssetModalContent() {
+  const auto& theme = Horo::UI::GetHoroTheme();
   constexpr float blockW = 470.0f;
   ImGui::PushItemWidth(blockW);
 
@@ -4220,7 +4229,7 @@ void EditorLayer::DrawCreateAssetModalContent() {
   }
   if (!m_assetImportError.empty()) {
     ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + blockW);
-    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
+    ImGui::TextColored(theme.error, "%s",
                        m_assetImportError.c_str());
     ImGui::PopTextWrapPos();
   }
@@ -4385,6 +4394,7 @@ void EditorLayer::DrawConfirmDeleteObjectsModal() {
 }
 
 void EditorLayer::DrawConfirmDeleteAssetModal() {
+  const auto& theme = Horo::UI::GetHoroTheme();
   if (m_confirmDeleteAssetOpen)
     ImGui::OpenPopup("Confirm Delete Asset");
   if (!ImGui::BeginPopupModal("Confirm Delete Asset", nullptr,
@@ -4417,7 +4427,7 @@ void EditorLayer::DrawConfirmDeleteAssetModal() {
   if (!m_pendingDeleteAssetError.empty()) {
     ImGui::Spacing();
     ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 360.0f);
-    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
+    ImGui::TextColored(theme.error, "%s",
                        m_pendingDeleteAssetError.c_str());
     ImGui::PopTextWrapPos();
   }
@@ -4452,6 +4462,7 @@ void EditorLayer::DrawDeleteConfirmModals() {
 
 void EditorLayer::DrawExitConfirmModal() {
   using enum PendingSceneAction;
+  const auto& theme = Horo::UI::GetHoroTheme();
   if (m_confirmExitOpen)
     ImGui::OpenPopup("Unsaved Changes");
 
@@ -4485,7 +4496,7 @@ void EditorLayer::DrawExitConfirmModal() {
   ImGui::Separator();
 
   if (!m_exitConfirmError.empty())
-    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+    ImGui::TextColored(theme.error, "%s",
                        m_exitConfirmError.c_str());
 
   if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
