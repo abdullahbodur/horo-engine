@@ -302,7 +302,7 @@ void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
   if (!drawList)
     return;
   const LauncherTheme &theme = GetLauncherTheme();
-  const bool hasCustomBackdrop =
+  static const bool hasCustomBackdrop =
       !ResolveLauncherVisualAsset("background.png").empty();
   const ImVec4 top = hasCustomBackdrop ? ImVec4(0.03f, 0.07f, 0.14f, 1.0f)
                                        : theme.backgroundTop;

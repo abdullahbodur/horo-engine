@@ -367,11 +367,15 @@ namespace Horo::Launcher {
             {
                 "-S", "${projectDir}", "-B",
                 "${projectDir}/build",
-                "-DCMAKE_PREFIX_PATH=${horoSdkRoot}",
-                "-DHORO_RENDERER=" + rendererBackend
+                "-DCMAKE_PREFIX_PATH=${horoSdkRoot}"
             },
             "${projectDir}"
         };
+        // Append renderer flag only for real backends; passing -DHORO_RENDERER=null
+        // generates projects that fail at startup since the template still links OpenGL.
+        if (rendererBackend != "null" && !rendererBackend.empty())
+          doc.manifest.configureCommand.args.push_back(
+              "-DHORO_RENDERER=" + rendererBackend);
         doc.manifest.buildCommand = {
             "cmake",
             {"--build", "${projectDir}/build", "--config", "Debug"},

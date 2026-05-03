@@ -488,6 +488,11 @@ TEST_CASE("Application bootstraps window, parses CLI, and runs lifecycle once",
   spec.defaultSceneFile = "assets/scenes/level.json";
   spec.graphicsApi = WindowGraphicsApi::OpenGL;
 
+  if (ShouldSkipWindowBootstrapOnThisRunner()) {
+    SUCCEED("Application bootstrap skipped on this CI runner");
+    return;
+  }
+
   try {
     TestApplication app(spec);
     std::string arg0 = "test-app";

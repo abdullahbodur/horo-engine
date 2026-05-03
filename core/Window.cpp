@@ -108,11 +108,13 @@ std::filesystem::path ResolveWindowIconPath(const std::string &rawPath) {
     return {};
 
   const std::filesystem::path requested(rawPath);
+  std::error_code cwdEc;
+  const std::filesystem::path cwd = std::filesystem::current_path(cwdEc);
   const std::array<std::filesystem::path, 4> candidates = {
       requested,
-      std::filesystem::current_path() / requested,
-      std::filesystem::current_path() / ".." / "sdk" / requested,
-      std::filesystem::current_path() / ".." / ".." / "sdk" / requested,
+      !cwdEc ? cwd / requested : std::filesystem::path{},
+      !cwdEc ? cwd / ".." / "sdk" / requested : std::filesystem::path{},
+      !cwdEc ? cwd / ".." / ".." / "sdk" / requested : std::filesystem::path{},
   };
   for (const std::filesystem::path &candidate : candidates) {
     std::error_code ec;

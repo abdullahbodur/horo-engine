@@ -349,9 +349,11 @@ TEST_CASE(
                                   "level.json"));
   REQUIRE(doc.manifest.projectName == "TemplateGame");
   REQUIRE(doc.manifest.defaultScene == "assets/scenes/level.json");
+  // "null" backend must not pass -DHORO_RENDERER=null to cmake:
+  // generated projects still link OpenGL and would fail at startup with that flag.
   REQUIRE(std::find(doc.manifest.configureCommand.args.begin(),
                     doc.manifest.configureCommand.args.end(),
-                    "-DHORO_RENDERER=null") !=
+                    "-DHORO_RENDERER=null") ==
           doc.manifest.configureCommand.args.end());
 
   const std::string mainCpp = ReadTextFile(projectRoot / "src" / "main.cpp");

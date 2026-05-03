@@ -189,12 +189,12 @@ bool AssertRecentProjectListed(ImGuiTestContext *ctx) {
     return false;
   ctx->SetRef(recentProjectsList);
   bool listed = WaitForCondition(
-      ctx, 180, [ctx]() { return ctx->ItemExists("Open"); });
+      ctx, 180, [ctx]() { return ctx->ItemExists("Open##recent-open-0"); });
   if (!listed) {
     if (ImGuiWindow *recentProjectCard = FindWindowContaining("RecentProjectCard")) {
       ctx->SetRef(recentProjectCard);
       listed = WaitForCondition(
-          ctx, 60, [ctx]() { return ctx->ItemExists("Open"); });
+          ctx, 60, [ctx]() { return ctx->ItemExists("Open##recent-open-0"); });
     }
   }
   if (!listed)
@@ -220,7 +220,7 @@ bool ReopenProjectFromRecentProjects(ImGuiTestContext *ctx,
   if (ImGuiWindow *recentProjectCard = FindWindowContaining("RecentProjectCard"))
     ctx->SetRef(recentProjectCard);
   LogDebug("UI scenario action: click recent project open button");
-  ctx->ItemClick("Open");
+  ctx->ItemClick("Open##recent-open-0");
   ctx->Yield(1);
   return true;
 }
