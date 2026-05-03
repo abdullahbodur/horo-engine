@@ -9,7 +9,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Launcher mode: local dev, CI, tests
     project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
     if(APPLE)
-        set(CMAKE_ObjCXX_COMPILER ${CMAKE_CXX_COMPILER})
+        set(CMAKE_OBJCXX_COMPILER ${CMAKE_CXX_COMPILER})
         enable_language(ObjCXX)
     endif()
     include(GNUInstallDirs)
