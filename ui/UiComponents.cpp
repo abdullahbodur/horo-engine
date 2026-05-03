@@ -48,6 +48,29 @@ void PushInputVars(const HoroRounding &rounding, const HoroDensity &density,
   *styleCount += 2;
 }
 
+void PushButtonColorsPrimary(const HoroPalette &palette, int *colorCount) {
+  ImGui::PushStyleColor(ImGuiCol_Button, palette.accent);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.accentHover);
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.accentActive);
+  ImGui::PushStyleColor(ImGuiCol_Text, palette.text);
+  *colorCount += 4;
+}
+
+void PushButtonColorsSecondary(const HoroPalette &palette, int *colorCount) {
+  ImGui::PushStyleColor(ImGuiCol_Button, palette.panelSoft);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.cardHover);
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.selection);
+  ImGui::PushStyleColor(ImGuiCol_Text, palette.text);
+  *colorCount += 4;
+}
+
+void PushButtonVars(const HoroRounding &rounding, const HoroDensity &density,
+                    int *styleCount) {
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, density.buttonPadding);
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.button);
+  *styleCount += 2;
+}
+
 } // namespace
 
 ScopedPanelStyle::ScopedPanelStyle(const EditorTheme &theme) {
@@ -136,11 +159,45 @@ void PopButtonStyle() {
   ImGui::PopStyleVar(2);
 }
 
-void TextMuted(const char *text) { ImGui::TextColored(GetEditorTheme().palette.textMuted, "%s", text); }
+ScopedButtonStyle::ScopedButtonStyle(const EditorTheme &theme, ButtonStyleVariant variant) {
+  PushButtonVars(theme.rounding, theme.density, &m_styleCount);
+  if (variant == ButtonStyleVariant::Primary) {
+    PushButtonColorsPrimary(theme.palette, &m_colorCount);
+  } else {
+    PushButtonColorsSecondary(theme.palette, &m_colorCount);
+  }
+}
 
-void SectionHeader(const char *title) {
-  ImGui::TextColored(GetEditorTheme().palette.text, "%s", title);
+ScopedButtonStyle::ScopedButtonStyle(const LauncherTheme &theme, ButtonStyleVariant variant) {
+  PushButtonVars(theme.rounding, theme.density, &m_styleCount);
+  if (variant == ButtonStyleVariant::Primary) {
+    PushButtonColorsPrimary(theme.palette, &m_colorCount);
+  } else {
+    PushButtonColorsSecondary(theme.palette, &m_colorCount);
+  }
+}
+
+ScopedButtonStyle::~ScopedButtonStyle() {
+  ImGui::PopStyleColor(m_colorCount);
+  ImGui::PopStyleVar(m_styleCount);
+}
+
+void TextMuted(const EditorTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
+
+void TextMuted(const LauncherTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
+
+void TextMuted(const char *text) { TextMuted(GetEditorTheme(), text); }
+
+void SectionHeader(const EditorTheme &theme, const char *title) {
+  ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
 }
+
+void SectionHeader(const LauncherTheme &theme, const char *title) {
+  ImGui::TextColored(theme.palette.text, "%s", title);
+  ImGui::Separator();
+}
+
+void SectionHeader(const char *title) { SectionHeader(GetEditorTheme(), title); }
 
 } // namespace Horo::Ui

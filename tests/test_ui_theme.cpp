@@ -28,17 +28,55 @@ TEST_CASE("shared Horo theme preserves launcher accent hierarchy") {
 }
 
 TEST_CASE("style scopes restore ImGui style stacks") {
-  ImGui::CreateContext();
-  const int colorStackBefore = ImGui::GetCurrentContext()->ColorStack.Size;
-  const int styleStackBefore = ImGui::GetCurrentContext()->StyleVarStack.Size;
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGui::SetCurrentContext(context);
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
 
   {
     Horo::Ui::ScopedPanelStyle panel(Horo::Ui::GetEditorTheme());
-    CHECK(ImGui::GetCurrentContext()->ColorStack.Size > colorStackBefore);
-    CHECK(ImGui::GetCurrentContext()->StyleVarStack.Size > styleStackBefore);
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
   }
 
-  CHECK(ImGui::GetCurrentContext()->ColorStack.Size == colorStackBefore);
-  CHECK(ImGui::GetCurrentContext()->StyleVarStack.Size == styleStackBefore);
-  ImGui::DestroyContext();
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  {
+    Horo::Ui::ScopedCardStyle card(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  {
+    Horo::Ui::ScopedInputStyle input(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  {
+    Horo::Ui::ScopedButtonStyle primary(Horo::Ui::GetEditorTheme(), Horo::Ui::ButtonStyleVariant::Primary);
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  {
+    Horo::Ui::ScopedButtonStyle secondary(Horo::Ui::GetEditorTheme(), Horo::Ui::ButtonStyleVariant::Secondary);
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+  ImGui::DestroyContext(context);
 }

@@ -48,13 +48,37 @@ private:
   int m_styleCount = 0;
 };
 
+enum class ButtonStyleVariant {
+  Primary,
+  Secondary,
+};
+
+class ScopedButtonStyle {
+public:
+  explicit ScopedButtonStyle(const EditorTheme &theme, ButtonStyleVariant variant);
+  explicit ScopedButtonStyle(const LauncherTheme &theme, ButtonStyleVariant variant);
+  ~ScopedButtonStyle();
+
+  ScopedButtonStyle(const ScopedButtonStyle &) = delete;
+  ScopedButtonStyle &operator=(const ScopedButtonStyle &) = delete;
+
+private:
+  int m_colorCount = 0;
+  int m_styleCount = 0;
+};
+
 void PushPrimaryButtonStyle(const EditorTheme &theme);
 void PushPrimaryButtonStyle(const LauncherTheme &theme);
 void PushSecondaryButtonStyle(const EditorTheme &theme);
 void PushSecondaryButtonStyle(const LauncherTheme &theme);
 void PopButtonStyle();
 
+void TextMuted(const EditorTheme &theme, const char *text);
+void TextMuted(const LauncherTheme &theme, const char *text);
 void TextMuted(const char *text);
+
+void SectionHeader(const EditorTheme &theme, const char *title);
+void SectionHeader(const LauncherTheme &theme, const char *title);
 void SectionHeader(const char *title);
 
 } // namespace Horo::Ui
