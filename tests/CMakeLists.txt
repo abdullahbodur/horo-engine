@@ -289,6 +289,12 @@ target_link_libraries(test_ui_automation_config PRIVATE ${HORO_ENGINE_LINK} Catc
 horo_set_test_output_dir(test_ui_automation_config)
 add_test(NAME test_ui_automation_config COMMAND $<TARGET_FILE:test_ui_automation_config>)
 
+# ---- test_ui_theme ----
+add_executable(test_ui_theme test_ui_theme.cpp)
+target_link_libraries(test_ui_theme PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+horo_set_test_output_dir(test_ui_theme)
+add_test(NAME test_ui_theme COMMAND $<TARGET_FILE:test_ui_theme>)
+
 # ---- test_input ----
 add_executable(test_input test_input.cpp)
 target_link_libraries(test_input PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
