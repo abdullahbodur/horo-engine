@@ -67,18 +67,10 @@ private:
   int m_styleCount = 0;
 };
 
-void PushPrimaryButtonStyle(const EditorTheme &theme);
-void PushPrimaryButtonStyle(const LauncherTheme &theme);
-void PushSecondaryButtonStyle(const EditorTheme &theme);
-void PushSecondaryButtonStyle(const LauncherTheme &theme);
-void PopButtonStyle();
-
 void TextMuted(const EditorTheme &theme, const char *text);
 void TextMuted(const LauncherTheme &theme, const char *text);
-void TextMuted(const char *text);
 
 void SectionHeader(const EditorTheme &theme, const char *title);
 void SectionHeader(const LauncherTheme &theme, const char *title);
-void SectionHeader(const char *title);
 
 } // namespace Horo::Ui

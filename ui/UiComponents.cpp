@@ -118,47 +118,6 @@ ScopedInputStyle::~ScopedInputStyle() {
   ImGui::PopStyleColor(m_colorCount);
 }
 
-void PushPrimaryButtonStyle(const EditorTheme &theme) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, theme.density.buttonPadding);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.rounding.button);
-  ImGui::PushStyleColor(ImGuiCol_Button, theme.palette.accent);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.accentHover);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.palette.accentActive);
-  ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-}
-
-void PushPrimaryButtonStyle(const LauncherTheme &theme) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, theme.density.buttonPadding);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.rounding.button);
-  ImGui::PushStyleColor(ImGuiCol_Button, theme.palette.accent);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.accentHover);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.palette.accentActive);
-  ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-}
-
-void PushSecondaryButtonStyle(const EditorTheme &theme) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, theme.density.buttonPadding);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.rounding.button);
-  ImGui::PushStyleColor(ImGuiCol_Button, theme.palette.panelSoft);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.cardHover);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.palette.selection);
-  ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-}
-
-void PushSecondaryButtonStyle(const LauncherTheme &theme) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, theme.density.buttonPadding);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.rounding.button);
-  ImGui::PushStyleColor(ImGuiCol_Button, theme.palette.panelSoft);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.cardHover);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.palette.selection);
-  ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-}
-
-void PopButtonStyle() {
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
-}
-
 ScopedButtonStyle::ScopedButtonStyle(const EditorTheme &theme, ButtonStyleVariant variant) {
   PushButtonVars(theme.rounding, theme.density, &m_styleCount);
   if (variant == ButtonStyleVariant::Primary) {
@@ -186,8 +145,6 @@ void TextMuted(const EditorTheme &theme, const char *text) { ImGui::TextColored(
 
 void TextMuted(const LauncherTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
 
-void TextMuted(const char *text) { TextMuted(GetEditorTheme(), text); }
-
 void SectionHeader(const EditorTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
@@ -197,7 +154,5 @@ void SectionHeader(const LauncherTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
 }
-
-void SectionHeader(const char *title) { SectionHeader(GetEditorTheme(), title); }
 
 } // namespace Horo::Ui
