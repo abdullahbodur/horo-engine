@@ -4,18 +4,18 @@ namespace Horo::Ui {
 namespace {
 
 constexpr HoroPalette kPalette{
-    .backgroundTop = ImVec4(0.02f, 0.04f, 0.08f, 1.0f),
-    .backgroundBottom = ImVec4(0.01f, 0.02f, 0.05f, 1.0f),
-    .panel = ImVec4(0.06f, 0.10f, 0.16f, 0.82f),
-    .panelSoft = ImVec4(0.08f, 0.13f, 0.20f, 0.64f),
+    .backgroundTop = ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f),
+    .backgroundBottom = ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f),
+    .panel = ImVec4(0.05f, 0.09f, 0.15f, 0.94f),
+    .panelSoft = ImVec4(0.07f, 0.11f, 0.18f, 0.90f),
     .card = ImVec4(0.05f, 0.10f, 0.17f, 0.76f),
     .cardHover = ImVec4(0.08f, 0.15f, 0.25f, 0.84f),
-    .border = ImVec4(0.15f, 0.24f, 0.35f, 0.64f),
+    .border = ImVec4(0.16f, 0.27f, 0.42f, 0.68f),
     .text = ImVec4(0.96f, 0.98f, 1.0f, 1.0f),
-    .textMuted = ImVec4(0.62f, 0.69f, 0.78f, 1.0f),
-    .accent = ImVec4(0.20f, 0.41f, 0.68f, 1.0f),
-    .accentHover = ImVec4(0.24f, 0.46f, 0.75f, 1.0f),
-    .accentActive = ImVec4(0.18f, 0.36f, 0.62f, 1.0f),
+    .textMuted = ImVec4(0.68f, 0.74f, 0.84f, 1.0f),
+    .accent = ImVec4(0.23f, 0.54f, 0.93f, 1.0f),
+    .accentHover = ImVec4(0.28f, 0.60f, 0.99f, 1.0f),
+    .accentActive = ImVec4(0.18f, 0.46f, 0.82f, 1.0f),
     .selection = ImVec4(0.14f, 0.31f, 0.52f, 0.92f),
     .selectionHover = ImVec4(0.18f, 0.37f, 0.60f, 0.96f),
     .input = ImVec4(0.04f, 0.08f, 0.13f, 1.0f),
@@ -26,8 +26,9 @@ constexpr HoroPalette kPalette{
 };
 
 constexpr HoroRounding kLauncherRounding{
+    .window = 16.0f,
     .panel = 12.0f,
-    .card = 8.0f,
+    .card = 10.0f,
     .button = 8.0f,
     .input = 6.0f,
     .tab = 6.0f,

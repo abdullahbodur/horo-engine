@@ -207,9 +207,17 @@ bool RenderPrimaryButton(const char *label, const ImVec2 &size) {
 }
 
 bool RenderSecondaryButton(const char *label, const ImVec2 &size) {
-  const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
-  Ui::ScopedButtonStyle style(theme, Ui::ButtonStyleVariant::Secondary);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 9.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                        ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                        ImVec4(0.14f, 0.18f, 0.24f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.94f, 0.98f, 1.0f));
   const bool pressed = ImGui::Button(label, size);
+  ImGui::PopStyleColor(4);
+  ImGui::PopStyleVar(2);
   return pressed;
 }
 
@@ -965,7 +973,7 @@ void LauncherEditorShell::RenderLauncher() {
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 22.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -999,7 +1007,7 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
 void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
                                                     float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -1036,7 +1044,7 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   m_importProjectDropTarget.valid = false;
   const float heroHeight = 152.0f;
-  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.panel);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.window);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
   ImGui::BeginChild("LauncherHero", ImVec2(contentWidth, heroHeight), false,

@@ -27,6 +27,7 @@ struct HoroPalette {
 };
 
 struct HoroRounding {
+  float window = 0.0f;
   float panel = 0.0f;
   float card = 0.0f;
   float button = 0.0f;

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <cmath>
 
 #include "ui/HoroTheme.h"
 #include "ui/UiComponents.h"
@@ -12,10 +13,16 @@ TEST_CASE("shared Horo theme exposes launcher and editor density variants") {
   const LauncherTheme &launcher = Horo::Ui::GetLauncherTheme();
   const EditorTheme &editor = Horo::Ui::GetEditorTheme();
 
-  CHECK(launcher.palette.panel.w == 0.82f);
+  CHECK(std::abs(launcher.palette.backgroundTop.x - (1.0f / 255.0f)) < 0.0001f);
+  CHECK(std::abs(launcher.palette.backgroundTop.y - (7.0f / 255.0f)) < 0.0001f);
+  CHECK(std::abs(launcher.palette.backgroundTop.z - (17.0f / 255.0f)) < 0.0001f);
+  CHECK(std::abs(launcher.palette.backgroundTop.w - 1.0f) < 0.0001f);
+  CHECK(launcher.palette.panel.w == 0.94f);
   CHECK(editor.palette.panel.w == 0.88f);
   CHECK(editor.density.panelPadding.x < launcher.density.panelPadding.x);
-  CHECK(editor.rounding.panel <= launcher.rounding.panel);
+  CHECK(editor.rounding.panel < launcher.rounding.window);
+  CHECK(launcher.rounding.window == 16.0f);
+  CHECK(launcher.rounding.card == 10.0f);
 }
 
 TEST_CASE("shared Horo theme preserves launcher accent hierarchy") {
@@ -25,6 +32,7 @@ TEST_CASE("shared Horo theme preserves launcher accent hierarchy") {
   CHECK(launcher.palette.accentHover.x >= launcher.palette.accent.x);
   CHECK(launcher.palette.accentActive.z <= launcher.palette.accent.z);
   CHECK(launcher.palette.textMuted.w == 1.0f);
+  CHECK(launcher.palette.border.w == 0.68f);
 }
 
 TEST_CASE("style scopes restore ImGui style stacks") {
