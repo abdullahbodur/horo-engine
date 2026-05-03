@@ -57,6 +57,10 @@ ImGuiWindow *FindWindowContaining(const char *token) {
 void SetLauncherHomeRef(ImGuiTestContext *ctx) {
   if (!ctx)
     return;
+  if (ImGuiWindow *hero = FindWindowContaining("LauncherHero")) {
+    ctx->SetRef(hero);
+    return;
+  }
   if (ImGuiWindow *mainContent = FindWindowContaining("LauncherMainContent")) {
     ctx->SetRef(mainContent);
     return;
