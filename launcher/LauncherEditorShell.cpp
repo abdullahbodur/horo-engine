@@ -23,6 +23,8 @@
 #include "scene/Entity.h"
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
+#include "ui/common/HoroTheme.h"
+#include "ui/common/HoroWidgets.h"
 
 #ifndef HORO_ENGINE_VERSION
 #define HORO_ENGINE_VERSION "0.0.0"
@@ -197,35 +199,7 @@ void RenderCenteredEmptyState(const char *text) {
   ImGui::TextDisabled("%s", text);
 }
 
-bool RenderPrimaryButton(const char *label, const ImVec2 &size) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 9.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.41f, 0.68f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.24f, 0.46f, 0.75f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.18f, 0.36f, 0.62f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.97f, 1.0f, 1.0f));
-  const bool pressed = ImGui::Button(label, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
-  return pressed;
-}
 
-bool RenderSecondaryButton(const char *label, const ImVec2 &size) {
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 9.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.16f, 0.20f, 0.28f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.14f, 0.18f, 0.24f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.94f, 0.98f, 1.0f));
-  const bool pressed = ImGui::Button(label, size);
-  ImGui::PopStyleColor(4);
-  ImGui::PopStyleVar(2);
-  return pressed;
-}
 
 bool RenderRecentProjectButton(const char *title, const ImVec2 &size) {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 8.0f));
@@ -242,43 +216,9 @@ bool RenderRecentProjectButton(const char *title, const ImVec2 &size) {
   return pressed;
 }
 
-void RenderLabeledInput(const char *title, const char *id, char *buffer,
-                        size_t bufferSize, float inputWidth) {
-  ImGui::TextDisabled("%s", title);
-  ImGui::SetNextItemWidth(inputWidth);
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 9.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.08f, 0.13f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,
-                        ImVec4(0.06f, 0.11f, 0.18f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_FrameBgActive,
-                        ImVec4(0.08f, 0.15f, 0.25f, 1.0f));
-  ImGui::InputText(id, buffer, bufferSize);
-  ImGui::PopStyleColor(3);
-  ImGui::PopStyleVar(2);
-}
 
-struct LauncherTheme final {
-  ImVec4 backgroundTop =
-      ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f);
-  ImVec4 backgroundBottom =
-      ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f);
-  ImVec4 panel = ImVec4(0.05f, 0.09f, 0.15f, 0.94f);
-  ImVec4 panelSoft = ImVec4(0.07f, 0.11f, 0.18f, 0.90f);
-  ImVec4 border = ImVec4(0.16f, 0.27f, 0.42f, 0.68f);
-  ImVec4 textMuted = ImVec4(0.68f, 0.74f, 0.84f, 1.0f);
-  ImVec4 accent = ImVec4(0.23f, 0.54f, 0.93f, 1.0f);
-  ImVec4 accentHover = ImVec4(0.28f, 0.60f, 0.99f, 1.0f);
-  ImVec4 accentActive = ImVec4(0.18f, 0.46f, 0.82f, 1.0f);
-  float windowRounding = 16.0f;
-  float panelRounding = 12.0f;
-  float cardRounding = 10.0f;
-};
 
-const LauncherTheme &GetLauncherTheme() {
-  static const LauncherTheme theme{};
-  return theme;
-}
+
 
 fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
   if (relativePath.empty())
@@ -301,7 +241,7 @@ fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
 void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
   if (!drawList)
     return;
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   static const bool hasCustomBackdrop =
       !ResolveLauncherVisualAsset("background.png").empty();
   const ImVec4 top = hasCustomBackdrop ? ImVec4(0.03f, 0.07f, 0.14f, 1.0f)
@@ -318,7 +258,7 @@ void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
 
 bool RenderSidebarNavItem(const char *label, bool selected,
                           const ImVec2 &size = ImVec2(-1.0f, 40.0f)) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 11.0f));
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 9.0f);
   if (selected) {
@@ -400,7 +340,7 @@ void DrawTemplateTileIcon(ImDrawList *drawList, const ImVec2 &center,
 
 bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
                         bool enabled, const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::InvisibleButton(label, size);
   const bool pressed = enabled && ImGui::IsItemClicked();
   const bool hovered = enabled && ImGui::IsItemHovered();
@@ -450,7 +390,7 @@ void RenderVerticalDivider(float height) {
 }
 
 void RenderAdvancedSettingsToggle(bool *open) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 size(190.0f, 30.0f);
   ImGui::InvisibleButton("Advanced Settings", size);
   if (ImGui::IsItemClicked() && open)
@@ -485,7 +425,7 @@ void DrawRecentProjectMetaIcon(ImDrawList *drawList, const ImVec2 &pos,
 }
 
 bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::InvisibleButton(id, size);
   const bool hovered = ImGui::IsItemHovered();
   const bool active = ImGui::IsItemActive();
@@ -507,7 +447,7 @@ bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
 }
 
 void RenderCreateProjectHeader() {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 iconPos = ImGui::GetCursorScreenPos();
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   const ImVec2 iconMax(iconPos.x + 38.0f, iconPos.y + 38.0f);
@@ -594,7 +534,7 @@ enum class SidebarFooterIcon {
 
 static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
                                    LauncherActionIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 max(pos.x + 38.0f, pos.y + 38.0f);
   drawList->AddRectFilled(
       pos, max,
@@ -623,7 +563,7 @@ static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
 
 static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
                                   SidebarFooterIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImU32 color = ImGui::ColorConvertFloat4ToU32(theme.textMuted);
   if (icon == SidebarFooterIcon::Discord) {
     const ImVec2 headMin(pos.x + 2.0f, pos.y + 4.0f);
@@ -649,7 +589,7 @@ static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
 }
 
 static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 textPos = ImGui::GetCursorPos();
   const ImVec2 iconPos = ImGui::GetCursorScreenPos();
   DrawSidebarFooterIcon(ImGui::GetWindowDrawList(), iconPos, icon);
@@ -661,7 +601,7 @@ static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
 static void
 RenderSidebarFooterImageItem(const char *label,
                              const std::shared_ptr<Texture> &iconTexture) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 textPos = ImGui::GetCursorPos();
   if (iconTexture && iconTexture->IsValid() &&
       iconTexture->GetNativeId() != 0) {
@@ -681,7 +621,7 @@ RenderSidebarFooterImageItem(const char *label,
 }
 
 static void RenderSidebarFooterSeparator() {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 start = ImGui::GetCursorScreenPos();
   const float width = std::min(154.0f, ImGui::GetContentRegionAvail().x);
   ImGui::GetWindowDrawList()->AddLine(
@@ -694,7 +634,7 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
                                      const char *subtitle,
                                      LauncherActionIcon icon,
                                      const ImVec2 &size) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const ImVec2 pos = ImGui::GetCursorScreenPos();
   ImGui::InvisibleButton(id, size);
   const bool hovered = ImGui::IsItemHovered();
@@ -1000,7 +940,7 @@ void LauncherEditorShell::RenderLauncher() {
 
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.windowRounding);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 22.0f));
@@ -1034,7 +974,7 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
 
 void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
                                                     float fullHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.windowRounding);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -1069,7 +1009,7 @@ void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
 }
 
 void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   m_importProjectDropTarget.valid = false;
   const float heroHeight = 152.0f;
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
@@ -1124,7 +1064,7 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
 }
 
 void LauncherEditorShell::RenderNewProjectPanel(float contentWidth) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const float panelHeight = m_newProjectAdvancedSettingsOpen ? 326.0f : 282.0f;
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.10f, 0.16f, 0.80f));
   ImGui::PushStyleColor(ImGuiCol_Border, theme.border);
@@ -1181,7 +1121,7 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
 
   ImGui::SetCursorPos(ImVec2(nameX, rowStartY));
   ImGui::BeginGroup();
-  RenderLabeledInput("Project Name", "##new-project-name",
+  Horo::UI::LabeledInput("Project Name", "##new-project-name",
                      m_newProjectNameInput.data(), m_newProjectNameInput.size(),
                      nameWidth);
   ImGui::EndGroup();
@@ -1191,11 +1131,11 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
   ImGui::SetCursorPos(ImVec2(locationX, rowStartY));
   ImGui::BeginGroup();
   const float browseWidth = 94.0f;
-  RenderLabeledInput("Location", "##new-project-path",
+  Horo::UI::LabeledInput("Location", "##new-project-path",
                      m_newProjectPathInput.data(), m_newProjectPathInput.size(),
                      std::max(120.0f, locationWidth - browseWidth - 8.0f));
   ImGui::SameLine(0.0f, 8.0f);
-  if (RenderSecondaryButton("Browse", ImVec2(browseWidth, 0.0f))) {
+  if (Horo::UI::SecondaryButton("Browse", ImVec2(browseWidth, 0.0f))) {
     const fs::path pickedLocation = PickFolderPath(
         "Select project location",
         DefaultBrowseDirectory(BufferToString(m_newProjectPathInput)));
@@ -1267,7 +1207,7 @@ void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
 
   ImGui::SetCursorPos(
       ImVec2(rowStartX + innerWidth - createButtonWidth - 2.0f, advancedRowY));
-  if (RenderPrimaryButton("Create Project   +",
+  if (Horo::UI::PrimaryButton("Create Project   +",
                           ImVec2(createButtonWidth, 40.0f))) {
     std::string createError;
     if (!CreateProjectFromLauncher(&createError))
@@ -1277,7 +1217,7 @@ void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
 
 void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
                                                    float panelHeight) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.10f, 0.16f, 0.80f));
   ImGui::PushStyleColor(ImGuiCol_Border, theme.border);
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.panelRounding);
@@ -1307,7 +1247,7 @@ void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
 
 void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
                                                   int cardIndex) {
-  const LauncherTheme &theme = GetLauncherTheme();
+  const Horo::UI::HoroTheme &theme = Horo::UI::GetHoroTheme();
   const fs::path path(recentPath);
   const fs::path normalizedPath = path.lexically_normal();
   std::string title = normalizedPath.filename().string();
