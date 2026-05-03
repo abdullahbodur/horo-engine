@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
 
 using Horo::Ui::EditorTheme;
 using Horo::Ui::LauncherTheme;
@@ -22,4 +25,20 @@ TEST_CASE("shared Horo theme preserves launcher accent hierarchy") {
   CHECK(launcher.palette.accentHover.x >= launcher.palette.accent.x);
   CHECK(launcher.palette.accentActive.z <= launcher.palette.accent.z);
   CHECK(launcher.palette.textMuted.w == 1.0f);
+}
+
+TEST_CASE("style scopes restore ImGui style stacks") {
+  ImGui::CreateContext();
+  const int colorStackBefore = ImGui::GetCurrentContext()->ColorStack.Size;
+  const int styleStackBefore = ImGui::GetCurrentContext()->StyleVarStack.Size;
+
+  {
+    Horo::Ui::ScopedPanelStyle panel(Horo::Ui::GetEditorTheme());
+    CHECK(ImGui::GetCurrentContext()->ColorStack.Size > colorStackBefore);
+    CHECK(ImGui::GetCurrentContext()->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(ImGui::GetCurrentContext()->ColorStack.Size == colorStackBefore);
+  CHECK(ImGui::GetCurrentContext()->StyleVarStack.Size == styleStackBefore);
+  ImGui::DestroyContext();
 }
