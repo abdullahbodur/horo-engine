@@ -9293,7 +9293,7 @@ Camera MakeDefaultCamera() {
 } // namespace
 
 TEST_CASE("SnapCameraToAxis: Right places camera on +X axis", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{1.0f, 2.0f, 3.0f};
   constexpr float dist = 5.0f;
@@ -9310,7 +9310,7 @@ TEST_CASE("SnapCameraToAxis: Right places camera on +X axis", "[editor][gimbal]"
 }
 
 TEST_CASE("SnapCameraToAxis: Left places camera on -X axis", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{0.0f, 0.0f, 0.0f};
   constexpr float dist = 4.0f;
@@ -9324,7 +9324,7 @@ TEST_CASE("SnapCameraToAxis: Left places camera on -X axis", "[editor][gimbal]")
 }
 
 TEST_CASE("SnapCameraToAxis: Top places camera on +Y axis with -Z up", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{0.0f, 0.0f, 0.0f};
   constexpr float dist = 6.0f;
@@ -9339,7 +9339,7 @@ TEST_CASE("SnapCameraToAxis: Top places camera on +Y axis with -Z up", "[editor]
 }
 
 TEST_CASE("SnapCameraToAxis: Bottom places camera on -Y axis with +Z up", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{0.0f, 0.0f, 0.0f};
   constexpr float dist = 6.0f;
@@ -9350,7 +9350,7 @@ TEST_CASE("SnapCameraToAxis: Bottom places camera on -Y axis with +Z up", "[edit
 }
 
 TEST_CASE("SnapCameraToAxis: Front places camera on +Z axis", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{0.0f, 0.0f, 0.0f};
   constexpr float dist = 3.0f;
@@ -9363,7 +9363,7 @@ TEST_CASE("SnapCameraToAxis: Front places camera on +Z axis", "[editor][gimbal]"
 }
 
 TEST_CASE("SnapCameraToAxis: Back places camera on -Z axis", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{0.0f, 0.0f, 0.0f};
   constexpr float dist = 3.0f;
@@ -9374,7 +9374,7 @@ TEST_CASE("SnapCameraToAxis: Back places camera on -Z axis", "[editor][gimbal]")
 }
 
 TEST_CASE("SnapCameraToAxis: None is a no-op for position", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 originalPos = cam.position;
   SnapCameraToAxis(cam, VS::None, Vec3::Zero(), 5.0f);
@@ -9386,7 +9386,7 @@ TEST_CASE("SnapCameraToAxis: None is a no-op for position", "[editor][gimbal]") 
 }
 
 TEST_CASE("SnapCameraToAxis: non-zero pivot offsets all positions", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   Camera cam = MakeDefaultCamera();
   const Vec3 pivot{10.0f, 5.0f, -3.0f};
   constexpr float dist = 7.0f;
@@ -9489,13 +9489,13 @@ std::array<ViewGimbalAxisCache, 3> MakeAxisCache(float xViewZ, float yViewZ,
 }
 
 static const std::array<ViewGimbalAxisDraw, 3> kTestAxes = {{
-    {EditorLayer::ViewSnap::Right, EditorLayer::ViewSnap::Left,
+    {ViewSnap::Right, ViewSnap::Left,
      {1.0f, 0.0f, 0.0f}, IM_COL32(255, 82, 58, 255),
      IM_COL32(145, 48, 42, 210), "X"},
-    {EditorLayer::ViewSnap::Top, EditorLayer::ViewSnap::Bottom,
+    {ViewSnap::Top, ViewSnap::Bottom,
      {0.0f, 1.0f, 0.0f}, IM_COL32(80, 230, 104, 255),
      IM_COL32(42, 135, 60, 210), "Y"},
-    {EditorLayer::ViewSnap::Front, EditorLayer::ViewSnap::Back,
+    {ViewSnap::Front, ViewSnap::Back,
      {0.0f, 0.0f, 1.0f}, IM_COL32(55, 155, 255, 255),
      IM_COL32(38, 92, 170, 210), "Z"},
 }};
@@ -9503,7 +9503,7 @@ static const std::array<ViewGimbalAxisDraw, 3> kTestAxes = {{
 } // namespace
 
 TEST_CASE("FindViewGimbalHoverSnap: positive viewZ returns posSnap", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   // All axes face the camera (viewZ > 0). Clicking on the X arrowhead tip should
   // give Right (posSnap for X).
   const ImVec2 center{100.0f, 100.0f};
@@ -9525,7 +9525,7 @@ TEST_CASE("FindViewGimbalHoverSnap: positive viewZ returns posSnap", "[editor][g
 }
 
 TEST_CASE("FindViewGimbalHoverSnap: negative viewZ returns negSnap", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   // X axis points away from camera (viewZ < 0). Clicking it should give Left.
   const ImVec2 center{100.0f, 100.0f};
   auto cache = MakeAxisCache(-1.0f, 1.0f, 1.0f); // X is pointing away
@@ -9543,7 +9543,7 @@ TEST_CASE("FindViewGimbalHoverSnap: negative viewZ returns negSnap", "[editor][g
 }
 
 TEST_CASE("FindViewGimbalHoverSnap: negative viewZ on Z axis returns Back", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   // Z axis points away (viewZ < 0). Cache[2] is Z, pointing left on screen.
   // We set Z viewZ to -1 (pointing away) — clicking that arrow should give Back.
   const ImVec2 center{100.0f, 100.0f};
@@ -9563,7 +9563,7 @@ TEST_CASE("FindViewGimbalHoverSnap: negative viewZ on Z axis returns Back", "[ed
 }
 
 TEST_CASE("FindViewGimbalHoverSnap: mouse far from all axes returns None", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   const ImVec2 center{100.0f, 100.0f};
   auto cache = MakeAxisCache(1.0f, 1.0f, 1.0f);
 
@@ -9577,7 +9577,7 @@ TEST_CASE("FindViewGimbalHoverSnap: mouse far from all axes returns None", "[edi
 }
 
 TEST_CASE("FindViewGimbalHoverSnap: positive Y axis click returns Top", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   const ImVec2 center{100.0f, 100.0f};
   // Y axis points up on screen (dy = -1.0 in ImGui coords = up).
   auto cache = MakeAxisCache(1.0f, 1.0f, 1.0f);
@@ -9593,7 +9593,7 @@ TEST_CASE("FindViewGimbalHoverSnap: positive Y axis click returns Top", "[editor
 }
 
 TEST_CASE("FindViewGimbalHoverSnap: negative Y axis click returns Bottom", "[editor][gimbal]") {
-  using VS = EditorLayer::ViewSnap;
+  using VS = ViewSnap;
   const ImVec2 center{100.0f, 100.0f};
   // Y axis points away from camera.
   auto cache = MakeAxisCache(1.0f, -1.0f, 1.0f);

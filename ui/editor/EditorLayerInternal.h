@@ -113,8 +113,8 @@ inline float DistSqPointSegment2D(float px, float py, float ax, float ay,
 /// posSnap is applied when the axis faces the camera (viewZ >= 0);
 /// negSnap is applied when the axis points away from it (viewZ < 0).
 struct ViewGimbalAxisDraw {
-  EditorLayer::ViewSnap posSnap; ///< Snap when axis faces the camera
-  EditorLayer::ViewSnap negSnap; ///< Snap when axis points away from camera
+  ViewSnap posSnap; ///< Snap when axis faces the camera
+  ViewSnap negSnap; ///< Snap when axis points away from camera
   Vec3 worldPlus;                ///< Positive world-space direction of the axis
   ImU32 col;                     ///< Full-brightness colour (axis faces viewer)
   ImU32 colDim;                  ///< Dimmed colour (axis points away)
@@ -232,21 +232,21 @@ inline void WorldAxisToScreenDir(const Camera &cam, const Vec3 &worldUnit,
 /// a gimbal axis. Uses posSnap when the axis faces the camera (viewZ >= 0)
 /// and negSnap when the axis points away from the camera (viewZ < 0), so that
 /// clicking a dimmed axis correctly snaps to the opposite view direction.
-inline EditorLayer::ViewSnap
+inline ViewSnap
 FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
                         const std::array<ViewGimbalAxisCache, 3> &cache,
                         const std::array<ViewGimbalAxisDraw, 3> &axes,
                         float shaftPx, float headLength, float headHalfWidth,
                         float hitPxSq) {
   float bestD = hitPxSq;
-  EditorLayer::ViewSnap snap = EditorLayer::ViewSnap::None;
+  ViewSnap snap = ViewSnap::None;
   for (const ViewGimbalAxisCache &c : cache) {
     const ViewGimbalAxisDraw &ad = axes[c.origIdx];
     const ViewGimbalArrowGeometry arrow =
         BuildViewGimbalArrow(center, c.dx, c.dy, shaftPx, headLength,
                              headHalfWidth);
     // Choose snap direction based on whether the axis faces the viewer.
-    const EditorLayer::ViewSnap thisSnap =
+    const ViewSnap thisSnap =
         c.viewZ >= 0.0f ? ad.posSnap : ad.negSnap;
     if (PointInTriangle2D(mouse, arrow.tip, arrow.headLeft, arrow.headRight))
       return thisSnap;
@@ -265,9 +265,9 @@ FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
 /// Sets position, target, and up so the camera is placed at distance
 /// \a distance from \a pivot along the appropriate world axis.
 /// This is the pure positioning kernel extracted from ApplyPendingViewSnap.
-inline void SnapCameraToAxis(Camera &cam, EditorLayer::ViewSnap snap,
+inline void SnapCameraToAxis(Camera &cam, ViewSnap snap,
                              Vec3 pivot, float distance) {
-  using enum EditorLayer::ViewSnap;
+  using enum ViewSnap;
   cam.target = pivot;
   cam.up = {0.0f, 1.0f, 0.0f};
   switch (snap) {

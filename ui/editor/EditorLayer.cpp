@@ -935,8 +935,66 @@ std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef &asset) {
 
 void EditorLayer::Init(GLFWwindow *window) {
   m_window = window;
+  m_uiWidgets.Initialize(this);
+  
+  // Set up UI widget callbacks
+  m_uiWidgets.onApplyRenameObject = [this](int index, const std::string& newId) {
+    if (index < 0 || index >= static_cast<int>(m_document.objects.size())) {
+      m_uiWidgets.SetRenameObjectError("Invalid object index");
+      return false;
+    }
+    
+    std::string error = ValidateRenameCandidate(m_document, index, newId);
+    if (!error.empty()) {
+      m_uiWidgets.SetRenameObjectError(error);
+      return false;
+    }
+    
+    SceneObject &target = m_document.objects[static_cast<size_t>(index)];
+    const std::string oldId = target.id;
+    if (oldId != newId) {
+      target.id = newId;
+      RewriteObjectIdReferences(&m_document, oldId, newId);
+      m_document.dirty = true;
+    }
+    return true;
+  };
+  
+  m_uiWidgets.onConfirmDeleteObjects = [this](const std::vector<int>& indices) {
+    std::vector<int> sorted = indices;
+    std::sort(sorted.rbegin(), sorted.rend());
+    for (int idx : sorted) {
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+        m_document.objects.erase(m_document.objects.begin() + idx);
+    }
+    m_selectedIndices.clear();
+    MarkDirtyAndReload();
+  };
+  
+  m_uiWidgets.onConfirmDeleteAsset = [this](const std::string& assetId) {
+    const AssetDeleteResult deleteResult = DeleteAssetDefinition(assetId);
+    if (!deleteResult.ok) {
+      // Error would need to be set on widget, but widget doesn't have a setter for asset error yet
+      // For now, the error is set in the old modal implementation
+    }
+  };
+  
+  m_uiWidgets.onConfirmExit = [this]() {
+    // Exit confirmation logic
+    m_closeRequested = true;
+  };
+  
+  m_uiWidgets.getStatusBarText = [this]() -> std::string {
+    const EditorStatusText status = BuildEditorStatusText(
+        EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
+                             m_document.dirty, m_flyMode, m_wantsReload});
+    return std::format("Sel: {} | Dirty: {} | Fly: {} | Reload: {}",
+                       status.selectionCount, status.dirtyText, status.flyText, status.reloadText);
+  };
+  
   m_mcpController.Initialize();
-  m_mcpSettingsDraft = m_mcpController.GetSettings();
+  m_settingsModal.SetMcpController(&m_mcpController);
+  *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
   if (m_mcpController.SettingsDocument().parseError)
     LogWarn("[MCP] Settings load fallback: {}",
             m_mcpController.SettingsDocument().error);
@@ -1020,8 +1078,6 @@ void EditorLayer::Toggle() {
     m_flyCamInitialized = false;
   }
   m_closeRequested = false;
-  m_confirmExitOpen = false;
-  m_exitConfirmError.clear();
   if (m_window)
     glfwSetInputMode(m_window, GLFW_CURSOR,
                      m_active ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
@@ -1205,8 +1261,7 @@ bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
   }
 
   m_assetDraftAlbedoMap = draftAsset.albedoMap;
-  m_clipboardToastLabel = "Albedo texture set";
-  m_clipboardToastTime = 2.0f;
+  m_uiWidgets.OnClipboardAction("Albedo texture set", 2.0f);
   return true;
 }
 
@@ -1225,8 +1280,7 @@ bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
   }
 
   m_document.dirty = true;
-  m_clipboardToastLabel = "Albedo texture set";
-  m_clipboardToastTime = 2.0f;
+  m_uiWidgets.OnClipboardAction("Albedo texture set", 2.0f);
   return true;
 }
 
@@ -1276,8 +1330,7 @@ void EditorLayer::ProcessPendingObjDrops() {
     m_assetDraftRenderScale = importResult.asset.renderScale;
     m_assetImportError.clear();
     m_openNewAssetHeader = true;
-    m_clipboardToastLabel = "OBJ dropped — draft ready";
-    m_clipboardToastTime = 2.2f;
+    m_uiWidgets.OnClipboardAction("OBJ dropped — draft ready", 2.2f);
     m_pendingPathDropPaths.clear();
     return;
   }
@@ -1349,9 +1402,9 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   const bool currHelpToggle = f1Held || (slashHeld && shiftHeld);
   if (ShouldToggleHelpPopup(currHelpToggle, m_prevHelpToggle, io.WantTextInput,
                             ImGui::IsAnyItemActive())) {
-    m_helpOpen = !m_helpOpen;
-    if (!m_helpOpen)
-      m_helpSearchQuery.clear();
+    m_helpPopup.SetOpen(!m_helpPopup.IsOpen());
+    if (!m_helpPopup.IsOpen())
+      m_helpPopup.SetSearchQuery("");
   }
   m_prevHelpToggle = currHelpToggle;
 
@@ -1375,10 +1428,10 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   m_prevCommandPaletteToggle = currCommandPaletteToggle;
 
   const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
-  const bool hasBlockingPopup = m_helpOpen || m_quickOpenOpen ||
+  const bool hasBlockingPopup = m_helpPopup.IsOpen() || m_quickOpenOpen ||
                                 m_commandPaletteOpen || m_assetSearchOpen ||
-                                m_confirmDeleteObjectsOpen ||
-                                m_confirmDeleteAssetOpen || m_confirmExitOpen;
+                                m_uiWidgets.IsConfirmDeleteObjectsOpen() ||
+                                m_uiWidgets.IsConfirmDeleteAssetOpen() || m_uiWidgets.IsConfirmExitOpen();
   const bool currUndo =
       accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS;
   const bool currRedo =
@@ -1599,8 +1652,7 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
     const std::string code =
         BuildSelectionRefCode(m_document.objects[idx], idx);
     glfwSetClipboardString(m_window, code.c_str());
-    m_clipboardToastLabel = "Reference copied";
-    m_clipboardToastTime = 1.6f;
+    m_uiWidgets.OnClipboardAction("Reference copied", 1.6f);
   }
   m_prevCopyRef = currCopyRef;
 
@@ -1658,8 +1710,6 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
 }
 
 bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
-  if (m_clipboardToastTime > 0.0f)
-    m_clipboardToastTime = std::max(0.0f, m_clipboardToastTime - dt);
 
   if (m_active) {
     ProcessMcpCommands();
@@ -1709,10 +1759,12 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
 void EditorLayer::SetHotReloadOverlay(bool active, float progress01,
                                       float spinnerAngleRad,
                                       std::string_view label) {
-  m_hotReloadOverlayActive = active;
-  m_hotReloadOverlayProgress = std::max(0.0f, std::min(1.0f, progress01));
-  m_hotReloadOverlaySpinner = spinnerAngleRad;
-  m_hotReloadOverlayLabel = label;
+  if (active) {
+    m_uiWidgets.OnHotReloadProgress(progress01, spinnerAngleRad);
+    m_uiWidgets.OnHotReloadStart(0.0f, std::string(label));
+  } else {
+    m_uiWidgets.OnHotReloadEnd();
+  }
 }
 
 void EditorLayer::ProcessDeferredFilePicks() { // NOSONAR
@@ -1817,13 +1869,13 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawAssetsPanel();
     DrawPropertiesPanel();
     DrawBottomDock();
-    DrawStatusBar();
-    DrawHelpPopup();
+    m_uiWidgets.DrawStatusBar();
+    m_helpPopup.Draw();
     DrawCommandPalettePopup();
     DrawQuickOpenPopup();
-    DrawSettingsModal();
+    m_settingsModal.Draw();
     DrawDeleteConfirmModals();
-    DrawExitConfirmModal();
+    m_uiWidgets.DrawExitConfirmModal();
     if (!m_playMode) {
       DrawSelectionHighlight(); // queues to DebugDraw
       if (m_gizmo.IsActive())
@@ -1832,8 +1884,8 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
   }
   if (m_overlayRenderCallback)
     m_overlayRenderCallback();
-  DrawHotReloadOverlay();
-  DrawClipboardToast();
+  m_uiWidgets.DrawHotReloadOverlay();
+  m_uiWidgets.DrawClipboardToast();
   SaveWorkspaceStateIfNeeded(false);
 
   if (m_active && !m_historyTransactionOpen &&
@@ -1994,68 +2046,6 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
   ImGui::PopStyleVar();
 }
 
-void EditorLayer::DrawClipboardToast() const {
-  if (m_clipboardToastTime <= 0.0f)
-    return;
-
-  const ImGuiIO &io = ImGui::GetIO();
-  ImDrawList *draw = ImGui::GetForegroundDrawList();
-
-  const ImVec2 size(230.0f, 32.0f);
-  const ImVec2 pos(io.DisplaySize.x - size.x - 14.0f,
-                   io.DisplaySize.y - size.y - 14.0f);
-  const ImVec2 max(pos.x + size.x, pos.y + size.y);
-
-  draw->AddRectFilled(pos, max, IM_COL32(12, 18, 28, 215), 8.0f);
-  draw->AddRect(pos, max, IM_COL32(90, 190, 255, 185), 8.0f, 0, 1.0f);
-  const char *label = m_clipboardToastLabel.empty()
-                          ? "Reference copied"
-                          : m_clipboardToastLabel.c_str();
-  draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 9.0f),
-                IM_COL32(220, 235, 255, 255), label);
-}
-
-void EditorLayer::DrawHotReloadOverlay() const {
-  if (!m_hotReloadOverlayActive)
-    return;
-
-  const ImGuiIO &io = ImGui::GetIO();
-  ImDrawList *draw = ImGui::GetForegroundDrawList();
-
-  const ImVec2 panelSize(280.0f, 74.0f);
-  const ImVec2 panelPos((io.DisplaySize.x - panelSize.x) * 0.5f, 18.0f);
-  const ImVec2 panelMax(panelPos.x + panelSize.x, panelPos.y + panelSize.y);
-
-  draw->AddRectFilled(panelPos, panelMax, IM_COL32(10, 14, 22, 215), 10.0f);
-  draw->AddRect(panelPos, panelMax, IM_COL32(70, 120, 190, 180), 10.0f, 0,
-                1.0f);
-
-  const ImVec2 spinnerCenter(panelPos.x + 24.0f,
-                             panelPos.y + panelSize.y * 0.5f);
-  const float spinnerR = 10.0f;
-  draw->AddCircle(spinnerCenter, spinnerR, IM_COL32(80, 90, 120, 200), 24,
-                  2.0f);
-
-  const float arcStart = m_hotReloadOverlaySpinner;
-  const float arcEnd = arcStart + 2.5f;
-  draw->PathArcTo(spinnerCenter, spinnerR, arcStart, arcEnd, 24);
-  draw->PathStroke(IM_COL32(110, 210, 255, 255), false, 3.0f);
-
-  const char *label = m_hotReloadOverlayLabel.empty()
-                          ? "Hot Reload"
-                          : m_hotReloadOverlayLabel.c_str();
-  draw->AddText(ImVec2(panelPos.x + 44.0f, panelPos.y + 14.0f),
-                IM_COL32(230, 240, 255, 255), label);
-
-  const ImVec2 barMin(panelPos.x + 44.0f, panelPos.y + 42.0f);
-  const ImVec2 barMax(panelMax.x - 16.0f, panelPos.y + 56.0f);
-  draw->AddRectFilled(barMin, barMax, IM_COL32(26, 32, 46, 255), 4.0f);
-
-  const float w = (barMax.x - barMin.x) * m_hotReloadOverlayProgress;
-  if (w > 1.0f)
-    draw->AddRectFilled(barMin, ImVec2(barMin.x + w, barMax.y),
-                        IM_COL32(90, 190, 255, 255), 4.0f);
-}
 
 // ---- Toolbar helpers
 // --------------------------------------------------------
@@ -2070,9 +2060,9 @@ void EditorLayer::DrawToolbarFileMenu() {
       m_resetDockLayoutRequested = true;
     ImGui::Separator();
     if (ImGui::MenuItem("Settings...")) {
-      m_settingsOpen = true;
-      m_mcpSettingsDraft = m_mcpController.GetSettings();
-      m_mcpSettingsError.clear();
+      m_settingsModal.SetOpen(true);
+      *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
+      m_settingsModal.GetError()->clear();
     }
     if (m_fileMenuRenderCallback) {
       ImGui::Separator();
@@ -2135,8 +2125,7 @@ void EditorLayer::DrawToolbarEditMenuItems(bool hasSelection,
     const std::string ref = BuildSelectionRefCode(
         m_document.objects[static_cast<size_t>(primaryIdx)], primaryIdx);
     ImGui::SetClipboardText(ref.c_str());
-    m_clipboardToastLabel = "Reference copied";
-    m_clipboardToastTime = 1.5f;
+    m_uiWidgets.OnClipboardAction("Reference copied", 1.5f);
   }
 }
 
@@ -2161,7 +2150,7 @@ void EditorLayer::DrawToolbarViewMenu() {
     if (flyBefore || m_flyMode)
       ImGui::TextDisabled("WASD + mouse");
     if (ImGui::MenuItem("Help", "? / F1"))
-      m_helpOpen = true;
+      m_helpPopup.SetOpen(true);
     if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
       m_quickOpenOpen = true;
     if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
@@ -2358,9 +2347,9 @@ void EditorLayer::DrawIconToolbar() {
     }
     ImGui::PopStyleVar(3);
     ImGui::SameLine(0, rightButtonGap);
-    if (ImGui::Button(ICON_FA_CIRCLE_QUESTION, buttonSize)) { m_helpOpen = true; }
+    if (ImGui::Button(ICON_FA_CIRCLE_QUESTION, buttonSize)) { m_helpPopup.SetOpen(true); }
     ImGui::SameLine(0, rightButtonGap);
-    if (ImGui::Button(ICON_FA_GEAR, buttonSize)) { m_settingsOpen = true; m_mcpSettingsDraft = m_mcpController.GetSettings(); m_mcpSettingsError.clear(); }
+    if (ImGui::Button(ICON_FA_GEAR, buttonSize)) { m_settingsModal.SetOpen(true); *m_settingsModal.GetDraft() = m_mcpController.GetSettings(); m_settingsModal.GetError()->clear(); }
   }
 
   ImGui::PopStyleVar();
@@ -2420,37 +2409,6 @@ void EditorLayer::DrawToolbar() {
 
   ImGui::End();
   ImGui::PopStyleVar();
-}
-
-void EditorLayer::DrawStatusBar() const {
-  const ImGuiIO &io = ImGui::GetIO();
-  const EditorStatusText status = BuildEditorStatusText(
-      EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
-                           m_document.dirty, m_flyMode, m_wantsReload});
-
-  ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kEditorStatusH));
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorStatusH));
-  ImGui::SetNextWindowBgAlpha(0.82f);
-  ImGui::Begin("##editor_statusbar", nullptr,
-               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                   ImGuiWindowFlags_NoScrollbar |
-                   ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-  ImGui::TextDisabled("Sel: %d", status.selectionCount);
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Dirty: %s", status.dirtyText);
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Fly: %s", status.flyText);
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::TextDisabled("Reload: %s", status.reloadText);
-
-  ImGui::End();
 }
 
 const std::vector<std::pair<std::filesystem::path, bool>> *
@@ -2791,8 +2749,7 @@ void EditorLayer::DrawMcpClientCard(const char *title, const char *pathLabel,
   ImGui::TextWrapped("%s", pathValue);
   if (ImGui::Button((std::string("Copy Config##") + title).c_str())) {
     glfwSetClipboardString(m_window, std::string(snippet).c_str());
-    m_clipboardToastLabel = std::string(toastLabel);
-    m_clipboardToastTime = 1.5f;
+    m_uiWidgets.OnClipboardAction(std::string(toastLabel), 1.5f);
   }
   ImGui::EndChild();
 }
@@ -2937,9 +2894,9 @@ void EditorLayer::DrawMcpTab() {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   if (ImGui::InvisibleButton("##mcp_test/open_settings_action",
                              ImVec2(1.0f, 1.0f))) {
-    m_settingsOpen = true;
-    m_mcpSettingsDraft = m_mcpController.GetSettings();
-    m_mcpSettingsError.clear();
+    m_settingsModal.SetOpen(true);
+    *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
+    m_settingsModal.GetError()->clear();
   }
   if (ImGui::InvisibleButton("##mcp_test/clear_log_action",
                              ImVec2(1.0f, 1.0f))) {
@@ -3024,15 +2981,14 @@ void EditorLayer::DrawMcpTab() {
 
   ImGui::SeparatorText("Quick Actions");
   if (ImGui::Button("Open Settings")) {
-    m_settingsOpen = true;
-    m_mcpSettingsDraft = m_mcpController.GetSettings();
-    m_mcpSettingsError.clear();
+    m_settingsModal.SetOpen(true);
+    *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
+    m_settingsModal.GetError()->clear();
   }
   ImGui::SameLine();
   if (ImGui::Button("Copy Endpoint")) {
     glfwSetClipboardString(m_window, status.endpointUrl.c_str());
-    m_clipboardToastLabel = "MCP endpoint copied";
-    m_clipboardToastTime = 1.5f;
+    m_uiWidgets.OnClipboardAction("MCP endpoint copied", 1.5f);
   }
   ImGui::SameLine();
   if (ImGui::Button("Clear Request Log"))
@@ -3070,59 +3026,6 @@ void EditorLayer::DrawMcpTab() {
 
   ImGui::SeparatorText("Catalog");
   DrawMcpTabCatalog(status);
-}
-
-void EditorLayer::DrawSettingsModal() {
-  if (m_settingsOpen)
-    ImGui::OpenPopup("Editor Settings");
-
-  if (!ImGui::BeginPopupModal("Editor Settings", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  ImGui::TextDisabled("Built-in MCP");
-  ImGui::Checkbox("Enable built-in MCP", &m_mcpSettingsDraft.enabled);
-  ImGui::Checkbox("Auto-start when editor opens",
-                  &m_mcpSettingsDraft.autoStart);
-
-  if (int port = m_mcpSettingsDraft.port; ImGui::InputInt("Port", &port))
-    m_mcpSettingsDraft.port = std::max(1, std::min(65535, port));
-
-  ImGui::Text("Host: %s", Mcp::kDefaultMcpHost);
-  m_mcpSettingsDraft.host = Mcp::kDefaultMcpHost;
-
-  const auto endpoint =
-      std::format("{}://{}:{}/mcp", Mcp::kMcpUrlScheme, m_mcpSettingsDraft.host,
-                  m_mcpSettingsDraft.port);
-  ImGui::TextWrapped("Endpoint: %s", endpoint.c_str());
-
-  if (!m_mcpSettingsError.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
-    ImGui::TextWrapped("%s", m_mcpSettingsError.c_str());
-    ImGui::PopStyleColor();
-  }
-
-  ImGui::Separator();
-  if (ImGui::Button("Apply", ImVec2(120.0f, 0.0f))) {
-    std::string err;
-    if (m_mcpController.ApplySettings(m_mcpSettingsDraft, &err)) {
-      m_mcpSettingsDraft = m_mcpController.GetSettings();
-      m_mcpSettingsError.clear();
-      m_settingsOpen = false;
-      ImGui::CloseCurrentPopup();
-    } else {
-      m_mcpSettingsError = err;
-    }
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
-    m_settingsOpen = false;
-    m_mcpSettingsDraft = m_mcpController.GetSettings();
-    m_mcpSettingsError.clear();
-    ImGui::CloseCurrentPopup();
-  }
-
-  ImGui::EndPopup();
 }
 
 // ViewGimbalAxisDraw, ViewGimbalAxisCache, ViewGimbalArrowGeometry,
@@ -3241,8 +3144,8 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
                 cPos, ad.label);
   }
 
-  if (canvasClicked && hoverSnap != None)
-    m_pendingViewSnap = hoverSnap;
+  if (canvasClicked && hoverSnap != ViewSnap::None)
+    m_uiWidgets.SetPendingViewSnap(hoverSnap);
 
   (void)idx;
 }
@@ -3268,58 +3171,7 @@ static const char *ObjectTypeIcon(SceneObjectType type) {
 // ---- DrawRenameObjectModal — extracted from DrawObjectList
 // ----------------------
 
-void EditorLayer::ApplyRenameObject() {
-  m_renameObjectError = ValidateRenameCandidate(m_document, m_renameObjectIndex,
-                                                m_renameObjectDraft);
-  if (!m_renameObjectError.empty())
-    return;
 
-  SceneObject &target =
-      m_document.objects[static_cast<size_t>(m_renameObjectIndex)];
-  const std::string oldId = target.id;
-  if (const std::string newId = m_renameObjectDraft; oldId != newId) {
-    target.id = newId;
-    RewriteObjectIdReferences(&m_document, oldId, newId);
-    m_document.dirty = true;
-  }
-  m_renameObjectError.clear();
-  m_renameObjectIndex = -1;
-  ImGui::CloseCurrentPopup();
-}
-
-void EditorLayer::DrawRenameObjectModal() {
-  if (m_renameObjectOpen) {
-    ImGui::OpenPopup("Rename Object");
-    m_renameObjectOpen = false;
-  }
-  if (!ImGui::BeginPopupModal("Rename Object", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  std::string nameBuf(256, '\0');
-  m_renameObjectDraft.copy(nameBuf.data(), nameBuf.size() - 1);
-  if (ImGui::InputText("New ID", nameBuf.data(), nameBuf.size(),
-                       ImGuiInputTextFlags_EnterReturnsTrue)) {
-    m_renameObjectDraft = nameBuf.data();
-  } else if (std::string_view(nameBuf.data()) != m_renameObjectDraft) {
-    m_renameObjectDraft = nameBuf.data();
-  }
-
-  if (!m_renameObjectError.empty())
-    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s",
-                       m_renameObjectError.c_str());
-
-  if (ImGui::Button("Apply"))
-    ApplyRenameObject();
-  ImGui::SameLine();
-  if (ImGui::Button("Cancel")) {
-    m_renameObjectError.clear();
-    m_renameObjectIndex = -1;
-    ImGui::CloseCurrentPopup();
-  }
-
-  ImGui::EndPopup();
-}
 
 void EditorLayer::DrawObjectList() {
   using enum SceneObjectType;
@@ -3416,7 +3268,7 @@ void EditorLayer::DrawObjectList() {
     ImGui::EndPopup();
   }
 
-  DrawRenameObjectModal();
+  m_uiWidgets.DrawRenameObjectModal();
 
   ImGui::End();
 }
@@ -3990,70 +3842,6 @@ void EditorLayer::DrawAssetsPanel() {
   ImGui::End();
 }
 
-void EditorLayer::DrawHelpPopup() {
-  if (!m_helpOpen)
-    return;
-  const std::span<const ShortcutRow> shortcuts = GetEditorShortcuts();
-
-  const ImGuiIO &io = ImGui::GetIO();
-  ImGui::SetNextWindowSize(ImVec2(620.0f, 420.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - 620.0f) * 0.5f,
-                                 (io.DisplaySize.y - 420.0f) * 0.5f),
-                          ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin("Help - Keyboard Shortcuts", &m_helpOpen,
-                    ImGuiWindowFlags_NoCollapse)) {
-    ImGui::End();
-    return;
-  }
-
-  ImGui::TextDisabled("Search by category, command, or key");
-  std::string searchBuf(256, '\0');
-  m_helpSearchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
-  if (ImGui::InputTextWithHint("##shortcut_search", "Find shortcut...",
-                               searchBuf.data(), searchBuf.size()))
-    m_helpSearchQuery = searchBuf.data();
-
-  ImGui::Separator();
-  ImGui::Columns(3, "shortcut_columns", false);
-  ImGui::SetColumnWidth(0, 130.0f);
-  ImGui::SetColumnWidth(1, 300.0f);
-  ImGui::TextUnformatted("Category");
-  ImGui::NextColumn();
-  ImGui::TextUnformatted("Command");
-  ImGui::NextColumn();
-  ImGui::TextUnformatted("Shortcut");
-  ImGui::NextColumn();
-  ImGui::Separator();
-
-  int shownCount = 0;
-  for (const auto &row : shortcuts) {
-    if (!MatchesShortcutQuery(row, m_helpSearchQuery))
-      continue;
-
-    ImGui::TextDisabled("%s", row.category);
-    ImGui::NextColumn();
-    ImGui::TextUnformatted(row.command);
-    ImGui::NextColumn();
-    ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "%s", row.keys);
-    ImGui::NextColumn();
-    ++shownCount;
-  }
-
-  ImGui::Columns(1);
-  if (shownCount == 0)
-    ImGui::TextDisabled("No shortcut matches '%s'", m_helpSearchQuery.c_str());
-
-  ImGui::Separator();
-  ImGui::TextDisabled("Tip: press ? or F1 to close this window quickly.");
-  ImGui::SameLine();
-  if (ImGui::Button("Close")) {
-    m_helpOpen = false;
-    m_helpSearchQuery.clear();
-  }
-  ImGui::End();
-}
-
 void EditorLayer::DrawCommandPalettePopup() {
   if (m_commandPaletteOpen) {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
@@ -4529,191 +4317,10 @@ void EditorLayer::DrawCreateAssetModalContent() {
   ImGui::PopItemWidth();
 }
 
-void EditorLayer::DrawConfirmDeleteObjectsModal() {
-  if (m_confirmDeleteObjectsOpen)
-    ImGui::OpenPopup("Confirm Delete Objects");
-  if (!ImGui::BeginPopupModal("Confirm Delete Objects", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  int validCount = 0;
-  for (int idx : m_pendingDeleteObjectIndices)
-    if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
-      ++validCount;
-
-  if (validCount <= 0) {
-    m_confirmDeleteObjectsOpen = false;
-    m_pendingDeleteObjectIndices.clear();
-    ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-    return;
-  }
-
-  ImGui::Text("Delete %d selected object(s)?", validCount);
-  ImGui::TextDisabled("This action cannot be undone.");
-  ImGui::Separator();
-
-  if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
-    m_confirmDeleteObjectsOpen = false;
-    m_pendingDeleteObjectIndices.clear();
-    ImGui::CloseCurrentPopup();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
-    std::vector<int> sorted = m_pendingDeleteObjectIndices;
-    std::sort(sorted.rbegin(), sorted.rend());
-    for (int idx : sorted) {
-      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
-        m_document.objects.erase(m_document.objects.begin() + idx);
-    }
-    m_selectedIndices.clear();
-    MarkDirtyAndReload();
-    m_confirmDeleteObjectsOpen = false;
-    m_pendingDeleteObjectIndices.clear();
-    ImGui::CloseCurrentPopup();
-  }
-  ImGui::EndPopup();
-}
-
-void EditorLayer::DrawConfirmDeleteAssetModal() {
-  if (m_confirmDeleteAssetOpen)
-    ImGui::OpenPopup("Confirm Delete Asset");
-  if (!ImGui::BeginPopupModal("Confirm Delete Asset", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  if (m_pendingDeleteAssetId.empty() ||
-      !m_document.assets.contains(m_pendingDeleteAssetId)) {
-    m_confirmDeleteAssetOpen = false;
-    m_pendingDeleteAssetId.clear();
-    m_pendingDeleteAssetError.clear();
-    ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-    return;
-  }
-
-  const std::filesystem::path managedDirectory =
-      GetManagedImportedAssetDirectory(
-          m_document.assets.at(m_pendingDeleteAssetId));
-
-  ImGui::Text("Delete asset '%s'?", m_pendingDeleteAssetId.c_str());
-  ImGui::TextDisabled("All object bindings to this asset will be cleared.");
-  if (!managedDirectory.empty()) {
-    ImGui::TextDisabled("Imported project files will also be removed:");
-    ImGui::TextWrapped("%s", managedDirectory.generic_string().c_str());
-  } else {
-    ImGui::TextDisabled("No managed imported asset folder was detected; only "
-                        "the asset record will be removed.");
-  }
-  if (!m_pendingDeleteAssetError.empty()) {
-    ImGui::Spacing();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 360.0f);
-    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
-                       m_pendingDeleteAssetError.c_str());
-    ImGui::PopTextWrapPos();
-  }
-  ImGui::Separator();
-
-  if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
-    m_confirmDeleteAssetOpen = false;
-    m_pendingDeleteAssetId.clear();
-    m_pendingDeleteAssetError.clear();
-    ImGui::CloseCurrentPopup();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
-    const AssetDeleteResult deleteResult =
-        DeleteAssetDefinition(m_pendingDeleteAssetId);
-    if (!deleteResult.ok) {
-      m_pendingDeleteAssetError = deleteResult.error;
-    } else {
-      m_confirmDeleteAssetOpen = false;
-      m_pendingDeleteAssetId.clear();
-      m_pendingDeleteAssetError.clear();
-      ImGui::CloseCurrentPopup();
-    }
-  }
-  ImGui::EndPopup();
-}
 
 void EditorLayer::DrawDeleteConfirmModals() {
-  DrawConfirmDeleteObjectsModal();
-  DrawConfirmDeleteAssetModal();
-}
-
-void EditorLayer::DrawExitConfirmModal() {
-  using enum PendingSceneAction;
-  if (m_confirmExitOpen)
-    ImGui::OpenPopup("Unsaved Changes");
-
-  if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  const char *actionLabel = "continue";
-  switch (m_pendingSceneAction) {
-  case NewScene:
-    actionLabel = "create a new scene";
-    break;
-  case OpenSceneFile:
-    actionLabel = "open another scene";
-    break;
-  case LoadSceneFromDisk:
-    actionLabel = "load the scene from disk";
-    break;
-  case ReloadSceneFromDisk:
-    actionLabel = "reload the scene";
-    break;
-  case CloseEditor:
-    actionLabel = "exit editor mode";
-    break;
-  case None:
-    break;
-  }
-
-  ImGui::TextUnformatted("You have unsaved changes.");
-  ImGui::TextDisabled("Save or discard them before you %s.", actionLabel);
-  ImGui::Separator();
-
-  if (!m_exitConfirmError.empty())
-    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
-                       m_exitConfirmError.c_str());
-
-  if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
-    m_confirmExitOpen = false;
-    m_exitConfirmError.clear();
-    m_pendingSceneAction = None;
-    ImGui::CloseCurrentPopup();
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Discard", ImVec2(120.0f, 0.0f))) {
-    if (m_pendingSceneAction == CloseEditor)
-      DiscardUnsavedChanges();
-    m_confirmExitOpen = false;
-    m_exitConfirmError.clear();
-    ImGui::CloseCurrentPopup();
-    std::string actionError;
-    if (!ExecutePendingSceneAction(&actionError))
-      m_exitConfirmError = actionError;
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Save & Continue", ImVec2(120.0f, 0.0f))) {
-    std::string saveError;
-    if (SaveDocument(&saveError)) {
-      m_confirmExitOpen = false;
-      m_exitConfirmError.clear();
-      ImGui::CloseCurrentPopup();
-      std::string actionError;
-      if (!ExecutePendingSceneAction(&actionError))
-        m_exitConfirmError = actionError;
-    } else {
-      m_exitConfirmError = saveError;
-    }
-  }
-
-  ImGui::EndPopup();
+  m_uiWidgets.DrawConfirmDeleteObjectsModal();
+  m_uiWidgets.DrawConfirmDeleteAssetModal();
 }
 
 // ---- Picking
@@ -4853,7 +4460,7 @@ void EditorLayer::DrawSelectionHighlight() {
 
 void EditorLayer::ApplyPendingViewSnap(Camera &cam) {
   using enum ViewSnap;
-  if (m_pendingViewSnap == None)
+  if (m_uiWidgets.GetPendingViewSnap() == None)
     return;
 
   Vec3 pivot = Vec3::Zero();
@@ -4866,10 +4473,10 @@ void EditorLayer::ApplyPendingViewSnap(Camera &cam) {
   }
 
   const float distance = std::max(2.0f, extent * 3.0f + 1.0f);
-  SnapCameraToAxis(cam, m_pendingViewSnap, pivot, distance);
+  SnapCameraToAxis(cam, m_uiWidgets.GetPendingViewSnap(), pivot, distance);
 
   m_flyCamInitialized = false;
-  m_pendingViewSnap = ViewSnap::None;
+  m_uiWidgets.ClearPendingViewSnap();
 }
 
 // ---- Helpers
@@ -5100,7 +4707,7 @@ void EditorLayer::RequestSceneAction(PendingSceneAction action) {
   m_pendingSceneAction = action;
   m_exitConfirmError.clear();
   if (m_document.dirty) {
-    m_confirmExitOpen = true;
+    m_uiWidgets.OpenConfirmExit();
     return;
   }
 
@@ -5259,8 +4866,7 @@ void EditorLayer::RequestDeleteSelectedObjects() {
   if (m_selectedIndices.empty())
     return;
 
-  m_pendingDeleteObjectIndices = m_selectedIndices;
-  m_confirmDeleteObjectsOpen = true;
+  m_uiWidgets.OpenConfirmDeleteObjects(m_selectedIndices);
 }
 
 void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
@@ -5269,18 +4875,13 @@ void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
   if (!m_document.assets.contains(std::string(assetId)))
     return;
 
-  m_pendingDeleteAssetId = assetId;
-  m_pendingDeleteAssetError.clear();
-  m_confirmDeleteAssetOpen = true;
+  m_uiWidgets.OpenConfirmDeleteAsset(std::string(assetId));
 }
 
 void EditorLayer::OpenRenameObjectModal(int index) {
   if (index < 0 || index >= static_cast<int>(m_document.objects.size()))
     return;
-  m_renameObjectIndex = index;
-  m_renameObjectDraft = m_document.objects[static_cast<size_t>(index)].id;
-  m_renameObjectError.clear();
-  m_renameObjectOpen = true;
+  m_uiWidgets.OpenRenameObject(index);
 }
 
 void EditorLayer::AddObject(SceneObjectType type, std::string_view parentId) {
@@ -5689,9 +5290,9 @@ void EditorLayer::OnMenuResetLayout() {
 }
 
 void EditorLayer::OnMenuSettings() {
-  m_settingsOpen = true;
-  m_mcpSettingsDraft = m_mcpController.GetSettings();
-  m_mcpSettingsError.clear();
+  m_settingsModal.SetOpen(true);
+  *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
+  m_settingsModal.GetError()->clear();
 }
 
 void EditorLayer::OnMenuCloseEditor() {
@@ -5732,11 +5333,11 @@ void EditorLayer::OnMenuDuplicate() {
 
 void EditorLayer::OnMenuDelete() {
   if (!m_selectedIndices.empty())
-    m_confirmDeleteObjectsOpen = true;
+    m_uiWidgets.OpenConfirmDeleteObjects(m_selectedIndices);
 }
 
 void EditorLayer::OnMenuHelp() {
-  m_helpOpen = true;
+  m_helpPopup.SetOpen(true);
 }
 
 void EditorLayer::OnMenuQuickOpen() {

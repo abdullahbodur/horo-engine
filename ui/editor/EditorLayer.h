@@ -17,6 +17,10 @@
 #include "ui/editor/EditorWorkspaceSettings.h"
 #include "ui/editor/SceneDocument.h"
 #include "ui/editor/TransformGizmo.h"
+#include "ui/editor/ViewSnap.h"
+#include "ui/editor/components/EditorHelpPopup.h"
+#include "ui/editor/components/EditorSettingsModal.h"
+#include "ui/editor/components/EditorUIWidgets.h"
 #include "mcp/McpController.h"
 #include "renderer/Camera.h"
 #include "renderer/Shader.h"
@@ -152,8 +156,6 @@ namespace Horo {
             Mcp::McpCommandResult ExecuteMcpCommand(std::string_view toolName,
                                                     const nlohmann::json &arguments);
 
-            enum class ViewSnap { None, Top, Bottom, Left, Right, Front, Back };
-
         private:
             enum class PendingSceneAction {
                 None,
@@ -174,6 +176,10 @@ namespace Horo {
             };
 
             DeferredFilePick m_deferredFilePick = DeferredFilePick::None;
+            
+            // Exit confirmation modal state
+            PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
+            std::string m_exitConfirmError;
 
             void ProcessDeferredFilePicks();
 
@@ -212,7 +218,6 @@ namespace Horo {
             double m_prevCursorY = 0.0;
             bool m_prevCursorInit = false;
             bool m_prevTab = false;
-            ViewSnap m_pendingViewSnap = ViewSnap::None;
 
             void ToggleFlyMode(const Camera &cam);
 
@@ -263,16 +268,12 @@ namespace Horo {
 
             void DrawViewportPanel(const Camera &cam, int screenW, int screenH);
 
+            void DrawViewGimbal(const Camera &cam);
+
             bool DrawViewportImage(float targetW, float targetH) const;
 
             bool HandleViewportAssetDrop(const Camera &cam, int screenW, int screenH,
                                          const char *assetIdText);
-
-            void DrawViewGimbal(const Camera &cam);
-
-            void DrawHotReloadOverlay() const;
-
-            void DrawClipboardToast() const;
 
             void DrawObjectList();
 
@@ -322,13 +323,9 @@ namespace Horo {
 
             void DrawFallbackAddComponentMenuItems(SceneObject &obj);
 
-            void DrawHelpPopup();
-
             void DrawCommandPalettePopup();
 
             void DrawQuickOpenPopup();
-
-            void DrawStatusBar() const;
 
             void DrawBottomDock();
 
@@ -351,14 +348,6 @@ namespace Horo {
             GetProjectDirListing(const std::filesystem::path &absPath);
 
             void DrawDeleteConfirmModals();
-
-            void DrawConfirmDeleteObjectsModal();
-
-            void DrawConfirmDeleteAssetModal();
-
-            void DrawExitConfirmModal();
-
-            void DrawSettingsModal();
 
             void HandlePicking(const Camera &cam, int screenW, int screenH);
 
@@ -515,11 +504,6 @@ namespace Horo {
 
             void DrawSceneControls();
 
-            // DrawObjectList sub-sections
-            void DrawRenameObjectModal();
-
-            void ApplyRenameObject();
-
             // DrawBottomDock sub-sections
             void DrawProjectBrowserTab();
 
@@ -560,12 +544,7 @@ namespace Horo {
 
             void DrawObjectsTreeRuntimeEntities(const SceneDocument &doc) const;
 
-            bool m_hotReloadOverlayActive = false;
-            float m_hotReloadOverlayProgress = 0.0f;
-            float m_hotReloadOverlaySpinner = 0.0f;
-            std::string m_hotReloadOverlayLabel;
-            float m_clipboardToastTime = 0.0f;
-            std::string m_clipboardToastLabel;
+
 
             std::string m_assetDraftId;
             std::string m_assetDraftGuid;
@@ -613,12 +592,10 @@ namespace Horo {
             Vec3 m_batchRotateDraft = Vec3::Zero();
             Vec3 m_batchScaleDraft = Vec3::One();
             int m_batchAssetChoice = 0;
-            bool m_helpOpen = false;
             bool m_prevHelpToggle = false;
-            std::string m_helpSearchQuery;
-            bool m_settingsOpen = false;
-            Mcp::McpSettings m_mcpSettingsDraft;
-            std::string m_mcpSettingsError;
+            EditorHelpPopup m_helpPopup;
+            EditorSettingsModal m_settingsModal;
+            EditorUIWidgets m_uiWidgets;
             int m_mcpSelectedActivityIndex = 0;
             bool m_mcpUiClearToggle = false;
             bool m_quickOpenOpen = false;
@@ -629,18 +606,6 @@ namespace Horo {
             std::string m_commandPaletteQuery;
             bool m_prevUndo = false;
             bool m_prevRedo = false;
-            bool m_confirmDeleteObjectsOpen = false;
-            bool m_confirmDeleteAssetOpen = false;
-            bool m_confirmExitOpen = false;
-            std::vector<int> m_pendingDeleteObjectIndices;
-            std::string m_pendingDeleteAssetId;
-            std::string m_pendingDeleteAssetError;
-            std::string m_exitConfirmError;
-            PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
-            bool m_renameObjectOpen = false;
-            int m_renameObjectIndex = -1;
-            std::string m_renameObjectDraft;
-            std::string m_renameObjectError;
 
             std::filesystem::path m_projectBrowserRoot;
             bool m_projectBrowserRootValid = false;
