@@ -6,7 +6,7 @@
 
 #include "core/EngineLaunchArgs.h"
 #include "core/LogBuffer.h"
-#include "editor/ProjectEntryFilter.h"
+#include "ui/editor/ProjectEntryFilter.h"
 
 using namespace Horo;
 using namespace Horo::Editor;

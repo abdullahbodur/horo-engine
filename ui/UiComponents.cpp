@@ -65,10 +65,28 @@ void PushButtonColorsSecondary(const HoroPalette &palette, int *colorCount) {
 }
 
 void PushButtonVars(const HoroRounding &rounding, const HoroDensity &density,
-                    int *styleCount) {
+                     int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, density.buttonPadding);
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.button);
   *styleCount += 2;
+}
+
+void PushComboColors(const HoroPalette &palette, int *colorCount) {
+  ImGui::PushStyleColor(ImGuiCol_FrameBg, palette.input);
+  ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, palette.inputHover);
+  ImGui::PushStyleColor(ImGuiCol_FrameBgActive, palette.inputActive);
+  ImGui::PushStyleColor(ImGuiCol_PopupBg, palette.panel);
+  ImGui::PushStyleColor(ImGuiCol_Text, palette.text);
+  *colorCount += 5;
+}
+
+void PushComboVars(const HoroRounding &rounding, const HoroDensity &density,
+                   int *styleCount) {
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.input);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, density.inputPadding);
+  ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, rounding.panel);
+  ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+  *styleCount += 4;
 }
 
 } // namespace
@@ -153,6 +171,94 @@ void SectionHeader(const EditorTheme &theme, const char *title) {
 void SectionHeader(const LauncherTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
+}
+
+bool Button(const EditorTheme &theme, ButtonStyleVariant variant,
+            const char *label, const ImVec2 &size) {
+  ScopedButtonStyle style(theme, variant);
+  return ImGui::Button(label, size);
+}
+
+bool Button(const LauncherTheme &theme, ButtonStyleVariant variant,
+            const char *label, const ImVec2 &size) {
+  ScopedButtonStyle style(theme, variant);
+  return ImGui::Button(label, size);
+}
+
+bool RenderPrimaryButton(const LauncherTheme &theme, const char *label,
+                         const ImVec2 &size) {
+  return Button(theme, ButtonStyleVariant::Primary, label, size);
+}
+
+bool RenderSecondaryButton(const LauncherTheme &theme, const char *label,
+                            const ImVec2 &size) {
+  return Button(theme, ButtonStyleVariant::Secondary, label, size);
+}
+
+bool RenderRecentProjectButton(const LauncherTheme &theme, const char *title,
+                                const ImVec2 &size) {
+  return Button(theme, ButtonStyleVariant::Secondary, title, size);
+}
+
+void RenderLabeledInput(const LauncherTheme &theme, const char *title,
+                        const char *id, char *buffer, size_t bufferSize,
+                        float inputWidth) {
+  ImGui::TextDisabled("%s", title);
+  ImGui::SetNextItemWidth(inputWidth);
+  InputText(theme, id, buffer, bufferSize);
+}
+
+bool InputText(const EditorTheme &theme, const char *id, char *buffer,
+               size_t bufferSize, ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  return ImGui::InputText(id, buffer, bufferSize, flags);
+}
+
+bool InputText(const LauncherTheme &theme, const char *id, char *buffer,
+               size_t bufferSize, ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  return ImGui::InputText(id, buffer, bufferSize, flags);
+}
+
+ScopedComboStyle::ScopedComboStyle(const EditorTheme &theme) {
+  PushComboColors(theme.palette, &m_colorCount);
+  PushComboVars(theme.rounding, theme.density, &m_styleCount);
+}
+
+ScopedComboStyle::ScopedComboStyle(const LauncherTheme &theme) {
+  PushComboColors(theme.palette, &m_colorCount);
+  PushComboVars(theme.rounding, theme.density, &m_styleCount);
+}
+
+ScopedComboStyle::~ScopedComboStyle() {
+  ImGui::PopStyleVar(m_styleCount);
+  ImGui::PopStyleColor(m_colorCount);
+}
+
+bool InputTextWithHint(const EditorTheme &theme, const char *id,
+                       const char *hint, char *buffer, size_t bufferSize,
+                       ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
+}
+
+bool InputTextWithHint(const LauncherTheme &theme, const char *id,
+                       const char *hint, char *buffer, size_t bufferSize,
+                       ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
+}
+
+bool Combo(const EditorTheme &theme, const char *label, int *currentItem,
+           const char *const items[], int itemCount) {
+  ScopedComboStyle style(theme);
+  return ImGui::Combo(label, currentItem, items, itemCount);
+}
+
+bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
+           const char *const items[], int itemCount) {
+  ScopedComboStyle style(theme);
+  return ImGui::Combo(label, currentItem, items, itemCount);
 }
 
 } // namespace Horo::Ui

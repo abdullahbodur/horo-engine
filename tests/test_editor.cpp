@@ -22,22 +22,22 @@
 #include "core/LogBuffer.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
-#include "editor/AssetImportService.h"
-#include "editor/AssetImporterRegistry.h"
-#include "editor/AssetMetadata.h"
-#include "editor/EditorAssetImport.h"
-#include "editor/EditorImGuiBackend.h"
-#include "editor/EditorLayer.h"
-#include "editor/EditorSceneGraph.h"
-#include "editor/EditorSchema.h"
-#include "editor/EditorSearch.h"
-#include "editor/EditorUiLogic.h"
-#include "editor/EditorWorkspaceSettings.h"
-#include "editor/Raycaster.h"
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
-#include "editor/SceneRuntimeBridge.h"
-#include "editor/SceneSerializer.h"
+#include "ui/editor/AssetImportService.h"
+#include "ui/editor/AssetImporterRegistry.h"
+#include "ui/editor/AssetMetadata.h"
+#include "ui/editor/EditorAssetImport.h"
+#include "ui/editor/EditorImGuiBackend.h"
+#include "ui/editor/EditorLayer.h"
+#include "ui/editor/EditorSceneGraph.h"
+#include "ui/editor/EditorSchema.h"
+#include "ui/editor/EditorSearch.h"
+#include "ui/editor/EditorUiLogic.h"
+#include "ui/editor/EditorWorkspaceSettings.h"
+#include "ui/editor/Raycaster.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneProjectBridge.h"
+#include "ui/editor/SceneRuntimeBridge.h"
+#include "ui/editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 #include "scene/Registry.h"
 #include "scene/components/MeshComponent.h"
@@ -49,7 +49,7 @@
 // functions (FindEnumOptionIndex, BuildImGuiComboItems,
 // SchemaAppliesToObjectType) that live inside anonymous namespaces and are
 // not reachable via EditorLayer's public surface.
-#include "editor/EditorLayerInternal.h"
+#include "ui/editor/EditorLayerInternal.h"
 
 using namespace Horo;
 using namespace Horo::Editor;
@@ -9060,8 +9060,8 @@ TEST_CASE("EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo fil
 // ===========================================================================
 // EditorSelectionRules
 // ===========================================================================
-#include "editor/EditorPropertyRules.h"
-#include "editor/EditorSelectionRules.h"
+#include "ui/editor/EditorPropertyRules.h"
+#include "ui/editor/EditorSelectionRules.h"
 
 TEST_CASE("ValidateRenameCandidate: empty draft returns error", "[editor][selection-rules]") {
   SceneDocument doc;

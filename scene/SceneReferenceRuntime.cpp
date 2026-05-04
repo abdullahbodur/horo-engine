@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <stdexcept>
 
-#include "editor/EditorUiLogic.h"
+#include "ui/editor/EditorUiLogic.h"
 #include "math/MathUtils.h"
 #include "physics/BoxCollider.h"
 #include "scene/components/BehaviorComponent.h"

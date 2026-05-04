@@ -96,6 +96,19 @@ public:
 
   void SetCursorMode(CursorMode mode);
 
+  void SetupNativeMenuBar();
+  using MenuCallback = std::function<void()>;
+  void SetMenuCallbacks(
+      MenuCallback fileNew, MenuCallback fileOpen, MenuCallback fileResetLayout,
+      MenuCallback fileSettings, MenuCallback fileCloseEditor,
+      MenuCallback addPanel, MenuCallback addProp, MenuCallback addLight,
+      MenuCallback addCamera, MenuCallback addPropFromAsset,
+      MenuCallback editUndo, MenuCallback editRedo, MenuCallback editRename,
+      MenuCallback editCreatePrefab, MenuCallback editDuplicate,
+      MenuCallback editDelete, MenuCallback viewFlyMode, MenuCallback viewHelp,
+      MenuCallback viewQuickOpen, MenuCallback viewCommandPalette,
+      MenuCallback viewResetLayout);
+
 private:
   GLFWwindow *m_window = nullptr;
   int m_width = 0;

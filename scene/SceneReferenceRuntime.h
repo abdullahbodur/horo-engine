@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneRuntimeCoordinatorBridge.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 #include "physics/RigidBody.h"
 #include "renderer/Light.h"
 #include "scene/Scene.h"

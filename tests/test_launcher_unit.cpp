@@ -10,9 +10,9 @@
 #include <string>
 #include <vector>
 
-#include "launcher/EditorHomeSettings.h"
-#include "launcher/LauncherProject.h"
-#include "launcher/LauncherProjectTemplate.h"
+#include "ui/launcher/EditorHomeSettings.h"
+#include "ui/launcher/LauncherProject.h"
+#include "ui/launcher/LauncherProjectTemplate.h"
 #include "tests/TestTempPaths.h"
 
 using namespace Horo::Launcher;

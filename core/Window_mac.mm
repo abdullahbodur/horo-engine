@@ -18,12 +18,7 @@ extern "C" void ApplyDarkTitleBarMac(GLFWwindow *glfwWindow) {
   if (!window)
     return;
 
-  // Force dark appearance base.
   window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-
-  // Make the title bar transparent so the window's backgroundColor shows
-  // through it, giving the exact dark navy color used by the launcher
-  // (RGB 1, 7, 17 = #01070F) instead of the generic system dark chrome.
   window.titlebarAppearsTransparent = YES;
   window.backgroundColor =
       [NSColor colorWithSRGBRed:1.0 / 255.0
@@ -42,4 +37,127 @@ extern "C" void ApplyAppIconMac(const char *iconPath) {
     [NSApp setApplicationIconImage:icon];
     [icon release];
   }
+}
+
+extern "C" void InvokeFileNew();
+extern "C" void InvokeFileOpen();
+extern "C" void InvokeFileResetLayout();
+extern "C" void InvokeFileSettings();
+extern "C" void InvokeFileCloseEditor();
+extern "C" void InvokeAddPanel();
+extern "C" void InvokeAddProp();
+extern "C" void InvokeAddLight();
+extern "C" void InvokeAddCamera();
+extern "C" void InvokeAddPropFromAsset();
+extern "C" void InvokeEditUndo();
+extern "C" void InvokeEditRedo();
+extern "C" void InvokeEditRename();
+extern "C" void InvokeEditCreatePrefab();
+extern "C" void InvokeEditDuplicate();
+extern "C" void InvokeEditDelete();
+extern "C" void InvokeViewFlyMode();
+extern "C" void InvokeViewHelp();
+extern "C" void InvokeViewQuickOpen();
+extern "C" void InvokeViewCommandPalette();
+extern "C" void InvokeViewResetLayout();
+
+@interface MenuHandler : NSObject
++ (void)fileNew:(id)sender;
++ (void)fileOpen:(id)sender;
++ (void)fileResetLayout:(id)sender;
++ (void)fileSettings:(id)sender;
++ (void)fileCloseEditor:(id)sender;
++ (void)addPanel:(id)sender;
++ (void)addProp:(id)sender;
++ (void)addLight:(id)sender;
++ (void)addCamera:(id)sender;
++ (void)addPropFromAsset:(id)sender;
++ (void)editUndo:(id)sender;
++ (void)editRedo:(id)sender;
++ (void)editRename:(id)sender;
++ (void)editCreatePrefab:(id)sender;
++ (void)editDuplicate:(id)sender;
++ (void)editDelete:(id)sender;
++ (void)viewFlyMode:(id)sender;
++ (void)viewHelp:(id)sender;
++ (void)viewQuickOpen:(id)sender;
++ (void)viewCommandPalette:(id)sender;
++ (void)viewResetLayout:(id)sender;
+@end
+
+@implementation MenuHandler
++ (void)fileNew:(id)sender { InvokeFileNew(); }
++ (void)fileOpen:(id)sender { InvokeFileOpen(); }
++ (void)fileResetLayout:(id)sender { InvokeFileResetLayout(); }
++ (void)fileSettings:(id)sender { InvokeFileSettings(); }
++ (void)fileCloseEditor:(id)sender { InvokeFileCloseEditor(); }
++ (void)addPanel:(id)sender { InvokeAddPanel(); }
++ (void)addProp:(id)sender { InvokeAddProp(); }
++ (void)addLight:(id)sender { InvokeAddLight(); }
++ (void)addCamera:(id)sender { InvokeAddCamera(); }
++ (void)addPropFromAsset:(id)sender { InvokeAddPropFromAsset(); }
++ (void)editUndo:(id)sender { InvokeEditUndo(); }
++ (void)editRedo:(id)sender { InvokeEditRedo(); }
++ (void)editRename:(id)sender { InvokeEditRename(); }
++ (void)editCreatePrefab:(id)sender { InvokeEditCreatePrefab(); }
++ (void)editDuplicate:(id)sender { InvokeEditDuplicate(); }
++ (void)editDelete:(id)sender { InvokeEditDelete(); }
++ (void)viewFlyMode:(id)sender { InvokeViewFlyMode(); }
++ (void)viewHelp:(id)sender { InvokeViewHelp(); }
++ (void)viewQuickOpen:(id)sender { InvokeViewQuickOpen(); }
++ (void)viewCommandPalette:(id)sender { InvokeViewCommandPalette(); }
++ (void)viewResetLayout:(id)sender { InvokeViewResetLayout(); }
+@end
+
+extern "C" void SetupNativeMenuBarMac() {
+  NSMenu *mainMenu = [[NSMenu alloc] init];
+
+  NSMenu *fileMenu = [[NSMenu alloc] initWithTitle:@"File"];
+  [fileMenu addItem:[[NSMenuItem alloc] initWithTitle:@"New Scene" action:@selector(fileNew:) keyEquivalent:@"n"]];
+  [fileMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Open Scene..." action:@selector(fileOpen:) keyEquivalent:@"o"]];
+  [fileMenu addItem:[NSMenuItem separatorItem]];
+  [fileMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Reset Layout" action:@selector(fileResetLayout:) keyEquivalent:@""]];
+  [fileMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Settings..." action:@selector(fileSettings:) keyEquivalent:@","]];
+  [fileMenu addItem:[NSMenuItem separatorItem]];
+  [fileMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Close Editor" action:@selector(fileCloseEditor:) keyEquivalent:@"w"]];
+  NSMenuItem *fileItem = [[NSMenuItem alloc] initWithTitle:@"File" action:nil keyEquivalent:@""];
+  [fileItem setSubmenu:fileMenu];
+  [mainMenu addItem:fileItem];
+
+  NSMenu *addMenu = [[NSMenu alloc] initWithTitle:@"Add"];
+  [addMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Panel" action:@selector(addPanel:) keyEquivalent:@""]];
+  [addMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Prop" action:@selector(addProp:) keyEquivalent:@""]];
+  [addMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Light" action:@selector(addLight:) keyEquivalent:@""]];
+  [addMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Camera" action:@selector(addCamera:) keyEquivalent:@""]];
+  [addMenu addItem:[NSMenuItem separatorItem]];
+  [addMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Prop from Selected Asset" action:@selector(addPropFromAsset:) keyEquivalent:@""]];
+  NSMenuItem *addItem = [[NSMenuItem alloc] initWithTitle:@"Add" action:nil keyEquivalent:@""];
+  [addItem setSubmenu:addMenu];
+  [mainMenu addItem:addItem];
+
+  NSMenu *editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Undo" action:@selector(editUndo:) keyEquivalent:@"z"]];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Redo" action:@selector(editRedo:) keyEquivalent:@"Z"]];
+  [editMenu addItem:[NSMenuItem separatorItem]];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Rename..." action:@selector(editRename:) keyEquivalent:@""]];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Create Prefab" action:@selector(editCreatePrefab:) keyEquivalent:@""]];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Duplicate" action:@selector(editDuplicate:) keyEquivalent:@"d"]];
+  [editMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Delete" action:@selector(editDelete:) keyEquivalent:@"\b"]];
+  NSMenuItem *editItem = [[NSMenuItem alloc] initWithTitle:@"Edit" action:nil keyEquivalent:@""];
+  [editItem setSubmenu:editMenu];
+  [mainMenu addItem:editItem];
+
+  NSMenu *viewMenu = [[NSMenu alloc] initWithTitle:@"View"];
+  [viewMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Fly Mode" action:@selector(viewFlyMode:) keyEquivalent:@"t"]];
+  [viewMenu addItem:[NSMenuItem separatorItem]];
+  [viewMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Help" action:@selector(viewHelp:) keyEquivalent:@"?"]];
+  [viewMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Quick Open" action:@selector(viewQuickOpen:) keyEquivalent:@"p"]];
+  [viewMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Command Palette" action:@selector(viewCommandPalette:) keyEquivalent:@"P"]];
+  [viewMenu addItem:[NSMenuItem separatorItem]];
+  [viewMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Reset Layout" action:@selector(viewResetLayout:) keyEquivalent:@""]];
+  NSMenuItem *viewItem = [[NSMenuItem alloc] initWithTitle:@"View" action:nil keyEquivalent:@""];
+  [viewItem setSubmenu:viewMenu];
+  [mainMenu addItem:viewItem];
+
+  [NSApp setMainMenu:mainMenu];
 }

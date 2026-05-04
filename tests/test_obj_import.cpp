@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "editor/EditorAssetImport.h"
+#include "ui/editor/EditorAssetImport.h"
 #include "renderer/ObjLoader.h"
 #include "tests/TestTempPaths.h"
 

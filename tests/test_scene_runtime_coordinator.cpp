@@ -4,8 +4,8 @@
 #include <string>
 #include <string_view>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneRuntimeCoordinatorBridge.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 #include "scene/RuntimeSceneDefinition.h"
 #include "scene/SceneRuntimeCoordinator.h"
 

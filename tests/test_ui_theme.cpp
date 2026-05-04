@@ -5,8 +5,11 @@
 
 #include "ui/HoroTheme.h"
 #include "ui/UiComponents.h"
+#include "ui/UiFonts.h"
 
 using Horo::Ui::EditorTheme;
+using Horo::Ui::FontFamilyConfig;
+using Horo::Ui::FontResolutionResult;
 using Horo::Ui::LauncherTheme;
 
 namespace {
@@ -108,5 +111,162 @@ TEST_CASE("style scopes restore ImGui style stacks") {
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 
+  {
+    Horo::Ui::ScopedComboStyle combo(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  {
+    Horo::Ui::ScopedComboStyle combo(Horo::Ui::GetLauncherTheme());
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("combo style scope pushes expected style counts") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  {
+    Horo::Ui::ScopedComboStyle combo(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size == colorStackBefore + 5);
+    CHECK(context->StyleVarStack.Size == styleStackBefore + 4);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("shared widget wrappers restore ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("wrapper-test");
+
+  Horo::Ui::Button(Horo::Ui::GetEditorTheme(),
+                   Horo::Ui::ButtonStyleVariant::Primary,
+                   "Apply##wrapper_test_button", ImVec2(120.0f, 0.0f));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  char buffer[32] = "value";
+  Horo::Ui::InputText(Horo::Ui::GetLauncherTheme(), "##wrapper_test_input",
+                      buffer, sizeof(buffer));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  Horo::Ui::InputTextWithHint(Horo::Ui::GetEditorTheme(),
+                              "##wrapper_test_hint", "Search", buffer,
+                              sizeof(buffer));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  int currentItem = 0;
+  const char *items[] = {"OpenGL", "Vulkan"};
+  Horo::Ui::Combo(Horo::Ui::GetLauncherTheme(), "Renderer##wrapper_test_combo",
+                  &currentItem, items, 2);
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("font path resolution returns empty for empty config") {
+  FontFamilyConfig config{.relativePath = "", .size = 16.0f};
+  FontResolutionResult result = Horo::Ui::ResolveFontPath(config);
+  CHECK_FALSE(result.found);
+  CHECK(result.resolvedPath.empty());
+}
+
+TEST_CASE("font path resolution returns not found for nonexistent font") {
+  FontFamilyConfig config{.relativePath = "assets/fonts/NonExistentFont.ttf",
+                          .size = 16.0f};
+  FontResolutionResult result = Horo::Ui::ResolveFontPath(config);
+  CHECK_FALSE(result.found);
+}
+
+TEST_CASE("font config stores relative path and size") {
+  FontFamilyConfig config{.relativePath = "assets/fonts/InterVariable.ttf",
+                          .size = 18.0f};
+  CHECK(config.relativePath == "assets/fonts/InterVariable.ttf");
+  CHECK(config.size == 18.0f);
+}
+
+TEST_CASE("font loading falls back to ImGui default font") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  FontFamilyConfig config{.relativePath = "assets/fonts/NonExistentFont.ttf",
+                           .size = 16.0f};
+  Horo::Ui::LoadFonts(ImGui::GetIO(), config);
+  CHECK(ImGui::GetIO().FontDefault != nullptr);
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("font path resolution rejects absolute paths") {
+  FontFamilyConfig config{.relativePath = "/etc/passwd", .size = 16.0f};
+  FontResolutionResult result = Horo::Ui::ResolveFontPath(config);
+  CHECK_FALSE(result.found);
+  CHECK(result.resolvedPath.empty());
+}
+
+TEST_CASE("font path resolution rejects path traversal") {
+  FontFamilyConfig config{.relativePath = "../etc/passwd", .size = 16.0f};
+  FontResolutionResult result = Horo::Ui::ResolveFontPath(config);
+  CHECK_FALSE(result.found);
+  CHECK(result.resolvedPath.empty());
+
+  FontFamilyConfig nestedConfig{.relativePath = "assets/../etc/passwd",
+                                 .size = 16.0f};
+  FontResolutionResult nestedResult =
+      Horo::Ui::ResolveFontPath(nestedConfig);
+  CHECK_FALSE(nestedResult.found);
+  CHECK(nestedResult.resolvedPath.empty());
+}
+
+TEST_CASE("secondary and recent project button wrappers restore ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("button-test");
+
+  Horo::Ui::RenderSecondaryButton(Horo::Ui::GetLauncherTheme(), "Secondary##test",
+                                   ImVec2(120.0f, 0.0f));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  Horo::Ui::RenderRecentProjectButton(Horo::Ui::GetLauncherTheme(),
+                                        "Recent##test", ImVec2(120.0f, 0.0f));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
   ImGui::DestroyContext(context);
 }

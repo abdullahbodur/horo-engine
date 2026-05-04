@@ -62,11 +62,11 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/renderer/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/scene/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/input/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/editor/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/launcher/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ui/editor/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ui/launcher/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.cpp"
 )
-list(FILTER ENGINE_SOURCES EXCLUDE REGEX "launcher[/\\\\]HoroEditorMain\\.cpp$")
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX "ui/launcher[/\\\\]HoroEditorMain\\.cpp$")
 # Exclude only the file that directly includes <glad/glad.h>; it lives in horo-renderer-opengl.
 list(FILTER ENGINE_SOURCES EXCLUDE REGEX
     "[/\\\\]renderer[/\\\\]OpenGLRenderBackend\\.cpp$")
@@ -217,12 +217,12 @@ add_custom_command(TARGET HoroEngine POST_BUILD
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STANDALONE_EDITOR)
-    add_executable(HoroEditor launcher/HoroEditorMain.cpp)
+    add_executable(HoroEditor ui/launcher/HoroEditorMain.cpp)
     target_compile_features(HoroEditor PRIVATE cxx_std_20)
 
     if(WIN32)
         target_compile_definitions(HoroEditor PRIVATE NOMINMAX)
-        target_sources(HoroEditor PRIVATE launcher/HoroEditor.rc)
+        target_sources(HoroEditor PRIVATE ui/launcher/HoroEditor.rc)
     endif()
 
     if(HORO_RENDERER STREQUAL "opengl")
@@ -269,14 +269,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
     )
 
     if(HORO_ENGINE_BUILD_TESTS AND TARGET HoroEngineImGuiTest)
-        add_executable(HoroEditorUiTest launcher/HoroEditorMain.cpp)
+        add_executable(HoroEditorUiTest ui/launcher/HoroEditorMain.cpp)
         target_link_libraries(HoroEditorUiTest PRIVATE HoroEngineImGuiTest)
         target_compile_features(HoroEditorUiTest PRIVATE cxx_std_20)
         target_compile_definitions(HoroEditorUiTest PRIVATE HORO_STANDALONE_UI_AUTOMATION=1)
 
         if(WIN32)
             target_compile_definitions(HoroEditorUiTest PRIVATE NOMINMAX)
-            target_sources(HoroEditorUiTest PRIVATE launcher/HoroEditor.rc)
+            target_sources(HoroEditorUiTest PRIVATE ui/launcher/HoroEditor.rc)
         endif()
 
         add_custom_command(TARGET HoroEditorUiTest POST_BUILD
@@ -324,7 +324,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         )
     endif()
 
-    install(DIRECTORY core editor input math mcp physics renderer scene launcher ui
+    install(DIRECTORY core input math mcp physics renderer scene ui
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h"
     )

@@ -23,6 +23,51 @@
 #ifdef __APPLE__
 extern "C" void ApplyDarkTitleBarMac(GLFWwindow *glfwWindow);
 extern "C" void ApplyAppIconMac(const char *iconPath);
+extern "C" void SetupNativeMenuBarMac();
+
+static std::function<void()> g_fileNewCallback;
+static std::function<void()> g_fileOpenCallback;
+static std::function<void()> g_fileResetLayoutCallback;
+static std::function<void()> g_fileSettingsCallback;
+static std::function<void()> g_fileCloseEditorCallback;
+static std::function<void()> g_addPanelCallback;
+static std::function<void()> g_addPropCallback;
+static std::function<void()> g_addLightCallback;
+static std::function<void()> g_addCameraCallback;
+static std::function<void()> g_addPropFromAssetCallback;
+static std::function<void()> g_editUndoCallback;
+static std::function<void()> g_editRedoCallback;
+static std::function<void()> g_editRenameCallback;
+static std::function<void()> g_editCreatePrefabCallback;
+static std::function<void()> g_editDuplicateCallback;
+static std::function<void()> g_editDeleteCallback;
+static std::function<void()> g_viewFlyModeCallback;
+static std::function<void()> g_viewHelpCallback;
+static std::function<void()> g_viewQuickOpenCallback;
+static std::function<void()> g_viewCommandPaletteCallback;
+static std::function<void()> g_viewResetLayoutCallback;
+
+extern "C" void InvokeFileNew() { if (g_fileNewCallback) g_fileNewCallback(); }
+extern "C" void InvokeFileOpen() { if (g_fileOpenCallback) g_fileOpenCallback(); }
+extern "C" void InvokeFileResetLayout() { if (g_fileResetLayoutCallback) g_fileResetLayoutCallback(); }
+extern "C" void InvokeFileSettings() { if (g_fileSettingsCallback) g_fileSettingsCallback(); }
+extern "C" void InvokeFileCloseEditor() { if (g_fileCloseEditorCallback) g_fileCloseEditorCallback(); }
+extern "C" void InvokeAddPanel() { if (g_addPanelCallback) g_addPanelCallback(); }
+extern "C" void InvokeAddProp() { if (g_addPropCallback) g_addPropCallback(); }
+extern "C" void InvokeAddLight() { if (g_addLightCallback) g_addLightCallback(); }
+extern "C" void InvokeAddCamera() { if (g_addCameraCallback) g_addCameraCallback(); }
+extern "C" void InvokeAddPropFromAsset() { if (g_addPropFromAssetCallback) g_addPropFromAssetCallback(); }
+extern "C" void InvokeEditUndo() { if (g_editUndoCallback) g_editUndoCallback(); }
+extern "C" void InvokeEditRedo() { if (g_editRedoCallback) g_editRedoCallback(); }
+extern "C" void InvokeEditRename() { if (g_editRenameCallback) g_editRenameCallback(); }
+extern "C" void InvokeEditCreatePrefab() { if (g_editCreatePrefabCallback) g_editCreatePrefabCallback(); }
+extern "C" void InvokeEditDuplicate() { if (g_editDuplicateCallback) g_editDuplicateCallback(); }
+extern "C" void InvokeEditDelete() { if (g_editDeleteCallback) g_editDeleteCallback(); }
+extern "C" void InvokeViewFlyMode() { if (g_viewFlyModeCallback) g_viewFlyModeCallback(); }
+extern "C" void InvokeViewHelp() { if (g_viewHelpCallback) g_viewHelpCallback(); }
+extern "C" void InvokeViewQuickOpen() { if (g_viewQuickOpenCallback) g_viewQuickOpenCallback(); }
+extern "C" void InvokeViewCommandPalette() { if (g_viewCommandPaletteCallback) g_viewCommandPaletteCallback(); }
+extern "C" void InvokeViewResetLayout() { if (g_viewResetLayoutCallback) g_viewResetLayoutCallback(); }
 #endif
 // clang-format on
 
@@ -400,5 +445,46 @@ void Window::DropPathsThunk(GLFWwindow *win, int count, const char **paths) {
   const auto *self = static_cast<const Window *>(glfwGetWindowUserPointer(win));
   if (self->m_fileDropCb)
     self->m_fileDropCb(count, paths);
+}
+
+void Window::SetupNativeMenuBar() {
+#ifdef __APPLE__
+  SetupNativeMenuBarMac();
+#endif
+}
+
+void Window::SetMenuCallbacks(
+    MenuCallback fileNew, MenuCallback fileOpen, MenuCallback fileResetLayout,
+    MenuCallback fileSettings, MenuCallback fileCloseEditor,
+    MenuCallback addPanel, MenuCallback addProp, MenuCallback addLight,
+    MenuCallback addCamera, MenuCallback addPropFromAsset,
+    MenuCallback editUndo, MenuCallback editRedo, MenuCallback editRename,
+    MenuCallback editCreatePrefab, MenuCallback editDuplicate,
+    MenuCallback editDelete, MenuCallback viewFlyMode, MenuCallback viewHelp,
+    MenuCallback viewQuickOpen, MenuCallback viewCommandPalette,
+    MenuCallback viewResetLayout) {
+#ifdef __APPLE__
+  g_fileNewCallback = std::move(fileNew);
+  g_fileOpenCallback = std::move(fileOpen);
+  g_fileResetLayoutCallback = std::move(fileResetLayout);
+  g_fileSettingsCallback = std::move(fileSettings);
+  g_fileCloseEditorCallback = std::move(fileCloseEditor);
+  g_addPanelCallback = std::move(addPanel);
+  g_addPropCallback = std::move(addProp);
+  g_addLightCallback = std::move(addLight);
+  g_addCameraCallback = std::move(addCamera);
+  g_addPropFromAssetCallback = std::move(addPropFromAsset);
+  g_editUndoCallback = std::move(editUndo);
+  g_editRedoCallback = std::move(editRedo);
+  g_editRenameCallback = std::move(editRename);
+  g_editCreatePrefabCallback = std::move(editCreatePrefab);
+  g_editDuplicateCallback = std::move(editDuplicate);
+  g_editDeleteCallback = std::move(editDelete);
+  g_viewFlyModeCallback = std::move(viewFlyMode);
+  g_viewHelpCallback = std::move(viewHelp);
+  g_viewQuickOpenCallback = std::move(viewQuickOpen);
+  g_viewCommandPaletteCallback = std::move(viewCommandPalette);
+  g_viewResetLayoutCallback = std::move(viewResetLayout);
+#endif
 }
 } // namespace Horo

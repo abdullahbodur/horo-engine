@@ -16,8 +16,8 @@
 #include <nlohmann/json.hpp>
 
 #include "core/ProjectPath.h"
-#include "editor/EditorLayer.h"
-#include "editor/SceneSerializer.h"
+#include "ui/editor/EditorLayer.h"
+#include "ui/editor/SceneSerializer.h"
 
 #ifdef _WIN32
 #include <winsock2.h>

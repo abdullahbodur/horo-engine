@@ -1,4 +1,4 @@
-#include "launcher/UiTestHarness.h"
+#include "ui/launcher/UiTestHarness.h"
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
 
@@ -36,8 +36,8 @@
 #include <imgui_test_engine/imgui_te_engine.h>
 
 #include "core/Logger.h"
-#include "editor/EditorLayer.h"
-#include "launcher/LauncherEditorShell.h"
+#include "ui/editor/EditorLayer.h"
+#include "ui/launcher/LauncherEditorShell.h"
 #include "tests/UiTestRegistry.h"
 
 namespace Horo {

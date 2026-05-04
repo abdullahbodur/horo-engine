@@ -13,11 +13,11 @@
 
 #include "core/EngineLaunchArgs.h"
 #include "core/ProjectPath.h"
-#include "editor/EditorWorkspaceSettings.h"
-#include "launcher/EditorHomeSettings.h"
-#include "launcher/ExternalProcessRunner.h"
-#include "launcher/LauncherProject.h"
-#include "launcher/LauncherProjectTemplate.h"
+#include "ui/editor/EditorWorkspaceSettings.h"
+#include "ui/launcher/EditorHomeSettings.h"
+#include "ui/launcher/ExternalProcessRunner.h"
+#include "ui/launcher/LauncherProject.h"
+#include "ui/launcher/LauncherProjectTemplate.h"
 #include "tests/TestTempPaths.h"
 
 using namespace Horo;
