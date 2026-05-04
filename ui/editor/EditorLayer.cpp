@@ -50,6 +50,7 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetMetadata.h"
 #include "ui/editor/EditorAssetImport.h"
+#include "ui/editor/components/EditorComponentContext.h"
 #include "ui/editor/EditorDebugTrace.h"
 #include "ui/editor/EditorImGuiBackend.h"
 #include "ui/editor/EditorPropertyRules.h"
@@ -703,101 +704,6 @@ RenderTargetHandle TryGetCachedGltfAlbedoPreview(
   return it->second->GetRenderTargetHandle();
 }
 
-bool TryGetAssetPreviewHandle( // NOSONAR: cpp:S3776 complex multi-format
-                               // preview resolution; extraction would obscure
-                               // flow
-    std::string_view assetId, const AssetDef &asset,
-    RenderTargetHandle *outHandle) {
-  if (!outHandle)
-    return false;
-  *outHandle = {};
-
-  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
-  if (!caps.supportsNativeTextureHandles)
-    return false;
-
-  static std::unordered_map<std::string, Texture, StringHash, std::equal_to<>>
-      s_textureByPath;
-  static std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
-                            std::equal_to<>>
-      s_gltfTextureByMesh;
-  static std::unordered_set<std::string, StringHash, std::equal_to<>>
-      s_noPreviewCache;
-
-  const std::string key =
-      std::format("{}|{}|{}", assetId, asset.mesh, asset.albedoMap);
-  if (s_noPreviewCache.contains(key))
-    return false;
-
-  auto loadTextureByPath =
-      [&](const std::filesystem::path &path) -> RenderTargetHandle {
-    if (!caps.supportsNativeTextureHandles)
-      return {};
-    if (path.empty())
-      return {};
-    if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
-      return {};
-    const std::string abs = path.generic_string();
-    auto it = s_textureByPath.find(abs);
-    if (it == s_textureByPath.end()) {
-      Texture tex = Texture::FromFile(abs, false);
-      it = s_textureByPath.try_emplace(abs, std::move(tex)).first;
-    }
-    if (!it->second.IsValid())
-      return {};
-    return it->second.GetRenderTargetHandle();
-  };
-
-  // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
-  if (caps.supportsOffscreenTargets && !asset.mesh.empty()) {
-    const RenderTargetHandle handle = TryRenderAssetMeshPreview(asset);
-    if (handle.IsValid()) {
-      *outHandle = handle;
-      return true;
-    }
-  }
-
-  // Priority 2: Fallback to texture-based thumbnails
-  if (!asset.albedoMap.empty()) {
-    const std::filesystem::path albedo =
-        ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
-    const RenderTargetHandle handle = loadTextureByPath(albedo);
-    if (handle.IsValid()) {
-      *outHandle = handle;
-      return true;
-    }
-  }
-
-  if (const std::filesystem::path meshPath =
-          ResolveProjectRelativeOrAbsolutePath(asset.mesh);
-      !meshPath.empty()) {
-    const std::string ext = ToLowerAscii(meshPath.extension().string());
-
-    if (ext == ".obj") {
-      const std::string diffusePath =
-          ObjLoader::FindDiffuseTexture(meshPath.generic_string());
-      const RenderTargetHandle handle =
-          loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
-      if (handle.IsValid()) {
-        *outHandle = handle;
-        return true;
-      }
-    }
-
-    if (ext == ".gltf" || ext == ".glb") {
-      const RenderTargetHandle handle =
-          TryGetCachedGltfAlbedoPreview(meshPath, &s_gltfTextureByMesh);
-      if (handle.IsValid()) {
-        *outHandle = handle;
-        return true;
-      }
-    }
-  }
-
-  s_noPreviewCache.insert(key);
-  return false;
-}
-
 ImTextureID ToImTextureId(const RenderTargetHandle &handle) {
   using enum RenderNativeHandleType;
   if (!handle.IsValid())
@@ -929,6 +835,101 @@ std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef &asset) {
 }
 
 } // namespace
+
+bool TryGetAssetPreviewHandle( // NOSONAR: cpp:S3776 complex multi-format
+                               // preview resolution; extraction would obscure
+                               // flow
+    std::string_view assetId, const AssetDef &asset,
+    RenderTargetHandle *outHandle) {
+  if (!outHandle)
+    return false;
+  *outHandle = {};
+
+  const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+  if (!caps.supportsNativeTextureHandles)
+    return false;
+
+  static std::unordered_map<std::string, Texture, StringHash, std::equal_to<>>
+      s_textureByPath;
+  static std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
+                            std::equal_to<>>
+      s_gltfTextureByMesh;
+  static std::unordered_set<std::string, StringHash, std::equal_to<>>
+      s_noPreviewCache;
+
+  const std::string key =
+      std::format("{}|{}|{}", assetId, asset.mesh, asset.albedoMap);
+  if (s_noPreviewCache.contains(key))
+    return false;
+
+  auto loadTextureByPath =
+      [&](const std::filesystem::path &path) -> RenderTargetHandle {
+    if (!caps.supportsNativeTextureHandles)
+      return {};
+    if (path.empty())
+      return {};
+    if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
+      return {};
+    const std::string abs = path.generic_string();
+    auto it = s_textureByPath.find(abs);
+    if (it == s_textureByPath.end()) {
+      Texture tex = Texture::FromFile(abs, false);
+      it = s_textureByPath.try_emplace(abs, std::move(tex)).first;
+    }
+    if (!it->second.IsValid())
+      return {};
+    return it->second.GetRenderTargetHandle();
+  };
+
+  // Priority 1: Try to render the 3D mesh as a thumbnail (offscreen FBO render)
+  if (caps.supportsOffscreenTargets && !asset.mesh.empty()) {
+    const RenderTargetHandle handle = TryRenderAssetMeshPreview(asset);
+    if (handle.IsValid()) {
+      *outHandle = handle;
+      return true;
+    }
+  }
+
+  // Priority 2: Fallback to texture-based thumbnails
+  if (!asset.albedoMap.empty()) {
+    const std::filesystem::path albedo =
+        ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
+    const RenderTargetHandle handle = loadTextureByPath(albedo);
+    if (handle.IsValid()) {
+      *outHandle = handle;
+      return true;
+    }
+  }
+
+  if (const std::filesystem::path meshPath =
+          ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+      !meshPath.empty()) {
+    const std::string ext = ToLowerAscii(meshPath.extension().string());
+
+    if (ext == ".obj") {
+      const std::string diffusePath =
+          ObjLoader::FindDiffuseTexture(meshPath.generic_string());
+      const RenderTargetHandle handle =
+          loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
+      if (handle.IsValid()) {
+        *outHandle = handle;
+        return true;
+      }
+    }
+
+    if (ext == ".gltf" || ext == ".glb") {
+      const RenderTargetHandle handle =
+          TryGetCachedGltfAlbedoPreview(meshPath, &s_gltfTextureByMesh);
+      if (handle.IsValid()) {
+        *outHandle = handle;
+        return true;
+      }
+    }
+  }
+
+  s_noPreviewCache.insert(key);
+  return false;
+}
 
 // ---- Lifecycle
 // ---------------------------------------------------------------
@@ -1094,46 +1095,50 @@ void EditorLayer::SetCursorVisible(bool visible) {
 }
 
 void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
-  InvalidateProjectBrowserCache();
-  m_projectBrowserRoot.clear();
-  m_projectBrowserRootValid = false;
-  m_projectBrowserCwd.clear();
-  m_projectBrowserCwdValid = false;
-  if (root.empty())
-    return;
+  m_bottomDock.InvalidateProjectBrowserCache();
   std::error_code ec;
+  
+  if (root.empty()) {
+    m_bottomDock.SetProjectBrowserRoot({});
+    return;
+  }
+  
   std::filesystem::path canon = std::filesystem::weakly_canonical(root, ec);
   if (ec)
     canon = std::move(root);
   if (!std::filesystem::is_directory(canon, ec) || ec) {
-    m_projectBrowserRoot = canon;
+    m_bottomDock.SetProjectBrowserRoot(canon);
     return;
   }
-  m_projectBrowserRoot = std::move(canon);
-  m_projectBrowserRootValid = true;
-  if (!m_savedProjectBrowserCwd.empty()) {
-    std::filesystem::path preferred = m_savedProjectBrowserCwd;
+  
+  m_bottomDock.SetProjectBrowserRoot(canon);
+  
+  if (!m_bottomDock.GetSavedProjectBrowserCwd().empty()) {
+    std::filesystem::path preferred = m_bottomDock.GetSavedProjectBrowserCwd();
     if (preferred.is_relative())
-      preferred = m_projectBrowserRoot / preferred;
+      preferred = canon / preferred;
     preferred = std::filesystem::weakly_canonical(preferred, ec);
     if (!ec && std::filesystem::is_directory(preferred) &&
-        preferred.native().rfind(m_projectBrowserRoot.native(), 0) == 0) {
-      m_projectBrowserCwd = std::move(preferred);
-      m_projectBrowserCwdValid = true;
+        preferred.native().rfind(canon.native(), 0) == 0) {
+      m_bottomDock.SetProjectBrowserCwd(preferred);
       return;
     }
   }
-  m_projectBrowserCwd = m_projectBrowserRoot;
-  m_projectBrowserCwdValid = true;
+  m_bottomDock.SetProjectBrowserCwd(canon);
 }
 
 void EditorLayer::SetProjectBrowserExtraBlocklist(
-    std::unordered_set<std::string, StringHash, std::equal_to<>> names) {
-  m_projectExtraBlocklist = std::move(names);
-  InvalidateProjectBrowserCache();
+    const std::unordered_set<std::string, StringHash, std::equal_to<>> names) {
+  m_projectExtraBlocklist = names;
+  m_bottomDock.SetProjectExtraBlocklist(names);
+  m_bottomDock.InvalidateProjectBrowserCache();
 }
 
-void EditorLayer::InvalidateProjectBrowserCache() { m_projectDirCache.clear(); }
+
+void EditorLayer::InvalidateProjectBrowserCache() {
+  m_projectDirCache.clear();
+  m_bottomDock.InvalidateProjectBrowserCache();
+}
 
 void EditorLayer::LoadWorkspaceState() {
   m_workspaceDocument = LoadEditorWorkspaceDocument();
@@ -1142,12 +1147,12 @@ void EditorLayer::LoadWorkspaceState() {
             m_workspaceDocument.error);
   }
 
-  m_consoleShowInfo = m_workspaceDocument.state.consoleShowInfo;
-  m_consoleShowWarn = m_workspaceDocument.state.consoleShowWarn;
-  m_consoleShowError = m_workspaceDocument.state.consoleShowError;
+  m_bottomDock.SetConsoleShowInfo(m_workspaceDocument.state.consoleShowInfo);
+  m_bottomDock.SetConsoleShowWarn(m_workspaceDocument.state.consoleShowWarn);
+  m_bottomDock.SetConsoleShowError(m_workspaceDocument.state.consoleShowError);
   if (!m_workspaceDocument.state.projectBrowserCwd.empty())
-    m_savedProjectBrowserCwd =
-        std::filesystem::path(m_workspaceDocument.state.projectBrowserCwd);
+    m_bottomDock.SetSavedProjectBrowserCwd(
+        std::filesystem::path(m_workspaceDocument.state.projectBrowserCwd));
   m_workspaceStateDirty = false;
 }
 
@@ -1155,15 +1160,17 @@ void EditorLayer::SaveWorkspaceStateIfNeeded(bool force) {
   if (!force && !m_workspaceStateDirty)
     return;
 
-  m_workspaceDocument.state.consoleShowInfo = m_consoleShowInfo;
-  m_workspaceDocument.state.consoleShowWarn = m_consoleShowWarn;
-  m_workspaceDocument.state.consoleShowError = m_consoleShowError;
-  if (m_projectBrowserCwdValid && !m_projectBrowserCwd.empty()) {
-    m_workspaceDocument.state.projectBrowserCwd =
-        m_projectBrowserCwd.generic_string();
-  } else if (!m_savedProjectBrowserCwd.empty()) {
-    m_workspaceDocument.state.projectBrowserCwd =
-        m_savedProjectBrowserCwd.generic_string();
+  m_workspaceDocument.state.consoleShowInfo = m_bottomDock.IsConsoleShowInfo();
+  m_workspaceDocument.state.consoleShowWarn = m_bottomDock.IsConsoleShowWarn();
+  m_workspaceDocument.state.consoleShowError = m_bottomDock.IsConsoleShowError();
+  
+  const auto& projectCwd = m_bottomDock.GetProjectBrowserCwd();
+  const auto& savedProjectCwd = m_bottomDock.GetSavedProjectBrowserCwd();
+  
+  if (!projectCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = projectCwd.generic_string();
+  } else if (!savedProjectCwd.empty()) {
+    m_workspaceDocument.state.projectBrowserCwd = savedProjectCwd.generic_string();
   } else {
     m_workspaceDocument.state.projectBrowserCwd.clear();
   }
@@ -1868,7 +1875,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawObjectList();
     DrawAssetsPanel();
     DrawPropertiesPanel();
-    DrawBottomDock();
+    m_bottomDock.Draw(&m_mcpController, m_window);
     m_uiWidgets.DrawStatusBar();
     m_helpPopup.Draw();
     DrawCommandPalettePopup();
@@ -2047,368 +2054,91 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
 }
 
 
-// ---- Toolbar helpers
-// --------------------------------------------------------
-
-void EditorLayer::DrawToolbarFileMenu() {
-  if (ImGui::BeginMenu("File")) {
-    if (ImGui::MenuItem("New Scene"))
-      RequestSceneAction(PendingSceneAction::NewScene);
-    if (ImGui::MenuItem("Open Scene..."))
-      RequestSceneAction(PendingSceneAction::OpenSceneFile);
-    if (ImGui::MenuItem("Reset Layout"))
-      m_resetDockLayoutRequested = true;
-    ImGui::Separator();
-    if (ImGui::MenuItem("Settings...")) {
-      m_settingsModal.SetOpen(true);
-      *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
-      m_settingsModal.GetError()->clear();
-    }
-    if (m_fileMenuRenderCallback) {
-      ImGui::Separator();
-      m_fileMenuRenderCallback();
-    }
-    ImGui::EndMenu();
-  }
-}
-
-void EditorLayer::DrawToolbarAddMenu(bool hasSelectedAsset) {
-  using enum SceneObjectType;
-  if (ImGui::BeginMenu("Add")) {
-    if (ImGui::MenuItem("Panel"))
-      AddObject(Panel);
-    if (ImGui::MenuItem("Prop"))
-      AddObject(Prop);
-    if (ImGui::MenuItem("Light"))
-      AddObject(Light);
-    if (ImGui::MenuItem("Camera"))
-      AddObject(Camera);
-    ImGui::Separator();
-    if (!hasSelectedAsset)
-      ImGui::BeginDisabled();
-    if (ImGui::MenuItem("Prop from Selected Asset"))
-      AddObjectFromSelectedAsset();
-    if (!hasSelectedAsset)
-      ImGui::EndDisabled();
-    ImGui::EndMenu();
-  }
-}
-
-void EditorLayer::DrawToolbarEditMenuItems(bool hasSelection,
-                                           bool hasSingleSelection,
-                                           int primaryIdx) {
-  if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z", false, CanUndoHistory()))
-    UndoHistory();
-
-  if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y", false,
-                      CanRedoHistory()))
-    RedoHistory();
-
-  ImGui::Separator();
-
-  if (ImGui::MenuItem("Rename...", nullptr, false, hasSingleSelection))
-    OpenRenameObjectModal(primaryIdx);
-  if (ImGui::MenuItem("Create Prefab", nullptr, false, hasSingleSelection)) {
-    std::string prefabError;
-    if (!CreatePrefabFromSelection(&prefabError))
-      LogError("[Editor] Create prefab failed: {}", prefabError);
-  }
-  if (ImGui::MenuItem("Duplicate", nullptr, false, hasSelection))
-    DuplicateSelectedObjects();
-  if (ImGui::MenuItem("Delete", nullptr, false, hasSelection))
-    RequestDeleteSelectedObjects();
-  ImGui::Separator();
-  if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C", false,
-                      hasSingleSelection) &&
-      primaryIdx >= 0 &&
-      primaryIdx < static_cast<int>(m_document.objects.size())) {
-    const std::string ref = BuildSelectionRefCode(
-        m_document.objects[static_cast<size_t>(primaryIdx)], primaryIdx);
-    ImGui::SetClipboardText(ref.c_str());
-    m_uiWidgets.OnClipboardAction("Reference copied", 1.5f);
-  }
-}
-
-void EditorLayer::DrawToolbarEditMenu(bool hasSelection,
-                                      bool hasSingleSelection, int primaryIdx) {
-  if (ImGui::BeginMenu("Edit")) {
-    DrawToolbarEditMenuItems(hasSelection, hasSingleSelection, primaryIdx);
-    ImGui::EndMenu();
-  }
-}
-
-void EditorLayer::DrawToolbarViewMenu() {
-  if (ImGui::BeginMenu("View")) {
-    const bool flyBefore = m_flyMode;
-    if (ImGui::MenuItem("Fly Mode", "Tab", m_flyMode)) {
-      m_flyMode = !m_flyMode;
-      m_flyCamInitialized = false;
-      m_prevCursorInit = false;
-      glfwSetInputMode(m_window, GLFW_CURSOR,
-                       m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-    }
-    if (flyBefore || m_flyMode)
-      ImGui::TextDisabled("WASD + mouse");
-    if (ImGui::MenuItem("Help", "? / F1"))
-      m_helpPopup.SetOpen(true);
-    if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
-      m_quickOpenOpen = true;
-    if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
-      m_commandPaletteOpen = true;
-      m_commandPaletteQuery.clear();
-    }
-    if (ImGui::MenuItem("Reset Layout"))
-      m_resetDockLayoutRequested = true;
-    ImGui::EndMenu();
-  }
-}
-
-void EditorLayer::DrawIconToolbar() {
-  const ImVec2 buttonSize(28, 24);
-  auto GetCenteredY = [&]() { return (ImGui::GetWindowHeight() - buttonSize.y) * 0.5f; };
-  constexpr float buttonGap = 10.0f;
-  constexpr float rightButtonGap = 8.0f;
-
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-
-  // Measure group widths to center the main toolbar block.
-  // Group 1: 4 buttons with horizontal gaps.
-  // Group 2: 2 buttons with horizontal gap.
-  // Group 3: preset combo             = 100
-  // Dividers: 2 × (6+1+6) = 26 each side of the pipe = 2 × 26 = 52
-  const float g1Width = 4.0f * buttonSize.x + 3.0f * buttonGap;
-  const float g2Width = 2.0f * buttonSize.x + buttonGap;
-  const float g3Width = 100.0f;
-  const float divPad = 6.0f;
-  const float divTotal = 2.0f * divPad + 1.0f; // pad | 1px line | pad
-  const float mainBlockWidth = g1Width + divTotal + g2Width + divTotal + g3Width;
-
-  const float rightGroupWidth = 180.0f;
-  const float rightMargin = 16.0f;
-  const float availableWidth = ImGui::GetWindowWidth() - rightGroupWidth - rightMargin;
-  const float startX = (availableWidth - mainBlockWidth) * 0.5f;
-
-  const float centerY = GetCenteredY();
-  ImDrawList* dl = ImGui::GetWindowDrawList();
-  const ImU32 divColor = ImGui::GetColorU32(ImGuiCol_Separator);
-  const float divTop = ImGui::GetWindowPos().y + centerY + 3.0f;
-  const float divBot = ImGui::GetWindowPos().y + centerY + buttonSize.y - 3.0f;
-
-  float curX = startX;
-
-  // Group 1: Select / Move / Rotate / Scale
-  ImGui::SetCursorPos(ImVec2(curX, centerY));
-  {
-    const bool isSelect = m_currentGizmoMode == GizmoMode::None;
-    if (isSelect) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-    if (ImGui::Button(ICON_FA_MOUSE_POINTER, buttonSize)) { m_currentGizmoMode = GizmoMode::None; }
-    if (isSelect) ImGui::PopStyleColor();
-    ImGui::SameLine(0, buttonGap);
-
-    const bool isMove = m_currentGizmoMode == GizmoMode::Translate;
-    if (isMove) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-    if (ImGui::Button(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, buttonSize)) { m_currentGizmoMode = GizmoMode::Translate; }
-    if (isMove) ImGui::PopStyleColor();
-    ImGui::SameLine(0, buttonGap);
-
-    const bool isRotate = m_currentGizmoMode == GizmoMode::Rotate;
-    if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-    if (ImGui::Button(ICON_FA_ROTATE, buttonSize)) { m_currentGizmoMode = GizmoMode::Rotate; }
-    if (isRotate) ImGui::PopStyleColor();
-    ImGui::SameLine(0, buttonGap);
-
-    const bool isScale = m_currentGizmoMode == GizmoMode::Scale;
-    if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-    if (ImGui::Button(ICON_FA_EXPAND, buttonSize)) { m_currentGizmoMode = GizmoMode::Scale; }
-    if (isScale) ImGui::PopStyleColor();
-  }
-  curX += g1Width;
-
-  {
-    const float divX = ImGui::GetWindowPos().x + curX + divPad;
-    dl->AddLine(ImVec2(divX, divTop), ImVec2(divX, divBot), divColor);
-    curX += divTotal;
-  }
-
-  // Group 2: Play / Pause / Stop
-  ImGui::SetCursorPos(ImVec2(curX, centerY));
-  {
-    if (!m_playMode) {
-      if (ImGui::Button(ICON_FA_PLAY, buttonSize)) {
-        m_playMode = true;
-        m_playModeEscPresses = 0;
-        if (m_flyMode) { m_flyMode = false; m_flyCamInitialized = false; m_prevCursorInit = false; }
-        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-      }
-    } else {
-      if (ImGui::Button(ICON_FA_STOP, buttonSize)) {
-        m_playMode = false;
-        m_playModeEscPresses = 0;
-        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-      }
-    }
-    ImGui::SameLine(0, buttonGap);
-    if (ImGui::Button(ICON_FA_PAUSE, buttonSize)) {}
-  }
-  curX += g2Width;
-
-  {
-    const float divX = ImGui::GetWindowPos().x + curX + divPad;
-    dl->AddLine(ImVec2(divX, divTop), ImVec2(divX, divBot), divColor);
-    curX += divTotal;
-  }
-
-  auto drawToolbarComboRow = [](const char *label, bool selected) {
-    const ImVec2 rowSize(ImGui::GetContentRegionAvail().x, 24.0f);
-    const bool clicked = ImGui::InvisibleButton("##combo_row", rowSize);
-    const ImVec2 rowMin = ImGui::GetItemRectMin();
-    const ImVec2 rowMax = ImGui::GetItemRectMax();
-    const bool hovered = ImGui::IsItemHovered();
-    if (hovered || selected) {
-      const auto &palette = Ui::GetEditorTheme().palette;
-      const ImVec4 fill = selected ? palette.selection : palette.selectionHover;
-      ImGui::GetWindowDrawList()->AddRectFilled(
-          ImVec2(rowMin.x + 1.0f, rowMin.y + 1.0f),
-          ImVec2(rowMax.x - 1.0f, rowMax.y - 1.0f),
-          ImGui::ColorConvertFloat4ToU32(fill), 5.0f);
-    }
-    ImGui::GetWindowDrawList()->AddText(ImVec2(rowMin.x + 5.0f, rowMin.y + 3.0f),
-                                        ImGui::GetColorU32(ImGuiCol_Text), label);
-    if (selected)
-      ImGui::SetItemDefaultFocus();
-    return clicked;
-  };
-
-  // Group 3: Preset dropdown
-  ImGui::SetCursorPos(ImVec2(curX, centerY));
-  {
-    const char* presets[] = {"Default", "Layout", "Animation"};
-    static int presetIdx = 0;
-    const bool supportsWireframeOverlay =
-        Renderer::GetBackendCapabilities().supportsWireframeOverlay;
-    if (!supportsWireframeOverlay)
-      m_wireframeMode = false;
-    ImGui::SetNextItemWidth(100);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
-    if (ImGui::BeginCombo("##preset", presets[presetIdx])) {
-      for (int i = 0; i < 3; i++) {
-        ImGui::PushID(i);
-        if (drawToolbarComboRow(presets[i], presetIdx == i)) {
-          presetIdx = i;
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::PopID();
-      }
-      ImGui::Separator();
-      if (!supportsWireframeOverlay)
-        ImGui::BeginDisabled();
-      ImGui::PushID("wireframe");
-      if (drawToolbarComboRow("Wireframe", m_wireframeMode)) {
-        m_wireframeMode = !m_wireframeMode;
-        ImGui::CloseCurrentPopup();
-      }
-      ImGui::PopID();
-      if (!supportsWireframeOverlay)
-        ImGui::EndDisabled();
-      ImGui::EndCombo();
-    }
-    ImGui::PopStyleVar(3);
-  }
-
-  // Right-aligned group: Scene / Help / Settings
-  ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - rightGroupWidth - rightMargin, centerY));
-  {
-    const char* scenes[] = {"Scene 1", "Scene 2"};
-    static int sceneIdx = 0;
-    
-    // Calculate dropdown width based on longest scene name
-    float maxSceneWidth = 0;
-    for (const auto* scene : scenes) {
-      maxSceneWidth = std::max(maxSceneWidth, ImGui::CalcTextSize(scene).x);
-    }
-    float comboWidth = maxSceneWidth + 24.0f; // padding + dropdown arrow
-    ImGui::SetNextItemWidth(comboWidth);
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
-    if (ImGui::BeginCombo("##scene", scenes[sceneIdx])) {
-      for (int i = 0; i < 2; i++) {
-        ImGui::PushID(i);
-        if (drawToolbarComboRow(scenes[i], sceneIdx == i)) {
-          sceneIdx = i;
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::PopID();
-      }
-      ImGui::EndCombo();
-    }
-    ImGui::PopStyleVar(3);
-    ImGui::SameLine(0, rightButtonGap);
-    if (ImGui::Button(ICON_FA_CIRCLE_QUESTION, buttonSize)) { m_helpPopup.SetOpen(true); }
-    ImGui::SameLine(0, rightButtonGap);
-    if (ImGui::Button(ICON_FA_GEAR, buttonSize)) { m_settingsModal.SetOpen(true); *m_settingsModal.GetDraft() = m_mcpController.GetSettings(); m_settingsModal.GetError()->clear(); }
-  }
-
-  ImGui::PopStyleVar();
-}
-
 // ---- Toolbar
-// -----------------------------------------------------------------
+// ----------------------------------------------------------------- 
 
 void EditorLayer::DrawToolbar() {
-  const ImGuiIO &io = ImGui::GetIO();
-  ImGui::SetNextWindowPos(ImVec2(0, 0));
+    EditorToolbarCallbacks callbacks;
+    EditorToolbarState state;
 
-#ifdef __APPLE__
-  constexpr float toolbarH = 38.0f;
-  ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar |
-                                  ImGuiWindowFlags_NoResize |
-                                  ImGuiWindowFlags_NoScrollbar |
-                                  ImGuiWindowFlags_NoBringToFrontOnFocus;
-#else
-  constexpr float toolbarH = kEditorToolbarH;
-  ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar |
-                                  ImGuiWindowFlags_NoResize |
-                                  ImGuiWindowFlags_NoScrollbar |
-                                  ImGuiWindowFlags_MenuBar |
-                                  ImGuiWindowFlags_NoBringToFrontOnFocus;
-#endif
+    // Callbacks for scene actions and object operations
+    callbacks.requestSceneAction = [this](std::string action) {
+        if (action == "NewScene")
+            RequestSceneAction(PendingSceneAction::NewScene);
+        else if (action == "OpenSceneFile")
+            RequestSceneAction(PendingSceneAction::OpenSceneFile);
+    };
 
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, toolbarH));
-  ImGui::SetNextWindowBgAlpha(0.85f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 0));
-  ImGui::Begin("##toolbar", nullptr, toolbarFlags);
+    callbacks.addObject = [this](SceneObjectType type) { AddObject(type); };
+    callbacks.addObjectFromSelectedAsset = [this]() { AddObjectFromSelectedAsset(); };
 
-#ifndef __APPLE__
-  ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "EDITOR");
-  ImGui::SameLine();
-  ImGui::Separator();
-  ImGui::SameLine();
+    // Edit callbacks
+    callbacks.canUndoHistory = [this]() { return CanUndoHistory(); };
+    callbacks.canRedoHistory = [this]() { return CanRedoHistory(); };
+    callbacks.undoHistory = [this]() { UndoHistory(); };
+    callbacks.redoHistory = [this]() { RedoHistory(); };
+    callbacks.openRenameObjectModal = [this](int idx) { OpenRenameObjectModal(idx); };
+    callbacks.createPrefabFromSelection = [this]() {
+        std::string prefabError;
+        if (!CreatePrefabFromSelection(&prefabError))
+            LogError("[Editor] Create prefab failed: {}", prefabError);
+        return true;
+    };
+    callbacks.duplicateSelectedObjects = [this]() { DuplicateSelectedObjects(); };
+    callbacks.requestDeleteSelectedObjects = [this]() { RequestDeleteSelectedObjects(); };
+    callbacks.buildSelectionRefCode = [this](int idx) {
+        if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+            return BuildSelectionRefCode(m_document.objects[static_cast<size_t>(idx)], idx);
+        return std::string{};
+    };
 
-  if (ImGui::BeginMenuBar()) {
-    const bool hasSelectedAsset = !m_selectedAssetId.empty() &&
-                                  m_document.assets.contains(m_selectedAssetId);
-    const bool hasSelection = !m_selectedIndices.empty();
-    const int primaryIdx = PrimaryIdx();
-    const bool hasSingleSelection = CanEditSingleSelection(
-        static_cast<int>(m_selectedIndices.size()), primaryIdx,
-        static_cast<int>(m_document.objects.size()));
+    // View menu callbacks
+    callbacks.openHelpPopup = [this]() { m_helpPopup.SetOpen(true); };
+    callbacks.openQuickOpen = [this]() { m_quickOpenOpen = true; };
+    callbacks.openCommandPalette = [this]() {
+        m_commandPaletteOpen = true;
+        m_commandPaletteQuery.clear();
+    };
+    callbacks.setFlyMode = [this](bool flyMode) {
+        if (m_flyMode != flyMode) {
+            m_flyMode = flyMode;
+            m_flyCamInitialized = false;
+            m_prevCursorInit = false;
+            glfwSetInputMode(m_window, GLFW_CURSOR,
+                             m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        }
+    };
+    callbacks.setResetDockLayout = [this](bool reset) {
+        m_resetDockLayoutRequested = reset;
+    };
 
-    DrawToolbarFileMenu();
-    DrawToolbarAddMenu(hasSelectedAsset);
-    DrawToolbarEditMenu(hasSelection, hasSingleSelection, primaryIdx);
-    DrawToolbarViewMenu();
-    ImGui::EndMenuBar();
-  }
-#else
-  DrawIconToolbar();
-#endif
+    // Settings callback
+    callbacks.openSettings = [this]() {
+        m_settingsModal.SetOpen(true);
+        *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
+        m_settingsModal.GetError()->clear();
+    };
 
-  ImGui::End();
-  ImGui::PopStyleVar();
+    // File menu custom callback
+    callbacks.fileMenuRenderCallback = m_fileMenuRenderCallback;
+
+    // State pointers
+    state.playMode = &m_playMode;
+    state.playModeEscPresses = &m_playModeEscPresses;
+    state.flyMode = &m_flyMode;
+    state.flyCamInitialized = &m_flyCamInitialized;
+    state.prevCursorInit = &m_prevCursorInit;
+    state.quickOpenOpen = &m_quickOpenOpen;
+    state.commandPaletteOpen = &m_commandPaletteOpen;
+    state.commandPaletteQuery = &m_commandPaletteQuery;
+    state.currentGizmoMode = &m_currentGizmoMode;
+    state.wireframeMode = &m_wireframeMode;
+    state.resetDockLayoutRequested = &m_resetDockLayoutRequested;
+    state.window = m_window;
+    state.selectedIndices = &m_selectedIndices;
+    state.selectedAssetId = &m_selectedAssetId;
+
+    m_toolbar.Draw(callbacks, state);
 }
 
 const std::vector<std::pair<std::filesystem::path, bool>> *
@@ -2477,556 +2207,6 @@ void EditorLayer::DrawProjectTreeRecursive(
   }
 }
 
-void EditorLayer::DrawBottomDock() {
-  const ImGuiIO &io = ImGui::GetIO();
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
-  const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
-  ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH),
-                           ImGuiCond_Always);
-  ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
-
-  const auto &palette = Ui::GetEditorTheme().palette;
-  ImGui::PushStyleColor(ImGuiCol_TabHovered, palette.cardHover);
-  ImGui::PushStyleColor(ImGuiCol_TabActive, palette.accent);
-  ImGui::PushStyleColor(ImGuiCol_TabUnfocusedActive, palette.accent);
-  if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
-    if (ImGui::BeginTabItem("Project")) {
-      DrawProjectBrowserTab();
-      ImGui::EndTabItem();
-    }
-    if (ImGui::BeginTabItem("Console")) {
-      DrawConsoleTab();
-      ImGui::EndTabItem();
-    }
-    if (ImGui::BeginTabItem("MCP")) {
-      DrawMcpTab();
-      ImGui::EndTabItem();
-    }
-    ImGui::EndTabBar();
-  }
-  ImGui::PopStyleColor(3);
-
-  ImGui::End();
-}
-
-void EditorLayer::DrawProjectBrowserBreadcrumbs(std::filesystem::path &nextCwd,
-                                                bool &cwdChanged) const {
-  if (const std::string rootLabel =
-          m_projectBrowserRoot.filename().string().empty()
-              ? m_projectBrowserRoot.generic_string()
-              : m_projectBrowserRoot.filename().string();
-      ImGui::SmallButton(rootLabel.c_str())) {
-    nextCwd = m_projectBrowserRoot;
-    cwdChanged = true;
-  }
-  std::error_code relEc;
-  if (const std::filesystem::path relPath = std::filesystem::relative(
-          m_projectBrowserCwd, m_projectBrowserRoot, relEc);
-      !relEc && !relPath.empty() && relPath != ".") {
-    std::filesystem::path crumb = m_projectBrowserRoot;
-    for (const auto &part : relPath) {
-      ImGui::SameLine();
-      ImGui::TextUnformatted(">");
-      ImGui::SameLine();
-      crumb /= part;
-      const std::string partLabel = part.string();
-      if (ImGui::SmallButton(partLabel.c_str())) {
-        nextCwd = crumb;
-        cwdChanged = true;
-      }
-    }
-  }
-}
-
-void EditorLayer::DrawProjectBrowserTiles(std::filesystem::path &nextCwd,
-                                          bool &cwdChanged) {
-  const auto *listing = GetProjectDirListing(m_projectBrowserCwd);
-  if (!listing) {
-    ImGui::TextDisabled("Cannot read '%s'",
-                        m_projectBrowserCwd.generic_string().c_str());
-    return;
-  }
-  const float spacing = 10.0f;
-  const float minTileW = 120.0f;
-  const float tileH = 104.0f;
-  const float iconW = 64.0f;
-  const float iconH = 42.0f;
-  const float availW = std::max(0.0f, ImGui::GetContentRegionAvail().x);
-  const int columns =
-      std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
-  const float tileW =
-      std::max(minTileW, (availW - spacing * static_cast<float>(columns - 1)) /
-                             static_cast<float>(columns));
-  int itemIndex = 0;
-  for (const auto &[p, isDir] : *listing) {
-    const std::string name = p.filename().string();
-    ImGui::PushID(p.generic_string().c_str());
-    ImGui::InvisibleButton("##project_item_btn", ImVec2(tileW, tileH));
-    if (ImGui::IsItemClicked() && isDir) {
-      nextCwd = p;
-      cwdChanged = true;
-    }
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-      ImGui::SetTooltip("%s", p.generic_string().c_str());
-
-    const ImVec2 rMin = ImGui::GetItemRectMin();
-    const ImVec2 rMax = ImGui::GetItemRectMax();
-    ImDrawList *dl = ImGui::GetWindowDrawList();
-    const bool hovered = ImGui::IsItemHovered();
-    const ImU32 hoverBg =
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.22f, 0.30f, 0.42f, 0.28f));
-    if (hovered)
-      dl->AddRectFilled(ImVec2(rMin.x + 2.0f, rMin.y + 2.0f),
-                        ImVec2(rMax.x - 2.0f, rMax.y - 2.0f), hoverBg, 8.0f);
-
-    const float iconX = rMin.x + (tileW - iconW) * 0.5f;
-    const float iconY = rMin.y + 10.0f;
-    if (isDir) {
-      const ImU32 tabCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.30f, 0.68f, 0.92f, 1.0f));
-      const ImU32 bodyCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 0.60f, 0.86f, 1.0f));
-      const ImU32 edgeCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.18f, 0.45f, 0.66f, 1.0f));
-      dl->AddRectFilled(ImVec2(iconX + 5.0f, iconY),
-                        ImVec2(iconX + iconW * 0.56f, iconY + 10.0f), tabCol,
-                        4.0f, ImDrawFlags_RoundCornersTop);
-      dl->AddRectFilled(ImVec2(iconX, iconY + 7.0f),
-                        ImVec2(iconX + iconW, iconY + iconH), bodyCol, 6.0f);
-      dl->AddRect(ImVec2(iconX, iconY + 7.0f),
-                  ImVec2(iconX + iconW, iconY + iconH), edgeCol, 6.0f);
-    } else {
-      const ImU32 pageCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.86f, 0.90f, 0.96f, 1.0f));
-      const ImU32 foldCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.74f, 0.80f, 0.90f, 1.0f));
-      const ImU32 edgeCol =
-          ImGui::ColorConvertFloat4ToU32(ImVec4(0.58f, 0.65f, 0.76f, 1.0f));
-      const ImVec2 p0(iconX + 8.0f, iconY);
-      const ImVec2 p1(iconX + iconW - 8.0f, iconY + iconH);
-      dl->AddRectFilled(p0, p1, pageCol, 4.0f);
-      dl->AddRect(p0, p1, edgeCol, 4.0f);
-      dl->AddTriangleFilled(ImVec2(p1.x - 14.0f, p0.y), ImVec2(p1.x, p0.y),
-                            ImVec2(p1.x, p0.y + 14.0f), foldCol);
-    }
-
-    std::string label = name;
-    if (const float maxLabelW = tileW - 10.0f;
-        ImGui::CalcTextSize(label.c_str()).x > maxLabelW) {
-      while (!label.empty() &&
-             ImGui::CalcTextSize((label + "...").c_str()).x > maxLabelW)
-        label.pop_back();
-      label += "...";
-    }
-    const ImVec2 labelSz = ImGui::CalcTextSize(label.c_str());
-    const float labelX = rMin.x + std::max(4.0f, (tileW - labelSz.x) * 0.5f);
-    const float labelY = iconY + iconH + 10.0f;
-    dl->AddText(ImVec2(labelX, labelY), ImGui::GetColorU32(ImGuiCol_Text),
-                label.c_str());
-    ImGui::PopID();
-    ++itemIndex;
-    if ((itemIndex % columns) != 0)
-      ImGui::SameLine(0.0f, spacing);
-  }
-}
-
-void EditorLayer::DrawProjectBrowserTab() {
-  if (!m_projectBrowserRootValid ||
-      !std::filesystem::is_directory(m_projectBrowserRoot)) {
-    ImGui::TextDisabled("Set project root (host app) to browse files.");
-    return;
-  }
-  if (!m_projectBrowserCwdValid ||
-      !std::filesystem::is_directory(m_projectBrowserCwd) ||
-      m_projectBrowserCwd.empty()) {
-    m_projectBrowserCwd = m_projectBrowserRoot;
-    m_projectBrowserCwdValid = true;
-  }
-  ImGui::BeginChild("##project_tiles", ImVec2(0, 0), true,
-                    ImGuiWindowFlags_HorizontalScrollbar);
-  bool cwdChanged = false;
-  std::filesystem::path nextCwd = m_projectBrowserCwd;
-  DrawProjectBrowserBreadcrumbs(nextCwd, cwdChanged);
-  ImGui::Separator();
-  DrawProjectBrowserTiles(nextCwd, cwdChanged);
-  if (cwdChanged) {
-    m_projectBrowserCwd = std::move(nextCwd);
-    m_projectBrowserCwdValid = true;
-    m_savedProjectBrowserCwd = m_projectBrowserCwd;
-    MarkWorkspaceStateDirty();
-  }
-  ImGui::EndChild();
-}
-
-void EditorLayer::DrawConsoleTab() {
-  using enum LogLevel;
-  int nInfo = 0;
-  int nWarn = 0;
-  int nErr = 0;
-  LogBuffer::Instance().GetCounts(&nInfo, &nWarn, &nErr);
-  if (ImGui::SmallButton("Clear"))
-    LogBuffer::Instance().Clear();
-  ImGui::SameLine();
-  if (ImGui::Checkbox("Info", &m_consoleShowInfo))
-    MarkWorkspaceStateDirty();
-  ImGui::SameLine();
-  if (ImGui::Checkbox("Warn", &m_consoleShowWarn))
-    MarkWorkspaceStateDirty();
-  ImGui::SameLine();
-  if (ImGui::Checkbox("Error", &m_consoleShowError))
-    MarkWorkspaceStateDirty();
-  ImGui::SameLine();
-  ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
-
-  ImGui::Separator();
-  ImGui::BeginChild("##console_scroll", ImVec2(0, 0), true,
-                    ImGuiWindowFlags_HorizontalScrollbar);
-  const LogBuffer &logBuf = LogBuffer::Instance();
-  const uint64_t rev = logBuf.Revision();
-  if (rev != m_consoleLogRevision) {
-    logBuf.CopyLinesTo(&m_consoleLinesCache);
-    m_consoleLogRevision = rev;
-  }
-
-  m_consoleVisibleScratch.clear();
-  for (int i = 0; i < static_cast<int>(m_consoleLinesCache.size()); ++i) {
-    const LogLine &entry = m_consoleLinesCache[static_cast<size_t>(i)];
-    if (entry.level == Info && !m_consoleShowInfo)
-      continue;
-    if (entry.level == Warn && !m_consoleShowWarn)
-      continue;
-    if (entry.level == Error && !m_consoleShowError)
-      continue;
-    m_consoleVisibleScratch.push_back(i);
-  }
-
-  // No ImGuiListClipper here: wrapped ImGui::Text rows have variable height
-  // and can confuse the clipper (hang or broken scroll). LogBuffer caps
-  // lines (~1k); a linear pass is fine.
-  EditorTrace("Console draw visible=%d cached=%zu rev=%llu",
-              static_cast<int>(m_consoleVisibleScratch.size()),
-              m_consoleLinesCache.size(), static_cast<unsigned long long>(rev));
-
-  for (int row = 0; row < static_cast<int>(m_consoleVisibleScratch.size());
-       ++row) {
-    const LogLine &entry = m_consoleLinesCache[static_cast<size_t>(
-        m_consoleVisibleScratch[static_cast<size_t>(row)])];
-    std::string timeBuf(32, '\0');
-    FormatLogTime(entry, timeBuf.data(), timeBuf.size());
-    const char *levelStr = "ERR";
-    if (entry.level == Info)
-      levelStr = "INFO";
-    else if (entry.level == Warn)
-      levelStr = "WARN";
-    ImVec4 color(0.85f, 0.9f, 1.0f, 1.0f);
-    if (entry.level == Warn)
-      color = ImVec4(1.0f, 0.85f, 0.4f, 1.0f);
-    else if (entry.level == Error)
-      color = ImVec4(1.0f, 0.45f, 0.4f, 1.0f);
-
-    const std::string lineLine =
-        std::format("[{}] {} ({}:{}) {}", timeBuf.c_str(), levelStr, entry.file,
-                    entry.line, entry.message);
-
-    ImGui::PushStyleColor(ImGuiCol_Text, color);
-    ImGui::TextUnformatted(lineLine.c_str());
-    ImGui::PopStyleColor();
-  }
-  ImGui::EndChild();
-}
-
-void EditorLayer::DrawMcpClientCard(const char *title, const char *pathLabel,
-                                    const char *pathValue, const char *hint,
-                                    std::string_view snippet,
-                                    const char *toastLabel) {
-  ImGui::TableNextColumn();
-  ImGui::BeginChild(title, ImVec2(0, 132.0f), true);
-  ImGui::TextUnformatted(title);
-  ImGui::Separator();
-  ImGui::TextWrapped("%s", hint);
-  ImGui::TextDisabled("%s", pathLabel);
-  ImGui::TextWrapped("%s", pathValue);
-  if (ImGui::Button((std::string("Copy Config##") + title).c_str())) {
-    glfwSetClipboardString(m_window, std::string(snippet).c_str());
-    m_uiWidgets.OnClipboardAction(std::string(toastLabel), 1.5f);
-  }
-  ImGui::EndChild();
-}
-
-void EditorLayer::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot &status) {
-  DrawUiAutomationMarker(
-      std::format("##mcp_test/activity_rows_{}", status.recentActivity.size())
-          .c_str());
-  if (!ImGui::BeginTable("##mcp_requests", 6,
-                         ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
-                             ImGuiTableFlags_ScrollY |
-                             ImGuiTableFlags_Resizable,
-                         ImVec2(0.0f, 200.0f)))
-    return;
-  ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-  ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthStretch, 1.6f);
-  ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 64.0f);
-  ImGui::TableSetupColumn("Ms", ImGuiTableColumnFlags_WidthFixed, 58.0f);
-  ImGui::TableSetupColumn("Request", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-  ImGui::TableSetupColumn("Response", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-  ImGui::TableHeadersRow();
-  for (int i = 0; i < static_cast<int>(status.recentActivity.size()); ++i) {
-    const Mcp::McpActivityEntry &entry =
-        status.recentActivity[static_cast<size_t>(i)];
-    ImGui::TableNextRow();
-    ImGui::TableSetColumnIndex(0);
-    const bool selected = i == m_mcpSelectedActivityIndex;
-    if (const std::string selectableLabel =
-            std::format("{}##mcp_req_{}", entry.timeText, i);
-        ImGui::Selectable(selectableLabel.c_str(), selected,
-                          ImGuiSelectableFlags_SpanAllColumns))
-      m_mcpSelectedActivityIndex = i;
-    ImGui::TableSetColumnIndex(1);
-    ImGui::TextUnformatted(entry.target.c_str());
-    ImGui::TableSetColumnIndex(2);
-    ImGui::TextColored(entry.ok ? ImVec4(0.75f, 0.95f, 0.75f, 1.0f)
-                                : ImVec4(1.0f, 0.55f, 0.5f, 1.0f),
-                       "%s", entry.ok ? "OK" : "FAIL");
-    ImGui::TableSetColumnIndex(3);
-    ImGui::Text("%.1f", entry.durationMs);
-    ImGui::TableSetColumnIndex(4);
-    ImGui::TextWrapped("%s", entry.requestPreview.empty()
-                                 ? "-"
-                                 : entry.requestPreview.c_str());
-    ImGui::TableSetColumnIndex(5);
-    ImGui::TextWrapped("%s", entry.responsePreview.empty()
-                                 ? "-"
-                                 : entry.responsePreview.c_str());
-  }
-  ImGui::EndTable();
-
-  if (status.recentActivity.empty()) {
-    DrawUiAutomationMarker("##mcp_test/request_detail_hidden");
-    return;
-  }
-  const Mcp::McpActivityEntry &selected =
-      status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
-  ImGui::SeparatorText("Request Detail");
-  ImGui::Text("Timestamp: %s", selected.timestampText.c_str());
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Method: %s",
-              selected.mcpMethod.empty() ? "-" : selected.mcpMethod.c_str());
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("HTTP: %d", selected.httpStatus);
-  ImGui::Text("Operation: %s",
-              selected.operation.empty() ? "-" : selected.operation.c_str());
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Request ID: %s",
-              selected.requestId.empty() ? "-" : selected.requestId.c_str());
-  DrawUiAutomationMarker("##mcp_test/request_detail_visible");
-  DrawUiAutomationMarker(selected.mcpMethod.empty()
-                             ? "##mcp_test/request_method_empty"
-                             : "##mcp_test/request_method_present");
-  DrawUiAutomationMarker("##mcp_test/request_http_present");
-  DrawUiAutomationMarker(selected.operation.empty()
-                             ? "##mcp_test/request_operation_empty"
-                             : "##mcp_test/request_operation_present");
-  DrawUiAutomationMarker(selected.requestId.empty()
-                             ? "##mcp_test/request_id_empty"
-                             : "##mcp_test/request_id_present");
-  if (!selected.error.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
-    ImGui::TextWrapped("Error: %s", selected.error.c_str());
-    ImGui::PopStyleColor();
-  }
-}
-
-void EditorLayer::DrawMcpTabCatalog(
-    const Mcp::McpStatusSnapshot &status) const {
-  if (!ImGui::BeginTable("##mcp_catalog", 2,
-                         ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
-    return;
-  ImGui::TableSetupColumn("Tools", ImGuiTableColumnFlags_WidthStretch);
-  ImGui::TableSetupColumn("Resources", ImGuiTableColumnFlags_WidthStretch);
-  ImGui::TableHeadersRow();
-  ImGui::TableNextRow();
-  ImGui::TableSetColumnIndex(0);
-  ImGui::BeginChild("##mcp_tools_catalog", ImVec2(0, 132.0f), false);
-  for (const Mcp::McpCatalogEntry &entry : status.toolCatalog) {
-    ImGui::TextUnformatted(entry.name.c_str());
-    ImGui::TextDisabled("%s", entry.description.c_str());
-  }
-  ImGui::EndChild();
-  ImGui::TableSetColumnIndex(1);
-  ImGui::BeginChild("##mcp_resources_catalog", ImVec2(0, 132.0f), false);
-  for (const Mcp::McpCatalogEntry &entry : status.resourceCatalog) {
-    ImGui::Text("%s", entry.name.c_str());
-    ImGui::TextDisabled("%s", entry.description.c_str());
-  }
-  ImGui::EndChild();
-  ImGui::EndTable();
-}
-
-void EditorLayer::DrawMcpTab() {
-  const Mcp::McpStatusSnapshot status = m_mcpController.GetStatusSnapshot();
-
-  if (m_mcpSelectedActivityIndex >=
-      static_cast<int>(status.recentActivity.size()))
-    m_mcpSelectedActivityIndex =
-        status.recentActivity.empty()
-            ? 0
-            : static_cast<int>(status.recentActivity.size()) - 1;
-
-  ImGui::Text("Status: %s", status.running ? "Running" : "Stopped");
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Enabled: %s", status.enabled ? "Yes" : "No");
-  DrawUiAutomationMarker(status.enabled ? "##mcp_test/status_enabled"
-                                        : "##mcp_test/status_disabled");
-  DrawUiAutomationMarker(status.running ? "##mcp_test/status_running"
-                                        : "##mcp_test/status_stopped");
-  DrawUiAutomationMarker(m_mcpUiClearToggle
-                             ? "##mcp_test/log_clear_toggle_on"
-                             : "##mcp_test/log_clear_toggle_off");
-#ifdef HORO_STANDALONE_UI_AUTOMATION
-  if (ImGui::InvisibleButton("##mcp_test/open_settings_action",
-                             ImVec2(1.0f, 1.0f))) {
-    m_settingsModal.SetOpen(true);
-    *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
-    m_settingsModal.GetError()->clear();
-  }
-  if (ImGui::InvisibleButton("##mcp_test/clear_log_action",
-                             ImVec2(1.0f, 1.0f))) {
-    m_mcpController.ClearActivityLog();
-    m_mcpUiClearToggle = !m_mcpUiClearToggle;
-  }
-#endif
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Endpoint: %s", status.endpointUrl.c_str());
-
-  ImGui::Text("Requests: %llu",
-              static_cast<unsigned long long>(status.totalRequests));
-  DrawUiAutomationMarker(
-      std::format("##mcp_test/activity_rows_{}", status.recentActivity.size())
-          .c_str());
-  DrawUiAutomationMarker(status.recentActivity.empty()
-                             ? "##mcp_test/request_detail_hidden"
-                             : "##mcp_test/request_detail_visible");
-  if (!status.recentActivity.empty()) {
-    const Mcp::McpActivityEntry &selected =
-        status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
-    DrawUiAutomationMarker(selected.mcpMethod.empty()
-                               ? "##mcp_test/request_method_empty"
-                               : "##mcp_test/request_method_present");
-    DrawUiAutomationMarker("##mcp_test/request_http_present");
-    DrawUiAutomationMarker(selected.operation.empty()
-                               ? "##mcp_test/request_operation_empty"
-                               : "##mcp_test/request_operation_present");
-    DrawUiAutomationMarker(selected.requestId.empty()
-                               ? "##mcp_test/request_id_empty"
-                               : "##mcp_test/request_id_present");
-  }
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Success: %llu",
-              static_cast<unsigned long long>(status.successCount));
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Failed: %llu",
-              static_cast<unsigned long long>(status.failureCount));
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Active: %d", status.activeRequests);
-
-  ImGui::Text("Tools: %d", static_cast<int>(status.toolCount));
-  DrawUiAutomationMarker(status.toolCount > 0 ? "##mcp_test/tools_available"
-                                              : "##mcp_test/tools_empty");
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Resources: %d", static_cast<int>(status.resourceCount));
-  DrawUiAutomationMarker(status.resourceCount > 0
-                             ? "##mcp_test/resources_available"
-                             : "##mcp_test/resources_empty");
-  ImGui::SameLine();
-  ImGui::TextDisabled("|");
-  ImGui::SameLine();
-  ImGui::Text("Last Request: %s", status.lastRequestTime.empty()
-                                      ? "-"
-                                      : status.lastRequestTime.c_str());
-
-  if (!status.topTool.empty() || !status.topResource.empty()) {
-    ImGui::Text("Top Tool: %s",
-                status.topTool.empty() ? "-" : status.topTool.c_str());
-    ImGui::SameLine();
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
-    ImGui::Text("Top Resource: %s",
-                status.topResource.empty() ? "-" : status.topResource.c_str());
-  }
-
-  if (!status.lastError.empty()) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
-    ImGui::TextWrapped("%s", status.lastError.c_str());
-    ImGui::PopStyleColor();
-  }
-
-  ImGui::SeparatorText("Quick Actions");
-  if (ImGui::Button("Open Settings")) {
-    m_settingsModal.SetOpen(true);
-    *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
-    m_settingsModal.GetError()->clear();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Copy Endpoint")) {
-    glfwSetClipboardString(m_window, status.endpointUrl.c_str());
-    m_uiWidgets.OnClipboardAction("MCP endpoint copied", 1.5f);
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Clear Request Log"))
-    m_mcpController.ClearActivityLog();
-  if (ImGui::IsItemClicked())
-    m_mcpUiClearToggle = !m_mcpUiClearToggle;
-  DrawUiAutomationMarker(m_mcpUiClearToggle
-                             ? "##mcp_test/log_clear_toggle_on"
-                             : "##mcp_test/log_clear_toggle_off");
-
-  ImGui::SeparatorText("Clients");
-  if (ImGui::BeginTable("##mcp_clients", 3,
-                        ImGuiTableFlags_SizingStretchSame)) {
-    ImGui::TableNextRow();
-    DrawMcpClientCard(
-        "Codex", "Config path", "~/.codex/config.toml or .codex/config.toml",
-        "Use the built-in MCP server entry so /mcp can discover Horo Engine "
-        "automatically.",
-        m_mcpController.BuildCodexConfigSnippet(), "Codex MCP config copied");
-    DrawMcpClientCard(
-        "Claude", "Config path", "~/.claude.json or .mcp.json",
-        "Claude Code can connect over HTTP MCP using the endpoint shown above.",
-        m_mcpController.BuildClaudeConfigSnippet(), "Claude MCP config copied");
-    DrawMcpClientCard("VS Code", "Config path",
-                      ".vscode/mcp.json or user mcp.json",
-                      "VS Code MCP can be set per workspace or globally from "
-                      "the Command Palette.",
-                      m_mcpController.BuildVsCodeConfigSnippet(),
-                      "VS Code MCP config copied");
-    ImGui::EndTable();
-  }
-
-  ImGui::SeparatorText("Live Requests");
-  DrawMcpTabLiveRequests(status);
-
-  ImGui::SeparatorText("Catalog");
-  DrawMcpTabCatalog(status);
-}
 
 // ViewGimbalAxisDraw, ViewGimbalAxisCache, ViewGimbalArrowGeometry,
 // BuildViewGimbalArrow, Cross2D, PointInTriangle2D, NormalizeViewGimbalAxis,
@@ -3796,50 +2976,52 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string *outError) {
 }
 
 void EditorLayer::DrawAssetsPanel() {
-  const ImGuiIO &io = ImGui::GetIO();
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
-  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-  const float hierarchyHeight =
-      std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
-  const float assetsTop = kEditorToolbarH + hierarchyHeight + 4.0f;
-  ImGui::SetNextWindowPos(ImVec2(0.0f, assetsTop), ImGuiCond_Always);
-  ImGui::SetNextWindowSize(
-      ImVec2(leftDockW, std::max(180.0f, workBottom - assetsTop)),
-      ImGuiCond_Always);
-  ImGui::Begin(kEditorAssetsWindow, nullptr, kMainPanelWindowFlags);
+    // Build component context
+    EditorComponentContext ctx;
+    ctx.document = &m_document;
+    ctx.lastSavedDocument = &m_lastSavedDocument;
+    ctx.schema = &m_schema;
+    ctx.selectedIndices = &m_selectedIndices;
+    ctx.selectedAssetId = &m_selectedAssetId;
+    ctx.assetImportService = &m_assetImportService;
+    ctx.liveRegistry = m_liveRegistry;
 
-  m_albedoDraftDrop.Clear();
-  m_albedoSelDrop.Clear();
+    // Build callbacks
+    EditorAssetsPanelCallbacks callbacks;
+    callbacks.requestDeleteAsset = [this](std::string_view assetId) {
+        RequestDeleteAsset(assetId);
+    };
+    callbacks.markDirtyAndReload = [this]() {
+        MarkDirtyAndReload();
+    };
+    callbacks.makeObjectFromAsset = [this](const std::string& assetId) {
+        return MakeObjectFromAsset(m_document, assetId, m_schema);
+    };
+    callbacks.setDeferredFilePick = [this](int deferredType) {
+        m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
+    };
 
-  if (ImGui::Button("+", ImVec2(28.0f, 0.0f)))
-    m_openNewAssetHeader = true;
-  ImGui::SameLine();
-  ImGui::SetCursorPosX(
-      std::max(0.0f, ImGui::GetWindowContentRegionMax().x - 74.0f));
-  if (ImGui::Button("Search", ImVec2(64.0f, 0.0f))) {
-    m_assetSearchOpen = true;
-    m_assetSearchQuery.clear();
-  }
-  ImGui::Separator();
+    // Build state
+    EditorAssetsPanelState state;
+    state.selectedAssetId = &m_selectedAssetId;
+    state.selectedIndices = &m_selectedIndices;
+    state.assetDraftId = &m_assetDraftId;
+    state.assetDraftGuid = &m_assetDraftGuid;
+    state.assetDraftDisplayName = &m_assetDraftDisplayName;
+    state.assetDraftMesh = &m_assetDraftMesh;
+    state.assetDraftRenderScale = &m_assetDraftRenderScale;
+    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
+    state.assetImportError = &m_assetImportError;
+    state.openNewAssetHeader = &m_openNewAssetHeader;
+    state.albedoDraftDrop = &m_albedoDraftDrop;
+    state.albedoSelDrop = &m_albedoSelDrop;
+    state.assetSearchOpen = &m_assetSearchOpen;
+    state.assetSearchQuery = &m_assetSearchQuery;
+    state.document = &m_document;
+    state.assetImportService = &m_assetImportService;
+    state.liveRegistry = m_liveRegistry;
 
-  std::vector<std::string> assetIds;
-  assetIds.reserve(m_document.assets.size());
-  for (const auto &[assetId, _] : m_document.assets)
-    assetIds.push_back(assetId);
-  std::ranges::sort(assetIds);
-
-  DrawAssetSpotlightPopup(assetIds);
-
-  bool openNewAssetModal = m_openNewAssetHeader;
-  if (m_openNewAssetHeader)
-    m_openNewAssetHeader = false;
-
-  DrawAssetGrid(assetIds, openNewAssetModal);
-
-  DrawCreateAssetModal(openNewAssetModal);
-
-  ImGui::End();
+    m_assetsPanel.Draw(ctx, callbacks, state);
 }
 
 void EditorLayer::DrawCommandPalettePopup() {
@@ -3969,353 +3151,6 @@ void EditorLayer::DrawQuickOpenPopup() {
   ImGui::EndPopup();
 }
 
-void EditorLayer::DrawAssetSpotlightPopup(
-    const std::vector<std::string> &assetIds) {
-  if (m_assetSearchOpen) {
-    ImGui::SetNextWindowSize(ImVec2(480.0f, 0.0f), ImGuiCond_Appearing);
-    if (!ImGui::IsPopupOpen("Asset Search"))
-      ImGui::OpenPopup("Asset Search");
-  }
-
-  if (!ImGui::BeginPopupModal("Asset Search", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
-    return;
-
-  ImGui::TextDisabled("Jump to asset");
-  ImGui::SetNextItemWidth(440.0f);
-  std::array<char, 256> queryBuf{};
-  m_assetSearchQuery.copy(queryBuf.data(), queryBuf.size() - 1);
-  if (ImGui::InputTextWithHint("##asset_spotlight_input", "Type asset id...",
-                               queryBuf.data(), queryBuf.size()))
-    m_assetSearchQuery = queryBuf.data();
-
-  ImGui::Separator();
-  bool picked = false;
-  int shownCount = 0;
-  for (const std::string &assetId : assetIds) {
-    auto it = m_document.assets.find(assetId);
-    if (it == m_document.assets.end())
-      continue;
-    if (!AssetMatchesQuickOpenQuery(assetId, it->second, m_assetSearchQuery))
-      continue;
-    if (const auto label =
-            std::format("{}##asset_spotlight_{}", assetId, assetId);
-        ImGui::Selectable(label.c_str(), m_selectedAssetId == assetId)) {
-      m_selectedAssetId = assetId;
-      picked = true;
-    }
-    ++shownCount;
-  }
-
-  if (shownCount == 0)
-    ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
-
-  if (picked || ImGui::Button("Close") ||
-      ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-    m_assetSearchOpen = false;
-    m_assetSearchQuery.clear();
-    ImGui::CloseCurrentPopup();
-  }
-
-  ImGui::EndPopup();
-}
-
-void EditorLayer::DrawAssetTile( // NOSONAR: cpp:S3776 asset tile with
-                                 // hover/select/rename UI; complexity from
-                                 // per-tile overlay rendering
-    const std::string &assetId, const AssetDef &asset, float tileW, float tileH,
-    float thumbPad, float thumbSize) {
-  const bool isSelectedAsset = (m_selectedAssetId == assetId);
-  if (isSelectedAsset)
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14f, 0.24f, 0.34f, 0.70f));
-  ImGui::BeginChild(
-      "##asset_tile", ImVec2(tileW, tileH), ImGuiChildFlags_Borders,
-      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-  if (isSelectedAsset)
-    ImGui::PopStyleColor();
-
-  ImGui::InvisibleButton("##asset_tile_select",
-                         ImVec2(tileW - 2.0f, tileH - 2.0f));
-  if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-    m_selectedAssetId = isSelectedAsset ? std::string() : assetId;
-
-  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-    ImGui::SetDragDropPayload("ASSET_ID", assetId.c_str(), assetId.size() + 1);
-    ImGui::Text("+ %s", assetId.c_str());
-    ImGui::EndDragDropSource();
-  }
-
-  if (ImGui::BeginPopupContextItem("##asset_tile_ctx")) {
-    if (ImGui::MenuItem("Add Prop")) {
-      SceneObject obj = MakeObjectFromAsset(m_document, assetId, m_schema);
-      m_document.objects.push_back(std::move(obj));
-      m_selectedIndices = {static_cast<int>(m_document.objects.size()) - 1};
-      MarkDirtyAndReload();
-    }
-    if (ImGui::MenuItem("Delete Asset"))
-      RequestDeleteAsset(assetId);
-    ImGui::EndPopup();
-  }
-
-  const ImVec2 tileMin = ImGui::GetWindowPos();
-  ImDrawList *dl = ImGui::GetWindowDrawList();
-  const ImVec2 thumbMin(tileMin.x + thumbPad, tileMin.y + thumbPad);
-  const ImVec2 thumbMax(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
-
-  dl->AddRectFilled(
-      thumbMin, thumbMax,
-      ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f)), 6.0f);
-  dl->AddRect(thumbMin, thumbMax,
-              ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)),
-              6.0f);
-
-  if (RenderTargetHandle previewHandle;
-      TryGetAssetPreviewHandle(assetId, asset, &previewHandle) &&
-      previewHandle.IsValid()) {
-    const ImVec2 uv0 =
-        previewHandle.needsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
-    const ImVec2 uv1 =
-        previewHandle.needsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
-    dl->AddImage(ToImTextureId(previewHandle), thumbMin, thumbMax, uv0, uv1);
-  } else {
-    const ImU32 labelCol =
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.67f, 0.74f, 0.84f, 0.95f));
-    const ImU32 meshCol =
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
-    const std::string ext =
-        asset.mesh.empty()
-            ? std::string("mesh")
-            : ToLowerAscii(
-                  std::filesystem::path(asset.mesh).extension().string());
-    dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 10.0f), labelCol,
-                "No preview texture");
-    dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 30.0f), meshCol,
-                ext.c_str());
-  }
-
-  AssetMetadata tileMetadata;
-  const bool hasTileMetadata =
-      LoadAssetMetadata(asset.guid, &tileMetadata, nullptr);
-  const bool hasDiagnostics =
-      hasTileMetadata &&
-      (!tileMetadata.lastImportSucceeded || !tileMetadata.diagnostics.empty());
-
-  std::string nameLabel =
-      asset.displayName.empty() ? assetId : asset.displayName;
-  if (hasDiagnostics)
-    nameLabel += " !";
-  if (const float maxLabelW = tileW - 14.0f;
-      ImGui::CalcTextSize(nameLabel.c_str()).x > maxLabelW) {
-    while (!nameLabel.empty() &&
-           ImGui::CalcTextSize((nameLabel + "...").c_str()).x > maxLabelW)
-      nameLabel.pop_back();
-    nameLabel += "...";
-  }
-  const ImVec2 nameSz = ImGui::CalcTextSize(nameLabel.c_str());
-  const float nameX = tileMin.x + std::max(7.0f, (tileW - nameSz.x) * 0.5f);
-  const float nameY = thumbMax.y + 6.0f;
-  const ImU32 nameColor = hasDiagnostics ? IM_COL32(255, 120, 120, 255)
-                                         : ImGui::GetColorU32(ImGuiCol_Text);
-  dl->AddText(ImVec2(nameX, nameY), nameColor, nameLabel.c_str());
-
-  ImGui::EndChild();
-}
-
-void EditorLayer::DrawAssetGrid(const std::vector<std::string> &assetIds,
-                                bool &openNewAssetModal) {
-  ImGui::BeginChild("##asset_grid", ImVec2(0, 0), false);
-
-  const float spacing = 8.0f;
-  const float minTileW = 130.0f;
-  const float availW = std::max(40.0f, ImGui::GetContentRegionAvail().x);
-  const int columns =
-      std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
-  const float tileW = (availW - spacing * static_cast<float>(columns - 1)) /
-                      static_cast<float>(columns);
-  const float thumbPad = 8.0f;
-  const float thumbSize = tileW - thumbPad * 2.0f;
-  const float tileH = thumbSize + thumbPad * 2.0f + 22.0f;
-
-  int shownAssetCount = 0;
-  for (const auto &assetId : assetIds) {
-    const auto assetIt = m_document.assets.find(assetId);
-    if (assetIt == m_document.assets.end())
-      continue;
-    const auto &asset = assetIt->second;
-    if (!AssetMatchesQuickOpenQuery(assetId, asset, m_assetSearchQuery))
-      continue;
-    ++shownAssetCount;
-    if (const int col = (shownAssetCount - 1) % columns; col > 0)
-      ImGui::SameLine(0.0f, spacing);
-    ImGui::PushID(assetId.c_str());
-    DrawAssetTile(assetId, asset, tileW, tileH, thumbPad, thumbSize);
-    ImGui::PopID();
-  }
-
-  if (const FilteredListState assetState = EvaluateFilteredListState(
-          assetIds.size(), shownAssetCount, m_assetSearchQuery);
-      assetState != FilteredListState::None) {
-    ImGui::Spacing();
-    if (assetState == FilteredListState::EmptyData) {
-      ImGui::TextDisabled("Asset registry is empty");
-      ImGui::TextDisabled(
-          "Create your first asset to enable fast prop placement.");
-      if (ImGui::Button("Create First Asset"))
-        openNewAssetModal = true;
-    } else if (assetState == FilteredListState::NoMatches) {
-      ImGui::TextDisabled("No assets match '%s'", m_assetSearchQuery.c_str());
-      if (ImGui::Button("Clear Asset Search"))
-        m_assetSearchQuery.clear();
-    }
-  }
-
-  ImGui::EndChild();
-}
-
-void EditorLayer::DrawCreateAssetModal(bool openModal) {
-  if (openModal)
-    ImGui::OpenPopup("Create Asset");
-  ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
-  if (ImGui::BeginPopupModal("Create Asset", nullptr,
-                             ImGuiWindowFlags_AlwaysAutoResize)) {
-    DrawCreateAssetModalContent();
-    ImGui::EndPopup();
-  }
-}
-
-// Extracted from DrawCreateAssetModal to keep the outer function below the
-// S3776 cognitive complexity threshold. Owns all widget logic for the modal.
-void EditorLayer::DrawCreateAssetModalContent() {
-  constexpr float blockW = 470.0f;
-  ImGui::PushItemWidth(blockW);
-
-  if (ImGui::Button("Import .obj...", ImVec2(blockW, 0.0f))) {
-    m_assetImportError.clear();
-#if !defined(_WIN32) && !defined(__APPLE__)
-    m_assetImportError = "Import dialog is not supported on this platform yet.";
-#else
-    m_deferredFilePick = DeferredFilePick::ImportObjBulk;
-#endif
-  }
-  if (!m_assetImportError.empty()) {
-    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + blockW);
-    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
-                       m_assetImportError.c_str());
-    ImGui::PopTextWrapPos();
-  }
-
-  ImGui::Spacing();
-
-  std::string idBuf(128, '\0');
-  m_assetDraftId.copy(idBuf.data(), idBuf.size() - 1);
-  ImGui::TextDisabled("Asset ID");
-  if (ImGui::InputText("##draft_id", idBuf.data(), idBuf.size())) {
-    m_assetDraftId = idBuf.data();
-    if (m_assetDraftDisplayName.empty())
-      m_assetDraftDisplayName = m_assetDraftId;
-  }
-
-  std::string displayNameBuf(128, '\0');
-  m_assetDraftDisplayName.copy(displayNameBuf.data(),
-                               displayNameBuf.size() - 1);
-  ImGui::TextDisabled("Display name");
-  if (ImGui::InputText("##draft_display_name", displayNameBuf.data(),
-                       displayNameBuf.size()))
-    m_assetDraftDisplayName = displayNameBuf.data();
-
-  if (!m_assetDraftGuid.empty()) {
-    ImGui::TextDisabled("GUID");
-    ImGui::TextWrapped("%s", m_assetDraftGuid.c_str());
-  }
-
-  std::string meshBuf(256, '\0');
-  m_assetDraftMesh.copy(meshBuf.data(), meshBuf.size() - 1);
-  ImGui::TextDisabled("Mesh");
-  if (ImGui::InputText("##draft_mesh", meshBuf.data(), meshBuf.size()))
-    m_assetDraftMesh = meshBuf.data();
-
-  std::string scaleBuf(128, '\0');
-  m_assetDraftRenderScale.copy(scaleBuf.data(), scaleBuf.size() - 1);
-  ImGui::TextDisabled("Render scale");
-  if (ImGui::InputText("##draft_scale", scaleBuf.data(), scaleBuf.size()))
-    m_assetDraftRenderScale = scaleBuf.data();
-
-  std::string albDraftBuf(512, '\0');
-  m_assetDraftAlbedoMap.copy(albDraftBuf.data(), albDraftBuf.size() - 1);
-  ImGui::TextDisabled("Albedo map (optional)");
-  const ImVec2 draftAlbLabelMin = ImGui::GetItemRectMin();
-  const ImVec2 draftAlbLabelMax = ImGui::GetItemRectMax();
-  if (ImGui::InputText("##draft_albedo", albDraftBuf.data(),
-                       albDraftBuf.size()))
-    m_assetDraftAlbedoMap = albDraftBuf.data();
-  {
-    const ImVec2 fMin = ImGui::GetItemRectMin();
-    const ImVec2 fMax = ImGui::GetItemRectMax();
-    m_albedoDraftDrop.valid = true;
-    m_albedoDraftDrop.minX = std::min(draftAlbLabelMin.x, fMin.x);
-    m_albedoDraftDrop.minY = draftAlbLabelMin.y;
-    m_albedoDraftDrop.maxX = std::max(draftAlbLabelMax.x, fMax.x);
-    m_albedoDraftDrop.maxY = fMax.y;
-  }
-
-#if defined(_WIN32) || defined(__APPLE__)
-  if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f)))
-    m_deferredFilePick = DeferredFilePick::NewAssetAlbedo;
-#else
-  ImGui::BeginDisabled();
-  ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f));
-  ImGui::EndDisabled();
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    ImGui::SetTooltip("Texture file dialog is not available on this platform.");
-#endif
-
-  ImGui::Spacing();
-
-  const bool canCreate = !m_assetDraftId.empty() && !m_assetDraftMesh.empty();
-  if (!canCreate)
-    ImGui::BeginDisabled();
-  if (ImGui::Button("Create Asset", ImVec2(150.0f, 0.0f))) {
-    AssetDef def;
-    def.mesh = m_assetDraftMesh;
-    def.renderScale = m_assetDraftRenderScale.empty() ? "1.0000,1.0000,1.0000"
-                                                      : m_assetDraftRenderScale;
-    def.albedoMap = m_assetDraftAlbedoMap;
-    def.guid =
-        m_assetDraftGuid.empty() ? GenerateAssetGuid() : m_assetDraftGuid;
-    def.displayName = m_assetDraftDisplayName.empty() ? m_assetDraftId
-                                                      : m_assetDraftDisplayName;
-    m_document.assets[m_assetDraftId] = std::move(def);
-    if (std::string metadataError;
-        !m_assetImportService.SaveMetadataForAsset(
-            m_assetDraftId, m_document.assets[m_assetDraftId],
-            &metadataError) &&
-        !metadataError.empty()) {
-      LogWarn("Create Asset metadata sync: {}", metadataError);
-    }
-    m_selectedAssetId = m_assetDraftId;
-    m_assetDraftId.clear();
-    m_assetDraftGuid.clear();
-    m_assetDraftDisplayName.clear();
-    m_assetDraftMesh.clear();
-    m_assetDraftRenderScale = "1.0000,1.0000,1.0000";
-    m_assetDraftAlbedoMap.clear();
-    m_assetImportError.clear();
-    MarkDirtyAndReload();
-    ImGui::CloseCurrentPopup();
-  }
-  if (!canCreate)
-    ImGui::EndDisabled();
-
-  ImGui::SameLine();
-  if (ImGui::Button("Cancel", ImVec2(150.0f, 0.0f))) {
-    m_assetImportError.clear();
-    m_assetDraftGuid.clear();
-    m_assetDraftDisplayName.clear();
-    ImGui::CloseCurrentPopup();
-  }
-
-  ImGui::PopItemWidth();
-}
 
 
 void EditorLayer::DrawDeleteConfirmModals() {

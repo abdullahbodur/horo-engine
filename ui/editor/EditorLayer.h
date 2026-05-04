@@ -18,8 +18,11 @@
 #include "ui/editor/SceneDocument.h"
 #include "ui/editor/TransformGizmo.h"
 #include "ui/editor/ViewSnap.h"
+#include "ui/editor/components/EditorAssetsPanel.h"
+#include "ui/editor/components/EditorBottomDock.h"
 #include "ui/editor/components/EditorHelpPopup.h"
 #include "ui/editor/components/EditorSettingsModal.h"
+#include "ui/editor/components/EditorToolbar.h"
 #include "ui/editor/components/EditorUIWidgets.h"
 #include "mcp/McpController.h"
 #include "renderer/Camera.h"
@@ -113,6 +116,8 @@ namespace Horo {
 
             void SetProjectBrowserExtraBlocklist(
                 std::unordered_set<std::string, StringHash, std::equal_to<> > names);
+
+            void InvalidateProjectBrowserCache();
 
             void SetFileMenuRenderCallback(std::function<void()> cb) {
                 m_fileMenuRenderCallback = std::move(cb);
@@ -262,7 +267,6 @@ namespace Horo {
             void MarkDirtyAndReload(); // dirty = true + TriggerReload()
 
             void DrawToolbar();
-            void DrawIconToolbar();
 
             void DrawDockspace();
 
@@ -327,25 +331,11 @@ namespace Horo {
 
             void DrawQuickOpenPopup();
 
-            void DrawBottomDock();
-
-            void DrawMcpTab();
-
-            void DrawMcpClientCard(const char *title, const char *pathLabel,
-                                   const char *pathValue, const char *hint,
-                                   std::string_view snippet, const char *toastLabel);
-
-            void DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot &status);
-
-            void DrawMcpTabCatalog(const Mcp::McpStatusSnapshot &status) const;
-
             void DrawProjectTreeRecursive(const std::filesystem::path &absPath,
                                           const std::filesystem::path &displayRoot);
 
-            void InvalidateProjectBrowserCache();
-
-            const std::vector<std::pair<std::filesystem::path, bool> > *
-            GetProjectDirListing(const std::filesystem::path &absPath);
+            const std::vector<std::pair<std::filesystem::path, bool>>*
+            GetProjectDirListing(const std::filesystem::path& absPath);
 
             void DrawDeleteConfirmModals();
 
@@ -487,46 +477,9 @@ namespace Horo {
 
             void DrawObjectsTree(SceneDocument &doc, bool isPrimary);
 
-            // DrawToolbar sub-sections
-            void DrawToolbarFileMenu();
-
-            void DrawToolbarAddMenu(bool hasSelectedAsset);
-
-            void DrawToolbarEditMenu(bool hasSelection, bool hasSingleSelection,
-                                     int primaryIdx);
-
-            void DrawToolbarEditMenuItems(bool hasSelection, bool hasSingleSelection,
-                                          int primaryIdx);
-
-            void DrawToolbarViewMenu();
-
             void DrawPlaybackControls();
 
             void DrawSceneControls();
-
-            // DrawBottomDock sub-sections
-            void DrawProjectBrowserTab();
-
-            void DrawProjectBrowserBreadcrumbs(std::filesystem::path &nextCwd,
-                                               bool &cwdChanged) const;
-
-            void DrawProjectBrowserTiles(std::filesystem::path &nextCwd,
-                                         bool &cwdChanged);
-
-            void DrawConsoleTab();
-
-            // DrawAssetsPanel sub-sections
-            void DrawAssetSpotlightPopup(const std::vector<std::string> &assetIds);
-
-            void DrawAssetGrid(const std::vector<std::string> &assetIds,
-                               bool &openNewAssetModal);
-
-            void DrawAssetTile(const std::string &assetId, const AssetDef &asset,
-                               float tileW, float tileH, float thumbPad, float thumbSize);
-
-            void DrawCreateAssetModal(bool openModal);
-
-            void DrawCreateAssetModalContent();
 
             // DrawObjectsTree recursive node renderer (extracted from drawNode lambda)
             void DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
@@ -544,8 +497,18 @@ namespace Horo {
 
             void DrawObjectsTreeRuntimeEntities(const SceneDocument &doc) const;
 
+            bool m_hasPendingPathDrop = false;
+            float m_pendingPathDropX = 0.0f;
+            float m_pendingPathDropY = 0.0f;
+            std::vector<std::string> m_pendingPathDropPaths;
 
+            // Last-frame screen rect for view axis gizmo (skip scene picking when cursor
+            // is here).
+            ScreenRectDropZone m_viewGizmoPickRect;
 
+            std::string m_objectSearchQuery;
+            
+            // Assets panel state
             std::string m_assetDraftId;
             std::string m_assetDraftGuid;
             std::string m_assetDraftDisplayName;
@@ -554,40 +517,12 @@ namespace Horo {
             std::string m_assetDraftAlbedoMap;
             std::string m_assetImportError;
             bool m_openNewAssetHeader = false;
-
-            bool m_hasPendingPathDrop = false;
-            float m_pendingPathDropX = 0.0f;
-            float m_pendingPathDropY = 0.0f;
-            std::vector<std::string> m_pendingPathDropPaths;
-
-            // Last-frame ImGui screen rects for albedo texture drops (Assets panel).
-            struct ScreenRectDropZone {
-                bool valid = false;
-                float minX = 0.0f;
-                float minY = 0.0f;
-                float maxX = 0.0f;
-                float maxY = 0.0f;
-                void Clear() noexcept { valid = false; }
-
-                bool Contains(float x, float y, float paddingPx) const noexcept {
-                    if (!valid)
-                        return false;
-                    const float p = paddingPx;
-                    return x >= minX - p && x <= maxX + p && y >= minY - p && y <= maxY + p;
-                }
-            };
-
             ScreenRectDropZone m_albedoDraftDrop;
             ScreenRectDropZone m_albedoSelDrop;
-
-            // Last-frame screen rect for view axis gizmo (skip scene picking when cursor
-            // is here).
-            ScreenRectDropZone m_viewGizmoPickRect;
-
             std::string m_selectedAssetId;
             bool m_assetSearchOpen = false;
             std::string m_assetSearchQuery;
-            std::string m_objectSearchQuery;
+            
             Vec3 m_batchTranslateDraft = Vec3::Zero();
             Vec3 m_batchRotateDraft = Vec3::Zero();
             Vec3 m_batchScaleDraft = Vec3::One();
@@ -595,6 +530,8 @@ namespace Horo {
             bool m_prevHelpToggle = false;
             EditorHelpPopup m_helpPopup;
             EditorSettingsModal m_settingsModal;
+            EditorToolbar m_toolbar;
+            EditorAssetsPanel m_assetsPanel;
             EditorUIWidgets m_uiWidgets;
             int m_mcpSelectedActivityIndex = 0;
             bool m_mcpUiClearToggle = false;
@@ -612,7 +549,7 @@ namespace Horo {
             std::filesystem::path m_projectBrowserCwd;
             bool m_projectBrowserCwdValid = false;
             std::filesystem::path m_savedProjectBrowserCwd;
-            std::unordered_set<std::string, StringHash, std::equal_to<> >
+            std::unordered_set<std::string, StringHash, std::equal_to<>>
             m_projectExtraBlocklist;
             EditorWorkspaceDocument m_workspaceDocument;
             bool m_workspaceStateDirty = false;
@@ -635,21 +572,18 @@ namespace Horo {
             // Hierarchy range-select anchor
             int m_lastClickedHierarchyIdx = -1;
 
-            bool m_consoleShowInfo = true;
-            bool m_consoleShowWarn = true;
-            bool m_consoleShowError = true;
+            // Bottom dock component
+            EditorBottomDock m_bottomDock;
+            Mcp::McpController m_mcpController;
 
+            // Project browser cache and blocklist (used by DrawProjectTreeRecursive)
             struct ProjectDirCache {
-                std::vector<std::pair<std::filesystem::path, bool> > entries;
+                std::vector<std::pair<std::filesystem::path, bool>> entries;
                 uint32_t cachedAtFrame = 0;
             };
 
-            std::unordered_map<std::string, ProjectDirCache, StringHash, std::equal_to<> >
-            m_projectDirCache;
-            std::vector<LogLine> m_consoleLinesCache;
-            std::vector<int> m_consoleVisibleScratch;
-            uint64_t m_consoleLogRevision = UINT64_MAX;
-            Mcp::McpController m_mcpController;
+            std::unordered_map<std::string, ProjectDirCache, StringHash, std::equal_to<>>
+                m_projectDirCache;
 
             static SceneObject MakeObjectFromAsset(const SceneDocument &doc,
                                                    const std::string &assetId,
