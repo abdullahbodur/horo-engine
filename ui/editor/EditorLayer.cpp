@@ -2345,9 +2345,17 @@ void EditorLayer::DrawIconToolbar() {
   // Right-aligned group: Scene / Help / Settings
   ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - rightGroupWidth - rightMargin, centerY));
   {
-    ImGui::SetNextItemWidth(80);
     const char* scenes[] = {"Scene 1", "Scene 2"};
     static int sceneIdx = 0;
+    
+    // Calculate dropdown width based on longest scene name
+    float maxSceneWidth = 0;
+    for (const auto* scene : scenes) {
+      maxSceneWidth = std::max(maxSceneWidth, ImGui::CalcTextSize(scene).x);
+    }
+    float comboWidth = maxSceneWidth + 24.0f; // padding + dropdown arrow
+    ImGui::SetNextItemWidth(comboWidth);
+    
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
