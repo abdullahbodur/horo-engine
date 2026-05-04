@@ -278,7 +278,7 @@ namespace Horo {
 
             void DrawProjectPanel();
 
-            void DrawAssetsPanelContent();
+            void DrawAssetsPanel();
 
             void DrawPropertiesPanel();
 
