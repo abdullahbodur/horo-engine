@@ -3,8 +3,10 @@
 // Must not be included by any public header.
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
@@ -17,6 +19,8 @@
 
 #include "core/LogBuffer.h"
 #include "core/ProjectPath.h"
+#include "renderer/Camera.h"
+#include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneDocument.h"
 
@@ -98,6 +102,198 @@ inline float DistSqPointSegment2D(float px, float py, float ax, float ay,
   const float dx = px - cx;
   const float dy = py - cy;
   return dx * dx + dy * dy;
+}
+
+// ---- View Gimbal helpers (extracted for unit-test access) -------------------
+// Geometry and hit-testing helpers shared between DrawViewGimbal and tests.
+// ImU32/ImVec2 are plain POD types that don't require an active ImGui context,
+// so these can be used freely in unit tests.
+
+/// Per-axis visual descriptor for the viewport orientation gimbal.
+/// posSnap is applied when the axis faces the camera (viewZ >= 0);
+/// negSnap is applied when the axis points away from it (viewZ < 0).
+struct ViewGimbalAxisDraw {
+  EditorLayer::ViewSnap posSnap; ///< Snap when axis faces the camera
+  EditorLayer::ViewSnap negSnap; ///< Snap when axis points away from camera
+  Vec3 worldPlus;                ///< Positive world-space direction of the axis
+  ImU32 col;                     ///< Full-brightness colour (axis faces viewer)
+  ImU32 colDim;                  ///< Dimmed colour (axis points away)
+  const char *label;             ///< Text label drawn near the arrowhead
+};
+
+/// Cached per-axis screen-space data computed once per frame.
+struct ViewGimbalAxisCache {
+  float dx = 0.0f;    ///< Screen-space X direction (normalized)
+  float dy = 0.0f;    ///< Screen-space Y direction (normalized, ImGui down = +)
+  float viewZ = 0.0f; ///< View-space Z: >= 0 faces camera, < 0 points away
+  int origIdx = 0;    ///< Index into the kAxes[] draw array
+};
+
+/// 2D arrow geometry for one gimbal axis.
+struct ViewGimbalArrowGeometry {
+  ImVec2 tip;
+  ImVec2 headLeft;
+  ImVec2 headRight;
+  ImVec2 shaftEnd;
+};
+
+inline ViewGimbalArrowGeometry BuildViewGimbalArrow(const ImVec2 &center,
+                                                    float dx, float dy,
+                                                    float shaftPx,
+                                                    float headLength,
+                                                    float headHalfWidth) {
+  const ImVec2 dir(dx, dy);
+  const ImVec2 perp(-dy, dx);
+  ViewGimbalArrowGeometry arrow;
+  arrow.tip =
+      ImVec2(center.x + dir.x * shaftPx, center.y + dir.y * shaftPx);
+  arrow.shaftEnd = ImVec2(arrow.tip.x - dir.x * headLength,
+                          arrow.tip.y - dir.y * headLength);
+  arrow.headLeft = ImVec2(arrow.shaftEnd.x + perp.x * headHalfWidth,
+                          arrow.shaftEnd.y + perp.y * headHalfWidth);
+  arrow.headRight = ImVec2(arrow.shaftEnd.x - perp.x * headHalfWidth,
+                           arrow.shaftEnd.y - perp.y * headHalfWidth);
+  return arrow;
+}
+
+inline float Cross2D(const ImVec2 &a, const ImVec2 &b, const ImVec2 &c) {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+inline bool PointInTriangle2D(const ImVec2 &p, const ImVec2 &a,
+                               const ImVec2 &b, const ImVec2 &c) {
+  const float c1 = Cross2D(a, b, p);
+  const float c2 = Cross2D(b, c, p);
+  const float c3 = Cross2D(c, a, p);
+  return (c1 >= 0.0f && c2 >= 0.0f && c3 >= 0.0f) ||
+         (c1 <= 0.0f && c2 <= 0.0f && c3 <= 0.0f);
+}
+
+inline void NormalizeViewGimbalAxis(ViewGimbalAxisCache &axis) {
+  const float len = std::sqrt(axis.dx * axis.dx + axis.dy * axis.dy);
+  if (len < 1e-4f) {
+    axis.dx = 1.0f;
+    axis.dy = 0.0f;
+    return;
+  }
+  axis.dx /= len;
+  axis.dy /= len;
+}
+
+/// Overrides the screen-space directions in \a cache so the three axes always
+/// form a symmetric triad (120° apart), anchored to the Y-axis screen angle.
+/// The viewZ values are preserved and still reflect true camera orientation.
+inline void
+ArrangeViewGimbalAxesAsTriad(std::array<ViewGimbalAxisCache, 3> &cache) {
+  constexpr float kThirdTurn = 2.09439510239f;
+  float yAngle = -1.57079632679f;
+  for (const ViewGimbalAxisCache &axis : cache) {
+    if (axis.origIdx == 1) {
+      yAngle = std::atan2(axis.dy, axis.dx);
+      break;
+    }
+  }
+
+  for (ViewGimbalAxisCache &axis : cache) {
+    float angle = yAngle;
+    if (axis.origIdx == 0)
+      angle += kThirdTurn;
+    else if (axis.origIdx == 2)
+      angle -= kThirdTurn;
+    axis.dx = std::cos(angle);
+    axis.dy = std::sin(angle);
+  }
+}
+
+/// Projects a world-space unit vector onto the screen using the camera view
+/// matrix. \a outViewZ receives the view-space Z of the projected vector:
+/// a positive value means the axis faces the camera; negative means it points
+/// away. Callers use this to choose between posSnap and negSnap.
+inline void WorldAxisToScreenDir(const Camera &cam, const Vec3 &worldUnit,
+                                 float *outDx, float *outDy,
+                                 float *outViewZ = nullptr) {
+  const Mat4 view = cam.GetView();
+  const Vec3 e = view.TransformVector(worldUnit);
+  if (outViewZ)
+    *outViewZ = e.z;
+  const float dx = e.x;
+  const float dy = -e.y; // ImGui Y is down
+  const float len = std::sqrt(dx * dx + dy * dy);
+  if (len < 1e-4f) {
+    *outDx = 1.f;
+    *outDy = 0.f;
+    return;
+  }
+  *outDx = dx / len;
+  *outDy = dy / len;
+}
+
+/// Returns the ViewSnap that should be activated when the mouse hovers over
+/// a gimbal axis. Uses posSnap when the axis faces the camera (viewZ >= 0)
+/// and negSnap when the axis points away from the camera (viewZ < 0), so that
+/// clicking a dimmed axis correctly snaps to the opposite view direction.
+inline EditorLayer::ViewSnap
+FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
+                        const std::array<ViewGimbalAxisCache, 3> &cache,
+                        const std::array<ViewGimbalAxisDraw, 3> &axes,
+                        float shaftPx, float headLength, float headHalfWidth,
+                        float hitPxSq) {
+  float bestD = hitPxSq;
+  EditorLayer::ViewSnap snap = EditorLayer::ViewSnap::None;
+  for (const ViewGimbalAxisCache &c : cache) {
+    const ViewGimbalAxisDraw &ad = axes[c.origIdx];
+    const ViewGimbalArrowGeometry arrow =
+        BuildViewGimbalArrow(center, c.dx, c.dy, shaftPx, headLength,
+                             headHalfWidth);
+    // Choose snap direction based on whether the axis faces the viewer.
+    const EditorLayer::ViewSnap thisSnap =
+        c.viewZ >= 0.0f ? ad.posSnap : ad.negSnap;
+    if (PointInTriangle2D(mouse, arrow.tip, arrow.headLeft, arrow.headRight))
+      return thisSnap;
+    const float d1 =
+        DistSqPointSegment2D(mouse.x, mouse.y, center.x, center.y,
+                             arrow.shaftEnd.x, arrow.shaftEnd.y);
+    if (d1 < bestD) {
+      bestD = d1;
+      snap = thisSnap;
+    }
+  }
+  return snap;
+}
+
+/// Positions \a cam to look along the selected axis toward \a pivot.
+/// Sets position, target, and up so the camera is placed at distance
+/// \a distance from \a pivot along the appropriate world axis.
+/// This is the pure positioning kernel extracted from ApplyPendingViewSnap.
+inline void SnapCameraToAxis(Camera &cam, EditorLayer::ViewSnap snap,
+                             Vec3 pivot, float distance) {
+  using enum EditorLayer::ViewSnap;
+  cam.target = pivot;
+  cam.up = {0.0f, 1.0f, 0.0f};
+  switch (snap) {
+  case Top:
+    cam.position = pivot + Vec3{0.0f, distance, 0.0f};
+    cam.up = {0.0f, 0.0f, -1.0f};
+    break;
+  case Bottom:
+    cam.position = pivot + Vec3{0.0f, -distance, 0.0f};
+    cam.up = {0.0f, 0.0f, 1.0f};
+    break;
+  case Left:
+    cam.position = pivot + Vec3{-distance, 0.0f, 0.0f};
+    break;
+  case Right:
+    cam.position = pivot + Vec3{distance, 0.0f, 0.0f};
+    break;
+  case Front:
+    cam.position = pivot + Vec3{0.0f, 0.0f, distance};
+    break;
+  case Back:
+    cam.position = pivot + Vec3{0.0f, 0.0f, -distance};
+    break;
+  case None:
+    break;
+  }
 }
 
 inline bool IsTextureFilePath(std::string_view path) {
@@ -295,4 +491,16 @@ using Internal::SceneObjectTypeToString;
 using Internal::SchemaAppliesToObjectType;
 using Internal::ToLowerAscii;
 using Internal::SyncAssetScaleMetadata;
+// ---- View Gimbal helpers ----
+using Internal::ViewGimbalAxisDraw;
+using Internal::ViewGimbalAxisCache;
+using Internal::ViewGimbalArrowGeometry;
+using Internal::BuildViewGimbalArrow;
+using Internal::Cross2D;
+using Internal::PointInTriangle2D;
+using Internal::NormalizeViewGimbalAxis;
+using Internal::ArrangeViewGimbalAxesAsTriad;
+using Internal::WorldAxisToScreenDir;
+using Internal::FindViewGimbalHoverSnap;
+using Internal::SnapCameraToAxis;
 } // namespace Horo::Editor

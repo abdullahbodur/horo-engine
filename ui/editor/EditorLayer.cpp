@@ -241,24 +241,10 @@ bool TryGetPlacementSurfaceBounds(Registry *liveRegistry,
 // Uses the view matrix directly — pivot-based perspective projection would
 // introduce distortion for off-centre or off-screen pivots and is incorrect for
 // a corner widget.
-void WorldAxisToScreenDir(const Camera &cam, const Vec3 &worldUnit,
-                          float *outDx, float *outDy,
-                          float *outViewZ = nullptr) {
-  const Mat4 view = cam.GetView();
-  const Vec3 e = view.TransformVector(worldUnit);
-  if (outViewZ)
-    *outViewZ = e.z;
-  const float dx = e.x;
-  const float dy = -e.y; // ImGui Y is down
-  const float len = std::sqrt(dx * dx + dy * dy);
-  if (len < 1e-4f) {
-    *outDx = 1.f;
-    *outDy = 0.f;
-    return;
-  }
-  *outDx = dx / len;
-  *outDy = dy / len;
-}
+// WorldAxisToScreenDir, ViewGimbalAxisDraw/Cache/ArrowGeometry, and the
+// gimbal helper functions (BuildViewGimbalArrow, Cross2D, PointInTriangle2D,
+// NormalizeViewGimbalAxis, ArrangeViewGimbalAxesAsTriad, FindViewGimbalHoverSnap,
+// SnapCameraToAxis) live in EditorLayerInternal.h for unit-test access.
 
 #if defined(__APPLE__)
 // SONAR-OFF
@@ -3139,114 +3125,11 @@ void EditorLayer::DrawSettingsModal() {
   ImGui::EndPopup();
 }
 
-struct ViewGimbalAxisDraw {
-  EditorLayer::ViewSnap posSnap;
-  Vec3 worldPlus;
-  ImU32 col;
-  ImU32 colDim;
-  const char *label;
-};
-
-struct ViewGimbalAxisCache {
-  float dx = 0.0f;
-  float dy = 0.0f;
-  float viewZ = 0.0f;
-  int origIdx = 0;
-};
-
-struct ViewGimbalArrowGeometry {
-  ImVec2 tip;
-  ImVec2 headLeft;
-  ImVec2 headRight;
-  ImVec2 shaftEnd;
-};
-
-ViewGimbalArrowGeometry BuildViewGimbalArrow(const ImVec2 &center, float dx,
-                                             float dy, float shaftPx,
-                                             float headLength,
-                                             float headHalfWidth) {
-  const ImVec2 dir(dx, dy);
-  const ImVec2 perp(-dy, dx);
-  ViewGimbalArrowGeometry arrow;
-  arrow.tip = ImVec2(center.x + dir.x * shaftPx, center.y + dir.y * shaftPx);
-  arrow.shaftEnd = ImVec2(arrow.tip.x - dir.x * headLength,
-                          arrow.tip.y - dir.y * headLength);
-  arrow.headLeft = ImVec2(arrow.shaftEnd.x + perp.x * headHalfWidth,
-                          arrow.shaftEnd.y + perp.y * headHalfWidth);
-  arrow.headRight = ImVec2(arrow.shaftEnd.x - perp.x * headHalfWidth,
-                           arrow.shaftEnd.y - perp.y * headHalfWidth);
-  return arrow;
-}
-
-float Cross2D(const ImVec2 &a, const ImVec2 &b, const ImVec2 &c) {
-  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
-
-bool PointInTriangle2D(const ImVec2 &p, const ImVec2 &a, const ImVec2 &b,
-                       const ImVec2 &c) {
-  const float c1 = Cross2D(a, b, p);
-  const float c2 = Cross2D(b, c, p);
-  const float c3 = Cross2D(c, a, p);
-  return (c1 >= 0.0f && c2 >= 0.0f && c3 >= 0.0f) ||
-         (c1 <= 0.0f && c2 <= 0.0f && c3 <= 0.0f);
-}
-
-void NormalizeViewGimbalAxis(ViewGimbalAxisCache &axis) {
-  const float len = std::sqrt(axis.dx * axis.dx + axis.dy * axis.dy);
-  if (len < 1e-4f) {
-    axis.dx = 1.0f;
-    axis.dy = 0.0f;
-    return;
-  }
-  axis.dx /= len;
-  axis.dy /= len;
-}
-
-void ArrangeViewGimbalAxesAsTriad(std::array<ViewGimbalAxisCache, 3> &cache) {
-  constexpr float kThirdTurn = 2.09439510239f;
-  float yAngle = -1.57079632679f;
-  for (const ViewGimbalAxisCache &axis : cache) {
-    if (axis.origIdx == 1) {
-      yAngle = std::atan2(axis.dy, axis.dx);
-      break;
-    }
-  }
-
-  for (ViewGimbalAxisCache &axis : cache) {
-    float angle = yAngle;
-    if (axis.origIdx == 0)
-      angle += kThirdTurn;
-    else if (axis.origIdx == 2)
-      angle -= kThirdTurn;
-    axis.dx = std::cos(angle);
-    axis.dy = std::sin(angle);
-  }
-}
-
-EditorLayer::ViewSnap
-FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
-                        const std::array<ViewGimbalAxisCache, 3> &cache,
-                        const std::array<ViewGimbalAxisDraw, 3> &axes,
-                        float shaftPx, float headLength,
-                        float headHalfWidth, float hitPxSq) {
-  float bestD = hitPxSq;
-  EditorLayer::ViewSnap snap = EditorLayer::ViewSnap::None;
-  for (const ViewGimbalAxisCache &c : cache) {
-    const ViewGimbalAxisDraw &ad = axes[c.origIdx];
-    const ViewGimbalArrowGeometry arrow = BuildViewGimbalArrow(
-        center, c.dx, c.dy, shaftPx, headLength, headHalfWidth);
-    if (PointInTriangle2D(mouse, arrow.tip, arrow.headLeft, arrow.headRight))
-      return ad.posSnap;
-    const float d1 =
-        DistSqPointSegment2D(mouse.x, mouse.y, center.x, center.y,
-                             arrow.shaftEnd.x, arrow.shaftEnd.y);
-    if (d1 < bestD) {
-      bestD = d1;
-      snap = ad.posSnap;
-    }
-  }
-  return snap;
-}
+// ViewGimbalAxisDraw, ViewGimbalAxisCache, ViewGimbalArrowGeometry,
+// BuildViewGimbalArrow, Cross2D, PointInTriangle2D, NormalizeViewGimbalAxis,
+// ArrangeViewGimbalAxesAsTriad, FindViewGimbalHoverSnap, and SnapCameraToAxis
+// are defined as inline functions in EditorLayerInternal.h so they can be
+// unit-tested without starting a full ImGui / rendering context.
 
 void EditorLayer::DrawViewGimbal( // NOSONAR
     const Camera &cam) {
@@ -3297,11 +3180,11 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
   constexpr float kHitPxSq = kHitPx * kHitPx;
 
   static const std::array<ViewGimbalAxisDraw, 3> kAxes = {{
-      {Right, {1.0f, 0.0f, 0.0f}, IM_COL32(255, 82, 58, 255),
+      {Right, Left, {1.0f, 0.0f, 0.0f}, IM_COL32(255, 82, 58, 255),
        IM_COL32(145, 48, 42, 210), "X"},
-      {Top, {0.0f, 1.0f, 0.0f}, IM_COL32(80, 230, 104, 255),
+      {Top, Bottom, {0.0f, 1.0f, 0.0f}, IM_COL32(80, 230, 104, 255),
        IM_COL32(42, 135, 60, 210), "Y"},
-      {Front, {0.0f, 0.0f, 1.0f}, IM_COL32(55, 155, 255, 255),
+      {Front, Back, {0.0f, 0.0f, 1.0f}, IM_COL32(55, 155, 255, 255),
        IM_COL32(38, 92, 170, 210), "Z"},
   }};
 
@@ -3338,7 +3221,8 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
   dl->AddCircleFilled(center, 4.0f, IM_COL32(80, 210, 230, 245), 16);
   for (const ViewGimbalAxisCache &ac : cache) {
     const ViewGimbalAxisDraw &ad = kAxes[ac.origIdx];
-    const bool hlPos = (hoverSnap == ad.posSnap);
+    // Highlight whichever direction (pos or neg) is currently hovered.
+    const bool hlPos = (hoverSnap == ad.posSnap) || (hoverSnap == ad.negSnap);
     ImU32 cPos = ac.viewZ < 0.0f ? ad.colDim : ad.col;
     if (hlPos)
       cPos = IM_COL32(255, 255, 200, 255);
@@ -4982,34 +4866,7 @@ void EditorLayer::ApplyPendingViewSnap(Camera &cam) {
   }
 
   const float distance = std::max(2.0f, extent * 3.0f + 1.0f);
-
-  cam.target = pivot;
-  cam.up = {0.0f, 1.0f, 0.0f};
-
-  switch (m_pendingViewSnap) {
-  case Top:
-    cam.position = pivot + Vec3{0.0f, distance, 0.0f};
-    cam.up = {0.0f, 0.0f, -1.0f};
-    break;
-  case Bottom:
-    cam.position = pivot + Vec3{0.0f, -distance, 0.0f};
-    cam.up = {0.0f, 0.0f, 1.0f};
-    break;
-  case Left:
-    cam.position = pivot + Vec3{-distance, 0.0f, 0.0f};
-    break;
-  case Right:
-    cam.position = pivot + Vec3{distance, 0.0f, 0.0f};
-    break;
-  case Front:
-    cam.position = pivot + Vec3{0.0f, 0.0f, distance};
-    break;
-  case Back:
-    cam.position = pivot + Vec3{0.0f, 0.0f, -distance};
-    break;
-  case None:
-    break;
-  }
+  SnapCameraToAxis(cam, m_pendingViewSnap, pivot, distance);
 
   m_flyCamInitialized = false;
   m_pendingViewSnap = ViewSnap::None;
