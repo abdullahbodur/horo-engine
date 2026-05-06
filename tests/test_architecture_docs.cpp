@@ -26,11 +26,33 @@ void RequireFileContains(const std::filesystem::path &path,
   REQUIRE(text.find(snippet) != std::string::npos);
 }
 
+std::filesystem::path FindRepoRoot(const std::filesystem::path &startDir) {
+  std::filesystem::path current = startDir;
+  
+  for (int i = 0; i < 10 && !current.empty(); ++i) {
+    if (std::filesystem::is_directory(current / "docs" / "architecture") &&
+        std::filesystem::is_directory(current / "renderer")) {
+      return current;
+    }
+    current = current.parent_path();
+  }
+  
+  current = std::filesystem::current_path();
+  for (int i = 0; i < 10 && !current.empty(); ++i) {
+    if (std::filesystem::is_directory(current / "docs" / "architecture") &&
+        std::filesystem::is_directory(current / "renderer")) {
+      return current;
+    }
+    current = current.parent_path();
+  }
+  
+  return startDir;
+}
+
 std::filesystem::path RepoRootFromSource(
     std::source_location location = std::source_location::current()) {
-  return std::filesystem::path(location.file_name())
-      .parent_path()
-      .parent_path();
+  const std::filesystem::path sourceDir = std::filesystem::path(location.file_name()).parent_path();
+  return FindRepoRoot(sourceDir);
 }
 } // namespace
 
@@ -160,12 +182,12 @@ TEST_CASE("Renderer foundation isolates backend-specific details from higher-lev
   REQUIRE(starterTemplate.find("RenderContext::EndFrame") == std::string::npos);
 
   const std::string editorLayer =
-      ReadTextFile(root / "editor" / "EditorLayer.cpp");
+      ReadTextFile(root / "ui" / "editor" / "EditorLayer.cpp");
   REQUIRE(editorLayer.find("GetNativeId(") == std::string::npos);
   REQUIRE(editorLayer.find("ImGui_ImplOpenGL3_") == std::string::npos);
 
   const std::string editorImGuiBackend =
-      ReadTextFile(root / "editor" / "EditorImGuiBackend.cpp");
+      ReadTextFile(root / "ui" / "editor" / "EditorImGuiBackend.cpp");
   REQUIRE(editorImGuiBackend.find("ImGui_ImplOpenGL3_Init") !=
           std::string::npos);
 
