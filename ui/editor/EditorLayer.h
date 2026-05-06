@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -10,14 +9,12 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 
-#include "core/LogBuffer.h"
 #include "ui/editor/AssetImportService.h"
 #include "ui/editor/EditorSchema.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/EditorWorkspaceSettings.h"
 #include "ui/editor/SceneDocument.h"
 #include "ui/editor/TransformGizmo.h"
-#include "ui/editor/ViewSnap.h"
 #include "ui/editor/components/EditorAssetsPanel.h"
 #include "ui/editor/components/EditorBottomDock.h"
 #include "ui/editor/components/EditorHelpPopup.h"
@@ -181,7 +178,7 @@ namespace Horo {
             };
 
             DeferredFilePick m_deferredFilePick = DeferredFilePick::None;
-            
+
             // Exit confirmation modal state
             PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
             std::string m_exitConfirmError;
@@ -507,7 +504,7 @@ namespace Horo {
             ScreenRectDropZone m_viewGizmoPickRect;
 
             std::string m_objectSearchQuery;
-            
+
             // Assets panel state
             std::string m_assetDraftId;
             std::string m_assetDraftGuid;
@@ -522,7 +519,7 @@ namespace Horo {
             std::string m_selectedAssetId;
             bool m_assetSearchOpen = false;
             std::string m_assetSearchQuery;
-            
+
             Vec3 m_batchTranslateDraft = Vec3::Zero();
             Vec3 m_batchRotateDraft = Vec3::Zero();
             Vec3 m_batchScaleDraft = Vec3::One();

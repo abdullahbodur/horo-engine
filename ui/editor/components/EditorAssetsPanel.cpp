@@ -19,14 +19,10 @@
 #include "ui/editor/EditorSearch.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneDocument.h"
+#include "ui/editor/components/EditorAssetThumbnailPreview.h"
 #include "ui/editor/components/EditorComponentContext.h"
 
 namespace Horo::Editor {
-
-// Forward declarations for functions that must be in EditorLayer
-extern bool TryGetAssetPreviewHandle(std::string_view assetId,
-                                    const AssetDef& asset,
-                                    RenderTargetHandle* outHandle);
 
 namespace {
     constexpr const char* kEditorAssetsWindow = "Assets";
@@ -39,21 +35,6 @@ namespace {
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoSavedSettings;
-
-    ImTextureID ToImTextureId(const RenderTargetHandle& handle) {
-        using enum RenderNativeHandleType;
-        if (!handle.IsValid())
-            return (ImTextureID)0;
-
-        switch (handle.nativeType) {
-            case OpenGLTexture2D:
-            case VulkanImGuiDescriptorSet:
-                return (ImTextureID)(intptr_t)handle.nativeHandle;
-            case None:
-            default:
-                return (ImTextureID)0;
-        }
-    }
 
     std::string ToLowerAscii(const std::string& str) {
         std::string result = str;

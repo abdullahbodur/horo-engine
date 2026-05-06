@@ -39,8 +39,9 @@ using namespace Horo::Editor::Internal;
 
 namespace Horo::Editor {
 
+namespace {
 constexpr uint32_t kProjectListingCacheFrames = 48;
-constexpr const char kEditorWorkspaceWindow[] = "Workspace";
+}
 
 void EditorBottomDock::Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window) {
     DrawBottomDock(mcpController, window);

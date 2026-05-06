@@ -17,6 +17,7 @@
 
 #include <imgui.h>
 
+#include "ui/IconsFontAwesome6.h"
 #include "core/LogBuffer.h"
 #include "core/ProjectPath.h"
 #include "renderer/Camera.h"
@@ -30,7 +31,13 @@ namespace Internal {
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
 constexpr float kEditorToolbarH = 36.0f;
 constexpr float kEditorStatusH = 24.0f;
+constexpr char kEditorHierarchyWindow[] = "Hierarchy";
 constexpr char kEditorPropertiesWindow[] = "Properties";
+constexpr char kEditorAssetsWindow[] = "Assets";
+constexpr char kEditorWorkspaceWindow[] = "Workspace";
+constexpr char kEditorViewportWindow[] = "Viewport";
+
+constexpr float kHierarchySectionRatio = 0.56f;
 
 constexpr ImGuiWindowFlags kMainPanelWindowFlags =
     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -296,6 +303,20 @@ inline void SnapCameraToAxis(Camera &cam, ViewSnap snap,
   }
 }
 
+inline const char *ObjectTypeIcon(SceneObjectType type) {
+  using enum SceneObjectType;
+  switch (type) {
+  case Prop:
+    return ICON_FA_CUBE;
+  case Light:
+    return ICON_FA_SUN;
+  case Camera:
+    return ICON_FA_VIDEO;
+  default:
+    return ICON_FA_FOLDER;
+  }
+}
+
 inline bool IsTextureFilePath(std::string_view path) {
   if (path.empty())
     return false;
@@ -468,29 +489,64 @@ inline void FormatLogTime(const LogLine &entry, char *buf, size_t bufSize) {
                                     tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec);
   buf[std::min(static_cast<size_t>(out.size), bufSize - 1)] = '\0';
 }
-} // namespace Internal
+
+bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
+                      Vec3 &outHalf);
+
+inline std::filesystem::path ResolvePreviewShaderPath(const char *fileName) {
+  namespace fs = std::filesystem;
+  const fs::path root = ProjectPath::Root();
+  const fs::path sdkRoot = ProjectPath::SdkRoot();
+  const std::array<fs::path, 7> candidates = {
+      sdkRoot / "renderer" / "shaders" / fileName,
+      sdkRoot / "bin" / "shaders" / fileName,
+      sdkRoot / "sdk" / "renderer" / "shaders" / fileName,
+      root / "engine" / "renderer" / "shaders" / fileName,
+      root.parent_path() / "horo-engine" / "renderer" / "shaders" / fileName,
+      root / "horo-engine" / "renderer" / "shaders" / fileName,
+      root / "renderer" / "shaders" / fileName,
+  };
+
+  for (const auto &candidate : candidates) {
+    std::error_code ec;
+    if (fs::is_regular_file(candidate, ec) && !ec)
+      return candidate;
+  }
+
+  return candidates.front();
+}
+
+}
 
 using Internal::BuildImGuiComboItems;
 using Internal::DrawUnavailableTextureDialogButton;
 using Internal::FindEnumOptionIndex;
 using Internal::FormatLogTime;
 using Internal::DistSqPointSegment2D;
+using Internal::kEditorAssetsWindow;
+using Internal::kEditorHierarchyWindow;
 using Internal::kEditorPropertiesWindow;
 using Internal::kEditorStatusH;
 using Internal::kEditorToolbarH;
+using Internal::kEditorViewportWindow;
+using Internal::kEditorWorkspaceWindow;
+using Internal::kHierarchySectionRatio;
 using Internal::kMainPanelWindowFlags;
 using Internal::kMaxEditorHistorySnapshots;
 using Internal::ObjectAt;
 using Internal::IsTextureFilePath;
 using Internal::ProjectHalfExtentOntoNormal;
+using Internal::ResolveObjectPlacementHalfExtents;
 using Internal::ParseRGBString;
 using Internal::ParseSceneObjectType;
-using Internal::ResolveObjectPlacementHalfExtents;
 using Internal::ResolveProjectRelativeOrAbsolutePath;
 using Internal::SceneObjectTypeToString;
 using Internal::SchemaAppliesToObjectType;
 using Internal::ToLowerAscii;
 using Internal::SyncAssetScaleMetadata;
+using Internal::ObjectTypeIcon;
+using Internal::TryPropWorldAabb;
+using Internal::ResolvePreviewShaderPath;
 // ---- View Gimbal helpers ----
 using Internal::ViewGimbalAxisDraw;
 using Internal::ViewGimbalAxisCache;
