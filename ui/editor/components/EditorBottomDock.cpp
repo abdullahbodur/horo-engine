@@ -52,9 +52,8 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     const ImGuiIO& io = ImGui::GetIO();
     const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
     const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-    const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-    ImGui::SetNextWindowPos(ImVec2(leftDockW, dockTop), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - leftDockW, bottomDockH), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH), ImGuiCond_Always);
     ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
     const auto& palette = Ui::GetEditorTheme().palette;
