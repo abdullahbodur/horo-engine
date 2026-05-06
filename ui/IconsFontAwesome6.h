@@ -42,3 +42,4 @@
 #define ICON_FA_LIGHTBULB "\xef\x83\xab"         // Light
 #define ICON_FA_VIDEO "\xef\x80\xbd"             // Camera
 #define ICON_FA_HAND_POINTER "\xef\x89\x9b"      // Selection
+#define ICON_FA_XMARK "\xef\x80\x8d"             // Clear/Close

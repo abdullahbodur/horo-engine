@@ -74,14 +74,28 @@ void EditorLayer::DrawObjectList() {
   ImGui::PushStyleColor(ImGuiCol_FrameBg, Ui::GetEditorTheme().palette.input);
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
   ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
-  ImGui::SetNextItemWidth(std::max(80.0f, panelWidth - 34.0f));
+  const float searchWidth = std::max(80.0f, panelWidth - 60.0f);
+  ImGui::SetNextItemWidth(searchWidth);
   if (ImGui::InputTextWithHint("##object_search", "Search objects...",
                                searchBuf.data(), searchBuf.size()))
     m_objectSearchQuery = searchBuf.data();
   ImGui::PopItemFlag();
-  ImGui::SameLine();
-  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
-  ImGui::TextDisabled("%s", ICON_FA_FILTER);
+  
+  if (!m_objectSearchQuery.empty()) {
+    ImGui::SameLine(0, 4.0f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, Ui::GetEditorTheme().palette.textMuted);
+    if (ImGui::SmallButton(ICON_FA_XMARK)) {
+      m_objectSearchQuery.clear();
+      searchBuf[0] = '\0';
+    }
+    ImGui::PopStyleColor();
+  } else {
+    ImGui::SameLine(0, 4.0f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+    ImGui::TextDisabled("%s", ICON_FA_FILTER);
+  }
+  
   ImGui::PopStyleVar();
   ImGui::PopStyleColor();
   ImGui::Spacing();
@@ -460,8 +474,6 @@ void EditorLayer::DrawObjectsTreeSearchMode( // NOSONAR: cpp:S3776 search-mode
 
   if (shownObjectCount == 0 && !doc.objects.empty()) {
     ImGui::TextDisabled("No objects match '%s'", query.c_str());
-    if (ImGui::Button("Clear Search"))
-      m_objectSearchQuery.clear();
   }
 }
 

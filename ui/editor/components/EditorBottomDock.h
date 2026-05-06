@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,9 +21,15 @@ namespace Horo::Mcp {
 namespace Horo::Editor {
     struct EditorComponentContext;
 
+    using AssetsTabDrawCallback = std::function<void()>;
+
     class EditorBottomDock {
     public:
         void Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window);
+
+        void SetAssetsTabCallback(AssetsTabDrawCallback callback) {
+            m_assetsTabCallback = std::move(callback);
+        }
 
         // Accessors for tab content state
         bool IsConsoleShowInfo() const { return m_consoleShowInfo; }
@@ -95,16 +102,13 @@ namespace Horo::Editor {
         int m_mcpSelectedActivityIndex = 0;
         bool m_mcpUiClearToggle = false;
 
+        AssetsTabDrawCallback m_assetsTabCallback;
+
         // Drawing functions
         void DrawBottomDock(Horo::Mcp::McpController* mcpController,
                             GLFWwindow* window);
 
-        void DrawProjectBrowserTab();
-
-        void DrawProjectBrowserBreadcrumbs(std::filesystem::path& nextCwd,
-                                           bool& cwdChanged) const;
-
-        void DrawProjectBrowserTiles(std::filesystem::path& nextCwd, bool& cwdChanged);
+        void DrawAssetsTab();
 
         void DrawConsoleTab();
 

@@ -52,8 +52,9 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     const ImGuiIO& io = ImGui::GetIO();
     const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
     const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-    ImGui::SetNextWindowPos(ImVec2(0.0f, dockTop), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, bottomDockH), ImGuiCond_Always);
+    const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+    ImGui::SetNextWindowPos(ImVec2(leftDockW, dockTop), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - leftDockW, bottomDockH), ImGuiCond_Always);
     ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
     const auto& palette = Ui::GetEditorTheme().palette;
@@ -61,8 +62,8 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     ImGui::PushStyleColor(ImGuiCol_TabActive, palette.accent);
     ImGui::PushStyleColor(ImGuiCol_TabUnfocusedActive, palette.accent);
     if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
-        if (ImGui::BeginTabItem("Project")) {
-            DrawProjectBrowserTab();
+        if (ImGui::BeginTabItem("Assets")) {
+            DrawAssetsTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {
@@ -80,136 +81,9 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     ImGui::End();
 }
 
-void EditorBottomDock::DrawProjectBrowserTab() {
-    if (!m_projectBrowserRootValid ||
-        !std::filesystem::is_directory(m_projectBrowserRoot)) {
-        ImGui::TextDisabled("Set project root (host app) to browse files.");
-        return;
-    }
-    if (!m_projectBrowserCwdValid ||
-        !std::filesystem::is_directory(m_projectBrowserCwd) || m_projectBrowserCwd.empty()) {
-        m_projectBrowserCwd = m_projectBrowserRoot;
-        m_projectBrowserCwdValid = true;
-    }
-    ImGui::BeginChild("##project_tiles", ImVec2(0, 0), true,
-                      ImGuiWindowFlags_HorizontalScrollbar);
-    bool cwdChanged = false;
-    std::filesystem::path nextCwd = m_projectBrowserCwd;
-    DrawProjectBrowserBreadcrumbs(nextCwd, cwdChanged);
-    ImGui::Separator();
-    DrawProjectBrowserTiles(nextCwd, cwdChanged);
-    if (cwdChanged) {
-        m_projectBrowserCwd = std::move(nextCwd);
-        m_projectBrowserCwdValid = true;
-        m_savedProjectBrowserCwd = m_projectBrowserCwd;
-    }
-    ImGui::EndChild();
-}
-
-void EditorBottomDock::DrawProjectBrowserBreadcrumbs(std::filesystem::path& nextCwd,
-                                                     bool& cwdChanged) const {
-    if (const std::string rootLabel = m_projectBrowserRoot.filename().string().empty()
-                                           ? m_projectBrowserRoot.generic_string()
-                                           : m_projectBrowserRoot.filename().string();
-        ImGui::SmallButton(rootLabel.c_str())) {
-        nextCwd = m_projectBrowserRoot;
-        cwdChanged = true;
-    }
-    std::error_code relEc;
-    if (const std::filesystem::path relPath =
-            std::filesystem::relative(m_projectBrowserCwd, m_projectBrowserRoot, relEc);
-        !relEc && !relPath.empty() && relPath != ".") {
-        std::filesystem::path crumb = m_projectBrowserRoot;
-        for (const auto& part : relPath) {
-            ImGui::SameLine();
-            ImGui::TextUnformatted(">");
-            ImGui::SameLine();
-            crumb /= part;
-            const std::string partLabel = part.string();
-            if (ImGui::SmallButton(partLabel.c_str())) {
-                nextCwd = crumb;
-                cwdChanged = true;
-            }
-        }
-    }
-}
-
-void EditorBottomDock::DrawProjectBrowserTiles(std::filesystem::path& nextCwd,
-                                               bool& cwdChanged) {
-    const auto* listing = GetProjectDirListing(m_projectBrowserCwd);
-    if (!listing) {
-        ImGui::TextDisabled("Cannot read '%s'", m_projectBrowserCwd.generic_string().c_str());
-        return;
-    }
-    const float spacing = 10.0f;
-    const float minTileW = 120.0f;
-    const float tileH = 104.0f;
-    const float iconW = 64.0f;
-    const float iconH = 42.0f;
-    const float availW = std::max(0.0f, ImGui::GetContentRegionAvail().x);
-    const int columns = std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
-    const float tileW =
-        std::max(minTileW,
-                 (availW - spacing * static_cast<float>(columns - 1)) / static_cast<float>(columns));
-    int itemIndex = 0;
-    for (const auto& [p, isDir] : *listing) {
-        const std::string name = p.filename().string();
-        ImGui::PushID(p.generic_string().c_str());
-        ImGui::InvisibleButton("##project_item_btn", ImVec2(tileW, tileH));
-        if (ImGui::IsItemClicked() && isDir) {
-            nextCwd = p;
-            cwdChanged = true;
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", p.generic_string().c_str());
-
-        const ImVec2 rMin = ImGui::GetItemRectMin();
-        const ImVec2 rMax = ImGui::GetItemRectMax();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const bool hovered = ImGui::IsItemHovered();
-        const ImU32 hoverBg = ImGui::ColorConvertFloat4ToU32(ImVec4(0.22f, 0.30f, 0.42f, 0.28f));
-        if (hovered)
-            dl->AddRectFilled(ImVec2(rMin.x + 2.0f, rMin.y + 2.0f), ImVec2(rMax.x - 2.0f, rMax.y - 2.0f),
-                              hoverBg, 8.0f);
-
-        const float iconX = rMin.x + (tileW - iconW) * 0.5f;
-        const float iconY = rMin.y + 10.0f;
-        if (isDir) {
-            const ImU32 tabCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.30f, 0.68f, 0.92f, 1.0f));
-            const ImU32 bodyCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 0.60f, 0.86f, 1.0f));
-            const ImU32 edgeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.18f, 0.45f, 0.66f, 1.0f));
-            dl->AddRectFilled(ImVec2(iconX + 5.0f, iconY), ImVec2(iconX + iconW * 0.56f, iconY + 10.0f),
-                              tabCol, 4.0f, ImDrawFlags_RoundCornersTop);
-            dl->AddRectFilled(ImVec2(iconX, iconY + 7.0f), ImVec2(iconX + iconW, iconY + iconH), bodyCol,
-                              6.0f);
-            dl->AddRect(ImVec2(iconX, iconY + 7.0f), ImVec2(iconX + iconW, iconY + iconH), edgeCol, 6.0f);
-        } else {
-            const ImU32 pageCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.86f, 0.90f, 0.96f, 1.0f));
-            const ImU32 foldCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.74f, 0.80f, 0.90f, 1.0f));
-            const ImU32 edgeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.58f, 0.65f, 0.76f, 1.0f));
-            const ImVec2 p0(iconX + 8.0f, iconY);
-            const ImVec2 p1(iconX + iconW - 8.0f, iconY + iconH);
-            dl->AddRectFilled(p0, p1, pageCol, 4.0f);
-            dl->AddRect(p0, p1, edgeCol, 4.0f);
-            dl->AddTriangleFilled(ImVec2(p1.x - 14.0f, p0.y), ImVec2(p1.x, p0.y),
-                                  ImVec2(p1.x, p0.y + 14.0f), foldCol);
-        }
-
-        std::string label = name;
-        if (const float maxLabelW = tileW - 10.0f;
-            ImGui::CalcTextSize(label.c_str()).x > maxLabelW) {
-            while (!label.empty() && ImGui::CalcTextSize((label + "...").c_str()).x > maxLabelW)
-                label.pop_back();
-            label += "...";
-        }
-        const ImVec2 labelSz = ImGui::CalcTextSize(label.c_str());
-        const float labelX = rMin.x + std::max(4.0f, (tileW - labelSz.x) * 0.5f);
-        const float labelY = iconY + iconH + 10.0f;
-        dl->AddText(ImVec2(labelX, labelY), ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
-        ImGui::PopID();
-        ++itemIndex;
-        if ((itemIndex % columns) != 0)
-            ImGui::SameLine(0.0f, spacing);
+void EditorBottomDock::DrawAssetsTab() {
+    if (m_assetsTabCallback) {
+        m_assetsTabCallback();
     }
 }
 

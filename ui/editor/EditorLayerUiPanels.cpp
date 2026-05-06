@@ -48,8 +48,12 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawDockspace();
     DrawViewportPanel(cam, screenW, screenH);
     DrawObjectList();
-    DrawAssetsPanel();
+    DrawProjectPanel();
     DrawPropertiesPanel();
+    
+    m_bottomDock.SetAssetsTabCallback([this]() {
+      DrawAssetsPanel();
+    });
     m_bottomDock.Draw(&m_mcpController, m_window);
     m_uiWidgets.DrawStatusBar();
     m_helpPopup.Draw();
@@ -59,9 +63,9 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawDeleteConfirmModals();
     m_uiWidgets.DrawExitConfirmModal();
     if (!m_playMode) {
-      DrawSelectionHighlight(); // queues to DebugDraw
+      DrawSelectionHighlight();
       if (m_gizmo.IsActive())
-        m_gizmo.Draw(cam, screenW, screenH); // queues to DebugDraw
+        m_gizmo.Draw(cam, screenW, screenH);
     }
   }
   if (m_overlayRenderCallback)
@@ -76,12 +80,9 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     CommitHistoryChange(frameHistoryBefore);
   }
 
-  // Wireframe pass: clears solid scene and draws edges; must happen before
-  // DebugDraw::Flush so selection highlight/gizmo render on top.
   if (m_active && !m_playMode)
     DrawWireframeOverlay(cam);
 
-  // Flush any queued debug primitives (selection box, gizmo, etc.) before ImGui
   DebugDraw::Flush(cam);
 
   ImGui::Render();
@@ -251,6 +252,41 @@ void EditorLayer::DrawProjectTreeRecursive(
       ImGui::BulletText("%s", name.c_str());
     }
   }
+}
+
+void EditorLayer::DrawProjectPanel() {
+  constexpr float kEditorToolbarH = 32.0f;
+  constexpr float kEditorStatusH = 20.0f;
+  constexpr float kHierarchySectionRatio = 0.5f;
+  constexpr ImGuiWindowFlags kMainPanelWindowFlags =
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+      ImGuiWindowFlags_NoSavedSettings;
+      
+  const ImGuiIO &io = ImGui::GetIO();
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight =
+      std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float projectTop = kEditorToolbarH + hierarchyHeight + 4.0f;
+  
+  ImGui::SetNextWindowPos(ImVec2(0.0f, projectTop), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(
+      ImVec2(leftDockW, std::max(180.0f, workBottom - projectTop)),
+      ImGuiCond_Always);
+  ImGui::Begin("Project", nullptr, kMainPanelWindowFlags);
+
+  if (!m_projectBrowserRootValid ||
+      !std::filesystem::is_directory(m_projectBrowserRoot)) {
+    ImGui::TextDisabled("Set project root to browse files.");
+  } else {
+    ImGui::BeginChild("##project_tree", ImVec2(0, 0), true);
+    DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+    ImGui::EndChild();
+  }
+  
+  ImGui::End();
 }
 
 void EditorLayer::DrawAssetsPanel() {
