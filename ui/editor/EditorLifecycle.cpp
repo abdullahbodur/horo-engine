@@ -25,6 +25,7 @@
 #include "ui/editor/EditorAssetImport.h"
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
 #include "ui/editor/EditorFilePickerUtils.h"
+#include "ui/editor/EditorImportedAssetPathUtils.h"
 #include "ui/editor/EditorImGuiBackend.h"
 #include "ui/editor/EditorPropertyRules.h"
 #include "ui/editor/EditorSceneGraph.h"
@@ -160,6 +161,9 @@ void EditorLayer::Init(GLFWwindow *window) {
   m_uiWidgets.onConfirmDeleteAsset = [this](const std::string &assetId) {
     const AssetDeleteResult deleteResult = DeleteAssetDefinition(assetId);
     if (!deleteResult.ok) {
+      LogWarn("[Editor] Failed to delete asset '{}': {}", assetId,
+              deleteResult.error.empty() ? "unknown error"
+                                         : deleteResult.error);
     }
   };
 
@@ -295,7 +299,7 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
       preferred = canon / preferred;
     preferred = std::filesystem::weakly_canonical(preferred, ec);
     if (!ec && std::filesystem::is_directory(preferred) &&
-        preferred.native().rfind(canon.native(), 0) == 0) {
+        IsPathWithinDirectory(preferred, canon)) {
       m_bottomDock.SetProjectBrowserCwd(preferred);
       return;
     }
@@ -439,8 +443,8 @@ void EditorLayer::SetHotReloadOverlay(bool active, float progress01,
                                       float spinnerAngleRad,
                                       std::string_view label) {
   if (active) {
-    m_uiWidgets.OnHotReloadProgress(progress01, spinnerAngleRad);
     m_uiWidgets.OnHotReloadStart(0.0f, std::string(label));
+    m_uiWidgets.OnHotReloadProgress(progress01, spinnerAngleRad);
   } else {
     m_uiWidgets.OnHotReloadEnd();
   }

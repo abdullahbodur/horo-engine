@@ -80,6 +80,9 @@ void EditorLayer::OnMenuRename() {
 }
 
 void EditorLayer::OnMenuCreatePrefab() {
+  std::string prefabError;
+  if (!CreatePrefabFromSelection(&prefabError))
+    LogError("[Editor] Create prefab failed: {}", prefabError);
 }
 
 void EditorLayer::OnMenuDuplicate() {

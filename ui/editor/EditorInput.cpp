@@ -97,7 +97,7 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
 
   // Tab toggles fly mode
   bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
-  if (currTab && !m_prevTab)
+  if (currTab && !m_prevTab && !io.WantTextInput && !ImGui::IsAnyItemActive())
     ToggleFlyMode(cam);
   m_prevTab = currTab;
 }
@@ -340,7 +340,9 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
   // Del key — delete all selected objects immediately
   bool currDel = glfwGetKey(m_window, GLFW_KEY_DELETE) == GLFW_PRESS;
   if (ShouldRequestDeleteSelection(currDel, m_prevDel,
-                                   !m_selectedIndices.empty()))
+                                   !m_selectedIndices.empty(),
+                                   io.WantTextInput,
+                                   ImGui::IsAnyItemActive()))
     RequestDeleteSelectedObjects();
   m_prevDel = currDel;
 }

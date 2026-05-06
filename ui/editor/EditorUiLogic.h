@@ -54,7 +54,9 @@ namespace Horo::Editor {
                                 bool hasPrimarySelection);
 
     bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete,
-                                      bool hasSelection);
+                                      bool hasSelection,
+                                      bool wantsTextInput,
+                                      bool anyItemActive);
 
     bool ShouldHandleEditorEscape(bool currEsc, bool prevEsc, bool wantsTextInput,
                                   bool anyItemActive, bool hasBlockingPopup);

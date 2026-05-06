@@ -1,11 +1,28 @@
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 
+#include <cctype>
 #include <system_error>
 
 #include "core/ProjectPath.h"
 #include "ui/editor/AssetMetadata.h"
 
 namespace Horo::Editor {
+
+namespace {
+
+bool IsValidManagedAssetGuid(std::string_view guid) {
+  if (guid.empty())
+    return false;
+
+  for (unsigned char ch : guid) {
+    if (!std::isalnum(ch) && ch != '-' && ch != '_')
+      return false;
+  }
+
+  return true;
+}
+
+} // namespace
 
 bool IsPathWithinDirectory(const std::filesystem::path &path,
                            const std::filesystem::path &directory) {
@@ -48,6 +65,9 @@ std::filesystem::path ResolveProjectAssetPath(std::string_view rawPath) {
 std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef &asset) {
   namespace fs = std::filesystem;
   if (!asset.guid.empty()) {
+    if (!IsValidManagedAssetGuid(asset.guid))
+      return {};
+
     const fs::path guidDirectory = GetManagedAssetDirectory(asset.guid);
     std::error_code ec;
     if (fs::exists(guidDirectory, ec) && !ec)

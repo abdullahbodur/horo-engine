@@ -33,8 +33,10 @@ bool ShouldCopySelectionRef(bool currCopyRef, bool prevCopyRef,
 }
 
 bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete,
-                                  bool hasSelection) {
-  return currDelete && !prevDelete && hasSelection;
+                                  bool hasSelection, bool wantsTextInput,
+                                  bool anyItemActive) {
+  return currDelete && !prevDelete && hasSelection && !wantsTextInput &&
+         !anyItemActive;
 }
 
 bool ShouldHandleEditorEscape(bool currEsc, bool prevEsc, bool wantsTextInput,

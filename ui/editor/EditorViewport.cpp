@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <format>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,14 @@ bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
   const auto it = obj.props.find("_eid");
   if (it == obj.props.end())
     return false;
-  const auto entity = static_cast<Entity>(std::stoul(it->second));
+  Entity entity;
+  try {
+    entity = static_cast<Entity>(std::stoul(it->second));
+  } catch (const std::invalid_argument &) {
+    return false;
+  } catch (const std::out_of_range &) {
+    return false;
+  }
   if (!reg.IsAlive(entity) || !reg.Has<MeshComponent>(entity) ||
       !reg.Has<TransformComponent>(entity))
     return false;

@@ -1696,9 +1696,11 @@ TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]")
   REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
-  REQUIRE(ShouldRequestDeleteSelection(true, false, true));
-  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true));
-  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
+  REQUIRE(ShouldRequestDeleteSelection(true, false, true, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, true, true, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, true, false, true));
 }
 
 TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[editor]") {
