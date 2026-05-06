@@ -85,6 +85,7 @@ void EditorLayer::DrawObjectList() {
   ImGui::PopStyleVar();
   ImGui::PopStyleColor();
   ImGui::Spacing();
+  ImGui::Spacing();
 
   const auto &palette = Ui::GetEditorTheme().palette;
   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, 2.0f));
