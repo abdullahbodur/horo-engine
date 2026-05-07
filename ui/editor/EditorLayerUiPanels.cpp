@@ -47,7 +47,6 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawToolbar();
     DrawDockspace();
     DrawViewportPanel(cam, screenW, screenH);
-    DrawObjectList();
     DrawProjectPanel();
     DrawPropertiesPanel();
 
@@ -254,23 +253,18 @@ void EditorLayer::DrawProjectTreeRecursive(
 void EditorLayer::DrawProjectPanel() {
   constexpr float kEditorToolbarH = 32.0f;
   constexpr float kEditorStatusH = 20.0f;
-  constexpr float kHierarchySectionRatio = 0.5f;
   constexpr ImGuiWindowFlags kMainPanelWindowFlags =
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
       ImGuiWindowFlags_NoSavedSettings;
-      
+
   const ImGuiIO &io = ImGui::GetIO();
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-  const float hierarchyHeight =
-      std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
-  const float projectTop = kEditorToolbarH + hierarchyHeight + 4.0f;
-  
-  ImGui::SetNextWindowPos(ImVec2(0.0f, projectTop), ImGuiCond_Always);
+  const float panelHeight = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
+
+  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
   ImGui::SetNextWindowSize(
-      ImVec2(leftDockW, std::max(180.0f, workBottom - projectTop)),
+      ImVec2(leftDockW, std::max(180.0f, panelHeight)),
       ImGuiCond_Always);
   ImGui::Begin("Project", nullptr, kMainPanelWindowFlags);
 
@@ -278,11 +272,11 @@ void EditorLayer::DrawProjectPanel() {
       !std::filesystem::is_directory(m_projectBrowserRoot)) {
     ImGui::TextDisabled("Set project root to browse files.");
   } else {
-    ImGui::BeginChild("##project_tree", ImVec2(0, 0), true);
+    ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
     DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
     ImGui::EndChild();
   }
-  
+
   ImGui::End();
 }
 

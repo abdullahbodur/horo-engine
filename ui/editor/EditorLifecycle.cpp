@@ -279,6 +279,8 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   std::error_code ec;
 
   if (root.empty()) {
+    m_projectBrowserRoot.clear();
+    m_projectBrowserRootValid = false;
     m_bottomDock.SetProjectBrowserRoot({});
     return;
   }
@@ -287,10 +289,14 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   if (ec)
     canon = std::move(root);
   if (!std::filesystem::is_directory(canon, ec) || ec) {
+    m_projectBrowserRoot = canon;
+    m_projectBrowserRootValid = false;
     m_bottomDock.SetProjectBrowserRoot(canon);
     return;
   }
 
+  m_projectBrowserRoot = canon;
+  m_projectBrowserRootValid = true;
   m_bottomDock.SetProjectBrowserRoot(canon);
 
   if (!m_bottomDock.GetSavedProjectBrowserCwd().empty()) {
