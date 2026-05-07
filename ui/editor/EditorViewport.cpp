@@ -211,9 +211,7 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
 
   const ImVec2 panelMin(layout.gimbalRect.minX, layout.gimbalRect.minY);
   const ImVec2 panelMax(layout.gimbalRect.maxX, layout.gimbalRect.maxY);
-  dl->AddRectFilled(panelMin, panelMax, IM_COL32(9, 14, 24, 55), 10.0f);
-
-  const int idx = PrimaryIdx();
+  dl->AddRectFilled(panelMin, panelMax, IM_COL32(20, 24, 36, 180), 10.0f);
 
   const float hitRegionWidth = layout.gimbalRect.maxX - layout.gimbalRect.minX -
                                2.0f * metrics.contentOffsetX;
@@ -228,78 +226,88 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
   const bool canvasHovered = ImGui::IsItemHovered();
   const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
-  constexpr float kShaftPx = 42.0f;
-  constexpr float kHeadLength = 13.0f;
-  constexpr float kHeadHalfWidth = 6.0f;
-  constexpr float kHitPx = 9.0f;
-  constexpr float kHitPxSq = kHitPx * kHitPx;
+  constexpr float kShaftPx = 36.0f;
+  constexpr float kHeadLength = 10.0f;
+  constexpr float kHeadHalfWidth = 5.0f;
+  constexpr float kHitRadius = 14.0f;
+  constexpr float kHitRadiusSq = kHitRadius * kHitRadius;
 
-  static const std::array<ViewGimbalAxisDraw, 3> kAxes = {{
-      {Right, Left, {1.0f, 0.0f, 0.0f}, IM_COL32(255, 82, 58, 255),
-       IM_COL32(145, 48, 42, 210), "X"},
-      {Top, Bottom, {0.0f, 1.0f, 0.0f}, IM_COL32(80, 230, 104, 255),
-       IM_COL32(42, 135, 60, 210), "Y"},
-      {Front, Back, {0.0f, 0.0f, 1.0f}, IM_COL32(55, 155, 255, 255),
-       IM_COL32(38, 92, 170, 210), "Z"},
+  struct AxisInfo {
+    ViewSnap snap;
+    Vec3 worldDir;
+    const char *label;
+    ImU32 col;
+  };
+
+  static const std::array<AxisInfo, 6> kDirs = {{
+      {Right, {1.0f, 0.0f, 0.0f}, "Right", IM_COL32(255, 82, 58, 255)},
+      {Left, {-1.0f, 0.0f, 0.0f}, "Left", IM_COL32(255, 82, 58, 180)},
+      {Top, {0.0f, 1.0f, 0.0f}, "Top", IM_COL32(80, 230, 104, 255)},
+      {Bottom, {0.0f, -1.0f, 0.0f}, "Bottom", IM_COL32(80, 230, 104, 180)},
+      {Front, {0.0f, 0.0f, 1.0f}, "Front", IM_COL32(55, 155, 255, 255)},
+      {Back, {0.0f, 0.0f, -1.0f}, "Back", IM_COL32(55, 155, 255, 180)},
   }};
 
-  // Pre-compute screen directions and view-space depth once per frame.
-  // Shared by hover and draw loops — no redundant WorldAxisToScreenDir calls.
-  std::array<ViewGimbalAxisCache, 3> cache{};
-  for (int i = 0; i < 3; i++) {
-    float vz = 0.f;
-    WorldAxisToScreenDir(cam, kAxes[i].worldPlus, &cache[i].dx, &cache[i].dy,
-                         &vz);
-    cache[i].viewZ = vz;
-    cache[i].origIdx = i;
+  std::array<float, 6> dirDx{};
+  std::array<float, 6> dirDy{};
+  std::array<float, 6> dirVz{};
+  for (int i = 0; i < 6; ++i) {
+    WorldAxisToScreenDir(cam, kDirs[i].worldDir, &dirDx[i], &dirDy[i],
+                         &dirVz[i]);
   }
-  ArrangeViewGimbalAxesAsTriad(cache);
 
-  // Sort ascending by view-space Z so background axes draw first (painter's
-  // algorithm).
-  std::ranges::sort(
-      cache, [](const ViewGimbalAxisCache &a, const ViewGimbalAxisCache &b) {
-        return a.viewZ < b.viewZ;
-      });
-
-  auto hitCache = cache;
-  std::ranges::reverse(hitCache);
-  const ViewSnap hoverSnap =
-      canvasHovered ? FindViewGimbalHoverSnap(io.MousePos, center, hitCache,
-                                               kAxes, kShaftPx, kHeadLength,
-                                               kHeadHalfWidth, kHitPxSq)
-                    : None;
+  ViewSnap hoverSnap = None;
+  if (canvasHovered) {
+    float bestD = kHitRadiusSq;
+    for (int i = 0; i < 6; ++i) {
+      const float tipX = center.x + dirDx[i] * kShaftPx;
+      const float tipY = center.y + dirDy[i] * kShaftPx;
+      const float dx = io.MousePos.x - tipX;
+      const float dy = io.MousePos.y - tipY;
+      const float d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        hoverSnap = kDirs[i].snap;
+      }
+    }
+  }
 
   const float fs = ImGui::GetFontSize();
-  const float cx = center.x;
-  const float cy = center.y;
-  dl->AddCircleFilled(center, 4.0f, IM_COL32(80, 210, 230, 245), 16);
-  for (const ViewGimbalAxisCache &ac : cache) {
-    const ViewGimbalAxisDraw &ad = kAxes[ac.origIdx];
-    // Highlight whichever direction (pos or neg) is currently hovered.
-    const bool hlPos = (hoverSnap == ad.posSnap) || (hoverSnap == ad.negSnap);
-    ImU32 cPos = ac.viewZ < 0.0f ? ad.colDim : ad.col;
-    if (hlPos)
-      cPos = IM_COL32(255, 255, 200, 255);
+
+  dl->AddCircleFilled(center, 5.0f, IM_COL32(200, 200, 200, 255), 16);
+  dl->AddCircle(center, 5.0f, IM_COL32(100, 100, 100, 255), 16, 1.0f);
+
+  std::array<int, 6> order = {0, 1, 2, 3, 4, 5};
+  std::ranges::sort(order, [&](int a, int b) {
+    return dirVz[a] < dirVz[b];
+  });
+
+  for (int idx : order) {
+    const AxisInfo &info = kDirs[idx];
+    const bool hl = hoverSnap == info.snap;
+    ImU32 col = info.col;
+    if (hl)
+      col = IM_COL32(255, 255, 200, 255);
+
+    const float dx = dirDx[idx];
+    const float dy = dirDy[idx];
 
     const ViewGimbalArrowGeometry arrow = BuildViewGimbalArrow(
-        ImVec2(cx, cy), ac.dx, ac.dy, kShaftPx, kHeadLength, kHeadHalfWidth);
+        center, dx, dy, kShaftPx, kHeadLength, kHeadHalfWidth);
 
-    dl->AddLine(center, arrow.shaftEnd, cPos, hlPos ? 4.0f : 3.0f);
-    dl->AddTriangleFilled(arrow.tip, arrow.headLeft, arrow.headRight, cPos);
+    dl->AddLine(center, arrow.shaftEnd, col, hl ? 4.0f : 2.5f);
+    dl->AddTriangleFilled(arrow.tip, arrow.headLeft, arrow.headRight, col);
 
-    // Offset label along the axis direction so it doesn't overlap the circle
-    // regardless of which way the axis is pointing on screen.
-    const float tDist = 8.0f;
-    dl->AddText(ImVec2(arrow.tip.x + ac.dx * tDist - fs * 0.3f,
-                       arrow.tip.y + ac.dy * tDist - fs * 0.5f),
-                cPos, ad.label);
+    const float tDist = 10.0f;
+    const float lx = arrow.tip.x + dx * tDist - fs * 0.3f;
+    const float ly = arrow.tip.y + dy * tDist - fs * 0.5f;
+    dl->AddText(ImVec2(lx + 1.0f, ly + 1.0f), IM_COL32(0, 0, 0, 200),
+                info.label);
+    dl->AddText(ImVec2(lx, ly), col, info.label);
   }
 
   if (canvasClicked && hoverSnap != ViewSnap::None)
     m_uiWidgets.SetPendingViewSnap(hoverSnap);
-
-  (void)idx;
 }
 
 void EditorLayer::HandlePicking(const Camera &cam, int screenW, int screenH) {
