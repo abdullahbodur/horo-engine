@@ -26,11 +26,9 @@ namespace Horo::Editor {
 void EditorLayer::DrawObjectList() {
   using enum SceneObjectType;
   const ImGuiIO &io = ImGui::GetIO();
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-  const float hierarchyHeight =
-      std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float availableH = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
+  const float hierarchyHeight = std::max(180.0f, availableH * 0.5f);
   ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(leftDockW, hierarchyHeight),
                            ImGuiCond_Always);

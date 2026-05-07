@@ -48,6 +48,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawToolbar();
     DrawDockspace();
     DrawViewportPanel(cam, screenW, screenH);
+    DrawObjectList();
     DrawProjectPanel();
     DrawPropertiesPanel();
 
@@ -260,6 +261,7 @@ void EditorLayer::DrawProjectTreeRecursive(
 void EditorLayer::DrawProjectPanel() {
   constexpr float kEditorToolbarH = 32.0f;
   constexpr float kEditorStatusH = 20.0f;
+  constexpr float kHierarchySectionRatio = 0.5f;
   constexpr ImGuiWindowFlags kMainPanelWindowFlags =
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
@@ -267,11 +269,13 @@ void EditorLayer::DrawProjectPanel() {
 
   const ImGuiIO &io = ImGui::GetIO();
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-  const float panelHeight = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
+  const float availableH = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
+  const float hierarchyHeight = std::max(180.0f, availableH * kHierarchySectionRatio);
+  const float projectTop = kEditorToolbarH + hierarchyHeight;
 
-  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, projectTop), ImGuiCond_Always);
   ImGui::SetNextWindowSize(
-      ImVec2(leftDockW, std::max(180.0f, panelHeight)),
+      ImVec2(leftDockW, std::max(180.0f, availableH - hierarchyHeight)),
       ImGuiCond_Always);
   ImGui::Begin("Project", nullptr, kMainPanelWindowFlags);
 
