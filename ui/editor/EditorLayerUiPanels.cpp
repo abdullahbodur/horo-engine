@@ -17,6 +17,7 @@
 #include "ui/editor/EditorSearch.h"
 #include "ui/editor/ProjectEntryFilter.h"
 #include "ui/editor/components/EditorComponentContext.h"
+#include "ui/IconsFontAwesome6.h"
 
 namespace Horo::Editor {
 namespace {
@@ -47,6 +48,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawToolbar();
     DrawDockspace();
     DrawViewportPanel(cam, screenW, screenH);
+    DrawObjectList();
     DrawProjectPanel();
     DrawPropertiesPanel();
 
@@ -240,12 +242,18 @@ void EditorLayer::DrawProjectTreeRecursive(
   for (const auto &[p, isDir] : *listing) {
     const std::string name = p.filename().string();
     if (isDir) {
-      if (ImGui::TreeNodeEx(name.c_str(), 0)) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.65f, 0.35f, 1.0f));
+      const std::string folderLabel = std::format("{}  {}", ICON_FA_FOLDER, name);
+      ImGui::PopStyleColor();
+      if (ImGui::TreeNodeEx(folderLabel.c_str(), 0)) {
         DrawProjectTreeRecursive(p, absPath);
         ImGui::TreePop();
       }
     } else {
-      ImGui::BulletText("%s", name.c_str());
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.75f, 0.95f, 1.0f));
+      const std::string fileLabel = std::format("{}  {}", ICON_FA_FILE, name);
+      ImGui::TextUnformatted(fileLabel.c_str());
+      ImGui::PopStyleColor();
     }
   }
 }
@@ -253,18 +261,23 @@ void EditorLayer::DrawProjectTreeRecursive(
 void EditorLayer::DrawProjectPanel() {
   constexpr float kEditorToolbarH = 32.0f;
   constexpr float kEditorStatusH = 20.0f;
+  constexpr float kHierarchySectionRatio = 0.5f;
   constexpr ImGuiWindowFlags kMainPanelWindowFlags =
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
       ImGuiWindowFlags_NoSavedSettings;
 
   const ImGuiIO &io = ImGui::GetIO();
+  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
   const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-  const float panelHeight = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
+  const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
+  const float hierarchyHeight =
+      std::max(220.0f, (workBottom - kEditorToolbarH) * kHierarchySectionRatio);
+  const float projectTop = kEditorToolbarH + hierarchyHeight + 4.0f;
 
-  ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
+  ImGui::SetNextWindowPos(ImVec2(0.0f, projectTop), ImGuiCond_Always);
   ImGui::SetNextWindowSize(
-      ImVec2(leftDockW, std::max(180.0f, panelHeight)),
+      ImVec2(leftDockW, std::max(180.0f, workBottom - projectTop)),
       ImGuiCond_Always);
   ImGui::Begin("Project", nullptr, kMainPanelWindowFlags);
 
