@@ -62,14 +62,17 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     ImGui::PushStyleColor(ImGuiCol_TabUnfocusedActive, palette.accent);
     if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
         if (ImGui::BeginTabItem("Assets")) {
+            m_selectedTab = Tab::Assets;
             DrawAssetsTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {
+            m_selectedTab = Tab::Console;
             DrawConsoleTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("MCP")) {
+            m_selectedTab = Tab::MCP;
             DrawMcpTab(mcpController, window);
             ImGui::EndTabItem();
         }
@@ -83,6 +86,21 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
 void EditorBottomDock::DrawAssetsTab() {
     if (m_assetsTabCallback) {
         m_assetsTabCallback();
+    }
+}
+
+void EditorBottomDock::DrawSelectedTabContent(Horo::Mcp::McpController* mcpController,
+                                               GLFWwindow* window) {
+    switch (m_selectedTab) {
+        case Tab::Assets:
+            DrawAssetsTab();
+            break;
+        case Tab::Console:
+            DrawConsoleTab();
+            break;
+        case Tab::MCP:
+            DrawMcpTab(mcpController, window);
+            break;
     }
 }
 

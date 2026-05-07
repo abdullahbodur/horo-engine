@@ -25,11 +25,18 @@ namespace Horo::Editor {
 
     class EditorBottomDock {
     public:
+        enum class Tab { Assets, Console, MCP };
+
         void Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window);
 
         void SetAssetsTabCallback(AssetsTabDrawCallback callback) {
             m_assetsTabCallback = std::move(callback);
         }
+
+        Tab GetSelectedTab() const { return m_selectedTab; }
+
+        void DrawSelectedTabContent(Horo::Mcp::McpController* mcpController,
+                                     GLFWwindow* window);
 
         // Accessors for tab content state
         bool IsConsoleShowInfo() const { return m_consoleShowInfo; }
@@ -103,6 +110,8 @@ namespace Horo::Editor {
         bool m_mcpUiClearToggle = false;
 
         AssetsTabDrawCallback m_assetsTabCallback;
+
+        Tab m_selectedTab = Tab::Assets;
 
         // Drawing functions
         void DrawBottomDock(Horo::Mcp::McpController* mcpController,

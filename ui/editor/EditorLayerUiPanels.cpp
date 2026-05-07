@@ -50,10 +50,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawObjectList();
     DrawProjectPanel();
     DrawPropertiesPanel();
-    
-    m_bottomDock.SetAssetsTabCallback([this]() {
-      DrawAssetsPanel();
-    });
+
     m_bottomDock.Draw(&m_mcpController, m_window);
     m_uiWidgets.DrawStatusBar();
     m_helpPopup.Draw();
