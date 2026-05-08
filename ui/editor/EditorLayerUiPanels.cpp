@@ -243,9 +243,13 @@ void EditorLayer::DrawProjectTreeRecursive(
   const auto &palette = Ui::GetEditorTheme().palette;
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 6.0f));
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
   ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
   ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
   ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
+
+  const float windowLeft = ImGui::GetWindowPos().x;
+  const float contentLeft = windowLeft + ImGui::GetWindowContentRegionMin().x;
 
   for (const auto &[p, isDir] : *listing) {
     const std::string name = p.filename().string();
@@ -253,7 +257,21 @@ void EditorLayer::DrawProjectTreeRecursive(
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.65f, 0.35f, 1.0f));
       const std::string folderLabel = std::format("{}  {}", ICON_FA_FOLDER, name);
       ImGui::PopStyleColor();
-      if (ImGui::TreeNodeEx(folderLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+
+      ImGui::AlignTextToFramePadding();
+      const bool open = ImGui::TreeNodeEx(folderLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth);
+
+      const ImVec2 rowMin = ImGui::GetItemRectMin();
+      const ImVec2 rowMax = ImGui::GetItemRectMax();
+      const bool rowHovered = ImGui::IsItemHovered();
+      if (rowHovered) {
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(contentLeft - 4.0f, rowMin.y + 1.0f),
+            ImVec2(rowMax.x + 4.0f, rowMax.y - 1.0f),
+            ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
+      }
+
+      if (open) {
         DrawProjectTreeRecursive(p, absPath);
         ImGui::TreePop();
       }
@@ -261,26 +279,24 @@ void EditorLayer::DrawProjectTreeRecursive(
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.75f, 0.95f, 1.0f));
       const std::string fileLabel = std::format("{}  {}", ICON_FA_FILE, name);
 
-      const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-      const float rowRight = ImGui::GetWindowPos().x +
-                             ImGui::GetWindowContentRegionMax().x - 2.0f;
-      const ImVec2 rowMax(rowRight, rowMin.y + ImGui::GetFrameHeight());
-      const bool rowHovered = ImGui::IsMouseHoveringRect(rowMin, rowMax);
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted(fileLabel.c_str());
+      const ImVec2 rowMin = ImGui::GetItemRectMin();
+      const ImVec2 rowMax = ImGui::GetItemRectMax();
+      const bool rowHovered = ImGui::IsItemHovered();
       if (rowHovered) {
         ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(rowMin.x, rowMin.y + 1.0f),
-            ImVec2(rowMax.x, rowMax.y - 1.0f),
+            ImVec2(contentLeft - 4.0f, rowMin.y + 1.0f),
+            ImVec2(rowMax.x + 4.0f, rowMax.y - 1.0f),
             ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
       }
 
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(fileLabel.c_str());
       ImGui::PopStyleColor();
     }
   }
 
   ImGui::PopStyleColor(3);
-  ImGui::PopStyleVar(2);
+  ImGui::PopStyleVar(3);
 }
 
 void EditorLayer::DrawProjectPanel() {
