@@ -186,15 +186,10 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
 }
 
 
-void EditorLayer::DrawViewGimbal( // NOSONAR
-    const Camera &cam) {
+void EditorLayer::DrawViewGimbal(const Camera &cam) {
   using enum ViewSnap;
   const ImGuiIO &io = ImGui::GetIO();
   const EditorViewGimbalMetrics &metrics = GetEditorViewGimbalMetrics();
-  const bool supportsWireframeOverlay =
-      Renderer::GetBackendCapabilities().supportsWireframeOverlay;
-  if (!supportsWireframeOverlay)
-    m_wireframeMode = false;
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const EditorViewGimbalLayout layout = BuildEditorViewGimbalLayout(
       m_viewportPanelRect, io.DisplaySize.x, rightDockW, kEditorToolbarH);
@@ -226,84 +221,98 @@ void EditorLayer::DrawViewGimbal( // NOSONAR
   const bool canvasHovered = ImGui::IsItemHovered();
   const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
-  constexpr float kShaftPx = 36.0f;
-  constexpr float kHeadLength = 10.0f;
-  constexpr float kHeadHalfWidth = 5.0f;
-  constexpr float kHitRadius = 14.0f;
+  constexpr float kLineLength = 32.0f;
+  constexpr float kEndpointRadius = 6.0f;
+  constexpr float kHitRadius = 12.0f;
   constexpr float kHitRadiusSq = kHitRadius * kHitRadius;
 
-  struct AxisInfo {
-    ViewSnap snap;
+  struct AxisData {
+    ViewSnap snapPos;
+    ViewSnap snapNeg;
     Vec3 worldDir;
-    const char *label;
+    char label;
     ImU32 col;
+    const char *tooltipPos;
+    const char *tooltipNeg;
   };
 
-  static const std::array<AxisInfo, 6> kDirs = {{
-      {Right, {1.0f, 0.0f, 0.0f}, "Right", IM_COL32(255, 82, 58, 255)},
-      {Left, {-1.0f, 0.0f, 0.0f}, "Left", IM_COL32(255, 82, 58, 180)},
-      {Top, {0.0f, 1.0f, 0.0f}, "Top", IM_COL32(80, 230, 104, 255)},
-      {Bottom, {0.0f, -1.0f, 0.0f}, "Bottom", IM_COL32(80, 230, 104, 180)},
-      {Front, {0.0f, 0.0f, 1.0f}, "Front", IM_COL32(55, 155, 255, 255)},
-      {Back, {0.0f, 0.0f, -1.0f}, "Back", IM_COL32(55, 155, 255, 180)},
+  static const std::array<AxisData, 3> kAxes = {{
+      {Right, Left, {1.0f, 0.0f, 0.0f}, 'X', IM_COL32(255, 82, 58, 255), "View Right", "View Left"},
+      {Top, Bottom, {0.0f, 1.0f, 0.0f}, 'Y', IM_COL32(80, 230, 104, 255), "View Top", "View Bottom"},
+      {Front, Back, {0.0f, 0.0f, 1.0f}, 'Z', IM_COL32(55, 155, 255, 255), "View Front", "View Back"},
   }};
 
-  std::array<float, 6> dirDx{};
-  std::array<float, 6> dirDy{};
-  std::array<float, 6> dirVz{};
-  for (int i = 0; i < 6; ++i) {
-    WorldAxisToScreenDir(cam, kDirs[i].worldDir, &dirDx[i], &dirDy[i],
-                         &dirVz[i]);
+  float dirDx[3]{};
+  float dirDy[3]{};
+  float dirVz[3]{};
+  for (int i = 0; i < 3; ++i) {
+    WorldAxisToScreenDir(cam, kAxes[i].worldDir, &dirDx[i], &dirDy[i], &dirVz[i]);
   }
 
   ViewSnap hoverSnap = None;
+  const char *hoverTooltip = nullptr;
   if (canvasHovered) {
     float bestD = kHitRadiusSq;
-    for (int i = 0; i < 6; ++i) {
-      const float tipX = center.x + dirDx[i] * kShaftPx;
-      const float tipY = center.y + dirDy[i] * kShaftPx;
+    for (int i = 0; i < 3; ++i) {
+      const float tipX = center.x + dirDx[i] * kLineLength;
+      const float tipY = center.y + dirDy[i] * kLineLength;
       const float dx = io.MousePos.x - tipX;
       const float dy = io.MousePos.y - tipY;
       const float d = dx * dx + dy * dy;
       if (d < bestD) {
         bestD = d;
-        hoverSnap = kDirs[i].snap;
+        hoverSnap = dirVz[i] >= 0.0f ? kAxes[i].snapPos : kAxes[i].snapNeg;
+        hoverTooltip = dirVz[i] >= 0.0f ? kAxes[i].tooltipPos : kAxes[i].tooltipNeg;
       }
     }
   }
 
   const float fs = ImGui::GetFontSize();
 
-  dl->AddCircleFilled(center, 5.0f, IM_COL32(200, 200, 200, 255), 16);
-  dl->AddCircle(center, 5.0f, IM_COL32(100, 100, 100, 255), 16, 1.0f);
+  dl->AddCircleFilled(center, 4.0f, IM_COL32(120, 120, 120, 255), 16);
 
-  std::array<int, 6> order = {0, 1, 2, 3, 4, 5};
-  std::ranges::sort(order, [&](int a, int b) {
-    return dirVz[a] < dirVz[b];
-  });
+  int order[3] = {0, 1, 2};
+  if (dirVz[0] > dirVz[1]) std::swap(order[0], order[1]);
+  if (dirVz[order[1]] > dirVz[order[2]]) std::swap(order[1], order[2]);
+  if (dirVz[order[0]] > dirVz[order[1]]) std::swap(order[0], order[1]);
 
   for (int idx : order) {
-    const AxisInfo &info = kDirs[idx];
-    const bool hl = hoverSnap == info.snap;
-    ImU32 col = info.col;
-    if (hl)
+    const AxisData &axis = kAxes[idx];
+    const bool isFront = dirVz[idx] >= 0.0f;
+    const bool hl = (hoverSnap == axis.snapPos) || (hoverSnap == axis.snapNeg);
+    ImU32 col = axis.col;
+    float alpha = isFront ? 1.0f : 0.5f;
+    if (hl) {
       col = IM_COL32(255, 255, 200, 255);
+      alpha = 1.0f;
+    }
+
+    const ImU32 lineCol = IM_COL32(
+        (col >> 0) & 0xFF,
+        (col >> 8) & 0xFF,
+        (col >> 16) & 0xFF,
+        static_cast<int>(255 * alpha));
 
     const float dx = dirDx[idx];
     const float dy = dirDy[idx];
+    const float endX = center.x + dx * kLineLength;
+    const float endY = center.y + dy * kLineLength;
 
-    const ViewGimbalArrowGeometry arrow = BuildViewGimbalArrow(
-        center, dx, dy, kShaftPx, kHeadLength, kHeadHalfWidth);
+    dl->AddLine(center, ImVec2(endX, endY), lineCol, hl ? 3.0f : 2.0f);
 
-    dl->AddLine(center, arrow.shaftEnd, col, hl ? 4.0f : 2.5f);
-    dl->AddTriangleFilled(arrow.tip, arrow.headLeft, arrow.headRight, col);
+    const float dotRadius = hl ? kEndpointRadius * 1.3f : kEndpointRadius;
+    dl->AddCircleFilled(ImVec2(endX, endY), dotRadius, lineCol, 12);
+    dl->AddCircle(ImVec2(endX, endY), dotRadius, IM_COL32(255, 255, 255, static_cast<int>(100 * alpha)), 12, 1.0f);
 
-    const float tDist = 10.0f;
-    const float lx = arrow.tip.x + dx * tDist - fs * 0.3f;
-    const float ly = arrow.tip.y + dy * tDist - fs * 0.5f;
-    dl->AddText(ImVec2(lx + 1.0f, ly + 1.0f), IM_COL32(0, 0, 0, 200),
-                info.label);
-    dl->AddText(ImVec2(lx, ly), col, info.label);
+    char labelStr[2] = {axis.label, '\0'};
+    const float labelW = ImGui::CalcTextSize(labelStr).x;
+    const float labelH = ImGui::CalcTextSize(labelStr).y;
+    dl->AddText(ImVec2(endX - labelW * 0.5f, endY - labelH * 0.5f), IM_COL32(0, 0, 0, static_cast<int>(200 * alpha)), labelStr);
+    dl->AddText(ImVec2(endX - labelW * 0.5f - 1.0f, endY - labelH * 0.5f - 1.0f), IM_COL32(255, 255, 255, static_cast<int>(255 * alpha)), labelStr);
+  }
+
+  if (hoverTooltip && canvasHovered) {
+    ImGui::SetTooltip("%s", hoverTooltip);
   }
 
   if (canvasClicked && hoverSnap != ViewSnap::None)
