@@ -253,7 +253,7 @@ void EditorLayer::DrawProjectTreeRecursive(
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.65f, 0.35f, 1.0f));
       const std::string folderLabel = std::format("{}  {}", ICON_FA_FOLDER, name);
       ImGui::PopStyleColor();
-      if (ImGui::TreeNodeEx(folderLabel.c_str(), 0)) {
+      if (ImGui::TreeNodeEx(folderLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
         DrawProjectTreeRecursive(p, absPath);
         ImGui::TreePop();
       }
@@ -273,6 +273,7 @@ void EditorLayer::DrawProjectTreeRecursive(
             ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
       }
 
+      ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted(fileLabel.c_str());
       ImGui::PopStyleColor();
     }
