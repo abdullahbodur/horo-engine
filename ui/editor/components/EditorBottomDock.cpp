@@ -1,7 +1,6 @@
 #include "ui/editor/components/EditorBottomDock.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <ranges>
@@ -31,8 +30,6 @@
 #include "ui/editor/EditorLayerInternal.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/ProjectEntryFilter.h"
-#include "ui/editor/components/EditorComponentContext.h"
-#include "ui/editor/components/EditorUIWidgets.h"
 #include "ui/HoroTheme.h"
 
 using namespace Horo::Editor::Internal;

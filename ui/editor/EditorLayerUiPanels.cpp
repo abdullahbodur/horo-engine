@@ -18,6 +18,7 @@
 #include "ui/editor/ProjectEntryFilter.h"
 #include "ui/editor/components/EditorComponentContext.h"
 #include "ui/IconsFontAwesome6.h"
+#include "ui/HoroTheme.h"
 
 namespace Horo::Editor {
 namespace {
@@ -239,6 +240,13 @@ void EditorLayer::DrawProjectTreeRecursive(
   if (!listing)
     return;
 
+  const auto &palette = Ui::GetEditorTheme().palette;
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 6.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+  ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
+  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
+  ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
+
   for (const auto &[p, isDir] : *listing) {
     const std::string name = p.filename().string();
     if (isDir) {
@@ -252,10 +260,26 @@ void EditorLayer::DrawProjectTreeRecursive(
     } else {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.75f, 0.95f, 1.0f));
       const std::string fileLabel = std::format("{}  {}", ICON_FA_FILE, name);
+
+      const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+      const float rowRight = ImGui::GetWindowPos().x +
+                             ImGui::GetWindowContentRegionMax().x - 2.0f;
+      const ImVec2 rowMax(rowRight, rowMin.y + ImGui::GetFrameHeight());
+      const bool rowHovered = ImGui::IsMouseHoveringRect(rowMin, rowMax);
+      if (rowHovered) {
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(rowMin.x, rowMin.y + 1.0f),
+            ImVec2(rowMax.x, rowMax.y - 1.0f),
+            ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
+      }
+
       ImGui::TextUnformatted(fileLabel.c_str());
       ImGui::PopStyleColor();
     }
   }
+
+  ImGui::PopStyleColor(3);
+  ImGui::PopStyleVar(2);
 }
 
 void EditorLayer::DrawProjectPanel() {

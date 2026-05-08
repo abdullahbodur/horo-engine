@@ -1,15 +1,12 @@
 #include "EditorUIWidgets.h"
 #include "ui/editor/EditorLayer.h"
 #include "imgui.h"
-#include <algorithm>
 
 namespace Horo::Editor {
 
 void EditorUIWidgets::Initialize(EditorLayer* editor) {
     m_editor = editor;
 }
-
-// ---- Overlays ----
 
 void EditorUIWidgets::DrawClipboardToast() const {
     if (m_clipboardToastTime <= 0.0f)

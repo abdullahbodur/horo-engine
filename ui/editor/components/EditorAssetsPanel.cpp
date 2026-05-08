@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <ranges>
@@ -15,12 +14,10 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportService.h"
 #include "ui/editor/AssetMetadata.h"
-#include "ui/editor/EditorImGuiBackend.h"
 #include "ui/editor/EditorSearch.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneDocument.h"
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
-#include "ui/editor/components/EditorComponentContext.h"
 
 namespace Horo::Editor {
 
