@@ -136,9 +136,13 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
   };
 
   const ImGuiIO &io = ImGui::GetIO();
-  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  if (m_leftDockWidth <= 0.0f)
+    m_leftDockWidth = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  if (m_bottomDockHeight <= 0.0f)
+    m_bottomDockHeight = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float leftDockW = m_leftDockWidth;
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float bottomDockH = m_bottomDockHeight;
   const EditorViewportRect defaultRect = BuildEditorViewportRect(
       io.DisplaySize.x, io.DisplaySize.y, kEditorToolbarH, kEditorStatusH,
       bottomDockH, leftDockW, rightDockW);

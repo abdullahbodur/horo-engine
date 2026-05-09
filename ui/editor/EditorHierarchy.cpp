@@ -17,6 +17,7 @@
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/IconsFontAwesome6.h"
 #include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
 #include "scene/Entity.h"
 #include "scene/Registry.h"
 #include "scene/components/TransformComponent.h"
@@ -26,92 +27,64 @@ namespace Horo::Editor {
 void EditorLayer::DrawObjectList() {
   using enum SceneObjectType;
   const ImGuiIO &io = ImGui::GetIO();
-  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
   const float availableH = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
-  const float hierarchyHeight = std::max(180.0f, availableH * 0.5f);
+
+  // Lazy-initialise split values from defaults on first frame.
+  if (m_leftDockWidth <= 0.0f)
+    m_leftDockWidth = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  if (m_hierarchyHeightRatio <= 0.0f)
+    m_hierarchyHeightRatio = kHierarchySectionRatio;
+
+  const float leftDockW = m_leftDockWidth;
+  const float hierarchyHeight = std::max(180.0f, availableH * m_hierarchyHeightRatio);
   ImGui::SetNextWindowPos(ImVec2(0.0f, kEditorToolbarH), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(leftDockW, hierarchyHeight),
                            ImGuiCond_Always);
   ImGui::Begin(kEditorHierarchyWindow, nullptr, kMainPanelWindowFlags);
 
-  const ImGuiStyle &style = ImGui::GetStyle();
   const float panelWidth = ImGui::GetContentRegionAvail().x;
-  const ImVec4 panel = Ui::GetEditorTheme().palette.panelSoft;
-  const ImVec4 border = Ui::GetEditorTheme().palette.border;
+  const Ui::EditorTheme &theme = Ui::GetEditorTheme();
 
-  ImGui::PushStyleColor(ImGuiCol_Button, panel);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, panel);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, panel);
-  ImGui::PushStyleColor(ImGuiCol_Border, border);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-  ImGui::Button("Scene", ImVec2(92.0f, 30.0f));
-  ImGui::PopStyleVar();
-  ImGui::PopStyleColor(4);
-
-  ImGui::SameLine();
-  ImGui::SetCursorPosX(panelWidth - 56.0f);
-  if (ImGui::SmallButton(ICON_FA_PLUS))
-    ImGui::OpenPopup("hierarchy_add_popup");
-  ImGui::SameLine();
-  ImGui::SetCursorPosX(panelWidth - 12.0f);
-  ImGui::TextDisabled("%s", ICON_FA_ELLIPSIS_VERTICAL);
-  if (ImGui::BeginPopup("hierarchy_add_popup")) {
-    if (ImGui::MenuItem("Panel"))
-      AddObject(Panel);
-    if (ImGui::MenuItem("Prop"))
-      AddObject(Prop);
-    if (ImGui::MenuItem("Light"))
-      AddObject(Light);
-    if (ImGui::MenuItem("Camera"))
-      AddObject(Camera);
-    ImGui::EndPopup();
+  // Top bar
+  {
+    const Ui::EditorPanelDropdownItem addItems[] = {
+        {ICON_FA_EXPAND,    "Panel",  [this] { AddObject(Panel);  }},
+        {ICON_FA_CUBE,      "Prop",   [this] { AddObject(Prop);   }},
+        {ICON_FA_LIGHTBULB, "Light",  [this] { AddObject(Light);  }},
+        {ICON_FA_VIDEO,     "Camera", [this] { AddObject(Camera); }},
+    };
+    const Ui::EditorPanelTabItem tabs[] = {
+        {Ui::EditorPanelTab::Scene, true},
+    };
+    const Ui::EditorPanelActionItem actions[] = {
+        {ICON_FA_PLUS, nullptr, addItems},
+        {ICON_FA_ELLIPSIS_VERTICAL},
+    };
+    Ui::RenderEditorPanelTopBar(theme, "hierarchy_topbar", tabs, actions);
   }
 
-  std::string searchBuf(256, '\0');
-  m_objectSearchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
-  ImGui::PushStyleColor(ImGuiCol_FrameBg, Ui::GetEditorTheme().palette.input);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
-  const float searchWidth = std::max(80.0f, panelWidth - 60.0f);
-  ImGui::SetNextItemWidth(searchWidth);
-  if (ImGui::InputTextWithHint("##object_search", "Search objects...",
-                               searchBuf.data(), searchBuf.size()))
-    m_objectSearchQuery = searchBuf.data();
-  ImGui::PopItemFlag();
-  
-  if (!m_objectSearchQuery.empty()) {
-    ImGui::SameLine(0, 4.0f);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, Ui::GetEditorTheme().palette.textMuted);
-    if (ImGui::SmallButton(ICON_FA_XMARK)) {
-      m_objectSearchQuery.clear();
-      searchBuf[0] = '\0';
-    }
-    ImGui::PopStyleColor();
-  } else {
-    ImGui::SameLine(0, 4.0f);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
-    ImGui::TextDisabled("%s", ICON_FA_FILTER);
+  // Search bar
+  {
+    std::array<char, 256> searchBuf{};
+    m_objectSearchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
+    Ui::EditorTreeSearchSlotConfig searchCfg;
+    searchCfg.enabled = true;
+    searchCfg.id = "##object_search";
+    searchCfg.placeholder = "Search objects...";
+    searchCfg.buffer = searchBuf.data();
+    searchCfg.bufferSize = searchBuf.size();
+    searchCfg.width = std::max(80.0f, panelWidth - 24.0f);
+    if (Ui::RenderEditorTreeSearchSlot(theme, searchCfg))
+      m_objectSearchQuery = searchBuf.data();
   }
-  
-  ImGui::PopStyleVar();
-  ImGui::PopStyleColor();
-  ImGui::Spacing();
+
   ImGui::Spacing();
 
-  const auto &palette = Ui::GetEditorTheme().palette;
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, 2.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 6.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
-  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
-  ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
-
-  // Primary scene
-  DrawSceneHeader(m_document, true, -1);
-
-  ImGui::PopStyleColor(3);
-  ImGui::PopStyleVar(3);
+  // Primary scene tree
+  {
+    const Ui::ScopedEditorTreeRowStyle treeRows(theme);
+    DrawSceneHeader(m_document, true, -1);
+  }
 
   // Right-click empty space → add object to primary scene
   if (ImGui::BeginPopupContextWindow("obj_ctx_empty",
@@ -202,24 +175,29 @@ void EditorLayer::DrawSceneHeader(SceneDocument &doc, bool isPrimary,
   std::string label = doc.sceneName.empty() ? "Level" : doc.sceneName;
   if (isPrimary && doc.dirty)
     label += " *";
-  label = std::format("{}  {}", ICON_FA_FOLDER_OPEN, label);
 
-  if (isPrimary)
-    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.33f, 0.52f, 1.0f));
-
-  ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+  const Ui::EditorTheme &theme = Ui::GetEditorTheme();
   const std::string nodeId = isPrimary
                                  ? std::string("##scene_primary")
                                  : std::format("##scene_{}", additionalIndex);
-  const bool open = ImGui::TreeNodeEx(nodeId.c_str(),
-                                      ImGuiTreeNodeFlags_OpenOnArrow |
-                                          ImGuiTreeNodeFlags_SpanAvailWidth |
-                                          ImGuiTreeNodeFlags_DefaultOpen,
-                                      "%s", label.c_str());
 
-  if (isPrimary)
-    ImGui::PopStyleColor();
+  Ui::EditorTreeItemSpec spec;
+  spec.id            = nodeId.c_str();
+  spec.label         = label.c_str();
+  spec.prefixIcon    = ICON_FA_FOLDER_OPEN;
+  spec.kind          = Ui::EditorTreeItemKind::Node;
+  spec.treeFlags     = ImGuiTreeNodeFlags_OpenOnArrow
+                     | ImGuiTreeNodeFlags_SpanAvailWidth
+                     | ImGuiTreeNodeFlags_DefaultOpen
+                     | ImGuiTreeNodeFlags_FramePadding;
+  spec.selected      = isPrimary;
+  spec.normalTextColor = &theme.palette.text;
 
+  ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+  const auto res = Ui::DrawEditorTreeItem(theme, spec);
+
+  // Eye suffix drawn as text so drag/drop and context menu still target the
+  // tree node (last ImGui item after DrawEditorTreeItem with no suffixIcon).
   ImGui::SameLine(ImGui::GetContentRegionAvail().x - 6.0f);
   ImGui::TextDisabled("%s", ICON_FA_EYE);
 
@@ -227,7 +205,7 @@ void EditorLayer::DrawSceneHeader(SceneDocument &doc, bool isPrimary,
   if (isPrimary)
     DrawSceneHeaderDragDrop(doc);
 
-  if (open) {
+  if (res.open) {
     DrawObjectsTree(doc, isPrimary);
     ImGui::TreePop();
   }
@@ -318,36 +296,29 @@ void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
 
   ImGui::PushID(idx);
   const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
-  ImGuiTreeNodeFlags flags =
-      ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
-      ImGuiTreeNodeFlags_FramePadding;
-  if (!hasChildren)
-    flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-  if (isPrimary && IsSelected(idx))
-    flags |= ImGuiTreeNodeFlags_Selected;
 
   auto nodeLabel = std::format("{}  {}", ObjectTypeIcon(obj.type), obj.id);
   if (!obj.assetId.empty())
     nodeLabel += std::format("  [{}]", obj.assetId);
 
-  const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-  const float rowRight = ImGui::GetWindowPos().x +
-                         ImGui::GetWindowContentRegionMax().x - 2.0f;
-  const ImVec2 rowMax(rowRight, rowMin.y + ImGui::GetFrameHeight());
-  const bool rowHovered = ImGui::IsMouseHoveringRect(rowMin, rowMax);
-  if (isPrimary && (IsSelected(idx) || rowHovered)) {
-    const auto &palette = Ui::GetEditorTheme().palette;
-    const ImVec4 fill = IsSelected(idx) ? palette.selection : palette.selectionHover;
-    ImGui::GetWindowDrawList()->AddRectFilled(
-        ImVec2(rowMin.x, rowMin.y + 1.0f),
-        ImVec2(rowMax.x, rowMax.y - 1.0f),
-        ImGui::ColorConvertFloat4ToU32(fill), 6.0f);
-  }
+  const Ui::EditorTheme &theme = Ui::GetEditorTheme();
+  Ui::EditorTreeItemSpec spec;
+  spec.id    = "##obj_tree";
+  spec.label = nodeLabel.c_str();
+  spec.kind  = Ui::EditorTreeItemKind::Node;
+  spec.treeFlags = hasChildren
+      ? (ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
+         ImGuiTreeNodeFlags_FramePadding)
+      : (ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
+         ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding);
+  spec.selected        = isPrimary && IsSelected(idx);
+  spec.normalTextColor = &theme.palette.text;
 
-  const bool open =
-      ImGui::TreeNodeEx("##obj_tree", flags, "%s", nodeLabel.c_str());
+  const auto res = Ui::DrawEditorTreeItem(theme, spec);
+
+  // After DrawEditorTreeItem (no suffixIcon), the last ImGui item is the tree
+  // node — drag/drop and context menu correctly target it.
   const bool clickedTreeNode = ImGui::IsItemClicked();
-
   if (isPrimary && clickedTreeNode)
     HandleTreeNodeClickSelection(idx);
   if (isPrimary)
@@ -358,7 +329,7 @@ void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
   ImGui::SameLine(eyeX);
   ImGui::TextDisabled("%s", ICON_FA_EYE);
 
-  if (open && hasChildren) {
+  if (res.open && hasChildren) {
     for (int childIdx : children[static_cast<size_t>(idx)])
       DrawTreeNode(childIdx, doc, isPrimary, shownObjectCount, children);
     ImGui::TreePop();

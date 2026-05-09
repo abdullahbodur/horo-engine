@@ -2242,9 +2242,9 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[edit
   REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
   REQUIRE(ComputeEditorLeftDockWidth(0.0f) == Approx(220.0f));
 
-  REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
-  REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
-  REQUIRE(ComputeEditorRightPanelWidth(0.0f) == Approx(280.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(360.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(460.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(0.0f) == Approx(360.0f));
 
   REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
   REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
@@ -3989,11 +3989,10 @@ TEST_CASE("TransformGizmo: HandleSize returns reasonable value", "[editor][gizmo
   cam.fovY = 60.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size > 0.0f);
-  REQUIRE(size < 100.0f);
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
-TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same position", "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: HandleSize returns unit size when camera at same position", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4004,7 +4003,7 @@ TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same positi
   cam.fovY = 60.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size == Approx(0.1f));
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: AxisDir returns correct directions", "[editor][gizmo]") {
@@ -4061,7 +4060,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates internal position", "[editor][gizm
   cam.fovY = 45.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size > 0.0f);
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
 // ============================================================

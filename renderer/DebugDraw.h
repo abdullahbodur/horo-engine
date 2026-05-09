@@ -28,8 +28,9 @@ namespace Horo {
         static void Box(const Vec3 &center, const Vec3 &halfExtents,
                         const Vec4 &color = {1, 0.5f, 0, 1});
 
-        // Flush all queued primitives to the GPU
-        static void Flush(const Camera &camera);
+        // Flush all queued primitives to the GPU.
+        // lineWidth is forwarded to glLineWidth (1.0 = default thin lines).
+        static void Flush(const Camera &camera, float lineWidth = 1.0f);
 
     private:
         struct LineVertex {

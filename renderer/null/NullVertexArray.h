@@ -30,7 +30,7 @@ public:
 
     void DrawIndexed(uint32_t) const override { /* No-op: null renderer. */ }
     void DrawArrays(uint32_t) const override { /* No-op: null renderer. */ }
-    void DrawArraysLines(uint32_t) const override { /* No-op: null renderer. */ }
+    void DrawArraysLines(uint32_t, float /*lineWidth*/ = 1.0f) const override { /* No-op: null renderer. */ }
 
     int GetBindCount()   const { return m_bindCount; }
     int GetUnbindCount() const { return m_unbindCount; }

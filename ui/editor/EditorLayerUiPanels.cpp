@@ -1,4 +1,5 @@
 #include "ui/editor/EditorLayer.h"
+#include "ui/editor/EditorLayerInternal.h"
 
 // clang-format off
 #define GLFW_INCLUDE_NONE
@@ -6,19 +7,23 @@
 // clang-format on
 #include <imgui.h>
 
+#include <array>
 #include <cstdint>
+#include <fstream>
 #include <format>
 #include <ranges>
 
 #include "core/Logger.h"
 #include "renderer/DebugDraw.h"
 #include "renderer/Renderer.h"
+#include "ui/editor/EditorImportedAssetPathUtils.h"
 #include "ui/editor/EditorImGuiBackend.h"
 #include "ui/editor/EditorSearch.h"
 #include "ui/editor/ProjectEntryFilter.h"
 #include "ui/editor/components/EditorComponentContext.h"
 #include "ui/IconsFontAwesome6.h"
 #include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
 
 namespace Horo::Editor {
 namespace {
@@ -53,7 +58,15 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     DrawProjectPanel();
     DrawPropertiesPanel();
 
-    m_bottomDock.Draw(&m_mcpController, m_window);
+    {
+      const ImGuiIO &io = ImGui::GetIO();
+      if (m_bottomDockHeight <= 0.0f)
+        m_bottomDockHeight = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+      if (m_leftDockWidth <= 0.0f)
+        m_leftDockWidth = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+      m_bottomDock.Draw(&m_mcpController, m_window, m_leftDockWidth, m_bottomDockHeight);
+    }
+    DrawEditorSplitters(ImGui::GetIO());
     m_uiWidgets.DrawStatusBar();
     m_helpPopup.Draw();
     DrawCommandPalettePopup();
@@ -82,7 +95,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
   if (m_active && !m_playMode)
     DrawWireframeOverlay(cam);
 
-  DebugDraw::Flush(cam);
+  DebugDraw::Flush(cam, 2.0f);
 
   ImGui::Render();
   if (m_imguiBackendInitialized)
@@ -184,7 +197,14 @@ void EditorLayer::DrawToolbar() {
     state.selectedIndices = &m_selectedIndices;
     state.selectedAssetId = &m_selectedAssetId;
 
+    // Snapshot mode before Draw so we can detect toolbar button clicks below.
+    const GizmoMode prevGizmoMode = m_currentGizmoMode;
     m_toolbar.Draw(callbacks, state);
+    // The toolbar writes directly into m_currentGizmoMode via void* pointer.
+    // If it changed, drive the real gizmo through RequestGizmoMode so that
+    // clicking a toolbar icon activates the gizmo for the current selection.
+    if (m_currentGizmoMode != prevGizmoMode)
+      RequestGizmoMode(m_currentGizmoMode);
 }
 
 const std::vector<std::pair<std::filesystem::path, bool>> *
@@ -235,99 +255,280 @@ EditorLayer::GetProjectDirListing(const std::filesystem::path &absPath) {
 void EditorLayer::DrawProjectTreeRecursive(
     const std::filesystem::path &absPath,
     const std::filesystem::path & /*displayRoot*/) {
-  namespace fs = std::filesystem;
   const auto *listing = GetProjectDirListing(absPath);
   if (!listing)
     return;
 
-  const auto &palette = Ui::GetEditorTheme().palette;
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 4.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
-  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
-  ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
+  const Ui::EditorTheme &theme = Ui::GetEditorTheme();
+  const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
 
-  const float windowLeft = ImGui::GetWindowPos().x;
-  const float contentLeft = windowLeft + ImGui::GetWindowContentRegionMin().x;
+  static const ImVec4 kFileColor(0.65f, 0.75f, 0.95f, 1.0f);
 
   for (const auto &[p, isDir] : *listing) {
     const std::string name = p.filename().string();
+
     if (isDir) {
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.65f, 0.35f, 1.0f));
-      const std::string folderLabel = std::format("{}  {}", ICON_FA_FOLDER, name);
-      ImGui::PopStyleColor();
-
-      ImGui::AlignTextToFramePadding();
-      const bool open = ImGui::TreeNodeEx(folderLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth);
-
-      const ImVec2 rowMin = ImGui::GetItemRectMin();
-      const ImVec2 rowMax = ImGui::GetItemRectMax();
-      const bool rowHovered = ImGui::IsItemHovered();
-      if (rowHovered) {
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(contentLeft - 4.0f, rowMin.y + 1.0f),
-            ImVec2(rowMax.x + 4.0f, rowMax.y - 1.0f),
-            ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
-      }
-
-      if (open) {
+      Ui::EditorTreeItemSpec spec;
+      spec.label = name.c_str();
+      spec.prefixIcon = ICON_FA_FOLDER;
+      spec.kind = Ui::EditorTreeItemKind::Node;
+      spec.treeFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
+      spec.normalTextColor = &theme.palette.text;
+      if (m_projectPanelCollapseAllRequested)
+        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+      const auto res = Ui::DrawEditorTreeItem(theme, spec);
+      if (res.open) {
         DrawProjectTreeRecursive(p, absPath);
         ImGui::TreePop();
       }
     } else {
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.75f, 0.95f, 1.0f));
-      const std::string fileLabel = std::format("{}  {}", ICON_FA_FILE, name);
-
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(fileLabel.c_str());
-      const ImVec2 rowMin = ImGui::GetItemRectMin();
-      const ImVec2 rowMax = ImGui::GetItemRectMax();
-      const bool rowHovered = ImGui::IsItemHovered();
-      if (rowHovered) {
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(contentLeft - 4.0f, rowMin.y + 1.0f),
-            ImVec2(rowMax.x + 4.0f, rowMax.y - 1.0f),
-            ImGui::ColorConvertFloat4ToU32(palette.selectionHover), 6.0f);
-      }
-
-      ImGui::PopStyleColor();
+      Ui::EditorTreeItemSpec spec;
+      spec.label = name.c_str();
+      spec.prefixIcon = ICON_FA_FILE;
+      spec.kind = Ui::EditorTreeItemKind::Leaf;
+      spec.normalTextColor = &kFileColor;
+      spec.hoveredTextColor = &theme.palette.text;
+      Ui::DrawEditorTreeItem(theme, spec);
     }
   }
-
-  ImGui::PopStyleColor(3);
-  ImGui::PopStyleVar(3);
 }
 
 void EditorLayer::DrawProjectPanel() {
-  constexpr float kEditorToolbarH = 32.0f;
-  constexpr float kEditorStatusH = 20.0f;
-  constexpr float kHierarchySectionRatio = 0.5f;
-  constexpr ImGuiWindowFlags kMainPanelWindowFlags =
-      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-      ImGuiWindowFlags_NoSavedSettings;
+  // Note: kEditorToolbarH, kEditorStatusH, kHierarchySectionRatio, and
+  // kMainPanelWindowFlags come from EditorLayerInternal.h (shared constants).
+  // The Project window does not show a title bar, so add NoTitleBar here.
+  constexpr ImGuiWindowFlags kProjectWindowFlags =
+      kMainPanelWindowFlags | ImGuiWindowFlags_NoTitleBar;
 
   const ImGuiIO &io = ImGui::GetIO();
-  const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
   const float availableH = io.DisplaySize.y - kEditorStatusH - kEditorToolbarH;
-  const float hierarchyHeight = std::max(180.0f, availableH * kHierarchySectionRatio);
+
+  // Lazy-initialise from the compute function on first frame.
+  if (m_leftDockWidth <= 0.0f)
+    m_leftDockWidth = ComputeEditorLeftDockWidth(io.DisplaySize.x);
+  if (m_hierarchyHeightRatio <= 0.0f)
+    m_hierarchyHeightRatio = kHierarchySectionRatio;
+
+  const float leftDockW = m_leftDockWidth;
+  const float hierarchyHeight = std::max(180.0f, availableH * m_hierarchyHeightRatio);
   const float projectTop = kEditorToolbarH + hierarchyHeight;
 
   ImGui::SetNextWindowPos(ImVec2(0.0f, projectTop), ImGuiCond_Always);
   ImGui::SetNextWindowSize(
       ImVec2(leftDockW, std::max(180.0f, availableH - hierarchyHeight)),
       ImGuiCond_Always);
-  ImGui::Begin("Project", nullptr, kMainPanelWindowFlags);
+  ImGui::Begin("Project", nullptr, kProjectWindowFlags);
+
+  const Ui::EditorTheme &theme = Ui::GetEditorTheme();
+  const auto &palette = theme.palette;
+
+  const Ui::EditorPanelTabItem projectTabs[] = {
+      {Ui::EditorPanelTab::Project, true},
+  };
+  const Ui::EditorPanelActionItem projectActions[] = {
+      {ICON_FA_PLUS},
+      {ICON_FA_ELLIPSIS_VERTICAL},
+  };
+  const Ui::EditorPanelTopBarResult topBar = Ui::RenderEditorPanelTopBar(
+      theme, "project_topbar",
+      projectTabs, projectActions);
+  if (topBar.clickedActionIndex == 0)
+    ImGui::OpenPopup("##project_add_menu");
+  if (topBar.clickedActionIndex == 1)
+    ImGui::OpenPopup("##project_panel_menu");
+
+  if (ImGui::BeginPopup("##project_add_menu")) {
+    if (ImGui::MenuItem("New Folder")) {
+      m_projectPanelCreateFolder = true;
+      m_projectPanelCreateName.clear();
+      m_projectPanelError.clear();
+      m_projectPanelCreateModalRequested = true;
+    }
+    if (ImGui::MenuItem("New File")) {
+      m_projectPanelCreateFolder = false;
+      m_projectPanelCreateName.clear();
+      m_projectPanelError.clear();
+      m_projectPanelCreateModalRequested = true;
+    }
+    ImGui::EndPopup();
+  }
+  if (ImGui::BeginPopup("##project_panel_menu")) {
+    if (ImGui::MenuItem("Refresh")) {
+      InvalidateProjectBrowserCache();
+      m_projectPanelError.clear();
+    }
+    if (ImGui::MenuItem("Collapse All"))
+      m_projectPanelCollapseAllRequested = true;
+    ImGui::EndPopup();
+  }
+
+  if (m_projectPanelCreateModalRequested) {
+    ImGui::OpenPopup("Create Project Entry");
+    m_projectPanelCreateModalRequested = false;
+  }
+
+  if (ImGui::BeginPopupModal("Create Project Entry", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char *itemKind = m_projectPanelCreateFolder ? "folder" : "file";
+    ImGui::Text("Create %s in project root", itemKind);
+
+    std::array<char, 256> inputBuffer{};
+    m_projectPanelCreateName.copy(inputBuffer.data(), inputBuffer.size() - 1);
+    if (ImGui::IsWindowAppearing())
+      ImGui::SetKeyboardFocusHere();
+    const bool enterPressed = ImGui::InputTextWithHint(
+        "##project_create_name", m_projectPanelCreateFolder ? "e.g. scripts"
+                                                            : "e.g. scripts/main.cpp",
+        inputBuffer.data(), inputBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+    m_projectPanelCreateName = inputBuffer.data();
+
+    if (!m_projectPanelError.empty()) {
+      Ui::ErrorText(theme, m_projectPanelError.c_str());
+    }
+
+    const bool submit = enterPressed || ImGui::Button("Create");
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      m_projectPanelError.clear();
+      ImGui::CloseCurrentPopup();
+    }
+
+    if (submit) {
+      namespace fs = std::filesystem;
+      auto fail = [this](std::string msg) { m_projectPanelError = std::move(msg); };
+
+      if (!m_projectBrowserRootValid || !fs::is_directory(m_projectBrowserRoot)) {
+        fail("Project root is unavailable.");
+      } else if (m_projectPanelCreateName.find_first_not_of(" \t\r\n") ==
+                 std::string::npos) {
+        fail("Name cannot be empty.");
+      } else {
+        const fs::path relPath = fs::path(m_projectPanelCreateName).lexically_normal();
+        bool hasParentTraversal = false;
+        for (const auto &part : relPath) {
+          if (part == "..") {
+            hasParentTraversal = true;
+            break;
+          }
+        }
+        if (relPath.empty() || relPath == "." || relPath.is_absolute() ||
+            hasParentTraversal) {
+          fail("Use a relative path inside the project root.");
+        } else {
+          const fs::path candidate = m_projectBrowserRoot / relPath;
+          if (!IsPathWithinDirectory(candidate, m_projectBrowserRoot)) {
+            fail("Path must remain inside the project root.");
+          } else {
+            std::error_code ec;
+            if (m_projectPanelCreateFolder) {
+              if (fs::exists(candidate, ec))
+                fail("A file or folder with that name already exists.");
+              else if (!fs::create_directories(candidate, ec) || ec)
+                fail("Failed to create folder.");
+            } else {
+              const fs::path parent = candidate.parent_path();
+              if (!parent.empty()) {
+                fs::create_directories(parent, ec);
+                if (ec) {
+                  fail("Failed to create parent folder(s).");
+                  ec.clear();
+                }
+              }
+              if (m_projectPanelError.empty()) {
+                if (fs::exists(candidate, ec))
+                  fail("A file or folder with that name already exists.");
+                else {
+                  std::ofstream out(candidate, std::ios::out | std::ios::trunc);
+                  if (!out.good())
+                    fail("Failed to create file.");
+                }
+              }
+            }
+
+            if (m_projectPanelError.empty()) {
+              InvalidateProjectBrowserCache();
+              m_projectPanelCreateName.clear();
+              ImGui::CloseCurrentPopup();
+            }
+          }
+        }
+      }
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (!m_projectPanelError.empty() && !ImGui::IsPopupOpen("Create Project Entry")) {
+    Ui::ErrorText(theme, m_projectPanelError.c_str());
+    ImGui::Separator();
+  }
 
   if (!m_projectBrowserRootValid ||
       !std::filesystem::is_directory(m_projectBrowserRoot)) {
     ImGui::TextDisabled("Set project root to browse files.");
   } else {
     ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
-    DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+
+    {
+      const ImGuiTreeNodeFlags topFlags =
+          ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
+      const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
+
+      if (m_projectPanelCollapseAllRequested)
+        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+      else
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+      Ui::EditorTreeItemSpec favSpec;
+      favSpec.id = "##project_favorites_node";
+      favSpec.label = "Favorites";
+      favSpec.prefixIcon = ICON_FA_FOLDER_OPEN;
+      favSpec.kind = Ui::EditorTreeItemKind::Node;
+      favSpec.treeFlags = topFlags;
+      favSpec.normalTextColor = &theme.palette.text;
+      const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec);
+      if (favRes.open) {
+        ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
+        constexpr const char *kNoFavoritesText = "No favorites yet.";
+        const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
+        const float minX = ImGui::GetWindowContentRegionMin().x;
+        const float maxX = ImGui::GetWindowContentRegionMax().x;
+        const float centeredX = minX + (maxX - minX - textSize.x) * 0.5f;
+        constexpr float kPlaceholderBlockHeight = 24.0f;
+        const float blockStartY = ImGui::GetCursorPosY();
+        const float centeredY =
+            blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
+        ImGui::SetCursorPosY(centeredY);
+        ImGui::SetCursorPosX(centeredX);
+        ImGui::TextUnformatted(kNoFavoritesText);
+        ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
+        ImGui::PopStyleColor();
+        ImGui::TreePop();
+      }
+
+      std::string rootName = m_projectBrowserRoot.filename().string();
+      if (rootName.empty())
+        rootName = m_projectBrowserRoot.generic_string();
+      if (m_projectPanelCollapseAllRequested)
+        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+      else
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+      Ui::EditorTreeItemSpec rootSpec;
+      rootSpec.id = "##project_root_node";
+      rootSpec.label = rootName.c_str();
+      rootSpec.prefixIcon = ICON_FA_FOLDER;
+      rootSpec.kind = Ui::EditorTreeItemKind::Node;
+      rootSpec.treeFlags = topFlags;
+      rootSpec.normalTextColor = &theme.palette.text;
+      const auto rootRes = Ui::DrawEditorTreeItem(theme, rootSpec);
+      if (rootRes.open) {
+        DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+        ImGui::TreePop();
+      }
+    }
     ImGui::EndChild();
   }
+
+  m_projectPanelCollapseAllRequested = false;
 
   ImGui::End();
 }
@@ -379,6 +580,43 @@ void EditorLayer::DrawAssetsPanel() {
     state.liveRegistry = m_liveRegistry;
 
     m_assetsPanel.Draw(ctx, callbacks, state);
+}
+
+void EditorLayer::DrawAssetsPanelInline() {
+    EditorAssetsPanelCallbacks callbacks;
+    callbacks.requestDeleteAsset = [this](std::string_view assetId) {
+        RequestDeleteAsset(assetId);
+    };
+    callbacks.markDirtyAndReload = [this]() {
+        MarkDirtyAndReload();
+    };
+    callbacks.makeObjectFromAsset = [this](const std::string& assetId) {
+        return MakeObjectFromAsset(m_document, assetId, m_schema);
+    };
+    callbacks.setDeferredFilePick = [this](int deferredType) {
+        m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
+    };
+
+    EditorAssetsPanelState state;
+    state.selectedAssetId = &m_selectedAssetId;
+    state.selectedIndices = &m_selectedIndices;
+    state.assetDraftId = &m_assetDraftId;
+    state.assetDraftGuid = &m_assetDraftGuid;
+    state.assetDraftDisplayName = &m_assetDraftDisplayName;
+    state.assetDraftMesh = &m_assetDraftMesh;
+    state.assetDraftRenderScale = &m_assetDraftRenderScale;
+    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
+    state.assetImportError = &m_assetImportError;
+    state.openNewAssetHeader = &m_openNewAssetHeader;
+    state.albedoDraftDrop = &m_albedoDraftDrop;
+    state.albedoSelDrop = &m_albedoSelDrop;
+    state.assetSearchOpen = &m_assetSearchOpen;
+    state.assetSearchQuery = &m_assetSearchQuery;
+    state.document = &m_document;
+    state.assetImportService = &m_assetImportService;
+    state.liveRegistry = m_liveRegistry;
+
+    m_assetsPanel.DrawContent(callbacks, state);
 }
 
 void EditorLayer::DrawCommandPalettePopup() {
@@ -511,6 +749,85 @@ void EditorLayer::DrawQuickOpenPopup() {
 void EditorLayer::DrawDeleteConfirmModals() {
   m_uiWidgets.DrawConfirmDeleteObjectsModal();
   m_uiWidgets.DrawConfirmDeleteAssetModal();
+}
+
+void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
+  // -----------------------------------------------------------------------
+  // Splitter logic using raw mouse position — no overlay window needed.
+  // This avoids all ImGui window z-order issues: panel windows drawn before
+  // this call would always win focus over an overlay window, making
+  // InvisibleButton hit-testing unreliable. Instead we test io.MousePos
+  // directly and manage drag state with m_activeSplitter.
+  //
+  //   Seam A — right edge of the left dock (EW)
+  //   Seam B — bottom of Hierarchy / top of Project (NS, left dock only)
+  //   Seam C — top of the bottom dock (NS, right of left dock to edge)
+  // -----------------------------------------------------------------------
+  constexpr float kHalfThick        = 5.0f; // half hit-area in px
+  constexpr float kMinLeftDock       = 180.0f;
+  constexpr float kMaxLeftDockRatio  = 0.35f;
+  constexpr float kMinHierarchyRatio = 0.20f;
+  constexpr float kMaxHierarchyRatio = 0.80f;
+  constexpr float kMinBottomDock     = 120.0f;
+  constexpr float kMaxBottomDockRatio = 0.60f;
+
+  const float displayW  = io.DisplaySize.x;
+  const float displayH  = io.DisplaySize.y;
+  const float availableH = displayH - kEditorStatusH - kEditorToolbarH;
+
+  // Ensure stored values are initialised before computing seam positions.
+  if (m_leftDockWidth        <= 0.0f) m_leftDockWidth        = ComputeEditorLeftDockWidth(displayW);
+  if (m_hierarchyHeightRatio <= 0.0f) m_hierarchyHeightRatio = kHierarchySectionRatio;
+  if (m_bottomDockHeight     <= 0.0f) m_bottomDockHeight     = ComputeEditorBottomDockHeight(displayH);
+
+  const float hierarchyH = std::max(180.0f, availableH * m_hierarchyHeightRatio);
+  const float seamAx = m_leftDockWidth;
+  const float seamBy = kEditorToolbarH + hierarchyH;
+  const float seamCy = displayH - kEditorStatusH - m_bottomDockHeight;
+
+  const ImVec2 mouse = io.MousePos;
+
+  // ---- Hover detection ----
+  // Seam A: EW seam spanning full panel height (toolbar → bottom dock top)
+  const bool hoverA = (mouse.x >= seamAx - kHalfThick && mouse.x <= seamAx + kHalfThick &&
+                       mouse.y >= kEditorToolbarH      && mouse.y <= seamCy);
+  // Seam B: NS seam spanning left dock width only
+  const bool hoverB = (mouse.x >= 0.0f                && mouse.x <= seamAx &&
+                       mouse.y >= seamBy - kHalfThick  && mouse.y <= seamBy + kHalfThick);
+  // Seam C: NS seam spanning from left dock to right edge
+  const bool hoverC = (mouse.x >= seamAx              && mouse.x <= displayW &&
+                       mouse.y >= seamCy - kHalfThick  && mouse.y <= seamCy + kHalfThick);
+
+  // ---- Drag state machine ----
+  if (io.MouseClicked[0]) {
+    if      (hoverA) m_activeSplitter = 0;
+    else if (hoverB) m_activeSplitter = 1;
+    else if (hoverC) m_activeSplitter = 2;
+    // Don't clear here — a click elsewhere is handled by the release below.
+  }
+  if (!io.MouseDown[0])
+    m_activeSplitter = -1;
+
+  // ---- Apply deltas ----
+  if (m_activeSplitter == 0) {
+    m_leftDockWidth = std::clamp(
+        m_leftDockWidth + io.MouseDelta.x,
+        kMinLeftDock, displayW * kMaxLeftDockRatio);
+  } else if (m_activeSplitter == 1) {
+    const float rawH = hierarchyH + io.MouseDelta.y;
+    m_hierarchyHeightRatio = std::clamp(
+        rawH / availableH, kMinHierarchyRatio, kMaxHierarchyRatio);
+  } else if (m_activeSplitter == 2) {
+    m_bottomDockHeight = std::clamp(
+        m_bottomDockHeight - io.MouseDelta.y,
+        kMinBottomDock, availableH * kMaxBottomDockRatio);
+  }
+
+  // ---- Cursor ----
+  if (hoverA || m_activeSplitter == 0)
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+  else if (hoverB || hoverC || m_activeSplitter == 1 || m_activeSplitter == 2)
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 }
 
 } // namespace Horo::Editor

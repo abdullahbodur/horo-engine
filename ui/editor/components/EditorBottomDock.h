@@ -27,7 +27,8 @@ namespace Horo::Editor {
     public:
         enum class Tab { Assets, Console, MCP };
 
-        void Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window);
+        void Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window,
+                  float leftDockWidth, float bottomDockHeight);
 
         void SetAssetsTabCallback(AssetsTabDrawCallback callback) {
             m_assetsTabCallback = std::move(callback);
@@ -115,7 +116,8 @@ namespace Horo::Editor {
 
         // Drawing functions
         void DrawBottomDock(Horo::Mcp::McpController* mcpController,
-                            GLFWwindow* window);
+                            GLFWwindow* window,
+                            float leftDockWidth, float bottomDockHeight);
 
         void DrawAssetsTab();
 

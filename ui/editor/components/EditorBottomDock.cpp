@@ -28,9 +28,9 @@
 #include "core/LogBuffer.h"
 #include "mcp/McpController.h"
 #include "ui/editor/EditorLayerInternal.h"
-#include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/ProjectEntryFilter.h"
 #include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
 
 using namespace Horo::Editor::Internal;
 
@@ -40,43 +40,38 @@ namespace {
 constexpr uint32_t kProjectListingCacheFrames = 48;
 }
 
-void EditorBottomDock::Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window) {
-    DrawBottomDock(mcpController, window);
+void EditorBottomDock::Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window,
+                            float leftDockWidth, float bottomDockHeight) {
+    DrawBottomDock(mcpController, window, leftDockWidth, bottomDockHeight);
 }
 
 void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
-                                      GLFWwindow* window) {
+                                      GLFWwindow* window,
+                                      float leftDockWidth, float bottomDockHeight) {
     const ImGuiIO& io = ImGui::GetIO();
-    const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
-    const float leftDockW = ComputeEditorLeftDockWidth(io.DisplaySize.x);
-    const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockH;
-    ImGui::SetNextWindowPos(ImVec2(leftDockW, dockTop), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - leftDockW, bottomDockH), ImGuiCond_Always);
+    const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockHeight;
+    ImGui::SetNextWindowPos(ImVec2(leftDockWidth, dockTop), ImGuiCond_Always);
+    const float dockW = std::max(0.0f, io.DisplaySize.x - leftDockWidth);
+    ImGui::SetNextWindowSize(ImVec2(dockW, bottomDockHeight), ImGuiCond_Always);
     ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
 
-    const auto& palette = Ui::GetEditorTheme().palette;
-    ImGui::PushStyleColor(ImGuiCol_TabHovered, palette.cardHover);
-    ImGui::PushStyleColor(ImGuiCol_TabActive, palette.accent);
-    ImGui::PushStyleColor(ImGuiCol_TabUnfocusedActive, palette.accent);
-    if (ImGui::BeginTabBar("##bottom_tabs", ImGuiTabBarFlags_None)) {
-        if (ImGui::BeginTabItem("Assets")) {
-            m_selectedTab = Tab::Assets;
-            DrawAssetsTab();
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Console")) {
-            m_selectedTab = Tab::Console;
-            DrawConsoleTab();
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("MCP")) {
-            m_selectedTab = Tab::MCP;
-            DrawMcpTab(mcpController, window);
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
+    const Ui::EditorTheme &theme = Ui::GetEditorTheme();
+
+    const Ui::EditorPanelTabItem tabs[] = {
+        {Ui::EditorPanelTab::Assets,  m_selectedTab == Tab::Assets},
+        {Ui::EditorPanelTab::Console, m_selectedTab == Tab::Console},
+        {Ui::EditorPanelTab::MCP,     m_selectedTab == Tab::MCP},
+    };
+    const auto topBar = Ui::RenderEditorPanelTopBar(theme, "workspace_topbar", tabs, {});
+    if (topBar.clickedTabIndex == 0) m_selectedTab = Tab::Assets;
+    if (topBar.clickedTabIndex == 1) m_selectedTab = Tab::Console;
+    if (topBar.clickedTabIndex == 2) m_selectedTab = Tab::MCP;
+
+    switch (m_selectedTab) {
+        case Tab::Assets:  DrawAssetsTab();                   break;
+        case Tab::Console: DrawConsoleTab();                  break;
+        case Tab::MCP:     DrawMcpTab(mcpController, window); break;
     }
-    ImGui::PopStyleColor(3);
 
     ImGui::End();
 }

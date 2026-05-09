@@ -13,6 +13,7 @@
 #include "renderer/RenderTargetHandle.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportService.h"
+#include "ui/IconsFontAwesome6.h"
 #include "ui/editor/AssetMetadata.h"
 #include "ui/editor/EditorSearch.h"
 #include "ui/editor/EditorUiLogic.h"
@@ -93,6 +94,32 @@ void EditorAssetsPanel::Draw(const EditorComponentContext& ctx,
     DrawCreateAssetModal(state, openNewAssetModal, callbacks);
 
     ImGui::End();
+}
+
+void EditorAssetsPanel::DrawContent(const EditorAssetsPanelCallbacks& callbacks,
+                                    const EditorAssetsPanelState& state) {
+    if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
+        return;
+
+    if (state.albedoDraftDrop)
+        state.albedoDraftDrop->Clear();
+    if (state.albedoSelDrop)
+        state.albedoSelDrop->Clear();
+
+    std::vector<std::string> assetIds;
+    assetIds.reserve(state.document->assets.size());
+    for (const auto& [assetId, _] : state.document->assets)
+        assetIds.push_back(assetId);
+    std::ranges::sort(assetIds);
+
+    DrawAssetSpotlightPopup(state, assetIds);
+
+    bool openNewAssetModal = *state.openNewAssetHeader;
+    if (*state.openNewAssetHeader)
+        *state.openNewAssetHeader = false;
+
+    DrawAssetGrid(state, assetIds, openNewAssetModal, callbacks);
+    DrawCreateAssetModal(state, openNewAssetModal, callbacks);
 }
 
 void EditorAssetsPanel::DrawAssetSpotlightPopup(
@@ -256,6 +283,98 @@ void EditorAssetsPanel::DrawAssetTile(
     ImGui::EndChild();
 }
 
+void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
+                                         float tileW, float tileH,
+                                         float thumbPad, float thumbSize) {
+    // Reserve enough height for the thumbnail area plus two label lines.
+    const float lineH   = ImGui::GetTextLineHeight();
+    const float labelH  = 4.0f + lineH + 2.0f + lineH + 4.0f; // gap + line1 + gap + line2 + bottom margin
+    const float addTileH = thumbPad * 2.0f + thumbSize + labelH;
+    // Use at least tileH so the tile is never shorter than regular tiles
+    const float childH = std::max(tileH, addTileH);
+
+    ImGui::BeginChild("##add_asset_tile_child", ImVec2(tileW, childH),
+                      ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    // Invisible button covers the whole tile for click detection
+    ImGui::InvisibleButton("##add_asset_btn", ImVec2(tileW - 2.0f, childH - 2.0f));
+    const bool hovered = ImGui::IsItemHovered();
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        openNewAssetModal = true;
+
+    // Accept internal ASSET_ID drags (e.g. future project-tree drag sources)
+    if (ImGui::BeginDragDropTarget()) {
+        ImGui::AcceptDragDropPayload("ASSET_ID");
+        ImGui::EndDragDropTarget();
+    }
+
+    const ImVec2 tileMin = ImGui::GetWindowPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Background
+    const ImVec4 bgColor = hovered
+        ? ImVec4(0.14f, 0.20f, 0.30f, 0.95f)
+        : ImVec4(0.09f, 0.12f, 0.18f, 0.85f);
+    const ImVec2 bgMin = tileMin;
+    const ImVec2 bgMax(tileMin.x + tileW, tileMin.y + childH);
+    dl->AddRectFilled(bgMin, bgMax,
+                      ImGui::ColorConvertFloat4ToU32(bgColor), 6.0f);
+
+    // Border — slightly brighter on hover
+    const ImVec4 borderColor = hovered
+        ? ImVec4(0.45f, 0.62f, 0.90f, 0.90f)
+        : ImVec4(0.35f, 0.50f, 0.70f, 0.70f);
+    dl->AddRect(bgMin, bgMax,
+                ImGui::ColorConvertFloat4ToU32(borderColor), 6.0f, 0, 1.5f);
+
+    // Thumbnail area bounds
+    const ImVec2 thumbMin(tileMin.x + thumbPad, tileMin.y + thumbPad);
+    const ImVec2 thumbMax(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
+
+    // Inner thumb background
+    dl->AddRectFilled(thumbMin, thumbMax,
+                      ImGui::ColorConvertFloat4ToU32(ImVec4(0.12f, 0.16f, 0.22f, 0.90f)),
+                      6.0f);
+    dl->AddRect(thumbMin, thumbMax,
+                ImGui::ColorConvertFloat4ToU32(ImVec4(0.35f, 0.50f, 0.70f, 0.50f)),
+                6.0f, 0, 1.0f);
+
+    // Centered "+" icon — 1.4× font size, large enough to be prominent but not overwhelming
+    const float iconFontSize = ImGui::GetFontSize() * 1.4f;
+    ImFont* font = ImGui::GetFont();
+    const ImVec2 iconSz = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, ICON_FA_PLUS);
+
+    const ImVec2 iconPos(
+        thumbMin.x + (thumbSize - iconSz.x) * 0.5f,
+        thumbMin.y + (thumbSize - iconSz.y) * 0.5f);
+    const ImU32 iconColor = hovered
+        ? ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.75f, 1.00f, 1.0f))
+        : ImGui::ColorConvertFloat4ToU32(ImVec4(0.40f, 0.58f, 0.85f, 0.90f));
+
+    dl->AddText(font, iconFontSize, iconPos, iconColor, ICON_FA_PLUS);
+
+    // Labels below thumbnail — both lines are guaranteed to fit inside childH
+    const float labelY = thumbMax.y + 4.0f;
+
+    const char* line1 = "Drag & Drop";
+    const ImVec2 sz1 = ImGui::CalcTextSize(line1);
+    dl->AddText(
+        ImVec2(tileMin.x + std::max(0.0f, (tileW - sz1.x) * 0.5f), labelY),
+        ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)),
+        line1);
+
+    const char* line2 = "Add Asset";
+    const ImVec2 sz2 = ImGui::CalcTextSize(line2);
+    dl->AddText(
+        ImVec2(tileMin.x + std::max(0.0f, (tileW - sz2.x) * 0.5f),
+               labelY + lineH + 2.0f),
+        ImGui::GetColorU32(ImGuiCol_Text),
+        line2);
+
+    ImGui::EndChild();
+}
+
 void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
                                       const std::vector<std::string>& assetIds,
                                       bool& openNewAssetModal,
@@ -291,22 +410,25 @@ void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
         ImGui::PopID();
     }
 
+    // "No matches" hint when a search filter is active but returns nothing.
+    // The add-asset tile still appears below regardless.
     if (const FilteredListState assetState = EvaluateFilteredListState(
             assetIds.size(), shownAssetCount, *state.assetSearchQuery);
-        assetState != FilteredListState::None) {
+        assetState == FilteredListState::NoMatches) {
         ImGui::Spacing();
-        if (assetState == FilteredListState::EmptyData) {
-            ImGui::TextDisabled("Asset registry is empty");
-            ImGui::TextDisabled(
-                "Create your first asset to enable fast prop placement.");
-            if (ImGui::Button("Create First Asset"))
-                openNewAssetModal = true;
-        } else if (assetState == FilteredListState::NoMatches) {
-            ImGui::TextDisabled("No assets match '%s'",
-                               state.assetSearchQuery->c_str());
-            if (ImGui::Button("Clear Asset Search"))
-                state.assetSearchQuery->clear();
-        }
+        ImGui::TextDisabled("No assets match '%s'",
+                            state.assetSearchQuery->c_str());
+        if (ImGui::Button("Clear Asset Search"))
+            state.assetSearchQuery->clear();
+        ImGui::Spacing();
+    }
+
+    // Always render the add-asset tile at the end of the grid
+    {
+        const int addTileCol = shownAssetCount % columns;
+        if (addTileCol > 0)
+            ImGui::SameLine(0.0f, spacing);
+        DrawAddAssetTile(openNewAssetModal, tileW, tileH, thumbPad, thumbSize);
     }
 
     ImGui::EndChild();

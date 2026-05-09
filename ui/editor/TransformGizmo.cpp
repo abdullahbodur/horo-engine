@@ -42,12 +42,8 @@ namespace Horo::Editor {
     // ---- Public math helpers ----------------------------------------------------
 
     float TransformGizmo::HandleSize(const Camera &cam) const {
-        float dist = (cam.position - m_pos).Length();
-        if (dist < 0.001f)
-            return 0.1f;
-        constexpr float kHandleScreenFrac = 0.08f; // 8% of screen height
-        float fovRad = ToRadians(cam.fovY);
-        return kHandleScreenFrac * 2.0f * dist * std::tan(fovRad * 0.5f);
+        (void)cam;
+        return 1.0f;
     }
 
     Vec3 TransformGizmo::AxisDir(GizmoAxis axis) const {

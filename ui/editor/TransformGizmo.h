@@ -38,8 +38,8 @@ namespace Horo::Editor {
         // ---- Math helpers (public for testability)
         // ----------------------------------
 
-        // World-space handle length (FOV-aware, screen-constant). screenFrac * 2 *
-        // dist * tan(fovY/2).
+        // World-space handle length. Uses a fixed 1.0 unit length so gizmo
+        // naturally scales on screen when zooming in/out.
         float HandleSize(const Camera &cam) const;
 
         // World-space direction for each axis (world-aligned, not local).

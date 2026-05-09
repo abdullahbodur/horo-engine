@@ -56,7 +56,9 @@ void EditorLayer::DrawPropertiesPanel() {
   // with mode-specific branching
   using enum SceneObjectType;
   const ImGuiIO &io = ImGui::GetIO();
-  const float bottomDockH = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  if (m_bottomDockHeight <= 0.0f)
+    m_bottomDockHeight = ComputeEditorBottomDockHeight(io.DisplaySize.y);
+  const float bottomDockH = m_bottomDockHeight;
   const float rightDockW = ComputeEditorRightPanelWidth(io.DisplaySize.x);
   const float workBottom = io.DisplaySize.y - kEditorStatusH - bottomDockH;
   ImGui::SetNextWindowPos(

@@ -87,7 +87,7 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   // close).
   if (currEsc && !m_prevEsc && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
       !hasBlockingPopup && m_gizmo.IsActive()) {
-    m_gizmo.Deactivate();
+    RequestGizmoMode(GizmoMode::None);
     if (m_gizmoHistoryPending) {
       FinalizeHistoryTransaction();
       m_gizmoHistoryPending = false;
@@ -118,6 +118,26 @@ void EditorLayer::UpdateFlyCameraWithGizmoSync(float dt, Camera &cam) {
   }
 }
 
+void EditorLayer::RequestGizmoMode(GizmoMode mode) {
+  using enum GizmoMode;
+  m_currentGizmoMode = mode;
+  if (mode == None) {
+    m_gizmo.Deactivate();
+    return;
+  }
+  // Activate only when there is a valid single selection and no drag in progress.
+  const int gizmoIdx = PrimaryIdx();
+  if (gizmoIdx < 0 || gizmoIdx >= static_cast<int>(m_document.objects.size()))
+    return;
+  if (m_gizmo.GetDragAxis() != GizmoAxis::None)
+    return;
+  const auto &gizmoObj = m_document.objects[gizmoIdx];
+  const Quaternion gizmoRot = Quaternion::FromEuler(ToRadians(gizmoObj.pitch),
+                                                    ToRadians(gizmoObj.yaw),
+                                                    ToRadians(gizmoObj.roll));
+  m_gizmo.Activate(mode, gizmoObj.position, gizmoRot, gizmoObj.scale);
+}
+
 // Handles all non-fly-mode per-frame work: copy-reference shortcut, gizmo
 // mode hotkeys (W/E/R), gizmo sync + delta update with surface/grid snapping,
 // object picking, and the Delete-key action.
@@ -127,22 +147,12 @@ void EditorLayer::HandleGizmoModeHotkeys(const ImGuiIO &io) {
   const bool currE = glfwGetKey(m_window, GLFW_KEY_E) == GLFW_PRESS;
   const bool currR = glfwGetKey(m_window, GLFW_KEY_R) == GLFW_PRESS;
   if (!io.WantTextInput && !ImGui::IsAnyItemActive()) {
-    const int gizmoIdx = PrimaryIdx();
-    if (gizmoIdx >= 0 &&
-        gizmoIdx < static_cast<int>(m_document.objects.size()) &&
-        m_gizmo.GetDragAxis() == GizmoAxis::None) {
-      const auto &gizmoObj = m_document.objects[gizmoIdx];
-      Quaternion gizmoRot = Quaternion::FromEuler(ToRadians(gizmoObj.pitch),
-                                                  ToRadians(gizmoObj.yaw),
-                                                  ToRadians(gizmoObj.roll));
-      if (currW && (!m_prevGizmoW || m_gizmo.GetMode() != Translate))
-        m_gizmo.Activate(Translate, gizmoObj.position, gizmoRot,
-                         gizmoObj.scale);
-      else if (currE && (!m_prevGizmoE || m_gizmo.GetMode() != Rotate))
-        m_gizmo.Activate(Rotate, gizmoObj.position, gizmoRot, gizmoObj.scale);
-      else if (currR && (!m_prevGizmoR || m_gizmo.GetMode() != Scale))
-        m_gizmo.Activate(Scale, gizmoObj.position, gizmoRot, gizmoObj.scale);
-    }
+    if (currW && (!m_prevGizmoW || m_gizmo.GetMode() != Translate))
+      RequestGizmoMode(Translate);
+    else if (currE && (!m_prevGizmoE || m_gizmo.GetMode() != Rotate))
+      RequestGizmoMode(Rotate);
+    else if (currR && (!m_prevGizmoR || m_gizmo.GetMode() != Scale))
+      RequestGizmoMode(Scale);
   }
   m_prevGizmoW = currW;
   m_prevGizmoE = currE;
@@ -421,10 +431,13 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
         std::asin(std::max(-1.0f, std::min(1.0f, dir.y))) * (180.0f / PI);
 
     // If the camera is nearly vertical (Top/Bottom snap), yaw is ill-defined.
-    // Keep previous yaw to avoid sudden axis flips when entering fly mode.
+    // Reset to a deterministic heading so entering fly mode matches the snapped
+    // view instead of reusing stale yaw from a prior fly session.
     if (const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
         horizLen > 0.0001f)
       m_flyYaw = -std::atan2(dir.x, -dir.z) * (180.0f / PI);
+    else
+      m_flyYaw = 0.0f;
 
     m_flyCamInitialized = true;
   }

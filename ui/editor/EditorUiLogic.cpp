@@ -73,7 +73,7 @@ float ComputeEditorLeftDockWidth(float displayWidth) {
 }
 
 float ComputeEditorRightPanelWidth(float displayWidth) {
-  return std::clamp(displayWidth * 0.18f, 280.0f, 380.0f);
+  return std::clamp(displayWidth * 0.24f, 360.0f, 460.0f);
 }
 
 float ComputeEditorBottomDockHeight(float displayHeight) {

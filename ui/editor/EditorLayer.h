@@ -233,6 +233,11 @@ namespace Horo {
 
             void HandleGizmoModeHotkeys(const ImGuiIO &io);
 
+            // Sets m_currentGizmoMode and drives m_gizmo in one place.
+            // If mode is None the gizmo is deactivated; otherwise it is activated
+            // for the current primary selection (no-op when there is none).
+            void RequestGizmoMode(GizmoMode mode);
+
             void SyncGizmoToSelection();
 
             void ApplyGizmoTranslateSnapping(GizmoAxis dragAxis, int primIdx, Vec3 &dPos);
@@ -280,7 +285,12 @@ namespace Horo {
 
             void DrawProjectPanel();
 
+            // Draws three draggable splitter handles at internal panel seams.
+            // Must be called once per frame after all panels have been drawn.
+            void DrawEditorSplitters(const ImGuiIO &io);
+
             void DrawAssetsPanel();
+            void DrawAssetsPanelInline(); // content-only, for embedding in bottom dock
 
             void DrawPropertiesPanel();
 
@@ -548,6 +558,11 @@ namespace Horo {
             std::filesystem::path m_savedProjectBrowserCwd;
             std::unordered_set<std::string, StringHash, std::equal_to<>>
             m_projectExtraBlocklist;
+            bool m_projectPanelCollapseAllRequested = false;
+            bool m_projectPanelCreateModalRequested = false;
+            bool m_projectPanelCreateFolder = true;
+            std::string m_projectPanelCreateName;
+            std::string m_projectPanelError;
             EditorWorkspaceDocument m_workspaceDocument;
             bool m_workspaceStateDirty = false;
             std::function<void()> m_fileMenuRenderCallback;
@@ -572,6 +587,15 @@ namespace Horo {
             // Bottom dock component
             EditorBottomDock m_bottomDock;
             Mcp::McpController m_mcpController;
+
+            // Panel split state — 0 means "use default on first frame".
+            float m_leftDockWidth = 0.0f;
+            float m_hierarchyHeightRatio = 0.0f;
+            float m_bottomDockHeight = 0.0f;
+            // -1 = none, 0 = seam A (left dock right edge, EW),
+            //            1 = seam B (hierarchy/project NS),
+            //            2 = seam C (bottom dock top, NS)
+            int m_activeSplitter = -1;
 
             // Project browser cache and blocklist (used by DrawProjectTreeRecursive)
             struct ProjectDirCache {

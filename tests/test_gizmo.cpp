@@ -69,21 +69,18 @@ TEST_CASE("TransformGizmo: Deactivate clears mode", "[gizmo]") {
 }
 
 // ============================================================================
-// Test 2 — HandleSize (FOV-aware, screen-constant:
-// screenFrac*2*dist*tan(fovY/2))
+// Test 2 — HandleSize (fixed world-unit size)
 // ============================================================================
 
-TEST_CASE("HandleSize: FOV-aware formula, distance 10", "[gizmo]") {
+TEST_CASE("HandleSize: fixed to one world unit", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
   Camera cam10 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
-  // Keep handle size screen-constant using the same projection relation.
-  float expected = 0.08f * 2.0f * 10.0f * std::tan(ToRadians(60.0f) * 0.5f);
-  CHECK(g.HandleSize(cam10) == Approx(expected).margin(1e-3f));
+  CHECK(g.HandleSize(cam10) == Approx(1.0f).margin(1e-6f));
 }
 
-TEST_CASE("HandleSize: doubles with distance", "[gizmo]") {
+TEST_CASE("HandleSize: independent of camera distance", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
@@ -91,18 +88,18 @@ TEST_CASE("HandleSize: doubles with distance", "[gizmo]") {
   Camera cam20 = MakeCamera({0.0f, 0.0f, 20.0f}, Vec3::Zero(), 60.0f);
   float h10 = g.HandleSize(cam10);
   float h20 = g.HandleSize(cam20);
-  // ratio must be exactly 2.0 regardless of formula constant
-  CHECK(h20 / h10 == Approx(2.0f).margin(1e-4f));
+  CHECK(h10 == Approx(1.0f).margin(1e-6f));
+  CHECK(h20 == Approx(1.0f).margin(1e-6f));
 }
 
-TEST_CASE("HandleSize: varies with FOV", "[gizmo]") {
+TEST_CASE("HandleSize: independent of camera FOV", "[gizmo]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
   Camera cam60 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
   Camera cam90 = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 90.0f);
-  // tan(45°) > tan(30°), so wider FOV → larger handles at same distance
-  CHECK(g.HandleSize(cam90) > g.HandleSize(cam60));
+  CHECK(g.HandleSize(cam90) == Approx(1.0f).margin(1e-6f));
+  CHECK(g.HandleSize(cam60) == Approx(1.0f).margin(1e-6f));
 }
 
 // ============================================================================
@@ -372,13 +369,12 @@ TEST_CASE("TransformGizmo: SyncTarget updates gizmo position for HandleSize", "[
 
   Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f);
   float h10 = g.HandleSize(cam);
-  CHECK(h10 == Approx(0.08f * 2.0f * 10.0f * std::tan(ToRadians(60.0f) * 0.5f))
-                   .margin(1e-3f));
+  CHECK(h10 == Approx(1.0f).margin(1e-6f));
 
-  // Move gizmo to (0,0,5) — now 5 units from camera; size should halve.
+  // Move gizmo to (0,0,5) — fixed world-unit sizing stays unchanged.
   g.SyncTarget({0.0f, 0.0f, 5.0f}, Quaternion::Identity(), Vec3::One());
   float h5 = g.HandleSize(cam);
-  CHECK(h5 == Approx(h10 * 0.5f).margin(1e-4f));
+  CHECK(h5 == Approx(1.0f).margin(1e-6f));
 }
 
 // ============================================================================
@@ -477,16 +473,16 @@ struct TransformGizmoTestAccessor {
 using TA = TransformGizmoTestAccessor;
 
 // ============================================================================
-// Test 14 — HandleSize: near-zero distance clamps to 0.1
+// Test 14 — HandleSize: near-zero distance still returns unit size
 // ============================================================================
 
-TEST_CASE("HandleSize: near-zero distance returns 0.1", "[gizmo]") {
+TEST_CASE("HandleSize: near-zero distance returns 1.0", "[gizmo]") {
   TransformGizmo g;
-  // Gizmo at origin; camera also at origin (dist ≈ 0 < 0.001f)
+  // Gizmo at origin; camera also at origin.
   g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
              Vec3::One());
   Camera cam = MakeCamera({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f});
-  CHECK(g.HandleSize(cam) == Approx(0.1f));
+  CHECK(g.HandleSize(cam) == Approx(1.0f).margin(1e-6f));
 }
 
 // ============================================================================

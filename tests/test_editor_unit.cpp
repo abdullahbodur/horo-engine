@@ -736,14 +736,14 @@ TEST_CASE("TransformGizmo: AxisDir returns zero for None", "[gizmo][coverage]") 
   CHECK(none.z == Approx(0.0f));
 }
 
-TEST_CASE("TransformGizmo: HandleSize returns small fallback at near-zero distance", "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: HandleSize returns unit size at near-zero distance", "[gizmo][coverage]") {
   TransformGizmo g;
   // Place gizmo right at the camera position → distance ≈ 0
   Camera cam = MakeCam({0, 0, 0}, {0, 0, -1});
   g.Activate(GizmoMode::Translate, cam.position, Quaternion::Identity(),
              Vec3::One());
   const float size = g.HandleSize(cam);
-  CHECK(size == Approx(0.1f).margin(0.01f));
+  CHECK(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: SyncTarget updates position", "[gizmo][coverage]") {
@@ -756,7 +756,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates position", "[gizmo][coverage]") {
   // origin so dist changes)
   Camera cam = MakeCam({0, 0, 0}, {0, 0, -1});
   const float size = g.HandleSize(cam);
-  CHECK(size > 0.0f);
+  CHECK(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: RayHitPlane returns false for behind-origin hit", "[gizmo][coverage]") {

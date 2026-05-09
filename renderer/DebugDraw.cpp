@@ -129,7 +129,7 @@ void main() { FragColor = v_color; }
         Line(c[3], c[7], color);
     }
 
-    void DebugDraw::Flush(const Camera &camera) {
+    void DebugDraw::Flush(const Camera &camera, float lineWidth) {
         if (!Renderer::GetBackendCapabilities().supportsDebugDraw) {
             s_lines.clear();
             return;
@@ -145,7 +145,7 @@ void main() { FragColor = v_color; }
                        static_cast<uint32_t>(s_lines.size() * sizeof(LineVertex)));
 
         s_vao->Bind();
-        s_vao->DrawArraysLines(static_cast<uint32_t>(s_lines.size()));
+        s_vao->DrawArraysLines(static_cast<uint32_t>(s_lines.size()), lineWidth);
         s_vao->Unbind();
 
         s_lines.clear();

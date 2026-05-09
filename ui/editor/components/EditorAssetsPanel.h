@@ -83,6 +83,11 @@ namespace Horo::Editor {
                   const EditorAssetsPanelCallbacks& callbacks,
                   const EditorAssetsPanelState& state);
 
+        // Renders only the grid content inside an already-open ImGui window.
+        // Used when embedding the asset panel as a tab inside another panel.
+        void DrawContent(const EditorAssetsPanelCallbacks& callbacks,
+                         const EditorAssetsPanelState& state);
+
     private:
         void DrawAssetSpotlightPopup(const EditorAssetsPanelState& state,
                                      const std::vector<std::string>& assetIds);
@@ -107,5 +112,9 @@ namespace Horo::Editor {
 
         void DrawCreateAssetModalContent(const EditorAssetsPanelState& state,
                                         const EditorAssetsPanelCallbacks& callbacks);
+
+        void DrawAddAssetTile(bool& openNewAssetModal,
+                              float tileW, float tileH,
+                              float thumbPad, float thumbSize);
     };
 }

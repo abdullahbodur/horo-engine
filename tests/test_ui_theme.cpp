@@ -129,6 +129,15 @@ TEST_CASE("style scopes restore ImGui style stacks") {
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 
+  {
+    Horo::Ui::ScopedEditorTreeRowStyle treeRows(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size > colorStackBefore);
+    CHECK(context->StyleVarStack.Size > styleStackBefore);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
   ImGui::DestroyContext(context);
 }
 
@@ -147,6 +156,125 @@ TEST_CASE("combo style scope pushes expected style counts") {
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("editor tree row style scope pushes expected style counts") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  {
+    Horo::Ui::ScopedEditorTreeRowStyle treeRows(Horo::Ui::GetEditorTheme());
+    CHECK(context->ColorStack.Size == colorStackBefore + 3);
+    CHECK(context->StyleVarStack.Size == styleStackBefore + 3);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("DrawEditorTreeItem restores ImGui style stacks (node)") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("tree-node-test");
+
+  {
+    Horo::Ui::ScopedEditorTreeRowStyle rowStyle(Horo::Ui::GetEditorTheme());
+    const ImVec4 white(1.0f, 1.0f, 1.0f, 1.0f);
+    Horo::Ui::EditorTreeItemSpec spec;
+    spec.id = "##test_node";
+    spec.label = "Folder";
+    spec.prefixIcon = "";
+    spec.kind = Horo::Ui::EditorTreeItemKind::Node;
+    spec.normalTextColor = &white;
+    const auto res = Horo::Ui::DrawEditorTreeItem(Horo::Ui::GetEditorTheme(), spec);
+    if (res.open)
+      ImGui::TreePop();
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("DrawEditorTreeItem restores ImGui style stacks (leaf with suffix)") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("tree-leaf-test");
+
+  {
+    Horo::Ui::ScopedEditorTreeRowStyle rowStyle(Horo::Ui::GetEditorTheme());
+    static const ImVec4 kFileColor(0.65f, 0.75f, 0.95f, 1.0f);
+    Horo::Ui::EditorTreeItemSpec spec;
+    spec.id = "##test_leaf";
+    spec.label = "main.cpp";
+    spec.prefixIcon = "";
+    spec.suffixIcon = "";
+    spec.kind = Horo::Ui::EditorTreeItemKind::Leaf;
+    spec.normalTextColor = &kFileColor;
+    spec.hoveredTextColor = &Horo::Ui::GetEditorTheme().palette.text;
+    Horo::Ui::DrawEditorTreeItem(Horo::Ui::GetEditorTheme(), spec);
+  }
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorTreeSearchSlot restores ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("search-slot-test");
+
+  char buf[64] = {};
+  Horo::Ui::EditorTreeSearchSlotConfig cfg;
+  cfg.enabled = true;
+  cfg.id = "##search_slot_test";
+  cfg.placeholder = "Search...";
+  cfg.buffer = buf;
+  cfg.bufferSize = sizeof(buf);
+  cfg.width = 200.0f;
+  Horo::Ui::RenderEditorTreeSearchSlot(Horo::Ui::GetEditorTheme(), cfg);
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
   ImGui::DestroyContext(context);
 }
 
@@ -262,7 +390,151 @@ TEST_CASE("secondary and recent project button wrappers restore ImGui style stac
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 
   Horo::Ui::RenderRecentProjectButton(Horo::Ui::GetLauncherTheme(),
-                                        "Recent##test", ImVec2(120.0f, 0.0f));
+                                      "Recent##test", ImVec2(120.0f, 0.0f));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("EditorPanelTabLabel returns correct names for all tabs") {
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Scene)) == "Scene");
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Project)) == "Project");
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Viewport)) == "Viewport");
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Assets)) == "Assets");
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Console)) == "Console");
+  CHECK(std::string(Horo::Ui::EditorPanelTabLabel(
+            Horo::Ui::EditorPanelTab::Animation)) == "Animation");
+}
+
+TEST_CASE("RenderEditorPanelTopBar restores ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("topbar-test");
+
+  const Horo::Ui::EditorPanelTabItem tabs[] = {
+      {Horo::Ui::EditorPanelTab::Project, true},
+  };
+  const Horo::Ui::EditorPanelActionItem actions[] = {
+      {"+"},
+      {"..."},
+  };
+  Horo::Ui::RenderEditorPanelTopBar(
+      Horo::Ui::GetEditorTheme(), "test_topbar", tabs, actions);
+
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorPanelTopBar returns -1 indices when nothing is clicked") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  ImGui::NewFrame();
+  ImGui::Begin("topbar-no-click-test");
+
+  const Horo::Ui::EditorPanelTabItem tabs[] = {
+      {Horo::Ui::EditorPanelTab::Project, true},
+  };
+  const Horo::Ui::EditorPanelActionItem actions[] = {
+      {"+"},
+  };
+  const Horo::Ui::EditorPanelTopBarResult result =
+      Horo::Ui::RenderEditorPanelTopBar(
+          Horo::Ui::GetEditorTheme(), "no_click", tabs, actions);
+
+  CHECK(result.clickedTabIndex == -1);
+  CHECK(result.clickedActionIndex == -1);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorPanelTopBar disabled actions are excluded") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  ImGui::NewFrame();
+  ImGui::Begin("disabled-action-test");
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  const Horo::Ui::EditorPanelTabItem tabs[] = {
+      {Horo::Ui::EditorPanelTab::Scene, true},
+  };
+  // Two actions: one enabled, one disabled.
+  const Horo::Ui::EditorPanelActionItem actions[] = {
+      {"+",   nullptr, {}, true},
+      {"...", nullptr, {}, false},
+  };
+  const auto result = Horo::Ui::RenderEditorPanelTopBar(
+      Horo::Ui::GetEditorTheme(), "disabled_action_topbar", tabs, actions);
+
+  // Stack must be clean regardless of which buttons were skipped.
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+  // No action was clicked (nothing was interacted with).
+  CHECK(result.clickedActionIndex == -1);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorPanelTopBar restores stacks with dropdown action") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  const int colorStackBefore = context->ColorStack.Size;
+  const int styleStackBefore = context->StyleVarStack.Size;
+
+  ImGui::NewFrame();
+  ImGui::Begin("topbar-dropdown-test");
+
+  bool triggered = false;
+  const Horo::Ui::EditorPanelDropdownItem dropItems[] = {
+      {nullptr, "Alpha", [&triggered] { triggered = true; }},
+      {nullptr, "Beta",  [&triggered] { triggered = true; }},
+  };
+  const Horo::Ui::EditorPanelTabItem tabs[] = {
+      {Horo::Ui::EditorPanelTab::Scene, true},
+  };
+  const Horo::Ui::EditorPanelActionItem actions[] = {
+      {"+", nullptr, dropItems},
+  };
+  Horo::Ui::RenderEditorPanelTopBar(
+      Horo::Ui::GetEditorTheme(), "dropdown_topbar", tabs, actions);
+
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 

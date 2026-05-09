@@ -125,6 +125,8 @@ void EditorLayer::Init(GLFWwindow *window) {
   m_window = window;
   m_uiWidgets.Initialize(this);
 
+  m_bottomDock.SetAssetsTabCallback([this]() { DrawAssetsPanelInline(); });
+
   m_uiWidgets.onApplyRenameObject = [this](int index, const std::string &newId) {
     if (index < 0 || index >= static_cast<int>(m_document.objects.size())) {
       m_uiWidgets.SetRenameObjectError("Invalid object index");
