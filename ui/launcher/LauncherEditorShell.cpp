@@ -1,3 +1,5 @@
+/** @file LauncherEditorShell.cpp
+ *  @brief Implements launcher UI rendering, project lifecycle flow, and asset loading helpers. */
 #include "ui/launcher/LauncherEditorShell.h"
 
 #include <algorithm>
@@ -34,10 +36,12 @@ namespace Horo::Launcher {
 namespace fs = std::filesystem;
 
 namespace {
+/** @brief Converts the fixed-size project path input buffer into a string value. */
 std::string BufferToString(const std::array<char, 512> &buffer) {
   return std::string(buffer.data());
 }
 
+/** @brief Converts the fixed-size project name input buffer into a string value. */
 std::string BufferToString(const std::array<char, 256> &buffer) {
   return std::string(buffer.data());
 }
@@ -166,8 +170,10 @@ void ApplyTransformUpdateFromObject(Scene *scene,
   }
 }
 
-// Validates a normalized project root and sets outError on failure.
-// Extracted from OpenProject() to reduce cognitive complexity (cpp:S3776).
+/** @brief Validates that a normalized path points to a launcher project root.
+ *  @param projectRoot Canonical path candidate to validate.
+ *  @param outError    Receives a human-readable validation failure message.
+ *  @return True when the root is non-empty and contains a launcher manifest. */
 bool CheckProjectRootValid(const fs::path &projectRoot, std::string *outError) {
   if (projectRoot.empty()) {
     if (outError)
@@ -183,10 +189,7 @@ bool CheckProjectRootValid(const fs::path &projectRoot, std::string *outError) {
   return true;
 }
 
-// Styled button and layout helpers extracted from RenderLauncher() lambdas so
-// their internal branching does not inflate the enclosing function's cognitive
-// complexity (cpp:S3776).
-
+/** @brief Renders an informational empty-state message centered in the current panel. */
 void RenderCenteredEmptyState(const char *text) {
   if (const float regionHeight = ImGui::GetContentRegionAvail().y;
       regionHeight > 40.0f)
@@ -277,6 +280,7 @@ bool RenderSidebarNavItem(const char *label, bool selected,
   return pressed;
 }
 
+/** @brief Visual icon variants used in the new-project template tile strip. */
 enum class TemplateTileIcon {
   Cube,
   Image,
@@ -490,10 +494,14 @@ void RenderLauncherBrand(const std::shared_ptr<Texture> &logoTexture) {
 }
 } // namespace
 
-// Loads the project manifest and default scene document for the given project
-// root. Extracted to reduce cognitive complexity of OpenProject() (cpp:S3776).
-// resolveAsset wraps the caller's ResolveAssetPath member to avoid having to
-// expose it as a free function.
+/** @brief Loads and validates the manifest plus default scene document for a project root.
+ *  @tparam F Callable type that resolves raw scene asset paths to absolute filesystem paths.
+ *  @param projectRoot      Canonical project root path.
+ *  @param projectDocument  Receives the parsed launcher project document.
+ *  @param sceneDocument    Receives the loaded scene document referenced by the manifest.
+ *  @param resolveAsset     Callable used to resolve manifest scene paths.
+ *  @param outError         Receives a human-readable error on failure.
+ *  @return True when both manifest and scene were loaded successfully. */
 template <typename F>
 static bool LoadLauncherDocuments(const fs::path &projectRoot,
                                   LauncherProjectDocument &projectDocument,
@@ -519,11 +527,13 @@ static bool LoadLauncherDocuments(const fs::path &projectRoot,
   return true;
 }
 
+/** @brief Icon variants for launcher hero action cards. */
 enum class LauncherActionIcon {
   Folder,
   Import,
 };
 
+/** @brief Icon variants for launcher sidebar footer links. */
 enum class SidebarFooterIcon {
   Discord,
   Documentation,

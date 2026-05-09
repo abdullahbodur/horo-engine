@@ -1,3 +1,7 @@
+/**
+ * @file AssetIdentity.cpp
+ * @brief Implementation for AssetIdentity editor functionality.
+ */
 #include "ui/editor/AssetIdentity.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+/** @file UiAutomationRunner.cpp
+ *  @brief Implements orchestration for launcher UI automation execution and reporting. */
 #include "ui/launcher/UiAutomationRunner.h"
 
 #include <algorithm>
@@ -50,6 +52,7 @@ constexpr const char *kFfmpegGifParams =
     "palettegen [pal]; "
     "[b] [pal] paletteuse\" $OUTPUT";
 
+/** @brief Temporarily redirects home-directory environment variables for automation isolation. */
 struct HomeDirGuard {
   std::string previousUserProfile = {};
   std::string previousHomeDrive = {};
@@ -175,6 +178,7 @@ std::string BuildProgressBar(const int completed, const int total) {
          std::string(static_cast<size_t>(kWidth - filled), '-');
 }
 
+/** @brief Transparent hash functor used for de-duplicating failed scenario names. */
 struct TransparentStringHash {
   using is_transparent = void;
 
@@ -204,6 +208,7 @@ std::string ExtractUiTestFailureLog(ImGuiTest &test) {
                         : std::string(buffer.c_str());
 }
 
+/** @brief Aggregated pass/fail progress snapshot derived from current queued tests. */
 struct UiAutomationProgressSnapshot {
   int completed = 0;
   int succeeded = 0;
@@ -236,6 +241,7 @@ CollectUiAutomationProgress(ImGuiTestEngine *engine, const int totalQueued) {
   return snapshot;
 }
 
+/** @brief Thrown when UI automation initialization cannot create required engine state. */
 class UiAutomationInitException final : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;
@@ -373,6 +379,7 @@ void ConfigureUiVideoCapture(UiAutomationRunState *state,
             IM_ARRAYSIZE(testIo->VideoCaptureExtension));
 }
 
+/** @brief Snapshot used when emitting periodic heartbeat diagnostics for UI automation. */
 struct UiHeartbeatSnapshot {
   int frameCount = 0;
   int maxFrames = 0;
@@ -424,6 +431,7 @@ void LogUiEnvVar(const char *name) {
   LogDebug("UI automation env: {}={}", name, value.empty() ? "<unset>" : value);
 }
 
+/** @brief ImGui test-engine capture callback that reads back pixels from the active renderer. */
 bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
                          unsigned int *pixels,
                          void *user_data) { // NOSONAR
@@ -461,6 +469,7 @@ bool UiScreenCaptureFunc(ImGuiID viewport_id, int x, int y, int w, int h,
 } // namespace
 #endif
 
+/** @brief Runtime implementation state for a single UI automation execution session. */
 struct UiAutomationRunner::Impl {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   static constexpr float kActionDelayShortSec =

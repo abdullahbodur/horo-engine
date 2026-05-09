@@ -1,8 +1,13 @@
+/**
+ * @file HoroTheme.cpp
+ * @brief Defines shared launcher/editor theme singletons and their base tokens.
+ */
 #include "ui/HoroTheme.h"
 
 namespace Horo::Ui {
 namespace {
 
+/** @brief Base colour palette shared by launcher and editor themes. */
 constexpr HoroPalette kPalette{
     .backgroundTop = ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f),
     .backgroundBottom = ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f),
@@ -25,6 +30,7 @@ constexpr HoroPalette kPalette{
     .destructive = ImVec4(0.95f, 0.35f, 0.32f, 1.0f),
 };
 
+/** @brief Corner radii preset used by launcher widgets and windows. */
 constexpr HoroRounding kLauncherRounding{
     .window = 16.0f,
     .panel = 12.0f,
@@ -34,6 +40,7 @@ constexpr HoroRounding kLauncherRounding{
     .tab = 6.0f,
 };
 
+/** @brief Spacing and padding preset used by launcher layouts. */
 constexpr HoroDensity kLauncherDensity{
     .panelPadding = ImVec2(18.0f, 18.0f),
     .cardPadding = ImVec2(16.0f, 14.0f),
@@ -42,6 +49,7 @@ constexpr HoroDensity kLauncherDensity{
     .itemSpacing = 8.0f,
 };
 
+/** @brief Corner radii preset used by dense editor widgets. */
 constexpr HoroRounding kEditorRounding{
     .panel = 7.0f,
     .card = 6.0f,
@@ -50,6 +58,7 @@ constexpr HoroRounding kEditorRounding{
     .tab = 5.0f,
 };
 
+/** @brief Spacing and padding preset used by editor layouts. */
 constexpr HoroDensity kEditorDensity{
     .panelPadding = ImVec2(10.0f, 8.0f),
     .cardPadding = ImVec2(10.0f, 8.0f),
@@ -58,6 +67,10 @@ constexpr HoroDensity kEditorDensity{
     .itemSpacing = 5.0f,
 };
 
+/**
+ * @brief Derive the editor palette from the shared base palette.
+ * @return Palette variant with editor-specific panel alpha.
+ */
 constexpr HoroPalette MakeEditorPalette() {
   HoroPalette palette = kPalette;
   palette.panel.w = 0.88f;

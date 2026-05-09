@@ -1,3 +1,7 @@
+/**
+ * @file EditorWireframe.cpp
+ * @brief Implementation for EditorWireframe editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

@@ -1,3 +1,7 @@
+/**
+ * @file EditorLayerUiPanels.cpp
+ * @brief Implementation for EditorLayerUiPanels editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 
@@ -367,8 +371,7 @@ void EditorLayer::DrawProjectPanel() {
     m_projectPanelCreateModalRequested = false;
   }
 
-  if (ImGui::BeginPopupModal("Create Project Entry", nullptr,
-                             ImGuiWindowFlags_AlwaysAutoResize)) {
+  if (Ui::BeginEditorModal({"Create Project Entry", 400.0f, true}, false)) {
     const char *itemKind = m_projectPanelCreateFolder ? "folder" : "file";
     ImGui::Text("Create %s in project root", itemKind);
 
@@ -386,12 +389,10 @@ void EditorLayer::DrawProjectPanel() {
       Ui::ErrorText(theme, m_projectPanelError.c_str());
     }
 
-    const bool submit = enterPressed || ImGui::Button("Create");
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
+    const auto footer = Ui::RenderEditorModalFooter(theme, "Create");
+    if (footer.cancelled)
       m_projectPanelError.clear();
-      ImGui::CloseCurrentPopup();
-    }
+    const bool submit = enterPressed || footer.confirmed;
 
     if (submit) {
       namespace fs = std::filesystem;
@@ -455,7 +456,7 @@ void EditorLayer::DrawProjectPanel() {
       }
     }
 
-    ImGui::EndPopup();
+    Ui::EndEditorModal();
   }
 
   if (!m_projectPanelError.empty() && !ImGui::IsPopupOpen("Create Project Entry")) {
@@ -620,34 +621,26 @@ void EditorLayer::DrawAssetsPanelInline() {
 }
 
 void EditorLayer::DrawCommandPalettePopup() {
-  if (m_commandPaletteOpen) {
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
-    if (!ImGui::IsPopupOpen("Command Palette"))
-      ImGui::OpenPopup("Command Palette");
-  }
+  const Ui::EditorPickerConfig paletteCfg{
+      "Command Palette", "Search commands", 520.0f, "Type a command..."};
 
-  if (!ImGui::BeginPopupModal("Command Palette", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
+  char paletteBuf[256] = {};
+  m_commandPaletteQuery.copy(paletteBuf, sizeof(paletteBuf) - 1);
+
+  if (!Ui::BeginEditorPickerModal(paletteCfg, m_commandPaletteOpen,
+                                  paletteBuf, sizeof(paletteBuf)))
     return;
 
-  ImGui::TextDisabled("Search commands");
-  ImGui::SetNextItemWidth(480.0f);
-  std::string queryBuf(256, '\0');
-  m_commandPaletteQuery.copy(queryBuf.data(), queryBuf.size() - 1);
-  if (ImGui::InputTextWithHint("##command_palette_input", "Type a command...",
-                               queryBuf.data(), queryBuf.size())) {
-    m_commandPaletteQuery = queryBuf.data();
-  }
+  m_commandPaletteQuery = paletteBuf;
 
-  ImGui::Separator();
   bool executed = false;
   int shownCount = 0;
   for (const CommandPaletteRow &row : GetEditorCommands()) {
     if (!MatchesCommandPaletteQuery(row, m_commandPaletteQuery))
       continue;
 
-    if (const auto label = std::format("{}##cmd_{}", row.command, row.id);
-        ImGui::Selectable(label.c_str(), false)) {
+    if (Ui::EditorPickerModalRow(
+            std::format("{}##cmd_{}", row.command, row.id).c_str(), false)) {
       ExecuteCommandPaletteAction(row.id);
       executed = true;
     }
@@ -660,36 +653,27 @@ void EditorLayer::DrawCommandPalettePopup() {
     ImGui::TextDisabled("No command matches '%s'",
                         m_commandPaletteQuery.c_str());
 
-  if (executed || ImGui::Button("Close") ||
-      ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+  if (executed) {
     m_commandPaletteOpen = false;
     ImGui::CloseCurrentPopup();
   }
 
-  ImGui::EndPopup();
+  Ui::EndEditorPickerModal(m_commandPaletteOpen, &m_commandPaletteQuery);
 }
 
 void EditorLayer::DrawQuickOpenPopup() {
-  if (m_quickOpenOpen) {
-    ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
-    if (!ImGui::IsPopupOpen("Quick Open"))
-      ImGui::OpenPopup("Quick Open");
-  }
+  const Ui::EditorPickerConfig quickOpenCfg{
+      "Quick Open", "Open object or asset", 520.0f,
+      "Type id, type, asset, or mesh..."};
 
-  if (!ImGui::BeginPopupModal("Quick Open", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize))
+  char quickOpenBuf[256] = {};
+  m_quickOpenQuery.copy(quickOpenBuf, sizeof(quickOpenBuf) - 1);
+
+  if (!Ui::BeginEditorPickerModal(quickOpenCfg, m_quickOpenOpen,
+                                  quickOpenBuf, sizeof(quickOpenBuf)))
     return;
 
-  ImGui::TextDisabled("Open object or asset");
-  ImGui::SetNextItemWidth(520.0f);
-  std::string queryBuf(256, '\0');
-  m_quickOpenQuery.copy(queryBuf.data(), queryBuf.size() - 1);
-  if (ImGui::InputTextWithHint("##quick_open_input",
-                               "Type id, type, asset, or mesh...",
-                               queryBuf.data(), queryBuf.size()))
-    m_quickOpenQuery = queryBuf.data();
-
-  ImGui::Separator();
+  m_quickOpenQuery = quickOpenBuf;
 
   bool picked = false;
   int shownCount = 0;
@@ -702,9 +686,9 @@ void EditorLayer::DrawQuickOpenPopup() {
     if (!ObjectMatchesQuickOpenQuery(obj, m_quickOpenQuery))
       continue;
 
-    if (const auto label =
-            std::format("Object: {}##quick_open_obj_{}", obj.id, i);
-        ImGui::Selectable(label.c_str(), IsSelected(i))) {
+    if (Ui::EditorPickerModalRow(
+            std::format("Object: {}##quick_open_obj_{}", obj.id, i).c_str(),
+            IsSelected(i))) {
       m_selectedIndices = {i};
       picked = true;
     }
@@ -723,9 +707,10 @@ void EditorLayer::DrawQuickOpenPopup() {
     if (!AssetMatchesQuickOpenQuery(assetId, asset, m_quickOpenQuery))
       continue;
 
-    if (const auto label =
-            std::format("Asset: {}##quick_open_asset_{}", assetId, assetId);
-        ImGui::Selectable(label.c_str(), m_selectedAssetId == assetId)) {
+    if (Ui::EditorPickerModalRow(
+            std::format("Asset: {}##quick_open_asset_{}", assetId, assetId)
+                .c_str(),
+            m_selectedAssetId == assetId)) {
       m_selectedAssetId = assetId;
       picked = true;
     }
@@ -737,13 +722,12 @@ void EditorLayer::DrawQuickOpenPopup() {
   if (shownCount == 0)
     ImGui::TextDisabled("No match for '%s'", m_quickOpenQuery.c_str());
 
-  if (picked || ImGui::Button("Close") ||
-      ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+  if (picked) {
     m_quickOpenOpen = false;
     ImGui::CloseCurrentPopup();
   }
 
-  ImGui::EndPopup();
+  Ui::EndEditorPickerModal(m_quickOpenOpen, &m_quickOpenQuery);
 }
 
 void EditorLayer::DrawDeleteConfirmModals() {

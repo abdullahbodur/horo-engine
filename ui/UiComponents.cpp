@@ -1,5 +1,10 @@
+/**
+ * @file UiComponents.cpp
+ * @brief Implementations for reusable themed ImGui primitives used by Horo UI.
+ */
 #include "ui/UiComponents.h"
 
+#include <cstdarg>
 #include <format>
 #include <string>
 
@@ -8,6 +13,7 @@
 namespace Horo::Ui {
 namespace {
 
+/** @brief Push panel window colours and track pushed colour count. */
 void PushPanelColors(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_WindowBg, palette.panel);
   ImGui::PushStyleColor(ImGuiCol_ChildBg, palette.panel);
@@ -15,6 +21,7 @@ void PushPanelColors(const HoroPalette &palette, int *colorCount) {
   *colorCount += 3;
 }
 
+/** @brief Push panel rounding/padding style vars and track push count. */
 void PushPanelVars(const HoroRounding &rounding, const HoroDensity &density,
                    int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, rounding.panel);
@@ -23,6 +30,7 @@ void PushPanelVars(const HoroRounding &rounding, const HoroDensity &density,
   *styleCount += 3;
 }
 
+/** @brief Push card-specific background, border, and header colours. */
 void PushCardColors(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_ChildBg, palette.card);
   ImGui::PushStyleColor(ImGuiCol_Border, palette.border);
@@ -31,6 +39,7 @@ void PushCardColors(const HoroPalette &palette, int *colorCount) {
   *colorCount += 4;
 }
 
+/** @brief Push card child-window style vars (rounding and padding). */
 void PushCardVars(const HoroRounding &rounding, const HoroDensity &density,
                   int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, rounding.card);
@@ -38,6 +47,7 @@ void PushCardVars(const HoroRounding &rounding, const HoroDensity &density,
   *styleCount += 2;
 }
 
+/** @brief Push text-input background and text colours. */
 void PushInputColors(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_FrameBg, palette.input);
   ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, palette.inputHover);
@@ -46,6 +56,7 @@ void PushInputColors(const HoroPalette &palette, int *colorCount) {
   *colorCount += 4;
 }
 
+/** @brief Push text-input rounding/padding style vars. */
 void PushInputVars(const HoroRounding &rounding, const HoroDensity &density,
                    int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.input);
@@ -53,6 +64,7 @@ void PushInputVars(const HoroRounding &rounding, const HoroDensity &density,
   *styleCount += 2;
 }
 
+/** @brief Push the primary button colour set. */
 void PushButtonColorsPrimary(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_Button, palette.accent);
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.accentHover);
@@ -61,6 +73,7 @@ void PushButtonColorsPrimary(const HoroPalette &palette, int *colorCount) {
   *colorCount += 4;
 }
 
+/** @brief Push the secondary button colour set. */
 void PushButtonColorsSecondary(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_Button, palette.panelSoft);
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.cardHover);
@@ -69,13 +82,15 @@ void PushButtonColorsSecondary(const HoroPalette &palette, int *colorCount) {
   *colorCount += 4;
 }
 
+/** @brief Push shared button style vars (padding and rounding). */
 void PushButtonVars(const HoroRounding &rounding, const HoroDensity &density,
-                     int *styleCount) {
+                    int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, density.buttonPadding);
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.button);
   *styleCount += 2;
 }
 
+/** @brief Push combo-box frame, popup, and text colours. */
 void PushComboColors(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_FrameBg, palette.input);
   ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, palette.inputHover);
@@ -85,6 +100,7 @@ void PushComboColors(const HoroPalette &palette, int *colorCount) {
   *colorCount += 5;
 }
 
+/** @brief Push combo-box rounding/padding/popup style vars. */
 void PushComboVars(const HoroRounding &rounding, const HoroDensity &density,
                    int *styleCount) {
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding.input);
@@ -94,6 +110,7 @@ void PushComboVars(const HoroRounding &rounding, const HoroDensity &density,
   *styleCount += 4;
 }
 
+/** @brief Push fully transparent tree-header colours for custom row backgrounds. */
 void PushTransparentHeaderColors(int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
   ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
@@ -101,6 +118,7 @@ void PushTransparentHeaderColors(int *colorCount) {
   *colorCount += 3;
 }
 
+/** @brief Push transparent button colours while preserving theme text colour. */
 void PushTransparentButtonColors(const HoroPalette &palette, int *colorCount) {
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
@@ -109,8 +127,10 @@ void PushTransparentButtonColors(const HoroPalette &palette, int *colorCount) {
   *colorCount += 4;
 }
 
-// Renders a span of EditorPanelDropdownItems recursively. Items with children
-// become sub-menus; items without children become MenuItems that call action().
+/**
+ * @brief Recursively render nested dropdown-menu items for panel action popups.
+ * @param items Menu items in the current submenu depth.
+ */
 void RenderEditorDropdownItems(std::span<const EditorPanelDropdownItem> items) {
   for (const auto &item : items) {
     std::string display;
@@ -217,6 +237,10 @@ void SectionHeader(const EditorTheme &theme, const char *title) {
 void SectionHeader(const LauncherTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
+}
+
+void RenderEditorSectionDivider(const char *title) {
+  ImGui::SeparatorText(title);
 }
 
 bool Button(const EditorTheme &theme, ButtonStyleVariant variant,
@@ -643,6 +667,269 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
     ImGui::SetCursorPosY(minCursorY);
 
   return result;
+}
+
+bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
+    if (openThisFrame && cfg.id)
+        ImGui::OpenPopup(cfg.id);
+    if (cfg.width > 0.0f)
+        ImGui::SetNextWindowSize(ImVec2(cfg.width, 0.0f), ImGuiCond_Appearing);
+    const ImGuiWindowFlags flags = cfg.autoResize
+        ? ImGuiWindowFlags_AlwaysAutoResize
+        : ImGuiWindowFlags_None;
+    return ImGui::BeginPopupModal(cfg.id, nullptr, flags);
+}
+
+void EndEditorModal() {
+    ImGui::EndPopup();
+}
+
+EditorModalFooterResult RenderEditorModalFooter(
+    const EditorTheme& theme,
+    const char* confirmLabel,
+    EditorModalFooterStyle style,
+    const char* alternateLabel,
+    float buttonWidth) {
+
+    EditorModalFooterResult result;
+    ImGui::Spacing();
+
+    if (style == EditorModalFooterStyle::ThreeWay && alternateLabel) {
+        int nc = 0; int nv = 0;
+        PushButtonColorsSecondary(theme.palette, &nc);
+        PushButtonVars(theme.rounding, theme.density, &nv);
+        if (ImGui::Button(alternateLabel, ImVec2(buttonWidth, 0.0f))) {
+            result.alternate = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+        ImGui::SameLine();
+    }
+
+    {
+        int nc = 0; int nv = 0;
+        PushButtonColorsSecondary(theme.palette, &nc);
+        PushButtonVars(theme.rounding, theme.density, &nv);
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0.0f))) {
+            result.cancelled = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+    }
+
+    ImGui::SameLine();
+
+    {
+        int nc = 0; int nv = 0;
+        if (style == EditorModalFooterStyle::DestructiveCancel) {
+            ImGui::PushStyleColor(ImGuiCol_Button,        theme.palette.destructive);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                ImVec4(theme.palette.destructive.x + 0.1f,
+                       theme.palette.destructive.y,
+                       theme.palette.destructive.z,
+                       1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                ImVec4(theme.palette.destructive.x - 0.05f,
+                       theme.palette.destructive.y,
+                       theme.palette.destructive.z,
+                       1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+            nc = 4;
+            PushButtonVars(theme.rounding, theme.density, &nv);
+        } else {
+            PushButtonColorsPrimary(theme.palette, &nc);
+            PushButtonVars(theme.rounding, theme.density, &nv);
+        }
+        if (ImGui::Button(confirmLabel, ImVec2(buttonWidth, 0.0f))) {
+            result.confirmed = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+    }
+
+    return result;
+}
+
+bool BeginEditorPickerModal(const EditorPickerConfig& cfg,
+                            bool openThisFrame,
+                            char* queryBuf, size_t queryBufSize) {
+    if (openThisFrame && cfg.id)
+        ImGui::OpenPopup(cfg.id);
+    if (cfg.width > 0.0f)
+        ImGui::SetNextWindowSize(ImVec2(cfg.width, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal(cfg.id, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return false;
+    if (cfg.prompt)
+        ImGui::TextDisabled("%s", cfg.prompt);
+    ImGui::SetNextItemWidth(cfg.width - 32.0f);
+    const char* hint = cfg.fieldHint ? cfg.fieldHint : "Search...";
+    ImGui::InputTextWithHint("##picker_query", hint, queryBuf, queryBufSize);
+    ImGui::Separator();
+    ImGui::BeginChild("##picker_scroll", ImVec2(0.0f, 240.0f), false);
+    return true;
+}
+
+bool EditorPickerModalRow(const char* label, bool selected) {
+    return ImGui::Selectable(label, selected);
+}
+
+void EndEditorPickerModal(bool& openFlag, std::string* query) {
+    ImGui::EndChild();
+    ImGui::Separator();
+    if (ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        openFlag = false;
+        if (query) query->clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// ── Group B: Input field primitives ──────────────────────────────────────────
+
+bool RenderEditorLabeledInput(const char* label, const char* id,
+                              char* buf, size_t bufSize,
+                              float width, const char* hint) {
+    if (label)
+        ImGui::TextDisabled("%s", label);
+    if (width > 0.0f)
+        ImGui::SetNextItemWidth(width);
+    else
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    if (hint)
+        return ImGui::InputTextWithHint(id, hint, buf, bufSize);
+    return ImGui::InputText(id, buf, bufSize);
+}
+
+bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
+                          bool& value, const char* tooltip) {
+    ImGui::PushStyleColor(ImGuiCol_CheckMark, theme.palette.accent);
+    const bool changed = ImGui::Checkbox(label, &value);
+    ImGui::PopStyleColor();
+    if (tooltip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tooltip);
+    return changed;
+}
+
+bool RenderEditorToggle(const EditorTheme& theme, const char* id,
+                        const char* label, bool& value) {
+    constexpr float pillW  = 36.0f;
+    constexpr float pillH  = 18.0f;
+    constexpr float radius = pillH * 0.5f;
+
+    ImGui::InvisibleButton(id, ImVec2(pillW, pillH));
+    const bool clicked = ImGui::IsItemClicked();
+    if (clicked)
+        value = !value;
+
+    ImDrawList* dl   = ImGui::GetWindowDrawList();
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+
+    const ImVec4& bg = value ? theme.palette.accent : theme.palette.panelSoft;
+    dl->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(bg), radius);
+    dl->AddRect(min, max, ImGui::ColorConvertFloat4ToU32(theme.palette.border),
+                radius, 0, 1.0f);
+
+    const float cx = value ? max.x - radius : min.x + radius;
+    const float cy = min.y + radius;
+    dl->AddCircleFilled(ImVec2(cx, cy), radius - 3.0f,
+                        ImGui::ColorConvertFloat4ToU32(theme.palette.text));
+
+    if (label && label[0] != '\0') {
+        ImGui::SameLine(0.0f, 8.0f);
+        ImGui::TextUnformatted(label);
+    }
+
+    return clicked;
+}
+
+bool RenderEditorDragFloat(const char* label, const char* id,
+                           float& value,
+                           float speed, float vmin, float vmax,
+                           const char* fmt, float width) {
+    if (label)
+        ImGui::TextDisabled("%s", label);
+    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    ImGui::SetNextItemWidth(w);
+    return ImGui::DragFloat(id, &value, speed, vmin, vmax, fmt);
+}
+
+bool RenderEditorDragFloat3(const char* label, const char* id,
+                            float value[3],
+                            float speed, float vmin, float vmax,
+                            const char* fmt, float width) {
+    if (label)
+        ImGui::TextDisabled("%s", label);
+    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    ImGui::SetNextItemWidth(w);
+    return ImGui::DragFloat3(id, value, speed, vmin, vmax, fmt);
+}
+
+bool RenderEditorSliderFloat(const char* label, const char* id,
+                             float& value, float vmin, float vmax,
+                             const char* fmt, float width) {
+    if (label)
+        ImGui::TextDisabled("%s", label);
+    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    ImGui::SetNextItemWidth(w);
+    return ImGui::SliderFloat(id, &value, vmin, vmax, fmt);
+}
+
+bool RenderEditorColorEdit3(const char* label, const char* id,
+                            float color[3], float width) {
+    if (label)
+        ImGui::TextDisabled("%s", label);
+    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    ImGui::SetNextItemWidth(w);
+    return ImGui::ColorEdit3(id, color);
+}
+
+bool BeginEditorPropertyRow(const char* label, float labelWidth) {
+    ImGui::TextUnformatted(label);
+    ImGui::SameLine(labelWidth);
+    return true;
+}
+
+void EndEditorPropertyRow() {
+    // Intentionally empty; exists for RAII symmetry and future use.
+}
+
+bool BeginEditorCard(const EditorTheme& theme, EditorCardConfig& cfg) {
+    if (cfg.selected)
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,
+            ImVec4(theme.palette.selection.x, theme.palette.selection.y,
+                   theme.palette.selection.z, 0.70f));
+    const bool open = ImGui::BeginChild(
+        cfg.id, ImVec2(cfg.width, cfg.height),
+        ImGuiChildFlags_Borders,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (cfg.selected)
+        ImGui::PopStyleColor();
+    cfg.hovered = ImGui::IsWindowHovered();
+    return open;
+}
+
+void EndEditorCard() {
+    ImGui::EndChild();
+}
+
+void RenderEditorStatusText(const EditorTheme& theme,
+                            EditorStatusLevel level,
+                            const char* fmt, ...) {
+    ImVec4 color;
+    switch (level) {
+        case EditorStatusLevel::Info:    color = theme.palette.textMuted;              break;
+        case EditorStatusLevel::Warning: color = ImVec4(1.0f, 0.80f, 0.30f, 1.0f);   break;
+        case EditorStatusLevel::Error:   color = theme.palette.destructive;            break;
+        case EditorStatusLevel::Success: color = ImVec4(0.35f, 0.85f, 0.50f, 1.0f);  break;
+    }
+    va_list args;
+    va_start(args, fmt);
+    ImGui::TextColoredV(color, fmt, args);
+    va_end(args);
 }
 
 } // namespace Horo::Ui

@@ -1,3 +1,7 @@
+/**
+ * @file EditorSchema.cpp
+ * @brief Implementation for EditorSchema editor functionality.
+ */
 #include "ui/editor/EditorSchema.h"
 
 #include <fstream>

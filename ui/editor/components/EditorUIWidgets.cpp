@@ -1,5 +1,8 @@
+/** @file EditorUIWidgets.cpp
+ *  @brief Implements transient editor overlays and modal widget behavior. */
 #include "EditorUIWidgets.h"
 #include "ui/editor/EditorLayer.h"
+#include "ui/UiComponents.h"
 #include "imgui.h"
 
 namespace Horo::Editor {
@@ -27,7 +30,7 @@ void EditorUIWidgets::DrawClipboardToast() const {
                             : m_clipboardToastLabel.c_str();
     draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 9.0f),
                   IM_COL32(220, 235, 255, 255), label);
-    
+
     // Decrement timer for next frame
     m_clipboardToastTime -= ImGui::GetIO().DeltaTime;
 }
@@ -76,7 +79,7 @@ void EditorUIWidgets::DrawHotReloadOverlay() const {
 
 void EditorUIWidgets::DrawStatusBar() const {
     const ImGuiIO& io = ImGui::GetIO();
-    
+
     constexpr float kEditorStatusH = 22.0f;
     ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kEditorStatusH));
     ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorStatusH));
@@ -107,8 +110,7 @@ void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
 void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     if (m_confirmDeleteObjectsOpen)
         ImGui::OpenPopup("Confirm Delete Objects");
-    if (!ImGui::BeginPopupModal("Confirm Delete Objects", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize))
+    if (!Horo::Ui::BeginEditorModal({"Confirm Delete Objects", 400.0f, true}, false))
         return;
 
     int validCount = static_cast<int>(m_pendingDeleteObjectIndices.size());
@@ -116,7 +118,7 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
         m_confirmDeleteObjectsOpen = false;
         m_pendingDeleteObjectIndices.clear();
         ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
+        Horo::Ui::EndEditorModal();
         return;
     }
 
@@ -124,13 +126,10 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     ImGui::TextDisabled("This action cannot be undone.");
     ImGui::Separator();
 
-    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
-        m_confirmDeleteObjectsOpen = false;
-        m_pendingDeleteObjectIndices.clear();
-        ImGui::CloseCurrentPopup();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+    const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
+    const auto result = Horo::Ui::RenderEditorModalFooter(
+        theme, "Delete All", Horo::Ui::EditorModalFooterStyle::DestructiveCancel);
+    if (result.confirmed) {
         if (onConfirmDeleteObjects) {
             onConfirmDeleteObjects(m_pendingDeleteObjectIndices);
         }
@@ -138,14 +137,17 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
         m_pendingDeleteObjectIndices.clear();
         ImGui::CloseCurrentPopup();
     }
-    ImGui::EndPopup();
+    if (result.cancelled) {
+        m_confirmDeleteObjectsOpen = false;
+        m_pendingDeleteObjectIndices.clear();
+    }
+    Horo::Ui::EndEditorModal();
 }
 
 void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
     if (m_confirmDeleteAssetOpen)
         ImGui::OpenPopup("Confirm Delete Asset");
-    if (!ImGui::BeginPopupModal("Confirm Delete Asset", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize))
+    if (!Horo::Ui::BeginEditorModal({"Confirm Delete Asset", 400.0f, true}, false))
         return;
 
     if (m_pendingDeleteAssetId.empty()) {
@@ -153,29 +155,25 @@ void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
         m_pendingDeleteAssetId.clear();
         m_pendingDeleteAssetError.clear();
         ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
+        Horo::Ui::EndEditorModal();
         return;
     }
 
     ImGui::Text("Delete asset '%s'?", m_pendingDeleteAssetId.c_str());
     ImGui::TextDisabled("All object bindings to this asset will be cleared.");
+    const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     if (!m_pendingDeleteAssetError.empty()) {
         ImGui::Spacing();
         ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 360.0f);
-        ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
-                           m_pendingDeleteAssetError.c_str());
+        Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
+                                         "%s", m_pendingDeleteAssetError.c_str());
         ImGui::PopTextWrapPos();
     }
     ImGui::Separator();
 
-    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
-        m_confirmDeleteAssetOpen = false;
-        m_pendingDeleteAssetId.clear();
-        m_pendingDeleteAssetError.clear();
-        ImGui::CloseCurrentPopup();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Delete", ImVec2(110.0f, 0.0f))) {
+    const auto result = Horo::Ui::RenderEditorModalFooter(
+        theme, "Delete", Horo::Ui::EditorModalFooterStyle::DestructiveCancel);
+    if (result.confirmed) {
         if (onConfirmDeleteAsset) {
             onConfirmDeleteAsset(m_pendingDeleteAssetId);
         }
@@ -184,33 +182,40 @@ void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
         m_pendingDeleteAssetError.clear();
         ImGui::CloseCurrentPopup();
     }
-    ImGui::EndPopup();
+    if (result.cancelled) {
+        m_confirmDeleteAssetOpen = false;
+        m_pendingDeleteAssetId.clear();
+        m_pendingDeleteAssetError.clear();
+    }
+    Horo::Ui::EndEditorModal();
 }
 
 void EditorUIWidgets::DrawExitConfirmModal() {
     if (m_confirmExitOpen)
         ImGui::OpenPopup("Unsaved Changes");
 
-    if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize))
+    if (!Horo::Ui::BeginEditorModal({"Unsaved Changes", 480.0f, true}, false))
         return;
 
     ImGui::TextUnformatted("You have unsaved changes.");
     ImGui::TextDisabled("Save or discard them before you continue.");
     ImGui::Separator();
 
+    const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     if (!m_exitConfirmError.empty())
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
-                           m_exitConfirmError.c_str());
+        Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
+                                         "%s", m_exitConfirmError.c_str());
 
-    if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+    const auto result = Horo::Ui::RenderEditorModalFooter(
+        theme, "Save", Horo::Ui::EditorModalFooterStyle::ThreeWay, "Discard");
+    if (result.confirmed) {
+        // This would need more sophisticated callback to handle save+continue
+        // For now just close
         m_confirmExitOpen = false;
         m_exitConfirmError.clear();
         ImGui::CloseCurrentPopup();
     }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Discard", ImVec2(120.0f, 0.0f))) {
+    if (result.alternate) {
         if (onConfirmExit) {
             onConfirmExit();
         }
@@ -218,17 +223,12 @@ void EditorUIWidgets::DrawExitConfirmModal() {
         m_exitConfirmError.clear();
         ImGui::CloseCurrentPopup();
     }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Save & Continue", ImVec2(120.0f, 0.0f))) {
-        // This would need more sophisticated callback to handle save+continue
-        // For now just close
+    if (result.cancelled) {
         m_confirmExitOpen = false;
         m_exitConfirmError.clear();
-        ImGui::CloseCurrentPopup();
     }
 
-    ImGui::EndPopup();
+    Horo::Ui::EndEditorModal();
 }
 
 // ---- Input Modals ----
@@ -238,8 +238,7 @@ void EditorUIWidgets::DrawRenameObjectModal() {
         ImGui::OpenPopup("Rename Object");
         m_renameObjectOpen = false;
     }
-    if (!ImGui::BeginPopupModal("Rename Object", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize))
+    if (!Horo::Ui::BeginEditorModal({"Rename Object", 400.0f, true}, false))
         return;
 
     std::string nameBuf(256, '\0');
@@ -251,18 +250,19 @@ void EditorUIWidgets::DrawRenameObjectModal() {
         m_renameObjectDraft = nameBuf.data();
     }
 
+    const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     if (!m_renameObjectError.empty())
-        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s",
-                           m_renameObjectError.c_str());
+        Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
+                                         "%s", m_renameObjectError.c_str());
 
-    if (ImGui::Button("Apply"))
+    const auto result = Horo::Ui::RenderEditorModalFooter(
+        theme, "Rename", Horo::Ui::EditorModalFooterStyle::OkCancel);
+    if (result.confirmed)
         ApplyRenameObject();
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
+    if (result.cancelled)
         CancelRenameObject();
-    }
 
-    ImGui::EndPopup();
+    Horo::Ui::EndEditorModal();
 }
 
 void EditorUIWidgets::ApplyRenameObject() {
@@ -275,7 +275,7 @@ void EditorUIWidgets::ApplyRenameObject() {
     if (onApplyRenameObject) {
         success = onApplyRenameObject(m_renameObjectIndex, m_renameObjectDraft);
     }
-    
+
     if (success) {
         m_renameObjectError.clear();
         m_renameObjectIndex = -1;
@@ -336,4 +336,3 @@ void EditorUIWidgets::OpenRenameObject(int objectIndex) {
 }
 
 }  // namespace Horo::Editor
-

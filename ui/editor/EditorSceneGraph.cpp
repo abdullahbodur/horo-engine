@@ -1,3 +1,7 @@
+/**
+ * @file EditorSceneGraph.cpp
+ * @brief Implementation for EditorSceneGraph editor functionality.
+ */
 #include "ui/editor/EditorSceneGraph.h"
 
 #include <algorithm>

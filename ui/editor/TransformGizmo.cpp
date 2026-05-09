@@ -1,3 +1,7 @@
+/**
+ * @file TransformGizmo.cpp
+ * @brief Implementation for TransformGizmo editor functionality.
+ */
 #include "ui/editor/TransformGizmo.h"
 
 #include <GLFW/glfw3.h>

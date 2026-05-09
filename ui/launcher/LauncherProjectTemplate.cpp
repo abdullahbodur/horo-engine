@@ -1,3 +1,5 @@
+/** @file LauncherProjectTemplate.cpp
+ *  @brief Implements scaffold generation for new launcher projects. */
 #include "ui/launcher/LauncherProjectTemplate.h"
 
 #include <algorithm>

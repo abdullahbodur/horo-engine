@@ -1,3 +1,5 @@
+/** @file HoroEditorMain.cpp
+ *  @brief Entry point and application wiring for the launcher-integrated Horo editor executable. */
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -38,6 +40,7 @@ namespace {
 using namespace Horo;
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
+/** @brief Returns true when the exact command-line flag is present. */
 bool HasArg(int argc, char **argv, const char *expected) {
   if (!expected || !*expected)
     return false;
@@ -48,6 +51,7 @@ bool HasArg(int argc, char **argv, const char *expected) {
   return false;
 }
 
+/** @brief Reads an environment variable as a std::string, returning empty when unset. */
 std::string ReadEnvString(const char *name) {
   if (!name || !*name)
     return {};
@@ -66,41 +70,66 @@ std::string ReadEnvString(const char *name) {
 #endif
 }
 
+/** @brief Resolves whether editor render heartbeat logging is enabled from environment. */
 bool IsRenderHeartbeatEnabled() {
   const std::string value = ReadEnvString("HORO_RENDER_HEARTBEAT");
   return ParseUiAutomationBoolValue(value, false);
 }
 #endif
 
+/** @brief Exception raised when renderer backend initialization fails during app startup. */
 class RendererBackendInitException final : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;
 };
 
+/** @brief Shared editor pointer used by native menubar callbacks. */
 static Editor::EditorLayer *g_editorInstance = nullptr;
 
+/** @brief Native menu callback that forwards "New Scene" to the current editor instance. */
 void MenuNewScene() { if (g_editorInstance) g_editorInstance->OnMenuNewScene(); }
+/** @brief Native menu callback that forwards "Open Scene" to the current editor instance. */
 void MenuOpenScene() { if (g_editorInstance) g_editorInstance->OnMenuOpenScene(); }
+/** @brief Native menu callback that forwards "Reset Layout" to the current editor instance. */
 void MenuResetLayout() { if (g_editorInstance) g_editorInstance->OnMenuResetLayout(); }
+/** @brief Native menu callback that forwards "Settings" to the current editor instance. */
 void MenuSettings() { if (g_editorInstance) g_editorInstance->OnMenuSettings(); }
+/** @brief Native menu callback that forwards "Close Editor" to the current editor instance. */
 void MenuCloseEditor() { if (g_editorInstance) g_editorInstance->OnMenuCloseEditor(); }
+/** @brief Native menu callback that forwards "Add Panel" to the current editor instance. */
 void MenuAddPanel() { if (g_editorInstance) g_editorInstance->OnMenuAddPanel(); }
+/** @brief Native menu callback that forwards "Add Prop" to the current editor instance. */
 void MenuAddProp() { if (g_editorInstance) g_editorInstance->OnMenuAddProp(); }
+/** @brief Native menu callback that forwards "Add Light" to the current editor instance. */
 void MenuAddLight() { if (g_editorInstance) g_editorInstance->OnMenuAddLight(); }
+/** @brief Native menu callback that forwards "Add Camera" to the current editor instance. */
 void MenuAddCamera() { if (g_editorInstance) g_editorInstance->OnMenuAddCamera(); }
+/** @brief Native menu callback that forwards "Add Prop From Asset" to the current editor instance. */
 void MenuAddPropFromAsset() { if (g_editorInstance) g_editorInstance->OnMenuAddPropFromAsset(); }
+/** @brief Native menu callback that forwards undo to the current editor instance. */
 void MenuUndo() { if (g_editorInstance) g_editorInstance->OnMenuUndo(); }
+/** @brief Native menu callback that forwards redo to the current editor instance. */
 void MenuRedo() { if (g_editorInstance) g_editorInstance->OnMenuRedo(); }
+/** @brief Native menu callback that forwards rename action to the current editor instance. */
 void MenuRename() { if (g_editorInstance) g_editorInstance->OnMenuRename(); }
+/** @brief Native menu callback that forwards prefab creation to the current editor instance. */
 void MenuCreatePrefab() { if (g_editorInstance) g_editorInstance->OnMenuCreatePrefab(); }
+/** @brief Native menu callback that forwards duplicate action to the current editor instance. */
 void MenuDuplicate() { if (g_editorInstance) g_editorInstance->OnMenuDuplicate(); }
+/** @brief Native menu callback that forwards delete action to the current editor instance. */
 void MenuDelete() { if (g_editorInstance) g_editorInstance->OnMenuDelete(); }
+/** @brief Native menu callback that forwards fly mode toggle to the current editor instance. */
 void MenuFlyMode() { if (g_editorInstance) g_editorInstance->OnMenuFlyMode(); }
+/** @brief Native menu callback that forwards help action to the current editor instance. */
 void MenuHelp() { if (g_editorInstance) g_editorInstance->OnMenuHelp(); }
+/** @brief Native menu callback that forwards quick-open action to the current editor instance. */
 void MenuQuickOpen() { if (g_editorInstance) g_editorInstance->OnMenuQuickOpen(); }
+/** @brief Native menu callback that forwards command-palette action to the current editor instance. */
 void MenuCommandPalette() { if (g_editorInstance) g_editorInstance->OnMenuCommandPalette(); }
+/** @brief Native menu callback that forwards view layout reset to the current editor instance. */
 void MenuViewResetLayout() { if (g_editorInstance) g_editorInstance->OnMenuViewResetLayout(); }
 
+/** @brief Main application implementation for editor + launcher runtime integration. */
 class HoroEditorApp final : public Application {
 public:
   explicit HoroEditorApp(const EngineLaunchOptions &launchOptions

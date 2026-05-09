@@ -1,3 +1,7 @@
+/**
+ * @file EditorUiLogic.cpp
+ * @brief Implementation for EditorUiLogic editor functionality.
+ */
 #include "ui/editor/EditorUiLogic.h"
 
 #include <algorithm>

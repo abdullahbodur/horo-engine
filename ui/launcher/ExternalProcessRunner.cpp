@@ -1,3 +1,5 @@
+/** @file ExternalProcessRunner.cpp
+ *  @brief Implements cross-platform child-process spawning, polling, and shutdown. */
 #include "ui/launcher/ExternalProcessRunner.h"
 
 #include <array>
@@ -24,6 +26,7 @@
 
 namespace Horo::Launcher {
     namespace {
+        /** @brief Emits one prefixed log line for process output forwarding. */
         void LogProcessLine(const std::string &label, const std::string &line) {
             if (line.empty())
                 return;
@@ -178,6 +181,7 @@ namespace Horo::Launcher {
         using ReaderThread = std::thread;
     } // namespace
 
+    /** @brief Owns native process resources and output reader state for a single spawn. */
     struct ExternalProcessRunner::ProcessHandle {
         ReaderThread readerThread;
         std::mutex readerMutex;

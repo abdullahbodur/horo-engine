@@ -1,3 +1,7 @@
+/**
+ * @file EditorHierarchy.cpp
+ * @brief Implementation for EditorHierarchy editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

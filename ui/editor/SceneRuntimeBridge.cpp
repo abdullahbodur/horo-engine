@@ -1,3 +1,7 @@
+/**
+ * @file SceneRuntimeBridge.cpp
+ * @brief Implementation for SceneRuntimeBridge editor functionality.
+ */
 #include "ui/editor/SceneRuntimeBridge.h"
 
 #include "ui/editor/SceneProjectBridge.h"

@@ -1,3 +1,5 @@
+/** @file EditorHomeSettings.cpp
+ *  @brief Implements persistence and normalization helpers for launcher home settings. */
 #include "ui/launcher/EditorHomeSettings.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+/** @file EditorAssetThumbnailPreview.cpp
+ *  @brief Implements thumbnail preview rendering and texture-handle resolution for editor assets. */
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
 
 #include <algorithm>
@@ -28,6 +30,7 @@
 namespace Horo::Editor {
 namespace {
 
+/** @brief Resolves a preview-shader file path by probing SDK and source-tree locations. */
 std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
   namespace fs = std::filesystem;
   const fs::path root = ProjectPath::Root();
@@ -51,31 +54,35 @@ std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
   return candidates.front();
 }
 
+/** @brief Singleton renderer/cache used to generate and store asset thumbnail resources. */
 struct AssetThumbnailRenderer {
-  std::shared_ptr<IFramebuffer> fbo;
-  int width = 512;
-  int height = 512;
-  Shader shader;
+  std::shared_ptr<IFramebuffer> fbo; /**< Off-screen framebuffer used for software thumbnail rendering paths. */
+  int width = 512;                   /**< Thumbnail render width in pixels. */
+  int height = 512;                  /**< Thumbnail render height in pixels. */
+  Shader shader;                     /**< Shader used when drawing preview meshes into the thumbnail target. */
 
+  /** @brief Cached mesh payload for one source mesh path. */
   struct CachedMesh {
-    std::shared_ptr<Mesh> mesh;
-    std::shared_ptr<SkinnedMesh> skinnedMesh;
-    std::shared_ptr<Skeleton> skeleton;
-    bool isSkinned = false;
+    std::shared_ptr<Mesh> mesh;                /**< Static mesh asset when the source is an OBJ mesh. */
+    std::shared_ptr<SkinnedMesh> skinnedMesh;  /**< Skinned mesh asset when the source is glTF/glb. */
+    std::shared_ptr<Skeleton> skeleton;        /**< Skeleton associated with skinnedMesh, when present. */
+    bool isSkinned = false;                    /**< True when this cache entry represents a skinned mesh path. */
   };
 
   std::unordered_map<std::string, CachedMesh, StringHash, std::equal_to<>>
-      meshCache;
-  std::unordered_set<std::string, StringHash, std::equal_to<>> noPreviewKeys;
+      meshCache; /**< Loaded mesh cache keyed by absolute mesh path. */
+  std::unordered_set<std::string, StringHash, std::equal_to<>> noPreviewKeys; /**< Mesh keys known to have no preview. */
   std::unordered_map<std::string, std::shared_ptr<ITexture>, StringHash,
-                     std::equal_to<>>
-      renderedTextureCache;
+                      std::equal_to<>>
+      renderedTextureCache; /**< Rendered thumbnail textures keyed by absolute mesh path. */
 
+  /** @brief Returns the global thumbnail renderer/cache instance. */
   static AssetThumbnailRenderer& Instance() {
     static AssetThumbnailRenderer instance;
     return instance;
   }
 
+  /** @brief Lazily initializes framebuffer and shader resources for thumbnail rendering. */
   bool Init() {
     if (fbo != nullptr)
       return IsValid();
@@ -106,8 +113,10 @@ struct AssetThumbnailRenderer {
     return IsValid();
   }
 
+  /** @brief Returns true if thumbnail-render resources are ready for drawing. */
   bool IsValid() const { return fbo != nullptr && shader.IsValid(); }
 
+  /** @brief Clears cached meshes/textures and releases GPU-side render resources. */
   void Cleanup() {
     meshCache.clear();
     noPreviewKeys.clear();
@@ -115,9 +124,11 @@ struct AssetThumbnailRenderer {
     fbo.reset();
   }
 
+  /** @brief Ensures renderer resources are released when the singleton is destroyed. */
   ~AssetThumbnailRenderer() { Cleanup(); }
 };
 
+/** @brief Loads and caches a mesh for preview rendering, returning nullptr on unsupported/failed assets. */
 AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) {
   if (meshPath.empty())
     return nullptr;
@@ -169,6 +180,7 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
   return &it->second;
 }
 
+/** @brief Builds view/projection matrices that frame the supplied mesh for thumbnail rendering. */
 void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outView,
                      Mat4& outProj) {
   Vec3 aabbCenter;
@@ -197,6 +209,7 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
   outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
 }
 
+/** @brief Renders the cached mesh into an off-screen target and returns the resulting texture handle. */
 RenderTargetHandle RenderMeshToThumbnail(
     const AssetThumbnailRenderer::CachedMesh& mesh, const std::string& meshKey) {
   if (const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
@@ -313,6 +326,7 @@ RenderTargetHandle RenderMeshToThumbnail(
   return destTex->GetRenderTargetHandle(true);
 }
 
+/** @brief Tries to render a mesh-derived thumbnail for the given asset definition. */
 RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef& asset) {
   if (asset.mesh.empty())
     return {};
@@ -337,6 +351,7 @@ RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef& asset) {
   return RenderMeshToThumbnail(*meshEntry, meshKey);
 }
 
+/** @brief Retrieves (or loads and caches) a glTF albedo texture handle for preview fallback rendering. */
 RenderTargetHandle TryGetCachedGltfAlbedoPreview(
     const std::filesystem::path& meshPath,
     std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,

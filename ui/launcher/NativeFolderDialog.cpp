@@ -1,3 +1,5 @@
+/** @file NativeFolderDialog.cpp
+ *  @brief Implements platform-native folder selection dialogs for launcher workflows. */
 #include "ui/launcher/NativeFolderDialog.h"
 
 #include <string>

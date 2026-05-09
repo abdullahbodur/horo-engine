@@ -1,3 +1,7 @@
+/**
+ * @file AssetImportService.cpp
+ * @brief Implementation for AssetImportService editor functionality.
+ */
 #include "ui/editor/AssetImportService.h"
 
 #include <algorithm>

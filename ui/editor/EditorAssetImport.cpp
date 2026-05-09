@@ -1,3 +1,7 @@
+/**
+ * @file EditorAssetImport.cpp
+ * @brief Implementation for EditorAssetImport editor functionality.
+ */
 #include "ui/editor/EditorAssetImport.h"
 
 #include <algorithm>

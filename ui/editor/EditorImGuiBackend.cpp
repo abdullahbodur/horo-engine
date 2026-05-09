@@ -1,3 +1,7 @@
+/**
+ * @file EditorImGuiBackend.cpp
+ * @brief Implementation for EditorImGuiBackend editor functionality.
+ */
 #include "ui/editor/EditorImGuiBackend.h"
 
 #include <algorithm>

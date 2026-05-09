@@ -1,3 +1,7 @@
+/**
+ * @file EditorFilePickerUtils.cpp
+ * @brief Implementation for EditorFilePickerUtils editor functionality.
+ */
 #include "ui/editor/EditorFilePickerUtils.h"
 
 #ifdef _WIN32

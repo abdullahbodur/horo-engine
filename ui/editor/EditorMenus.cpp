@@ -1,3 +1,7 @@
+/**
+ * @file EditorMenus.cpp
+ * @brief Implementation for EditorMenus editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

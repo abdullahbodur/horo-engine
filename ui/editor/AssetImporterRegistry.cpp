@@ -1,3 +1,7 @@
+/**
+ * @file AssetImporterRegistry.cpp
+ * @brief Implementation for AssetImporterRegistry editor functionality.
+ */
 #include "ui/editor/AssetImporterRegistry.h"
 
 #include <algorithm>

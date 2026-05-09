@@ -1,3 +1,5 @@
+/** @file LauncherProject.cpp
+ *  @brief Implements launcher project manifest serialization and command resolution. */
 #include "ui/launcher/LauncherProject.h"
 
 #include <algorithm>

@@ -1,3 +1,6 @@
+/** @file EditorDebugTrace.h
+ *  @brief Optional stderr tracing for the in-game editor, enabled via HORO_EDITOR_TRACE=1.
+ */
 #pragma once
 
 // Optional stderr tracing for the in-game editor (not routed through game Log /
@@ -10,6 +13,13 @@
 #include <string>
 
 namespace Horo::Editor {
+    /** @brief Returns true when editor tracing is enabled for the current process.
+     *
+     *  Checks the HORO_EDITOR_TRACE environment variable once per process and
+     *  caches the result.  Always returns false in release builds.
+     *
+     *  @return True when tracing output should be emitted to stderr.
+     */
     inline bool EditorTraceEnabled() {
 #ifndef NDEBUG
         static int checked = 0;
@@ -34,6 +44,14 @@ namespace Horo::Editor {
 #endif
     }
 
+    /** @brief Writes a formatted trace message to stderr when tracing is enabled.
+     *
+     *  Messages are prefixed with "[EDITOR] " and terminated with a newline.
+     *  This is a no-op in release builds or when HORO_EDITOR_TRACE is unset.
+     *
+     *  @param fmt  std::format format string.
+     *  @param args Arguments forwarded to std::format.
+     */
     template<typename... Args>
     inline void EditorTrace(std::format_string<Args...> fmt, Args &&... args) {
         if (!EditorTraceEnabled())

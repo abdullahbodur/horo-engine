@@ -1,3 +1,7 @@
+/**
+ * @file AssetMetadata.cpp
+ * @brief Implementation for AssetMetadata editor functionality.
+ */
 #include "ui/editor/AssetMetadata.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+/** @file UiAutomationConfig.cpp
+ *  @brief Implements UI automation configuration parsing and suite selection helpers. */
 #include "ui/launcher/UiAutomationConfig.h"
 
 #include <array>
@@ -5,11 +7,13 @@
 
 namespace Horo {
     namespace {
+        /** @brief Declares a named suite and its scenario filter expression. */
         struct UiAutomationTestSuiteDefinition {
             std::string_view name;
             std::string_view filter;
         };
 
+        /** @brief Built-in UI automation suite definitions keyed by public suite name. */
         constexpr std::array kUiAutomationTestSuites{
             UiAutomationTestSuiteDefinition{
                 "launcher-basic",

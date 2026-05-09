@@ -1,3 +1,7 @@
+/**
+ * @file EditorMcpHandlers.cpp
+ * @brief Implementation for EditorMcpHandlers editor functionality.
+ */
 // MCP command handler methods for EditorLayer.
 // Method definitions are in this file; declarations remain in EditorLayer.h.
 

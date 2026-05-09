@@ -542,3 +542,351 @@ TEST_CASE("RenderEditorPanelTopBar restores stacks with dropdown action") {
   ImGui::EndFrame();
   ImGui::DestroyContext(context);
 }
+
+// ─── Group A: Modal & picker primitives ───────────────────────────────────────
+
+TEST_CASE("BeginEditorModal returns false when not opened") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("modal-test-window");
+
+  // Not opened this frame → BeginEditorModal must return false (popup not open)
+  Horo::Ui::EditorModalConfig cfg{"modal_test", 400.0f, true};
+  const bool open = Horo::Ui::BeginEditorModal(cfg, false);
+  CHECK_FALSE(open);
+  // EndEditorModal must NOT be called when BeginEditorModal returns false
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorModalFooter result defaults to all-false") {
+  // Verify the result struct default state
+  Horo::Ui::EditorModalFooterResult r;
+  CHECK_FALSE(r.confirmed);
+  CHECK_FALSE(r.cancelled);
+  CHECK_FALSE(r.alternate);
+}
+
+TEST_CASE("RenderEditorModalFooter renders without stack leak (OkCancel)") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("footer-test-window");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  Horo::Ui::RenderEditorModalFooter(theme, "OK");
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorModalFooter renders without stack leak (DestructiveCancel)") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("footer-destructive-window");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  Horo::Ui::RenderEditorModalFooter(
+      theme, "Delete",
+      Horo::Ui::EditorModalFooterStyle::DestructiveCancel);
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorModalFooter renders without stack leak (ThreeWay)") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("footer-threeway-window");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  Horo::Ui::RenderEditorModalFooter(
+      theme, "Save & Continue",
+      Horo::Ui::EditorModalFooterStyle::ThreeWay, "Discard");
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+// ─── Group B: Input field primitives ──────────────────────────────────────────
+
+TEST_CASE("RenderEditorLabeledInput does not crash with empty buf") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("labeled-input-test");
+
+  char buf[64] = "initial";
+  const bool changed = Horo::Ui::RenderEditorLabeledInput(
+      "Asset ID", "##test_labeled", buf, sizeof(buf));
+  // Not interacted → not changed
+  CHECK_FALSE(changed);
+  // Buffer should be untouched
+  CHECK(std::string(buf) == "initial");
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorLabeledInput with hint does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("labeled-input-hint-test");
+
+  char buf[64] = {};
+  REQUIRE_NOTHROW(Horo::Ui::RenderEditorLabeledInput(
+      "Name", "##test_hint", buf, sizeof(buf), 0.0f, "Enter name..."));
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorCheckbox does not crash and restores stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("checkbox-test");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  bool value = false;
+  Horo::Ui::RenderEditorCheckbox(theme, "Enable Feature", value, "Tooltip text");
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK_FALSE(value); // not interacted
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorToggle does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("toggle-test");
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  bool value = false;
+  REQUIRE_NOTHROW(
+      Horo::Ui::RenderEditorToggle(theme, "##mcp_toggle", "Enable MCP", value));
+  CHECK_FALSE(value);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorDragFloat does not crash and returns false without interaction") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("drag-float-test");
+
+  float value = 3.14f;
+  const bool changed = Horo::Ui::RenderEditorDragFloat(
+      "Mass", "##mass", value, 0.1f, 0.0f, 100.0f);
+  CHECK_FALSE(changed);
+  CHECK(value == 3.14f);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorDragFloat3 does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("drag-float3-test");
+
+  float vec[3] = {1.0f, 2.0f, 3.0f};
+  const bool changed = Horo::Ui::RenderEditorDragFloat3(
+      "Position", "##pos", vec);
+  CHECK_FALSE(changed);
+  CHECK(vec[0] == 1.0f);
+  CHECK(vec[1] == 2.0f);
+  CHECK(vec[2] == 3.0f);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorSliderFloat does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("slider-float-test");
+
+  float fov = 60.0f;
+  REQUIRE_NOTHROW(Horo::Ui::RenderEditorSliderFloat(
+      "FOV", "##fov", fov, 1.0f, 179.0f));
+  CHECK(fov == 60.0f);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorColorEdit3 does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("color-edit-test");
+
+  float color[3] = {1.0f, 0.5f, 0.0f};
+  REQUIRE_NOTHROW(Horo::Ui::RenderEditorColorEdit3("Color", "##col", color));
+  CHECK(color[0] == 1.0f);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("BeginEditorPropertyRow and EndEditorPropertyRow do not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("property-row-test");
+
+  REQUIRE_NOTHROW([&] {
+    Horo::Ui::BeginEditorPropertyRow("Mesh", 120.0f);
+    ImGui::TextUnformatted("value");
+    Horo::Ui::EndEditorPropertyRow();
+  }());
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+// ─── Group C: Card and status primitives ──────────────────────────────────────
+
+TEST_CASE("BeginEditorCard and EndEditorCard do not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("card-test");
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  Horo::Ui::EditorCardConfig cfg{"##testcard", 120.0f, 80.0f, false, false};
+  if (Horo::Ui::BeginEditorCard(theme, cfg))
+      Horo::Ui::EndEditorCard();
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("BeginEditorCard with selected=true does not crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("card-selected-test");
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  Horo::Ui::EditorCardConfig cfg{"##selcard", 120.0f, 80.0f, true, false};
+  if (Horo::Ui::BeginEditorCard(theme, cfg))
+      Horo::Ui::EndEditorCard();
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorStatusText renders each level without crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("status-text-test");
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  REQUIRE_NOTHROW([&] {
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Info,    "info %d", 1);
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Warning, "warn %s", "x");
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,   "err");
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Success, "ok");
+  }());
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}

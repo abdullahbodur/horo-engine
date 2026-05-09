@@ -1,3 +1,7 @@
+/**
+ * @file EditorPropertyRules.cpp
+ * @brief Implementation for EditorPropertyRules editor functionality.
+ */
 #include "ui/editor/EditorPropertyRules.h"
 
 #include "ui/editor/EditorSchema.h"

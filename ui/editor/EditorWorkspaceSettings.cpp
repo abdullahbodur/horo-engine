@@ -1,3 +1,7 @@
+/**
+ * @file EditorWorkspaceSettings.cpp
+ * @brief Implementation for EditorWorkspaceSettings editor functionality.
+ */
 #include "ui/editor/EditorWorkspaceSettings.h"
 
 #include <fstream>

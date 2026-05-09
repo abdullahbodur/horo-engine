@@ -1,3 +1,7 @@
+/**
+ * @file EditorAssetDrops.cpp
+ * @brief Implementation for EditorAssetDrops editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

@@ -1,3 +1,5 @@
+/** @file EditorBottomDock.cpp
+ *  @brief Implements the bottom workspace dock and its Assets/Console/MCP tab content. */
 #include "ui/editor/components/EditorBottomDock.h"
 
 #include <algorithm>
@@ -37,6 +39,7 @@ using namespace Horo::Editor::Internal;
 namespace Horo::Editor {
 
 namespace {
+/** @brief Number of frames a project-directory listing remains valid before refresh. */
 constexpr uint32_t kProjectListingCacheFrames = 48;
 }
 
@@ -99,6 +102,7 @@ void EditorBottomDock::DrawSelectedTabContent(Horo::Mcp::McpController* mcpContr
 
 void EditorBottomDock::DrawConsoleTab() {
     using enum LogLevel;
+    const Ui::EditorTheme& theme = Ui::GetEditorTheme();
     int nInfo = 0;
     int nWarn = 0;
     int nErr = 0;
@@ -106,13 +110,13 @@ void EditorBottomDock::DrawConsoleTab() {
     if (ImGui::SmallButton("Clear"))
         LogBuffer::Instance().Clear();
     ImGui::SameLine();
-    if (ImGui::Checkbox("Info", &m_consoleShowInfo))
+    if (Ui::RenderEditorCheckbox(theme, "Info", m_consoleShowInfo))
         ; // Workspace state will be marked dirty by caller
     ImGui::SameLine();
-    if (ImGui::Checkbox("Warn", &m_consoleShowWarn))
+    if (Ui::RenderEditorCheckbox(theme, "Warn", m_consoleShowWarn))
         ; // Workspace state will be marked dirty by caller
     ImGui::SameLine();
-    if (ImGui::Checkbox("Error", &m_consoleShowError))
+    if (Ui::RenderEditorCheckbox(theme, "Error", m_consoleShowError))
         ; // Workspace state will be marked dirty by caller
     ImGui::SameLine();
     ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
@@ -226,7 +230,7 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
         ImGui::PopStyleColor();
     }
 
-    ImGui::SeparatorText("Quick Actions");
+    Horo::Ui::RenderEditorSectionDivider("Quick Actions");
     if (ImGui::Button("Open Settings")) {
         // Settings modal would be accessed through context
     }
@@ -240,7 +244,7 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
     if (ImGui::IsItemClicked())
         m_mcpUiClearToggle = !m_mcpUiClearToggle;
 
-    ImGui::SeparatorText("Clients");
+    Horo::Ui::RenderEditorSectionDivider("Clients");
     if (ImGui::BeginTable("##mcp_clients", 3, ImGuiTableFlags_SizingStretchSame)) {
         ImGui::TableNextRow();
         DrawMcpClientCard("Codex", "Config path", "~/.codex/config.toml or .codex/config.toml",
@@ -260,10 +264,10 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
         ImGui::EndTable();
     }
 
-    ImGui::SeparatorText("Live Requests");
+    Horo::Ui::RenderEditorSectionDivider("Live Requests");
     DrawMcpTabLiveRequests(status);
 
-    ImGui::SeparatorText("Catalog");
+    Horo::Ui::RenderEditorSectionDivider("Catalog");
     DrawMcpTabCatalog(status);
 }
 
@@ -288,6 +292,7 @@ void EditorBottomDock::DrawMcpClientCard(const char* title, const char* pathLabe
 }
 
 void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& status) {
+    const Ui::EditorTheme& theme = Ui::GetEditorTheme();
     if (!ImGui::BeginTable("##mcp_requests", 6,
                            ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -312,9 +317,10 @@ void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& stat
         ImGui::TableSetColumnIndex(1);
         ImGui::TextUnformatted(entry.target.c_str());
         ImGui::TableSetColumnIndex(2);
-        ImGui::TextColored(entry.ok ? ImVec4(0.75f, 0.95f, 0.75f, 1.0f)
-                                     : ImVec4(1.0f, 0.55f, 0.5f, 1.0f),
-                           "%s", entry.ok ? "OK" : "FAIL");
+        Ui::RenderEditorStatusText(theme,
+                                   entry.ok ? Ui::EditorStatusLevel::Success
+                                            : Ui::EditorStatusLevel::Error,
+                                   "%s", entry.ok ? "OK" : "FAIL");
         ImGui::TableSetColumnIndex(3);
         ImGui::Text("%.1f", entry.durationMs);
         ImGui::TableSetColumnIndex(4);
@@ -328,7 +334,7 @@ void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& stat
         return;
     }
     const Mcp::McpActivityEntry& selected = status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
-    ImGui::SeparatorText("Request Detail");
+    Horo::Ui::RenderEditorSectionDivider("Request Detail");
     ImGui::Text("Timestamp: %s", selected.timestampText.c_str());
     ImGui::SameLine();
     ImGui::TextDisabled("|");

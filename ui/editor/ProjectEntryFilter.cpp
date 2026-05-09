@@ -1,3 +1,7 @@
+/**
+ * @file ProjectEntryFilter.cpp
+ * @brief Implementation for ProjectEntryFilter editor functionality.
+ */
 #include "ui/editor/ProjectEntryFilter.h"
 
 namespace Horo::Editor {

@@ -1,3 +1,7 @@
+/**
+ * @file EditorSelection.cpp
+ * @brief Implementation for EditorSelection editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

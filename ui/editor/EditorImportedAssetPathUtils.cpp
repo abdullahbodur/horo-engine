@@ -1,3 +1,7 @@
+/**
+ * @file EditorImportedAssetPathUtils.cpp
+ * @brief Implementation for EditorImportedAssetPathUtils editor functionality.
+ */
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 
 #include <cctype>

@@ -1,3 +1,7 @@
+/**
+ * @file SceneProjectBridge.cpp
+ * @brief Implementation for SceneProjectBridge editor functionality.
+ */
 #include "ui/editor/SceneProjectBridge.h"
 
 #include <algorithm>

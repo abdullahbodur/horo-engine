@@ -1,3 +1,7 @@
+/**
+ * @file SceneDocument.h
+ * @brief Editor-side scene data model representing the authorable scene state.
+ */
 #pragma once
 #include <functional>
 #include <optional>
@@ -11,31 +15,39 @@
 #include "math/Vec3.h"
 
 namespace Horo::Editor {
+    /** @brief Classifies the broad category of a scene object. */
     enum class SceneObjectType { Panel, Prop, Light, Camera };
 
-    // A single component attached to a SceneObject (like Unity Inspector
-    // components). Built-in types and their props:
-    //   "light"      → intensity (float 0-10), color ("r,g,b"), radius (float)
-    //   "rigidbody"  → mass (float), isKinematic ("true"/"false"), useGravity
-    //   ("true"/"false") "script"     → behaviorTag (string)
+    /**
+     * @brief A single component attached to a SceneObject, analogous to a Unity
+     *        Inspector component.
+     *
+     * @note Built-in component types and their properties:
+     *   - "light"     → intensity (float 0-10), color ("r,g,b"), radius (float)
+     *   - "rigidbody" → mass (float), isKinematic ("true"/"false"), useGravity ("true"/"false")
+     *   - "script"    → behaviorTag (string)
+     */
     struct ComponentDesc {
-        std::string type; // "light", "rigidbody", "script"
+        std::string type; /**< Component type name; one of "light", "rigidbody", or "script". */
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
-        props; // type-specific props
+        props; /**< Type-specific key-value properties. */
 
         bool operator==(const ComponentDesc &) const = default;
     };
 
-    // Reusable mesh + scale definition.
-    // Multiple scene objects can reference the same asset by id instead of
-    // repeating mesh/renderScale in every object's props.
+    /**
+     * @brief Reusable mesh and scale definition shared by multiple scene objects.
+     *
+     * Multiple scene objects can reference the same asset by ID instead of
+     * repeating mesh or renderScale in every object's props.
+     */
     struct AssetDef {
-        std::string mesh; // mesh tag, e.g. "stone.obj"
-        std::string renderScale; // "x,y,z" — matches the renderScale prop convention
+        std::string mesh;        /**< Mesh tag, e.g. "stone.obj". */
+        std::string renderScale; /**< Render scale as "x,y,z"; matches the renderScale prop convention. */
         std::string
-        albedoMap; // optional diffuse texture path (e.g. assets/models/foo.png)
-        std::string guid; // stable path-independent identity for imported content
-        std::string displayName; // human-facing label shown in the editor
+        albedoMap;               /**< Optional diffuse texture path, e.g. "assets/models/foo.png". */
+        std::string guid;        /**< Stable path-independent identity for imported content. */
+        std::string displayName; /**< Human-facing label shown in the editor. */
 
         AssetDef() = default;
 
@@ -50,47 +62,57 @@ namespace Horo::Editor {
         bool operator==(const AssetDef &) const = default;
     };
 
+    /**
+     * @brief Records that a scene object was instantiated from a named prefab.
+     */
     struct ScenePrefabInstance {
-        std::string prefabId;
-        std::string sourcePath;
+        std::string prefabId;   /**< Identifier of the source prefab asset. */
+        std::string sourcePath; /**< File path from which the prefab was loaded. */
 
         bool operator==(const ScenePrefabInstance &) const = default;
     };
 
-    // One generic scene object: transform + optional asset reference + props bag.
-    // If assetId is set, mesh and renderScale are resolved from
-    // SceneDocument::assets; the per-object props only carry type-specific
-    // overrides (behavior, etc.). _eid is a runtime-only handle and is never
-    // written to disk.
+    /**
+     * @brief One generic scene object: transform, optional asset reference, and
+     *        a type-specific properties bag.
+     *
+     * @note When @c assetId is non-empty, mesh and renderScale are resolved from
+     *       SceneDocument::assets; per-object props carry only type-specific overrides.
+     *       The runtime entity ID (_eid) is never written to disk.
+     */
     struct SceneObject {
-        std::string id;
-        SceneObjectType type = SceneObjectType::Panel;
-        Vec3 position = Vec3::Zero();
-        Vec3 scale = Vec3::One(); // world-space AABB half-extents
-        float yaw = 0.0f; // degrees around Y axis
-        float pitch = 0.0f; // degrees around X axis; clamped ±89 for Camera objects
-        float roll = 0.0f; // degrees around Z axis
-        std::string assetId; // empty → use inline props
-        std::optional<ScenePrefabInstance> prefabInstance;
+        std::string id;                                    /**< Unique identifier within the scene. */
+        SceneObjectType type = SceneObjectType::Panel;     /**< Broad category of this object. */
+        Vec3 position = Vec3::Zero();                      /**< World-space position. */
+        Vec3 scale = Vec3::One();                          /**< World-space AABB half-extents. */
+        float yaw = 0.0f;                                  /**< Rotation around the Y axis in degrees. */
+        float pitch = 0.0f;                                /**< Rotation around the X axis in degrees; clamped to ±89 for Camera objects. */
+        float roll = 0.0f;                                 /**< Rotation around the Z axis in degrees. */
+        std::string assetId;                               /**< Asset ID; empty means inline props are used directly. */
+        std::optional<ScenePrefabInstance> prefabInstance; /**< Set when this object was instantiated from a prefab. */
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
-        props;
+        props;                                             /**< Type-specific key-value overrides. */
         std::vector<ComponentDesc>
-        components; // attached components (light, rigidbody, script, …)
+        components;                                        /**< Attached components (light, rigidbody, script, etc.). */
 
         bool operator==(const SceneObject &) const = default;
     };
 
+    /**
+     * @brief Top-level container for the editor-side scene: settings, asset
+     *        definitions, and the flat list of scene objects.
+     */
     struct SceneDocument {
-        int version = 1;
-        std::string sceneId = "scene";
-        std::string sceneName = "Scene"; // display name shown in the hierarchy header
-        std::string filePath;
-        bool dirty = false;
+        int version = 1;                   /**< Schema version for forward compatibility. */
+        std::string sceneId = "scene";     /**< Stable identifier for this scene. */
+        std::string sceneName = "Scene";   /**< Display name shown in the hierarchy header. */
+        std::string filePath;              /**< Absolute path to the serialized scene file on disk. */
+        bool dirty = false;                /**< True when unsaved changes are present. */
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
-        settings;
+        settings;                          /**< Global scene-level settings as key-value pairs. */
         std::unordered_map<std::string, AssetDef, StringHash, std::equal_to<> >
-        assets; // id → definition
-        std::vector<SceneObject> objects;
+        assets;                            /**< Named asset definitions keyed by asset ID. */
+        std::vector<SceneObject> objects;  /**< Ordered list of scene objects. */
 
         bool operator==(const SceneDocument &) const = default;
     };

@@ -1,3 +1,7 @@
+/**
+ * @file UiFonts.cpp
+ * @brief Runtime implementations for font-path resolution and ImGui font setup.
+ */
 #include "ui/UiFonts.h"
 
 #include <imgui.h>

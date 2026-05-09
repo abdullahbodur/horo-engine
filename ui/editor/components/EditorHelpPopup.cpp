@@ -1,3 +1,5 @@
+/** @file EditorHelpPopup.cpp
+ *  @brief Implements the searchable keyboard-shortcuts help popup window. */
 #include "ui/editor/components/EditorHelpPopup.h"
 
 #include <imgui.h>

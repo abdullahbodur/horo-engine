@@ -1,3 +1,5 @@
+/** @file EditorToolbar.cpp
+ *  @brief Implements the editor menu bar and icon-toolbar rendering logic. */
 #include "EditorToolbar.h"
 
 #include <imgui.h>
@@ -265,7 +267,7 @@ void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
     {
         // Cast void* to GizmoMode* to avoid circular header dependency
         GizmoMode* gizmoMode = static_cast<GizmoMode*>(state.currentGizmoMode);
-        
+
         const bool isSelect = !gizmoMode || *gizmoMode == GizmoMode::None;
         if (isSelect)
             ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);

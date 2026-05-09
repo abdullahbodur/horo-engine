@@ -1,3 +1,7 @@
+/**
+ * @file EditorInput.cpp
+ * @brief Implementation for EditorInput editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

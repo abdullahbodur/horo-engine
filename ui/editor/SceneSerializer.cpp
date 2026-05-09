@@ -1,3 +1,7 @@
+/**
+ * @file SceneSerializer.cpp
+ * @brief JSON serialization helpers backing SceneSerializer load/save flows.
+ */
 #include "ui/editor/SceneSerializer.h"
 
 #include <algorithm>
@@ -9,9 +13,15 @@
 
 #include "ui/editor/AssetIdentity.h"
 
+/** @brief Local alias for nlohmann::json used by serialization helpers. */
 using json = nlohmann::json;
 
 namespace Horo::Editor {
+    /**
+     * @brief Maps persisted object type tokens to SceneObjectType values.
+     * @param s Serialized type token.
+     * @return Matching SceneObjectType, or Panel for unknown values.
+     */
     static SceneObjectType TypeFromString(std::string_view s) {
         using enum SceneObjectType;
         if (s == "Prop")
@@ -23,6 +33,11 @@ namespace Horo::Editor {
         return Panel;
     }
 
+    /**
+     * @brief Converts SceneObjectType values to persisted JSON tokens.
+     * @param t Object type enum value.
+     * @return Stable type token used in scene files.
+     */
     static const char *TypeToString(SceneObjectType t) {
         using enum SceneObjectType;
         switch (t) {
@@ -37,6 +52,11 @@ namespace Horo::Editor {
         }
     }
 
+    /**
+     * @brief Builds a deterministic JSON object for scene object properties.
+     * @param so Scene object source data.
+     * @return Serialized object properties with runtime-only keys removed.
+     */
     static json BuildObjectPropsJson(const SceneObject &so) {
         json props = json::object();
         std::vector<std::string> propKeys;
@@ -54,6 +74,11 @@ namespace Horo::Editor {
         return props;
     }
 
+    /**
+     * @brief Serializes component descriptors attached to a scene object.
+     * @param so Scene object source data.
+     * @return JSON array of component definitions in deterministic key order.
+     */
     static json BuildObjectComponentsJson(const SceneObject &so) {
         json comps = json::array();
         for (const auto &cd: so.components) {
@@ -73,6 +98,11 @@ namespace Horo::Editor {
         return comps;
     }
 
+    /**
+     * @brief Parses component descriptors from an object JSON payload.
+     * @param so Scene object receiving parsed components.
+     * @param obj Serialized object JSON.
+     */
     static void ParseObjectComponents(SceneObject &so, const json &obj) {
         if (!obj.contains("components") || !obj["components"].is_array())
             return;
@@ -87,6 +117,10 @@ namespace Horo::Editor {
         }
     }
 
+    /**
+     * @brief Migrates legacy isLight property into a light component.
+     * @param so Scene object to normalize.
+     */
     static void ApplyLegacyIsLight(SceneObject &so) {
         if (const auto isLightIt = so.props.find("isLight");
             isLightIt != so.props.end()) {
@@ -107,6 +141,11 @@ namespace Horo::Editor {
         }
     }
 
+    /**
+     * @brief Parses one serialized object entry into a SceneObject.
+     * @param obj Serialized object JSON.
+     * @return Parsed SceneObject with legacy compatibility applied.
+     */
     static SceneObject ParseSceneObject(const json &obj) {
         SceneObject so;
         so.id = obj.value("id", "");
@@ -134,6 +173,12 @@ namespace Horo::Editor {
         return so;
     }
 
+    /**
+     * @brief Loads and parses a scene document JSON file from disk.
+     * @param path Input scene file path.
+     * @return Deserialized SceneDocument.
+     * @throws SceneSerializerException on I/O errors or invalid scene JSON.
+     */
     SceneDocument SceneSerializer::LoadFromFile(const std::string &path) {
         std::ifstream f(path);
         if (!f.is_open())
@@ -183,6 +228,12 @@ namespace Horo::Editor {
         return doc;
     }
 
+    /**
+     * @brief Serializes and writes a scene document JSON file to disk.
+     * @param doc Scene document to persist.
+     * @param path Output scene file path.
+     * @throws SceneSerializerException when the output file cannot be written.
+     */
     void SceneSerializer::SaveToFile(const SceneDocument &doc,
                                      const std::string &path) {
         SceneDocument docToSave = doc;

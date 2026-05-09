@@ -1,3 +1,7 @@
+/**
+ * @file Raycaster.cpp
+ * @brief Implementation for Raycaster editor functionality.
+ */
 #include "ui/editor/Raycaster.h"
 
 #include <algorithm>

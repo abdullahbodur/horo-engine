@@ -1,3 +1,5 @@
+/** @file EditorAssetsPanel.cpp
+ *  @brief Implements asset-grid rendering, spotlight search, and create-asset modal flows. */
 #include "ui/editor/components/EditorAssetsPanel.h"
 
 #include <algorithm>
@@ -9,6 +11,7 @@
 
 #include <imgui.h>
 
+#include "ui/UiComponents.h"
 #include "core/Logger.h"
 #include "renderer/RenderTargetHandle.h"
 #include "ui/editor/AssetIdentity.h"
@@ -23,17 +26,22 @@
 namespace Horo::Editor {
 
 namespace {
+    /** @brief ImGui window name used for the standalone assets panel. */
     constexpr const char* kEditorAssetsWindow = "Assets";
 
-    // Layout constants (copied from EditorLayer)
+    /** @brief Toolbar height used to anchor the assets panel in the left dock layout. */
     constexpr float kEditorToolbarH = 32.0f;
+    /** @brief Status-bar height reserved at the bottom of the editor viewport. */
     constexpr float kEditorStatusH = 20.0f;
+    /** @brief Fraction of left-dock vertical space allocated to the hierarchy section. */
     constexpr float kHierarchySectionRatio = 0.5f;
+    /** @brief Shared ImGui flags used for the docked assets panel container window. */
     constexpr ImGuiWindowFlags kMainPanelWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoSavedSettings;
 
+    /** @brief Returns a lowercase copy of the input string using ASCII semantics. */
     std::string ToLowerAscii(const std::string& str) {
         std::string result = str;
         for (auto& c : result)
@@ -125,25 +133,16 @@ void EditorAssetsPanel::DrawContent(const EditorAssetsPanelCallbacks& callbacks,
 void EditorAssetsPanel::DrawAssetSpotlightPopup(
     const EditorAssetsPanelState& state,
     const std::vector<std::string>& assetIds) {
-    if (*state.assetSearchOpen) {
-        ImGui::SetNextWindowSize(ImVec2(480.0f, 0.0f), ImGuiCond_Appearing);
-        if (!ImGui::IsPopupOpen("Asset Search"))
-            ImGui::OpenPopup("Asset Search");
-    }
-
-    if (!ImGui::BeginPopupModal("Asset Search", nullptr,
-                               ImGuiWindowFlags_AlwaysAutoResize))
-        return;
-
-    ImGui::TextDisabled("Jump to asset");
-    ImGui::SetNextItemWidth(440.0f);
     std::array<char, 256> queryBuf{};
     state.assetSearchQuery->copy(queryBuf.data(), queryBuf.size() - 1);
-    if (ImGui::InputTextWithHint("##asset_spotlight_input", "Type asset id...",
-                                 queryBuf.data(), queryBuf.size()))
-        *state.assetSearchQuery = queryBuf.data();
 
-    ImGui::Separator();
+    if (!Horo::Ui::BeginEditorPickerModal(
+            {"Asset Search", "Jump to asset", 520.0f, "Type asset id..."},
+            *state.assetSearchOpen, queryBuf.data(), queryBuf.size()))
+        return;
+
+    *state.assetSearchQuery = queryBuf.data();
+
     bool picked = false;
     int shownCount = 0;
     for (const std::string& assetId : assetIds) {
@@ -153,9 +152,9 @@ void EditorAssetsPanel::DrawAssetSpotlightPopup(
         if (!AssetMatchesQuickOpenQuery(assetId, it->second,
                                        *state.assetSearchQuery))
             continue;
-        if (const auto label =
-                std::format("{}##asset_spotlight_{}", assetId, assetId);
-            ImGui::Selectable(label.c_str(), *state.selectedAssetId == assetId)) {
+        const auto label = std::format("{}##asset_spotlight_{}", assetId, assetId);
+        if (Horo::Ui::EditorPickerModalRow(label.c_str(),
+                                           *state.selectedAssetId == assetId)) {
             *state.selectedAssetId = assetId;
             picked = true;
         }
@@ -166,14 +165,12 @@ void EditorAssetsPanel::DrawAssetSpotlightPopup(
         ImGui::TextDisabled("No assets match '%s'",
                            state.assetSearchQuery->c_str());
 
-    if (picked || ImGui::Button("Close") ||
-        ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    if (picked) {
         *state.assetSearchOpen = false;
         state.assetSearchQuery->clear();
         ImGui::CloseCurrentPopup();
     }
-
-    ImGui::EndPopup();
+    Horo::Ui::EndEditorPickerModal(*state.assetSearchOpen, state.assetSearchQuery);
 }
 
 void EditorAssetsPanel::DrawAssetTile(
@@ -186,13 +183,9 @@ void EditorAssetsPanel::DrawAssetTile(
     float thumbSize,
     const EditorAssetsPanelCallbacks& callbacks) {
     const bool isSelectedAsset = (*state.selectedAssetId == assetId);
-    if (isSelectedAsset)
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14f, 0.24f, 0.34f, 0.70f));
-    ImGui::BeginChild(
-        "##asset_tile", ImVec2(tileW, tileH), ImGuiChildFlags_Borders,
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    if (isSelectedAsset)
-        ImGui::PopStyleColor();
+    const auto &theme = Horo::Ui::GetEditorTheme();
+    Horo::Ui::EditorCardConfig cardCfg{"##asset_tile", tileW, tileH, isSelectedAsset};
+    Horo::Ui::BeginEditorCard(theme, cardCfg);
 
     ImGui::InvisibleButton("##asset_tile_select",
                           ImVec2(tileW - 2.0f, tileH - 2.0f));
@@ -280,7 +273,7 @@ void EditorAssetsPanel::DrawAssetTile(
                                            : ImGui::GetColorU32(ImGuiCol_Text);
     dl->AddText(ImVec2(nameX, nameY), nameColor, nameLabel.c_str());
 
-    ImGui::EndChild();
+    Horo::Ui::EndEditorCard();
 }
 
 void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
@@ -438,13 +431,9 @@ void EditorAssetsPanel::DrawCreateAssetModal(
     const EditorAssetsPanelState& state,
     bool openModal,
     const EditorAssetsPanelCallbacks& callbacks) {
-    if (openModal)
-        ImGui::OpenPopup("Create Asset");
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal("Create Asset", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (Horo::Ui::BeginEditorModal({"Create Asset", 480.0f, true}, openModal)) {
         DrawCreateAssetModalContent(state, callbacks);
-        ImGui::EndPopup();
+        Horo::Ui::EndEditorModal();
     }
 }
 
@@ -462,19 +451,17 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
         callbacks.setDeferredFilePick(1);  // DeferredFilePick::ImportObjBulk
 #endif
     }
-    if (!state.assetImportError->empty()) {
-        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + blockW);
-        ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
-                          state.assetImportError->c_str());
-        ImGui::PopTextWrapPos();
-    }
+    if (!state.assetImportError->empty())
+        Horo::Ui::RenderEditorStatusText(Horo::Ui::GetEditorTheme(),
+                                         Horo::Ui::EditorStatusLevel::Error,
+                                         "%s", state.assetImportError->c_str());
 
     ImGui::Spacing();
 
     std::string idBuf(128, '\0');
     state.assetDraftId->copy(idBuf.data(), idBuf.size() - 1);
-    ImGui::TextDisabled("Asset ID");
-    if (ImGui::InputText("##draft_id", idBuf.data(), idBuf.size())) {
+    if (Horo::Ui::RenderEditorLabeledInput("Asset ID", "##draft_id",
+                                           idBuf.data(), idBuf.size())) {
         *state.assetDraftId = idBuf.data();
         if (state.assetDraftDisplayName->empty())
             *state.assetDraftDisplayName = *state.assetDraftId;
@@ -483,9 +470,8 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
     std::string displayNameBuf(128, '\0');
     state.assetDraftDisplayName->copy(displayNameBuf.data(),
                                        displayNameBuf.size() - 1);
-    ImGui::TextDisabled("Display name");
-    if (ImGui::InputText("##draft_display_name", displayNameBuf.data(),
-                         displayNameBuf.size()))
+    if (Horo::Ui::RenderEditorLabeledInput("Display name", "##draft_display_name",
+                                           displayNameBuf.data(), displayNameBuf.size()))
         *state.assetDraftDisplayName = displayNameBuf.data();
 
     if (!state.assetDraftGuid->empty()) {
@@ -495,32 +481,30 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
 
     std::string meshBuf(256, '\0');
     state.assetDraftMesh->copy(meshBuf.data(), meshBuf.size() - 1);
-    ImGui::TextDisabled("Mesh");
-    if (ImGui::InputText("##draft_mesh", meshBuf.data(), meshBuf.size()))
+    if (Horo::Ui::RenderEditorLabeledInput("Mesh", "##draft_mesh",
+                                           meshBuf.data(), meshBuf.size()))
         *state.assetDraftMesh = meshBuf.data();
 
     std::string scaleBuf(128, '\0');
     state.assetDraftRenderScale->copy(scaleBuf.data(), scaleBuf.size() - 1);
-    ImGui::TextDisabled("Render scale");
-    if (ImGui::InputText("##draft_scale", scaleBuf.data(), scaleBuf.size()))
+    if (Horo::Ui::RenderEditorLabeledInput("Render scale", "##draft_scale",
+                                           scaleBuf.data(), scaleBuf.size()))
         *state.assetDraftRenderScale = scaleBuf.data();
 
     std::string albDraftBuf(512, '\0');
     state.assetDraftAlbedoMap->copy(albDraftBuf.data(), albDraftBuf.size() - 1);
-    ImGui::TextDisabled("Albedo map (optional)");
-    const ImVec2 draftAlbLabelMin = ImGui::GetItemRectMin();
-    const ImVec2 draftAlbLabelMax = ImGui::GetItemRectMax();
-    if (ImGui::InputText("##draft_albedo", albDraftBuf.data(),
-                         albDraftBuf.size()))
+    const float albLabelTop = ImGui::GetCursorScreenPos().y;
+    if (Horo::Ui::RenderEditorLabeledInput("Albedo map (optional)", "##draft_albedo",
+                                           albDraftBuf.data(), albDraftBuf.size()))
         *state.assetDraftAlbedoMap = albDraftBuf.data();
     {
         const ImVec2 fMin = ImGui::GetItemRectMin();
         const ImVec2 fMax = ImGui::GetItemRectMax();
         if (state.albedoDraftDrop) {
             state.albedoDraftDrop->valid = true;
-            state.albedoDraftDrop->minX = std::min(draftAlbLabelMin.x, fMin.x);
-            state.albedoDraftDrop->minY = draftAlbLabelMin.y;
-            state.albedoDraftDrop->maxX = std::max(draftAlbLabelMax.x, fMax.x);
+            state.albedoDraftDrop->minX = fMin.x;
+            state.albedoDraftDrop->minY = albLabelTop;
+            state.albedoDraftDrop->maxX = fMax.x;
             state.albedoDraftDrop->maxY = fMax.y;
         }
     }
@@ -537,11 +521,19 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
 #endif
 
     ImGui::Spacing();
+    ImGui::PopItemWidth();
 
+    const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     const bool canCreate = !state.assetDraftId->empty() && !state.assetDraftMesh->empty();
     if (!canCreate)
         ImGui::BeginDisabled();
-    if (ImGui::Button("Create Asset", ImVec2(150.0f, 0.0f))) {
+    const auto footerResult = Horo::Ui::RenderEditorModalFooter(
+        theme, "Create Asset", Horo::Ui::EditorModalFooterStyle::OkCancel,
+        nullptr, 150.0f);
+    if (!canCreate)
+        ImGui::EndDisabled();
+
+    if (footerResult.confirmed) {
         AssetDef def;
         def.mesh = *state.assetDraftMesh;
         def.renderScale = state.assetDraftRenderScale->empty() ? "1.0000,1.0000,1.0000"
@@ -572,18 +564,12 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
         callbacks.markDirtyAndReload();
         ImGui::CloseCurrentPopup();
     }
-    if (!canCreate)
-        ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(150.0f, 0.0f))) {
+    if (footerResult.cancelled) {
         state.assetImportError->clear();
         state.assetDraftGuid->clear();
         state.assetDraftDisplayName->clear();
-        ImGui::CloseCurrentPopup();
+        // CloseCurrentPopup already called by RenderEditorModalFooter
     }
-
-    ImGui::PopItemWidth();
 }
 
 }

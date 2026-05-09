@@ -1,3 +1,7 @@
+/**
+ * @file SceneRuntimeCoordinatorBridge.cpp
+ * @brief Implementation for SceneRuntimeCoordinatorBridge editor functionality.
+ */
 #include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 
 #include <sstream>
@@ -6,6 +10,11 @@
 
 namespace Horo::Editor {
     namespace {
+        /**
+         * @brief Builds a compact error summary from runtime scene build issues.
+         * @param buildResult Build output that may contain validation issues.
+         * @return Pipe-delimited error list, or empty when no build errors exist.
+         */
         std::string SummarizeBuildIssues(const RuntimeSceneBuildResult &buildResult) {
             std::ostringstream stream;
             bool first = true;
@@ -20,6 +29,13 @@ namespace Horo::Editor {
             return stream.str();
         }
 
+        /**
+         * @brief Creates a failed runtime operation result from build diagnostics.
+         * @param operation Runtime operation that failed to start.
+         * @param state Current lifecycle state when the failure happened.
+         * @param buildResult Build output used to derive the failure message.
+         * @return Failed operation result populated with an error summary.
+         */
         SceneRuntimeOperationResult
         MakeBuildFailure(SceneRuntimeOperation operation, SceneLifecycleState state,
                          const RuntimeSceneBuildResult &buildResult) {
@@ -34,6 +50,9 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /**
+     * @copydoc LoadSceneDocument
+     */
     SceneRuntimeOperationResult
     LoadSceneDocument(SceneRuntimeCoordinator &coordinator,
                       const SceneDocument &document,
@@ -47,6 +66,9 @@ namespace Horo::Editor {
         return coordinator.Load(buildResult.definition, applyCallback);
     }
 
+    /**
+     * @copydoc ReloadSceneDocument
+     */
     SceneRuntimeOperationResult
     ReloadSceneDocument(SceneRuntimeCoordinator &coordinator,
                         const SceneDocument &document,

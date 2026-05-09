@@ -1,3 +1,7 @@
+/**
+ * @file EditorViewport.cpp
+ * @brief Implementation for EditorViewport editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

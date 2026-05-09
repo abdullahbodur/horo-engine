@@ -1,3 +1,7 @@
+/**
+ * @file EditorLifecycle.cpp
+ * @brief Implementation for EditorLifecycle editor functionality.
+ */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 

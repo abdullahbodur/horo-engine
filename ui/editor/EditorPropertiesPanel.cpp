@@ -1,3 +1,7 @@
+/**
+ * @file EditorPropertiesPanel.cpp
+ * @brief Implementation for EditorPropertiesPanel editor functionality.
+ */
 // Properties panel draw methods for EditorLayer.
 // Method definitions are in this file; declarations remain in EditorLayer.h.
 
@@ -29,6 +33,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ui/UiComponents.h"
 #include "ui/editor/AssetMetadata.h"
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -202,8 +207,8 @@ void EditorLayer::DrawPropertiesMultiSelect() {
   for (const std::string &assetId : sortedAssetIds)
     assetItems.push_back(assetId.c_str());
 
-  ImGui::Combo("Batch Asset", &m_batchAssetChoice, assetItems.data(),
-               static_cast<int>(assetItems.size()));
+  Horo::Ui::Combo(Horo::Ui::GetEditorTheme(), "Batch Asset", &m_batchAssetChoice,
+                 assetItems.data(), static_cast<int>(assetItems.size()));
   if (ImGui::Button("Apply Asset"))
     ApplyBatchAssetChange(sortedAssetIds);
 
@@ -293,6 +298,7 @@ void EditorLayer::DrawPropertiesSelectedAsset(
   }
 
   if (hasAssetMetadata) {
+    const auto &theme = Horo::Ui::GetEditorTheme();
     if (ImGui::Button("Reimport Asset", ImVec2(-1.0f, 0.0f))) {
       const AssetReimportResult reimportResult =
           m_assetImportService.ReimportAssetWithDependents(
@@ -306,8 +312,8 @@ void EditorLayer::DrawPropertiesSelectedAsset(
       }
     }
     if (!m_assetImportError.empty())
-      ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s",
-                         m_assetImportError.c_str());
+      Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
+                                       "%s", m_assetImportError.c_str());
   }
 
   ImGui::Spacing();
@@ -421,8 +427,9 @@ void EditorLayer::DrawPropertiesIdentitySection(SceneObject &obj,
       if (id == currentParent)
         currentIdx = static_cast<int>(parentItems.size()) - 1;
     }
-    if (ImGui::Combo("Parent##identity_parent", &currentIdx, parentItems.data(),
-                     static_cast<int>(parentItems.size()))) {
+    if (Horo::Ui::Combo(Horo::Ui::GetEditorTheme(), "Parent##identity_parent",
+                       &currentIdx, parentItems.data(),
+                       static_cast<int>(parentItems.size()))) {
       if (currentIdx == 0)
         obj.props.erase("parentId");
       else
@@ -442,7 +449,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
 
   if (std::array<float, 3> pos = {obj.position.x, obj.position.y,
                                   obj.position.z};
-      ImGui::DragFloat3("Position", pos.data(), 0.05f)) {
+      Horo::Ui::RenderEditorDragFloat3("Position", "##Position", pos.data(), 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
     changedTransform = true;
     m_document.dirty = true;
@@ -450,7 +457,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
       m_transformCb(obj);
   }
 
-  if (ImGui::DragFloat("Yaw", &obj.yaw, 1.0f, -360.0f, 360.0f)) {
+  if (Horo::Ui::RenderEditorDragFloat("Yaw", "##Yaw", obj.yaw, 1.0f, -360.0f, 360.0f)) {
     changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
@@ -458,7 +465,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
   }
 
   if (float pitch = obj.pitch;
-      ImGui::DragFloat("Pitch", &pitch, 1.0f, -89.0f, 89.0f)) {
+      Horo::Ui::RenderEditorDragFloat("Pitch", "##Pitch", pitch, 1.0f, -89.0f, 89.0f)) {
     obj.pitch = std::max(-89.0f, std::min(89.0f, pitch));
     changedTransform = true;
     m_document.dirty = true;
@@ -522,8 +529,9 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
         curTarget = ti;
       ++ti;
     }
-    if (ImGui::Combo("Follow Target", &curTarget, targetItems.data(),
-                     static_cast<int>(targetItems.size()))) {
+    if (Horo::Ui::Combo(Horo::Ui::GetEditorTheme(), "Follow Target", &curTarget,
+                       targetItems.data(),
+                       static_cast<int>(targetItems.size()))) {
       followId =
           (curTarget == 0) ? "" : targetItems[static_cast<size_t>(curTarget)];
       m_document.dirty = true;
@@ -545,7 +553,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
 
   if (std::array<float, 3> pos = {obj.position.x, obj.position.y,
                                   obj.position.z};
-      ImGui::DragFloat3("Position", pos.data(), 0.05f)) {
+      Horo::Ui::RenderEditorDragFloat3("Position", "##Position", pos.data(), 0.05f)) {
     obj.position = {pos[0], pos[1], pos[2]};
     changedTransform = true;
     m_document.dirty = true;
@@ -554,7 +562,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
   }
 
   if (std::array<float, 3> scl = {obj.scale.x, obj.scale.y, obj.scale.z};
-      ImGui::DragFloat3("Scale", scl.data(), 0.02f, 0.01f, 200.0f)) {
+      Horo::Ui::RenderEditorDragFloat3("Scale", "##Scale", scl.data(), 0.02f, 0.01f, 200.0f)) {
     obj.scale = {scl[0], scl[1], scl[2]};
     m_document.dirty = true;
     if (m_transformCb)
@@ -563,8 +571,8 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
 
   // ---- Rotation (Euler angles: Pitch / Yaw / Roll) ----
   if (std::array<float, 3> rot = {obj.pitch, obj.yaw, obj.roll};
-      ImGui::DragFloat3("Rotation (P/Y/R)", rot.data(), 1.0f, -360.0f,
-                        360.0f)) {
+      Horo::Ui::RenderEditorDragFloat3("Rotation (P/Y/R)", "##Rotation (P/Y/R)",
+                                       rot.data(), 1.0f, -360.0f, 360.0f)) {
     obj.pitch = rot[0];
     obj.yaw = rot[1];
     obj.roll = rot[2];
@@ -600,8 +608,8 @@ void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
     ++assetIndex;
   }
 
-  if (ImGui::Combo("Asset ID", &currentAssetIndex, assetItems.data(),
-                   static_cast<int>(assetItems.size()))) {
+  if (Horo::Ui::Combo(Horo::Ui::GetEditorTheme(), "Asset ID", &currentAssetIndex,
+                     assetItems.data(), static_cast<int>(assetItems.size()))) {
     if (currentAssetIndex == 0)
       obj.assetId.clear();
     else
@@ -617,8 +625,9 @@ void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
       ImGui::TextDisabled("renderScale: %s",
                           assetIt->second.renderScale.c_str());
     } else {
-      ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Missing asset: %s",
-                         obj.assetId.c_str());
+      const auto &theme = Horo::Ui::GetEditorTheme();
+      Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Warning,
+                                       "Missing asset: %s", obj.assetId.c_str());
     }
   }
 }
@@ -626,6 +635,7 @@ void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
 void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
                                         const FieldDef &fd, std::string &val) {
   using enum SceneObjectType;
+  const auto &theme = Horo::Ui::GetEditorTheme();
   const std::string widgetLabel = fd.label + "##schema_" + fd.key;
   // Lambda keeps the repeated Light-transform notification out of the switch
   // body so the per-case nesting depth stays within S3776 limits.
@@ -646,7 +656,8 @@ void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
   }
   case FieldDef::Widget::Float: {
     if (float f = val.empty() ? fd.minVal : std::stof(val);
-        ImGui::SliderFloat(widgetLabel.c_str(), &f, fd.minVal, fd.maxVal)) {
+        Horo::Ui::RenderEditorSliderFloat(fd.label.c_str(), widgetLabel.c_str(),
+                                          f, fd.minVal, fd.maxVal)) {
       val = std::format("{:.4f}", f);
       m_document.dirty = true;
       notifyLightTransform();
@@ -655,7 +666,7 @@ void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
   }
   case FieldDef::Widget::Bool: {
     if (bool b = (val == "true" || val == "1");
-        ImGui::Checkbox(widgetLabel.c_str(), &b)) {
+        Horo::Ui::RenderEditorCheckbox(theme, widgetLabel.c_str(), b)) {
       val = b ? "true" : "false";
       m_document.dirty = true;
       notifyLightTransform();
@@ -675,7 +686,8 @@ void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
   case FieldDef::Widget::Color3: {
     std::array<float, 3> col = {1.0f, 1.0f, 1.0f};
     ParseRGBString(val, col.data());
-    if (ImGui::ColorEdit3(widgetLabel.c_str(), col.data())) {
+    if (Horo::Ui::RenderEditorColorEdit3(fd.label.c_str(), widgetLabel.c_str(),
+                                         col.data())) {
       val = std::format("{:.4f},{:.4f},{:.4f}", col[0], col[1], col[2]);
       m_document.dirty = true;
       notifyLightTransform();
@@ -708,7 +720,7 @@ void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
           comp.props.contains("intensity")
               ? std::strtof(comp.props["intensity"].c_str(), nullptr)
               : 1.0f;
-      ImGui::SliderFloat("Intensity", &intensity, 0.0f, 10.0f)) {
+      Horo::Ui::RenderEditorSliderFloat("Intensity", "##Intensity", intensity, 0.0f, 10.0f)) {
     comp.props["intensity"] = std::format("{:.4f}", intensity);
     m_document.dirty = true;
   }
@@ -716,7 +728,7 @@ void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
   std::array<float, 3> col = {1.0f, 1.0f, 1.0f};
   if (comp.props.contains("color"))
     ParseRGBString(comp.props["color"], col.data());
-  if (ImGui::ColorEdit3("Color", col.data())) {
+  if (Horo::Ui::RenderEditorColorEdit3("Color", "##Color", col.data())) {
     comp.props["color"] =
         std::format("{:.4f},{:.4f},{:.4f}", col[0], col[1], col[2]);
     m_document.dirty = true;
@@ -725,32 +737,33 @@ void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
   float radius = comp.props.contains("radius")
                      ? std::strtof(comp.props["radius"].c_str(), nullptr)
                      : 5.0f;
-  if (ImGui::DragFloat("Radius", &radius, 0.1f, 0.0f, 100.0f)) {
+  if (Horo::Ui::RenderEditorDragFloat("Radius", "##Radius", radius, 0.1f, 0.0f, 100.0f)) {
     comp.props["radius"] = std::format("{:.4f}", radius);
     m_document.dirty = true;
   }
 }
 
 void EditorLayer::DrawRigidBodyComponentFields(ComponentDesc &comp) {
+  const auto &theme = Horo::Ui::GetEditorTheme();
   // Mass
   if (float mass = comp.props.contains("mass")
                        ? std::strtof(comp.props["mass"].c_str(), nullptr)
                        : 1.0f;
-      ImGui::DragFloat("Mass", &mass, 0.1f, 0.0f, 10000.0f)) {
+      Horo::Ui::RenderEditorDragFloat("Mass", "##Mass", mass, 0.1f, 0.0f, 10000.0f)) {
     comp.props["mass"] = std::format("{:.4f}", mass);
     m_document.dirty = true;
   }
   // Is Kinematic
   if (bool isKinematic = comp.props.contains("isKinematic") &&
                          comp.props["isKinematic"] == "true";
-      ImGui::Checkbox("Is Kinematic", &isKinematic)) {
+      Horo::Ui::RenderEditorCheckbox(theme, "Is Kinematic", isKinematic)) {
     comp.props["isKinematic"] = isKinematic ? "true" : "false";
     m_document.dirty = true;
   }
   // Use Gravity
   bool useGravity =
       !comp.props.contains("useGravity") || comp.props["useGravity"] == "true";
-  if (ImGui::Checkbox("Use Gravity", &useGravity)) {
+  if (Horo::Ui::RenderEditorCheckbox(theme, "Use Gravity", useGravity)) {
     comp.props["useGravity"] = useGravity ? "true" : "false";
     m_document.dirty = true;
   }
@@ -779,8 +792,8 @@ void EditorLayer::DrawScriptComponentField(ComponentDesc &comp) {
       currentIdx = i + 1;
   }
 
-  if (ImGui::Combo("Behavior", &currentIdx, labels.data(),
-                   static_cast<int>(labels.size()))) {
+  if (Horo::Ui::Combo(Horo::Ui::GetEditorTheme(), "Behavior", &currentIdx,
+                     labels.data(), static_cast<int>(labels.size()))) {
     comp.props["behaviorTag"] =
         (currentIdx == 0) ? "" : options[static_cast<size_t>(currentIdx - 1)];
     m_document.dirty = true;

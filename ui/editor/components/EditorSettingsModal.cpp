@@ -1,24 +1,27 @@
+/** @file EditorSettingsModal.cpp
+ *  @brief Implements drawing and apply/cancel behavior for the editor settings modal. */
 #include "ui/editor/components/EditorSettingsModal.h"
 
 #include <format>
 #include <imgui.h>
 
 #include "mcp/McpSettings.h"
+#include "ui/UiComponents.h"
 
 namespace Horo::Editor {
 
 void EditorSettingsModal::Draw() {
+    const auto& theme = Horo::Ui::GetEditorTheme();
+
     if (m_open && m_mcpController)
         ImGui::OpenPopup("Editor Settings");
 
-    if (!ImGui::BeginPopupModal("Editor Settings", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize))
+    if (!Horo::Ui::BeginEditorModal({"Editor Settings", 480.0f, true}, false))
         return;
 
     ImGui::TextDisabled("Built-in MCP");
-    ImGui::Checkbox("Enable built-in MCP", &m_draft.enabled);
-    ImGui::Checkbox("Auto-start when editor opens",
-                    &m_draft.autoStart);
+    Horo::Ui::RenderEditorToggle(theme, "##mcp_toggle", "Enable built-in MCP", m_draft.enabled);
+    Horo::Ui::RenderEditorCheckbox(theme, "Auto-start when editor opens", m_draft.autoStart);
 
     if (int port = m_draft.port; ImGui::InputInt("Port", &port))
         m_draft.port = std::max(1, std::min(65535, port));
@@ -38,7 +41,8 @@ void EditorSettingsModal::Draw() {
     }
 
     ImGui::Separator();
-    if (ImGui::Button("Apply", ImVec2(120.0f, 0.0f))) {
+    const auto footerResult = Horo::Ui::RenderEditorModalFooter(theme, "Apply");
+    if (footerResult.confirmed) {
         std::string err;
         if (m_mcpController && m_mcpController->ApplySettings(m_draft, &err)) {
             m_draft = m_mcpController->GetSettings();
@@ -49,16 +53,14 @@ void EditorSettingsModal::Draw() {
             m_error = err;
         }
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+    if (footerResult.cancelled) {
         m_open = false;
         if (m_mcpController)
             m_draft = m_mcpController->GetSettings();
         m_error.clear();
-        ImGui::CloseCurrentPopup();
     }
 
-    ImGui::EndPopup();
+    Horo::Ui::EndEditorModal();
 }
 
 } // namespace Horo::Editor

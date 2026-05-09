@@ -1,3 +1,7 @@
+/**
+ * @file EditorSearch.cpp
+ * @brief Implementation for EditorSearch editor functionality.
+ */
 #include "ui/editor/EditorSearch.h"
 
 #include <algorithm>

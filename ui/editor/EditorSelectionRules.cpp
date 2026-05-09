@@ -1,3 +1,7 @@
+/**
+ * @file EditorSelectionRules.cpp
+ * @brief Implementation for EditorSelectionRules editor functionality.
+ */
 #include "ui/editor/EditorSelectionRules.h"
 
 #include <format>

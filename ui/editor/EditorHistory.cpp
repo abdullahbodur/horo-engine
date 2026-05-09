@@ -1,3 +1,7 @@
+/**
+ * @file EditorHistory.cpp
+ * @brief Implementation for EditorHistory editor functionality.
+ */
 // Undo/redo history management for EditorLayer.
 // Method definitions are in this file; declarations remain in EditorLayer.h.
 #include "ui/editor/EditorLayer.h"
