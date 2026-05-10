@@ -1,6 +1,6 @@
 /**
  * @file EditorPropertyRules.cpp
- * @brief Implementation for EditorPropertyRules editor functionality.
+ * @brief Schema-driven defaults and Prop/Camera construction helpers shared by the editor.
  */
 #include "ui/editor/EditorPropertyRules.h"
 
@@ -10,6 +10,7 @@
 
 namespace Horo::Editor {
 
+/** @copydoc MakeObjectFromAsset */
 SceneObject MakeObjectFromAsset(const SceneDocument &doc,
                                 const std::string &assetId,
                                 const EditorSchema &schema) {
@@ -35,6 +36,7 @@ SceneObject MakeObjectFromAsset(const SceneDocument &doc,
   return obj;
 }
 
+/** @copydoc ApplySchemaFieldDefaults */
 void ApplySchemaFieldDefaults(SceneObject &obj, const EditorSchema &schema) {
   const TypeSchema *typeSchema = schema.GetSchema(obj.type);
   if (!typeSchema)
@@ -45,6 +47,7 @@ void ApplySchemaFieldDefaults(SceneObject &obj, const EditorSchema &schema) {
   }
 }
 
+/** @copydoc ApplyComponentFieldDefaults */
 void ApplyComponentFieldDefaults(ComponentDesc &comp,
                                  const EditorSchema &schema) {
   const ComponentSchema *compSchema = schema.GetComponentSchema(comp.type);
@@ -56,6 +59,7 @@ void ApplyComponentFieldDefaults(ComponentDesc &comp,
   }
 }
 
+/** @copydoc ApplyCameraBuiltinDefaults */
 void ApplyCameraBuiltinDefaults(SceneObject &obj) {
   if (!obj.props.contains("fov"))
     obj.props["fov"] = "60";

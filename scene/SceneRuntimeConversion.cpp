@@ -7,6 +7,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "math/MathUtils.h"
+
 namespace Horo {
     namespace {
         Vec3 ParseVec3Csv(std::string_view value, const Vec3 &fallback) {
@@ -165,9 +167,16 @@ namespace Horo {
 
             switch (node.kind) {
                     using enum SceneNodeKind;
-                case Panel:
-                    room.panels.emplace_back(node.position, node.scale);
+                case Panel: {
+                    RuntimeScenePanel runtimePanel;
+                    runtimePanel.center = node.position;
+                    runtimePanel.half = node.scale;
+                    runtimePanel.rotation = Quaternion::FromEuler(
+                        ToRadians(node.pitch), ToRadians(node.yaw),
+                        ToRadians(node.roll));
+                    room.panels.push_back(runtimePanel);
                     break;
+                }
                 case Prop:
                     AppendPropFromNode(node, path, assetsById, room, result);
                     break;

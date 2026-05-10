@@ -37,9 +37,7 @@
 using namespace Horo;
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Test helpers
-// ---------------------------------------------------------------------------
 
 // Build a minimal one-bone skeleton with an identity inverseBindMatrix.
 static std::shared_ptr<Skeleton> MakeSingleBoneSkeleton() {

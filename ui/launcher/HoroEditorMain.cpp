@@ -272,6 +272,15 @@ private:
     if (m_shell.HasActiveProject())
       frameConfig.lights = m_runtime->GetLights();
 
+    // Sync the camera aspect to the current framebuffer. Without this, the
+    // projection stays at its constructor default (16:9) and resizing the
+    // window stretches geometry horizontally instead of revealing more scene.
+    const int fbWidth = GetWindow().GetWidth();
+    const int fbHeight = GetWindow().GetHeight();
+    if (fbWidth > 0 && fbHeight > 0)
+      m_camera.aspect =
+          static_cast<float>(fbWidth) / static_cast<float>(fbHeight);
+
     Renderer::BeginFrame(frameConfig);
     if (m_shell.HasActiveProject()) {
       Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(m_camera),
@@ -279,7 +288,7 @@ private:
       m_scene.RenderSystems(alpha);
       Renderer::EndPass();
     }
-    m_editor.Render(m_camera, GetWindow().GetWidth(), GetWindow().GetHeight());
+    m_editor.Render(m_camera, fbWidth, fbHeight);
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
     if (m_runUiAutomation && m_uiAutomation)

@@ -244,7 +244,6 @@ namespace Horo::Editor {
         j["sceneId"] = docToSave.sceneId.empty() ? "scene" : docToSave.sceneId;
         j["sceneName"] = docToSave.sceneName.empty() ? "Scene" : docToSave.sceneName;
 
-        // ---- Scene settings (stable key order) ----
         json settings = json::object();
         {
             std::vector<std::string> keys;
@@ -257,7 +256,6 @@ namespace Horo::Editor {
         }
         j["settings"] = settings;
 
-        // ---- Asset registry ----
         json assets = json::object();
         std::vector<std::string> assetIds;
         assetIds.reserve(docToSave.assets.size());
@@ -278,7 +276,6 @@ namespace Horo::Editor {
         }
         j["assets"] = assets;
 
-        // ---- Objects ----
         j["objects"] = json::array();
         for (auto &so: docToSave.objects) {
             json obj;

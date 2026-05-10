@@ -1,14 +1,16 @@
 /**
  * @file ProjectEntryFilter.cpp
- * @brief Implementation for ProjectEntryFilter editor functionality.
+ * @brief Project-browser filtering for dotfiles and generated/build directory names.
  */
 #include "ui/editor/ProjectEntryFilter.h"
 
 namespace Horo::Editor {
+    /** @copydoc IsHiddenDotEntry */
     bool IsHiddenDotEntry(std::string_view filenameUtf8) {
         return !filenameUtf8.empty() && filenameUtf8.front() == '.';
     }
 
+    /** @copydoc IsBlockedProjectDirName */
     bool IsBlockedProjectDirName(
         std::string_view dirname,
         const std::unordered_set<std::string, StringHash, std::equal_to<> >

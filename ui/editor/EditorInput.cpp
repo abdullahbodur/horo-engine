@@ -1,6 +1,6 @@
 /**
  * @file EditorInput.cpp
- * @brief Implementation for EditorInput editor functionality.
+ * @brief Per-frame keyboard/mouse handling for @ref EditorLayer: shortcuts, fly camera, gizmo, and picking.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -22,8 +22,7 @@
 
 namespace Horo::Editor {
 
-// Dispatches all keyboard shortcuts (toggle popups, undo/redo, escape,
-// tab/fly-mode) that must fire every active editor frame.
+/** @copydoc EditorLayer::HandleEditorKeyboardShortcuts */
 void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
     const Camera &cam) {
   if (!m_window)
@@ -106,7 +105,7 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   m_prevTab = currTab;
 }
 
-// Advances the fly camera and keeps the active gizmo anchored to its target.
+/** @copydoc EditorLayer::UpdateFlyCameraWithGizmoSync */
 void EditorLayer::UpdateFlyCameraWithGizmoSync(float dt, Camera &cam) {
   UpdateFlyCamera(dt, cam);
   // Keep gizmo anchored to object even while flying
@@ -122,6 +121,7 @@ void EditorLayer::UpdateFlyCameraWithGizmoSync(float dt, Camera &cam) {
   }
 }
 
+/** @copydoc EditorLayer::RequestGizmoMode */
 void EditorLayer::RequestGizmoMode(GizmoMode mode) {
   using enum GizmoMode;
   m_currentGizmoMode = mode;
@@ -142,9 +142,7 @@ void EditorLayer::RequestGizmoMode(GizmoMode mode) {
   m_gizmo.Activate(mode, gizmoObj.position, gizmoRot, gizmoObj.scale);
 }
 
-// Handles all non-fly-mode per-frame work: copy-reference shortcut, gizmo
-// mode hotkeys (W/E/R), gizmo sync + delta update with surface/grid snapping,
-// object picking, and the Delete-key action.
+/** @copydoc EditorLayer::HandleGizmoModeHotkeys */
 void EditorLayer::HandleGizmoModeHotkeys(const ImGuiIO &io) {
   using enum GizmoMode;
   const bool currW = glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS;
@@ -163,6 +161,7 @@ void EditorLayer::HandleGizmoModeHotkeys(const ImGuiIO &io) {
   m_prevGizmoR = currR;
 }
 
+/** @copydoc EditorLayer::SyncGizmoToSelection */
 void EditorLayer::SyncGizmoToSelection() {
   if (!m_gizmo.IsActive())
     return;
@@ -182,6 +181,7 @@ void EditorLayer::SyncGizmoToSelection() {
   m_gizmo.SyncTarget(syncObj.position, syncRot, syncObj.scale);
 }
 
+/** @copydoc EditorLayer::ApplyGizmoTranslateSnapping */
 void EditorLayer::ApplyGizmoTranslateSnapping( // NOSONAR: cpp:S3776 complex
                                                // AABB snapping geometry;
                                                // extraction would obscure snap
@@ -277,6 +277,7 @@ void EditorLayer::ApplyGizmoTranslateSnapping( // NOSONAR: cpp:S3776 complex
   }
 }
 
+/** @copydoc EditorLayer::UpdateNonFlyModeInput */
 void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
                                         int screenH) {
   if (!m_window)
@@ -306,13 +307,11 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
   }
   m_prevCopyRef = currCopyRef;
 
-  // ---- Gizmo mode hotkeys (W/E/R) ----------------------------------------
   HandleGizmoModeHotkeys(io);
 
   // Sync gizmo to primary selected object each frame
   SyncGizmoToSelection();
 
-  // ---- Gizmo update (consumes mouse before picking) ----------------------
   Vec3 dPos = Vec3::Zero();
   Quaternion dRot = Quaternion::Identity();
   Vec3 dScale = Vec3::One();
@@ -361,6 +360,7 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
   m_prevDel = currDel;
 }
 
+/** @copydoc EditorLayer::OnUpdate */
 bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
 
   if (m_active) {
@@ -408,6 +408,7 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
          (io.WantCaptureMouse || io.WantCaptureKeyboard);
 }
 
+/** @copydoc EditorLayer::ToggleFlyMode */
 void EditorLayer::ToggleFlyMode(const Camera &cam) {
   m_flyMode = !m_flyMode;
   m_flyCamInitialized = false;
@@ -417,6 +418,7 @@ void EditorLayer::ToggleFlyMode(const Camera &cam) {
   (void)cam; // camera sync happens lazily in UpdateFlyCamera
 }
 
+/** @copydoc EditorLayer::UpdateFlyCamera */
 void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
   // Fly mode always uses world-up to avoid inverted controls after view snaps.
   cam.up = Vec3::Up();

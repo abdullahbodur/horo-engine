@@ -12,10 +12,20 @@ struct TransformGizmoTestAccessor; // forward declaration for test seam
 
 namespace Horo::Editor {
     /** @brief Operation mode of the transform gizmo. */
-    enum class GizmoMode { None, Translate, Rotate, Scale };
+    enum class GizmoMode {
+        None,      /**< Gizmo inactive; does not render or consume input. */
+        Translate, /**< Drag handles adjust world-space position. */
+        Rotate,    /**< Drag arcs adjust world-space rotation. */
+        Scale,     /**< Drag handles adjust world-space scale. */
+    };
 
     /** @brief World-space axis currently highlighted or being dragged. */
-    enum class GizmoAxis { None, X, Y, Z };
+    enum class GizmoAxis {
+        None, /**< No axis selected or drag inactive. */
+        X,    /**< Local/world X axis handle. */
+        Y,    /**< Local/world Y axis handle. */
+        Z,    /**< Local/world Z axis handle. */
+    };
 
     /** @brief Renders and drives an interactive per-object transform gizmo in the viewport. */
     class TransformGizmo {
@@ -79,8 +89,6 @@ namespace Horo::Editor {
          */
         void Draw(const Camera &cam, int screenW, int screenH) const;
 
-        // ---- Math helpers (public for testability)
-        // ----------------------------------
 
         // World-space handle length. Uses a fixed 1.0 unit length so gizmo
         // naturally scales on screen when zooming in/out.

@@ -446,6 +446,7 @@ void EditorLayer::DrawSelectionHighlight() {
 
     Vec3 center = obj.position;
     Vec3 half = obj.scale;
+    bool usingWorldAabb = false;
     if (!m_liveRegistry ||
         !TryPropWorldAabb(*m_liveRegistry, obj, center, half))
       half = {std::max(half.x, 0.25f), std::max(half.y, 0.25f),
@@ -454,8 +455,20 @@ void EditorLayer::DrawSelectionHighlight() {
       half.x = std::max(half.x, 0.25f);
       half.y = std::max(half.y, 0.25f);
       half.z = std::max(half.z, 0.25f);
+      usingWorldAabb = true;
     }
-    DebugDraw::Box(center, half, {0.2f, 0.7f, 1.0f, 1.0f});
+
+    const Vec4 highlightColor = {0.2f, 0.7f, 1.0f, 1.0f};
+    const bool hasRotation =
+        obj.pitch != 0.0f || obj.yaw != 0.0f || obj.roll != 0.0f;
+    if (hasRotation && !usingWorldAabb) {
+      const Quaternion objRotation =
+          Quaternion::FromEuler(ToRadians(obj.pitch), ToRadians(obj.yaw),
+                                ToRadians(obj.roll));
+      DebugDraw::OrientedBox(center, half, objRotation, highlightColor);
+    } else {
+      DebugDraw::Box(center, half, highlightColor);
+    }
   }
 }
 

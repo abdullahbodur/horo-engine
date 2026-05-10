@@ -30,7 +30,6 @@
 
 namespace Horo::Editor {
 namespace Internal {
-// ---- Layout constants ----
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
 constexpr float kEditorToolbarH = 36.0f;           /**< Height of the editor toolbar in pixels. */
 constexpr float kEditorStatusH = 24.0f;            /**< Height of the editor status bar in pixels. */
@@ -49,7 +48,6 @@ constexpr ImGuiWindowFlags kMainPanelWindowFlags =
 
 constexpr size_t kMaxEditorHistorySnapshots = 128; /**< Maximum undo/redo depth before old snapshots are trimmed. */
 
-// ---- Document utilities ----
 
 /** @brief Returns a mutable reference to the scene object at index @p idx.
  *  @param doc Scene document that owns the object list.
@@ -67,7 +65,6 @@ inline const SceneObject &ObjectAt(const SceneDocument &doc, int idx) {
 
 /** @brief Keeps every object's "_assetRenderScale" prop in sync with its asset definition.
  *  @param doc Scene document to update; no-op when null. */
-// Keeps every object's "_assetRenderScale" prop in sync with its asset def.
 inline void SyncAssetScaleMetadata(SceneDocument *doc) {
   if (!doc)
     return;
@@ -135,7 +132,6 @@ inline float DistSqPointSegment2D(float px, float py, float ax, float ay,
   return dx * dx + dy * dy;
 }
 
-// ---- View Gimbal helpers (extracted for unit-test access) -------------------
 // Geometry and hit-testing helpers shared between DrawViewGimbal and tests.
 // ImU32/ImVec2 are plain POD types that don't require an active ImGui context,
 // so these can be used freely in unit tests.
@@ -162,10 +158,10 @@ struct ViewGimbalAxisCache {
 
 /** @brief 2D arrow geometry for one gimbal axis. */
 struct ViewGimbalArrowGeometry {
-  ImVec2 tip;
-  ImVec2 headLeft;
-  ImVec2 headRight;
-  ImVec2 shaftEnd;
+  ImVec2 tip;       /**< Arrow tip in screen space (furthest from gimbal centre). */
+  ImVec2 headLeft;  /**< Left base vertex of the arrowhead triangle. */
+  ImVec2 headRight; /**< Right base vertex of the arrowhead triangle. */
+  ImVec2 shaftEnd;  /**< Shaft endpoint where the arrowhead attaches (toward centre). */
 };
 
 /** @brief Builds the 2-D arrow geometry for a single gimbal axis.
@@ -397,7 +393,6 @@ ResolveProjectRelativeOrAbsolutePath(std::string_view rawPath) {
   return ProjectPath::Root() / p;
 }
 
-// ---- UI utilities ----
 
 /** @brief Parses a comma-separated "r,g,b" string into a float[3] array.
  *  @param s   Source string in "r,g,b" format; missing components default to 1.
@@ -487,8 +482,6 @@ inline bool SchemaAppliesToObjectType(const std::vector<std::string> &appliesTo,
   });
 }
 
-// ---- Type-string converters (used in both EditorLayer.cpp and
-// EditorMcpHandlers.cpp) ----
 
 /** @brief Converts a SceneObjectType to its canonical display string.
  *  @param type The scene object type to convert.
@@ -544,7 +537,6 @@ inline bool ParseSceneObjectType(std::string_view raw,
  *  @param entry   Log line whose time field is formatted.
  *  @param buf     Output character buffer; must be non-null and at least @p bufSize bytes.
  *  @param bufSize Size of @p buf in bytes including the null terminator. */
-// Formats the wall-clock time of a LogLine as HH:MM:SS into buf.
 inline void FormatLogTime(const LogLine &entry, char *buf, size_t bufSize) {
   using clock = std::chrono::system_clock;
   const std::time_t t = clock::to_time_t(entry.time);
@@ -627,7 +619,6 @@ using Internal::SyncAssetScaleMetadata;
 using Internal::ObjectTypeIcon;
 using Internal::TryPropWorldAabb;
 using Internal::ResolvePreviewShaderPath;
-// ---- View Gimbal helpers ----
 using Internal::ViewGimbalAxisDraw;
 using Internal::ViewGimbalAxisCache;
 using Internal::ViewGimbalArrowGeometry;

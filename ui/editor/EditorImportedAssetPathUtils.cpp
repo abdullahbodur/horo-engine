@@ -1,6 +1,8 @@
 /**
  * @file EditorImportedAssetPathUtils.cpp
- * @brief Implementation for EditorImportedAssetPathUtils editor functionality.
+ * @brief Resolves imported asset folders under @c assets/models with symlink-safe containment checks.
+ *
+ * Validates GUID segments for filesystem safety and resolves mesh-relative GUID folders when the GUID directory exists.
  */
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 
@@ -14,6 +16,7 @@ namespace Horo::Editor {
 
 namespace {
 
+/** @brief True when @p guid is non-empty and uses only alphanumeric, hyphen, or underscore characters. */
 bool IsValidManagedAssetGuid(std::string_view guid) {
   if (guid.empty())
     return false;
@@ -28,6 +31,7 @@ bool IsValidManagedAssetGuid(std::string_view guid) {
 
 } // namespace
 
+/** @copydoc IsPathWithinDirectory */
 bool IsPathWithinDirectory(const std::filesystem::path &path,
                            const std::filesystem::path &directory) {
   namespace fs = std::filesystem;
@@ -49,6 +53,7 @@ bool IsPathWithinDirectory(const std::filesystem::path &path,
   return dirIt == normDir.end();
 }
 
+/** @copydoc ResolveProjectAssetPath */
 std::filesystem::path ResolveProjectAssetPath(std::string_view rawPath) {
   namespace fs = std::filesystem;
   if (rawPath.empty())
@@ -66,6 +71,7 @@ std::filesystem::path ResolveProjectAssetPath(std::string_view rawPath) {
   return fs::weakly_canonical(root / path, ec);
 }
 
+/** @copydoc GetManagedImportedAssetDirectory */
 std::filesystem::path GetManagedImportedAssetDirectory(const AssetDef &asset) {
   namespace fs = std::filesystem;
   if (!asset.guid.empty()) {

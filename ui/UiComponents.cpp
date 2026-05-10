@@ -932,4 +932,206 @@ void RenderEditorStatusText(const EditorTheme& theme,
     va_end(args);
 }
 
+// ─── Group D: Settings modal primitives ──────────────────────────────────────
+
+EditorVerticalTabResult RenderEditorVerticalTabs(
+    const EditorTheme& theme,
+    const char* id,
+    std::span<const EditorVerticalTabItem> tabs,
+    float width) {
+
+    EditorVerticalTabResult result;
+    if (!id || tabs.empty() || width <= 0.0f)
+        return result;
+
+    // Host child: no built-in border; we paint the column border manually so
+    // the bottom edge can extend past the child content height cleanly.
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme.palette.panelSoft);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
+    ImGui::BeginChild(id, ImVec2(width, 0.0f), ImGuiChildFlags_Borders);
+
+    const ImDrawList* /*unused*/ drawList [[maybe_unused]] = ImGui::GetWindowDrawList();
+    const float availWidth = ImGui::GetContentRegionAvail().x;
+    constexpr float kRowHeight = 54.0f;
+    constexpr float kRowPaddingX = 10.0f;
+    constexpr float kRowPaddingY = 8.0f;
+
+    for (int i = 0; i < static_cast<int>(tabs.size()); ++i) {
+        const EditorVerticalTabItem& item = tabs[i];
+        const char* tabId = item.id ? item.id : "";
+        ImGui::PushID(tabId);
+
+        const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+        const ImVec2 rowSize(availWidth, kRowHeight);
+
+        // Hit-test area
+        ImGui::InvisibleButton("##vtab_hit", rowSize);
+        const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+        const bool hovered = ImGui::IsItemHovered();
+
+        // Background
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec4 bg = item.selected ? theme.palette.selection
+                                        : (hovered ? theme.palette.cardHover
+                                                   : ImVec4(0, 0, 0, 0));
+        if (bg.w > 0.0f) {
+            dl->AddRectFilled(
+                rowStart,
+                ImVec2(rowStart.x + rowSize.x, rowStart.y + rowSize.y),
+                ImGui::ColorConvertFloat4ToU32(bg),
+                theme.rounding.button);
+        }
+
+        // Accent marker on the left edge when selected
+        if (item.selected) {
+            dl->AddRectFilled(
+                rowStart,
+                ImVec2(rowStart.x + 3.0f, rowStart.y + rowSize.y),
+                ImGui::ColorConvertFloat4ToU32(theme.palette.accent),
+                theme.rounding.button);
+        }
+
+        // Text
+        float textX = rowStart.x + kRowPaddingX;
+        const float textY = rowStart.y + kRowPaddingY;
+
+        if (item.icon && item.icon[0] != '\0') {
+            const ImVec2 iconSize = ImGui::CalcTextSize(item.icon);
+            dl->AddText(
+                ImVec2(textX, textY),
+                ImGui::ColorConvertFloat4ToU32(
+                    item.selected ? theme.palette.text : theme.palette.textMuted),
+                item.icon);
+            textX += iconSize.x + 8.0f;
+        }
+
+        if (item.label && item.label[0] != '\0') {
+            dl->AddText(
+                ImVec2(textX, textY),
+                ImGui::ColorConvertFloat4ToU32(theme.palette.text),
+                item.label);
+        }
+
+        if (item.description && item.description[0] != '\0') {
+            dl->AddText(
+                ImVec2(textX, textY + ImGui::GetFontSize() + 2.0f),
+                ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
+                item.description);
+        }
+
+        if (clicked)
+            result.clickedIndex = i;
+
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    return result;
+}
+
+bool BeginEditorSettingsCard(const EditorTheme& theme,
+                             const char* id,
+                             const char* title) {
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme.palette.card);
+    ImGui::PushStyleColor(ImGuiCol_Border, theme.palette.border);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.rounding.card);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    const bool visible = ImGui::BeginChild(
+        id ? id : "##settings_card",
+        ImVec2(0.0f, 0.0f),
+        ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    if (visible && title && title[0] != '\0') {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+        ImGui::TextUnformatted(title);
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+    }
+    return visible;
+}
+
+void EndEditorSettingsCard() {
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+}
+
+void RenderEditorSettingText(const EditorTheme& theme,
+                             const char* label,
+                             const char* description) {
+    if (label && label[0] != '\0') {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+        ImGui::TextUnformatted(label);
+        ImGui::PopStyleColor();
+    }
+    if (description && description[0] != '\0') {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.textMuted);
+        ImGui::TextWrapped("%s", description);
+        ImGui::PopStyleColor();
+    }
+}
+
+EditorSettingsFooterResult RenderEditorSettingsFooter(
+    const EditorTheme& theme,
+    bool canApply,
+    float buttonWidth) {
+
+    EditorSettingsFooterResult result;
+
+    // Right-align: compute total width then SameLine-advance to align right edge.
+    constexpr float kButtonSpacing = 8.0f;
+    const float totalWidth = buttonWidth * 3.0f + kButtonSpacing * 2.0f;
+    const float avail = ImGui::GetContentRegionAvail().x;
+    if (avail > totalWidth)
+        ImGui::Dummy(ImVec2(avail - totalWidth, 0.0f));
+    ImGui::SameLine();
+
+    // Cancel (secondary)
+    {
+        int nc = 0; int nv = 0;
+        PushButtonColorsSecondary(theme.palette, &nc);
+        PushButtonVars(theme.rounding, theme.density, &nv);
+        if (ImGui::Button("Cancel##settings_test/footer_cancel",
+                          ImVec2(buttonWidth, 0.0f))) {
+            result.cancelled = true;
+        }
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+    }
+    ImGui::SameLine(0.0f, kButtonSpacing);
+
+    // Apply (secondary, disabled when canApply == false)
+    {
+        int nc = 0; int nv = 0;
+        PushButtonColorsSecondary(theme.palette, &nc);
+        PushButtonVars(theme.rounding, theme.density, &nv);
+        ImGui::BeginDisabled(!canApply);
+        if (ImGui::Button("Apply##settings_test/footer_apply",
+                          ImVec2(buttonWidth, 0.0f))) {
+            result.applied = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+    }
+    ImGui::SameLine(0.0f, kButtonSpacing);
+
+    // OK (primary)
+    {
+        int nc = 0; int nv = 0;
+        PushButtonColorsPrimary(theme.palette, &nc);
+        PushButtonVars(theme.rounding, theme.density, &nv);
+        if (ImGui::Button("OK##settings_test/footer_ok",
+                          ImVec2(buttonWidth, 0.0f))) {
+            result.accepted = true;
+        }
+        ImGui::PopStyleColor(nc);
+        ImGui::PopStyleVar(nv);
+    }
+
+    return result;
+}
+
 } // namespace Horo::Ui

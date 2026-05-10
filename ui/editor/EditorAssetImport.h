@@ -24,9 +24,6 @@ namespace Horo::Editor {
      */
     std::string MeshTagFromImportedPath(const std::string &path);
 
-    // Returns a "x,y,z" render-scale string that makes the mesh approximately
-    // targetHeight world units tall. Returns "1.0000,1.0000,1.0000" if the OBJ
-    // cannot be parsed or if the mesh has zero height.
     /** @brief Computes a render-scale string that fits the mesh to a target world-space height.
      *  @param meshTag      Tag identifying the mesh within the imported OBJ.
      *  @param targetHeight Desired height in world units (default 2.0).

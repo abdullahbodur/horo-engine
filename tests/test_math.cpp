@@ -11,7 +11,6 @@
 using namespace Horo;
 using Catch::Approx;
 
-// ---- Vec3 ----
 
 TEST_CASE("Vec3 arithmetic", "[math][vec3]") {
   Vec3 a{1, 2, 3};
@@ -66,7 +65,6 @@ TEST_CASE("Vec3 lerp", "[math][vec3]") {
   REQUIRE(m.z == Approx(15));
 }
 
-// ---- Mat4 ----
 
 TEST_CASE("Mat4 identity multiply", "[math][mat4]") {
   Mat4 I = Mat4::Identity();
@@ -126,7 +124,6 @@ TEST_CASE("Mat4 transpose", "[math][mat4]") {
   REQUIRE(T(2, 3) == Approx(M(3, 2)));
 }
 
-// ---- Mat3 ----
 
 TEST_CASE("Mat3 identity", "[math][mat3]") {
   Mat3 I = Mat3::Identity();
@@ -146,7 +143,6 @@ TEST_CASE("Mat3 inverse", "[math][mat3]") {
       REQUIRE(Iinv(r, c) == Approx(I(r, c)).epsilon(1e-5));
 }
 
-// ---- Quaternion ----
 
 TEST_CASE("Quaternion identity", "[math][quat]") {
   Quaternion q = Quaternion::Identity();
@@ -201,7 +197,6 @@ TEST_CASE("Quaternion composition", "[math][quat]") {
   REQUIRE(r.z == Approx(0).margin(1e-4));
 }
 
-// ---- MathUtils ----
 
 TEST_CASE("MathUtils clamp and lerp", "[math][utils]") {
   REQUIRE(Clamp(5.0f, 0.0f, 3.0f) == Approx(3.0f));

@@ -1,6 +1,8 @@
 /**
  * @file EditorHierarchy.cpp
- * @brief Implementation for EditorHierarchy editor functionality.
+ * @brief Hierarchy panel: scene headers, object tree, search mode, drag/drop, and runtime entity listing.
+ *
+ * Implements @ref EditorLayer drawing helpers declared in @ref EditorLayer.h for the left-dock hierarchy window.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -28,6 +30,7 @@
 
 namespace Horo::Editor {
 
+/** @copydoc EditorLayer::DrawObjectList */
 void EditorLayer::DrawObjectList() {
   using enum SceneObjectType;
   const ImGuiIO &io = ImGui::GetIO();
@@ -113,8 +116,7 @@ void EditorLayer::DrawObjectList() {
   ImGui::End();
 }
 
-// Renders a Unity-style collapsible scene header, then the objects tree under
-// it.
+/** @copydoc EditorLayer::DrawSceneHeaderContextMenu */
 void EditorLayer::DrawSceneHeaderContextMenu(SceneDocument & /*doc*/,
                                              bool isPrimary,
                                              int additionalIndex) {
@@ -151,6 +153,7 @@ void EditorLayer::DrawSceneHeaderContextMenu(SceneDocument & /*doc*/,
   ImGui::EndPopup();
 }
 
+/** @copydoc EditorLayer::DrawSceneHeaderDragDrop */
 void EditorLayer::DrawSceneHeaderDragDrop(SceneDocument &doc) {
   if (!ImGui::BeginDragDropTarget())
     return;
@@ -174,6 +177,7 @@ void EditorLayer::DrawSceneHeaderDragDrop(SceneDocument &doc) {
   ImGui::EndDragDropTarget();
 }
 
+/** @copydoc EditorLayer::DrawSceneHeader */
 void EditorLayer::DrawSceneHeader(SceneDocument &doc, bool isPrimary,
                                   int additionalIndex) {
   std::string label = doc.sceneName.empty() ? "Level" : doc.sceneName;
@@ -215,9 +219,8 @@ void EditorLayer::DrawSceneHeader(SceneDocument &doc, bool isPrimary,
   }
 }
 
-// ---- DrawTreeNode — extracted from drawNode lambda in DrawObjectsTree
-// --------
 
+/** @copydoc EditorLayer::HandleTreeNodeClickSelection */
 void EditorLayer::HandleTreeNodeClickSelection(int idx) {
   const auto &treeIo = ImGui::GetIO();
   if (treeIo.KeyShift && m_lastClickedHierarchyIdx >= 0) {
@@ -235,6 +238,7 @@ void EditorLayer::HandleTreeNodeClickSelection(int idx) {
   }
 }
 
+/** @copydoc EditorLayer::HandleTreeNodeDragDrop */
 void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
                                          SceneObject &obj) {
   // Guard: TreeNodeEx may be clipped (LastItemData.ID == 0), which would
@@ -290,6 +294,7 @@ void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
   }
 }
 
+/** @copydoc EditorLayer::DrawTreeNode */
 void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
                                int &shownObjectCount,
                                std::vector<std::vector<int>> &children) {
@@ -342,6 +347,7 @@ void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
   ImGui::PopID();
 }
 
+/** @copydoc EditorLayer::DrawObjectsTreeSearchMode */
 void EditorLayer::DrawObjectsTreeSearchMode( // NOSONAR: cpp:S3776 search-mode
                                              // tree draw; complexity from
                                              // per-object context menus
@@ -450,6 +456,7 @@ void EditorLayer::DrawObjectsTreeSearchMode( // NOSONAR: cpp:S3776 search-mode
   }
 }
 
+/** @copydoc EditorLayer::DrawObjectsTreeRootDropZone */
 void EditorLayer::DrawObjectsTreeRootDropZone() {
   const ImVec2 avail = ImGui::GetContentRegionAvail();
   ImGui::InvisibleButton("##hierarchy_root_asset_drop",
@@ -467,6 +474,7 @@ void EditorLayer::DrawObjectsTreeRootDropZone() {
   }
 }
 
+/** @copydoc EditorLayer::DrawObjectsTreeRuntimeEntities */
 void EditorLayer::DrawObjectsTreeRuntimeEntities(
     const SceneDocument &doc) const {
   if (!m_liveRegistry)
@@ -517,8 +525,7 @@ void EditorLayer::DrawObjectsTreeRuntimeEntities(
   ImGui::PopStyleColor();
 }
 
-// Renders the tree of objects inside a scene, plus runtime entities for the
-// primary scene.
+/** @copydoc EditorLayer::DrawObjectsTree */
 void EditorLayer::DrawObjectsTree(SceneDocument &doc, bool isPrimary) {
   using enum SceneObjectType;
   // Search filter applies only to the primary scene

@@ -992,4 +992,117 @@ void RenderEditorStatusText(const EditorTheme &theme,
                             EditorStatusLevel  level,
                             const char        *fmt, ...);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Group D — Settings modal primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @brief One entry in an editor vertical tab strip (used by Settings modal).
+ *
+ * Rows are rendered as selectable cards with an optional leading icon, a
+ * bold label, and a muted description string. The @p selected flag drives
+ * accent / selection tinting; @p id doubles as the ImGui id suffix.
+ */
+struct EditorVerticalTabItem {
+  const char *id = nullptr;          /**< Stable ImGui id suffix (e.g. "mcp"). */
+  const char *icon = nullptr;        /**< Optional Font Awesome icon string; may be nullptr. */
+  const char *label = nullptr;       /**< Required primary label (e.g. "MCP"). */
+  const char *description = nullptr; /**< Optional muted description under the label. */
+  bool        selected = false;      /**< Drawn in accent/selection tint when true. */
+};
+
+/**
+ * @brief Return value from RenderEditorVerticalTabs().
+ */
+struct EditorVerticalTabResult {
+  int clickedIndex = -1; /**< Index of the tab clicked this frame, or -1. */
+};
+
+/**
+ * @brief Renders a left-aligned vertical tab strip inside a fixed-width column.
+ *
+ * Each tab is a full-width selectable card that paints its own hover/selection
+ * background via the draw list (so the visual stays consistent even when
+ * tooltip popups or other style overrides are active). The function must be
+ * called inside an existing ImGui window or child region; it creates its own
+ * child window of the given @p width to host the tab stack.
+ *
+ * @param theme Active editor theme.
+ * @param id    Stable ImGui id for the child window (e.g. "##settings_tabs").
+ * @param tabs  Ordered list of tab items.
+ * @param width Pixel width of the tab column.
+ * @return Result containing the clicked tab index (or -1 if none).
+ */
+EditorVerticalTabResult RenderEditorVerticalTabs(
+    const EditorTheme &theme,
+    const char *id,
+    std::span<const EditorVerticalTabItem> tabs,
+    float width);
+
+/**
+ * @brief Begins a titled settings card inside a modal or panel.
+ *
+ * Pushes card colours, opens a child window with a border, renders the title
+ * header, and positions the cursor for body content. Must be paired with
+ * EndEditorSettingsCard() even when Begin returns false (mirrors the ImGui
+ * child-window pattern used by BeginEditorCard()).
+ *
+ * @param theme Active editor theme.
+ * @param id    ImGui id for the card child window.
+ * @param title Header string displayed at the top of the card.
+ * @return Always true while the card is visible; the caller must always call
+ *         EndEditorSettingsCard().
+ */
+bool BeginEditorSettingsCard(const EditorTheme &theme,
+                             const char *id,
+                             const char *title);
+
+/** @brief Ends a settings card begun with BeginEditorSettingsCard(). */
+void EndEditorSettingsCard();
+
+/**
+ * @brief Renders a single settings row with a label and optional muted description.
+ *
+ * Intended for read-only informational rows such as the MCP Endpoint display.
+ * Interactive fields (toggles, checkboxes, number inputs) should use their
+ * existing primitives (RenderEditorToggle / RenderEditorCheckbox / ImGui::InputInt)
+ * inline instead.
+ * @param theme       Active editor theme.
+ * @param label       Primary label; may be nullptr to skip.
+ * @param description Muted secondary description; may be nullptr to skip.
+ */
+void RenderEditorSettingText(const EditorTheme &theme,
+                             const char *label,
+                             const char *description);
+
+/**
+ * @brief Return value from RenderEditorSettingsFooter().
+ *
+ * Unlike EditorModalFooterResult, this footer intentionally does NOT call
+ * ImGui::CloseCurrentPopup(). The caller is responsible for closing the
+ * popup only when save succeeded (OK) or the user chose to discard (Cancel).
+ */
+struct EditorSettingsFooterResult {
+  bool cancelled = false; /**< True when Cancel was clicked this frame. */
+  bool applied   = false; /**< True when Apply was clicked this frame. */
+  bool accepted  = false; /**< True when OK was clicked this frame. */
+};
+
+/**
+ * @brief Renders the Cancel / Apply / OK footer for a settings modal.
+ *
+ * Buttons are right-aligned in the order Cancel, Apply, OK. Apply is disabled
+ * when @p canApply is false; OK is always enabled (it can close a clean modal).
+ * The caller decides when to call ImGui::CloseCurrentPopup().
+ *
+ * @param theme       Active editor theme.
+ * @param canApply    Enables the Apply button when true; disables it when false.
+ * @param buttonWidth Pixel width of each button.
+ * @return Which button (if any) was clicked this frame.
+ */
+EditorSettingsFooterResult RenderEditorSettingsFooter(
+    const EditorTheme &theme,
+    bool canApply,
+    float buttonWidth = 104.0f);
+
 } // namespace Horo::Ui

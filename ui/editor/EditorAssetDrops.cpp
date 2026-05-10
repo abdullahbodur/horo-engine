@@ -1,6 +1,11 @@
 /**
  * @file EditorAssetDrops.cpp
- * @brief Implementation for EditorAssetDrops editor functionality.
+ * @brief OS file-drop integration for texture albedo assignment and OBJ draft import.
+ *
+ * @ref EditorLayer::OnPathsDropped queues UTF-8 paths and cursor coordinates;
+ * @ref EditorLayer::ProcessPendingPathDrops drains them after the frame boundary.
+ * Texture paths hit-test draft vs. selected-asset albedo drop zones; OBJ paths drive
+ * @ref AssetImportService::ImportAssetFromSource into the new-asset draft state.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -13,6 +18,12 @@
 
 namespace Horo::Editor {
 
+/** @brief Stores GLFW drop paths and cursor coordinates for @ref ProcessPendingPathDrops.
+ *  @param pathCount Number of entries in @p utf8Paths.
+ *  @param utf8Paths UTF-8 absolute paths from the OS drop payload.
+ *  @param dropX     Cursor X in ImGui/GLFW client coordinates.
+ *  @param dropY     Cursor Y in ImGui/GLFW client coordinates.
+ */
 void EditorLayer::OnPathsDropped(int pathCount, const char **utf8Paths,
                                  float dropX, float dropY) {
   if (!utf8Paths || pathCount <= 0)
@@ -30,6 +41,10 @@ void EditorLayer::OnPathsDropped(int pathCount, const char **utf8Paths,
   m_hasPendingPathDrop = true;
 }
 
+/** @brief Imports @p path as the new-asset draft albedo via @ref AssetImportService::ImportTextureForAsset.
+ *  @param path Absolute path to a dropped texture file.
+ *  @return True when the texture was copied and @c m_assetDraftAlbedoMap was updated.
+ */
 bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
   if (m_assetDraftGuid.empty())
     m_assetDraftGuid = GenerateAssetGuid();
@@ -59,6 +74,10 @@ bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
   return true;
 }
 
+/** @brief Imports @p path as albedo for @c m_selectedAssetId when that asset exists.
+ *  @param path Absolute path to a dropped texture file.
+ *  @return True when the selected asset was updated and the document marked dirty.
+ */
 bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
   if (m_selectedAssetId.empty())
     return false;
@@ -78,6 +97,10 @@ bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
   return true;
 }
 
+/** @brief Consumes queued paths that look like textures when the drop hits an albedo drop zone.
+ *
+ * Tests @c m_pendingPathDropX/Y against @c m_albedoDraftDrop and @c m_albedoSelDrop with a small pixel margin.
+ */
 void EditorLayer::ProcessPendingTextureDrops() {
   constexpr float kTextureDropHitSlopPx = 6.0f;
   const float px = m_pendingPathDropX;
@@ -98,6 +121,10 @@ void EditorLayer::ProcessPendingTextureDrops() {
   }
 }
 
+/** @brief Imports the first queued @c .obj path into the new-asset draft and clears the queue on success or hard failure.
+ *
+ * On failure sets @c m_assetImportError and opens the new-asset header so the user sees the message.
+ */
 void EditorLayer::ProcessPendingObjDrops() {
   for (const std::string &path : m_pendingPathDropPaths) {
     if (!IsObjFilePath(path))
@@ -130,6 +157,10 @@ void EditorLayer::ProcessPendingObjDrops() {
   }
 }
 
+/** @brief Drains a pending OS drop: tries textures first, then OBJ, then clears state.
+ *
+ * Clears @c m_hasPendingPathDrop before delegating; always clears @c m_pendingPathDropPaths when done.
+ */
 void EditorLayer::ProcessPendingPathDrops() {
   if (!m_hasPendingPathDrop)
     return;

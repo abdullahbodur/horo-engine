@@ -1,6 +1,6 @@
 /**
  * @file EditorSceneGraph.cpp
- * @brief Implementation for EditorSceneGraph editor functionality.
+ * @brief Implementations of hierarchy ID helpers and prefab path utilities declared in @ref EditorSceneGraph.h.
  */
 #include "ui/editor/EditorSceneGraph.h"
 
@@ -21,16 +21,19 @@
 #include "math/Vec3.h"
 
 namespace Horo::Editor {
+    /** @copydoc IsObjectReferencePropKey */
     bool IsObjectReferencePropKey(std::string_view key) {
         return key == "parentId" || key == "followTargetId";
     }
 
+    /** @copydoc GetParentId */
     std::string_view GetParentId(const SceneObject &obj) {
         static constexpr std::string_view kEmpty;
         const auto it = obj.props.find("parentId");
         return (it != obj.props.end()) ? std::string_view{it->second} : kEmpty;
     }
 
+    /** @copydoc FindObjectIndexById */
     int FindObjectIndexById(const SceneDocument &doc, std::string_view id) {
         if (id.empty())
             return -1;
@@ -41,6 +44,7 @@ namespace Horo::Editor {
         return static_cast<int>(it - doc.objects.begin());
     }
 
+    /** @copydoc IsDescendantOf */
     bool IsDescendantOf(const SceneDocument &doc, int nodeIdx, int ancestorIdx) {
         if (nodeIdx < 0 || ancestorIdx < 0 ||
             nodeIdx >= static_cast<int>(doc.objects.size()) ||
@@ -63,6 +67,7 @@ namespace Horo::Editor {
         return false;
     }
 
+    /** @copydoc PropagateHierarchyTransformDelta */
     void PropagateHierarchyTransformDelta(
         SceneDocument &doc, int parentIdx, const ParentTransformState &oldParent,
         const ParentTransformState &newParent,
@@ -97,6 +102,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc CollectReservedObjectIds */
     std::unordered_set<std::string, StringHash, std::equal_to<> >
     CollectReservedObjectIds(const SceneDocument &doc) {
         std::unordered_set<std::string, StringHash, std::equal_to<> > reservedIds;
@@ -112,6 +118,7 @@ namespace Horo::Editor {
         return reservedIds;
     }
 
+    /** @copydoc IsReservedObjectId */
     bool IsReservedObjectId(const SceneDocument &doc, std::string_view id,
                             const std::string *ignoreConcreteObjectId) {
         if (id.empty())
@@ -133,6 +140,7 @@ namespace Horo::Editor {
         return false;
     }
 
+    /** @copydoc RewriteObjectIdReferences */
     void RewriteObjectIdReferences(SceneDocument *doc, std::string_view oldId,
                                    std::string_view newId) {
         if (!doc || oldId.empty() || oldId == newId)
@@ -145,6 +153,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc LogDanglingObjectReferences */
     void LogDanglingObjectReferences(const SceneDocument &doc,
                                      std::string_view sourceLabel) {
         std::unordered_set<std::string, StringHash, std::equal_to<> > objectIds;
@@ -164,6 +173,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc SanitizePrefabStem */
     std::string SanitizePrefabStem(std::string value) {
         for (char &ch: value) {
             const bool alphaNum = (ch >= 'a' && ch <= 'z') ||
@@ -178,6 +188,7 @@ namespace Horo::Editor {
         return value.empty() ? "prefab" : value;
     }
 
+    /** @copydoc BuildUniquePrefabPath */
     std::filesystem::path BuildUniquePrefabPath(const SceneDocument &doc,
                                                 const SceneObject &object) {
         const std::filesystem::path prefabDir =

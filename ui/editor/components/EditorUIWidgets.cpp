@@ -105,7 +105,6 @@ void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
     (void)cam;
 }
 
-// ---- Confirmation Modals ----
 
 void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     if (m_confirmDeleteObjectsOpen)
@@ -231,7 +230,6 @@ void EditorUIWidgets::DrawExitConfirmModal() {
     Horo::Ui::EndEditorModal();
 }
 
-// ---- Input Modals ----
 
 void EditorUIWidgets::DrawRenameObjectModal() {
     if (m_renameObjectOpen) {
@@ -290,7 +288,6 @@ void EditorUIWidgets::CancelRenameObject() {
     ImGui::CloseCurrentPopup();
 }
 
-// ---- Callbacks ----
 
 void EditorUIWidgets::OnClipboardAction(const std::string& label, float duration) {
     m_clipboardToastTime = duration;

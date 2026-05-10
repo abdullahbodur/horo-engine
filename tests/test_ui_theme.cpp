@@ -2,6 +2,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cmath>
+#include <string>
+#include <string_view>
 
 #include "ui/HoroTheme.h"
 #include "ui/UiComponents.h"
@@ -10,6 +12,7 @@
 using Horo::Ui::EditorTheme;
 using Horo::Ui::FontFamilyConfig;
 using Horo::Ui::FontResolutionResult;
+using Horo::Ui::HoroPalette;
 using Horo::Ui::LauncherTheme;
 
 namespace {
@@ -885,6 +888,256 @@ TEST_CASE("RenderEditorStatusText renders each level without crash") {
     Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,   "err");
     Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Success, "ok");
   }());
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+
+// ─── Editor theme presets ─────────────────────────────────────────────────────
+
+TEST_CASE("editor theme preset ids are stable and match parser") {
+  using Horo::Ui::EditorThemePreset;
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetId(
+            EditorThemePreset::DarkBlue)) == "darkBlue");
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetId(
+            EditorThemePreset::Graphite)) == "graphite");
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetId(
+            EditorThemePreset::HighContrast)) == "highContrast");
+
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetLabel(
+            EditorThemePreset::DarkBlue)) == "Dark Blue");
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetLabel(
+            EditorThemePreset::Graphite)) == "Graphite");
+  CHECK(std::string_view(Horo::Ui::EditorThemePresetLabel(
+            EditorThemePreset::HighContrast)) == "High Contrast");
+
+  bool ok = false;
+  CHECK(Horo::Ui::ParseEditorThemePreset("darkBlue", &ok) ==
+        EditorThemePreset::DarkBlue);
+  CHECK(ok);
+  CHECK(Horo::Ui::ParseEditorThemePreset("graphite", &ok) ==
+        EditorThemePreset::Graphite);
+  CHECK(ok);
+  CHECK(Horo::Ui::ParseEditorThemePreset("highContrast", &ok) ==
+        EditorThemePreset::HighContrast);
+  CHECK(ok);
+}
+
+TEST_CASE("editor theme preset parser rejects unknown ids and falls back to DarkBlue") {
+  using Horo::Ui::EditorThemePreset;
+  bool ok = true;
+  CHECK(Horo::Ui::ParseEditorThemePreset("unknownTheme", &ok) ==
+        EditorThemePreset::DarkBlue);
+  CHECK_FALSE(ok);
+
+  // Empty string must not throw and must still return DarkBlue.
+  ok = true;
+  CHECK(Horo::Ui::ParseEditorThemePreset("", &ok) ==
+        EditorThemePreset::DarkBlue);
+  CHECK_FALSE(ok);
+
+  // Case sensitivity: "DarkBlue" is not a valid id.
+  ok = true;
+  CHECK(Horo::Ui::ParseEditorThemePreset("DarkBlue", &ok) ==
+        EditorThemePreset::DarkBlue);
+  CHECK_FALSE(ok);
+}
+
+TEST_CASE("EditorThemePresets() enumerates all three presets in display order") {
+  using Horo::Ui::EditorThemePreset;
+  const auto presets = Horo::Ui::EditorThemePresets();
+  REQUIRE(presets.size() == 3);
+  CHECK(presets[0] == EditorThemePreset::DarkBlue);
+  CHECK(presets[1] == EditorThemePreset::Graphite);
+  CHECK(presets[2] == EditorThemePreset::HighContrast);
+}
+
+TEST_CASE("SetEditorThemePreset/GetEditorThemePreset round-trip") {
+  using Horo::Ui::EditorThemePreset;
+  // Snapshot and restore to avoid leaking state to later tests.
+  const EditorThemePreset previous = Horo::Ui::GetEditorThemePreset();
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::Graphite);
+  CHECK(Horo::Ui::GetEditorThemePreset() == EditorThemePreset::Graphite);
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::HighContrast);
+  CHECK(Horo::Ui::GetEditorThemePreset() == EditorThemePreset::HighContrast);
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::DarkBlue);
+  CHECK(Horo::Ui::GetEditorThemePreset() == EditorThemePreset::DarkBlue);
+  Horo::Ui::SetEditorThemePreset(previous);
+}
+
+TEST_CASE("DarkBlue preset preserves the canonical editor palette") {
+  using Horo::Ui::EditorThemePreset;
+  const EditorThemePreset previous = Horo::Ui::GetEditorThemePreset();
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::DarkBlue);
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  CheckVec4Near(theme.palette.accent, ImVec4(0.23f, 0.54f, 0.93f, 1.0f));
+  CheckVec4Near(theme.palette.textMuted, ImVec4(0.68f, 0.74f, 0.84f, 1.0f));
+  CheckVec4Near(theme.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 0.68f));
+  CHECK(theme.palette.panel.w == 0.88f);
+  Horo::Ui::SetEditorThemePreset(previous);
+}
+
+TEST_CASE("alternative presets differ from DarkBlue on key tokens") {
+  using Horo::Ui::EditorThemePreset;
+  const EditorThemePreset previous = Horo::Ui::GetEditorThemePreset();
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::DarkBlue);
+  const HoroPalette darkBlue = Horo::Ui::GetEditorTheme().palette;
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::Graphite);
+  const HoroPalette graphite = Horo::Ui::GetEditorTheme().palette;
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::HighContrast);
+  const HoroPalette hc = Horo::Ui::GetEditorTheme().palette;
+
+  const auto differs = [](const ImVec4 &a, const ImVec4 &b) {
+    return std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z) >
+           0.05f;
+  };
+
+  CHECK(differs(graphite.panel, darkBlue.panel));
+  CHECK(differs(graphite.card, darkBlue.card));
+  CHECK(differs(graphite.border, darkBlue.border));
+  CHECK(differs(graphite.accent, darkBlue.accent));
+  CHECK(differs(graphite.selection, darkBlue.selection));
+
+  CHECK(differs(hc.panel, darkBlue.panel));
+  CHECK(differs(hc.card, darkBlue.card));
+  CHECK(differs(hc.border, darkBlue.border));
+  CHECK(differs(hc.accent, darkBlue.accent));
+  CHECK(differs(hc.selection, darkBlue.selection));
+
+  Horo::Ui::SetEditorThemePreset(previous);
+}
+
+TEST_CASE("ApplyEditorTheme maps the selected preset palette into ImGuiStyle") {
+  using Horo::Ui::EditorThemePreset;
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+
+  const EditorThemePreset previous = Horo::Ui::GetEditorThemePreset();
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::Graphite);
+  Horo::Ui::ApplyEditorTheme(ImGui::GetStyle());
+  const auto graphite = Horo::Ui::GetEditorTheme().palette;
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Button], graphite.card);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Header], graphite.selection);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_CheckMark], graphite.accent);
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::HighContrast);
+  Horo::Ui::ApplyEditorTheme(ImGui::GetStyle());
+  const auto hc = Horo::Ui::GetEditorTheme().palette;
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Button], hc.card);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Header], hc.selection);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_CheckMark], hc.accent);
+
+  Horo::Ui::SetEditorThemePreset(EditorThemePreset::DarkBlue);
+  Horo::Ui::ApplyEditorTheme(ImGui::GetStyle());
+  const auto db = Horo::Ui::GetEditorTheme().palette;
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Button], db.card);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_Header], db.selection);
+  CheckVec4Near(ImGui::GetStyle().Colors[ImGuiCol_CheckMark], db.accent);
+
+  Horo::Ui::SetEditorThemePreset(previous);
+  ImGui::DestroyContext(context);
+}
+
+
+// ─── Settings modal primitives ────────────────────────────────────────────────
+
+TEST_CASE("RenderEditorVerticalTabs restores ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  ImGui::NewFrame();
+  ImGui::Begin("vtab-test");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  const Horo::Ui::EditorVerticalTabItem items[] = {
+      {"mcp",        nullptr, "MCP",        "Built-in server",    true},
+      {"appearance", nullptr, "Appearance", "Theme presets",      false},
+  };
+  const auto result = Horo::Ui::RenderEditorVerticalTabs(
+      Horo::Ui::GetEditorTheme(), "##vtabs", items, 220.0f);
+  CHECK(result.clickedIndex == -1);
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("BeginEditorSettingsCard restores ImGui style stacks") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  ImGui::NewFrame();
+  ImGui::Begin("settings-card-test");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  if (Horo::Ui::BeginEditorSettingsCard(
+          Horo::Ui::GetEditorTheme(), "##server_card", "Server")) {
+    Horo::Ui::RenderEditorSettingText(
+        Horo::Ui::GetEditorTheme(), "Host", "127.0.0.1");
+  }
+  Horo::Ui::EndEditorSettingsCard();
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
+TEST_CASE("RenderEditorSettingsFooter restores ImGui style stacks and does not close popup") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+
+  ImGui::NewFrame();
+  ImGui::Begin("settings-footer-test");
+
+  const int colorsBefore = context->ColorStack.Size;
+  const int stylesBefore = context->StyleVarStack.Size;
+
+  // canApply == true (Apply is enabled)
+  const auto enabledResult = Horo::Ui::RenderEditorSettingsFooter(
+      Horo::Ui::GetEditorTheme(), /*canApply=*/true);
+  CHECK_FALSE(enabledResult.cancelled);
+  CHECK_FALSE(enabledResult.applied);
+  CHECK_FALSE(enabledResult.accepted);
+
+  // canApply == false (Apply is disabled)
+  const auto disabledResult = Horo::Ui::RenderEditorSettingsFooter(
+      Horo::Ui::GetEditorTheme(), /*canApply=*/false);
+  CHECK_FALSE(disabledResult.cancelled);
+  CHECK_FALSE(disabledResult.applied);
+  CHECK_FALSE(disabledResult.accepted);
+
+  CHECK(context->ColorStack.Size == colorsBefore);
+  CHECK(context->StyleVarStack.Size == stylesBefore);
+
+  // Settings footer must NOT have called ImGui::CloseCurrentPopup(). We verify
+  // by checking that the popup stack is empty: if the footer had called
+  // CloseCurrentPopup on a non-existent popup it would assert.
+  CHECK(context->OpenPopupStack.Size == 0);
 
   ImGui::End();
   ImGui::EndFrame();

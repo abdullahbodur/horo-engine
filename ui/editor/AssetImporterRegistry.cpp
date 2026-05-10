@@ -1,6 +1,10 @@
 /**
  * @file AssetImporterRegistry.cpp
- * @brief Implementation for AssetImporterRegistry editor functionality.
+ * @brief Built-in @ref AssetImporter implementations and @ref AssetImporterRegistry registration.
+ *
+ * Provides OBJ import via @c ObjLoader with companion MTL and referenced textures copied into
+ * managed asset folders, plus image extensions for texture assets. Extension lookup normalises
+ * to lower-case ASCII.
  */
 #include "ui/editor/AssetImporterRegistry.h"
 
@@ -17,6 +21,7 @@
 
 namespace Horo::Editor {
     namespace {
+        /** @brief Returns a copy of @p text with every ASCII letter lowercased. */
         std::string ToLowerAscii(std::string text) {
             std::ranges::transform(text, text.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
@@ -24,6 +29,7 @@ namespace Horo::Editor {
             return text;
         }
 
+        /** @brief True when @p path has a supported image extension (ASCII lower-case test). */
         bool IsTexturePath(const std::string &path) {
             const std::string ext =
                     ToLowerAscii(std::filesystem::path(path).extension().string());
@@ -31,6 +37,10 @@ namespace Horo::Editor {
                    ext == ".tga" || ext == ".webp" || ext == ".hdr";
         }
 
+        /** @brief Copies @p source to @p destination, handling same-file and Windows file_exists races.
+         *  @param ec Receives filesystem errors from underlying @c copy_file / @c remove calls.
+         *  @return True when @p destination contains a copy of @p source on success.
+         */
         bool CopyFileReplacing(const std::filesystem::path &source,
                                const std::filesystem::path &destination,
                                std::error_code &ec) {
@@ -61,6 +71,7 @@ namespace Horo::Editor {
             return !ec;
         }
 
+        /** @brief Collects texture filenames referenced by @c map_* directives in an MTL file. */
         std::vector<std::string>
         ScanMtlForTextureNames(const std::filesystem::path &mtlSource) {
             std::vector<std::string> textures;
@@ -87,6 +98,9 @@ namespace Horo::Editor {
             return textures;
         }
 
+        /** @brief Copies OBJ-linked MTL and textures from @p objSource's folder into @p destinationDir.
+         *  @return Project-relative generic paths of copied files, sorted and uniqued.
+         */
         std::vector<std::string>
         CopyObjCompanionAssets(const std::filesystem::path &objSource,
                                const std::filesystem::path &destinationDir) {
@@ -143,6 +157,10 @@ namespace Horo::Editor {
             return copiedFiles;
         }
 
+        /** @brief Builds sidecar metadata for a finished import: settings, produced files, Source + ProducedOutput deps.
+         *  @param importerId Registered importer id string stored on the metadata row.
+         *  @param producedFiles Paths merged and deduplicated into @c metadata.producedFiles.
+         */
         AssetMetadata BuildImportedMetadata(const AssetImportRequest &request,
                                             const AssetDef &asset,
                                             std::string importerId,
@@ -166,6 +184,7 @@ namespace Horo::Editor {
             return metadata;
         }
 
+        /** @brief Convenience factory for @ref AssetImportDiagnostic rows tied to @p request. */
         AssetImportDiagnostic MakeDiagnostic(AssetDiagnosticSeverity severity,
                                              std::string code, std::string message,
                                              const AssetImportRequest &request,
@@ -180,6 +199,7 @@ namespace Horo::Editor {
             return diagnostic;
         }
 
+        /** @brief Built-in importer that copies OBJ meshes into managed storage with companion materials/textures. */
         class ObjAssetImporter final : public AssetImporter {
         public:
             const char *ImporterId() const override { return "builtin.obj_mesh"; }
@@ -189,6 +209,9 @@ namespace Horo::Editor {
                 return {".obj"};
             }
 
+            /** @brief Validates paths, copies OBJ + companions, assigns mesh/renderScale/albedo from @c ObjLoader hints.
+             *  @param request Import inputs including destination GUID and source OBJ path.
+             */
             AssetImportResult Import(const AssetImportRequest &request) const override {
                 namespace fs = std::filesystem;
                 AssetImportResult result;
@@ -265,6 +288,7 @@ namespace Horo::Editor {
             }
         };
 
+        /** @brief Built-in importer that copies raster/HDR images into managed storage as texture assets. */
         class TextureCopyImporter final : public AssetImporter {
         public:
             const char *ImporterId() const override { return "builtin.texture_copy"; }
@@ -274,6 +298,9 @@ namespace Horo::Editor {
                 return {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp", ".hdr"};
             }
 
+            /** @brief Validates extension, copies the image beside other managed outputs, sets @c albedoMap path.
+             *  @param request Import inputs including destination GUID and image source path.
+             */
             AssetImportResult Import(const AssetImportRequest &request) const override {
                 namespace fs = std::filesystem;
                 AssetImportResult result;
@@ -334,17 +361,22 @@ namespace Horo::Editor {
         };
     } // namespace
 
+    /** @brief Registers the built-in OBJ mesh importer and texture copy importer. */
     AssetImporterRegistry::AssetImporterRegistry() {
         Register(std::make_unique<ObjAssetImporter>());
         Register(std::make_unique<TextureCopyImporter>());
     }
 
+    /** @brief Takes ownership of @p importer when non-null and stores it in the registry. */
     void AssetImporterRegistry::Register(std::unique_ptr<AssetImporter> importer) {
         if (!importer)
             return;
         m_importers.push_back(std::move(importer));
     }
 
+    /** @brief Chooses an importer whose @ref AssetImporter::SupportedExtensions matches @p sourcePath's suffix.
+     *  @return First match in registration order, or nullptr when no extension matches.
+     */
     const AssetImporter *
     AssetImporterRegistry::FindByExtension(const std::string &sourcePath) const {
         const std::string ext =
@@ -357,6 +389,7 @@ namespace Horo::Editor {
         return nullptr;
     }
 
+    /** @brief Looks up @p importerId against each registered @ref AssetImporter::ImporterId. */
     const AssetImporter *
     AssetImporterRegistry::FindById(std::string_view importerId) const {
         for (const auto &importer: m_importers) {
@@ -366,6 +399,7 @@ namespace Horo::Editor {
         return nullptr;
     }
 
+    /** @brief Collects importer ids in the same order as internal registration storage. */
     std::vector<std::string> AssetImporterRegistry::RegisteredImporterIds() const {
         std::vector<std::string> ids;
         ids.reserve(m_importers.size());

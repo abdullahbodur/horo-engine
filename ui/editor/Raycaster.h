@@ -19,7 +19,6 @@ namespace Horo::Editor {
         Vec3 normal = Vec3::Zero(); /**< Outward surface normal at the hit point. */
     };
 
-    // Unproject a screen-space pixel (top-left = 0,0) to a world-space ray.
     /** @brief Unprojects a screen-space pixel coordinate to a world-space ray.
      *  @param mouseX  Pixel X coordinate (0 = left edge).
      *  @param mouseY  Pixel Y coordinate (0 = top edge).
@@ -31,9 +30,6 @@ namespace Horo::Editor {
     Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH,
                     const Camera &cam);
 
-    // Ray vs axis-aligned bounding box (slab method).
-    // center: box centre world-space; half: box half-extents.
-    // Returns distance along ray to the nearest hit (>= 0), or -1 on miss.
     /** @brief Tests a ray against an axis-aligned bounding box (slab method) and fills hit details.
      *  @param ray    The ray to test.
      *  @param center Box centre in world space.

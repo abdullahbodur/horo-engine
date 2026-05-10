@@ -123,6 +123,8 @@ ctest --preset debug --output-on-failure
 - Renderer parity
   tracking: [docs/development/backend-parity-validation-matrix.md](./docs/development/backend-parity-validation-matrix.md)
 
+- API documentation conventions (Doxygen): [AGENTS.md § Documentation](AGENTS.md#documentation-doxygen)
+
 Architecture policy reminders:
 
 - new headers are internal by default

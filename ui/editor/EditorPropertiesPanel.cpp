@@ -73,7 +73,6 @@ void EditorLayer::DrawPropertiesPanel() {
       ImGuiCond_Always);
   ImGui::Begin(kEditorPropertiesWindow, nullptr, kMainPanelWindowFlags);
 
-  // ---- Multi-selection summary ----
   if (m_selectedIndices.size() > 1) {
     DrawPropertiesMultiSelect();
     ImGui::End();
@@ -396,7 +395,6 @@ void EditorLayer::DrawPropertiesSelectedAsset(
 void EditorLayer::DrawPropertiesIdentitySection(SceneObject &obj,
                                                 int primaryIdx) {
   using enum SceneObjectType;
-  // ---- Identity ----
   DrawUiAutomationMarker("##properties_test/identity_section");
   ImGui::LabelText("ID##identity_id", "%s", obj.id.c_str());
   const char *typeName = "Panel";
@@ -569,7 +567,6 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
       m_transformCb(obj);
   }
 
-  // ---- Rotation (Euler angles: Pitch / Yaw / Roll) ----
   if (std::array<float, 3> rot = {obj.pitch, obj.yaw, obj.roll};
       Horo::Ui::RenderEditorDragFloat3("Rotation (P/Y/R)", "##Rotation (P/Y/R)",
                                        rot.data(), 1.0f, -360.0f, 360.0f)) {
@@ -702,7 +699,6 @@ void EditorLayer::DrawPropertiesSchemaFields(SceneObject &obj) {
   ImGui::Separator();
   ImGui::Text("Props");
 
-  // ---- Schema-driven fields ----
   const TypeSchema *schema = m_schema.GetSchema(obj.type);
   if (!schema)
     return;
@@ -803,7 +799,6 @@ void EditorLayer::DrawScriptComponentField(ComponentDesc &comp) {
 void EditorLayer::DrawPropertiesComponentsList(SceneObject &obj) {
   // NOSONAR: cpp:S3776 component list with per-type edit panels; complexity
   // from component type dispatch
-  // ---- Components ----
   ImGui::Separator();
   ImGui::Text("Components");
 
@@ -943,6 +938,4 @@ void EditorLayer::DrawPropertiesAddComponentMenu(SceneObject &obj) {
   }
 }
 
-// ---- Picking
-// -----------------------------------------------------------------
 } // namespace Horo::Editor

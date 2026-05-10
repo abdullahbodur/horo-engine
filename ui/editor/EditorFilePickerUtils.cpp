@@ -1,6 +1,10 @@
 /**
  * @file EditorFilePickerUtils.cpp
- * @brief Implementation for EditorFilePickerUtils editor functionality.
+ * @brief Native file-picker implementations for OBJ and texture imports.
+ *
+ * Windows uses @c GetOpenFileNameW with UTF-8 conversion. macOS shells out to
+ * @c osascript choose file (OBJ filters are validated after pick). Other hosts
+ * return empty paths until a picker is wired.
  */
 #include "ui/editor/EditorFilePickerUtils.h"
 
@@ -23,6 +27,10 @@
 namespace Horo::Editor {
 namespace {
 #if defined(_WIN32)
+/** @brief Converts a null-terminated UTF-16 path from the common-dialog API into UTF-8.
+ *  @param path Wide-character path buffer from @c OPENFILENAMEW.
+ *  @return UTF-8 string, or empty when conversion fails.
+ */
 std::string WidePathToUtf8(const wchar_t *path) {
   const int size = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0,
                                        nullptr, nullptr);
@@ -39,6 +47,10 @@ std::string WidePathToUtf8(const wchar_t *path) {
 
 #if defined(__APPLE__)
 // SONAR-OFF
+/** @brief Runs @p cmd with @c popen and returns trimmed line-oriented stdout.
+ *  @param cmd Shell command line (typically @c osascript … choose file …).
+ *  @return POSIX path string, or empty when the pipe fails or user cancels.
+ */
 std::string ReadPathFromOsascript(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
   if (!pipe)
@@ -57,6 +69,7 @@ std::string ReadPathFromOsascript(const char *cmd) {
 } // namespace
 
 // SONAR-OFF
+/** @copydoc PickObjFilePath */
 std::string PickObjFilePath() {
 #if defined(_WIN32)
   wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
@@ -82,6 +95,7 @@ std::string PickObjFilePath() {
 // SONAR-ON
 
 // SONAR-OFF
+/** @copydoc PickTextureFilePath */
 std::string PickTextureFilePath() {
 #ifdef _WIN32
   wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW

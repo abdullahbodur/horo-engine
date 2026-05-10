@@ -1,6 +1,6 @@
 /**
  * @file EditorSelection.cpp
- * @brief Implementation for EditorSelection editor functionality.
+ * @brief Selection helpers, reload triggers, and reference-string builders on @ref EditorLayer.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -16,14 +16,17 @@
 
 namespace Horo::Editor {
 
+/** @copydoc EditorLayer::IsSelected */
 bool EditorLayer::IsSelected(int i) const {
   return std::ranges::find(m_selectedIndices, i) != m_selectedIndices.end();
 }
 
+/** @copydoc EditorLayer::PrimaryIdx */
 int EditorLayer::PrimaryIdx() const {
   return m_selectedIndices.empty() ? -1 : m_selectedIndices.back();
 }
 
+/** @copydoc EditorLayer::ToggleSelect */
 void EditorLayer::ToggleSelect(int i) {
   if (auto it = std::ranges::find(m_selectedIndices, i);
       it != m_selectedIndices.end())
@@ -32,16 +35,19 @@ void EditorLayer::ToggleSelect(int i) {
     m_selectedIndices.push_back(i);
 }
 
+/** @copydoc EditorLayer::TriggerReload */
 void EditorLayer::TriggerReload() {
   m_pendingDoc = m_document;
   m_wantsReload = true;
 }
 
+/** @copydoc EditorLayer::MarkDirtyAndReload */
 void EditorLayer::MarkDirtyAndReload() {
   m_document.dirty = true;
   TriggerReload();
 }
 
+/** @copydoc EditorLayer::GetSelectedObjectIds */
 std::vector<std::string> EditorLayer::GetSelectedObjectIds() const {
   std::vector<std::string> ids;
   ids.reserve(m_selectedIndices.size());
@@ -52,6 +58,7 @@ std::vector<std::string> EditorLayer::GetSelectedObjectIds() const {
   return ids;
 }
 
+/** @copydoc EditorLayer::SetSelectedObjectIds */
 void EditorLayer::SetSelectedObjectIds(const std::vector<std::string> &ids) {
   m_selectedIndices.clear();
   std::unordered_set<std::string, StringHash, std::equal_to<>> seen;
@@ -68,12 +75,14 @@ void EditorLayer::SetSelectedObjectIds(const std::vector<std::string> &ids) {
   }
 }
 
+/** @copydoc EditorLayer::MakeObjectFromAsset */
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument &doc,
                                              const std::string &assetId,
                                              const EditorSchema &schema) {
   return Horo::Editor::MakeObjectFromAsset(doc, assetId, schema);
 }
 
+/** @copydoc EditorLayer::DuplicateObject */
 SceneObject EditorLayer::DuplicateObject(const SceneDocument &doc,
                                          const SceneObject &src) {
   SceneObject clone = src;
@@ -82,6 +91,7 @@ SceneObject EditorLayer::DuplicateObject(const SceneDocument &doc,
   return clone;
 }
 
+/** @copydoc EditorLayer::BuildSelectionRefCode */
 std::string EditorLayer::BuildSelectionRefCode(const SceneObject &obj,
                                                int idx) const {
   auto getProp = [&](const char *key) {
@@ -113,10 +123,12 @@ std::string EditorLayer::BuildSelectionRefCode(const SceneObject &obj,
   return ss.str();
 }
 
+/** @copydoc EditorLayer::GenerateId */
 std::string EditorLayer::GenerateId(const SceneDocument &doc) {
   return GenerateUniqueId(doc, "obj");
 }
 
+/** @copydoc EditorLayer::GenerateCameraId */
 std::string EditorLayer::GenerateCameraId(const SceneDocument &doc) {
   return GenerateUniqueId(doc, "cam");
 }

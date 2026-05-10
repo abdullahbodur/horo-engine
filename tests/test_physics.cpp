@@ -14,7 +14,6 @@
 using namespace Horo;
 using Catch::Approx;
 
-// ---- RigidBody construction ----
 
 TEST_CASE("RigidBody MakeSphere sets mass and collider", "[physics][rigidbody]") {
   auto body = RigidBody::MakeSphere(0.5f, 2.0f);
@@ -30,7 +29,6 @@ TEST_CASE("RigidBody MakeStatic has zero invMass", "[physics][rigidbody]") {
   REQUIRE(body.IsStatic());
 }
 
-// ---- Integration ----
 
 TEST_CASE("SemiImplicitEuler: static body is not moved", "[physics][integration]") {
   RigidBody b = RigidBody::MakeStatic();
@@ -87,7 +85,6 @@ TEST_CASE("SemiImplicitEuler: sphere falls correct distance over many steps", "[
   REQUIRE(b.position.y == Approx(expectedY).epsilon(0.5f));
 }
 
-// ---- Sphere-plane collision impulse ----
 
 TEST_CASE("Sphere-plane impulse reverses vertical velocity", "[physics][collision]") {
   // Set up a sphere approaching a floor at y=0
@@ -148,7 +145,6 @@ TEST_CASE("ContactConstraint: resolves two-body normal impulse", "[physics][cons
   REQUIRE(vn >= 0.0f);
 }
 
-// ---- Mass and inertia ----
 
 TEST_CASE("Sphere inertia tensor is diagonal", "[physics][rigidbody]") {
   auto body = RigidBody::MakeSphere(1.0f, 1.0f);
@@ -164,7 +160,6 @@ TEST_CASE("Sphere inertia tensor is diagonal", "[physics][rigidbody]") {
   REQUIRE(body.inertiaTensorInv.m[1][2] == Approx(0).margin(1e-6));
 }
 
-// ---- SAT box-box contact normal direction ----
 
 TEST_CASE("SAT::TestBoxBox normal points from B toward A", "[physics][sat]") {
   // A is the player (dynamic), B is the wall (static).

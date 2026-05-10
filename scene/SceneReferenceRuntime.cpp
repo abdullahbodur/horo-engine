@@ -184,9 +184,10 @@ namespace Horo {
             for (const auto &panel: room.panels) {
                 RigidBody wall = RigidBody::MakeStatic();
                 wall.position = panel.center;
+                wall.orientation = panel.rotation;
                 wall.collider = std::make_shared<BoxCollider>(panel.half);
                 m_scene->GetPhysics().AddBody(std::move(wall));
-                m_panels.emplace_back(panel.center, panel.half);
+                m_panels.emplace_back(panel.center, panel.half, panel.rotation);
                 ++m_stats.panelCount;
                 ++m_stats.staticBodyCount;
             }

@@ -177,9 +177,8 @@ void EditorLayer::DrawToolbar() {
 
     // Settings callback
     callbacks.openSettings = [this]() {
-        m_settingsModal.SetOpen(true);
-        *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
-        m_settingsModal.GetError()->clear();
+        m_settingsModal.Open(m_mcpController.GetSettings(),
+                             m_userSettingsDocument.settings);
     };
 
     // File menu custom callback
@@ -736,7 +735,6 @@ void EditorLayer::DrawDeleteConfirmModals() {
 }
 
 void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
-  // -----------------------------------------------------------------------
   // Splitter logic using raw mouse position — no overlay window needed.
   // This avoids all ImGui window z-order issues: panel windows drawn before
   // this call would always win focus over an overlay window, making
@@ -746,7 +744,6 @@ void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
   //   Seam A — right edge of the left dock (EW)
   //   Seam B — bottom of Hierarchy / top of Project (NS, left dock only)
   //   Seam C — top of the bottom dock (NS, right of left dock to edge)
-  // -----------------------------------------------------------------------
   constexpr float kHalfThick        = 5.0f; // half hit-area in px
   constexpr float kMinLeftDock       = 180.0f;
   constexpr float kMaxLeftDockRatio  = 0.35f;
@@ -771,7 +768,6 @@ void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
 
   const ImVec2 mouse = io.MousePos;
 
-  // ---- Hover detection ----
   // Seam A: EW seam spanning full panel height (toolbar → bottom dock top)
   const bool hoverA = (mouse.x >= seamAx - kHalfThick && mouse.x <= seamAx + kHalfThick &&
                        mouse.y >= kEditorToolbarH      && mouse.y <= seamCy);
@@ -782,7 +778,6 @@ void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
   const bool hoverC = (mouse.x >= seamAx              && mouse.x <= displayW &&
                        mouse.y >= seamCy - kHalfThick  && mouse.y <= seamCy + kHalfThick);
 
-  // ---- Drag state machine ----
   if (io.MouseClicked[0]) {
     if      (hoverA) m_activeSplitter = 0;
     else if (hoverB) m_activeSplitter = 1;
@@ -792,7 +787,6 @@ void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
   if (!io.MouseDown[0])
     m_activeSplitter = -1;
 
-  // ---- Apply deltas ----
   if (m_activeSplitter == 0) {
     m_leftDockWidth = std::clamp(
         m_leftDockWidth + io.MouseDelta.x,
@@ -807,7 +801,6 @@ void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
         kMinBottomDock, availableH * kMaxBottomDockRatio);
   }
 
-  // ---- Cursor ----
   if (hoverA || m_activeSplitter == 0)
     ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
   else if (hoverB || hoverC || m_activeSplitter == 1 || m_activeSplitter == 2)

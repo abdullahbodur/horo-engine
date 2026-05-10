@@ -1,6 +1,6 @@
 /**
  * @file EditorWireframe.cpp
- * @brief Implementation for EditorWireframe editor functionality.
+ * @brief Submits mesh wireframe passes over scene objects when overlay mode is enabled in @ref EditorLayer.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -16,10 +16,19 @@
 namespace Horo::Editor {
 namespace {
 
+/** @brief Component-wise multiplication of two vectors (non-uniform scale combine). */
 Vec3 MultiplyComponents(const Vec3 &a, const Vec3 &b) {
   return {a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
+/**
+ * @brief Resolves mesh path and optional render scale from asset linkage or mesh prop.
+ * @param doc Scene containing asset definitions.
+ * @param obj Object whose mesh source is queried.
+ * @param outMeshPath Optional mesh path output; cleared when absent or on failure.
+ * @param outAssetRenderScale Optional scale parsed from asset CSV, or identity.
+ * @return True when a non-empty mesh path was resolved.
+ */
 bool TryResolveObjectMeshPath(const SceneDocument &doc, const SceneObject &obj,
                               std::string *outMeshPath,
                               Vec3 *outAssetRenderScale) {
@@ -50,6 +59,7 @@ bool TryResolveObjectMeshPath(const SceneDocument &doc, const SceneObject &obj,
   return true;
 }
 
+/** @brief World model matrix including asset render-scale multiplier when present. */
 Mat4 BuildObjectModelMatrix(const SceneDocument &doc, const SceneObject &obj) {
   Vec3 assetRenderScale = Vec3::One();
   std::string ignoredMeshPath;
@@ -64,6 +74,7 @@ Mat4 BuildObjectModelMatrix(const SceneDocument &doc, const SceneObject &obj) {
 
 } // namespace
 
+/** @copydoc EditorLayer::DrawWireframeOverlay */
 void EditorLayer::DrawWireframeOverlay(const Camera &cam) {
   if (!Renderer::GetBackendCapabilities().supportsWireframeOverlay) {
     m_wireframeMode = false;

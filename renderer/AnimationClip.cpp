@@ -4,9 +4,7 @@
 #include <utility>
 
 namespace Horo {
-    // ---------------------------------------------------------------------------
     // AnimationClip — public interface
-    // ---------------------------------------------------------------------------
 
     void AnimationClip::AddTrack(BoneTrack track) {
         m_tracks.push_back(std::move(track));
@@ -49,9 +47,7 @@ namespace Horo {
         }
     }
 
-    // ---------------------------------------------------------------------------
     // Private helpers — keyframe lookup and interpolation
-    // ---------------------------------------------------------------------------
 
     // FindInterval returns the index of the last keyframe whose time is <= `time`.
     // Uses std::lower_bound for O(log n) lookup, then steps back by one.

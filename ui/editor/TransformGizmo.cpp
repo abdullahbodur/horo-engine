@@ -15,8 +15,6 @@
 #include "renderer/DebugDraw.h"
 
 namespace Horo::Editor {
-    // ---- Activation / sync
-    // -------------------------------------------------------
 
     void TransformGizmo::Activate(GizmoMode mode, Vec3 targetPos,
                                   Quaternion targetRot, Vec3 targetScale) {
@@ -43,7 +41,6 @@ namespace Horo::Editor {
         m_scale = scale;
     }
 
-    // ---- Public math helpers ----------------------------------------------------
 
     float TransformGizmo::HandleSize(const Camera &cam) const {
         (void)cam;
@@ -111,12 +108,85 @@ namespace Horo::Editor {
         return lineOrigin + lineDir * s;
     }
 
-    // ---- Axis picking (screen-space 2D) -----------------------------------------
 
     GizmoAxis TransformGizmo::PickAxis(float mx, float my, const Camera &cam,
                                        int screenW, int screenH) const {
+        // In rotate mode the visual handle is a circular ring, not a line.
+        // Testing distance to the axis line would let clicks far from the ring
+        // (but along the axis direction) trigger rotation, so dispatch to a
+        // dedicated ring-aware picker. Translate and scale share the
+        // segment-distance test below because their visible shafts are lines.
+        if (m_mode == GizmoMode::Rotate) {
+            const float radius = HandleSize(cam);
+            constexpr float kRotateHitRadiusSq = 7.0f * 7.0f;
+            constexpr int kSegments = 48;
+            constexpr float kRingTwoPi = 6.28318530718f;
+
+            const std::array<Vec3, 3> kBasisU = {
+                Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f},
+                Vec3{1.0f, 0.0f, 0.0f}
+            };
+            const std::array<Vec3, 3> kBasisV = {
+                Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 0.0f, 1.0f},
+                Vec3{0.0f, 1.0f, 0.0f}
+            };
+
+            float bestRingDist = kRotateHitRadiusSq;
+            GizmoAxis bestRingAxis = GizmoAxis::None;
+
+            for (int i = 0; i < 3; ++i) {
+                const auto ringAxis = static_cast<GizmoAxis>(i + 1);
+                const Vec3 uVec = kBasisU[i];
+                const Vec3 vVec = kBasisV[i];
+
+                float prevX = 0.0f;
+                float prevY = 0.0f;
+                bool prevValid = false;
+
+                for (int j = 0; j <= kSegments; ++j) {
+                    const float t = kRingTwoPi * static_cast<float>(j) /
+                                    static_cast<float>(kSegments);
+                    const Vec3 p = m_pos + uVec * (std::cos(t) * radius) +
+                                   vVec * (std::sin(t) * radius);
+                    float sx;
+                    float sy;
+                    if (!WorldToScreen(p, cam, screenW, screenH, sx, sy)) {
+                        prevValid = false;
+                        continue;
+                    }
+                    if (prevValid) {
+                        const float abx = sx - prevX;
+                        const float aby = sy - prevY;
+                        const float apx = mx - prevX;
+                        const float apy = my - prevY;
+                        const float abLen2 = abx * abx + aby * aby;
+                        float segT = 0.0f;
+                        if (abLen2 > 1e-8f)
+                            segT = std::clamp(
+                                (apx * abx + apy * aby) / abLen2, 0.0f, 1.0f);
+                        const float cx = prevX + segT * abx;
+                        const float cy = prevY + segT * aby;
+                        const float dx = mx - cx;
+                        const float dy = my - cy;
+                        const float distSq = dx * dx + dy * dy;
+                        if (distSq < bestRingDist) {
+                            bestRingDist = distSq;
+                            bestRingAxis = ringAxis;
+                        }
+                    }
+                    prevX = sx;
+                    prevY = sy;
+                    prevValid = true;
+                }
+            }
+            return bestRingAxis;
+        }
+
         const float handleLen = HandleSize(cam);
-        constexpr float kHitRadiusSq = 12.0f * 12.0f; // 12-pixel threshold
+        // Hit radius tuned to visual thickness (shaft ≈ 4-5 px, head ≈ 12 px on
+        // screen). 7 px keeps clicks feeling "on the arrow" without requiring
+        // pixel-perfect accuracy on the shaft.
+        constexpr float kHitRadiusSq = 7.0f * 7.0f;
         constexpr float kAxisStartT =
                 0.22f; // avoid accidental picks at the gizmo origin
 
@@ -165,8 +235,6 @@ namespace Horo::Editor {
         return bestAxis;
     }
 
-    // ---- Update
-    // ------------------------------------------------------------------
 
     void TransformGizmo::BeginDrag(const Ray &ray, const Camera &cam) {
         m_dragging = m_hovered;
@@ -279,7 +347,6 @@ namespace Horo::Editor {
         return m_dragging != GizmoAxis::None || m_hovered != GizmoAxis::None;
     }
 
-    // ---- Draw -------------------------------------------------------------------
 
     namespace {
         const std::array<Vec4, 3> kAxisColors = {
@@ -297,41 +364,74 @@ namespace Horo::Editor {
                                        int /*screenH*/) const {
         const float handleLen = HandleSize(cam);
 
+        // Visual thickness: axis shaft is a thin rectangular prism built from
+        // two perpendicular flat quads ("+" cross section). Width is a fraction
+        // of handle length so the gizmo scales naturally with the camera.
+        const float shaftHalfWidth = handleLen * 0.018f;
+        const float headLen = handleLen * 0.22f;
+        const float headRadius = handleLen * 0.055f;
+        const float shaftLen = handleLen - headLen;
+
         for (int i = 0; i < 3; ++i) {
             auto axis = static_cast<GizmoAxis>(i + 1);
-            Vec3 dir = AxisDir(axis);
-            Vec3 tip = m_pos + dir * handleLen;
-            Vec4 color = (axis == m_hovered || axis == m_dragging)
-                             ? kHoverColor
-                             : kAxisColors[i];
+            const Vec3 dir = AxisDir(axis);
+            const Vec3 tip = m_pos + dir * handleLen;
+            const Vec3 shaftEnd = m_pos + dir * shaftLen;
+            const Vec4 color = (axis == m_hovered || axis == m_dragging)
+                                   ? kHoverColor
+                                   : kAxisColors[i];
 
-            DebugDraw::Line(m_pos, tip, color);
-
-            // Arrowhead: 4 fan lines at 15° from tip
+            // Build two perpendicular basis vectors for the cross-section.
             Vec3 perp1 = Vec3::Cross(dir, {0.0f, 1.0f, 0.0f});
             if (perp1.LengthSq() < 1e-4f)
                 perp1 = Vec3::Cross(dir, {1.0f, 0.0f, 0.0f});
             perp1 = perp1.Normalized();
-            Vec3 perp2 = Vec3::Cross(dir, perp1).Normalized();
+            const Vec3 perp2 = Vec3::Cross(dir, perp1).Normalized();
 
-            const float arrowLen = handleLen * 0.2f;
-            const float arrowSpread = std::tan(ToRadians(15.0f)) * arrowLen;
-            Vec3 arrowBase = tip - dir * arrowLen;
+            // Thick shaft: two crossed flat quads ("+") from origin to shaftEnd.
+            // Each quad is 2 triangles. The two-quad cross looks uniformly thick
+            // from any viewing angle without needing a full cylinder.
+            const auto drawShaftQuad = [&](const Vec3 &side) {
+                const Vec3 a = m_pos + side * shaftHalfWidth;
+                const Vec3 b = m_pos - side * shaftHalfWidth;
+                const Vec3 c = shaftEnd - side * shaftHalfWidth;
+                const Vec3 d = shaftEnd + side * shaftHalfWidth;
+                DebugDraw::Triangle(a, b, c, color);
+                DebugDraw::Triangle(a, c, d, color);
+            };
+            drawShaftQuad(perp1);
+            drawShaftQuad(perp2);
 
-            DebugDraw::Line(tip, arrowBase + perp1 * arrowSpread, color);
-            DebugDraw::Line(tip, arrowBase - perp1 * arrowSpread, color);
-            DebugDraw::Line(tip, arrowBase + perp2 * arrowSpread, color);
-            DebugDraw::Line(tip, arrowBase - perp2 * arrowSpread, color);
+            // Solid pyramid arrowhead: 4 triangular faces from tip down to a
+            // square base at shaftEnd, plus two base triangles so the bottom
+            // is closed when seen from behind.
+            const Vec3 baseCenter = shaftEnd;
+            const Vec3 baseP1 = baseCenter + perp1 * headRadius;
+            const Vec3 baseP2 = baseCenter + perp2 * headRadius;
+            const Vec3 baseM1 = baseCenter - perp1 * headRadius;
+            const Vec3 baseM2 = baseCenter - perp2 * headRadius;
+
+            DebugDraw::Triangle(tip, baseP1, baseP2, color);
+            DebugDraw::Triangle(tip, baseP2, baseM1, color);
+            DebugDraw::Triangle(tip, baseM1, baseM2, color);
+            DebugDraw::Triangle(tip, baseM2, baseP1, color);
+
+            // Base cap (slightly darker tint would need a shader path; keep
+            // same color — the cap just prevents a see-through look from behind).
+            DebugDraw::Triangle(baseP1, baseM1, baseP2, color);
+            DebugDraw::Triangle(baseP2, baseM1, baseM2, color);
         }
     }
 
     void TransformGizmo::DrawRotate(const Camera &cam, int /*screenW*/,
                                     int /*screenH*/) const {
         const float radius = HandleSize(cam);
-        constexpr int kSegments = 32;
+        const float halfThickness = radius * 0.018f;
+        constexpr int kSegments = 48;
 
-        // Axis-plane basis vectors: each ring lies on the plane perpendicular to its
-        // axis.
+        // Axis-plane basis vectors: each ring lies on the plane perpendicular
+        // to its rotation axis. Axis normals double as the "ribbon thickness"
+        // direction so the ring renders as a flat 3D band rather than a hair.
         const std::array<Vec3, 3> kBasisU = {
             Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}
         };
@@ -341,19 +441,44 @@ namespace Horo::Editor {
 
         for (int i = 0; i < 3; ++i) {
             auto axis = static_cast<GizmoAxis>(i + 1);
-            Vec4 color = (axis == m_hovered || axis == m_dragging)
-                             ? kHoverColor
-                             : kAxisColors[i];
-            Vec3 uVec = kBasisU[i];
-            Vec3 vVec = kBasisV[i];
+            const Vec4 color = (axis == m_hovered || axis == m_dragging)
+                                   ? kHoverColor
+                                   : kAxisColors[i];
+            const Vec3 uVec = kBasisU[i];
+            const Vec3 vVec = kBasisV[i];
+            const Vec3 axisN = Vec3::Cross(uVec, vVec).Normalized();
 
             Vec3 prev;
             for (int j = 0; j <= kSegments; ++j) {
-                float t = kTwoPi * static_cast<float>(j) / static_cast<float>(kSegments);
-                Vec3 p =
-                        m_pos + uVec * (std::cos(t) * radius) + vVec * (std::sin(t) * radius);
-                if (j > 0)
-                    DebugDraw::Line(prev, p, color);
+                const float t = kTwoPi * static_cast<float>(j) /
+                                static_cast<float>(kSegments);
+                const Vec3 p = m_pos + uVec * (std::cos(t) * radius) +
+                               vVec * (std::sin(t) * radius);
+                if (j > 0) {
+                    // Ribbon quad perpendicular to the ring plane (thickness
+                    // along axisN) + a radial ribbon so the ring stays visible
+                    // when viewed edge-on to the first ribbon's plane.
+                    const Vec3 off_n = axisN * halfThickness;
+
+                    // midpoint-to-center for the radial direction
+                    Vec3 radialMid = ((prev - m_pos) + (p - m_pos));
+                    radialMid = (radialMid.LengthSq() > 1e-8f)
+                                    ? radialMid.Normalized()
+                                    : uVec;
+                    const Vec3 off_r = radialMid * halfThickness;
+
+                    // Axis-normal ribbon (sticks out of ring plane)
+                    DebugDraw::Triangle(prev + off_n, prev - off_n, p - off_n,
+                                        color);
+                    DebugDraw::Triangle(prev + off_n, p - off_n, p + off_n,
+                                        color);
+
+                    // Radial ribbon (widens ring in its own plane)
+                    DebugDraw::Triangle(prev + off_r, prev - off_r, p - off_r,
+                                        color);
+                    DebugDraw::Triangle(prev + off_r, p - off_r, p + off_r,
+                                        color);
+                }
                 prev = p;
             }
         }
@@ -362,22 +487,46 @@ namespace Horo::Editor {
     void TransformGizmo::DrawScale(const Camera &cam, int /*screenW*/,
                                    int /*screenH*/) const {
         const float handleLen = HandleSize(cam);
+        const float shaftHalfWidth = handleLen * 0.018f;
         const float boxHalf = handleLen * 0.08f;
+        // Shaft ends just before the cube so the cube sits on the shaft tip
+        // rather than encapsulating its final segment.
+        const float shaftLen = handleLen - boxHalf;
 
         for (int i = 0; i < 3; ++i) {
             auto axis = static_cast<GizmoAxis>(i + 1);
-            Vec3 dir = AxisDir(axis);
-            Vec3 tip = m_pos + dir * handleLen;
-            Vec4 color = (axis == m_hovered || axis == m_dragging)
-                             ? kHoverColor
-                             : kAxisColors[i];
+            const Vec3 dir = AxisDir(axis);
+            const Vec3 tip = m_pos + dir * handleLen;
+            const Vec3 shaftEnd = m_pos + dir * shaftLen;
+            const Vec4 color = (axis == m_hovered || axis == m_dragging)
+                                   ? kHoverColor
+                                   : kAxisColors[i];
 
-            DebugDraw::Line(m_pos, tip, color);
-            DebugDraw::Box(tip, {boxHalf, boxHalf, boxHalf}, color);
+            Vec3 perp1 = Vec3::Cross(dir, {0.0f, 1.0f, 0.0f});
+            if (perp1.LengthSq() < 1e-4f)
+                perp1 = Vec3::Cross(dir, {1.0f, 0.0f, 0.0f});
+            perp1 = perp1.Normalized();
+            const Vec3 perp2 = Vec3::Cross(dir, perp1).Normalized();
+
+            // Thick cross-quad shaft (matches translate visuals).
+            const auto drawShaftQuad = [&](const Vec3 &side) {
+                const Vec3 a = m_pos + side * shaftHalfWidth;
+                const Vec3 b = m_pos - side * shaftHalfWidth;
+                const Vec3 c = shaftEnd - side * shaftHalfWidth;
+                const Vec3 d = shaftEnd + side * shaftHalfWidth;
+                DebugDraw::Triangle(a, b, c, color);
+                DebugDraw::Triangle(a, c, d, color);
+            };
+            drawShaftQuad(perp1);
+            drawShaftQuad(perp2);
+
+            // Solid cube handle at the axis tip.
+            DebugDraw::SolidBox(tip, {boxHalf, boxHalf, boxHalf}, color);
         }
 
-        // Centre uniform-scale box (white)
-        DebugDraw::Box(m_pos, {boxHalf, boxHalf, boxHalf}, {1.0f, 1.0f, 1.0f, 1.0f});
+        // Centre uniform-scale handle (solid white cube).
+        DebugDraw::SolidBox(m_pos, {boxHalf, boxHalf, boxHalf},
+                            {1.0f, 1.0f, 1.0f, 1.0f});
     }
 
     void TransformGizmo::Draw(const Camera &cam, int screenW, int screenH) const {

@@ -76,9 +76,7 @@ DuplicateObjectForTest(const Horo::Editor::SceneDocument &doc,
 } // namespace
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
   return (Horo::Tests::SecureTempBase() / name).string();
@@ -4699,7 +4697,6 @@ static SceneDocument MakeRichDocument() {
   return doc;
 }
 
-// ---- Select AFTER Toggle: light component -----------------------------------
 
 TEST_CASE("EditorLayer render: light component selected after Toggle covers DrawLightComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4715,7 +4712,6 @@ TEST_CASE("EditorLayer render: light component selected after Toggle covers Draw
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: rigidbody component ------------------------------
 
 TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers DrawRigidBodyComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4730,7 +4726,6 @@ TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers 
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: script component ---------------------------------
 
 TEST_CASE("EditorLayer render: script component selected after Toggle covers DrawScriptComponentField", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4746,7 +4741,6 @@ TEST_CASE("EditorLayer render: script component selected after Toggle covers Dra
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: all 3 component types ----------------------------
 
 TEST_CASE("EditorLayer render: all component types on one object after Toggle covers full ComponentsList", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4762,7 +4756,6 @@ TEST_CASE("EditorLayer render: all component types on one object after Toggle co
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: camera with follow target -------------------------
 
 TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle covers camera section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4778,7 +4771,6 @@ TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle 
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: camera without follow target ----------------------
 
 TEST_CASE("EditorLayer render: camera without followTargetId selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4794,7 +4786,6 @@ TEST_CASE("EditorLayer render: camera without followTargetId selected after Togg
   REQUIRE(true);
 }
 
-// ---- Multi-select: same assetId (covers "shared asset" path) ----------------
 
 TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows batch panel", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4812,7 +4803,6 @@ TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows 
   REQUIRE(true);
 }
 
-// ---- Multi-select: different assetIds (covers "Mixed" path) -----------------
 
 TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4831,7 +4821,6 @@ TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed 
   REQUIRE(true);
 }
 
-// ---- Multi-select: objects with no assetId (covers "<none>" path) -----------
 
 TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows none label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4850,7 +4839,6 @@ TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows non
   REQUIRE(true);
 }
 
-// ---- Multi-select 3 or more objects ----------------------------------------
 
 TEST_CASE("EditorLayer render: multi-select three objects covers batch transform UI", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4867,8 +4855,6 @@ TEST_CASE("EditorLayer render: multi-select three objects covers batch transform
   editor.Render(cam, 1280, 720);
   REQUIRE(true);
 }
-
-// ---- Asset selected after Toggle then deleted: covers asset-not-found branch
 
 TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-found clear in DrawPropertiesPanel", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4896,9 +4882,6 @@ TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-fo
   REQUIRE(editor.GetSelectedAssetId().empty());
 }
 
-// ---- Asset selected after Toggle: valid asset covers
-// DrawPropertiesSelectedAsset fully
-
 TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawPropertiesSelectedAsset", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -4917,7 +4900,6 @@ TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawProp
   REQUIRE(true);
 }
 
-// ---- Prop with no assetId selected after Toggle ----------------------------
 
 TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle renders transform section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4933,7 +4915,6 @@ TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle render
   REQUIRE(true);
 }
 
-// ---- Panel object selected after Toggle ------------------------------------
 
 TEST_CASE("EditorLayer render: panel with no components selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4949,7 +4930,6 @@ TEST_CASE("EditorLayer render: panel with no components selected after Toggle", 
   REQUIRE(true);
 }
 
-// ---- Switching selection across multiple Render calls ----------------------
 
 TEST_CASE("EditorLayer render: cycling through all object types with select-after-toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4968,7 +4948,6 @@ TEST_CASE("EditorLayer render: cycling through all object types with select-afte
   REQUIRE(true);
 }
 
-// ---- Overlay callback is invoked during Render ------------------------------
 
 TEST_CASE("EditorLayer render: overlay callback is invoked during active Render", "[editor][render]") {
   ImGuiContextGuard imgui;
@@ -4984,7 +4963,6 @@ TEST_CASE("EditorLayer render: overlay callback is invoked during active Render"
   REQUIRE(callCount == 1);
 }
 
-// ---- Overlay callback cleared -----------------------------------------------
 
 TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[editor][render]") {
   ImGuiContextGuard imgui;
@@ -5000,7 +4978,6 @@ TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[
   REQUIRE(true);
 }
 
-// ---- Script behavior options callback set ----------------------------------
 
 TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5033,7 +5010,6 @@ TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers op
   REQUIRE(true);
 }
 
-// ---- Script behavior options callback with unknown behavior ----------------
 
 TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in options list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5065,7 +5041,6 @@ TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in 
   REQUIRE(true);
 }
 
-// ---- Object selected with assetId that exists in document ------------------
 
 TEST_CASE("EditorLayer render: prop with existing assetId shows asset section after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5091,7 +5066,6 @@ TEST_CASE("EditorLayer render: prop with existing assetId shows asset section af
   REQUIRE(true);
 }
 
-// ---- Object with parentId set — covers parent dropdown rendering -----------
 
 TEST_CASE("EditorLayer render: child object with parentId after Toggle shows parent dropdown", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5122,7 +5096,6 @@ TEST_CASE("EditorLayer render: child object with parentId after Toggle shows par
   REQUIRE(true);
 }
 
-// ---- Object with prefab instance set ----------------------------------------
 
 TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle shows prefab label", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5211,7 +5184,6 @@ TEST_CASE("TransformGizmo: Draw Translate at camera position (degenerate handleS
   REQUIRE(true);
 }
 
-// ---- TransformGizmo active in EditorLayer render ----------------------------
 
 TEST_CASE("EditorLayer render: active gizmo Draw is called from Render", "[editor][render][gizmo]") {
   ImGuiContextGuard imgui;
@@ -6192,8 +6164,6 @@ TEST_CASE("EditorLayer render: Render with large viewport dimensions", "[editor]
   REQUIRE(true);
 }
 
-// ---- Camera search path in DrawPropertiesCameraSection FollowTarget combo ---
-
 TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object is handled gracefully", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -6217,7 +6187,6 @@ TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object 
   REQUIRE(true);
 }
 
-// ---- Prop with assetId referencing missing asset renders gracefully --------
 
 TEST_CASE("EditorLayer render: prop with assetId that is not in assets map renders without crash", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -6243,7 +6212,6 @@ TEST_CASE("EditorLayer render: prop with assetId that is not in assets map rende
   REQUIRE(true);
 }
 
-// ---- Light SceneObject type selection (different from light component) -----
 
 TEST_CASE("EditorLayer render: Light type object selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -6267,9 +6235,6 @@ TEST_CASE("EditorLayer render: Light type object selected after Toggle", "[edito
   editor.Render(cam, 1280, 720);
   REQUIRE(true);
 }
-
-// ---- Inspect object renders with SyncGizmoToSelection exercised multiple
-// times
 
 TEST_CASE("EditorLayer render: selecting different objects across renders exercises gizmo sync", "[editor][render]") {
   ImGuiContextGuard imgui;

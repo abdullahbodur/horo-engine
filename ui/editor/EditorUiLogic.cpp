@@ -1,6 +1,6 @@
 /**
  * @file EditorUiLogic.cpp
- * @brief Implementation for EditorUiLogic editor functionality.
+ * @brief Stateless helpers for ImGui input edge-detection, dock sizing, viewport rects, and asset-drop targets.
  */
 #include "ui/editor/EditorUiLogic.h"
 
@@ -9,26 +9,31 @@
 
 namespace Horo::Editor {
 namespace {
+/** @brief Default pixel metrics for the viewport orientation gimbal overlay. */
 constexpr EditorViewGimbalMetrics kEditorViewGimbalMetrics{};
 } // namespace
 
+/** @copydoc ShouldToggleHelpPopup */
 bool ShouldToggleHelpPopup(bool currToggle, bool prevToggle,
                            bool wantsTextInput, bool anyItemActive) {
   return currToggle && !prevToggle && !wantsTextInput && !anyItemActive;
 }
 
+/** @copydoc ShouldOpenQuickOpen */
 bool ShouldOpenQuickOpen(bool currToggle, bool prevToggle, bool flyMode,
                          bool wantsTextInput, bool anyItemActive) {
   return currToggle && !prevToggle && !flyMode && !wantsTextInput &&
          !anyItemActive;
 }
 
+/** @copydoc ShouldOpenCommandPalette */
 bool ShouldOpenCommandPalette(bool currToggle, bool prevToggle, bool flyMode,
                               bool wantsTextInput, bool anyItemActive) {
   return currToggle && !prevToggle && !flyMode && !wantsTextInput &&
          !anyItemActive;
 }
 
+/** @copydoc ShouldCopySelectionRef */
 bool ShouldCopySelectionRef(bool currCopyRef, bool prevCopyRef,
                             bool wantsTextInput, bool anyItemActive,
                             bool hasPrimarySelection) {
@@ -36,6 +41,7 @@ bool ShouldCopySelectionRef(bool currCopyRef, bool prevCopyRef,
          hasPrimarySelection;
 }
 
+/** @copydoc ShouldRequestDeleteSelection */
 bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete,
                                   bool hasSelection, bool wantsTextInput,
                                   bool anyItemActive) {
@@ -43,26 +49,31 @@ bool ShouldRequestDeleteSelection(bool currDelete, bool prevDelete,
          !anyItemActive;
 }
 
+/** @copydoc ShouldHandleEditorEscape */
 bool ShouldHandleEditorEscape(bool currEsc, bool prevEsc, bool wantsTextInput,
                               bool anyItemActive, bool hasBlockingPopup) {
   return currEsc && !prevEsc && !wantsTextInput && !anyItemActive &&
          !hasBlockingPopup;
 }
 
+/** @copydoc CanEditSingleSelection */
 bool CanEditSingleSelection(int selectionCount, int primaryIndex,
                             int objectCount) {
   return selectionCount == 1 && primaryIndex >= 0 && primaryIndex < objectCount;
 }
 
+/** @copydoc ResolveEditorExitDecision */
 EditorExitDecision ResolveEditorExitDecision(bool hasUnsavedChanges) {
   return hasUnsavedChanges ? EditorExitDecision::PromptUnsavedConfirm
                            : EditorExitDecision::ExitImmediately;
 }
 
+/** @copydoc ShouldFinalizeEditorClose */
 bool ShouldFinalizeEditorClose(bool closeRequested, bool hasPendingReload) {
   return closeRequested && !hasPendingReload;
 }
 
+/** @copydoc BuildEditorStatusText */
 EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot &snapshot) {
   EditorStatusText out;
   out.selectionCount = std::max(0, snapshot.selectionCount);
@@ -72,18 +83,22 @@ EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot &snapshot) {
   return out;
 }
 
+/** @copydoc ComputeEditorLeftDockWidth */
 float ComputeEditorLeftDockWidth(float displayWidth) {
   return std::clamp(displayWidth * 0.16f, 220.0f, 320.0f);
 }
 
+/** @copydoc ComputeEditorRightPanelWidth */
 float ComputeEditorRightPanelWidth(float displayWidth) {
   return std::clamp(displayWidth * 0.24f, 360.0f, 460.0f);
 }
 
+/** @copydoc ComputeEditorBottomDockHeight */
 float ComputeEditorBottomDockHeight(float displayHeight) {
   return std::clamp(displayHeight * 0.18f, 180.0f, 260.0f);
 }
 
+/** @copydoc DrawViewportAssetDropTarget */
 EditorViewportAssetDropResult
 DrawViewportAssetDropTarget(bool playMode, float targetWidth,
                             float targetHeight,
@@ -118,6 +133,7 @@ DrawViewportAssetDropTarget(bool playMode, float targetWidth,
   return result;
 }
 
+/** @copydoc BuildEditorViewportRect */
 EditorViewportRect
 BuildEditorViewportRect(float displayWidth, float displayHeight,
                         float toolbarHeight, float statusHeight,
@@ -132,10 +148,12 @@ BuildEditorViewportRect(float displayWidth, float displayHeight,
   return rect;
 }
 
+/** @copydoc GetEditorViewGimbalMetrics */
 const EditorViewGimbalMetrics &GetEditorViewGimbalMetrics() {
   return kEditorViewGimbalMetrics;
 }
 
+/** @copydoc BuildEditorViewGimbalLayout */
 EditorViewGimbalLayout
 BuildEditorViewGimbalLayout(const EditorViewportRect &viewportRect,
                             float displayWidth, float rightPanelWidth,
@@ -165,6 +183,7 @@ BuildEditorViewGimbalLayout(const EditorViewportRect &viewportRect,
   return layout;
 }
 
+/** @copydoc TryParseVec3Csv */
 bool TryParseVec3Csv(const std::string &text, Vec3 *outValue) {
   if (!outValue)
     return false;

@@ -28,6 +28,7 @@ namespace Horo::Editor {
     /** @brief High-level service that drives asset import and reimport through the registry. */
     class AssetImportService {
     public:
+        /** @brief Constructs a service with a default-constructed importer registry (built-in importers registered). */
         AssetImportService() = default;
 
         /** @brief Imports an asset from a source file path into the project.

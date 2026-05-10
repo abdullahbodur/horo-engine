@@ -1,6 +1,6 @@
 /**
  * @file EditorSceneOps.cpp
- * @brief Implementation for EditorSceneOps editor functionality.
+ * @brief Scene/document mutations on @ref EditorLayer: save, prefabs, deletes, duplication, and viewport drops.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -27,6 +27,11 @@
 #include "ui/editor/SceneSerializer.h"
 
 namespace Horo::Editor {
+/**
+ * @brief Resolves conservative world-space bounds for ray-vs-surface placement (panels/props).
+ *
+ * Uses object scale as fallback half-extents and optionally expands via TryPropWorldAabb when a live registry exists.
+ */
 bool TryGetPlacementSurfaceBounds(Registry *liveRegistry,
                                   const SceneObject &obj, Vec3 *outCenter,
                                   Vec3 *outHalf) {
@@ -51,6 +56,7 @@ bool TryGetPlacementSurfaceBounds(Registry *liveRegistry,
   return true;
 }
 
+/** @copydoc EditorLayer::ReloadDocumentFromDisk */
 bool EditorLayer::ReloadDocumentFromDisk(
     std::string *outError,
     const std::vector<std::string> *preferredSelectionIds,
@@ -80,6 +86,7 @@ bool EditorLayer::ReloadDocumentFromDisk(
   }
 }
 
+/** @copydoc EditorLayer::ApplyGizmoDeltaToSelection */
 void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
                                              const Vec3 &dScale,
                                              const Quaternion &dRot,
@@ -125,6 +132,7 @@ void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
   }
 }
 
+/** @copydoc EditorLayer::SaveDocument */
 bool EditorLayer::SaveDocument(std::string *outError) {
   if (outError)
     outError->clear();
@@ -159,6 +167,7 @@ bool EditorLayer::SaveDocument(std::string *outError) {
   }
 }
 
+/** @copydoc EditorLayer::DeleteAssetDefinition */
 EditorLayer::AssetDeleteResult
 EditorLayer::DeleteAssetDefinition(const std::string &assetId) {
   AssetDeleteResult result;
@@ -203,6 +212,7 @@ EditorLayer::DeleteAssetDefinition(const std::string &assetId) {
   return result;
 }
 
+/** @copydoc EditorLayer::DiscardUnsavedChanges */
 void EditorLayer::DiscardUnsavedChanges() {
   if (!m_document.dirty)
     return;
@@ -213,6 +223,7 @@ void EditorLayer::DiscardUnsavedChanges() {
   TriggerReload();
 }
 
+/** @copydoc EditorLayer::RequestSceneAction */
 void EditorLayer::RequestSceneAction(PendingSceneAction action) {
   if (action == PendingSceneAction::None)
     return;
@@ -229,6 +240,7 @@ void EditorLayer::RequestSceneAction(PendingSceneAction action) {
     LogError("[Editor] Scene action failed: {}", actionError);
 }
 
+/** @copydoc EditorLayer::ExecutePendingSceneAction */
 bool EditorLayer::ExecutePendingSceneAction(std::string *outError) {
   using enum PendingSceneAction;
   if (outError)
@@ -281,6 +293,7 @@ bool EditorLayer::ExecutePendingSceneAction(std::string *outError) {
   return true;
 }
 
+/** @copydoc EditorLayer::ExecuteCommandPaletteAction */
 void EditorLayer::ExecuteCommandPaletteAction(std::string_view commandId) {
   using enum PendingSceneAction;
   if (commandId == "undo")
@@ -309,6 +322,7 @@ void EditorLayer::ExecuteCommandPaletteAction(std::string_view commandId) {
   }
 }
 
+/** @copydoc EditorLayer::CreatePrefabFromSelection */
 bool EditorLayer::CreatePrefabFromSelection(std::string *outError,
                                             std::string *outPrefabPath) {
   if (outError)
@@ -376,6 +390,7 @@ bool EditorLayer::CreatePrefabFromSelection(std::string *outError,
   return true;
 }
 
+/** @copydoc EditorLayer::RequestDeleteSelectedObjects */
 void EditorLayer::RequestDeleteSelectedObjects() {
   if (m_selectedIndices.empty())
     return;
@@ -383,6 +398,7 @@ void EditorLayer::RequestDeleteSelectedObjects() {
   m_uiWidgets.OpenConfirmDeleteObjects(m_selectedIndices);
 }
 
+/** @copydoc EditorLayer::RequestDeleteAsset */
 void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
   if (assetId.empty())
     return;
@@ -392,12 +408,14 @@ void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
   m_uiWidgets.OpenConfirmDeleteAsset(std::string(assetId));
 }
 
+/** @copydoc EditorLayer::OpenRenameObjectModal */
 void EditorLayer::OpenRenameObjectModal(int index) {
   if (index < 0 || index >= static_cast<int>(m_document.objects.size()))
     return;
   m_uiWidgets.OpenRenameObject(index);
 }
 
+/** @copydoc EditorLayer::AddObject */
 void EditorLayer::AddObject(SceneObjectType type, std::string_view parentId) {
   using enum SceneObjectType;
   const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -417,10 +435,12 @@ void EditorLayer::AddObject(SceneObjectType type, std::string_view parentId) {
   CommitHistoryChange(before);
 }
 
+/** @copydoc EditorLayer::AddObjectFromSelectedAsset */
 void EditorLayer::AddObjectFromSelectedAsset(std::string_view parentId) {
   CreateObjectFromAsset(m_selectedAssetId, parentId);
 }
 
+/** @copydoc EditorLayer::CreateObjectFromAsset */
 bool EditorLayer::CreateObjectFromAsset(std::string_view assetId,
                                         std::string_view parentId,
                                         const Vec3 *worldPosition,
@@ -469,6 +489,7 @@ bool EditorLayer::CreateObjectFromAsset(std::string_view assetId,
   return true;
 }
 
+/** @copydoc EditorLayer::TryBuildViewportDropPosition */
 bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
                                                int screenH,
                                                std::string_view assetId,
@@ -519,6 +540,7 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
   return true;
 }
 
+/** @copydoc EditorLayer::DuplicatePrimarySelection */
 void EditorLayer::DuplicatePrimarySelection() {
   const int primaryIdx = PrimaryIdx();
   if (primaryIdx < 0 ||
@@ -535,6 +557,7 @@ void EditorLayer::DuplicatePrimarySelection() {
   CommitHistoryChange(before);
 }
 
+/** @copydoc EditorLayer::DuplicateSelectedObjects */
 void EditorLayer::DuplicateSelectedObjects() {
   if (m_selectedIndices.empty())
     return;

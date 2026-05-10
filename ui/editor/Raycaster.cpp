@@ -1,6 +1,6 @@
 /**
  * @file Raycaster.cpp
- * @brief Implementation for Raycaster editor functionality.
+ * @brief Viewport picking: pixel unprojection, ray–AABB tests, and ground-plane intersection.
  */
 #include "ui/editor/Raycaster.h"
 
@@ -12,6 +12,7 @@
 #include "math/Vec4.h"
 
 namespace Horo::Editor {
+    /** @copydoc ScreenToRay */
     Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH,
                     const Camera &cam) {
         // Convert pixel coords to NDC [-1, 1].
@@ -38,6 +39,7 @@ namespace Horo::Editor {
         return r;
     }
 
+    /** @copydoc RayVsAABBHit */
     bool RayVsAABBHit(const Ray &ray, const Vec3 &center, const Vec3 &half,
                       RayAabbHit *outHit) {
         constexpr float kEps = 1e-6f;
@@ -99,6 +101,7 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @copydoc RayVsAABB */
     float RayVsAABB(const Ray &ray, const Vec3 &center, const Vec3 &half) {
         constexpr float kEps = 1e-6f;
         if (const bool originInside =
@@ -112,6 +115,7 @@ namespace Horo::Editor {
         return RayVsAABBHit(ray, center, half, &hit) ? hit.distance : -1.0f;
     }
 
+    /** @copydoc TryIntersectGroundPlane */
     bool TryIntersectGroundPlane(const Ray &ray, Vec3 *outHitPoint) {
         if (!outHitPoint)
             return false;

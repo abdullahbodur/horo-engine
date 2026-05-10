@@ -14,8 +14,6 @@ using namespace Horo;
 using namespace Horo::Editor;
 using Catch::Approx;
 
-// ---- Helpers
-// -----------------------------------------------------------------
 
 static Camera MakeCamera(Vec3 pos, Vec3 target, float fovY = 60.0f,
                          float aspect = 1.0f) {

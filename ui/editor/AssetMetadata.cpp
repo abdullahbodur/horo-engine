@@ -1,6 +1,10 @@
 /**
  * @file AssetMetadata.cpp
- * @brief Implementation for AssetMetadata editor functionality.
+ * @brief JSON persistence for per-asset metadata sidecars and managed-directory path helpers.
+ *
+ * Reads and writes the `.meta` JSON beside imported assets under @c ProjectPath::Root(),
+ * including diagnostics, dependency records, importer settings, and produced file lists.
+ * Enum values map to stable lowercase string tokens for forward-compatible serialization.
  */
 #include "ui/editor/AssetMetadata.h"
 
@@ -12,10 +16,12 @@
 #include "core/ProjectPath.h"
 #include "ui/editor/AssetIdentity.h"
 
+/** @brief Local alias for @c nlohmann::json in metadata serialization helpers. */
 using json = nlohmann::json;
 
 namespace Horo::Editor {
     namespace {
+        /** @brief Serialises @ref AssetDiagnosticSeverity to its persisted JSON token. */
         std::string DiagnosticSeverityToString(AssetDiagnosticSeverity severity) {
             using enum AssetDiagnosticSeverity;
             switch (severity) {
@@ -29,6 +35,7 @@ namespace Horo::Editor {
             return "error";
         }
 
+        /** @brief Parses a persisted severity string; unknown values map to @ref AssetDiagnosticSeverity::Error. */
         AssetDiagnosticSeverity DiagnosticSeverityFromString(std::string_view text) {
             using enum AssetDiagnosticSeverity;
             if (text == "info")
@@ -38,6 +45,7 @@ namespace Horo::Editor {
             return Error;
         }
 
+        /** @brief Serialises @ref AssetDependencyKind to its persisted JSON token. */
         std::string DependencyKindToString(AssetDependencyKind kind) {
             using enum AssetDependencyKind;
             switch (kind) {
@@ -51,6 +59,7 @@ namespace Horo::Editor {
             return "source";
         }
 
+        /** @brief Parses a dependency-kind token; unknown values map to @ref AssetDependencyKind::Source. */
         AssetDependencyKind DependencyKindFromString(std::string_view text) {
             using enum AssetDependencyKind;
             if (text == "produced_output")
@@ -60,6 +69,7 @@ namespace Horo::Editor {
             return Source;
         }
 
+        /** @brief Lists mesh and albedo paths from @p asset for stable ordering as produced outputs. */
         std::vector<std::string> CollectProducedFiles(const AssetDef &asset) {
             std::vector<std::string> producedFiles;
             if (!asset.mesh.empty())
@@ -73,6 +83,7 @@ namespace Horo::Editor {
             return producedFiles;
         }
 
+        /** @brief Fills @p metadata.settings from JSON object @c j["settings"]. */
         void ParseSettingsJson(const json &j, AssetMetadata &metadata) {
             if (!j.contains("settings") || !j["settings"].is_object())
                 return;
@@ -84,6 +95,7 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Appends string entries from JSON array @c j["producedFiles"]. */
         void ParseProducedFilesJson(const json &j, AssetMetadata &metadata) {
             if (!j.contains("producedFiles") || !j["producedFiles"].is_array())
                 return;
@@ -93,6 +105,7 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Parses dependency rows from JSON array @c j["dependencies"]. */
         void ParseDependenciesJson(const json &j, AssetMetadata &metadata) {
             if (!j.contains("dependencies") || !j["dependencies"].is_array())
                 return;
@@ -108,6 +121,7 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Parses diagnostic rows from JSON array @c j["diagnostics"]. */
         void ParseDiagnosticsJson(const json &j, AssetMetadata &metadata) {
             if (!j.contains("diagnostics") || !j["diagnostics"].is_array())
                 return;
@@ -127,12 +141,18 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /** @brief Managed folder path under the project root: @c assets/models/ plus @p assetGuid.
+     *  @param assetGuid Stable asset GUID; empty yields an empty path.
+     */
     std::filesystem::path GetManagedAssetDirectory(const std::string &assetGuid) {
         if (assetGuid.empty())
             return {};
         return ProjectPath::Root() / "assets" / "models" / assetGuid;
     }
 
+    /** @brief Resolves the managed directory from @p asset, preferring GUID then mesh parent.
+     *  @param asset Definition whose @c guid or @c mesh locates on-disk content.
+     */
     std::filesystem::path GetManagedAssetDirectory(const AssetDef &asset) {
         if (!asset.guid.empty())
             return GetManagedAssetDirectory(asset.guid);
@@ -145,12 +165,21 @@ namespace Horo::Editor {
         return meshPath.parent_path();
     }
 
+    /** @brief Path to @c asset.meta.json inside the managed directory for @p assetGuid.
+     *  @param assetGuid Stable GUID; empty yields an empty path.
+     */
     std::filesystem::path GetAssetMetadataPath(const std::string &assetGuid) {
         if (assetGuid.empty())
             return {};
         return GetManagedAssetDirectory(assetGuid) / "asset.meta.json";
     }
 
+    /** @brief Reads and parses @c asset.meta.json for @p assetGuid into @p outMetadata.
+     *  @param assetGuid   GUID identifying the managed asset folder.
+     *  @param outMetadata Receives parsed fields on success; must be non-null.
+     *  @param outError    Optional parse/open error message.
+     *  @return False when the file is missing, unreadable, or JSON-invalid.
+     */
     bool LoadAssetMetadata(const std::string &assetGuid, AssetMetadata *outMetadata,
                            std::string *outError) {
         if (outError)
@@ -197,6 +226,11 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @brief Writes @p metadata to its GUID-managed @c asset.meta.json with stable key ordering.
+     *  @param metadata Sidecar to persist; @c assetGuid must be non-empty to resolve the path.
+     *  @param outError Optional filesystem or IO error message.
+     *  @return False when the parent directory cannot be created or the file cannot be written.
+     */
     bool SaveAssetMetadata(const AssetMetadata &metadata, std::string *outError) {
         if (outError)
             outError->clear();
@@ -274,6 +308,10 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @brief Constructs metadata matching @p asset with produced-file and dependency seeds.
+     *  @param assetId Logical document key for @p asset.
+     *  @param asset   Definition whose mesh/albedo populate produced outputs.
+     */
     AssetMetadata BuildAssetMetadata(const std::string &assetId,
                                      const AssetDef &asset) {
         AssetMetadata metadata;
@@ -287,6 +325,11 @@ namespace Horo::Editor {
         return metadata;
     }
 
+    /** @brief Ensures every asset in @p doc has a persisted sidecar, creating or refreshing as needed.
+     *  @param doc      Document whose assets are normalised; must be non-null.
+     *  @param outError Optional first save failure message.
+     *  @return False when any @ref SaveAssetMetadata call fails.
+     */
     bool EnsureAssetMetadataForDocument(SceneDocument *doc, std::string *outError) {
         if (outError)
             outError->clear();

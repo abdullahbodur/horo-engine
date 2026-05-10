@@ -1,15 +1,17 @@
 /**
  * @file EditorHistory.cpp
- * @brief Implementation for EditorHistory editor functionality.
+ * @brief Undo/redo snapshot stack for @ref Horo::Editor::EditorLayer.
+ *
+ * Snapshots capture document, saved baseline, object selection by ID, and assets-panel selection.
+ * @ref EditorLayer::CommitHistoryChange pushes onto undo when the post-state differs; redo clears on new edits.
  */
-// Undo/redo history management for EditorLayer.
-// Method definitions are in this file; declarations remain in EditorLayer.h.
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
 
 #include <vector>
 
 namespace Horo::Editor {
+    /** @copydoc EditorLayer::HistorySnapshotsEqual */
     bool EditorLayer::HistorySnapshotsEqual(const EditorHistorySnapshot &lhs,
                                             const EditorHistorySnapshot &rhs) {
         return lhs.document == rhs.document &&
@@ -18,6 +20,7 @@ namespace Horo::Editor {
                lhs.selectedAssetId == rhs.selectedAssetId;
     }
 
+    /** @copydoc EditorLayer::TrimHistory */
     void EditorLayer::TrimHistory(std::vector<EditorHistorySnapshot> *history) {
         if (!history)
             return;
@@ -29,6 +32,7 @@ namespace Horo::Editor {
                                                    kMaxEditorHistorySnapshots));
     }
 
+    /** @copydoc EditorLayer::CaptureHistorySnapshot */
     EditorLayer::EditorHistorySnapshot EditorLayer::CaptureHistorySnapshot() const {
         EditorHistorySnapshot snapshot;
         snapshot.document = m_document;
@@ -38,6 +42,7 @@ namespace Horo::Editor {
         return snapshot;
     }
 
+    /** @copydoc EditorLayer::RestoreHistorySnapshot */
     void EditorLayer::RestoreHistorySnapshot(
         const EditorHistorySnapshot &snapshot) {
         m_document = snapshot.document;
@@ -52,6 +57,7 @@ namespace Horo::Editor {
         TriggerReload();
     }
 
+    /** @copydoc EditorLayer::CommitHistoryChange */
     void EditorLayer::CommitHistoryChange(const EditorHistorySnapshot &before) {
         if (EditorHistorySnapshot after = CaptureHistorySnapshot();
             HistorySnapshotsEqual(before, after))
@@ -62,6 +68,7 @@ namespace Horo::Editor {
         m_redoHistory.clear();
     }
 
+    /** @copydoc EditorLayer::BeginHistoryTransaction */
     void EditorLayer::BeginHistoryTransaction(const EditorHistorySnapshot &before) {
         if (m_historyTransactionOpen)
             return;
@@ -69,6 +76,7 @@ namespace Horo::Editor {
         m_historyTransactionOpen = true;
     }
 
+    /** @copydoc EditorLayer::FinalizeHistoryTransaction */
     void EditorLayer::FinalizeHistoryTransaction() {
         if (!m_historyTransactionOpen)
             return;
@@ -76,12 +84,14 @@ namespace Horo::Editor {
         m_historyTransactionOpen = false;
     }
 
+    /** @copydoc EditorLayer::ClearHistory */
     void EditorLayer::ClearHistory() {
         m_undoHistory.clear();
         m_redoHistory.clear();
         m_historyTransactionOpen = false;
     }
 
+    /** @copydoc EditorLayer::RefreshHistorySavedBaseline */
     void EditorLayer::RefreshHistorySavedBaseline() {
         auto refreshSnapshot = [this](EditorHistorySnapshot *snapshot) {
             if (!snapshot)
@@ -101,10 +111,13 @@ namespace Horo::Editor {
             refreshSnapshot(&m_historyTransactionBefore);
     }
 
+    /** @copydoc EditorLayer::CanUndoHistory */
     bool EditorLayer::CanUndoHistory() const { return !m_undoHistory.empty(); }
 
+    /** @copydoc EditorLayer::CanRedoHistory */
     bool EditorLayer::CanRedoHistory() const { return !m_redoHistory.empty(); }
 
+    /** @copydoc EditorLayer::UndoHistory */
     bool EditorLayer::UndoHistory() {
         FinalizeHistoryTransaction();
         if (m_undoHistory.empty())
@@ -119,6 +132,7 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @copydoc EditorLayer::RedoHistory */
     bool EditorLayer::RedoHistory() {
         FinalizeHistoryTransaction();
         if (m_redoHistory.empty())

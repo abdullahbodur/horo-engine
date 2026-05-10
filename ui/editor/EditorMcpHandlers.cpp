@@ -36,7 +36,6 @@ using json = nlohmann::json;
 
 namespace Horo::Editor {
     namespace {
-        // ---- Issue key helpers (used only by BuildMcpBuildSnapshot) ----
 
         std::string BuildIssueKey(std::string_view severity, std::string_view path,
                                   std::string_view message) {
@@ -56,7 +55,6 @@ namespace Horo::Editor {
                        : "warning";
         }
 
-        // ---- MCP snapshot builders ----
 
         Mcp::McpBuildSnapshot BuildMcpBuildSnapshot(const SceneDocument &document) {
             Mcp::McpBuildSnapshot snapshot;
@@ -205,7 +203,6 @@ namespace Horo::Editor {
             return snapshot;
         }
 
-        // ---- MCP argument parsers ----
 
         bool McpParseVec3(const json &value, Vec3 *out) {
             if (!out || !value.is_array() || value.size() != 3)

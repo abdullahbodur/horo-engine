@@ -1,10 +1,13 @@
 /**
  * @file HoroTheme.h
- * @brief Theme token structures and accessors for launcher/editor UI styling.
+ * @brief Theme token structures, preset registry, and accessors for launcher/editor UI styling.
  */
 #pragma once
 
 #include <imgui.h>
+
+#include <span>
+#include <string_view>
 
 namespace Horo::Ui {
 
@@ -99,6 +102,72 @@ struct EditorTheme {
 };
 
 /**
+ * @brief Selectable editor colour preset.
+ *
+ * Presets ship with the application and map to fixed palettes.  `DarkBlue` is
+ * the default and preserves the original Horo editor look; `Graphite` and
+ * `HighContrast` are alternative, accessibility-focused palettes.
+ */
+enum class EditorThemePreset {
+  DarkBlue,     /**< Default Horo palette: deep blue panels, blue accent. */
+  Graphite,     /**< Neutral dark workspace: slate borders, cool gray-blue accent. */
+  HighContrast, /**< Maximum contrast: near-black panels, vivid cyan accent, pure white text. */
+};
+
+/**
+ * @brief Returns the stable string identifier for a preset.
+ *
+ * These ids are persisted on disk in `~/.horo/editor_settings.json`.  They are
+ * intentionally short and camelCase, separate from the display labels.
+ * @param preset Preset to look up.
+ * @return Null-terminated string: `darkBlue`, `graphite`, or `highContrast`.
+ */
+const char *EditorThemePresetId(EditorThemePreset preset);
+
+/**
+ * @brief Returns the human-facing display label for a preset.
+ * @param preset Preset to look up.
+ * @return Null-terminated string: `Dark Blue`, `Graphite`, or `High Contrast`.
+ */
+const char *EditorThemePresetLabel(EditorThemePreset preset);
+
+/**
+ * @brief Parses a persisted preset id back into a preset enum.
+ *
+ * Unknown or empty ids fall back to `DarkBlue` so corrupt/legacy settings
+ * cannot crash the editor.  The optional @p ok output reports whether the
+ * input was recognised.
+ * @param id  Persisted id; matched case-sensitively against EditorThemePresetId values.
+ * @param ok  Optional output; set to true when @p id matches a known preset, false otherwise.
+ * @return Parsed preset, or `DarkBlue` when @p id is unknown.
+ */
+EditorThemePreset ParseEditorThemePreset(std::string_view id, bool *ok = nullptr);
+
+/**
+ * @brief Returns the full list of supported presets in display order.
+ *
+ * The returned span references static storage and is safe to cache.
+ * @return Span listing `DarkBlue`, `Graphite`, `HighContrast`.
+ */
+std::span<const EditorThemePreset> EditorThemePresets();
+
+/**
+ * @brief Stores @p preset as the active editor theme preset.
+ *
+ * The call only updates internal state; it does NOT reapply ImGui style
+ * colours.  Call ApplyEditorTheme(ImGui::GetStyle()) after this to push the
+ * new palette into ImGui.
+ * @param preset Preset to activate.
+ */
+void SetEditorThemePreset(EditorThemePreset preset);
+
+/**
+ * @brief Returns the preset currently selected as the editor theme.
+ * @return Active preset; defaults to `DarkBlue` until changed.
+ */
+EditorThemePreset GetEditorThemePreset();
+
+/**
  * @brief Returns the application-wide launcher theme singleton.
  *
  * The theme is constructed once and the reference remains valid for the
@@ -108,12 +177,26 @@ struct EditorTheme {
 const LauncherTheme &GetLauncherTheme();
 
 /**
- * @brief Returns the application-wide editor theme singleton.
+ * @brief Returns the editor theme for the currently selected preset.
  *
- * The theme is constructed once and the reference remains valid for the
- * lifetime of the process.  Never call this before ImGui has been initialised.
- * @return Const reference to the shared EditorTheme instance.
+ * The reference points to static storage per preset and remains valid for
+ * the lifetime of the process.  The referenced object is effectively
+ * immutable, so any cached references become stale after
+ * SetEditorThemePreset() — callers that rebind to preset changes should
+ * re-fetch via GetEditorTheme() each frame.
+ * @return Const reference to the EditorTheme instance for the active preset.
  */
 const EditorTheme &GetEditorTheme();
+
+/**
+ * @brief Maps the active editor theme onto an ImGui style struct.
+ *
+ * Writes palette colours, rounding, and density into @p style so ImGui will
+ * render with the currently selected preset.  This is the single central
+ * point where the editor's ImGui colour theme is derived from HoroPalette;
+ * both `EditorLayer::Init` and the Settings modal's Apply/OK path call it.
+ * @param style ImGui style target (typically `ImGui::GetStyle()`).
+ */
+void ApplyEditorTheme(ImGuiStyle &style);
 
 } // namespace Horo::Ui

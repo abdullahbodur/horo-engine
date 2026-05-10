@@ -16,9 +16,7 @@ using namespace Horo::Editor;
 using namespace Horo::ObjLoader;
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
   return (Horo::Tests::SecureTempBase() / name).string();

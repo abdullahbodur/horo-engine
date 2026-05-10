@@ -1,6 +1,9 @@
 /**
  * @file SceneProjectBridge.cpp
- * @brief Implementation for SceneProjectBridge editor functionality.
+ * @brief Bidirectional conversion between @ref SceneDocument and typed @ref SceneProjectModel.
+ *
+ * Maps editor props/components onto SceneNodeDefinition, expands prefabs from disk, and merges typed asset rows.
+ * Inverse path rebuilds SceneObject vectors and serialisable AssetDef entries from runtime-facing structs.
  */
 #include "ui/editor/SceneProjectBridge.h"
 
@@ -407,6 +410,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /** @copydoc BuildSceneProjectModel */
     SceneProjectModel BuildSceneProjectModel(const SceneDocument &doc) {
         SceneProjectModel model;
         model.scene.metadata.schemaVersion = doc.version;
@@ -473,6 +477,7 @@ namespace Horo::Editor {
         return model;
     }
 
+    /** @copydoc BuildSceneDocument */
     SceneDocument BuildSceneDocument(const SceneProjectModel &model) {
         SceneDocument doc;
         doc.version = model.scene.metadata.schemaVersion;

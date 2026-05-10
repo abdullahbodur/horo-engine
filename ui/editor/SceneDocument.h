@@ -16,7 +16,12 @@
 
 namespace Horo::Editor {
     /** @brief Classifies the broad category of a scene object. */
-    enum class SceneObjectType { Panel, Prop, Light, Camera };
+    enum class SceneObjectType {
+        Panel,  /**< Generic authored object without specialised runtime behavior. */
+        Prop,   /**< Rendered prop instance, usually backed by an asset definition. */
+        Light,  /**< Light-emitting object (point or directional). */
+        Camera, /**< Camera object that can drive view/projection state. */
+    };
 
     /**
      * @brief A single component attached to a SceneObject, analogous to a Unity
@@ -49,8 +54,16 @@ namespace Horo::Editor {
         std::string guid;        /**< Stable path-independent identity for imported content. */
         std::string displayName; /**< Human-facing label shown in the editor. */
 
+        /** @brief Constructs an empty asset definition. */
         AssetDef() = default;
 
+        /** @brief Constructs an asset definition from explicit field values.
+         *  @param meshValue         Mesh tag/path string.
+         *  @param renderScaleValue  Render scale encoded as "x,y,z".
+         *  @param albedoMapValue    Optional albedo texture path.
+         *  @param guidValue         Stable GUID for imported content.
+         *  @param displayNameValue  Human-facing asset label.
+         */
         AssetDef(std::string meshValue, std::string renderScaleValue,
                  std::string albedoMapValue = {}, std::string guidValue = {},
                  std::string displayNameValue = {})
@@ -59,6 +72,7 @@ namespace Horo::Editor {
               displayName(std::move(displayNameValue)) {
         }
 
+        /** @brief Returns true when all persisted asset fields are equal. */
         bool operator==(const AssetDef &) const = default;
     };
 
@@ -69,6 +83,7 @@ namespace Horo::Editor {
         std::string prefabId;   /**< Identifier of the source prefab asset. */
         std::string sourcePath; /**< File path from which the prefab was loaded. */
 
+        /** @brief Returns true when both prefab identifier and source path are equal. */
         bool operator==(const ScenePrefabInstance &) const = default;
     };
 
@@ -95,6 +110,7 @@ namespace Horo::Editor {
         std::vector<ComponentDesc>
         components;                                        /**< Attached components (light, rigidbody, script, etc.). */
 
+        /** @brief Returns true when all authored fields and attached components are equal. */
         bool operator==(const SceneObject &) const = default;
     };
 
@@ -114,6 +130,7 @@ namespace Horo::Editor {
         assets;                            /**< Named asset definitions keyed by asset ID. */
         std::vector<SceneObject> objects;  /**< Ordered list of scene objects. */
 
+        /** @brief Returns true when metadata, settings, assets, and object lists are equal. */
         bool operator==(const SceneDocument &) const = default;
     };
 } // namespace Horo::Editor

@@ -6,7 +6,6 @@
 #include <array>
 #include <chrono>
 #include <atomic>
-#include <cmath>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -58,14 +57,12 @@ namespace Horo {
 
         void DismissOpenPopupByClickingOutside(ImGuiTestContext *ctx);
 
-        // ---------------------------------------------------------------------------
         // WaitForPopup: waits for the popup at stack depth `depth` to be rendered
         // and contain `sentinelItem`.  On success leaves ctx->SetRef at that window
         // and returns its ID.  On failure returns 0 (does NOT press Escape).
         //
         // depth 0 = first/outermost popup (e.g. a toolbar or context menu popup).
         // depth 1 = second popup (e.g. an "Add" sub-menu inside a context menu).
-        // ---------------------------------------------------------------------------
         ImGuiID WaitForPopup(ImGuiTestContext *ctx, int depth, const char *sentinelItem, int maxFrames) {
             ImGuiID wid = 0;
             bool sentinelFound = false;
@@ -589,7 +586,13 @@ namespace Horo {
             // Click safe cancel buttons so editor-owned modal-open flags are reset and
             // the next toolbar interaction is not blocked by a re-opened modal.
             ClickModalButtonIfPresent(ctx, "Rename Object", "Cancel");
-            ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
+            // Editor Settings uses a marker-based footer, so fall back to the
+            // marker when the plain label is absent.
+            if (ctx) {
+                ctx->SetRef("Editor Settings");
+                ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+                ctx->Yield(2);
+            }
             ClickModalButtonIfPresent(ctx, "Create Asset", "Cancel");
             ClickModalButtonIfPresent(ctx, "Unsaved Changes", "Cancel");
             ClickModalButtonIfPresent(ctx, "Confirm Delete Objects", "Cancel");
@@ -764,8 +767,6 @@ namespace Horo {
             });
         }
 
-        // ---- MCP HTTP request helpers (cross-platform, used by mcp_send_* scenarios)
-        // ----
 
 #ifdef _WIN32
         using UiSockHandle = SOCKET;
@@ -843,26 +844,47 @@ namespace Horo {
 
             const bool modalReady = WaitForCondition(ctx, 60, [ctx]() {
                 ctx->SetRef("Editor Settings");
-                return ctx->ItemExists("Enable built-in MCP");
+                return ctx->ItemExists("Enable built-in MCP") ||
+                       CurrentRefHasMarker(ctx, "##settings_test/tab_mcp");
             });
             if (!modalReady) {
-                LogWarn("UI scenario: MCP settings modal did not expose enable checkbox.");
-                ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
+                LogWarn("UI scenario: MCP settings modal did not expose MCP tab.");
+                ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
                 return false;
             }
 
             ctx->SetRef("Editor Settings");
+            // Make sure MCP tab is active in the redesigned tabbed modal.
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_mcp");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+
+            const bool enableReady = WaitForCondition(ctx, 30, [ctx]() {
+                ctx->SetRef("Editor Settings");
+                return ctx->ItemExists("Enable built-in MCP");
+            });
+            if (!enableReady) {
+                LogWarn("UI scenario: Enable built-in MCP toggle did not appear.");
+                ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+                return false;
+            }
+
             // Check the box unconditionally — idempotent if already checked.
             LogDebug("UI scenario action: enable MCP in settings modal");
             ctx->ItemCheck("Enable built-in MCP");
             ctx->Yield(1);
             LogDebug("UI scenario action: apply MCP settings");
-            ctx->ItemClick("Apply");
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_apply");
             ctx->Yield(4);
+            // Staged-edit semantics: Apply keeps the modal open. Close via Cancel
+            // so subsequent scenarios are not blocked by a leftover open modal.
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
             return true;
         }
 
-        // ---- Scenario run functions ----
 
         void RunToolbarButtonsVisible(ImGuiTestContext *ctx) {
             UiAutomationRunState *state =
@@ -1350,7 +1372,7 @@ namespace Horo {
 
             const bool modalReady = WaitForCondition(ctx, 60, [ctx]() {
                 ctx->SetRef("Editor Settings");
-                return ctx->ItemExists("Cancel");
+                return CurrentRefHasMarker(ctx, "##settings_test/footer_cancel");
             });
             IM_CHECK(modalReady);
             if (!modalReady) {
@@ -1359,17 +1381,17 @@ namespace Horo {
             }
 
             ctx->SetRef("Editor Settings");
-            IM_CHECK(ctx->ItemExists("Cancel"));
-            IM_CHECK(ctx->ItemExists("Apply"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_apply"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_ok"));
 
             LogDebug("UI scenario action: click Cancel to close modal");
-            ctx->ItemClick("Cancel");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
             ctx->Yield(2);
 
             LogInfo("UI scenario done: editor_ui/settings_modal_open_cancel");
         }
 
-        // ---- Registration helpers ----
 
         ImGuiTest *RegisterToolbarButtonsVisible(ImGuiTestEngine *engine, UiAutomationRunState *state) {
             ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui", "toolbar_buttons_visible");
@@ -1828,7 +1850,6 @@ namespace Horo {
             return test;
         }
 
-        // ---- New scenarios (added below) ----
 
         void RunObjectContextMenuInHierarchy(ImGuiTestContext *ctx) {
             UiAutomationRunState *state =
@@ -2659,7 +2680,6 @@ namespace Horo {
             return test;
         }
 
-        // ---- New scenarios (uncovered EditorLayer paths) ----
 
         // 1. play_mode_toggle — lines 2182–2200 (DrawPlaybackControls)
         void RunPlayModeToggle(ImGuiTestContext *ctx) {
@@ -2924,24 +2944,34 @@ namespace Horo {
 
             const bool modalReady = WaitForCondition(ctx, 60, [ctx]() {
                 ctx->SetRef("Editor Settings");
-                return ctx->ItemExists("Apply");
+                return CurrentRefHasMarker(ctx, "##settings_test/footer_apply");
             });
             IM_CHECK(modalReady);
             if (!modalReady) {
-                ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
                 return;
             }
 
             ctx->SetRef("Editor Settings");
-            IM_CHECK(ctx->ItemExists("Apply"));
-            IM_CHECK(ctx->ItemExists("Cancel"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_apply"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
 
-            LogDebug("UI scenario action: click Apply in Settings modal");
-            ctx->ItemClick("Apply");
+            // Apply without dirty edits is a no-op on the Apply button (disabled).
+            // Toggle the MCP auto-start checkbox to make the draft dirty first so
+            // Apply is exercised, then assert the modal STILL shows the footer
+            // after clicking — staged semantics mean Apply must not close.
+            ctx->ItemClick("Auto-start when editor opens");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_apply");
             ctx->Yield(2);
 
-            // Modal should be closed after Apply (MCP apply may succeed or fail;
-            // either way the editor should remain responsive)
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
+
+            // Close via Cancel so later scenarios are not blocked by a leftover modal.
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+
             ctx->SetRef("##toolbar");
             IM_CHECK(ctx->ItemExists("File"));
 
@@ -2984,7 +3014,8 @@ namespace Horo {
             });
             IM_CHECK(modalReady);
             if (!modalReady) {
-                ClickModalButtonIfPresent(ctx, "Editor Settings", "Cancel");
+                ctx->SetRef("Editor Settings");
+                ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
                 return;
             }
 
@@ -2997,7 +3028,8 @@ namespace Horo {
             ctx->Yield(1);
 
             LogDebug("UI scenario action: cancel settings modal");
-            ctx->ItemClick("Cancel");
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
             ctx->Yield(2);
 
             ctx->SetRef("##toolbar");
@@ -3015,6 +3047,295 @@ namespace Horo {
             test->TestFunc = &RunSettingsModalPortInput;
             return test;
         }
+
+        // ── New settings modal scenarios (Task 8) ────────────────────────────
+
+        // Helper: open File -> Settings... and wait for the Settings modal to appear.
+        bool OpenSettingsModal(ImGuiTestContext *ctx) {
+            if (!ctx)
+                return false;
+            const ImGuiID filePopup =
+                    OpenToolbarPopup(ctx, "File", "##toolbar_file_popup", "Settings...");
+            if (!filePopup)
+                return false;
+            ctx->ItemClick("Settings...");
+            ctx->Yield(2);
+            return WaitForCondition(ctx, 60, [ctx]() {
+                ctx->SetRef("Editor Settings");
+                return CurrentRefHasMarker(ctx, "##settings_test/footer_cancel");
+            });
+        }
+
+        void RunSettingsModalTabsVisible(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_modal_tabs_visible");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/tab_mcp"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/tab_appearance"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_apply"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_ok"));
+
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+            LogInfo("UI scenario done: editor_ui/settings_modal_tabs_visible");
+        }
+
+        ImGuiTest *RegisterSettingsModalTabsVisible(ImGuiTestEngine *engine,
+                                                    UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "settings_modal_tabs_visible");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsModalTabsVisible;
+            return test;
+        }
+
+        void RunSettingsMcpApplyStaysOpen(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_mcp_apply_stays_open");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_mcp");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(ctx->ItemExists("Auto-start when editor opens"));
+            ctx->ItemClick("Auto-start when editor opens");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_apply");
+            ctx->Yield(2);
+
+            // Modal must remain open after Apply (staged-edit semantics).
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
+
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+            LogInfo("UI scenario done: editor_ui/settings_mcp_apply_stays_open");
+        }
+
+        ImGuiTest *RegisterSettingsMcpApplyStaysOpen(ImGuiTestEngine *engine,
+                                                    UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "settings_mcp_apply_stays_open");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsMcpApplyStaysOpen;
+            return test;
+        }
+
+        void RunSettingsMcpCancelDiscards(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_mcp_cancel_discards");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_mcp");
+            ctx->Yield(1);
+
+            // Toggle Auto-start to mark draft dirty, then Cancel.
+            ctx->SetRef("Editor Settings");
+            ctx->ItemClick("Auto-start when editor opens");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+
+            // Reopen; draft should show the original value (Auto-start checkbox
+            // is back to its prior state because Cancel restored the originals).
+            // We cannot directly read widget state via the test engine without
+            // IM_CHECK on visible label — the important invariant here is that
+            // the modal re-opens cleanly after Cancel-discard.
+            IM_CHECK(OpenSettingsModal(ctx));
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(ctx->ItemExists("Auto-start when editor opens"));
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+            LogInfo("UI scenario done: editor_ui/settings_mcp_cancel_discards");
+        }
+
+        ImGuiTest *RegisterSettingsMcpCancelDiscards(ImGuiTestEngine *engine,
+                                                    UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "settings_mcp_cancel_discards");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsMcpCancelDiscards;
+            return test;
+        }
+
+        void RunSettingsAppearanceApply(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_appearance_apply");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_appearance");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/theme_graphite"));
+            ClickCurrentRefMarker(ctx, "##settings_test/theme_graphite");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_apply");
+            ctx->Yield(4);
+
+            // Modal must still be open after Apply.
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_cancel"));
+
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+            LogInfo("UI scenario done: editor_ui/settings_appearance_apply");
+        }
+
+        ImGuiTest *RegisterSettingsAppearanceApply(ImGuiTestEngine *engine,
+                                                   UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "settings_appearance_apply");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsAppearanceApply;
+            return test;
+        }
+
+        void RunSettingsAppearanceOkCloses(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_appearance_ok_closes");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_appearance");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/theme_high_contrast");
+            ctx->Yield(1);
+
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_ok");
+            ctx->Yield(4);
+
+            // After OK the modal must be gone; toolbar should be reachable.
+            ctx->SetRef("##toolbar");
+            IM_CHECK(ctx->ItemExists("File"));
+
+            // Reset theme by reopening and picking Dark Blue + OK so later
+            // scenarios start from the default preset.
+            IM_CHECK(OpenSettingsModal(ctx));
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_appearance");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/theme_dark_blue");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_ok");
+            ctx->Yield(4);
+            LogInfo("UI scenario done: editor_ui/settings_appearance_ok_closes");
+        }
+
+        ImGuiTest *RegisterSettingsAppearanceOkCloses(ImGuiTestEngine *engine,
+                                                      UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(engine, "editor_ui",
+                                               "settings_appearance_ok_closes");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsAppearanceOkCloses;
+            return test;
+        }
+
+        void RunSettingsTabSwitchPreservesDrafts(ImGuiTestContext *ctx) {
+            UiAutomationRunState *state =
+                    GetTestState(ctx, "editor_ui/settings_tab_switch_preserves_drafts");
+            IM_CHECK(state != nullptr);
+            if (!state)
+                return;
+            IM_CHECK(EnsureEditorActive(ctx, state));
+            if (!EnsureEditorActive(ctx, state))
+                return;
+
+            IM_CHECK(OpenSettingsModal(ctx));
+
+            // Start on MCP; toggle Auto-start to dirty the draft.
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_mcp");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            ctx->ItemClick("Auto-start when editor opens");
+            ctx->Yield(1);
+
+            // Switch to Appearance, change preset.
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_appearance");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/theme_graphite"));
+            ClickCurrentRefMarker(ctx, "##settings_test/theme_graphite");
+            ctx->Yield(1);
+
+            // Switch back to MCP: the checkbox should still be visible and the
+            // footer Apply should still be enabled (dirty draft preserved).
+            ctx->SetRef("Editor Settings");
+            ClickCurrentRefMarker(ctx, "##settings_test/tab_mcp");
+            ctx->Yield(1);
+            ctx->SetRef("Editor Settings");
+            IM_CHECK(ctx->ItemExists("Auto-start when editor opens"));
+            IM_CHECK(CurrentRefHasMarker(ctx, "##settings_test/footer_apply"));
+
+            ClickCurrentRefMarker(ctx, "##settings_test/footer_cancel");
+            ctx->Yield(2);
+            LogInfo("UI scenario done: editor_ui/settings_tab_switch_preserves_drafts");
+        }
+
+        ImGuiTest *RegisterSettingsTabSwitchPreservesDrafts(
+            ImGuiTestEngine *engine, UiAutomationRunState *state) {
+            ImGuiTest *test = IM_REGISTER_TEST(
+                engine, "editor_ui", "settings_tab_switch_preserves_drafts");
+            test->UserData = state;
+            test->TestFunc = &RunSettingsTabSwitchPreservesDrafts;
+            return test;
+        }
+
+        // ── End new settings modal scenarios ─────────────────────────────────
 
         // 8. create_asset_modal_fill_cancel — lines 4200–4320 (DrawCreateAssetModal)
         void RunCreateAssetModalFillCancel(ImGuiTestContext *ctx) {
@@ -3743,7 +4064,6 @@ namespace Horo {
             return test;
         }
 
-        // ---- New scenarios added for coverage improvement ----
 
         // mcp_enable_and_verify_running: opens Settings, enables MCP, applies, verifies
         // the status line shows "Running" (or at least "Yes" for Enabled).
@@ -4962,6 +5282,18 @@ namespace Horo {
                            &RegisterSettingsModalApplyButton);
         RegisterUiScenario("editor/settings_modal_port_input",
                            &RegisterSettingsModalPortInput);
+        RegisterUiScenario("editor/settings_modal_tabs_visible",
+                           &RegisterSettingsModalTabsVisible);
+        RegisterUiScenario("editor/settings_mcp_apply_stays_open",
+                           &RegisterSettingsMcpApplyStaysOpen);
+        RegisterUiScenario("editor/settings_mcp_cancel_discards",
+                           &RegisterSettingsMcpCancelDiscards);
+        RegisterUiScenario("editor/settings_appearance_apply",
+                           &RegisterSettingsAppearanceApply);
+        RegisterUiScenario("editor/settings_appearance_ok_closes",
+                           &RegisterSettingsAppearanceOkCloses);
+        RegisterUiScenario("editor/settings_tab_switch_preserves_drafts",
+                           &RegisterSettingsTabSwitchPreservesDrafts);
         RegisterUiScenario("editor/create_asset_modal_fill_cancel",
                            &RegisterCreateAssetModalFillCancel);
         RegisterUiScenario("editor/delete_confirm_modal_accept",

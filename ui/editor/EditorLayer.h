@@ -14,6 +14,7 @@
 #include "ui/editor/AssetImportService.h"
 #include "ui/editor/EditorSchema.h"
 #include "ui/editor/EditorUiLogic.h"
+#include "ui/editor/EditorUserSettings.h"
 #include "ui/editor/EditorWorkspaceSettings.h"
 #include "ui/editor/SceneDocument.h"
 #include "ui/editor/TransformGizmo.h"
@@ -825,6 +826,8 @@ namespace Horo {
             bool m_prevHelpToggle = false;             /**< Previous-frame help-toggle shortcut state. */
             EditorHelpPopup m_helpPopup;               /**< Help/shortcuts popup component state. */
             EditorSettingsModal m_settingsModal;       /**< Settings modal component state. */
+            EditorUserSettingsDocument m_userSettingsDocument{};
+                                                       /**< Persisted user-wide editor preferences (theme preset). */
             EditorToolbar m_toolbar;                   /**< Toolbar component state and actions. */
             EditorAssetsPanel m_assetsPanel;           /**< Assets panel component state and renderer. */
             EditorUIWidgets m_uiWidgets;               /**< Shared editor widget helpers. */

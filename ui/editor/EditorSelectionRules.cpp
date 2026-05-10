@@ -1,6 +1,6 @@
 /**
  * @file EditorSelectionRules.cpp
- * @brief Implementation for EditorSelectionRules editor functionality.
+ * @brief Rename validation, parent-choice enumeration, and unique ID generation for scene objects.
  */
 #include "ui/editor/EditorSelectionRules.h"
 
@@ -13,6 +13,7 @@
 
 namespace Horo::Editor {
 
+/** @copydoc ValidateRenameCandidate */
 std::string ValidateRenameCandidate(const SceneDocument &doc, int targetIndex,
                                     const std::string &draftId) {
   if (targetIndex < 0 || targetIndex >= static_cast<int>(doc.objects.size())) {
@@ -28,6 +29,7 @@ std::string ValidateRenameCandidate(const SceneDocument &doc, int targetIndex,
   return {};
 }
 
+/** @copydoc CollectParentCandidates */
 std::vector<std::string> CollectParentCandidates(const SceneDocument &doc,
                                                  int primaryIdx) {
   std::vector<std::string> result;
@@ -39,6 +41,7 @@ std::vector<std::string> CollectParentCandidates(const SceneDocument &doc,
   return result;
 }
 
+/** @copydoc GenerateUniqueId */
 std::string GenerateUniqueId(const SceneDocument &doc,
                              std::string_view prefix) {
   const auto reservedIds = CollectReservedObjectIds(doc);

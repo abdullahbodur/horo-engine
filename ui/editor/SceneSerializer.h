@@ -9,7 +9,11 @@
 #include "ui/editor/SceneDocument.h"
 
 namespace Horo::Editor {
-    /** @brief Exception thrown by SceneSerializer when a load or save operation fails. */
+    /**
+     * @brief Failure thrown when scene JSON cannot be read or written.
+     *
+     * Wraps @c std::runtime_error; message strings are intended for logs or UI display.
+     */
     class SceneSerializerException : public std::runtime_error {
     public:
         using std::runtime_error::runtime_error;

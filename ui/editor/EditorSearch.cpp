@@ -1,6 +1,6 @@
 /**
  * @file EditorSearch.cpp
- * @brief Implementation for EditorSearch editor functionality.
+ * @brief Query helpers and static shortcut/command tables backing quick-open, help, and the command palette.
  */
 #include "ui/editor/EditorSearch.h"
 
@@ -47,6 +47,7 @@ namespace Horo::Editor {
             }
         };
 
+        /** @brief Lowercases ASCII letters for case-insensitive substring checks. */
         std::string ToLower(std::string text) {
             std::ranges::transform(text, text.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
@@ -55,6 +56,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /** @copydoc ObjectTypeLabel */
     const char *ObjectTypeLabel(SceneObjectType type) {
         using enum SceneObjectType;
         switch (type) {
@@ -71,6 +73,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc ContainsCaseInsensitive */
     bool ContainsCaseInsensitive(const std::string &textRaw,
                                  const std::string &queryRaw) {
         if (queryRaw.empty())
@@ -78,6 +81,7 @@ namespace Horo::Editor {
         return ToLower(textRaw).find(ToLower(queryRaw)) != std::string::npos;
     }
 
+    /** @copydoc MatchesShortcutQuery */
     bool MatchesShortcutQuery(const ShortcutRow &row, const std::string &queryRaw) {
         if (queryRaw.empty())
             return true;
@@ -87,6 +91,7 @@ namespace Horo::Editor {
                ContainsCaseInsensitive(row.keys, queryRaw);
     }
 
+    /** @copydoc MatchesCommandPaletteQuery */
     bool MatchesCommandPaletteQuery(const CommandPaletteRow &row,
                                     const std::string &queryRaw) {
         if (queryRaw.empty())
@@ -97,12 +102,15 @@ namespace Horo::Editor {
                ContainsCaseInsensitive(row.id, queryRaw);
     }
 
+    /** @copydoc GetEditorShortcuts */
     std::span<const ShortcutRow> GetEditorShortcuts() { return kEditorShortcuts; }
 
+    /** @copydoc GetEditorCommands */
     std::span<const CommandPaletteRow> GetEditorCommands() {
         return kEditorCommands;
     }
 
+    /** @copydoc ObjectMatchesQuickOpenQuery */
     bool ObjectMatchesQuickOpenQuery(const SceneObject &obj,
                                      const std::string &queryRaw) {
         const char *typeName = ObjectTypeLabel(obj.type);
@@ -110,6 +118,7 @@ namespace Horo::Editor {
                                        queryRaw);
     }
 
+    /** @copydoc AssetMatchesQuickOpenQuery */
     bool AssetMatchesQuickOpenQuery(const std::string &assetId,
                                     const AssetDef &asset,
                                     const std::string &queryRaw) {
@@ -117,6 +126,7 @@ namespace Horo::Editor {
             assetId + " " + asset.mesh + " " + asset.albedoMap, queryRaw);
     }
 
+    /** @copydoc EvaluateFilteredListState */
     FilteredListState EvaluateFilteredListState(size_t totalCount, int shownCount,
                                                 std::string_view queryRaw) {
         using enum FilteredListState;

@@ -778,9 +778,12 @@ TEST_CASE("McpSnapshot builds world-space edges for rotated objects", "[mcp][sna
   REQUIRE(NearlyEqualJsonFloat(edges["halfExtents"][2], 3.0f));
 
   const json &firstCorner = edges["worldCorners"][0];
-  REQUIRE(NearlyEqualJsonFloat(firstCorner[0], 11.0f));
-  REQUIRE(NearlyEqualJsonFloat(firstCorner[1], 0.0f));
-  REQUIRE(NearlyEqualJsonFloat(firstCorner[2], 0.0f));
+  // Box local corner (-0.5, -0.5, -0.5) scaled by (4, 2, 6) = (-2, -1, -3),
+  // rotated 90° around Y (yaw) maps (x,y,z) -> (z, y, -x) -> (-3, -1, 2),
+  // then translated by center (10, 2, 3) = (7, 1, 5).
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[0], 7.0f));
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[1], 1.0f));
+  REQUIRE(NearlyEqualJsonFloat(firstCorner[2], 5.0f));
 }
 
 TEST_CASE("McpProtocol serves initialize, lists, all resources, and all read tools", "[mcp][protocol][coverage]") {

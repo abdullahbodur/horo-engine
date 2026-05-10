@@ -1,6 +1,9 @@
 /**
  * @file SceneRuntimeCoordinatorBridge.cpp
- * @brief Implementation for SceneRuntimeCoordinatorBridge editor functionality.
+ * @brief Bridges @ref SceneDocument load/reload into @ref SceneRuntimeCoordinator with build validation.
+ *
+ * Builds a @ref RuntimeSceneDefinition via @ref BuildRuntimeSceneDefinition and forwards to the coordinator,
+ * returning structured failures when the build reports errors.
  */
 #include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 

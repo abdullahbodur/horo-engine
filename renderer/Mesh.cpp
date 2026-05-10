@@ -145,7 +145,6 @@ namespace Horo {
         Draw();
     }
 
-    // ---- Procedural generators ----
 
     Mesh Mesh::CreateSphere(float radius, int stacks, int slices) {
         std::vector<Vertex> verts;

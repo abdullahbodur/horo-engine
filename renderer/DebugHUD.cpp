@@ -14,7 +14,6 @@
 #include "renderer/Renderer.h"
 
 namespace Horo {
-    // ---- Static member definitions ----
 
     std::shared_ptr<IVertexArray>  DebugHUD::s_vao;
     std::shared_ptr<IVertexBuffer> DebugHUD::s_vbo;
@@ -40,7 +39,6 @@ namespace Horo {
     DebugHUD::s_glyphBuf = {};
     int DebugHUD::s_glyphCount = 0;
 
-    // ---- Public-domain 8x8 IBM BIOS font (ASCII 0-127) ----
     // Each char = 8 bytes, one per row, bit 7 = leftmost pixel.
     static const std::array<uint8_t, 128 * 8> FONT_DATA = {
         // 0x00 (NUL)
@@ -1197,7 +1195,6 @@ namespace Horo {
         0x00,
     };
 
-    // ---- Inline GLSL shaders ----
 
     static const char *const HUD_VERT = R"glsl(
 #version 410 core
@@ -1228,7 +1225,6 @@ void main() {
 }
 )glsl";
 
-    // ---- Init / Shutdown ----
 
     void DebugHUD::Init(int screenW, int screenH) {
         s_screenW = screenW;
@@ -1271,7 +1267,6 @@ void main() {
         s_screenH = h;
     }
 
-    // ---- Font atlas ----
 
     void DebugHUD::BuildFontAtlas() {
         // 128 chars × 8 pixels wide = 1024 wide, 8 tall, R8
@@ -1306,7 +1301,6 @@ void main() {
     }
 
 #ifndef NDEBUG
-    // ---- World label submission ----
 
     void DebugHUD::SubmitWorldLabel(const Vec3 &worldPos, const Mat4 &vp,
                                     const char *text) {
@@ -1331,7 +1325,6 @@ void main() {
     }
 #endif
 
-    // ---- Update ----
 
     void DebugHUD::Update(float dt, const HUDStats &stats) {
         if (!Renderer::GetBackendCapabilities().supportsDebugHud)
@@ -1368,7 +1361,6 @@ void main() {
         s_stats = stats;
     }
 
-    // ---- Render ----
 
     void DebugHUD::Render() {
         if (!Renderer::GetBackendCapabilities().supportsDebugHud)
@@ -1574,7 +1566,6 @@ void main() {
     }
 #endif
 
-    // ---- DrawText (CPU batching only) ----
 
     void DebugHUD::DrawText(const char *text, float x, float y, float r, float g,
                             float b, float scale) {
@@ -1619,7 +1610,6 @@ void main() {
         }
     }
 
-    // ---- FlushGlyphs ----
 
     void DebugHUD::FlushGlyphs() {
         if (s_glyphCount == 0)

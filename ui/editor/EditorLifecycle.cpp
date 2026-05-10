@@ -66,63 +66,6 @@ void LoadEditorFonts(ImGuiIO &io) {
   }
 }
 
-void ApplyEditorTheme(ImGuiStyle &style) {
-  using namespace Horo::Ui;
-  const EditorTheme &theme = GetEditorTheme();
-  const HoroPalette &p = theme.palette;
-  const HoroRounding &r = theme.rounding;
-  const HoroDensity &d = theme.density;
-
-  style.Colors[ImGuiCol_Text] = p.text;
-  style.Colors[ImGuiCol_TextDisabled] = p.textMuted;
-  style.Colors[ImGuiCol_WindowBg] = p.panel;
-  style.Colors[ImGuiCol_ChildBg] = p.card;
-  style.Colors[ImGuiCol_PopupBg] = p.modal;
-  style.Colors[ImGuiCol_Border] = p.border;
-  style.Colors[ImGuiCol_FrameBg] = p.input;
-  style.Colors[ImGuiCol_FrameBgHovered] = p.inputHover;
-  style.Colors[ImGuiCol_FrameBgActive] = p.inputActive;
-  style.Colors[ImGuiCol_TitleBg] = p.panel;
-  style.Colors[ImGuiCol_TitleBgActive] = p.panelSoft;
-  style.Colors[ImGuiCol_MenuBarBg] = p.panel;
-  style.Colors[ImGuiCol_ScrollbarBg] = p.input;
-  style.Colors[ImGuiCol_ScrollbarGrab] = p.border;
-  style.Colors[ImGuiCol_ScrollbarGrabHovered] = p.accent;
-  style.Colors[ImGuiCol_ScrollbarGrabActive] = p.accentActive;
-  style.Colors[ImGuiCol_CheckMark] = p.accent;
-  style.Colors[ImGuiCol_SliderGrab] = p.accent;
-  style.Colors[ImGuiCol_SliderGrabActive] = p.accentActive;
-  style.Colors[ImGuiCol_Button] = p.card;
-  style.Colors[ImGuiCol_ButtonHovered] = p.cardHover;
-  style.Colors[ImGuiCol_ButtonActive] = p.accentActive;
-  style.Colors[ImGuiCol_Header] = p.selection;
-  style.Colors[ImGuiCol_HeaderHovered] = p.selectionHover;
-  style.Colors[ImGuiCol_HeaderActive] = p.accentActive;
-  style.Colors[ImGuiCol_Separator] = p.border;
-  style.Colors[ImGuiCol_ResizeGrip] = p.border;
-  style.Colors[ImGuiCol_ResizeGripHovered] = p.accent;
-  style.Colors[ImGuiCol_ResizeGripActive] = p.accentActive;
-  style.Colors[ImGuiCol_Tab] = p.card;
-  style.Colors[ImGuiCol_TabHovered] = p.cardHover;
-  style.Colors[ImGuiCol_TabActive] = p.accent;
-  style.Colors[ImGuiCol_TabUnfocused] = p.card;
-  style.Colors[ImGuiCol_TabUnfocusedActive] = p.panelSoft;
-
-  style.WindowRounding = r.window;
-  style.ChildRounding = r.card;
-  style.FrameRounding = r.input;
-  style.PopupRounding = r.panel;
-  style.ScrollbarRounding = r.button;
-  style.GrabRounding = r.button;
-  style.TabRounding = r.tab;
-
-  style.WindowPadding = d.panelPadding;
-  style.FramePadding = d.inputPadding;
-  style.ItemSpacing = ImVec2(d.itemSpacing, d.itemSpacing);
-  style.ItemInnerSpacing = ImVec2(d.itemSpacing * 0.5f, d.itemSpacing * 0.5f);
-  style.CellPadding = d.cardPadding;
-}
-
 } // namespace
 
 void EditorLayer::Init(GLFWwindow *window) {
@@ -186,16 +129,31 @@ void EditorLayer::Init(GLFWwindow *window) {
 
   m_mcpController.Initialize();
   m_settingsModal.SetMcpController(&m_mcpController);
-  *m_settingsModal.GetDraft() = m_mcpController.GetSettings();
   if (m_mcpController.SettingsDocument().parseError)
     LogWarn("[MCP] Settings load fallback: {}",
             m_mcpController.SettingsDocument().error);
+
+  // Load persisted editor user preferences (theme preset, ...) and apply.
+  m_userSettingsDocument = LoadEditorUserSettingsDocument();
+  if (m_userSettingsDocument.parseError ||
+      !m_userSettingsDocument.error.empty()) {
+    LogWarn("[Editor] User settings load fallback: {}",
+            m_userSettingsDocument.error);
+  }
+  Ui::SetEditorThemePreset(m_userSettingsDocument.settings.themePreset);
+
+  m_settingsModal.SetUserSettingsDocument(&m_userSettingsDocument);
+  m_settingsModal.SetApplyThemePresetCallback(
+      [](Ui::EditorThemePreset preset) {
+        Ui::SetEditorThemePreset(preset);
+        Ui::ApplyEditorTheme(ImGui::GetStyle());
+      });
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
   LoadEditorFonts(io);
-  ApplyEditorTheme(ImGui::GetStyle());
+  Ui::ApplyEditorTheme(ImGui::GetStyle());
   m_imguiIniPath = ResolveEditorLayoutPath().string();
   std::error_code settingsEc;
   std::filesystem::create_directories(ResolveEditorLayoutPath().parent_path(),
