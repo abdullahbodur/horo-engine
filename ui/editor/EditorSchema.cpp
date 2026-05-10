@@ -11,6 +11,7 @@ using json = nlohmann::json;
 
 namespace Horo::Editor {
     namespace {
+        /** @brief Converts a SceneObjectType enum to its string representation. */
         const char *TypeName(SceneObjectType t) {
             using enum SceneObjectType;
             switch (t) {
@@ -25,6 +26,7 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Parses a single FieldDef from a JSON field descriptor object. */
         FieldDef ParseFieldDef(const json &fd) {
             FieldDef field;
             field.key = fd.value("key", "");
@@ -58,6 +60,7 @@ namespace Horo::Editor {
             return field;
         }
 
+        /** @brief Extracts the appliesTo string list from a schema definition JSON. */
         void ParseAppliesTo(const json &definition,
                             std::vector<std::string> *outAppliesTo) {
             if (!outAppliesTo)
@@ -71,6 +74,7 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Applies mesh-specific defaults to a Prop type's mesh field. */
         void ProcessTypeSchemaMeshField(FieldDef &field) {
             field.widget = FieldDef::Widget::Enum;
             if (field.options.empty())
@@ -79,6 +83,7 @@ namespace Horo::Editor {
                 field.defaultValue = "box";
         }
 
+        /** @brief Constructs a TypeSchema from a parsed JSON type definition. */
         TypeSchema BuildTypeSchema(const std::string &typeName, const json &typeDef) {
             TypeSchema schema;
             schema.name = typeName;
@@ -95,6 +100,7 @@ namespace Horo::Editor {
             return schema;
         }
 
+        /** @brief Constructs a ComponentSchema from a parsed JSON component definition. */
         ComponentSchema BuildComponentSchema(const std::string &componentType,
                                              const json &componentDef) {
             ComponentSchema schema;
@@ -110,6 +116,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /** @copydoc EditorSchema::LoadFromFile */
     void EditorSchema::LoadFromFile(const std::string &path) {
         std::ifstream f(path);
         if (!f.is_open())
@@ -145,17 +152,20 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc EditorSchema::GetSchema */
     const TypeSchema *EditorSchema::GetSchema(SceneObjectType t) const {
         auto it = m_schemas.find(TypeName(t));
         return (it != m_schemas.end()) ? &it->second : nullptr;
     }
 
+    /** @copydoc EditorSchema::GetSchemaByName */
     const TypeSchema *
     EditorSchema::GetSchemaByName(const std::string &typeName) const {
         const auto it = m_schemas.find(typeName);
         return (it != m_schemas.end()) ? &it->second : nullptr;
     }
 
+    /** @copydoc EditorSchema::GetComponentSchema */
     const ComponentSchema *
     EditorSchema::GetComponentSchema(const std::string &componentType) const {
         const auto it = m_componentSchemas.find(componentType);

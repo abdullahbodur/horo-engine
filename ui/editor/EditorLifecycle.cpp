@@ -1,6 +1,6 @@
 /**
  * @file EditorLifecycle.cpp
- * @brief Implementation for EditorLifecycle editor functionality.
+ * @brief EditorLayer lifecycle: initialization, shutdown, toggle, and document loading.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -48,6 +48,7 @@
 namespace Horo::Editor {
 namespace {
 
+/** @brief Load the editor UI font and merge FontAwesome icon glyphs. */
 void LoadEditorFonts(ImGuiIO &io) {
   const Ui::FontFamilyConfig config{.relativePath = "assets/fonts/InterVariable.ttf",
                                     .size = 16.0f};
@@ -68,6 +69,7 @@ void LoadEditorFonts(ImGuiIO &io) {
 
 } // namespace
 
+/** @copydoc EditorLayer::Init */
 void EditorLayer::Init(GLFWwindow *window) {
   m_window = window;
   m_uiWidgets.Initialize(this);
@@ -203,6 +205,7 @@ void EditorLayer::Init(GLFWwindow *window) {
   LogInfo("[Editor] Asset thumbnail caches cleared on Init");
 }
 
+/** @copydoc EditorLayer::Shutdown */
 void EditorLayer::Shutdown() {
   SaveWorkspaceStateIfNeeded(true);
   if (!m_imguiIniPath.empty())
@@ -214,6 +217,7 @@ void EditorLayer::Shutdown() {
   ImGui::DestroyContext();
 }
 
+/** @copydoc EditorLayer::Toggle */
 void EditorLayer::Toggle() {
   m_active = !m_active;
   if (!m_active)
@@ -231,6 +235,7 @@ void EditorLayer::Toggle() {
   m_mcpController.SetEditorActive(m_active);
 }
 
+/** @copydoc EditorLayer::SetCursorVisible */
 void EditorLayer::SetCursorVisible(bool visible) {
   if (!m_window)
     return;
@@ -238,6 +243,7 @@ void EditorLayer::SetCursorVisible(bool visible) {
                    visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
 }
 
+/** @copydoc EditorLayer::SetProjectBrowserRoot */
 void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   m_bottomDock.InvalidateProjectBrowserCache();
   std::error_code ec;
@@ -277,6 +283,7 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
   m_bottomDock.SetProjectBrowserCwd(canon);
 }
 
+/** @copydoc EditorLayer::SetProjectBrowserExtraBlocklist */
 void EditorLayer::SetProjectBrowserExtraBlocklist(
     const std::unordered_set<std::string, StringHash, std::equal_to<>> names) {
   m_projectExtraBlocklist = names;
@@ -284,11 +291,13 @@ void EditorLayer::SetProjectBrowserExtraBlocklist(
   m_bottomDock.InvalidateProjectBrowserCache();
 }
 
+/** @copydoc EditorLayer::InvalidateProjectBrowserCache */
 void EditorLayer::InvalidateProjectBrowserCache() {
   m_projectDirCache.clear();
   m_bottomDock.InvalidateProjectBrowserCache();
 }
 
+/** @copydoc EditorLayer::LoadWorkspaceState */
 void EditorLayer::LoadWorkspaceState() {
   m_workspaceDocument = LoadEditorWorkspaceDocument();
   if (m_workspaceDocument.parseError) {
@@ -305,6 +314,7 @@ void EditorLayer::LoadWorkspaceState() {
   m_workspaceStateDirty = false;
 }
 
+/** @copydoc EditorLayer::SaveWorkspaceStateIfNeeded */
 void EditorLayer::SaveWorkspaceStateIfNeeded(bool force) {
   if (!force && !m_workspaceStateDirty)
     return;
@@ -332,8 +342,10 @@ void EditorLayer::SaveWorkspaceStateIfNeeded(bool force) {
   m_workspaceStateDirty = false;
 }
 
+/** @copydoc EditorLayer::MarkWorkspaceStateDirty */
 void EditorLayer::MarkWorkspaceStateDirty() { m_workspaceStateDirty = true; }
 
+/** @copydoc EditorLayer::ApplyLoadedDocument */
 void EditorLayer::ApplyLoadedDocument(SceneDocument doc, bool resetHistory) {
   using enum SceneObjectType;
   if (doc.filePath.empty())
@@ -371,10 +383,12 @@ void EditorLayer::ApplyLoadedDocument(SceneDocument doc, bool resetHistory) {
     ClearHistory();
 }
 
+/** @copydoc EditorLayer::LoadDocument */
 void EditorLayer::LoadDocument(SceneDocument doc) {
   ApplyLoadedDocument(std::move(doc), true);
 }
 
+/** @copydoc EditorLayer::SyncRuntimeEntityIds */
 void EditorLayer::SyncRuntimeEntityIds(const Registry &registry) {
   using enum SceneObjectType;
   std::vector<int> propIndices;
@@ -409,6 +423,7 @@ void EditorLayer::SyncRuntimeEntityIds(const Registry &registry) {
     m_document.objects[static_cast<size_t>(propIndices[j])].props.erase("_eid");
 }
 
+/** @copydoc EditorLayer::SetHotReloadOverlay */
 void EditorLayer::SetHotReloadOverlay(bool active, float progress01,
                                       float spinnerAngleRad,
                                       std::string_view label) {
@@ -420,6 +435,7 @@ void EditorLayer::SetHotReloadOverlay(bool active, float progress01,
   }
 }
 
+/** @copydoc EditorLayer::ProcessDeferredFilePicks */
 void EditorLayer::ProcessDeferredFilePicks() { // NOSONAR
   const DeferredFilePick pick = m_deferredFilePick;
   if (pick == DeferredFilePick::None)
@@ -494,6 +510,7 @@ void EditorLayer::ProcessDeferredFilePicks() { // NOSONAR
   }
 }
 
+/** @copydoc EditorLayer::AddNewScene */
 void EditorLayer::AddNewScene() {
   SceneDocument newDoc;
   newDoc.sceneId = "scene";
@@ -506,8 +523,10 @@ void EditorLayer::AddNewScene() {
 
 #ifdef _WIN32
 // SONAR-OFF
+/** @copydoc EditorLayer::OpenAdditionalSceneFile */
 void EditorLayer::OpenAdditionalSceneFile() {
 #else
+/** @copydoc EditorLayer::OpenAdditionalSceneFile */
 void EditorLayer::OpenAdditionalSceneFile() const {
 #endif
 #ifdef _WIN32
@@ -535,12 +554,14 @@ void EditorLayer::OpenAdditionalSceneFile() const {
 // SONAR-ON
 #endif
 
+/** @copydoc EditorLayer::CloseAdditionalScene */
 void EditorLayer::CloseAdditionalScene(int index) {
   if (index < 0 || index >= static_cast<int>(m_additionalScenes.size()))
     return;
   m_additionalScenes.erase(m_additionalScenes.begin() + index);
 }
 
+/** @copydoc EditorLayer::SaveAdditionalScene */
 bool EditorLayer::SaveAdditionalScene(int index, std::string *outError) {
   if (index < 0 || index >= static_cast<int>(m_additionalScenes.size()))
     return false;
@@ -561,10 +582,12 @@ bool EditorLayer::SaveAdditionalScene(int index, std::string *outError) {
   }
 }
 
+/** @copydoc EditorLayer::ApplySchemaDefaults */
 void EditorLayer::ApplySchemaDefaults(SceneObject &obj) const {
   ApplySchemaFieldDefaults(obj, m_schema);
 }
 
+/** @copydoc EditorLayer::ApplyComponentSchemaDefaults */
 void EditorLayer::ApplyComponentSchemaDefaults(ComponentDesc &component) const {
   ApplyComponentFieldDefaults(component, m_schema);
 }

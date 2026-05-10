@@ -34,6 +34,7 @@ namespace Horo::Launcher {
         }
 
 #ifdef _WIN32
+        /** @brief Reads lines from a Windows pipe handle and logs them until EOF. */
         void ReadWindowsPipe(HANDLE hRead, const std::string &label,
                              std::atomic<bool> &readerDone) {
             std::array<char, 512> buffer{};
@@ -57,6 +58,7 @@ namespace Horo::Launcher {
             readerDone = true;
         }
 #else
+        /** @brief Reads lines from a POSIX file descriptor and logs them until EOF. */
         void ReadPosixPipe(int fdRead, const std::string &label,
                            std::atomic<bool> &readerDone) {
             std::array<char, 512> buffer{};
@@ -80,6 +82,7 @@ namespace Horo::Launcher {
 #endif
 
 #ifdef _WIN32
+        /** @brief Converts a UTF-8 string to a wide string for Windows API calls. */
         std::wstring Utf8ToWide(const std::string &value) {
             if (value.empty())
                 return {};
@@ -92,6 +95,7 @@ namespace Horo::Launcher {
             return out;
         }
 
+        /** @brief Builds a quoted wide-string command line from a resolved command. */
         std::wstring BuildCommandLine(const ResolvedLauncherCommand &command) {
             auto quote = [](const std::string &part) {
                 if (part.find(' ') == std::string::npos &&
@@ -118,6 +122,7 @@ namespace Horo::Launcher {
             return Utf8ToWide(commandLine);
         }
 
+        /** @brief Terminates a Windows process and waits for it to exit. */
         int StopWindowsProcess(HANDLE processHandle) {
             if (!processHandle)
                 return 1;
@@ -132,6 +137,7 @@ namespace Horo::Launcher {
 #endif
 
 #ifndef _WIN32
+        /** @brief Decodes a POSIX wait status into a conventional exit code. */
         int DecodePosixExitCode(int status, int fallback = 1) {
             if (WIFEXITED(status))
                 return WEXITSTATUS(status);
@@ -140,6 +146,7 @@ namespace Horo::Launcher {
             return fallback;
         }
 
+        /** @brief Attempts a non-blocking waitpid and reports whether the child was reaped. */
         bool TryWaitForPid(pid_t pid, int *status, int options, bool *outReaped) {
             if (!status || !outReaped)
                 return false;
@@ -154,6 +161,7 @@ namespace Horo::Launcher {
             return true;
         }
 
+        /** @brief Sends SIGTERM then SIGKILL to a POSIX child process and waits for exit. */
         int StopPosixProcess(pid_t *pid) {
             if (!pid || *pid <= 0)
                 return 1;
@@ -198,8 +206,10 @@ namespace Horo::Launcher {
 #endif
     };
 
+    /** @copydoc ExternalProcessRunner::ExternalProcessRunner */
     ExternalProcessRunner::ExternalProcessRunner() = default;
 
+    /** @copydoc ExternalProcessRunner::~ExternalProcessRunner */
     ExternalProcessRunner::~ExternalProcessRunner() {
         try {
             Stop();
@@ -208,6 +218,7 @@ namespace Horo::Launcher {
         }
     }
 
+    /** @copydoc ExternalProcessRunner::Start */
     bool ExternalProcessRunner::Start(const ResolvedLauncherCommand &command,
                                       // platform-specific process startup
                                       const std::string &label,
@@ -330,6 +341,7 @@ namespace Horo::Launcher {
         return true;
     }
 
+    /** @copydoc ExternalProcessRunner::Poll */
     void ExternalProcessRunner::Poll() {
         if (!m_process || !m_status.active)
             return;
@@ -357,6 +369,7 @@ namespace Horo::Launcher {
 #endif
     }
 
+    /** @copydoc ExternalProcessRunner::Stop */
     void ExternalProcessRunner::Stop() {
         if (!m_process)
             return;
@@ -392,8 +405,10 @@ namespace Horo::Launcher {
         m_process.reset();
     }
 
+    /** @copydoc ExternalProcessRunner::IsActive */
     bool ExternalProcessRunner::IsActive() const { return m_status.active; }
 
+    /** @copydoc ExternalProcessRunner::Finish */
     void ExternalProcessRunner::Finish(int exitCode, bool terminatedByUser,
                                        std::string error) {
         m_status.active = false;

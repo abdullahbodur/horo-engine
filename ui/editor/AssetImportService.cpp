@@ -215,9 +215,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
-    /** @brief Runs @p importer, synthesises diagnostics on failure, and stamps identity/metadata fields on success.
-     *  @param request Supplies logical ids and paths echoed into diagnostics.
-     */
+    /** @copydoc AssetImportService::RunImporter */
     AssetImportResult
     AssetImportService::RunImporter(const AssetImporter &importer,
                                     const AssetImportRequest &request) const {
@@ -243,9 +241,7 @@ namespace Horo::Editor {
         return result;
     }
 
-    /** @brief Looks up an importer by extension, runs it, and persists fresh metadata on success.
-     *  @param settings Forwarded into @ref AssetImportRequest for importer-specific options.
-     */
+    /** @copydoc AssetImportService::ImportAssetFromSource */
     AssetImportResult AssetImportService::ImportAssetFromSource(
         const std::string &sourcePath, const std::string &assetId,
         const std::string &assetGuid, const std::string &displayName,
@@ -280,9 +276,7 @@ namespace Horo::Editor {
         return result;
     }
 
-    /** @brief Reimports @p path via @c builtin.texture_copy while merging settings/deps into existing metadata.
-     *  @param asset In/out asset definition whose @c albedoMap is updated from the import result.
-     */
+    /** @copydoc AssetImportService::ImportTextureForAsset */
     bool AssetImportService::ImportTextureForAsset(const std::string &sourcePath,
                                                    const std::string &assetId,
                                                    AssetDef *asset,
@@ -342,7 +336,7 @@ namespace Horo::Editor {
         return true;
     }
 
-    /** @brief Rewrites the metadata sidecar from live @p asset fields without running an importer. */
+    /** @copydoc AssetImportService::SaveMetadataForAsset */
     bool AssetImportService::SaveMetadataForAsset(const std::string &assetId,
                                                   const AssetDef &asset,
                                                   std::string *outError) const {
@@ -360,9 +354,7 @@ namespace Horo::Editor {
         return SaveAssetMetadata(metadata, outError);
     }
 
-    /** @brief Reimports @p rootAssetGuid then every dependent asset in deterministic topological order.
-     *  @param reason Human-readable cause recorded on each @ref AssetReimportRecord.
-     */
+    /** @copydoc AssetImportService::ReimportAssetWithDependents */
     AssetReimportResult AssetImportService::ReimportAssetWithDependents(
         SceneDocument *doc, const std::string &rootAssetGuid,
         const std::string &reason) const {
@@ -428,11 +420,7 @@ namespace Horo::Editor {
         return result;
     }
 
-    /** @brief Reimports one GUID: resolves importer from metadata, optionally reapplies albedo override path.
-     *  @param guid GUID matching @c doc->assets[].guid for the row being rebuilt.
-     *  @param result Accumulates @ref AssetReimportRecord rows and top-level @c error on failure paths.
-     *  @return False stops @ref ReimportAssetWithDependents early with @p result populated.
-     */
+    /** @copydoc AssetImportService::ReimportSingleAsset */
     bool AssetImportService::ReimportSingleAsset(
         const std::string &guid, const std::string &recordReason,
         SceneDocument *doc, AssetReimportResult &result) const {

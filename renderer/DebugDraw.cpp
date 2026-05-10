@@ -207,25 +207,18 @@ void main() { FragColor = v_color; }
         c[6] = center + Vec3{h.x, h.y, h.z};
         c[7] = center + Vec3{-h.x, h.y, h.z};
 
-        // Emit each face as two triangles. Triangle() already double-sides,
-        // so winding orientation is irrelevant here.
-        // -Z face (back)
-        Triangle(c[0], c[1], c[2], color);
+        // Emit each face as two triangles (double-sided via Triangle()).
+        Triangle(c[0], c[1], c[2], color); // back
         Triangle(c[0], c[2], c[3], color);
-        // +Z face (front)
-        Triangle(c[4], c[5], c[6], color);
+        Triangle(c[4], c[5], c[6], color); // front
         Triangle(c[4], c[6], c[7], color);
-        // -X face (left)
-        Triangle(c[0], c[3], c[7], color);
+        Triangle(c[0], c[3], c[7], color); // left
         Triangle(c[0], c[7], c[4], color);
-        // +X face (right)
-        Triangle(c[1], c[2], c[6], color);
+        Triangle(c[1], c[2], c[6], color); // right
         Triangle(c[1], c[6], c[5], color);
-        // -Y face (bottom)
-        Triangle(c[0], c[1], c[5], color);
+        Triangle(c[0], c[1], c[5], color); // bottom
         Triangle(c[0], c[5], c[4], color);
-        // +Y face (top)
-        Triangle(c[3], c[2], c[6], color);
+        Triangle(c[3], c[2], c[6], color); // top
         Triangle(c[3], c[6], c[7], color);
     }
 

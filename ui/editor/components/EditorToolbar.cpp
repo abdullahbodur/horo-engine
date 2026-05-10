@@ -12,6 +12,7 @@
 
 namespace Horo::Editor {
 
+/** @copydoc EditorToolbar::Draw */
 void EditorToolbar::Draw(const EditorToolbarCallbacks& callbacks,
                          const EditorToolbarState& state) {
     const ImGuiIO& io = ImGui::GetIO();
@@ -44,14 +45,6 @@ void EditorToolbar::Draw(const EditorToolbarCallbacks& callbacks,
     ImGui::SameLine();
 
     if (ImGui::BeginMenuBar()) {
-        const bool hasSelectedAsset = state.selectedAssetId && !state.selectedAssetId->empty();
-        const bool hasSelection = state.selectedIndices && !state.selectedIndices->empty();
-        const int primaryIdx = hasSelection && !state.selectedIndices->empty()
-                                   ? state.selectedIndices->front()
-                                   : -1;
-        const bool hasSingleSelection =
-            hasSelection && state.selectedIndices && state.selectedIndices->size() == 1;
-
         DrawFileMenu(callbacks, state);
         DrawAddMenu(callbacks, state);
         DrawEditMenu(callbacks, state);
@@ -66,6 +59,7 @@ void EditorToolbar::Draw(const EditorToolbarCallbacks& callbacks,
     ImGui::PopStyleVar();
 }
 
+/** @copydoc EditorToolbar::DrawFileMenu */
 void EditorToolbar::DrawFileMenu(const EditorToolbarCallbacks& callbacks,
                                  const EditorToolbarState& state) {
     if (ImGui::BeginMenu("File")) {
@@ -97,6 +91,7 @@ void EditorToolbar::DrawFileMenu(const EditorToolbarCallbacks& callbacks,
     }
 }
 
+/** @copydoc EditorToolbar::DrawAddMenu */
 void EditorToolbar::DrawAddMenu(const EditorToolbarCallbacks& callbacks,
                                 const EditorToolbarState& state) {
     if (ImGui::BeginMenu("Add")) {
@@ -134,20 +129,16 @@ void EditorToolbar::DrawAddMenu(const EditorToolbarCallbacks& callbacks,
     }
 }
 
+/** @copydoc EditorToolbar::DrawEditMenu */
 void EditorToolbar::DrawEditMenu(const EditorToolbarCallbacks& callbacks,
                                  const EditorToolbarState& state) {
     if (ImGui::BeginMenu("Edit")) {
-        const bool hasSelection = state.selectedIndices && !state.selectedIndices->empty();
-        const int primaryIdx = hasSelection && !state.selectedIndices->empty()
-                                   ? state.selectedIndices->front()
-                                   : -1;
-        const bool hasSingleSelection = hasSelection && state.selectedIndices && state.selectedIndices->size() == 1;
-
         DrawEditMenuItems(callbacks, state);
         ImGui::EndMenu();
     }
 }
 
+/** @copydoc EditorToolbar::DrawEditMenuItems */
 void EditorToolbar::DrawEditMenuItems(const EditorToolbarCallbacks& callbacks,
                                       const EditorToolbarState& state) {
     bool canUndo = callbacks.canUndoHistory ? callbacks.canUndoHistory() : false;
@@ -195,6 +186,7 @@ void EditorToolbar::DrawEditMenuItems(const EditorToolbarCallbacks& callbacks,
     }
 }
 
+/** @copydoc EditorToolbar::DrawViewMenu */
 void EditorToolbar::DrawViewMenu(const EditorToolbarCallbacks& callbacks,
                                  const EditorToolbarState& state) {
     if (ImGui::BeginMenu("View")) {
@@ -233,6 +225,7 @@ void EditorToolbar::DrawViewMenu(const EditorToolbarCallbacks& callbacks,
     }
 }
 
+/** @copydoc EditorToolbar::DrawIconToolbar */
 void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
                                     const EditorToolbarState& state) {
     const ImVec2 buttonSize(28, 24);

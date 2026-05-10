@@ -8,6 +8,7 @@
 
 namespace Horo::Editor {
 
+/** @copydoc EditorHelpPopup::Draw */
 void EditorHelpPopup::Draw() {
     if (!m_open)
         return;

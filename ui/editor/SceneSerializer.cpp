@@ -173,12 +173,7 @@ namespace Horo::Editor {
         return so;
     }
 
-    /**
-     * @brief Loads and parses a scene document JSON file from disk.
-     * @param path Input scene file path.
-     * @return Deserialized SceneDocument.
-     * @throws SceneSerializerException on I/O errors or invalid scene JSON.
-     */
+    /** @copydoc SceneSerializer::LoadFromFile */
     SceneDocument SceneSerializer::LoadFromFile(const std::string &path) {
         std::ifstream f(path);
         if (!f.is_open())
@@ -228,12 +223,7 @@ namespace Horo::Editor {
         return doc;
     }
 
-    /**
-     * @brief Serializes and writes a scene document JSON file to disk.
-     * @param doc Scene document to persist.
-     * @param path Output scene file path.
-     * @throws SceneSerializerException when the output file cannot be written.
-     */
+    /** @copydoc SceneSerializer::SaveToFile */
     void SceneSerializer::SaveToFile(const SceneDocument &doc,
                                      const std::string &path) {
         SceneDocument docToSave = doc;

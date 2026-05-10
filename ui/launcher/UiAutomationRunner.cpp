@@ -115,6 +115,7 @@ struct HomeDirGuard {
   }
 };
 
+/** @brief Reads a boolean value from the named environment variable. */
 bool ParseBoolEnv(const char *name) {
   if (!name || !*name)
     return false;
@@ -122,6 +123,7 @@ bool ParseBoolEnv(const char *name) {
   return ParseUiAutomationBoolValue(value, false);
 }
 
+/** @brief Reads a boolean value from the named environment variable, defaulting to true. */
 bool ParseBoolEnvDefaultTrue(const char *name) {
   if (!name || !*name)
     return true;
@@ -129,6 +131,7 @@ bool ParseBoolEnvDefaultTrue(const char *name) {
   return ParseUiAutomationBoolValue(value, true);
 }
 
+/** @brief Reads a non-negative integer from the named environment variable. */
 int ParseNonNegativeIntEnv(const char *name, int fallback = 0) {
   if (!name || !*name)
     return fallback;
@@ -136,14 +139,17 @@ int ParseNonNegativeIntEnv(const char *name, int fallback = 0) {
   return ParseUiAutomationNonNegativeIntValue(value, fallback);
 }
 
+/** @brief Reads a string value from the named environment variable. */
 std::string ReadEnvString(const char *name) {
   if (!name || !*name)
     return {};
   return HomeDirGuard::ReadEnv(name);
 }
 
+/** @brief Logs the value of a UI automation environment variable for diagnostics. */
 void LogUiEnvVar(const char *name);
 
+/** @brief Returns a human-readable name for an ImGui test status enum value. */
 const char *UiTestStatusName(const ImGuiTestStatus status) {
   switch (status) {
   case ImGuiTestStatus_Unknown:
@@ -164,11 +170,13 @@ const char *UiTestStatusName(const ImGuiTestStatus status) {
   return "Invalid";
 }
 
+/** @brief Returns the fully qualified category/name string for a test. */
 std::string UiTestFullName(const ImGuiTest &test) {
   return std::format("{}/{}", test.Category ? test.Category : "<unknown>",
                      test.Name ? test.Name : "<unknown>");
 }
 
+/** @brief Builds a fixed-width ASCII progress bar string. */
 std::string BuildProgressBar(const int completed, const int total) {
   constexpr int kWidth = 20;
   if (total <= 0)
@@ -195,6 +203,7 @@ struct TransparentStringHash {
   }
 };
 
+/** @brief Extracts the error-level log lines from a completed test's output buffer. */
 std::string ExtractUiTestFailureLog(ImGuiTest &test) {
   ImGuiTextBuffer buffer;
   test.Output.Log.ExtractLinesForVerboseLevels(
@@ -216,6 +225,7 @@ struct UiAutomationProgressSnapshot {
   std::string currentTest;
 };
 
+/** @brief Collects a pass/fail progress snapshot from the current test engine state. */
 UiAutomationProgressSnapshot
 CollectUiAutomationProgress(ImGuiTestEngine *engine, const int totalQueued) {
   UiAutomationProgressSnapshot snapshot{};
@@ -247,6 +257,7 @@ public:
   using std::runtime_error::runtime_error;
 };
 
+/** @brief Constructs a unique temporary directory path for this automation run. */
 fs::path BuildUiAutomationTempRoot() {
   const std::string homePath = HomeDirGuard::ReadEnv("HOME");
 #ifdef _WIN32
@@ -267,11 +278,13 @@ fs::path BuildUiAutomationTempRoot() {
   return baseDir / std::format(".horo_editor_ui_automation_{}_{}", now, pid);
 }
 
+/** @brief Returns the lazily-initialized singleton temp root path for this process. */
 const fs::path &UiAutomationTempRoot() {
   static const fs::path tempRoot = BuildUiAutomationTempRoot();
   return tempRoot;
 }
 
+/** @brief Logs all relevant UI automation environment variables for diagnostics. */
 void LogUiAutomationEnv() {
   static constexpr std::array<const char *, 11> kEnvVars = {
       "HORO_UI_TEST_CAPTURE",    "HORO_UI_TEST_VIDEO",
@@ -285,12 +298,14 @@ void LogUiAutomationEnv() {
     LogUiEnvVar(name);
 }
 
+/** @brief Resolves the capture output directory from environment and defaults. */
 fs::path ResolveCaptureOutputDir(bool captureEnabled,
                                  const std::string &outputDirEnv) {
   return ResolveUiCaptureOutputDir(captureEnabled, outputDirEnv,
                                    fs::current_path());
 }
 
+/** @brief Creates and secures the temporary and output directories for the automation run. */
 void PrepareUiAutomationDirectories(const UiAutomationRunState *state) {
   if (!state)
     return;
@@ -352,6 +367,7 @@ void PrepareUiAutomationDirectories(const UiAutomationRunState *state) {
   }
 }
 
+/** @brief Configures the test engine IO for video capture if ffmpeg is available. */
 void ConfigureUiVideoCapture(UiAutomationRunState *state,
                              ImGuiTestEngineIO *testIo) {
   if (!state || !testIo || !state->captureEnabled || !state->videoEnabled)
@@ -392,6 +408,7 @@ struct UiHeartbeatSnapshot {
   bool queueEmpty = false;
 };
 
+/** @brief Emits periodic heartbeat and large-delta diagnostics for the automation run. */
 void LogUiHeartbeat(const UiHeartbeatSnapshot &snapshot) {
   const int frameCount = snapshot.frameCount;
   if (ShouldLogUiAutomationHeartbeat(snapshot.heartbeatLogEnabled, frameCount,
@@ -426,6 +443,7 @@ void LogUiHeartbeat(const UiHeartbeatSnapshot &snapshot) {
   }
 }
 
+/** @brief Logs the value of a UI automation environment variable for diagnostics. */
 void LogUiEnvVar(const char *name) {
   const std::string value = ReadEnvString(name);
   LogDebug("UI automation env: {}={}", name, value.empty() ? "<unset>" : value);
@@ -617,10 +635,13 @@ struct UiAutomationRunner::Impl {
 #endif
 };
 
+/** @copydoc UiAutomationRunner::UiAutomationRunner */
 UiAutomationRunner::UiAutomationRunner() { m_impl = std::make_unique<Impl>(); }
 
+/** @copydoc UiAutomationRunner::~UiAutomationRunner */
 UiAutomationRunner::~UiAutomationRunner() = default;
 
+/** @copydoc UiAutomationRunner::PrepareEnvironmentBeforeAppStart */
 void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
     bool runUiAutomation) {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
@@ -650,6 +671,7 @@ void UiAutomationRunner::PrepareEnvironmentBeforeAppStart(
 #endif
 }
 
+/** @copydoc UiAutomationRunner::StartIfRequested */
 void UiAutomationRunner::StartIfRequested(
     bool runUiAutomation, Launcher::LauncherEditorShell *shellContext,
     Editor::EditorLayer *editorContext) const {
@@ -757,6 +779,7 @@ void UiAutomationRunner::StartIfRequested(
 #endif
 }
 
+/** @copydoc UiAutomationRunner::PostRenderFrame */
 void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   if (!m_impl->active || m_impl->engine == nullptr)
@@ -796,6 +819,7 @@ void UiAutomationRunner::PostRenderFrame(GLFWwindow *nativeWindowHandle) const {
 #endif
 }
 
+/** @copydoc UiAutomationRunner::Shutdown */
 void UiAutomationRunner::Shutdown() const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
@@ -832,6 +856,7 @@ void UiAutomationRunner::Shutdown() const {
 #endif
 }
 
+/** @copydoc UiAutomationRunner::DestroyContext */
 void UiAutomationRunner::DestroyContext() const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   if (m_impl->engine == nullptr)
@@ -842,6 +867,7 @@ void UiAutomationRunner::DestroyContext() const {
 #endif
 }
 
+/** @copydoc UiAutomationRunner::DidPass */
 bool UiAutomationRunner::DidPass() const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   return m_impl->passed;
@@ -850,6 +876,7 @@ bool UiAutomationRunner::DidPass() const {
 #endif
 }
 
+/** @copydoc UiAutomationRunner::IsActive */
 bool UiAutomationRunner::IsActive() const {
 #ifdef HORO_STANDALONE_UI_AUTOMATION
   return m_impl->active;

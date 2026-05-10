@@ -21,6 +21,7 @@
 namespace Horo::Editor {
 #if defined(HORO_HAS_VULKAN)
     namespace {
+        /** @brief Holds Vulkan-specific ImGui integration state. */
         struct VulkanImGuiState {
             VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
             VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -30,6 +31,7 @@ namespace Horo::Editor {
 
         VulkanImGuiState g_vulkanImGuiState;
 
+        /** @brief Creates a Vulkan descriptor pool sized for ImGui resource usage. */
         VkDescriptorPool CreateVulkanImGuiDescriptorPool(VkDevice device) {
             const VkDescriptorPoolSize poolSizes[] = {
                 {VK_DESCRIPTOR_TYPE_SAMPLER, 64},
@@ -60,6 +62,7 @@ namespace Horo::Editor {
             return pool;
         }
 
+        /** @brief Destroys the global Vulkan ImGui descriptor pool. */
         void DestroyVulkanImGuiDescriptorPool(VkDevice device) {
             if (device == VK_NULL_HANDLE ||
                 g_vulkanImGuiState.descriptorPool == VK_NULL_HANDLE)
@@ -68,6 +71,7 @@ namespace Horo::Editor {
             g_vulkanImGuiState.descriptorPool = VK_NULL_HANDLE;
         }
 
+        /** @brief Callback that submits ImGui draw data within a Vulkan command buffer. */
         void RenderVulkanImGuiDrawDataCallback(void *userData,
                                                void *commandBufferHandle) {
             if (userData == nullptr || commandBufferHandle == nullptr)
@@ -78,6 +82,7 @@ namespace Horo::Editor {
                 reinterpret_cast<VkCommandBuffer>(commandBufferHandle));
         }
 
+        /** @brief Populates an ImGui_ImplVulkan_InitInfo from the active Vulkan backend. */
         bool TryBuildVulkanImGuiInitInfo(VulkanRenderBackend *backend,
                                          ImGui_ImplVulkan_InitInfo *outInitInfo,
                                          uint32_t *outMinImageCount,
@@ -121,6 +126,7 @@ namespace Horo::Editor {
     } // namespace
 #endif // HORO_HAS_VULKAN
 
+    /** @copydoc IsSupportedEditorImGuiBackend */
     bool IsSupportedEditorImGuiBackend(RenderBackendId backendId) {
         using enum RenderBackendId;
         switch (backendId) {
@@ -140,6 +146,7 @@ namespace Horo::Editor {
         return false;
     }
 
+    /** @copydoc InitEditorImGuiBackend */
     bool InitEditorImGuiBackend(GLFWwindow *window, RenderBackendId backendId) {
         if (!window)
             return false;
@@ -203,6 +210,7 @@ namespace Horo::Editor {
         return false;
     }
 
+    /** @copydoc ShutdownEditorImGuiBackend */
     void ShutdownEditorImGuiBackend(RenderBackendId backendId) {
         using enum RenderBackendId;
         switch (backendId) {
@@ -241,6 +249,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc BeginEditorImGuiFrame */
     void BeginEditorImGuiFrame(RenderBackendId backendId) {
         using enum RenderBackendId;
         switch (backendId) {
@@ -288,6 +297,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc RenderEditorImGuiDrawData */
     void RenderEditorImGuiDrawData(RenderBackendId backendId,
                                    ImDrawData *drawData) {
         if (!drawData)

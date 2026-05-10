@@ -1,13 +1,3 @@
-#pragma once
-
-#include <imgui.h>
-
-#include <functional>
-#include <span>
-#include <string>
-
-#include "ui/HoroTheme.h"
-
 /**
  * @file UiComponents.h
  * @brief Reusable ImGui widget primitives for all Horo editor and launcher UI.
@@ -26,6 +16,15 @@
  *   the call site never needs a theme-type branch.
  * - All declarations live in namespace Horo::Ui.
  */
+#pragma once
+
+#include <imgui.h>
+
+#include <functional>
+#include <span>
+#include <string>
+
+#include "ui/HoroTheme.h"
 
 namespace Horo::Ui {
 

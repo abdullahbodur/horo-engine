@@ -81,6 +81,7 @@ namespace Horo {
         };
     } // namespace
 
+    /** @copydoc ShouldLogUiAutomationHeartbeat */
     bool ShouldLogUiAutomationHeartbeat(const bool enabled,
                                         const int frameCount,
                                         const int heartbeatInterval) {
@@ -88,15 +89,18 @@ namespace Horo {
                (frameCount == 1 || (frameCount % heartbeatInterval) == 0);
     }
 
+    /** @copydoc ShouldWarnUiAutomationLargeFrameDelta */
     bool ShouldWarnUiAutomationLargeFrameDelta(const double frameDeltaSec) {
         return frameDeltaSec > kUiAutomationLargeFrameDeltaWarningSec;
     }
 
+    /** @copydoc ShouldLogEditorRenderHeartbeat */
     bool ShouldLogEditorRenderHeartbeat(const bool enabled,
                                         const int frameCount) {
         return enabled && (frameCount == 1 || (frameCount % 60) == 0);
     }
 
+    /** @copydoc UiAutomationTestSuiteNames */
     std::vector<std::string_view> UiAutomationTestSuiteNames() {
         std::vector<std::string_view> names;
         names.reserve(kUiAutomationTestSuites.size());
@@ -105,6 +109,7 @@ namespace Horo {
         return names;
     }
 
+    /** @copydoc ResolveUiAutomationScenarioFilter */
     std::string_view ResolveUiAutomationScenarioFilter(
         const std::string_view explicitFilter, const std::string_view suiteName) {
         if (!explicitFilter.empty())
@@ -118,12 +123,14 @@ namespace Horo {
         return {};
     }
 
+    /** @copydoc ParseUiAutomationBoolValue */
     bool ParseUiAutomationBoolValue(std::string_view value, bool fallback) {
         if (value.empty())
             return fallback;
         return value != "0";
     }
 
+    /** @copydoc ParseUiAutomationNonNegativeIntValue */
     int ParseUiAutomationNonNegativeIntValue(std::string_view value, int fallback) {
         if (value.empty())
             return fallback;
@@ -137,6 +144,7 @@ namespace Horo {
         return parsed;
     }
 
+    /** @copydoc ResolveUiCaptureOutputDir */
     std::filesystem::path
     ResolveUiCaptureOutputDir(const bool captureEnabled,
                               const std::string_view outputDirEnv,
@@ -148,6 +156,7 @@ namespace Horo {
         return currentPath / "ui_test_output";
     }
 
+    /** @copydoc SelectUiAutomationBaseDir */
     std::filesystem::path SelectUiAutomationBaseDir(
         const std::string_view homePath, const std::string_view userProfilePath,
         const std::filesystem::path &currentPath, const bool isWindows) {

@@ -13,6 +13,7 @@ namespace Horo::Launcher {
     using json = nlohmann::json;
 
     namespace {
+        /** @brief Parses a JSON object into a LauncherProjectCommand struct. */
         LauncherProjectCommand ParseCommand(const json &value) {
             LauncherProjectCommand out;
             if (!value.is_object())
@@ -29,6 +30,7 @@ namespace Horo::Launcher {
             return out;
         }
 
+        /** @brief Serializes a LauncherProjectCommand into a JSON object. */
         json SerializeCommand(const LauncherProjectCommand &command) {
             json out = json::object();
             out["executable"] = command.executable;
@@ -37,6 +39,7 @@ namespace Horo::Launcher {
             return out;
         }
 
+        /** @brief Replaces all occurrences of needle with replacement in value. */
         std::string ReplaceAll(std::string value, std::string_view needle,
                                std::string_view replacement) {
             if (needle.empty())
@@ -50,6 +53,7 @@ namespace Horo::Launcher {
             return value;
         }
 
+        /** @brief Expands ${projectDir} and ${horoSdkRoot} tokens in a string. */
         std::string ExpandTokens(std::string_view value, const fs::path &projectRoot,
                                  const fs::path &sdkRoot) {
             std::string expanded(value);
@@ -59,6 +63,7 @@ namespace Horo::Launcher {
             return expanded;
         }
 
+        /** @brief Builds a human-readable command-line string from a resolved command. */
         std::string BuildDebugString(const ResolvedLauncherCommand &command) {
             std::ostringstream out;
             out << command.executable.generic_string();
@@ -68,16 +73,19 @@ namespace Horo::Launcher {
         }
     } // namespace
 
+    /** @copydoc ResolveProjectManifestPath */
     fs::path ResolveProjectManifestPath(const fs::path &projectRoot) {
         return projectRoot / ".horo" / "project.json";
     }
 
+    /** @copydoc IsLauncherProjectRoot */
     bool IsLauncherProjectRoot(const fs::path &projectRoot) {
         std::error_code ec;
         return fs::is_regular_file(ResolveProjectManifestPath(projectRoot), ec) &&
                !ec;
     }
 
+    /** @copydoc LoadProjectManifestDocument */
     LauncherProjectDocument
     LoadProjectManifestDocument(const fs::path &projectRoot) {
         LauncherProjectDocument out;
@@ -140,6 +148,7 @@ namespace Horo::Launcher {
         return out;
     }
 
+    /** @copydoc SaveProjectManifestDocument */
     bool SaveProjectManifestDocument(const fs::path &projectRoot,
                                      LauncherProjectDocument *doc,
                                      std::string *outError) {
@@ -198,6 +207,7 @@ namespace Horo::Launcher {
         return true;
     }
 
+    /** @copydoc SanitizeProjectId */
     std::string SanitizeProjectId(std::string_view projectName) {
         std::string out;
         out.reserve(projectName.size());
@@ -216,6 +226,7 @@ namespace Horo::Launcher {
         return out;
     }
 
+    /** @copydoc ResolveLauncherCommand */
     bool ResolveLauncherCommand(const LauncherProjectCommand &command,
                                 const fs::path &projectRoot,
                                 const fs::path &sdkRoot,

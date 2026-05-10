@@ -15,6 +15,7 @@ namespace Horo::Launcher {
     namespace {
         constexpr size_t kMaxRecentProjects = 10;
 
+        /** @brief Canonicalizes a project path for deduplication in the recent list. */
         std::string NormalizeRecentProjectPath(const fs::path &path) {
             if (path.empty())
                 return {};
@@ -32,10 +33,12 @@ namespace Horo::Launcher {
         }
     } // namespace
 
+    /** @copydoc ResolveEditorHomePath */
     fs::path ResolveEditorHomePath() {
         return Horo::Mcp::ResolveMcpSettingsDirectory() / "editor_home.json";
     }
 
+    /** @copydoc LoadEditorHomeDocument */
     EditorHomeDocument LoadEditorHomeDocument() {
         EditorHomeDocument out;
         std::ifstream in(ResolveEditorHomePath());
@@ -80,6 +83,7 @@ namespace Horo::Launcher {
         return out;
     }
 
+    /** @copydoc SaveEditorHomeDocument */
     bool SaveEditorHomeDocument(EditorHomeDocument *doc, std::string *outError) {
         if (outError)
             outError->clear();
@@ -133,6 +137,7 @@ namespace Horo::Launcher {
         return true;
     }
 
+    /** @copydoc RememberRecentProject */
     void RememberRecentProject(EditorHomeDocument *doc,
                                const fs::path &projectRoot) {
         if (!doc)
@@ -150,6 +155,7 @@ namespace Horo::Launcher {
         doc->state.lastProjectPath = normalized;
     }
 
+    /** @copydoc PruneMissingRecentProjects */
     void PruneMissingRecentProjects(EditorHomeDocument *doc) {
         if (!doc)
             return;

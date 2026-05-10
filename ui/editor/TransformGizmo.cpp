@@ -16,6 +16,7 @@
 
 namespace Horo::Editor {
 
+    /** @copydoc TransformGizmo::Activate */
     void TransformGizmo::Activate(GizmoMode mode, Vec3 targetPos,
                                   Quaternion targetRot, Vec3 targetScale) {
         m_mode = mode;
@@ -27,12 +28,14 @@ namespace Horo::Editor {
         m_prevMouseL = false;
     }
 
+    /** @copydoc TransformGizmo::Deactivate */
     void TransformGizmo::Deactivate() {
         m_mode = GizmoMode::None;
         m_dragging = GizmoAxis::None;
         m_hovered = GizmoAxis::None;
     }
 
+    /** @copydoc TransformGizmo::SyncTarget */
     void TransformGizmo::SyncTarget(Vec3 pos, Quaternion rot, Vec3 scale) {
         // Always sync — EditorLayer calls this with the already-updated position
         // from the previous frame's delta, so there is no double-counting.
@@ -42,11 +45,13 @@ namespace Horo::Editor {
     }
 
 
+    /** @copydoc TransformGizmo::HandleSize */
     float TransformGizmo::HandleSize(const Camera &cam) const {
         (void)cam;
         return 1.0f;
     }
 
+    /** @copydoc TransformGizmo::AxisDir */
     Vec3 TransformGizmo::AxisDir(GizmoAxis axis) const {
         using enum GizmoAxis;
         switch (axis) {
@@ -61,6 +66,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc TransformGizmo::WorldToScreen */
     bool TransformGizmo::WorldToScreen(const Vec3 &p, const Camera &cam, int w,
                                        int h, float &sx, float &sy) {
         Mat4 vp = cam.GetViewProjection();
@@ -75,6 +81,7 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @copydoc TransformGizmo::RayHitPlane */
     bool TransformGizmo::RayHitPlane(const Ray &ray, const Vec3 &normal,
                                      const Vec3 &point, Vec3 &outHit) {
         float denom = Vec3::Dot(normal, ray.direction);
@@ -87,6 +94,7 @@ namespace Horo::Editor {
         return true;
     }
 
+    /** @copydoc TransformGizmo::RayClosestOnLine */
     Vec3 TransformGizmo::RayClosestOnLine(const Ray &ray, const Vec3 &lineOrigin,
                                           const Vec3 &lineDir) {
         // Minimize squared distance between ray point and line point.
@@ -109,6 +117,7 @@ namespace Horo::Editor {
     }
 
 
+    /** @copydoc TransformGizmo::PickAxis */
     GizmoAxis TransformGizmo::PickAxis(float mx, float my, const Camera &cam,
                                        int screenW, int screenH) const {
         // In rotate mode the visual handle is a circular ring, not a line.
@@ -236,6 +245,7 @@ namespace Horo::Editor {
     }
 
 
+    /** @copydoc TransformGizmo::BeginDrag */
     void TransformGizmo::BeginDrag(const Ray &ray, const Camera &cam) {
         m_dragging = m_hovered;
         m_dragAnchorPos = m_pos;
@@ -264,6 +274,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc TransformGizmo::ApplyActiveDrag */
     bool TransformGizmo::ApplyActiveDrag(const Ray &ray, const Camera &cam,
                                          Vec3 &outDeltaPos, Quaternion &outDeltaRot,
                                          Vec3 &outDeltaScale) {
@@ -307,6 +318,7 @@ namespace Horo::Editor {
         return false;
     }
 
+    /** @copydoc TransformGizmo::Update */
     bool TransformGizmo::Update(GLFWwindow *window, const Camera &cam, int screenW,
                                 int screenH, Vec3 &outDeltaPos,
                                 Quaternion &outDeltaRot, Vec3 &outDeltaScale) {
@@ -360,6 +372,7 @@ namespace Horo::Editor {
         constexpr float kTwoPi = 6.28318530718f;
     } // namespace
 
+    /** @copydoc TransformGizmo::DrawTranslate */
     void TransformGizmo::DrawTranslate(const Camera &cam, int /*screenW*/,
                                        int /*screenH*/) const {
         const float handleLen = HandleSize(cam);
@@ -423,6 +436,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc TransformGizmo::DrawRotate */
     void TransformGizmo::DrawRotate(const Camera &cam, int /*screenW*/,
                                     int /*screenH*/) const {
         const float radius = HandleSize(cam);
@@ -484,6 +498,7 @@ namespace Horo::Editor {
         }
     }
 
+    /** @copydoc TransformGizmo::DrawScale */
     void TransformGizmo::DrawScale(const Camera &cam, int /*screenW*/,
                                    int /*screenH*/) const {
         const float handleLen = HandleSize(cam);
@@ -529,6 +544,7 @@ namespace Horo::Editor {
                             {1.0f, 1.0f, 1.0f, 1.0f});
     }
 
+    /** @copydoc TransformGizmo::Draw */
     void TransformGizmo::Draw(const Camera &cam, int screenW, int screenH) const {
         using enum GizmoMode;
         if (m_mode == None)

@@ -361,22 +361,20 @@ namespace Horo::Editor {
         };
     } // namespace
 
-    /** @brief Registers the built-in OBJ mesh importer and texture copy importer. */
+    /** @copydoc AssetImporterRegistry::AssetImporterRegistry */
     AssetImporterRegistry::AssetImporterRegistry() {
         Register(std::make_unique<ObjAssetImporter>());
         Register(std::make_unique<TextureCopyImporter>());
     }
 
-    /** @brief Takes ownership of @p importer when non-null and stores it in the registry. */
+    /** @copydoc AssetImporterRegistry::Register */
     void AssetImporterRegistry::Register(std::unique_ptr<AssetImporter> importer) {
         if (!importer)
             return;
         m_importers.push_back(std::move(importer));
     }
 
-    /** @brief Chooses an importer whose @ref AssetImporter::SupportedExtensions matches @p sourcePath's suffix.
-     *  @return First match in registration order, or nullptr when no extension matches.
-     */
+    /** @copydoc AssetImporterRegistry::FindByExtension */
     const AssetImporter *
     AssetImporterRegistry::FindByExtension(const std::string &sourcePath) const {
         const std::string ext =
@@ -389,7 +387,7 @@ namespace Horo::Editor {
         return nullptr;
     }
 
-    /** @brief Looks up @p importerId against each registered @ref AssetImporter::ImporterId. */
+    /** @copydoc AssetImporterRegistry::FindById */
     const AssetImporter *
     AssetImporterRegistry::FindById(std::string_view importerId) const {
         for (const auto &importer: m_importers) {
@@ -399,7 +397,7 @@ namespace Horo::Editor {
         return nullptr;
     }
 
-    /** @brief Collects importer ids in the same order as internal registration storage. */
+    /** @copydoc AssetImporterRegistry::RegisteredImporterIds */
     std::vector<std::string> AssetImporterRegistry::RegisteredImporterIds() const {
         std::vector<std::string> ids;
         ids.reserve(m_importers.size());

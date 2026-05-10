@@ -19,6 +19,7 @@ namespace Horo::Launcher {
 #if defined(_WIN32) || defined(__APPLE__)
     namespace {
 #ifdef _WIN32
+        /** @brief Converts a UTF-8 string to a wide string for Windows API calls. */
         std::wstring Utf8ToWide(const std::string &value) {
             if (value.empty())
                 return {};
@@ -37,6 +38,7 @@ namespace Horo::Launcher {
             return wide;
         }
 
+        /** @brief RAII guard that initializes and uninitializes COM on the current thread. */
         class ScopedComInit {
         public:
             ScopedComInit() = default;
@@ -63,6 +65,7 @@ namespace Horo::Launcher {
                                                        COINIT_DISABLE_OLE1DDE);
         };
 #elif defined(__APPLE__)
+        /** @brief Escapes special characters for safe embedding in an AppleScript string literal. */
         std::string EscapeAppleScriptString(const std::string &value) {
             std::string escaped;
             escaped.reserve(value.size());
@@ -74,6 +77,7 @@ namespace Horo::Launcher {
             return escaped;
         }
 
+        /** @brief Executes an osascript command and returns the trimmed output path. */
         std::string ReadPathFromOsascript(const std::string &command) {
             FILE *pipe = popen(command.c_str(), "r");
             if (!pipe)
@@ -93,6 +97,7 @@ namespace Horo::Launcher {
     } // namespace
 #endif
 
+    /** @copydoc PickFolderPath */
     fs::path PickFolderPath(const char *prompt,
                             [[maybe_unused]] const fs::path &defaultPath) {
 #ifdef _WIN32

@@ -50,6 +50,7 @@ namespace {
     }
 }
 
+/** @copydoc EditorAssetsPanel::Draw */
 void EditorAssetsPanel::Draw(const EditorComponentContext& ctx,
                             const EditorAssetsPanelCallbacks& callbacks,
                             const EditorAssetsPanelState& state) {
@@ -104,6 +105,7 @@ void EditorAssetsPanel::Draw(const EditorComponentContext& ctx,
     ImGui::End();
 }
 
+/** @copydoc EditorAssetsPanel::DrawContent */
 void EditorAssetsPanel::DrawContent(const EditorAssetsPanelCallbacks& callbacks,
                                     const EditorAssetsPanelState& state) {
     if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
@@ -130,6 +132,7 @@ void EditorAssetsPanel::DrawContent(const EditorAssetsPanelCallbacks& callbacks,
     DrawCreateAssetModal(state, openNewAssetModal, callbacks);
 }
 
+/** @copydoc EditorAssetsPanel::DrawAssetSpotlightPopup */
 void EditorAssetsPanel::DrawAssetSpotlightPopup(
     const EditorAssetsPanelState& state,
     const std::vector<std::string>& assetIds) {
@@ -173,6 +176,7 @@ void EditorAssetsPanel::DrawAssetSpotlightPopup(
     Horo::Ui::EndEditorPickerModal(*state.assetSearchOpen, state.assetSearchQuery);
 }
 
+/** @copydoc EditorAssetsPanel::DrawAssetTile */
 void EditorAssetsPanel::DrawAssetTile(
     const EditorAssetsPanelState& state,
     const std::string& assetId,
@@ -276,6 +280,7 @@ void EditorAssetsPanel::DrawAssetTile(
     Horo::Ui::EndEditorCard();
 }
 
+/** @copydoc EditorAssetsPanel::DrawAddAssetTile */
 void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
                                          float tileW, float tileH,
                                          float thumbPad, float thumbSize) {
@@ -368,6 +373,7 @@ void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
     ImGui::EndChild();
 }
 
+/** @copydoc EditorAssetsPanel::DrawAssetGrid */
 void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
                                       const std::vector<std::string>& assetIds,
                                       bool& openNewAssetModal,
@@ -427,6 +433,7 @@ void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
     ImGui::EndChild();
 }
 
+/** @copydoc EditorAssetsPanel::DrawCreateAssetModal */
 void EditorAssetsPanel::DrawCreateAssetModal(
     const EditorAssetsPanelState& state,
     bool openModal,
@@ -437,6 +444,7 @@ void EditorAssetsPanel::DrawCreateAssetModal(
     }
 }
 
+/** @copydoc EditorAssetsPanel::DrawCreateAssetModalContent */
 void EditorAssetsPanel::DrawCreateAssetModalContent(
     const EditorAssetsPanelState& state,
     const EditorAssetsPanelCallbacks& callbacks) {

@@ -43,12 +43,13 @@ void DrawSwatch(ImDrawList *dl, ImVec2 topLeft, float size, const ImVec4 &color,
 
 /** @brief Returns the visible description string used on Appearance preset cards. */
 const char *ThemePresetDescription(Horo::Ui::EditorThemePreset preset) {
+    using enum Horo::Ui::EditorThemePreset;
     switch (preset) {
-    case Horo::Ui::EditorThemePreset::DarkBlue:
+    case DarkBlue:
         return "Current Horo editor palette";
-    case Horo::Ui::EditorThemePreset::Graphite:
+    case Graphite:
         return "Neutral dark workspace";
-    case Horo::Ui::EditorThemePreset::HighContrast:
+    case HighContrast:
         return "Maximum contrast for readability";
     }
     return "";
@@ -56,12 +57,13 @@ const char *ThemePresetDescription(Horo::Ui::EditorThemePreset preset) {
 
 /** @brief Returns the stable automation marker id for a preset card. */
 const char *ThemePresetMarker(Horo::Ui::EditorThemePreset preset) {
+    using enum Horo::Ui::EditorThemePreset;
     switch (preset) {
-    case Horo::Ui::EditorThemePreset::DarkBlue:
+    case DarkBlue:
         return "##settings_test/theme_dark_blue";
-    case Horo::Ui::EditorThemePreset::Graphite:
+    case Graphite:
         return "##settings_test/theme_graphite";
-    case Horo::Ui::EditorThemePreset::HighContrast:
+    case HighContrast:
         return "##settings_test/theme_high_contrast";
     }
     return "##settings_test/theme_unknown";
@@ -69,6 +71,7 @@ const char *ThemePresetMarker(Horo::Ui::EditorThemePreset preset) {
 
 } // namespace
 
+/** @copydoc EditorSettingsModal::Open */
 void EditorSettingsModal::Open(const Mcp::McpSettings &mcp,
                                const EditorUserSettings &user) {
     m_open = true;
@@ -81,6 +84,7 @@ void EditorSettingsModal::Open(const Mcp::McpSettings &mcp,
     m_userDraft = user;
 }
 
+/** @copydoc EditorSettingsModal::IsDirty */
 bool EditorSettingsModal::IsDirty() const {
     if (m_mcpDraft.enabled != m_mcpOriginal.enabled)
         return true;
@@ -97,12 +101,14 @@ bool EditorSettingsModal::IsDirty() const {
     return false;
 }
 
+/** @copydoc EditorSettingsModal::ResetDrafts */
 void EditorSettingsModal::ResetDrafts() {
     m_mcpDraft = m_mcpOriginal;
     m_userDraft = m_userOriginal;
     m_error.clear();
 }
 
+/** @copydoc EditorSettingsModal::SaveAll */
 bool EditorSettingsModal::SaveAll() {
     m_error.clear();
 
@@ -154,6 +160,7 @@ bool EditorSettingsModal::SaveAll() {
     return true;
 }
 
+/** @copydoc EditorSettingsModal::Draw */
 void EditorSettingsModal::Draw() {
     if (!m_open)
         return;

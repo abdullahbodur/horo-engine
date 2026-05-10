@@ -12,6 +12,7 @@
 #include "renderer/ObjLoader.h"
 
 namespace Horo::Editor {
+    /** @copydoc IsObjFilePath */
     bool IsObjFilePath(const std::string &path) {
         if (path.empty())
             return false;
@@ -23,12 +24,14 @@ namespace Horo::Editor {
         return ext == ".obj";
     }
 
+    /** @copydoc AssetIdFromImportedPath */
     std::string AssetIdFromImportedPath(const std::string &path) {
         if (path.empty())
             return {};
         return std::filesystem::path(path).stem().string();
     }
 
+    /** @copydoc MeshTagFromImportedPath */
     std::string MeshTagFromImportedPath(const std::string &path) {
         if (path.empty())
             return {};
@@ -37,6 +40,7 @@ namespace Horo::Editor {
                 .generic_string();
     }
 
+    /** @copydoc SuggestRenderScale */
     std::string SuggestRenderScale(const std::string &meshTag, float targetHeight) {
         auto aabb = ObjLoader::ComputeAABB(meshTag);
         if (!aabb.valid)

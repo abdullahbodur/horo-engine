@@ -14,21 +14,25 @@ namespace Horo::Editor {
     using json = nlohmann::json;
 
     namespace {
+        /** @brief Returns the directory used for editor settings files. */
         fs::path ResolveEditorSettingsDirectory() {
             return Mcp::ResolveMcpSettingsDirectory();
         }
     } // namespace
 
+    /** @copydoc ResolveEditorLayoutPath */
     fs::path ResolveEditorLayoutPath() {
         return ResolveEditorSettingsDirectory() / "editor_layout.ini";
     }
 
+    /** @copydoc ResolveEditorWorkspacePath */
     fs::path ResolveEditorWorkspacePath() {
         if (ProjectPath::HasExplicitProjectRoot())
             return ProjectPath::Root() / ".horo" / "editor_workspace.json";
         return ResolveEditorSettingsDirectory() / "editor_workspace.json";
     }
 
+    /** @copydoc LoadEditorWorkspaceDocument */
     EditorWorkspaceDocument LoadEditorWorkspaceDocument() {
         EditorWorkspaceDocument out;
         std::ifstream in(ResolveEditorWorkspacePath());
@@ -67,6 +71,7 @@ namespace Horo::Editor {
         return out;
     }
 
+    /** @copydoc SaveEditorWorkspaceDocument */
     bool SaveEditorWorkspaceDocument(EditorWorkspaceDocument *doc,
                                      std::string *outError) {
         if (outError)

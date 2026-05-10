@@ -201,7 +201,7 @@ namespace Horo::Editor {
                                const char* pathValue, const char* hint,
                                std::string_view snippet, const char* toastLabel,
                                Horo::Mcp::McpController* mcpController,
-                               class GLFWwindow* window);
+                               struct GLFWwindow* window);
 
         /** @brief Draws the live-requests section of the MCP tab.
          *  @param status Current MCP status snapshot containing in-flight requests. */

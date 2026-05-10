@@ -141,18 +141,14 @@ namespace Horo::Editor {
         }
     } // namespace
 
-    /** @brief Managed folder path under the project root: @c assets/models/ plus @p assetGuid.
-     *  @param assetGuid Stable asset GUID; empty yields an empty path.
-     */
+    /** @copydoc GetManagedAssetDirectory(const std::string &) */
     std::filesystem::path GetManagedAssetDirectory(const std::string &assetGuid) {
         if (assetGuid.empty())
             return {};
         return ProjectPath::Root() / "assets" / "models" / assetGuid;
     }
 
-    /** @brief Resolves the managed directory from @p asset, preferring GUID then mesh parent.
-     *  @param asset Definition whose @c guid or @c mesh locates on-disk content.
-     */
+    /** @copydoc GetManagedAssetDirectory(const AssetDef &) */
     std::filesystem::path GetManagedAssetDirectory(const AssetDef &asset) {
         if (!asset.guid.empty())
             return GetManagedAssetDirectory(asset.guid);
@@ -165,21 +161,14 @@ namespace Horo::Editor {
         return meshPath.parent_path();
     }
 
-    /** @brief Path to @c asset.meta.json inside the managed directory for @p assetGuid.
-     *  @param assetGuid Stable GUID; empty yields an empty path.
-     */
+    /** @copydoc GetAssetMetadataPath */
     std::filesystem::path GetAssetMetadataPath(const std::string &assetGuid) {
         if (assetGuid.empty())
             return {};
         return GetManagedAssetDirectory(assetGuid) / "asset.meta.json";
     }
 
-    /** @brief Reads and parses @c asset.meta.json for @p assetGuid into @p outMetadata.
-     *  @param assetGuid   GUID identifying the managed asset folder.
-     *  @param outMetadata Receives parsed fields on success; must be non-null.
-     *  @param outError    Optional parse/open error message.
-     *  @return False when the file is missing, unreadable, or JSON-invalid.
-     */
+    /** @copydoc LoadAssetMetadata */
     bool LoadAssetMetadata(const std::string &assetGuid, AssetMetadata *outMetadata,
                            std::string *outError) {
         if (outError)
@@ -226,11 +215,7 @@ namespace Horo::Editor {
         return true;
     }
 
-    /** @brief Writes @p metadata to its GUID-managed @c asset.meta.json with stable key ordering.
-     *  @param metadata Sidecar to persist; @c assetGuid must be non-empty to resolve the path.
-     *  @param outError Optional filesystem or IO error message.
-     *  @return False when the parent directory cannot be created or the file cannot be written.
-     */
+    /** @copydoc SaveAssetMetadata */
     bool SaveAssetMetadata(const AssetMetadata &metadata, std::string *outError) {
         if (outError)
             outError->clear();
@@ -308,10 +293,7 @@ namespace Horo::Editor {
         return true;
     }
 
-    /** @brief Constructs metadata matching @p asset with produced-file and dependency seeds.
-     *  @param assetId Logical document key for @p asset.
-     *  @param asset   Definition whose mesh/albedo populate produced outputs.
-     */
+    /** @copydoc BuildAssetMetadata */
     AssetMetadata BuildAssetMetadata(const std::string &assetId,
                                      const AssetDef &asset) {
         AssetMetadata metadata;
@@ -325,11 +307,7 @@ namespace Horo::Editor {
         return metadata;
     }
 
-    /** @brief Ensures every asset in @p doc has a persisted sidecar, creating or refreshing as needed.
-     *  @param doc      Document whose assets are normalised; must be non-null.
-     *  @param outError Optional first save failure message.
-     *  @return False when any @ref SaveAssetMetadata call fails.
-     */
+    /** @copydoc EnsureAssetMetadataForDocument */
     bool EnsureAssetMetadataForDocument(SceneDocument *doc, std::string *outError) {
         if (outError)
             outError->clear();

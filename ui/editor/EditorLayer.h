@@ -40,10 +40,6 @@ namespace Horo {
          *  OnUpdate() followed by Render(). Poll WantsSceneReload() to detect when the
          *  caller must rebuild the live scene.
          */
-        // In-game editor overlay.
-        //
-        // Typical usage as prose: call Init, Load, Toggle, then each frame call
-        // OnUpdate and Render; handle WantsSceneReload for live rebuild.
         class EditorLayer {
         public:
             /** @brief Initialises the ImGui backend and editor subsystems.
@@ -112,7 +108,6 @@ namespace Horo {
              *  @param screenH Framebuffer height in pixels.
              *  @return True when ImGui is consuming mouse or keyboard input; the caller
              *          should suppress game input in that case. */
-            /** @brief Processes input and per-frame picking for the editor. */
             bool OnUpdate(float dt, Camera &cam, int screenW, int screenH);
 
             /** @brief Renders ImGui panels, selection highlight, and the transform gizmo.

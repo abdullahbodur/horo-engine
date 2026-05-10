@@ -18,12 +18,7 @@
 
 namespace Horo::Editor {
 
-/** @brief Stores GLFW drop paths and cursor coordinates for @ref ProcessPendingPathDrops.
- *  @param pathCount Number of entries in @p utf8Paths.
- *  @param utf8Paths UTF-8 absolute paths from the OS drop payload.
- *  @param dropX     Cursor X in ImGui/GLFW client coordinates.
- *  @param dropY     Cursor Y in ImGui/GLFW client coordinates.
- */
+/** @copydoc EditorLayer::OnPathsDropped */
 void EditorLayer::OnPathsDropped(int pathCount, const char **utf8Paths,
                                  float dropX, float dropY) {
   if (!utf8Paths || pathCount <= 0)
@@ -41,10 +36,7 @@ void EditorLayer::OnPathsDropped(int pathCount, const char **utf8Paths,
   m_hasPendingPathDrop = true;
 }
 
-/** @brief Imports @p path as the new-asset draft albedo via @ref AssetImportService::ImportTextureForAsset.
- *  @param path Absolute path to a dropped texture file.
- *  @return True when the texture was copied and @c m_assetDraftAlbedoMap was updated.
- */
+/** @copydoc EditorLayer::TryApplyDraftAlbedoDrop */
 bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
   if (m_assetDraftGuid.empty())
     m_assetDraftGuid = GenerateAssetGuid();
@@ -74,10 +66,7 @@ bool EditorLayer::TryApplyDraftAlbedoDrop(const std::string &path) {
   return true;
 }
 
-/** @brief Imports @p path as albedo for @c m_selectedAssetId when that asset exists.
- *  @param path Absolute path to a dropped texture file.
- *  @return True when the selected asset was updated and the document marked dirty.
- */
+/** @copydoc EditorLayer::TryApplySelectedAssetAlbedoDrop */
 bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
   if (m_selectedAssetId.empty())
     return false;
@@ -97,10 +86,7 @@ bool EditorLayer::TryApplySelectedAssetAlbedoDrop(const std::string &path) {
   return true;
 }
 
-/** @brief Consumes queued paths that look like textures when the drop hits an albedo drop zone.
- *
- * Tests @c m_pendingPathDropX/Y against @c m_albedoDraftDrop and @c m_albedoSelDrop with a small pixel margin.
- */
+/** @copydoc EditorLayer::ProcessPendingTextureDrops */
 void EditorLayer::ProcessPendingTextureDrops() {
   constexpr float kTextureDropHitSlopPx = 6.0f;
   const float px = m_pendingPathDropX;
@@ -121,10 +107,7 @@ void EditorLayer::ProcessPendingTextureDrops() {
   }
 }
 
-/** @brief Imports the first queued @c .obj path into the new-asset draft and clears the queue on success or hard failure.
- *
- * On failure sets @c m_assetImportError and opens the new-asset header so the user sees the message.
- */
+/** @copydoc EditorLayer::ProcessPendingObjDrops */
 void EditorLayer::ProcessPendingObjDrops() {
   for (const std::string &path : m_pendingPathDropPaths) {
     if (!IsObjFilePath(path))
@@ -157,10 +140,7 @@ void EditorLayer::ProcessPendingObjDrops() {
   }
 }
 
-/** @brief Drains a pending OS drop: tries textures first, then OBJ, then clears state.
- *
- * Clears @c m_hasPendingPathDrop before delegating; always clears @c m_pendingPathDropPaths when done.
- */
+/** @copydoc EditorLayer::ProcessPendingPathDrops */
 void EditorLayer::ProcessPendingPathDrops() {
   if (!m_hasPendingPathDrop)
     return;

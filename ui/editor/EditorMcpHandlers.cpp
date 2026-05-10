@@ -1,9 +1,10 @@
 /**
  * @file EditorMcpHandlers.cpp
- * @brief Implementation for EditorMcpHandlers editor functionality.
+ * @brief MCP command handler method definitions for EditorLayer.
+ *
+ * Declarations live in EditorLayer.h; this file provides the out-of-line
+ * definitions for snapshot publishing, command dispatch, and per-tool handlers.
  */
-// MCP command handler methods for EditorLayer.
-// Method definitions are in this file; declarations remain in EditorLayer.h.
 
 // clang-format off
 #define GLFW_INCLUDE_NONE
@@ -247,6 +248,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
+    /** @copydoc EditorLayer::ProcessMcpCommands */
     void EditorLayer::ProcessMcpCommands() {
         m_mcpController.DrainCommands(
             [this](std::string_view toolName, const nlohmann::json &arguments) {
@@ -254,6 +256,7 @@ namespace Horo::Editor {
             });
     }
 
+    /** @copydoc EditorLayer::PublishMcpSnapshot */
     void EditorLayer::PublishMcpSnapshot() {
         Mcp::McpEditorSnapshot snapshot;
         snapshot.editorActive = m_active;
@@ -322,10 +325,12 @@ namespace Horo::Editor {
         m_mcpController.PublishSnapshot(snapshot);
     }
 
+    /** @copydoc EditorLayer::McpFindObjectIndex */
     int EditorLayer::McpFindObjectIndex(std::string_view id) const {
         return FindObjectIndexById(m_document, id);
     }
 
+    /** @copydoc EditorLayer::McpSummarizeObject */
     nlohmann::json
     EditorLayer::McpSummarizeObject(const SceneObject &object) const {
         json out = json::object();
@@ -350,6 +355,7 @@ namespace Horo::Editor {
         return out;
     }
 
+    /** @copydoc EditorLayer::McpSummarizeAsset */
     nlohmann::json EditorLayer::McpSummarizeAsset(const std::string &assetId,
                                                   const AssetDef &asset) const {
         int referenceCount = 0;
@@ -368,6 +374,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::ExecuteMcpCommand */
     Mcp::McpCommandResult
     EditorLayer::ExecuteMcpCommand(std::string_view toolName,
                                    const nlohmann::json &arguments) {
@@ -414,6 +421,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleSelect */
     Mcp::McpCommandResult
     EditorLayer::McpHandleSelect(const nlohmann::json &arguments) {
         std::vector<std::string> ids;
@@ -437,6 +445,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleClearSelection */
     Mcp::McpCommandResult
     EditorLayer::McpHandleClearSelection(const nlohmann::json &) {
         m_selectedIndices.clear();
@@ -444,6 +453,7 @@ namespace Horo::Editor {
         return Mcp::McpCommandResult{true, json{{"cleared", true}}, std::string()};
     }
 
+    /** @copydoc EditorLayer::McpHandleUndo */
     Mcp::McpCommandResult EditorLayer::McpHandleUndo(const nlohmann::json &) {
         const bool undone = UndoHistory();
         return Mcp::McpCommandResult{
@@ -458,6 +468,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleRedo */
     Mcp::McpCommandResult EditorLayer::McpHandleRedo(const nlohmann::json &) {
         const bool redone = RedoHistory();
         return Mcp::McpCommandResult{
@@ -472,6 +483,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleCreateObject */
     Mcp::McpCommandResult
     EditorLayer::McpHandleCreateObject(const nlohmann::json &arguments) {
         using enum SceneObjectType;
@@ -538,6 +550,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleCreateObjectFromAsset */
     Mcp::McpCommandResult
     EditorLayer::McpHandleCreateObjectFromAsset(const nlohmann::json &arguments) {
         const std::string assetId = arguments.value("assetId", "");
@@ -574,6 +587,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleCreatePrefab */
     Mcp::McpCommandResult
     EditorLayer::McpHandleCreatePrefab(const nlohmann::json &arguments) {
         if (const std::string id = arguments.value("id", ""); !id.empty())
@@ -604,6 +618,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleUpdateObject */
     Mcp::McpCommandResult
     EditorLayer::McpHandleUpdateObject(const nlohmann::json &arguments,
                                        std::string_view toolName) {
@@ -660,6 +675,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleRenameObject */
     Mcp::McpCommandResult
     EditorLayer::McpHandleRenameObject(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -688,6 +704,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleReparentObject */
     Mcp::McpCommandResult
     EditorLayer::McpHandleReparentObject(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -726,6 +743,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleDuplicate */
     Mcp::McpCommandResult
     EditorLayer::McpHandleDuplicate(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -778,6 +796,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleDelete */
     Mcp::McpCommandResult
     EditorLayer::McpHandleDelete(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -817,6 +836,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleSelectAsset */
     Mcp::McpCommandResult
     EditorLayer::McpHandleSelectAsset(const nlohmann::json &arguments) {
         const std::string assetId = arguments.value("id", "");
@@ -828,6 +848,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleUpdateAsset */
     Mcp::McpCommandResult
     EditorLayer::McpHandleUpdateAsset(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -860,6 +881,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleDeleteAsset */
     Mcp::McpCommandResult
     EditorLayer::McpHandleDeleteAsset(const nlohmann::json &arguments) {
         const std::string assetId = arguments.value("id", "");
@@ -877,6 +899,7 @@ namespace Horo::Editor {
         return Mcp::McpCommandResult{true, std::move(payload), std::string()};
     }
 
+    /** @copydoc EditorLayer::McpHandleNewScene */
     Mcp::McpCommandResult
     EditorLayer::McpHandleNewScene(const nlohmann::json &arguments) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();
@@ -903,6 +926,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleSaveScene */
     Mcp::McpCommandResult EditorLayer::McpHandleSaveScene(const nlohmann::json &) {
         if (std::string saveError; !SaveDocument(&saveError))
             return Mcp::McpCommandResult{false, json::object(), saveError};
@@ -912,6 +936,7 @@ namespace Horo::Editor {
         };
     }
 
+    /** @copydoc EditorLayer::McpHandleReloadScene */
     Mcp::McpCommandResult
     EditorLayer::McpHandleReloadScene(const nlohmann::json &) {
         const EditorHistorySnapshot before = CaptureHistorySnapshot();

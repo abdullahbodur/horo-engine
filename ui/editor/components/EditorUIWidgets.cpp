@@ -7,10 +7,12 @@
 
 namespace Horo::Editor {
 
+/** @copydoc EditorUIWidgets::Initialize */
 void EditorUIWidgets::Initialize(EditorLayer* editor) {
     m_editor = editor;
 }
 
+/** @copydoc EditorUIWidgets::DrawClipboardToast */
 void EditorUIWidgets::DrawClipboardToast() const {
     if (m_clipboardToastTime <= 0.0f)
         return;
@@ -35,6 +37,7 @@ void EditorUIWidgets::DrawClipboardToast() const {
     m_clipboardToastTime -= ImGui::GetIO().DeltaTime;
 }
 
+/** @copydoc EditorUIWidgets::DrawHotReloadOverlay */
 void EditorUIWidgets::DrawHotReloadOverlay() const {
     if (!m_hotReloadOverlayActive)
         return;
@@ -77,6 +80,7 @@ void EditorUIWidgets::DrawHotReloadOverlay() const {
                             IM_COL32(90, 190, 255, 255), 4.0f);
 }
 
+/** @copydoc EditorUIWidgets::DrawStatusBar */
 void EditorUIWidgets::DrawStatusBar() const {
     const ImGuiIO& io = ImGui::GetIO();
 
@@ -98,6 +102,7 @@ void EditorUIWidgets::DrawStatusBar() const {
     ImGui::End();
 }
 
+/** @copydoc EditorUIWidgets::DrawViewGimbal */
 void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
     // Gimbal drawing is complex and needs viewport context from EditorLayer
     // For now, this is deferred - the actual implementation stays in EditorLayer
@@ -106,6 +111,7 @@ void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
 }
 
 
+/** @copydoc EditorUIWidgets::DrawConfirmDeleteObjectsModal */
 void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     if (m_confirmDeleteObjectsOpen)
         ImGui::OpenPopup("Confirm Delete Objects");
@@ -143,6 +149,7 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     Horo::Ui::EndEditorModal();
 }
 
+/** @copydoc EditorUIWidgets::DrawConfirmDeleteAssetModal */
 void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
     if (m_confirmDeleteAssetOpen)
         ImGui::OpenPopup("Confirm Delete Asset");
@@ -189,6 +196,7 @@ void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
     Horo::Ui::EndEditorModal();
 }
 
+/** @copydoc EditorUIWidgets::DrawExitConfirmModal */
 void EditorUIWidgets::DrawExitConfirmModal() {
     if (m_confirmExitOpen)
         ImGui::OpenPopup("Unsaved Changes");
@@ -231,6 +239,7 @@ void EditorUIWidgets::DrawExitConfirmModal() {
 }
 
 
+/** @copydoc EditorUIWidgets::DrawRenameObjectModal */
 void EditorUIWidgets::DrawRenameObjectModal() {
     if (m_renameObjectOpen) {
         ImGui::OpenPopup("Rename Object");
@@ -263,6 +272,7 @@ void EditorUIWidgets::DrawRenameObjectModal() {
     Horo::Ui::EndEditorModal();
 }
 
+/** @copydoc EditorUIWidgets::ApplyRenameObject */
 void EditorUIWidgets::ApplyRenameObject() {
     if (m_renameObjectIndex < 0) {
         CancelRenameObject();
@@ -282,6 +292,7 @@ void EditorUIWidgets::ApplyRenameObject() {
     // else: error message should be set by callback
 }
 
+/** @copydoc EditorUIWidgets::CancelRenameObject */
 void EditorUIWidgets::CancelRenameObject() {
     m_renameObjectError.clear();
     m_renameObjectIndex = -1;
@@ -289,11 +300,13 @@ void EditorUIWidgets::CancelRenameObject() {
 }
 
 
+/** @copydoc EditorUIWidgets::OnClipboardAction */
 void EditorUIWidgets::OnClipboardAction(const std::string& label, float duration) {
     m_clipboardToastTime = duration;
     m_clipboardToastLabel = label;
 }
 
+/** @copydoc EditorUIWidgets::OnHotReloadStart */
 void EditorUIWidgets::OnHotReloadStart(float duration, const std::string& label) {
     m_hotReloadOverlayActive = true;
     m_hotReloadOverlayProgress = 0.0f;
@@ -302,30 +315,36 @@ void EditorUIWidgets::OnHotReloadStart(float duration, const std::string& label)
     (void)duration; // duration could be used for progress calculations
 }
 
+/** @copydoc EditorUIWidgets::OnHotReloadProgress */
 void EditorUIWidgets::OnHotReloadProgress(float progress, float spinner) {
     m_hotReloadOverlayProgress = progress;
     m_hotReloadOverlaySpinner = spinner;
 }
 
+/** @copydoc EditorUIWidgets::OnHotReloadEnd */
 void EditorUIWidgets::OnHotReloadEnd() {
     m_hotReloadOverlayActive = false;
 }
 
+/** @copydoc EditorUIWidgets::OpenConfirmDeleteObjects */
 void EditorUIWidgets::OpenConfirmDeleteObjects(const std::vector<int>& indices) {
     m_confirmDeleteObjectsOpen = true;
     m_pendingDeleteObjectIndices = indices;
 }
 
+/** @copydoc EditorUIWidgets::OpenConfirmDeleteAsset */
 void EditorUIWidgets::OpenConfirmDeleteAsset(const std::string& assetId) {
     m_confirmDeleteAssetOpen = true;
     m_pendingDeleteAssetId = assetId;
     m_pendingDeleteAssetError.clear();
 }
 
+/** @copydoc EditorUIWidgets::OpenConfirmExit */
 void EditorUIWidgets::OpenConfirmExit() {
     m_confirmExitOpen = true;
 }
 
+/** @copydoc EditorUIWidgets::OpenRenameObject */
 void EditorUIWidgets::OpenRenameObject(int objectIndex) {
     m_renameObjectOpen = true;
     m_renameObjectIndex = objectIndex;

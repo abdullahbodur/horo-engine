@@ -1,6 +1,7 @@
 /**
  * @file EditorViewport.cpp
- * @brief Implementation for EditorViewport editor functionality.
+ * @brief EditorLayer viewport rendering: scene image, view gimbal, object
+ *        picking, selection highlight, asset drop handling, and view-snap logic.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -64,6 +65,7 @@ bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
 }
 }
 
+/** @copydoc EditorLayer::RefreshViewportPanelRect */
 void EditorLayer::RefreshViewportPanelRect() {
   const ImVec2 winPos = ImGui::GetWindowPos();
   const ImVec2 innerMin = ImGui::GetWindowContentRegionMin();
@@ -74,6 +76,7 @@ void EditorLayer::RefreshViewportPanelRect() {
   m_viewportPanelRect.maxY = winPos.y + innerMax.y;
 }
 
+/** @copydoc EditorLayer::DrawViewportImage */
 bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
   static std::string s_lastViewportRenderError;
   if (targetW <= 0.0f || targetH <= 0.0f)
@@ -106,6 +109,7 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
   return true;
 }
 
+/** @copydoc EditorLayer::HandleViewportAssetDrop */
 bool EditorLayer::HandleViewportAssetDrop(const Camera &cam, int screenW,
                                           int screenH,
                                           const char *assetIdText) {
@@ -130,6 +134,7 @@ bool EditorLayer::HandleViewportAssetDrop(const Camera &cam, int screenW,
   return true;
 }
 
+/** @copydoc EditorLayer::DrawViewportPanel */
 void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
                                     int screenH) {
   struct ViewportAssetDropContext {
@@ -194,6 +199,7 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
 }
 
 
+/** @copydoc EditorLayer::DrawViewGimbal */
 void EditorLayer::DrawViewGimbal(const Camera &cam) {
   using enum ViewSnap;
   const ImGuiIO &io = ImGui::GetIO();
@@ -275,7 +281,6 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
     }
   }
 
-  const float fs = ImGui::GetFontSize();
 
   dl->AddCircleFilled(center, 4.0f, IM_COL32(120, 120, 120, 255), 16);
 
@@ -327,6 +332,7 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
     m_uiWidgets.SetPendingViewSnap(hoverSnap);
 }
 
+/** @copydoc EditorLayer::HandlePicking */
 void EditorLayer::HandlePicking(const Camera &cam, int screenW, int screenH) {
   bool currL =
       glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
@@ -396,6 +402,7 @@ void EditorLayer::HandlePicking(const Camera &cam, int screenW, int screenH) {
   }
 }
 
+/** @copydoc EditorLayer::DrawSelectionHighlight */
 void EditorLayer::DrawSelectionHighlight() {
   using enum SceneObjectType;
   const auto n = static_cast<int>(m_document.objects.size());
@@ -472,6 +479,7 @@ void EditorLayer::DrawSelectionHighlight() {
   }
 }
 
+/** @copydoc EditorLayer::ApplyPendingViewSnap */
 void EditorLayer::ApplyPendingViewSnap(Camera &cam) {
   using enum ViewSnap;
   if (m_uiWidgets.GetPendingViewSnap() == None)

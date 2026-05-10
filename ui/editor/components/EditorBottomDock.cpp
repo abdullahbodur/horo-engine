@@ -43,11 +43,13 @@ namespace {
 constexpr uint32_t kProjectListingCacheFrames = 48;
 }
 
+/** @copydoc EditorBottomDock::Draw */
 void EditorBottomDock::Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window,
                             float leftDockWidth, float bottomDockHeight) {
     DrawBottomDock(mcpController, window, leftDockWidth, bottomDockHeight);
 }
 
+/** @copydoc EditorBottomDock::DrawBottomDock */
 void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
                                       GLFWwindow* window,
                                       float leftDockWidth, float bottomDockHeight) {
@@ -79,27 +81,31 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
     ImGui::End();
 }
 
+/** @copydoc EditorBottomDock::DrawAssetsTab */
 void EditorBottomDock::DrawAssetsTab() {
     if (m_assetsTabCallback) {
         m_assetsTabCallback();
     }
 }
 
+/** @copydoc EditorBottomDock::DrawSelectedTabContent */
 void EditorBottomDock::DrawSelectedTabContent(Horo::Mcp::McpController* mcpController,
                                                GLFWwindow* window) {
+    using enum Tab;
     switch (m_selectedTab) {
-        case Tab::Assets:
+        case Assets:
             DrawAssetsTab();
             break;
-        case Tab::Console:
+        case Console:
             DrawConsoleTab();
             break;
-        case Tab::MCP:
+        case MCP:
             DrawMcpTab(mcpController, window);
             break;
     }
 }
 
+/** @copydoc EditorBottomDock::DrawConsoleTab */
 void EditorBottomDock::DrawConsoleTab() {
     using enum LogLevel;
     const Ui::EditorTheme& theme = Ui::GetEditorTheme();
@@ -110,14 +116,11 @@ void EditorBottomDock::DrawConsoleTab() {
     if (ImGui::SmallButton("Clear"))
         LogBuffer::Instance().Clear();
     ImGui::SameLine();
-    if (Ui::RenderEditorCheckbox(theme, "Info", m_consoleShowInfo))
-        ; // Workspace state will be marked dirty by caller
+    Ui::RenderEditorCheckbox(theme, "Info", m_consoleShowInfo);
     ImGui::SameLine();
-    if (Ui::RenderEditorCheckbox(theme, "Warn", m_consoleShowWarn))
-        ; // Workspace state will be marked dirty by caller
+    Ui::RenderEditorCheckbox(theme, "Warn", m_consoleShowWarn);
     ImGui::SameLine();
-    if (Ui::RenderEditorCheckbox(theme, "Error", m_consoleShowError))
-        ; // Workspace state will be marked dirty by caller
+    Ui::RenderEditorCheckbox(theme, "Error", m_consoleShowError);
     ImGui::SameLine();
     ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
 
@@ -169,6 +172,7 @@ void EditorBottomDock::DrawConsoleTab() {
     ImGui::EndChild();
 }
 
+/** @copydoc EditorBottomDock::DrawMcpTab */
 void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
                                   GLFWwindow* window) {
     if (!mcpController)
@@ -271,6 +275,7 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
     DrawMcpTabCatalog(status);
 }
 
+/** @copydoc EditorBottomDock::DrawMcpClientCard */
 void EditorBottomDock::DrawMcpClientCard(const char* title, const char* pathLabel,
                                          const char* pathValue, const char* hint,
                                          std::string_view snippet,
@@ -291,6 +296,7 @@ void EditorBottomDock::DrawMcpClientCard(const char* title, const char* pathLabe
     ImGui::EndChild();
 }
 
+/** @copydoc EditorBottomDock::DrawMcpTabLiveRequests */
 void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& status) {
     const Ui::EditorTheme& theme = Ui::GetEditorTheme();
     if (!ImGui::BeginTable("##mcp_requests", 6,
@@ -356,6 +362,7 @@ void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& stat
     }
 }
 
+/** @copydoc EditorBottomDock::DrawMcpTabCatalog */
 void EditorBottomDock::DrawMcpTabCatalog(const Mcp::McpStatusSnapshot& status) const {
     if (!ImGui::BeginTable("##mcp_catalog", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
         return;
@@ -380,6 +387,7 @@ void EditorBottomDock::DrawMcpTabCatalog(const Mcp::McpStatusSnapshot& status) c
     ImGui::EndTable();
 }
 
+/** @copydoc EditorBottomDock::GetProjectDirListing */
 const std::vector<std::pair<std::filesystem::path, bool>>*
 EditorBottomDock::GetProjectDirListing(const std::filesystem::path& absPath) {
     namespace fs = std::filesystem;
@@ -421,6 +429,7 @@ EditorBottomDock::GetProjectDirListing(const std::filesystem::path& absPath) {
     return &m_projectDirCache.at(key).entries;
 }
 
+/** @copydoc EditorBottomDock::InvalidateProjectBrowserCache */
 void EditorBottomDock::InvalidateProjectBrowserCache() {
     m_projectDirCache.clear();
 }

@@ -375,6 +375,7 @@ RenderTargetHandle TryGetCachedGltfAlbedoPreview(
 
 } // namespace
 
+/** @copydoc TryGetAssetPreviewHandle */
 bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
                               RenderTargetHandle* outHandle) {
   if (!outHandle)
@@ -464,6 +465,7 @@ bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
   return false;
 }
 
+/** @copydoc ToImTextureId */
 ImTextureID ToImTextureId(const RenderTargetHandle& handle) {
   using enum RenderNativeHandleType;
   if (!handle.IsValid())
@@ -479,6 +481,7 @@ ImTextureID ToImTextureId(const RenderTargetHandle& handle) {
   }
 }
 
+/** @copydoc TryGetAssetPreviewStaticMesh */
 const Mesh* TryGetAssetPreviewStaticMesh(std::string_view meshPath) {
   const auto* meshEntry = TryLoadAssetMesh(meshPath);
   if (!meshEntry || !meshEntry->mesh)
@@ -486,6 +489,7 @@ const Mesh* TryGetAssetPreviewStaticMesh(std::string_view meshPath) {
   return meshEntry->mesh.get();
 }
 
+/** @copydoc ClearAssetThumbnailMeshCaches */
 void ClearAssetThumbnailMeshCaches() {
   auto& renderer = AssetThumbnailRenderer::Instance();
   renderer.noPreviewKeys.clear();

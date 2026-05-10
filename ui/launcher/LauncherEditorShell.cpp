@@ -46,6 +46,7 @@ std::string BufferToString(const std::array<char, 256> &buffer) {
   return std::string(buffer.data());
 }
 
+/** @brief Copies a string_view into a fixed-size char buffer, null-terminating the result. */
 template <size_t N>
 void CopyToBuffer(std::array<char, N> *buffer, std::string_view value) {
   if (!buffer)
@@ -70,12 +71,14 @@ constexpr std::array<const char *, 3> kRendererBackendIds = {
     "null",
 };
 
+/** @brief Returns the renderer backend string identifier for the given combo-box index. */
 std::string RendererBackendIdFromIndex(int index) {
   if (index < 0 || index >= static_cast<int>(kRendererBackendIds.size()))
     return kRendererBackendIds.front();
   return kRendererBackendIds[static_cast<size_t>(index)];
 }
 
+/** @brief Computes a unit forward direction vector from yaw and pitch angles in degrees. */
 Vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg) {
   const float yawRad = ToRadians(yawDeg);
   const float pitchRad = ToRadians(std::clamp(pitchDeg, -89.0f, 89.0f));
@@ -83,6 +86,7 @@ Vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg) {
           -std::cos(yawRad) * std::cos(pitchRad)};
 }
 
+/** @brief Returns a sensible starting directory for a folder-browse dialog given a raw path. */
 fs::path DefaultBrowseDirectory(const fs::path &rawPath) {
   if (rawPath.empty())
     return fs::current_path();
@@ -99,6 +103,7 @@ fs::path DefaultBrowseDirectory(const fs::path &rawPath) {
   return fs::current_path();
 }
 
+/** @brief Returns true when the candidate path looks like an installed engine SDK prefix. */
 bool IsInstalledEnginePrefix(const fs::path &candidate) {
   if (candidate.empty())
     return false;
@@ -110,6 +115,7 @@ bool IsInstalledEnginePrefix(const fs::path &candidate) {
          !ec;
 }
 
+/** @brief Returns true when the candidate path looks like a CMake build-tree engine prefix. */
 bool IsBuildTreeEnginePrefix(const fs::path &candidate) {
   if (candidate.empty())
     return false;
@@ -123,6 +129,7 @@ bool IsBuildTreeEnginePrefix(const fs::path &candidate) {
   return hasConfig && hasTargets;
 }
 
+/** @brief Canonicalizes a path for use as a cache lookup key. */
 fs::path NormalizePathForLookup(const fs::path &rawPath) {
   if (rawPath.empty())
     return {};
@@ -136,6 +143,7 @@ fs::path NormalizePathForLookup(const fs::path &rawPath) {
   return normalized.lexically_normal();
 }
 
+/** @brief Pushes editor-side transform changes into the runtime entity's TransformComponent. */
 void ApplyTransformUpdateFromObject(Scene *scene,
                                     const Editor::SceneObject &object) {
   if (!scene)
@@ -202,24 +210,29 @@ void RenderCenteredEmptyState(const char *text) {
   ImGui::TextDisabled("%s", text);
 }
 
+/** @brief Renders a themed primary action button. */
 bool RenderPrimaryButton(const char *label, const ImVec2 &size) {
   return Ui::RenderPrimaryButton(Ui::GetLauncherTheme(), label, size);
 }
 
+/** @brief Renders a themed secondary action button. */
 bool RenderSecondaryButton(const char *label, const ImVec2 &size) {
   return Ui::RenderSecondaryButton(Ui::GetLauncherTheme(), label, size);
 }
 
+/** @brief Renders a themed button styled for recent project cards. */
 bool RenderRecentProjectButton(const char *title, const ImVec2 &size) {
   return Ui::RenderRecentProjectButton(Ui::GetLauncherTheme(), title, size);
 }
 
+/** @brief Renders a themed labeled text input field. */
 void RenderLabeledInput(const char *title, const char *id, char *buffer,
                          size_t bufferSize, float inputWidth) {
   Ui::RenderLabeledInput(Ui::GetLauncherTheme(), title, id, buffer, bufferSize,
                          inputWidth);
 }
 
+/** @brief Resolves a relative visual asset path to an absolute path by searching known locations. */
 fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
   if (relativePath.empty())
     return {};
@@ -238,6 +251,7 @@ fs::path ResolveLauncherVisualAsset(std::string_view relativePath) {
   return {};
 }
 
+/** @brief Draws the full-window gradient backdrop behind the launcher UI. */
 void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
   if (!drawList)
     return;
@@ -256,6 +270,7 @@ void DrawBackdrop(ImDrawList *drawList, const ImVec2 &pos, const ImVec2 &size) {
                                     ImGui::ColorConvertFloat4ToU32(bottom));
 }
 
+/** @brief Renders a single navigation item in the launcher sidebar. */
 bool RenderSidebarNavItem(const char *label, bool selected,
                           const ImVec2 &size = ImVec2(-1.0f, 40.0f)) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -287,6 +302,7 @@ enum class TemplateTileIcon {
   Sandbox,
 };
 
+/** @brief Draws the icon glyph inside a template selection tile. */
 void DrawTemplateTileIcon(ImDrawList *drawList, const ImVec2 &center,
                           TemplateTileIcon icon, ImU32 color) {
   if (icon == TemplateTileIcon::Image) {
@@ -339,6 +355,7 @@ void DrawTemplateTileIcon(ImDrawList *drawList, const ImVec2 &center,
   drawList->AddLine(lowerRight, base, color, 2.0f);
 }
 
+/** @brief Renders a selectable project template tile with icon and label. */
 bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
                         bool enabled, const ImVec2 &size) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -382,6 +399,7 @@ bool RenderTemplateTile(const char *label, TemplateTileIcon icon, bool selected,
   return pressed;
 }
 
+/** @brief Renders a thin vertical divider line of the given height. */
 void RenderVerticalDivider(float height) {
   const ImVec2 pos = ImGui::GetCursorScreenPos();
   ImGui::GetWindowDrawList()->AddLine(
@@ -390,6 +408,7 @@ void RenderVerticalDivider(float height) {
   ImGui::Dummy(ImVec2(1.0f, height));
 }
 
+/** @brief Renders the collapsible advanced settings toggle control. */
 void RenderAdvancedSettingsToggle(bool *open) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 size(190.0f, 30.0f);
@@ -413,6 +432,7 @@ void RenderAdvancedSettingsToggle(bool *open) {
   drawList->AddText(textPos, color, "Advanced Settings");
 }
 
+/** @brief Draws the small calendar-style metadata icon on a recent project card. */
 void DrawRecentProjectMetaIcon(ImDrawList *drawList, const ImVec2 &pos,
                                ImU32 color) {
   drawList->AddRect(ImVec2(pos.x, pos.y + 2.0f),
@@ -425,6 +445,7 @@ void DrawRecentProjectMetaIcon(ImDrawList *drawList, const ImVec2 &pos,
                     ImVec2(pos.x + 9.0f, pos.y + 4.0f), color, 1.4f);
 }
 
+/** @brief Renders the three-dot context menu button on a recent project card. */
 bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   ImGui::InvisibleButton(id, size);
@@ -447,6 +468,7 @@ bool RenderRecentProjectMenuButton(const char *id, const ImVec2 &size) {
   return ImGui::IsItemClicked();
 }
 
+/** @brief Renders the icon and title header for the new project creation panel. */
 void RenderCreateProjectHeader() {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 iconPos = ImGui::GetCursorScreenPos();
@@ -477,6 +499,7 @@ void RenderCreateProjectHeader() {
   ImGui::EndGroup();
 }
 
+/** @brief Renders the Horo Engine brand logo or text fallback in the sidebar. */
 void RenderLauncherBrand(const std::shared_ptr<Texture> &logoTexture) {
   if (logoTexture && logoTexture->IsValid() &&
       logoTexture->GetNativeId() != 0) {
@@ -539,6 +562,7 @@ enum class SidebarFooterIcon {
   Documentation,
 };
 
+/** @brief Draws the icon glyph inside a launcher hero action card. */
 static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
                                    LauncherActionIcon icon) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -568,6 +592,7 @@ static void DrawLauncherActionIcon(ImDrawList *drawList, const ImVec2 &pos,
   }
 }
 
+/** @brief Draws the icon glyph for a sidebar footer link item. */
 static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
                                   SidebarFooterIcon icon) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -595,6 +620,7 @@ static void DrawSidebarFooterIcon(ImDrawList *drawList, const ImVec2 &pos,
   }
 }
 
+/** @brief Renders a sidebar footer link with a drawn icon and label text. */
 static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 textPos = ImGui::GetCursorPos();
@@ -605,6 +631,7 @@ static void RenderSidebarFooterItem(const char *label, SidebarFooterIcon icon) {
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
 
+/** @brief Renders a sidebar footer link with a texture icon and label text. */
 static void
 RenderSidebarFooterImageItem(const char *label,
                              const std::shared_ptr<Texture> &iconTexture) {
@@ -627,6 +654,7 @@ RenderSidebarFooterImageItem(const char *label,
   ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
 
+/** @brief Renders a horizontal separator line in the sidebar footer area. */
 static void RenderSidebarFooterSeparator() {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const ImVec2 start = ImGui::GetCursorScreenPos();
@@ -637,6 +665,7 @@ static void RenderSidebarFooterSeparator() {
   ImGui::Dummy(ImVec2(0.0f, 14.0f));
 }
 
+/** @brief Renders a clickable action card in the launcher hero section. */
 static bool RenderLauncherActionCard(const char *id, const char *title,
                                      const char *subtitle,
                                      LauncherActionIcon icon,
@@ -667,6 +696,7 @@ static bool RenderLauncherActionCard(const char *id, const char *title,
   return ImGui::IsItemClicked();
 }
 
+/** @copydoc LauncherEditorShell::Attach */
 void LauncherEditorShell::Attach(Editor::EditorLayer *editor, Scene *scene,
                                  SceneReferenceRuntime *runtime,
                                  Camera *camera) {
@@ -676,6 +706,7 @@ void LauncherEditorShell::Attach(Editor::EditorLayer *editor, Scene *scene,
   m_camera = camera;
 }
 
+/** @copydoc LauncherEditorShell::Initialize */
 void LauncherEditorShell::Initialize() {
   m_homeDocument = LoadEditorHomeDocument();
   if (m_homeDocument.parseError)
@@ -692,12 +723,14 @@ void LauncherEditorShell::Initialize() {
   ConfigureRuntimeCallbacks();
 }
 
+/** @copydoc LauncherEditorShell::Shutdown */
 void LauncherEditorShell::Shutdown() {
   m_processRunner.Stop();
   std::string saveError;
   SaveEditorHomeDocument(&m_homeDocument, &saveError);
 }
 
+/** @copydoc LauncherEditorShell::ConfigureRuntimeCallbacks */
 void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   if (!m_editor || !m_runtime)
     return;
@@ -730,6 +763,7 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
   });
 }
 
+/** @copydoc LauncherEditorShell::OpenProject */
 bool LauncherEditorShell::OpenProject(const fs::path &projectPath,
                                       std::string *outError) {
   if (outError)
@@ -777,6 +811,7 @@ bool LauncherEditorShell::OpenProject(const fs::path &projectPath,
   return true;
 }
 
+/** @copydoc LauncherEditorShell::CloseProject */
 void LauncherEditorShell::CloseProject() {
   m_processRunner.Stop();
 
@@ -808,6 +843,7 @@ void LauncherEditorShell::CloseProject() {
   m_projectRoot.clear();
 }
 
+/** @copydoc LauncherEditorShell::UnloadCurrentProjectState */
 void LauncherEditorShell::UnloadCurrentProjectState() {
   m_processRunner.Stop();
   if (m_runtime && m_runtime->GetCoordinator().IsActive()) {
@@ -822,6 +858,7 @@ void LauncherEditorShell::UnloadCurrentProjectState() {
     m_editor->SaveWorkspaceStateNow();
 }
 
+/** @copydoc LauncherEditorShell::SetupEditorForProject */
 void LauncherEditorShell::SetupEditorForProject(
     const fs::path &projectRoot, const Editor::SceneDocument &sceneDocument) {
   m_editor->ReloadWorkspaceStateFromDisk();
@@ -831,6 +868,7 @@ void LauncherEditorShell::SetupEditorForProject(
     m_editor->Toggle();
 }
 
+/** @copydoc LauncherEditorShell::Update */
 void LauncherEditorShell::Update() {
   m_processRunner.Poll();
   HandlePendingSceneReload();
@@ -839,11 +877,13 @@ void LauncherEditorShell::Update() {
     CloseProject();
 }
 
+/** @copydoc LauncherEditorShell::RenderOverlay */
 void LauncherEditorShell::RenderOverlay() {
   if (!HasActiveProject())
     RenderLauncher();
 }
 
+/** @copydoc LauncherEditorShell::HandlePendingSceneReload */
 void LauncherEditorShell::HandlePendingSceneReload() {
   if (!HasActiveProject() || !m_editor || !m_runtime ||
       !m_editor->WantsSceneReload())
@@ -861,6 +901,7 @@ void LauncherEditorShell::HandlePendingSceneReload() {
   m_editor->AcknowledgeReload();
 }
 
+/** @copydoc LauncherEditorShell::RefreshCameraFromSceneCamera */
 void LauncherEditorShell::RefreshCameraFromSceneCamera() {
   if (!m_camera || !m_runtime || !m_runtime->GetSceneCamera().has_value())
     return;
@@ -874,6 +915,7 @@ void LauncherEditorShell::RefreshCameraFromSceneCamera() {
   m_camera->zFar = sceneCamera.farClip;
 }
 
+/** @copydoc LauncherEditorShell::OpenProjectFromPicker */
 bool LauncherEditorShell::OpenProjectFromPicker(std::string *outError) {
   const fs::path pickedPath = PickFolderPath(
       "Select Horo project folder",
@@ -887,6 +929,7 @@ bool LauncherEditorShell::OpenProjectFromPicker(std::string *outError) {
   return OpenProject(pickedPath, outError);
 }
 
+/** @copydoc LauncherEditorShell::OnPathsDropped */
 void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
                                          float dropX, float dropY) {
   const ImportProjectDropTarget &target = m_importProjectDropTarget;
@@ -911,6 +954,7 @@ void LauncherEditorShell::OnPathsDropped(int pathCount, const char **utf8Paths,
   }
 }
 
+/** @copydoc LauncherEditorShell::RenderLauncher */
 void LauncherEditorShell::RenderLauncher() {
   const ImGuiViewport *viewport = ImGui::GetMainViewport();
   ImGui::SetNextWindowPos(viewport->Pos);
@@ -945,6 +989,7 @@ void LauncherEditorShell::RenderLauncher() {
   ImGui::End();
 }
 
+/** @copydoc LauncherEditorShell::RenderLauncherSidebar */
 void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
                                                 float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -979,6 +1024,7 @@ void LauncherEditorShell::RenderLauncherSidebar(float sidebarWidth,
   ImGui::PopStyleVar(3);
 }
 
+/** @copydoc LauncherEditorShell::RenderLauncherMainContent */
 void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
                                                     float fullHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -1015,6 +1061,7 @@ void LauncherEditorShell::RenderLauncherMainContent(float mainWidth,
   ImGui::EndChild();
 }
 
+/** @copydoc LauncherEditorShell::RenderLauncherHero */
 void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   m_importProjectDropTarget.valid = false;
@@ -1070,6 +1117,7 @@ void LauncherEditorShell::RenderLauncherHero(float contentWidth) {
   ImGui::EndChild();
 }
 
+/** @copydoc LauncherEditorShell::RenderNewProjectPanel */
 void LauncherEditorShell::RenderNewProjectPanel(float contentWidth) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
   const float panelHeight = m_newProjectAdvancedSettingsOpen ? 326.0f : 282.0f;
@@ -1105,6 +1153,7 @@ void LauncherEditorShell::RenderNewProjectPanel(float contentWidth) {
   ImGui::EndChild();
 }
 
+/** @copydoc LauncherEditorShell::RenderNewProjectFormRow */
 void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
                                                   float rowStartX,
                                                   float rowStartY) {
@@ -1186,6 +1235,7 @@ void LauncherEditorShell::RenderNewProjectFormRow(float innerWidth,
   ImGui::EndGroup();
 }
 
+/** @copydoc LauncherEditorShell::RenderNewProjectActions */
 void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
                                                   float rowStartX,
                                                   float advancedRowY) {
@@ -1214,6 +1264,7 @@ void LauncherEditorShell::RenderNewProjectActions(float innerWidth,
   }
 }
 
+/** @copydoc LauncherEditorShell::RenderRecentProjectsList */
 void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
                                                    float panelHeight) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -1244,6 +1295,7 @@ void LauncherEditorShell::RenderRecentProjectsList(float contentWidth,
   ImGui::EndChild();
 }
 
+/** @copydoc LauncherEditorShell::RenderRecentProjectCard */
 void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
                                                   int cardIndex) {
   const Ui::LauncherTheme &theme = Ui::GetLauncherTheme();
@@ -1308,6 +1360,7 @@ void LauncherEditorShell::RenderRecentProjectCard(const std::string &recentPath,
   ImGui::Dummy(ImVec2(0.0f, 8.0f));
 }
 
+/** @copydoc LauncherEditorShell::EnsureLauncherLogoTexture */
 std::shared_ptr<Texture> LauncherEditorShell::EnsureLauncherLogoTexture() {
   if (m_launcherLogoTexture)
     return m_launcherLogoTexture;
@@ -1324,6 +1377,7 @@ std::shared_ptr<Texture> LauncherEditorShell::EnsureLauncherLogoTexture() {
   return m_launcherLogoTexture;
 }
 
+/** @copydoc LauncherEditorShell::EnsureDiscordIconTexture */
 std::shared_ptr<Texture> LauncherEditorShell::EnsureDiscordIconTexture() {
   if (m_discordIconTexture)
     return m_discordIconTexture;
@@ -1340,6 +1394,7 @@ std::shared_ptr<Texture> LauncherEditorShell::EnsureDiscordIconTexture() {
   return m_discordIconTexture;
 }
 
+/** @copydoc LauncherEditorShell::CreateProjectFromLauncher */
 bool LauncherEditorShell::CreateProjectFromLauncher(std::string *outError) {
   LauncherProjectDocument createdProject;
   const LauncherProjectTemplateRequest request{
@@ -1355,6 +1410,7 @@ bool LauncherEditorShell::CreateProjectFromLauncher(std::string *outError) {
   return OpenProject(request.projectRoot, outError);
 }
 
+/** @copydoc LauncherEditorShell::ResolveCommandSdkRoot */
 fs::path LauncherEditorShell::ResolveCommandSdkRoot() const {
   std::vector<fs::path> candidates;
   const fs::path assetSdkRoot = NormalizePathForLookup(ProjectPath::SdkRoot());
@@ -1383,6 +1439,7 @@ fs::path LauncherEditorShell::ResolveCommandSdkRoot() const {
   return assetSdkRoot;
 }
 
+/** @copydoc LauncherEditorShell::NormalizeProjectRootInput */
 fs::path
 LauncherEditorShell::NormalizeProjectRootInput(const fs::path &rawPath) const {
   if (rawPath.empty())
@@ -1402,6 +1459,7 @@ LauncherEditorShell::NormalizeProjectRootInput(const fs::path &rawPath) const {
   return normalized.lexically_normal();
 }
 
+/** @copydoc LauncherEditorShell::ResolveAssetPath */
 fs::path
 LauncherEditorShell::ResolveAssetPath(const std::string &rawPath) const {
   if (rawPath.empty())
@@ -1412,6 +1470,7 @@ LauncherEditorShell::ResolveAssetPath(const std::string &rawPath) const {
   return ProjectPath::Resolve(rawPath);
 }
 
+/** @copydoc LauncherEditorShell::ResolveShaderPath */
 fs::path LauncherEditorShell::ResolveShaderPath(const char *fileName) const {
   const std::array<fs::path, 4> candidates = {
       ProjectPath::ResolveSdk(std::string("renderer/shaders/") + fileName),
@@ -1428,6 +1487,7 @@ fs::path LauncherEditorShell::ResolveShaderPath(const char *fileName) const {
   return candidates.front();
 }
 
+/** @copydoc LauncherEditorShell::EnsureSceneShader */
 std::shared_ptr<Shader> LauncherEditorShell::EnsureSceneShader() {
   if (!m_sceneShader) {
     m_sceneShader = std::make_shared<Shader>(
@@ -1437,6 +1497,7 @@ std::shared_ptr<Shader> LauncherEditorShell::EnsureSceneShader() {
   return m_sceneShader;
 }
 
+/** @copydoc LauncherEditorShell::LoadMeshForTag */
 std::shared_ptr<Mesh>
 LauncherEditorShell::LoadMeshForTag(const std::string &meshTag) {
   if (meshTag.empty())
@@ -1468,6 +1529,7 @@ LauncherEditorShell::LoadMeshForTag(const std::string &meshTag) {
   return mesh;
 }
 
+/** @copydoc LauncherEditorShell::LoadTexture */
 std::shared_ptr<Texture>
 LauncherEditorShell::LoadTexture(const std::string &rawPath) {
   if (rawPath.empty())

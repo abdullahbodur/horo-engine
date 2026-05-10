@@ -31,9 +31,7 @@ namespace Horo::Editor {
         }
     } // namespace
 
-    /** @brief Generates a new 128-bit random GUID encoded as 32 lowercase hexadecimal digits.
-     *  @return Hex string with no separators (stable identity for imported assets).
-     */
+    /** @copydoc GenerateAssetGuid */
     std::string GenerateAssetGuid() {
         static constexpr std::array<char, 16> kHex = {
             '0', '1', '2', '3', '4', '5', '6', '7',
@@ -56,11 +54,7 @@ namespace Horo::Editor {
         return guid;
     }
 
-    /** @brief Derives a UI label for @p asset using non-empty trimmed fields in priority order.
-     *  @param assetId Logical asset key from the document map.
-     *  @param asset   Definition supplying optional displayName and mesh path.
-     *  @return Trimmed @c displayName, else @p assetId, else mesh filename stem, else @c "Asset".
-     */
+    /** @copydoc MakeAssetDisplayName */
     std::string MakeAssetDisplayName(const std::string &assetId,
                                      const AssetDef &asset) {
         if (const std::string trimmedDisplay = Trim(asset.displayName);
@@ -80,10 +74,7 @@ namespace Horo::Editor {
         return "Asset";
     }
 
-    /** @brief Assigns a GUID when missing and refreshes @c displayName from @ref MakeAssetDisplayName.
-     *  @param assetId Logical asset identifier used as a display-name fallback.
-     *  @param asset   Asset definition to mutate; no-op when null.
-     */
+    /** @copydoc EnsureAssetIdentity(const std::string &, AssetDef *) */
     void EnsureAssetIdentity(const std::string &assetId, AssetDef *asset) {
         if (!asset)
             return;
@@ -92,9 +83,7 @@ namespace Horo::Editor {
         asset->displayName = MakeAssetDisplayName(assetId, *asset);
     }
 
-    /** @brief Ensures identity fields for every asset in @p doc->assets.
-     *  @param doc Scene document whose asset map is updated in place; no-op when null.
-     */
+    /** @copydoc EnsureAssetIdentity(SceneDocument *) */
     void EnsureAssetIdentity(SceneDocument *doc) {
         if (!doc)
             return;

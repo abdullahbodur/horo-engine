@@ -13,6 +13,7 @@
 
 namespace Horo::Ui {
 
+/** @copydoc ResolveFontPath */
 FontResolutionResult ResolveFontPath(const FontFamilyConfig &config) {
   if (config.relativePath.empty())
     return {};
@@ -44,6 +45,7 @@ FontResolutionResult ResolveFontPath(const FontFamilyConfig &config) {
   return {};
 }
 
+/** @copydoc LoadFonts */
 void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont) {
   const FontResolutionResult resolved = ResolveFontPath(primaryFont);
   if (resolved.found) {
@@ -59,6 +61,7 @@ void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont) {
     io.FontDefault = io.Fonts->AddFontDefault();
 }
 
+/** @copydoc LoadDefaultFont */
 void LoadDefaultFont(ImGuiIO &io) { io.FontDefault = io.Fonts->AddFontDefault(); }
 
 } // namespace Horo::Ui

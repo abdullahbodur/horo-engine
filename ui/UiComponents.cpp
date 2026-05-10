@@ -157,51 +157,61 @@ void RenderEditorDropdownItems(std::span<const EditorPanelDropdownItem> items) {
 
 } // namespace
 
+/** @copydoc ScopedPanelStyle::ScopedPanelStyle(const EditorTheme &) */
 ScopedPanelStyle::ScopedPanelStyle(const EditorTheme &theme) {
   PushPanelColors(theme.palette, &m_colorCount);
   PushPanelVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedPanelStyle::ScopedPanelStyle(const LauncherTheme &) */
 ScopedPanelStyle::ScopedPanelStyle(const LauncherTheme &theme) {
   PushPanelColors(theme.palette, &m_colorCount);
   PushPanelVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedPanelStyle::~ScopedPanelStyle */
 ScopedPanelStyle::~ScopedPanelStyle() {
   ImGui::PopStyleVar(m_styleCount);
   ImGui::PopStyleColor(m_colorCount);
 }
 
+/** @copydoc ScopedCardStyle::ScopedCardStyle(const EditorTheme &) */
 ScopedCardStyle::ScopedCardStyle(const EditorTheme &theme) {
   PushCardColors(theme.palette, &m_colorCount);
   PushCardVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedCardStyle::ScopedCardStyle(const LauncherTheme &) */
 ScopedCardStyle::ScopedCardStyle(const LauncherTheme &theme) {
   PushCardColors(theme.palette, &m_colorCount);
   PushCardVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedCardStyle::~ScopedCardStyle */
 ScopedCardStyle::~ScopedCardStyle() {
   ImGui::PopStyleVar(m_styleCount);
   ImGui::PopStyleColor(m_colorCount);
 }
 
+/** @copydoc ScopedInputStyle::ScopedInputStyle(const EditorTheme &) */
 ScopedInputStyle::ScopedInputStyle(const EditorTheme &theme) {
   PushInputColors(theme.palette, &m_colorCount);
   PushInputVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedInputStyle::ScopedInputStyle(const LauncherTheme &) */
 ScopedInputStyle::ScopedInputStyle(const LauncherTheme &theme) {
   PushInputColors(theme.palette, &m_colorCount);
   PushInputVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedInputStyle::~ScopedInputStyle */
 ScopedInputStyle::~ScopedInputStyle() {
   ImGui::PopStyleVar(m_styleCount);
   ImGui::PopStyleColor(m_colorCount);
 }
 
+/** @copydoc ScopedButtonStyle::ScopedButtonStyle(const EditorTheme &, ButtonStyleVariant) */
 ScopedButtonStyle::ScopedButtonStyle(const EditorTheme &theme, ButtonStyleVariant variant) {
   PushButtonVars(theme.rounding, theme.density, &m_styleCount);
   if (variant == ButtonStyleVariant::Primary) {
@@ -211,6 +221,7 @@ ScopedButtonStyle::ScopedButtonStyle(const EditorTheme &theme, ButtonStyleVarian
   }
 }
 
+/** @copydoc ScopedButtonStyle::ScopedButtonStyle(const LauncherTheme &, ButtonStyleVariant) */
 ScopedButtonStyle::ScopedButtonStyle(const LauncherTheme &theme, ButtonStyleVariant variant) {
   PushButtonVars(theme.rounding, theme.density, &m_styleCount);
   if (variant == ButtonStyleVariant::Primary) {
@@ -220,56 +231,68 @@ ScopedButtonStyle::ScopedButtonStyle(const LauncherTheme &theme, ButtonStyleVari
   }
 }
 
+/** @copydoc ScopedButtonStyle::~ScopedButtonStyle */
 ScopedButtonStyle::~ScopedButtonStyle() {
   ImGui::PopStyleColor(m_colorCount);
   ImGui::PopStyleVar(m_styleCount);
 }
 
+/** @copydoc TextMuted(const EditorTheme &, const char *) */
 void TextMuted(const EditorTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
 
+/** @copydoc TextMuted(const LauncherTheme &, const char *) */
 void TextMuted(const LauncherTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
 
+/** @copydoc SectionHeader(const EditorTheme &, const char *) */
 void SectionHeader(const EditorTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
 }
 
+/** @copydoc SectionHeader(const LauncherTheme &, const char *) */
 void SectionHeader(const LauncherTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
   ImGui::Separator();
 }
 
+/** @copydoc RenderEditorSectionDivider */
 void RenderEditorSectionDivider(const char *title) {
   ImGui::SeparatorText(title);
 }
 
+/** @copydoc Button(const EditorTheme &, ButtonStyleVariant, const char *, const ImVec2 &) */
 bool Button(const EditorTheme &theme, ButtonStyleVariant variant,
             const char *label, const ImVec2 &size) {
   ScopedButtonStyle style(theme, variant);
   return ImGui::Button(label, size);
 }
 
+/** @copydoc Button(const LauncherTheme &, ButtonStyleVariant, const char *, const ImVec2 &) */
 bool Button(const LauncherTheme &theme, ButtonStyleVariant variant,
             const char *label, const ImVec2 &size) {
   ScopedButtonStyle style(theme, variant);
   return ImGui::Button(label, size);
 }
 
+/** @copydoc RenderPrimaryButton */
 bool RenderPrimaryButton(const LauncherTheme &theme, const char *label,
                          const ImVec2 &size) {
   return Button(theme, ButtonStyleVariant::Primary, label, size);
 }
 
+/** @copydoc RenderSecondaryButton */
 bool RenderSecondaryButton(const LauncherTheme &theme, const char *label,
                             const ImVec2 &size) {
   return Button(theme, ButtonStyleVariant::Secondary, label, size);
 }
 
+/** @copydoc RenderRecentProjectButton */
 bool RenderRecentProjectButton(const LauncherTheme &theme, const char *title,
                                 const ImVec2 &size) {
   return Button(theme, ButtonStyleVariant::Secondary, title, size);
 }
 
+/** @copydoc RenderLabeledInput */
 void RenderLabeledInput(const LauncherTheme &theme, const char *title,
                         const char *id, char *buffer, size_t bufferSize,
                         float inputWidth) {
@@ -278,33 +301,39 @@ void RenderLabeledInput(const LauncherTheme &theme, const char *title,
   InputText(theme, id, buffer, bufferSize);
 }
 
+/** @copydoc InputText(const EditorTheme &, const char *, char *, size_t, ImGuiInputTextFlags) */
 bool InputText(const EditorTheme &theme, const char *id, char *buffer,
                size_t bufferSize, ImGuiInputTextFlags flags) {
   ScopedInputStyle style(theme);
   return ImGui::InputText(id, buffer, bufferSize, flags);
 }
 
+/** @copydoc InputText(const LauncherTheme &, const char *, char *, size_t, ImGuiInputTextFlags) */
 bool InputText(const LauncherTheme &theme, const char *id, char *buffer,
                size_t bufferSize, ImGuiInputTextFlags flags) {
   ScopedInputStyle style(theme);
   return ImGui::InputText(id, buffer, bufferSize, flags);
 }
 
+/** @copydoc ScopedComboStyle::ScopedComboStyle(const EditorTheme &) */
 ScopedComboStyle::ScopedComboStyle(const EditorTheme &theme) {
   PushComboColors(theme.palette, &m_colorCount);
   PushComboVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedComboStyle::ScopedComboStyle(const LauncherTheme &) */
 ScopedComboStyle::ScopedComboStyle(const LauncherTheme &theme) {
   PushComboColors(theme.palette, &m_colorCount);
   PushComboVars(theme.rounding, theme.density, &m_styleCount);
 }
 
+/** @copydoc ScopedComboStyle::~ScopedComboStyle */
 ScopedComboStyle::~ScopedComboStyle() {
   ImGui::PopStyleVar(m_styleCount);
   ImGui::PopStyleColor(m_colorCount);
 }
 
+/** @copydoc InputTextWithHint(const EditorTheme &, const char *, const char *, char *, size_t, ImGuiInputTextFlags) */
 bool InputTextWithHint(const EditorTheme &theme, const char *id,
                        const char *hint, char *buffer, size_t bufferSize,
                        ImGuiInputTextFlags flags) {
@@ -312,6 +341,7 @@ bool InputTextWithHint(const EditorTheme &theme, const char *id,
   return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
 }
 
+/** @copydoc InputTextWithHint(const LauncherTheme &, const char *, const char *, char *, size_t, ImGuiInputTextFlags) */
 bool InputTextWithHint(const LauncherTheme &theme, const char *id,
                        const char *hint, char *buffer, size_t bufferSize,
                        ImGuiInputTextFlags flags) {
@@ -319,22 +349,26 @@ bool InputTextWithHint(const LauncherTheme &theme, const char *id,
   return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
 }
 
+/** @copydoc Combo(const EditorTheme &, const char *, int *, const char *const[], int) */
 bool Combo(const EditorTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
   ScopedComboStyle style(theme);
   return ImGui::Combo(label, currentItem, items, itemCount);
 }
 
+/** @copydoc Combo(const LauncherTheme &, const char *, int *, const char *const[], int) */
 bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
   ScopedComboStyle style(theme);
   return ImGui::Combo(label, currentItem, items, itemCount);
 }
 
+/** @copydoc GetEditorTreeRowMetrics */
 EditorTreeRowMetrics GetEditorTreeRowMetrics(const EditorTheme & /*theme*/) {
   return EditorTreeRowMetrics{};
 }
 
+/** @copydoc ScopedEditorTreeRowStyle::ScopedEditorTreeRowStyle */
 ScopedEditorTreeRowStyle::ScopedEditorTreeRowStyle(const EditorTheme &theme) {
   const EditorTreeRowMetrics metrics = GetEditorTreeRowMetrics(theme);
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, metrics.framePadding);
@@ -344,11 +378,13 @@ ScopedEditorTreeRowStyle::ScopedEditorTreeRowStyle(const EditorTheme &theme) {
   PushTransparentHeaderColors(&m_colorCount);
 }
 
+/** @copydoc ScopedEditorTreeRowStyle::~ScopedEditorTreeRowStyle */
 ScopedEditorTreeRowStyle::~ScopedEditorTreeRowStyle() {
   ImGui::PopStyleColor(m_colorCount);
   ImGui::PopStyleVar(m_styleCount);
 }
 
+/** @copydoc BeginEditorTreeRow */
 EditorTreeRowState BeginEditorTreeRow(const EditorTheme &theme) {
   const EditorTreeRowMetrics metrics = GetEditorTreeRowMetrics(theme);
   const float windowLeft = ImGui::GetWindowPos().x;
@@ -373,6 +409,7 @@ EditorTreeRowState BeginEditorTreeRow(const EditorTheme &theme) {
   };
 }
 
+/** @copydoc DrawEditorTreeRowBackground */
 void DrawEditorTreeRowBackground(const EditorTheme &theme,
                                  const EditorTreeRowState &row,
                                  bool selected) {
@@ -389,6 +426,7 @@ void DrawEditorTreeRowBackground(const EditorTheme &theme,
       ImGui::ColorConvertFloat4ToU32(fill), metrics.rounding);
 }
 
+/** @copydoc EndFixedHeightEditorTreeRow */
 void EndFixedHeightEditorTreeRow(const EditorTreeRowState &row) {
   const float cursorEndY = ImGui::GetCursorScreenPos().y;
   const float rowEndY = row.start.y + row.height;
@@ -396,6 +434,7 @@ void EndFixedHeightEditorTreeRow(const EditorTreeRowState &row) {
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (rowEndY - cursorEndY));
 }
 
+/** @copydoc RenderEditorTreeSearchSlot */
 bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
                                 const EditorTreeSearchSlotConfig &config) {
   if (!config.enabled || config.buffer == nullptr || config.bufferSize == 0)
@@ -427,6 +466,7 @@ bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
   return changed;
 }
 
+/** @copydoc DrawEditorTreeItem */
 EditorTreeItemResult DrawEditorTreeItem(const EditorTheme &theme,
                                         const EditorTreeItemSpec &item) {
   EditorTreeItemResult result;
@@ -481,6 +521,7 @@ EditorTreeItemResult DrawEditorTreeItem(const EditorTheme &theme,
   return result;
 }
 
+/** @copydoc EditorHeaderIconButton */
 bool EditorHeaderIconButton(const EditorTheme &theme, const char *label,
                             const ImVec2 &size) {
   int colorCount = 0;
@@ -492,32 +533,36 @@ bool EditorHeaderIconButton(const EditorTheme &theme, const char *label,
   return clicked;
 }
 
+/** @copydoc ErrorText */
 void ErrorText(const EditorTheme &theme, const char *text) {
   ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.destructive);
   ImGui::TextWrapped("%s", text);
   ImGui::PopStyleColor();
 }
 
+/** @copydoc EditorPanelTabLabel */
 const char *EditorPanelTabLabel(EditorPanelTab tab) {
+  using enum EditorPanelTab;
   switch (tab) {
-  case EditorPanelTab::Scene:
+  case Scene:
     return "Scene";
-  case EditorPanelTab::Project:
+  case Project:
     return "Project";
-  case EditorPanelTab::Viewport:
+  case Viewport:
     return "Viewport";
-  case EditorPanelTab::Assets:
+  case Assets:
     return "Assets";
-  case EditorPanelTab::Console:
+  case Console:
     return "Console";
-  case EditorPanelTab::Animation:
+  case Animation:
     return "Animation";
-  case EditorPanelTab::MCP:
+  case MCP:
     return "MCP";
   }
   return "Unknown";
 }
 
+/** @copydoc RenderEditorPanelTopBar */
 EditorPanelTopBarResult RenderEditorPanelTopBar(
     const EditorTheme &theme, const char *id,
     std::span<const EditorPanelTabItem> tabs,
@@ -669,6 +714,7 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
   return result;
 }
 
+/** @copydoc BeginEditorModal */
 bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
     if (openThisFrame && cfg.id)
         ImGui::OpenPopup(cfg.id);
@@ -680,10 +726,12 @@ bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
     return ImGui::BeginPopupModal(cfg.id, nullptr, flags);
 }
 
+/** @copydoc EndEditorModal */
 void EndEditorModal() {
     ImGui::EndPopup();
 }
 
+/** @copydoc RenderEditorModalFooter */
 EditorModalFooterResult RenderEditorModalFooter(
     const EditorTheme& theme,
     const char* confirmLabel,
@@ -753,6 +801,7 @@ EditorModalFooterResult RenderEditorModalFooter(
     return result;
 }
 
+/** @copydoc BeginEditorPickerModal */
 bool BeginEditorPickerModal(const EditorPickerConfig& cfg,
                             bool openThisFrame,
                             char* queryBuf, size_t queryBufSize) {
@@ -772,10 +821,12 @@ bool BeginEditorPickerModal(const EditorPickerConfig& cfg,
     return true;
 }
 
+/** @copydoc EditorPickerModalRow */
 bool EditorPickerModalRow(const char* label, bool selected) {
     return ImGui::Selectable(label, selected);
 }
 
+/** @copydoc EndEditorPickerModal */
 void EndEditorPickerModal(bool& openFlag, std::string* query) {
     ImGui::EndChild();
     ImGui::Separator();
@@ -789,6 +840,7 @@ void EndEditorPickerModal(bool& openFlag, std::string* query) {
 
 // ── Group B: Input field primitives ──────────────────────────────────────────
 
+/** @copydoc RenderEditorLabeledInput */
 bool RenderEditorLabeledInput(const char* label, const char* id,
                               char* buf, size_t bufSize,
                               float width, const char* hint) {
@@ -803,6 +855,7 @@ bool RenderEditorLabeledInput(const char* label, const char* id,
     return ImGui::InputText(id, buf, bufSize);
 }
 
+/** @copydoc RenderEditorCheckbox */
 bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
                           bool& value, const char* tooltip) {
     ImGui::PushStyleColor(ImGuiCol_CheckMark, theme.palette.accent);
@@ -813,6 +866,7 @@ bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
     return changed;
 }
 
+/** @copydoc RenderEditorToggle */
 bool RenderEditorToggle(const EditorTheme& theme, const char* id,
                         const char* label, bool& value) {
     constexpr float pillW  = 36.0f;
@@ -846,6 +900,7 @@ bool RenderEditorToggle(const EditorTheme& theme, const char* id,
     return clicked;
 }
 
+/** @copydoc RenderEditorDragFloat */
 bool RenderEditorDragFloat(const char* label, const char* id,
                            float& value,
                            float speed, float vmin, float vmax,
@@ -857,6 +912,7 @@ bool RenderEditorDragFloat(const char* label, const char* id,
     return ImGui::DragFloat(id, &value, speed, vmin, vmax, fmt);
 }
 
+/** @copydoc RenderEditorDragFloat3 */
 bool RenderEditorDragFloat3(const char* label, const char* id,
                             float value[3],
                             float speed, float vmin, float vmax,
@@ -868,6 +924,7 @@ bool RenderEditorDragFloat3(const char* label, const char* id,
     return ImGui::DragFloat3(id, value, speed, vmin, vmax, fmt);
 }
 
+/** @copydoc RenderEditorSliderFloat */
 bool RenderEditorSliderFloat(const char* label, const char* id,
                              float& value, float vmin, float vmax,
                              const char* fmt, float width) {
@@ -878,6 +935,7 @@ bool RenderEditorSliderFloat(const char* label, const char* id,
     return ImGui::SliderFloat(id, &value, vmin, vmax, fmt);
 }
 
+/** @copydoc RenderEditorColorEdit3 */
 bool RenderEditorColorEdit3(const char* label, const char* id,
                             float color[3], float width) {
     if (label)
@@ -887,16 +945,19 @@ bool RenderEditorColorEdit3(const char* label, const char* id,
     return ImGui::ColorEdit3(id, color);
 }
 
+/** @copydoc BeginEditorPropertyRow */
 bool BeginEditorPropertyRow(const char* label, float labelWidth) {
     ImGui::TextUnformatted(label);
     ImGui::SameLine(labelWidth);
     return true;
 }
 
+/** @copydoc EndEditorPropertyRow */
 void EndEditorPropertyRow() {
     // Intentionally empty; exists for RAII symmetry and future use.
 }
 
+/** @copydoc BeginEditorCard */
 bool BeginEditorCard(const EditorTheme& theme, EditorCardConfig& cfg) {
     if (cfg.selected)
         ImGui::PushStyleColor(ImGuiCol_ChildBg,
@@ -912,19 +973,22 @@ bool BeginEditorCard(const EditorTheme& theme, EditorCardConfig& cfg) {
     return open;
 }
 
+/** @copydoc EndEditorCard */
 void EndEditorCard() {
     ImGui::EndChild();
 }
 
+/** @copydoc RenderEditorStatusText */
 void RenderEditorStatusText(const EditorTheme& theme,
                             EditorStatusLevel level,
                             const char* fmt, ...) {
+    using enum EditorStatusLevel;
     ImVec4 color;
     switch (level) {
-        case EditorStatusLevel::Info:    color = theme.palette.textMuted;              break;
-        case EditorStatusLevel::Warning: color = ImVec4(1.0f, 0.80f, 0.30f, 1.0f);   break;
-        case EditorStatusLevel::Error:   color = theme.palette.destructive;            break;
-        case EditorStatusLevel::Success: color = ImVec4(0.35f, 0.85f, 0.50f, 1.0f);  break;
+        case Info:    color = theme.palette.textMuted;              break;
+        case Warning: color = ImVec4(1.0f, 0.80f, 0.30f, 1.0f);   break;
+        case Error:   color = theme.palette.destructive;            break;
+        case Success: color = ImVec4(0.35f, 0.85f, 0.50f, 1.0f);  break;
     }
     va_list args;
     va_start(args, fmt);
@@ -934,6 +998,7 @@ void RenderEditorStatusText(const EditorTheme& theme,
 
 // ─── Group D: Settings modal primitives ──────────────────────────────────────
 
+/** @copydoc RenderEditorVerticalTabs */
 EditorVerticalTabResult RenderEditorVerticalTabs(
     const EditorTheme& theme,
     const char* id,
@@ -1032,6 +1097,7 @@ EditorVerticalTabResult RenderEditorVerticalTabs(
     return result;
 }
 
+/** @copydoc BeginEditorSettingsCard */
 bool BeginEditorSettingsCard(const EditorTheme& theme,
                              const char* id,
                              const char* title) {
@@ -1052,12 +1118,14 @@ bool BeginEditorSettingsCard(const EditorTheme& theme,
     return visible;
 }
 
+/** @copydoc EndEditorSettingsCard */
 void EndEditorSettingsCard() {
     ImGui::EndChild();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 }
 
+/** @copydoc RenderEditorSettingText */
 void RenderEditorSettingText(const EditorTheme& theme,
                              const char* label,
                              const char* description) {
@@ -1073,6 +1141,7 @@ void RenderEditorSettingText(const EditorTheme& theme,
     }
 }
 
+/** @copydoc RenderEditorSettingsFooter */
 EditorSettingsFooterResult RenderEditorSettingsFooter(
     const EditorTheme& theme,
     bool canApply,

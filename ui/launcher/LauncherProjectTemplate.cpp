@@ -14,6 +14,7 @@ namespace Horo::Launcher {
     namespace fs = std::filesystem;
 
     namespace {
+        /** @brief Writes a string to a file, creating parent directories as needed. */
         bool WriteTextFile(const fs::path &path, const std::string &content,
                            std::string *outError) {
             if (outError)
@@ -37,6 +38,7 @@ namespace Horo::Launcher {
             return true;
         }
 
+        /** @brief Generates the main.cpp source content for a new project template. */
         std::string BuildTemplateMainCpp(const std::string &projectName) {
             return "#include <memory>\n"
                    "#include <stdexcept>\n"
@@ -229,6 +231,7 @@ namespace Horo::Launcher {
                    "}\n";
         }
 
+        /** @brief Generates the CMakeLists.txt content for a new project template. */
         std::string BuildTemplateCMakeLists(const std::string &projectName,
                                             const std::string &projectId) {
             return "cmake_minimum_required(VERSION 3.25)\n"
@@ -277,6 +280,7 @@ namespace Horo::Launcher {
                    ")\n";
         }
 
+        /** @brief Normalizes a renderer backend string to a known lowercase identifier. */
         std::string NormalizeRendererBackend(std::string rendererBackend) {
             std::ranges::transform(rendererBackend, rendererBackend.begin(),
                                    [](unsigned char c) {
@@ -288,6 +292,7 @@ namespace Horo::Launcher {
             return "opengl";
         }
 
+        /** @brief Constructs the default scene document for a new project template. */
         Editor::SceneDocument BuildTemplateScene() {
             Editor::SceneDocument doc;
             doc.version = 1;
@@ -322,6 +327,7 @@ namespace Horo::Launcher {
         }
     } // namespace
 
+    /** @copydoc CreateLauncherProjectTemplate */
     bool CreateLauncherProjectTemplate(
         const LauncherProjectTemplateRequest &request,
         LauncherProjectDocument *outProjectDocument, std::string *outError) {

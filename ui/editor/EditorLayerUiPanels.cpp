@@ -1,6 +1,7 @@
 /**
  * @file EditorLayerUiPanels.cpp
- * @brief Implementation for EditorLayerUiPanels editor functionality.
+ * @brief EditorLayer UI panel rendering: dockspace, toolbar, project browser,
+ *        assets panel, command palette, quick-open, and splitter logic.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -34,6 +35,7 @@ namespace {
 constexpr uint32_t kProjectListingCacheFrames = 48;
 }
 
+/** @copydoc EditorLayer::Render */
 void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
   ProcessDeferredFilePicks();
   if (!m_active) {
@@ -106,6 +108,7 @@ void EditorLayer::Render(const Camera &cam, int screenW, int screenH) {
     RenderEditorImGuiDrawData(Renderer::GetBackendId(), ImGui::GetDrawData());
 }
 
+/** @copydoc EditorLayer::DrawDockspace */
 void EditorLayer::DrawDockspace() {
   if (!m_resetDockLayoutRequested)
     return;
@@ -120,6 +123,7 @@ void EditorLayer::DrawDockspace() {
   m_resetDockLayoutRequested = false;
 }
 
+/** @copydoc EditorLayer::DrawToolbar */
 void EditorLayer::DrawToolbar() {
     EditorToolbarCallbacks callbacks;
     EditorToolbarState state;
@@ -210,6 +214,7 @@ void EditorLayer::DrawToolbar() {
       RequestGizmoMode(m_currentGizmoMode);
 }
 
+/** @copydoc EditorLayer::GetProjectDirListing */
 const std::vector<std::pair<std::filesystem::path, bool>> *
 EditorLayer::GetProjectDirListing(const std::filesystem::path &absPath) {
   namespace fs = std::filesystem;
@@ -255,6 +260,7 @@ EditorLayer::GetProjectDirListing(const std::filesystem::path &absPath) {
   return &m_projectDirCache.at(key).entries;
 }
 
+/** @copydoc EditorLayer::DrawProjectTreeRecursive */
 void EditorLayer::DrawProjectTreeRecursive(
     const std::filesystem::path &absPath,
     const std::filesystem::path & /*displayRoot*/) {
@@ -296,6 +302,7 @@ void EditorLayer::DrawProjectTreeRecursive(
   }
 }
 
+/** @copydoc EditorLayer::DrawProjectPanel */
 void EditorLayer::DrawProjectPanel() {
   // Note: kEditorToolbarH, kEditorStatusH, kHierarchySectionRatio, and
   // kMainPanelWindowFlags come from EditorLayerInternal.h (shared constants).
@@ -533,6 +540,7 @@ void EditorLayer::DrawProjectPanel() {
   ImGui::End();
 }
 
+/** @copydoc EditorLayer::DrawAssetsPanel */
 void EditorLayer::DrawAssetsPanel() {
     // Build component context
     EditorComponentContext ctx;
@@ -582,6 +590,7 @@ void EditorLayer::DrawAssetsPanel() {
     m_assetsPanel.Draw(ctx, callbacks, state);
 }
 
+/** @copydoc EditorLayer::DrawAssetsPanelInline */
 void EditorLayer::DrawAssetsPanelInline() {
     EditorAssetsPanelCallbacks callbacks;
     callbacks.requestDeleteAsset = [this](std::string_view assetId) {
@@ -619,6 +628,7 @@ void EditorLayer::DrawAssetsPanelInline() {
     m_assetsPanel.DrawContent(callbacks, state);
 }
 
+/** @copydoc EditorLayer::DrawCommandPalettePopup */
 void EditorLayer::DrawCommandPalettePopup() {
   const Ui::EditorPickerConfig paletteCfg{
       "Command Palette", "Search commands", 520.0f, "Type a command..."};
@@ -660,6 +670,7 @@ void EditorLayer::DrawCommandPalettePopup() {
   Ui::EndEditorPickerModal(m_commandPaletteOpen, &m_commandPaletteQuery);
 }
 
+/** @copydoc EditorLayer::DrawQuickOpenPopup */
 void EditorLayer::DrawQuickOpenPopup() {
   const Ui::EditorPickerConfig quickOpenCfg{
       "Quick Open", "Open object or asset", 520.0f,
@@ -729,11 +740,13 @@ void EditorLayer::DrawQuickOpenPopup() {
   Ui::EndEditorPickerModal(m_quickOpenOpen, &m_quickOpenQuery);
 }
 
+/** @copydoc EditorLayer::DrawDeleteConfirmModals */
 void EditorLayer::DrawDeleteConfirmModals() {
   m_uiWidgets.DrawConfirmDeleteObjectsModal();
   m_uiWidgets.DrawConfirmDeleteAssetModal();
 }
 
+/** @copydoc EditorLayer::DrawEditorSplitters */
 void EditorLayer::DrawEditorSplitters(const ImGuiIO &io) {
   // Splitter logic using raw mouse position — no overlay window needed.
   // This avoids all ImGui window z-order issues: panel windows drawn before

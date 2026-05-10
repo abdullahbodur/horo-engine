@@ -154,6 +154,7 @@ EditorThemePreset &MutableCurrentPreset() {
 
 } // namespace
 
+/** @copydoc GetLauncherTheme */
 const LauncherTheme &GetLauncherTheme() {
   static const LauncherTheme theme{
       .palette = kPalette,
@@ -163,30 +164,35 @@ const LauncherTheme &GetLauncherTheme() {
   return theme;
 }
 
+/** @copydoc EditorThemePresetId */
 const char *EditorThemePresetId(EditorThemePreset preset) {
+  using enum EditorThemePreset;
   switch (preset) {
-  case EditorThemePreset::DarkBlue:
+  case DarkBlue:
     return "darkBlue";
-  case EditorThemePreset::Graphite:
+  case Graphite:
     return "graphite";
-  case EditorThemePreset::HighContrast:
+  case HighContrast:
     return "highContrast";
   }
   return "darkBlue";
 }
 
+/** @copydoc EditorThemePresetLabel */
 const char *EditorThemePresetLabel(EditorThemePreset preset) {
+  using enum EditorThemePreset;
   switch (preset) {
-  case EditorThemePreset::DarkBlue:
+  case DarkBlue:
     return "Dark Blue";
-  case EditorThemePreset::Graphite:
+  case Graphite:
     return "Graphite";
-  case EditorThemePreset::HighContrast:
+  case HighContrast:
     return "High Contrast";
   }
   return "Dark Blue";
 }
 
+/** @copydoc ParseEditorThemePreset */
 EditorThemePreset ParseEditorThemePreset(std::string_view id, bool *ok) {
   for (const EditorThemePreset preset : kPresetList) {
     if (id == EditorThemePresetId(preset)) {
@@ -200,18 +206,22 @@ EditorThemePreset ParseEditorThemePreset(std::string_view id, bool *ok) {
   return EditorThemePreset::DarkBlue;
 }
 
+/** @copydoc EditorThemePresets */
 std::span<const EditorThemePreset> EditorThemePresets() {
   return std::span<const EditorThemePreset>(kPresetList.data(), kPresetList.size());
 }
 
+/** @copydoc SetEditorThemePreset */
 void SetEditorThemePreset(EditorThemePreset preset) {
   MutableCurrentPreset() = preset;
 }
 
+/** @copydoc GetEditorThemePreset */
 EditorThemePreset GetEditorThemePreset() {
   return MutableCurrentPreset();
 }
 
+/** @copydoc GetEditorTheme */
 const EditorTheme &GetEditorTheme() {
   switch (GetEditorThemePreset()) {
   case EditorThemePreset::DarkBlue: {
@@ -247,6 +257,7 @@ const EditorTheme &GetEditorTheme() {
   return fallback;
 }
 
+/** @copydoc ApplyEditorTheme */
 void ApplyEditorTheme(ImGuiStyle &style) {
   const EditorTheme &theme = GetEditorTheme();
   const HoroPalette &p = theme.palette;

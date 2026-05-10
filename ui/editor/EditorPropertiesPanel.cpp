@@ -1,9 +1,9 @@
 /**
  * @file EditorPropertiesPanel.cpp
- * @brief Implementation for EditorPropertiesPanel editor functionality.
+ * @brief Properties panel draw methods for EditorLayer.
+ *
+ * Method definitions are in this file; declarations remain in EditorLayer.h.
  */
-// Properties panel draw methods for EditorLayer.
-// Method definitions are in this file; declarations remain in EditorLayer.h.
 
 // Windows headers must come before GLFW to avoid type redefinition conflicts
 #ifdef _WIN32
@@ -55,6 +55,7 @@ void DrawUiAutomationMarker(const char *) {}
 } // namespace
 
 namespace Horo::Editor {
+/** @copydoc EditorLayer::DrawPropertiesPanel */
 void EditorLayer::DrawPropertiesPanel() {
   // NOSONAR: cpp:S3776 properties panel
   // integrates multiple section editors
@@ -123,6 +124,7 @@ void EditorLayer::DrawPropertiesPanel() {
   ImGui::End();
 }
 
+/** @copydoc EditorLayer::ApplyBatchAssetChange */
 void EditorLayer::ApplyBatchAssetChange(
     const std::vector<std::string> &sortedAssetIds) {
   if (m_batchAssetChoice == 1) {
@@ -144,6 +146,7 @@ void EditorLayer::ApplyBatchAssetChange(
   }
 }
 
+/** @copydoc EditorLayer::ApplyBatchTransform */
 void EditorLayer::ApplyBatchTransform() {
   for (int idx : m_selectedIndices) {
     if (idx < 0 || idx >= static_cast<int>(m_document.objects.size()))
@@ -162,6 +165,7 @@ void EditorLayer::ApplyBatchTransform() {
   MarkDirtyAndReload();
 }
 
+/** @copydoc EditorLayer::DrawPropertiesMultiSelect */
 void EditorLayer::DrawPropertiesMultiSelect() {
   ImGui::Text("%d objects selected",
               static_cast<int>(m_selectedIndices.size()));
@@ -240,6 +244,7 @@ void EditorLayer::DrawPropertiesMultiSelect() {
     RequestDeleteSelectedObjects();
 }
 
+/** @copydoc EditorLayer::DrawAssetDiagnosticsSection */
 void EditorLayer::DrawAssetDiagnosticsSection(
     const AssetMetadata &metadata) const {
   if (!metadata.importerId.empty()) {
@@ -274,6 +279,7 @@ void EditorLayer::DrawAssetDiagnosticsSection(
   }
 }
 
+/** @copydoc EditorLayer::DrawPropertiesSelectedAsset */
 void EditorLayer::DrawPropertiesSelectedAsset(
     std::unordered_map<std::string, AssetDef, StringHash,
                        std::equal_to<>>::iterator assetIt) {
@@ -392,6 +398,7 @@ void EditorLayer::DrawPropertiesSelectedAsset(
   ImGui::PopStyleColor(3);
 }
 
+/** @copydoc EditorLayer::DrawPropertiesIdentitySection */
 void EditorLayer::DrawPropertiesIdentitySection(SceneObject &obj,
                                                 int primaryIdx) {
   using enum SceneObjectType;
@@ -438,6 +445,7 @@ void EditorLayer::DrawPropertiesIdentitySection(SceneObject &obj,
   ImGui::Separator();
 }
 
+/** @copydoc EditorLayer::DrawPropertiesCameraSection */
 void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
                                               int primaryIdx) {
   const Vec3 oldPos = obj.position;
@@ -541,6 +549,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
     RequestDeleteSelectedObjects();
 }
 
+/** @copydoc EditorLayer::DrawPropertiesTransformSection */
 void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
                                                  int primaryIdx) {
   DrawUiAutomationMarker("##properties_test/transform_section");
@@ -588,6 +597,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
   }
 }
 
+/** @copydoc EditorLayer::DrawPropertiesAssetSection */
 void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
   ImGui::Separator();
   ImGui::Text("Asset");
@@ -629,6 +639,7 @@ void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
   }
 }
 
+/** @copydoc EditorLayer::DrawSchemaFieldWidget */
 void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
                                         const FieldDef &fd, std::string &val) {
   using enum SceneObjectType;
@@ -694,6 +705,7 @@ void EditorLayer::DrawSchemaFieldWidget(const SceneObject &obj,
   }
 }
 
+/** @copydoc EditorLayer::DrawPropertiesSchemaFields */
 void EditorLayer::DrawPropertiesSchemaFields(SceneObject &obj) {
   using enum SceneObjectType;
   ImGui::Separator();
@@ -710,6 +722,7 @@ void EditorLayer::DrawPropertiesSchemaFields(SceneObject &obj) {
   }
 }
 
+/** @copydoc EditorLayer::DrawLightComponentFields */
 void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
   // Intensity
   if (float intensity =
@@ -739,6 +752,7 @@ void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
   }
 }
 
+/** @copydoc EditorLayer::DrawRigidBodyComponentFields */
 void EditorLayer::DrawRigidBodyComponentFields(ComponentDesc &comp) {
   const auto &theme = Horo::Ui::GetEditorTheme();
   // Mass
@@ -765,6 +779,7 @@ void EditorLayer::DrawRigidBodyComponentFields(ComponentDesc &comp) {
   }
 }
 
+/** @copydoc EditorLayer::DrawScriptComponentField */
 void EditorLayer::DrawScriptComponentField(ComponentDesc &comp) {
   std::vector<std::string> options;
   if (m_scriptBehaviorOptionsCb)
@@ -796,6 +811,7 @@ void EditorLayer::DrawScriptComponentField(ComponentDesc &comp) {
   }
 }
 
+/** @copydoc EditorLayer::DrawPropertiesComponentsList */
 void EditorLayer::DrawPropertiesComponentsList(SceneObject &obj) {
   // NOSONAR: cpp:S3776 component list with per-type edit panels; complexity
   // from component type dispatch
@@ -854,6 +870,7 @@ void EditorLayer::DrawPropertiesComponentsList(SceneObject &obj) {
   }
 }
 
+/** @copydoc EditorLayer::DrawAddComponentMenuItems */
 void EditorLayer::DrawAddComponentMenuItems(SceneObject &obj) {
   std::vector<const ComponentSchema *> componentSchemas;
   componentSchemas.reserve(m_schema.ComponentSchemas().size());
@@ -891,6 +908,7 @@ void EditorLayer::DrawAddComponentMenuItems(SceneObject &obj) {
   DrawFallbackAddComponentMenuItems(obj);
 }
 
+/** @copydoc EditorLayer::DrawFallbackAddComponentMenuItems */
 void EditorLayer::DrawFallbackAddComponentMenuItems(SceneObject &obj) {
   // Fallback built-in components when no schema is registered
   if (ImGui::MenuItem("Light")) {
@@ -928,6 +946,7 @@ void EditorLayer::DrawFallbackAddComponentMenuItems(SceneObject &obj) {
   }
 }
 
+/** @copydoc EditorLayer::DrawPropertiesAddComponentMenu */
 void EditorLayer::DrawPropertiesAddComponentMenu(SceneObject &obj) {
   ImGui::Spacing();
   if (ImGui::Button("+ Add Component"))
