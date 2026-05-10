@@ -883,8 +883,8 @@ TEST_CASE("RenderEditorStatusText renders each level without crash") {
 
   const auto &theme = Horo::Ui::GetEditorTheme();
   REQUIRE_NOTHROW([&] {
-    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Info,    "info %d", 1);
-    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Warning, "warn %s", "x");
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Info,    "info 1");
+    Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Warning, "warn x");
     Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,   "err");
     Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Success, "ok");
   }());

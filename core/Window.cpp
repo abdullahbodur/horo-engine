@@ -447,44 +447,37 @@ void Window::DropPathsThunk(GLFWwindow *win, int count, const char **paths) {
     self->m_fileDropCb(count, paths);
 }
 
-void Window::SetupNativeMenuBar() {
+void Window::SetupNativeMenuBar() const {
 #ifdef __APPLE__
   SetupNativeMenuBarMac();
 #endif
 }
 
-void Window::SetMenuCallbacks(
-    MenuCallback fileNew, MenuCallback fileOpen, MenuCallback fileResetLayout,
-    MenuCallback fileSettings, MenuCallback fileCloseEditor,
-    MenuCallback addPanel, MenuCallback addProp, MenuCallback addLight,
-    MenuCallback addCamera, MenuCallback addPropFromAsset,
-    MenuCallback editUndo, MenuCallback editRedo, MenuCallback editRename,
-    MenuCallback editCreatePrefab, MenuCallback editDuplicate,
-    MenuCallback editDelete, MenuCallback viewFlyMode, MenuCallback viewHelp,
-    MenuCallback viewQuickOpen, MenuCallback viewCommandPalette,
-    MenuCallback viewResetLayout) {
+void Window::SetMenuCallbacks(MenuCallbacks callbacks) const {
 #ifdef __APPLE__
-  g_fileNewCallback = std::move(fileNew);
-  g_fileOpenCallback = std::move(fileOpen);
-  g_fileResetLayoutCallback = std::move(fileResetLayout);
-  g_fileSettingsCallback = std::move(fileSettings);
-  g_fileCloseEditorCallback = std::move(fileCloseEditor);
-  g_addPanelCallback = std::move(addPanel);
-  g_addPropCallback = std::move(addProp);
-  g_addLightCallback = std::move(addLight);
-  g_addCameraCallback = std::move(addCamera);
-  g_addPropFromAssetCallback = std::move(addPropFromAsset);
-  g_editUndoCallback = std::move(editUndo);
-  g_editRedoCallback = std::move(editRedo);
-  g_editRenameCallback = std::move(editRename);
-  g_editCreatePrefabCallback = std::move(editCreatePrefab);
-  g_editDuplicateCallback = std::move(editDuplicate);
-  g_editDeleteCallback = std::move(editDelete);
-  g_viewFlyModeCallback = std::move(viewFlyMode);
-  g_viewHelpCallback = std::move(viewHelp);
-  g_viewQuickOpenCallback = std::move(viewQuickOpen);
-  g_viewCommandPaletteCallback = std::move(viewCommandPalette);
-  g_viewResetLayoutCallback = std::move(viewResetLayout);
+  g_fileNewCallback = std::move(callbacks.fileNew);
+  g_fileOpenCallback = std::move(callbacks.fileOpen);
+  g_fileResetLayoutCallback = std::move(callbacks.fileResetLayout);
+  g_fileSettingsCallback = std::move(callbacks.fileSettings);
+  g_fileCloseEditorCallback = std::move(callbacks.fileCloseEditor);
+  g_addPanelCallback = std::move(callbacks.addPanel);
+  g_addPropCallback = std::move(callbacks.addProp);
+  g_addLightCallback = std::move(callbacks.addLight);
+  g_addCameraCallback = std::move(callbacks.addCamera);
+  g_addPropFromAssetCallback = std::move(callbacks.addPropFromAsset);
+  g_editUndoCallback = std::move(callbacks.editUndo);
+  g_editRedoCallback = std::move(callbacks.editRedo);
+  g_editRenameCallback = std::move(callbacks.editRename);
+  g_editCreatePrefabCallback = std::move(callbacks.editCreatePrefab);
+  g_editDuplicateCallback = std::move(callbacks.editDuplicate);
+  g_editDeleteCallback = std::move(callbacks.editDelete);
+  g_viewFlyModeCallback = std::move(callbacks.viewFlyMode);
+  g_viewHelpCallback = std::move(callbacks.viewHelp);
+  g_viewQuickOpenCallback = std::move(callbacks.viewQuickOpen);
+  g_viewCommandPaletteCallback = std::move(callbacks.viewCommandPalette);
+  g_viewResetLayoutCallback = std::move(callbacks.viewResetLayout);
+#else
+  (void)callbacks;
 #endif
 }
 } // namespace Horo

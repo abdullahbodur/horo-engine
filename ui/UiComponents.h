@@ -979,17 +979,16 @@ enum class EditorStatusLevel {
  * @brief Renders a coloured status message derived from the active theme palette.
  *
  * Selects the appropriate colour for @p level (Info → textMuted, Warning →
- * amber, Error → destructive, Success → soft green) and calls
- * ImGui::TextColoredV with the supplied printf-style format string.
+ * amber, Error → destructive, Success → soft green) and renders the text
+ * with ImGui::TextColored.
  *
  * @param theme  Active editor theme.
  * @param level  Severity level that determines the text colour.
- * @param fmt    printf-style format string.
- * @param ...    Format arguments.
+ * @param text   Message to display.
  */
 void RenderEditorStatusText(const EditorTheme &theme,
                             EditorStatusLevel  level,
-                            const char        *fmt, ...);
+                            const char        *text);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Group D — Settings modal primitives

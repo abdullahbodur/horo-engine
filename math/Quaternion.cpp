@@ -1,5 +1,6 @@
 #include "math/Quaternion.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "math/Mat3.h"
@@ -149,7 +150,7 @@ namespace Horo {
         //   R[0][2] / R[2][2] = tan(yaw)
         //   R[1][0] / R[1][1] = tan(roll)
         float sinP = 2.0f * (w * x - y * z);
-        sinP = sinP > 1.0f ? 1.0f : (sinP < -1.0f ? -1.0f : sinP);
+        sinP = std::clamp(sinP, -1.0f, 1.0f);
         const float pitch = Asin(sinP);
 
         float yaw;

@@ -117,8 +117,8 @@ bool EditorSettingsModal::SaveAll() {
     m_mcpDraft.host = Mcp::kDefaultMcpHost;
 
     // Validate appearance preset by ensuring it matches a known enumerant.
-    const auto &presets = Horo::Ui::EditorThemePresets();
-    if (std::ranges::find(presets, m_userDraft.themePreset) == presets.end()) {
+    if (const auto &presets = Horo::Ui::EditorThemePresets();
+        std::ranges::find(presets, m_userDraft.themePreset) == presets.end()) {
         m_error = "Invalid theme preset selection.";
         return false;
     }
@@ -128,8 +128,7 @@ bool EditorSettingsModal::SaveAll() {
         m_error = "MCP controller unavailable.";
         return false;
     }
-    std::string mcpError;
-    if (!m_mcpController->ApplySettings(m_mcpDraft, &mcpError)) {
+    if (std::string mcpError; !m_mcpController->ApplySettings(m_mcpDraft, &mcpError)) {
         m_error = mcpError.empty() ? "Failed to apply MCP settings." : mcpError;
         return false;
     }
@@ -140,8 +139,7 @@ bool EditorSettingsModal::SaveAll() {
         return false;
     }
     m_userSettingsDocument->settings = m_userDraft;
-    std::string userError;
-    if (!SaveEditorUserSettingsDocument(m_userSettingsDocument, &userError)) {
+    if (std::string userError; !SaveEditorUserSettingsDocument(m_userSettingsDocument, &userError)) {
         m_error = userError.empty() ? "Failed to save editor user settings."
                                     : userError;
         return false;
@@ -175,11 +173,11 @@ void EditorSettingsModal::Draw() {
 
     const ImVec2 modalSize = ComputeModalSize(io);
     ImGui::SetNextWindowSize(modalSize, ImGuiCond_Appearing);
-    constexpr ImGuiWindowFlags kFlags =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
 
-    if (!ImGui::BeginPopupModal(kPopupId, nullptr, kFlags))
+    if (constexpr ImGuiWindowFlags kFlags =
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+        !ImGui::BeginPopupModal(kPopupId, nullptr, kFlags))
         return;
 
     // Treat Escape as Cancel.
@@ -249,9 +247,9 @@ void EditorSettingsModal::Draw() {
         },
     }};
 
-    const auto tabResult = Horo::Ui::RenderEditorVerticalTabs(
-        theme, "##settings_vtabs", tabs, kLeftTabColumnWidth);
-    if (tabResult.clickedIndex == 0)
+    if (const auto tabResult = Horo::Ui::RenderEditorVerticalTabs(
+            theme, "##settings_vtabs", tabs, kLeftTabColumnWidth);
+        tabResult.clickedIndex == 0)
         m_activeTab = Tab::MCP;
     else if (tabResult.clickedIndex == 1)
         m_activeTab = Tab::Appearance;
@@ -263,137 +261,8 @@ void EditorSettingsModal::Draw() {
                       ImGuiWindowFlags_AlwaysUseWindowPadding);
 
     switch (m_activeTab) {
-    case Tab::MCP: {
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-        ImGui::TextUnformatted("MCP");
-        ImGui::PopStyleColor();
-        Horo::Ui::TextMuted(theme,
-                             "Built-in Model Context Protocol server settings.");
-        ImGui::Spacing();
-
-        if (Horo::Ui::BeginEditorSettingsCard(theme, "##settings_mcp_server_card",
-                                              "Server")) {
-            Horo::Ui::RenderEditorToggle(theme, "##mcp_toggle",
-                                         "Enable built-in MCP",
-                                         m_mcpDraft.enabled);
-            Horo::Ui::RenderEditorCheckbox(theme, "Auto-start when editor opens",
-                                           m_mcpDraft.autoStart);
-
-            int port = m_mcpDraft.port;
-            ImGui::SetNextItemWidth(160.0f);
-            if (ImGui::InputInt("Port", &port))
-                m_mcpDraft.port = std::clamp(port, 1, 65535);
-
-            ImGui::Text("Host: %s", Mcp::kDefaultMcpHost);
-            m_mcpDraft.host = Mcp::kDefaultMcpHost;
-
-            const auto endpoint =
-                std::format("{}://{}:{}/mcp", Mcp::kMcpUrlScheme,
-                            m_mcpDraft.host, m_mcpDraft.port);
-            ImGui::TextWrapped("Endpoint: %s##settings_test/mcp_endpoint",
-                               endpoint.c_str());
-        }
-        Horo::Ui::EndEditorSettingsCard();
-        break;
-    }
-
-    case Tab::Appearance: {
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
-        ImGui::TextUnformatted("Appearance");
-        ImGui::PopStyleColor();
-        Horo::Ui::TextMuted(theme, "Editor theme and color preferences.");
-        ImGui::Spacing();
-
-        if (Horo::Ui::BeginEditorSettingsCard(theme,
-                                              "##settings_appearance_theme_card",
-                                              "Theme")) {
-            for (const Horo::Ui::EditorThemePreset preset :
-                 Horo::Ui::EditorThemePresets()) {
-                const bool selected = m_userDraft.themePreset == preset;
-                const char *label = Horo::Ui::EditorThemePresetLabel(preset);
-                const char *description = ThemePresetDescription(preset);
-                const char *marker = ThemePresetMarker(preset);
-
-                // Draw preset row as a selectable card with a leading radio marker.
-                ImGui::PushID(marker);
-                const ImVec2 rowStart = ImGui::GetCursorScreenPos();
-                const float rowHeight = 62.0f;
-                const float rowWidth = ImGui::GetContentRegionAvail().x;
-
-                const std::string hitId =
-                    std::string("##preset_hit") + marker;
-                if (ImGui::InvisibleButton(hitId.c_str(),
-                                           ImVec2(rowWidth, rowHeight)))
-                    m_userDraft.themePreset = preset;
-                const bool hovered = ImGui::IsItemHovered();
-
-                ImDrawList *dl = ImGui::GetWindowDrawList();
-                const ImVec4 bg = selected ? theme.palette.selection
-                                           : (hovered ? theme.palette.cardHover
-                                                      : theme.palette.card);
-                dl->AddRectFilled(
-                    rowStart,
-                    ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
-                    ImGui::ColorConvertFloat4ToU32(bg),
-                    theme.rounding.card);
-                dl->AddRect(
-                    rowStart,
-                    ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
-                    ImGui::ColorConvertFloat4ToU32(theme.palette.border),
-                    theme.rounding.card, 0, 1.0f);
-
-                // Radio indicator
-                const float radioCx = rowStart.x + 18.0f;
-                const float radioCy = rowStart.y + rowHeight * 0.5f;
-                dl->AddCircle(ImVec2(radioCx, radioCy), 7.0f,
-                              ImGui::ColorConvertFloat4ToU32(
-                                  selected ? theme.palette.accent
-                                           : theme.palette.border),
-                              0, 1.5f);
-                if (selected) {
-                    dl->AddCircleFilled(
-                        ImVec2(radioCx, radioCy), 3.5f,
-                        ImGui::ColorConvertFloat4ToU32(theme.palette.accent));
-                }
-
-                // Label + description
-                const float textX = rowStart.x + 40.0f;
-                dl->AddText(
-                    ImVec2(textX, rowStart.y + 12.0f),
-                    ImGui::ColorConvertFloat4ToU32(theme.palette.text), label);
-                dl->AddText(
-                    ImVec2(textX, rowStart.y + 12.0f + ImGui::GetFontSize() + 2.0f),
-                    ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
-                    description);
-
-                // Swatch row on the right — static previews sampled from preset tokens.
-                // To keep preview work lightweight we render swatches from the
-                // active editor theme for the currently selected preset only.
-                if (selected) {
-                    constexpr float kSwatchSize = 14.0f;
-                    constexpr float kSwatchGap = 4.0f;
-                    const float swatchY = rowStart.y + (rowHeight - kSwatchSize) * 0.5f;
-                    float swatchX = rowStart.x + rowWidth - (kSwatchSize * 4.0f + kSwatchGap * 3.0f + 16.0f);
-                    DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                               theme.palette.panel, theme.rounding.input);
-                    swatchX += kSwatchSize + kSwatchGap;
-                    DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                               theme.palette.card, theme.rounding.input);
-                    swatchX += kSwatchSize + kSwatchGap;
-                    DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                               theme.palette.accent, theme.rounding.input);
-                    swatchX += kSwatchSize + kSwatchGap;
-                    DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                               theme.palette.textMuted, theme.rounding.input);
-                }
-
-                ImGui::PopID();
-                ImGui::Spacing();
-            }
-        }
-        Horo::Ui::EndEditorSettingsCard();
-        break;
-    }
+    case Tab::MCP:        DrawMcpTab(theme);        break;
+    case Tab::Appearance: DrawAppearanceTab(theme); break;
     }
 
     ImGui::EndChild();
@@ -405,10 +274,9 @@ void EditorSettingsModal::Draw() {
     }
 
     const bool dirty = IsDirty();
-    const auto footer =
-        Horo::Ui::RenderEditorSettingsFooter(theme, /*canApply=*/dirty);
-
-    if (footer.cancelled) {
+    if (const auto footer =
+            Horo::Ui::RenderEditorSettingsFooter(theme, /*canApply=*/dirty);
+        footer.cancelled) {
         ResetDrafts();
         m_open = false;
         ImGui::CloseCurrentPopup();
@@ -418,10 +286,7 @@ void EditorSettingsModal::Draw() {
         }
         // On failure, m_error already set; modal remains open.
     } else if (footer.accepted) {
-        if (!dirty) {
-            m_open = false;
-            ImGui::CloseCurrentPopup();
-        } else if (SaveAll()) {
+        if (!dirty || SaveAll()) {
             m_open = false;
             ImGui::CloseCurrentPopup();
         }
@@ -429,6 +294,136 @@ void EditorSettingsModal::Draw() {
     }
 
     ImGui::EndPopup();
+}
+
+void EditorSettingsModal::DrawMcpTab(const Horo::Ui::EditorTheme& theme) {
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+    ImGui::TextUnformatted("MCP");
+    ImGui::PopStyleColor();
+    Horo::Ui::TextMuted(theme,
+                         "Built-in Model Context Protocol server settings.");
+    ImGui::Spacing();
+
+    if (Horo::Ui::BeginEditorSettingsCard(theme, "##settings_mcp_server_card",
+                                          "Server")) {
+        Horo::Ui::RenderEditorToggle(theme, "##mcp_toggle",
+                                     "Enable built-in MCP",
+                                     m_mcpDraft.enabled);
+        Horo::Ui::RenderEditorCheckbox(theme, "Auto-start when editor opens",
+                                       m_mcpDraft.autoStart);
+
+        int port = m_mcpDraft.port;
+        ImGui::SetNextItemWidth(160.0f);
+        if (ImGui::InputInt("Port", &port))
+            m_mcpDraft.port = std::clamp(port, 1, 65535);
+
+        ImGui::Text("Host: %s", Mcp::kDefaultMcpHost);
+        m_mcpDraft.host = Mcp::kDefaultMcpHost;
+
+        const auto endpoint =
+            std::format("{}://{}:{}/mcp", Mcp::kMcpUrlScheme,
+                        m_mcpDraft.host, m_mcpDraft.port);
+        ImGui::TextWrapped("Endpoint: %s##settings_test/mcp_endpoint",
+                           endpoint.c_str());
+    }
+    Horo::Ui::EndEditorSettingsCard();
+}
+
+void EditorSettingsModal::DrawAppearanceTab(const Horo::Ui::EditorTheme& theme) {
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+    ImGui::TextUnformatted("Appearance");
+    ImGui::PopStyleColor();
+    Horo::Ui::TextMuted(theme, "Editor theme and color preferences.");
+    ImGui::Spacing();
+
+    if (!Horo::Ui::BeginEditorSettingsCard(theme,
+                                          "##settings_appearance_theme_card",
+                                          "Theme")) {
+        Horo::Ui::EndEditorSettingsCard();
+        return;
+    }
+
+    for (const Horo::Ui::EditorThemePreset preset :
+         Horo::Ui::EditorThemePresets()) {
+        const bool selected = m_userDraft.themePreset == preset;
+        const char *label = Horo::Ui::EditorThemePresetLabel(preset);
+        const char *description = ThemePresetDescription(preset);
+        const char *marker = ThemePresetMarker(preset);
+
+        ImGui::PushID(marker);
+        const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+        const float rowHeight = 62.0f;
+        const float rowWidth = ImGui::GetContentRegionAvail().x;
+
+        if (const std::string hitId = std::string("##preset_hit") + marker;
+            ImGui::InvisibleButton(hitId.c_str(),
+                                   ImVec2(rowWidth, rowHeight)))
+            m_userDraft.themePreset = preset;
+        const bool hovered = ImGui::IsItemHovered();
+
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        ImVec4 bg;
+        if (selected)
+            bg = theme.palette.selection;
+        else if (hovered)
+            bg = theme.palette.cardHover;
+        else
+            bg = theme.palette.card;
+        dl->AddRectFilled(
+            rowStart,
+            ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
+            ImGui::ColorConvertFloat4ToU32(bg),
+            theme.rounding.card);
+        dl->AddRect(
+            rowStart,
+            ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.border),
+            theme.rounding.card, 0, 1.0f);
+
+        const float radioCx = rowStart.x + 18.0f;
+        const float radioCy = rowStart.y + rowHeight * 0.5f;
+        dl->AddCircle(ImVec2(radioCx, radioCy), 7.0f,
+                      ImGui::ColorConvertFloat4ToU32(
+                          selected ? theme.palette.accent
+                                   : theme.palette.border),
+                      0, 1.5f);
+        if (selected) {
+            dl->AddCircleFilled(
+                ImVec2(radioCx, radioCy), 3.5f,
+                ImGui::ColorConvertFloat4ToU32(theme.palette.accent));
+        }
+
+        const float textX = rowStart.x + 40.0f;
+        dl->AddText(
+            ImVec2(textX, rowStart.y + 12.0f),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.text), label);
+        dl->AddText(
+            ImVec2(textX, rowStart.y + 12.0f + ImGui::GetFontSize() + 2.0f),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
+            description);
+
+        if (selected) {
+            constexpr float kSwatchSize = 14.0f;
+            constexpr float kSwatchGap = 4.0f;
+            const float swatchY = rowStart.y + (rowHeight - kSwatchSize) * 0.5f;
+            float swatchX = rowStart.x + rowWidth - (kSwatchSize * 4.0f + kSwatchGap * 3.0f + 16.0f);
+            DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
+                       theme.palette.panel, theme.rounding.input);
+            swatchX += kSwatchSize + kSwatchGap;
+            DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
+                       theme.palette.card, theme.rounding.input);
+            swatchX += kSwatchSize + kSwatchGap;
+            DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
+                       theme.palette.accent, theme.rounding.input);
+            swatchX += kSwatchSize + kSwatchGap;
+            DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
+                       theme.palette.textMuted, theme.rounding.input);
+        }
+
+        ImGui::PopID();
+        ImGui::Spacing();
+    }
+    Horo::Ui::EndEditorSettingsCard();
 }
 
 } // namespace Horo::Editor

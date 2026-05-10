@@ -182,7 +182,8 @@ private:
             return x >= minX - margin && x <= maxX + margin &&
                    y >= minY - margin && y <= maxY + margin;
         }
-    } m_viewGizmoPickRect; /**< Hit-test rectangle for the view orientation gimbal. */
+    };
+    PickRect m_viewGizmoPickRect; /**< Hit-test rectangle for the view orientation gimbal. */
 };
 
 }  // namespace Horo::Editor

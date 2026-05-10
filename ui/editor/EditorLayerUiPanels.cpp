@@ -332,12 +332,12 @@ void EditorLayer::DrawProjectPanel() {
   const Ui::EditorTheme &theme = Ui::GetEditorTheme();
   const auto &palette = theme.palette;
 
-  const Ui::EditorPanelTabItem projectTabs[] = {
-      {Ui::EditorPanelTab::Project, true},
+  const std::array projectTabs = {
+      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Project, true},
   };
-  const Ui::EditorPanelActionItem projectActions[] = {
-      {ICON_FA_PLUS},
-      {ICON_FA_ELLIPSIS_VERTICAL},
+  const std::array projectActions = {
+      Ui::EditorPanelActionItem{ICON_FA_PLUS},
+      Ui::EditorPanelActionItem{ICON_FA_ELLIPSIS_VERTICAL},
   };
   const Ui::EditorPanelTopBarResult topBar = Ui::RenderEditorPanelTopBar(
       theme, "project_topbar",
@@ -398,9 +398,8 @@ void EditorLayer::DrawProjectPanel() {
     const auto footer = Ui::RenderEditorModalFooter(theme, "Create");
     if (footer.cancelled)
       m_projectPanelError.clear();
-    const bool submit = enterPressed || footer.confirmed;
 
-    if (submit) {
+    if (const bool submit = enterPressed || footer.confirmed; submit) {
       namespace fs = std::filesystem;
       auto fail = [this](std::string msg) { m_projectPanelError = std::move(msg); };
 
@@ -433,8 +432,7 @@ void EditorLayer::DrawProjectPanel() {
               else if (!fs::create_directories(candidate, ec) || ec)
                 fail("Failed to create folder.");
             } else {
-              const fs::path parent = candidate.parent_path();
-              if (!parent.empty()) {
+              if (const fs::path parent = candidate.parent_path(); !parent.empty()) {
                 fs::create_directories(parent, ec);
                 if (ec) {
                   fail("Failed to create parent folder(s).");
@@ -492,8 +490,7 @@ void EditorLayer::DrawProjectPanel() {
       favSpec.kind = Ui::EditorTreeItemKind::Node;
       favSpec.treeFlags = topFlags;
       favSpec.normalTextColor = &theme.palette.text;
-      const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec);
-      if (favRes.open) {
+      if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open) {
         ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
         constexpr const char *kNoFavoritesText = "No favorites yet.";
         const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
@@ -633,14 +630,14 @@ void EditorLayer::DrawCommandPalettePopup() {
   const Ui::EditorPickerConfig paletteCfg{
       "Command Palette", "Search commands", 520.0f, "Type a command..."};
 
-  char paletteBuf[256] = {};
-  m_commandPaletteQuery.copy(paletteBuf, sizeof(paletteBuf) - 1);
+  std::array<char, 256> paletteBuf{};
+  m_commandPaletteQuery.copy(paletteBuf.data(), paletteBuf.size() - 1);
 
   if (!Ui::BeginEditorPickerModal(paletteCfg, m_commandPaletteOpen,
-                                  paletteBuf, sizeof(paletteBuf)))
+                                  paletteBuf.data(), paletteBuf.size()))
     return;
 
-  m_commandPaletteQuery = paletteBuf;
+  m_commandPaletteQuery = paletteBuf.data();
 
   bool executed = false;
   int shownCount = 0;
@@ -676,14 +673,14 @@ void EditorLayer::DrawQuickOpenPopup() {
       "Quick Open", "Open object or asset", 520.0f,
       "Type id, type, asset, or mesh..."};
 
-  char quickOpenBuf[256] = {};
-  m_quickOpenQuery.copy(quickOpenBuf, sizeof(quickOpenBuf) - 1);
+  std::array<char, 256> quickOpenBuf{};
+  m_quickOpenQuery.copy(quickOpenBuf.data(), quickOpenBuf.size() - 1);
 
   if (!Ui::BeginEditorPickerModal(quickOpenCfg, m_quickOpenOpen,
-                                  quickOpenBuf, sizeof(quickOpenBuf)))
+                                  quickOpenBuf.data(), quickOpenBuf.size()))
     return;
 
-  m_quickOpenQuery = quickOpenBuf;
+  m_quickOpenQuery = quickOpenBuf.data();
 
   bool picked = false;
   int shownCount = 0;

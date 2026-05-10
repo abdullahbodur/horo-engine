@@ -125,6 +125,10 @@ private:
     bool IsDirty() const;
     /** @brief Discards both drafts back to their original values and clears the error. */
     void ResetDrafts();
+    /** @brief Renders the MCP tab content. */
+    void DrawMcpTab(const Horo::Ui::EditorTheme& theme);
+    /** @brief Renders the Appearance tab content. */
+    void DrawAppearanceTab(const Horo::Ui::EditorTheme& theme);
     /**
      * @brief Attempts to validate and persist both MCP and Appearance drafts.
      *

@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <limits>
 #include <stdexcept>
@@ -199,6 +200,67 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
 }
 
 
+namespace {
+struct AxisData {
+  ViewSnap snapPos;
+  ViewSnap snapNeg;
+  Vec3 worldDir;
+  char label;
+  ImU32 col;
+  const char *tooltipPos;
+  const char *tooltipNeg;
+};
+
+struct ViewGimbalAxisRenderParams {
+  ImVec2 center;
+  float lineLength;
+  float endpointRadius;
+};
+
+void RenderViewGimbalAxes(ImDrawList* dl,
+                          const ViewGimbalAxisRenderParams& params,
+                          const std::array<AxisData, 3>& axes,
+                          const std::array<float, 3>& dirDx,
+                          const std::array<float, 3>& dirDy,
+                          const std::array<float, 3>& dirVz,
+                          const std::array<int, 3>& order,
+                          ViewSnap hoverSnap) {
+  for (int idx : order) {
+    const AxisData &axis = axes[idx];
+    const bool isFront = dirVz[idx] >= 0.0f;
+    const bool hl = (hoverSnap == axis.snapPos) || (hoverSnap == axis.snapNeg);
+    ImU32 col = axis.col;
+    float alpha = isFront ? 1.0f : 0.5f;
+    if (hl) {
+      col = IM_COL32(255, 255, 200, 255);
+      alpha = 1.0f;
+    }
+
+    const ImU32 lineCol = IM_COL32(
+        (col >> 0) & 0xFF,
+        (col >> 8) & 0xFF,
+        (col >> 16) & 0xFF,
+        static_cast<int>(255 * alpha));
+
+    const float endX = params.center.x + dirDx[idx] * params.lineLength;
+    const float endY = params.center.y + dirDy[idx] * params.lineLength;
+
+    dl->AddLine(params.center, ImVec2(endX, endY), lineCol, hl ? 3.0f : 2.0f);
+
+    const float dotRadius = hl ? params.endpointRadius * 1.3f : params.endpointRadius;
+    dl->AddCircleFilled(ImVec2(endX, endY), dotRadius, lineCol, 12);
+    dl->AddCircle(ImVec2(endX, endY), dotRadius, IM_COL32(255, 255, 255, static_cast<int>(100 * alpha)), 12, 1.0f);
+
+    const std::array<char, 2> labelStr = {axis.label, '\0'};
+    const float labelW = ImGui::CalcTextSize(labelStr.data()).x;
+    const float labelH = ImGui::CalcTextSize(labelStr.data()).y;
+    dl->AddText(ImVec2(endX - labelW * 0.5f, endY - labelH * 0.5f), IM_COL32(0, 0, 0, static_cast<int>(200 * alpha)), labelStr.data());
+    dl->AddText(ImVec2(endX - labelW * 0.5f - 1.0f, endY - labelH * 0.5f - 1.0f), IM_COL32(255, 255, 255, static_cast<int>(255 * alpha)), labelStr.data());
+  }
+}
+}  // namespace
+
+
 /** @copydoc EditorLayer::DrawViewGimbal */
 void EditorLayer::DrawViewGimbal(const Camera &cam) {
   using enum ViewSnap;
@@ -240,25 +302,15 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
   constexpr float kHitRadius = 12.0f;
   constexpr float kHitRadiusSq = kHitRadius * kHitRadius;
 
-  struct AxisData {
-    ViewSnap snapPos;
-    ViewSnap snapNeg;
-    Vec3 worldDir;
-    char label;
-    ImU32 col;
-    const char *tooltipPos;
-    const char *tooltipNeg;
-  };
-
   static const std::array<AxisData, 3> kAxes = {{
       {Right, Left, {1.0f, 0.0f, 0.0f}, 'X', IM_COL32(255, 82, 58, 255), "View Right", "View Left"},
       {Top, Bottom, {0.0f, 1.0f, 0.0f}, 'Y', IM_COL32(80, 230, 104, 255), "View Top", "View Bottom"},
       {Front, Back, {0.0f, 0.0f, 1.0f}, 'Z', IM_COL32(55, 155, 255, 255), "View Front", "View Back"},
   }};
 
-  float dirDx[3]{};
-  float dirDy[3]{};
-  float dirVz[3]{};
+  std::array<float, 3> dirDx{};
+  std::array<float, 3> dirDy{};
+  std::array<float, 3> dirVz{};
   for (int i = 0; i < 3; ++i) {
     WorldAxisToScreenDir(cam, kAxes[i].worldDir, &dirDx[i], &dirDy[i], &dirVz[i]);
   }
@@ -272,8 +324,7 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
       const float tipY = center.y + dirDy[i] * kLineLength;
       const float dx = io.MousePos.x - tipX;
       const float dy = io.MousePos.y - tipY;
-      const float d = dx * dx + dy * dy;
-      if (d < bestD) {
+      if (const float d = dx * dx + dy * dy; d < bestD) {
         bestD = d;
         hoverSnap = dirVz[i] >= 0.0f ? kAxes[i].snapPos : kAxes[i].snapNeg;
         hoverTooltip = dirVz[i] >= 0.0f ? kAxes[i].tooltipPos : kAxes[i].tooltipNeg;
@@ -284,45 +335,13 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
 
   dl->AddCircleFilled(center, 4.0f, IM_COL32(120, 120, 120, 255), 16);
 
-  int order[3] = {0, 1, 2};
+  std::array<int, 3> order = {0, 1, 2};
   if (dirVz[0] > dirVz[1]) std::swap(order[0], order[1]);
   if (dirVz[order[1]] > dirVz[order[2]]) std::swap(order[1], order[2]);
   if (dirVz[order[0]] > dirVz[order[1]]) std::swap(order[0], order[1]);
 
-  for (int idx : order) {
-    const AxisData &axis = kAxes[idx];
-    const bool isFront = dirVz[idx] >= 0.0f;
-    const bool hl = (hoverSnap == axis.snapPos) || (hoverSnap == axis.snapNeg);
-    ImU32 col = axis.col;
-    float alpha = isFront ? 1.0f : 0.5f;
-    if (hl) {
-      col = IM_COL32(255, 255, 200, 255);
-      alpha = 1.0f;
-    }
-
-    const ImU32 lineCol = IM_COL32(
-        (col >> 0) & 0xFF,
-        (col >> 8) & 0xFF,
-        (col >> 16) & 0xFF,
-        static_cast<int>(255 * alpha));
-
-    const float dx = dirDx[idx];
-    const float dy = dirDy[idx];
-    const float endX = center.x + dx * kLineLength;
-    const float endY = center.y + dy * kLineLength;
-
-    dl->AddLine(center, ImVec2(endX, endY), lineCol, hl ? 3.0f : 2.0f);
-
-    const float dotRadius = hl ? kEndpointRadius * 1.3f : kEndpointRadius;
-    dl->AddCircleFilled(ImVec2(endX, endY), dotRadius, lineCol, 12);
-    dl->AddCircle(ImVec2(endX, endY), dotRadius, IM_COL32(255, 255, 255, static_cast<int>(100 * alpha)), 12, 1.0f);
-
-    char labelStr[2] = {axis.label, '\0'};
-    const float labelW = ImGui::CalcTextSize(labelStr).x;
-    const float labelH = ImGui::CalcTextSize(labelStr).y;
-    dl->AddText(ImVec2(endX - labelW * 0.5f, endY - labelH * 0.5f), IM_COL32(0, 0, 0, static_cast<int>(200 * alpha)), labelStr);
-    dl->AddText(ImVec2(endX - labelW * 0.5f - 1.0f, endY - labelH * 0.5f - 1.0f), IM_COL32(255, 255, 255, static_cast<int>(255 * alpha)), labelStr);
-  }
+  RenderViewGimbalAxes(dl, {center, kLineLength, kEndpointRadius},
+                       kAxes, dirDx, dirDy, dirVz, order, hoverSnap);
 
   if (hoverTooltip && canvasHovered) {
     ImGui::SetTooltip("%s", hoverTooltip);

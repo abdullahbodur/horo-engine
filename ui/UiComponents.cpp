@@ -562,6 +562,102 @@ const char *EditorPanelTabLabel(EditorPanelTab tab) {
   return "Unknown";
 }
 
+namespace {
+/** @brief Renders the tab buttons in the panel top bar. Returns clicked tab index or -1. */
+int RenderPanelTabs(const EditorTheme& theme,
+                    std::span<const EditorPanelTabItem> tabs,
+                    float maxTabRight,
+                    float kTabHorizontalPadding,
+                    float kTabVerticalPadding,
+                    float kTabSpacing,
+                    float kUnderlineThickness) {
+  int clickedTab = -1;
+  for (int i = 0; i < static_cast<int>(tabs.size()); ++i) {
+    if (i > 0)
+      ImGui::SameLine(0.0f, kTabSpacing);
+    if (ImGui::GetCursorPosX() >= maxTabRight)
+      break;
+
+    const EditorPanelTabItem &item = tabs[i];
+    const char *label = EditorPanelTabLabel(item.tab);
+    const float tabWidth = ImGui::CalcTextSize(label).x + kTabHorizontalPadding * 2.0f;
+    if (ImGui::GetCursorPosX() + tabWidth > maxTabRight)
+      break;
+
+    ImGui::PushID(i);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.cardHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text,
+        item.selected ? theme.palette.text : theme.palette.textMuted);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(kTabHorizontalPadding, kTabVerticalPadding));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+
+    const ImVec2 btnPos = ImGui::GetCursorScreenPos();
+    if (ImGui::Button(label, ImVec2(tabWidth, 0.0f)))
+      clickedTab = i;
+    if (item.selected) {
+      const ImVec2 btnMax = ImGui::GetItemRectMax();
+      ImGui::GetWindowDrawList()->AddRectFilled(
+          ImVec2(btnPos.x, btnMax.y - kUnderlineThickness),
+          ImVec2(btnMax.x, btnMax.y),
+          ImGui::ColorConvertFloat4ToU32(theme.palette.accent));
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
+    ImGui::PopID();
+  }
+  return clickedTab;
+}
+
+/** @brief Renders the action buttons in the panel top bar. Returns clicked action index or -1. */
+int RenderPanelActions(const EditorTheme& theme,
+                       std::span<const EditorPanelActionItem> actions,
+                       float actionButtonSize,
+                       float kActionSpacing) {
+  int clickedAction = -1;
+  int renderedCount = 0;
+  for (int i = 0; i < static_cast<int>(actions.size()); ++i) {
+    const EditorPanelActionItem &action = actions[i];
+    if (!action.enabled)
+      continue;
+    if (renderedCount > 0)
+      ImGui::SameLine(0.0f, kActionSpacing);
+    ++renderedCount;
+
+    ImGui::PushID(i);
+    std::string btnLabel;
+    if (action.icon)
+      btnLabel = action.icon;
+    if (action.text && action.text[0] != '\0') {
+      btnLabel += "  ";
+      btnLabel += action.text;
+    }
+
+    const bool clicked =
+        EditorHeaderIconButton(theme, btnLabel.c_str(), ImVec2(actionButtonSize, 0.0f));
+
+    if (clicked && !action.dropdown.empty()) {
+      ImGui::OpenPopup(std::format("##action_popup_{}", i).c_str());
+    } else if (clicked) {
+      clickedAction = i;
+    }
+
+    if (!action.dropdown.empty()) {
+      const std::string popupId = std::format("##action_popup_{}", i);
+      if (ImGui::BeginPopup(popupId.c_str())) {
+        RenderEditorDropdownItems(action.dropdown);
+        ImGui::EndPopup();
+      }
+    }
+    ImGui::PopID();
+  }
+  return clickedAction;
+}
+}  // namespace
+
 /** @copydoc RenderEditorPanelTopBar */
 EditorPanelTopBarResult RenderEditorPanelTopBar(
     const EditorTheme &theme, const char *id,
@@ -572,12 +668,12 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
   constexpr float kTabSpacing = 2.0f;
   constexpr float kActionSpacing = 6.0f;
   constexpr float kHeaderBottomPadding = 8.0f;
+  constexpr float kUnderlineThickness = 2.0f;
 
   EditorPanelTopBarResult result;
   const float headerY = ImGui::GetCursorPosY();
   const float actionButtonSize = ImGui::GetTextLineHeight() + 4.0f;
 
-  // Only enabled actions contribute to width and are rendered.
   int enabledActionCount = 0;
   for (const auto &a : actions)
     if (a.enabled) ++enabledActionCount;
@@ -594,12 +690,7 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
 
   ImGui::PushID(id);
 
-  constexpr float kUnderlineThickness = 2.0f;
-
-  // Draw full-width gray baseline at the same Y band as the selected-tab blue
-  // underline. tabRowBottom must use kTabVerticalPadding — the same padding
-  // pushed onto the style stack when buttons are rendered — so the two rects
-  // share an identical bottom edge.
+  // Draw full-width gray baseline
   {
     const ImVec2 tabOrigin   = ImGui::GetCursorScreenPos();
     const float tabRowBottom = tabOrigin.y + ImGui::GetFontSize() + kTabVerticalPadding * 2.0f;
@@ -612,103 +703,18 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
         ImGui::ColorConvertFloat4ToU32(theme.palette.border));
   }
 
-  for (int i = 0; i < static_cast<int>(tabs.size()); ++i) {
-    if (i > 0)
-      ImGui::SameLine(0.0f, kTabSpacing);
-
-    if (ImGui::GetCursorPosX() >= maxTabRight)
-      break;
-
-    const EditorPanelTabItem &item = tabs[i];
-    const char *label = EditorPanelTabLabel(item.tab);
-    const ImVec2 labelSize = ImGui::CalcTextSize(label);
-    const float tabWidth = labelSize.x + kTabHorizontalPadding * 2.0f;
-    if (ImGui::GetCursorPosX() + tabWidth > maxTabRight)
-      break;
-
-    ImGui::PushID(i);
-    const ImVec4 textColor =
-        item.selected ? theme.palette.text : theme.palette.textMuted;
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.cardHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(kTabHorizontalPadding, kTabVerticalPadding));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-
-    const ImVec2 btnPos = ImGui::GetCursorScreenPos();
-    if (ImGui::Button(label, ImVec2(tabWidth, 0.0f)))
-      result.clickedTabIndex = i;
-    const ImVec2 btnMax = ImGui::GetItemRectMax();
-
-    if (item.selected) {
-      ImDrawList *dl = ImGui::GetWindowDrawList();
-      dl->AddRectFilled(
-          ImVec2(btnPos.x, btnMax.y - kUnderlineThickness),
-          ImVec2(btnMax.x, btnMax.y),
-          ImGui::ColorConvertFloat4ToU32(theme.palette.accent));
-    }
-
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(4);
-    ImGui::PopID();
-  }
+  result.clickedTabIndex = RenderPanelTabs(theme, tabs, maxTabRight,
+      kTabHorizontalPadding, kTabVerticalPadding, kTabSpacing, kUnderlineThickness);
 
   if (enabledActionCount > 0) {
-    ImGui::SetCursorPos(
-        ImVec2(rightEdge - actionsWidth, headerY + 1.0f));
-
-    int renderedCount = 0;
-    for (int i = 0; i < static_cast<int>(actions.size()); ++i) {
-      const EditorPanelActionItem &action = actions[i];
-      if (!action.enabled)
-        continue;
-
-      if (renderedCount > 0)
-        ImGui::SameLine(0.0f, kActionSpacing);
-      ++renderedCount;
-
-      const ImVec2 btnSize(actionButtonSize, 0.0f);
-      ImGui::PushID(i);
-
-      std::string btnLabel;
-      if (action.icon)
-        btnLabel = action.icon;
-      if (action.text && action.text[0] != '\0') {
-        btnLabel += "  ";
-        btnLabel += action.text;
-      }
-
-      const bool clicked =
-          EditorHeaderIconButton(theme, btnLabel.c_str(), btnSize);
-
-      if (clicked) {
-        if (!action.dropdown.empty()) {
-          const std::string popupId = std::format("##action_popup_{}", i);
-          ImGui::OpenPopup(popupId.c_str());
-        } else {
-          result.clickedActionIndex = i;
-        }
-      }
-
-      if (!action.dropdown.empty()) {
-        const std::string popupId = std::format("##action_popup_{}", i);
-        if (ImGui::BeginPopup(popupId.c_str())) {
-          RenderEditorDropdownItems(action.dropdown);
-          ImGui::EndPopup();
-        }
-      }
-
-      ImGui::PopID();
-    }
+    ImGui::SetCursorPos(ImVec2(rightEdge - actionsWidth, headerY + 1.0f));
+    result.clickedActionIndex = RenderPanelActions(theme, actions, actionButtonSize, kActionSpacing);
   }
 
   ImGui::PopID();
 
-  const float minCursorY =
-      headerY + ImGui::GetFrameHeight() + kHeaderBottomPadding;
-  if (ImGui::GetCursorPosY() < minCursorY)
+  if (const float minCursorY = headerY + ImGui::GetFrameHeight() + kHeaderBottomPadding;
+      ImGui::GetCursorPosY() < minCursorY)
     ImGui::SetCursorPosY(minCursorY);
 
   return result;
@@ -981,7 +987,7 @@ void EndEditorCard() {
 /** @copydoc RenderEditorStatusText */
 void RenderEditorStatusText(const EditorTheme& theme,
                             EditorStatusLevel level,
-                            const char* fmt, ...) {
+                            const char* text) {
     using enum EditorStatusLevel;
     ImVec4 color;
     switch (level) {
@@ -990,13 +996,85 @@ void RenderEditorStatusText(const EditorTheme& theme,
         case Error:   color = theme.palette.destructive;            break;
         case Success: color = ImVec4(0.35f, 0.85f, 0.50f, 1.0f);  break;
     }
-    va_list args;
-    va_start(args, fmt);
-    ImGui::TextColoredV(color, fmt, args);
-    va_end(args);
+    ImGui::TextColored(color, "%s", text);
 }
 
 // ─── Group D: Settings modal primitives ──────────────────────────────────────
+
+namespace {
+/** @brief Renders a single vertical tab row. Returns true if clicked. */
+bool RenderVerticalTabRow(const EditorTheme& theme,
+                          const EditorVerticalTabItem& item,
+                          float availWidth) {
+    constexpr float kRowHeight = 54.0f;
+    constexpr float kRowPaddingX = 10.0f;
+    constexpr float kRowPaddingY = 8.0f;
+
+    const char* tabId = item.id ? item.id : "";
+    ImGui::PushID(tabId);
+
+    const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+    const ImVec2 rowSize(availWidth, kRowHeight);
+
+    ImGui::InvisibleButton("##vtab_hit", rowSize);
+    const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+    const bool hovered = ImGui::IsItemHovered();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec4 bg;
+    if (item.selected)
+        bg = theme.palette.selection;
+    else if (hovered)
+        bg = theme.palette.cardHover;
+    else
+        bg = ImVec4(0, 0, 0, 0);
+    if (bg.w > 0.0f) {
+        dl->AddRectFilled(
+            rowStart,
+            ImVec2(rowStart.x + rowSize.x, rowStart.y + rowSize.y),
+            ImGui::ColorConvertFloat4ToU32(bg),
+            theme.rounding.button);
+    }
+
+    if (item.selected) {
+        dl->AddRectFilled(
+            rowStart,
+            ImVec2(rowStart.x + 3.0f, rowStart.y + rowSize.y),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.accent),
+            theme.rounding.button);
+    }
+
+    float textX = rowStart.x + kRowPaddingX;
+    const float textY = rowStart.y + kRowPaddingY;
+
+    if (item.icon && item.icon[0] != '\0') {
+        const ImVec2 iconSize = ImGui::CalcTextSize(item.icon);
+        dl->AddText(
+            ImVec2(textX, textY),
+            ImGui::ColorConvertFloat4ToU32(
+                item.selected ? theme.palette.text : theme.palette.textMuted),
+            item.icon);
+        textX += iconSize.x + 8.0f;
+    }
+
+    if (item.label && item.label[0] != '\0') {
+        dl->AddText(
+            ImVec2(textX, textY),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.text),
+            item.label);
+    }
+
+    if (item.description && item.description[0] != '\0') {
+        dl->AddText(
+            ImVec2(textX, textY + ImGui::GetFontSize() + 2.0f),
+            ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
+            item.description);
+    }
+
+    ImGui::PopID();
+    return clicked;
+}
+}  // namespace
 
 /** @copydoc RenderEditorVerticalTabs */
 EditorVerticalTabResult RenderEditorVerticalTabs(
@@ -1009,86 +1087,16 @@ EditorVerticalTabResult RenderEditorVerticalTabs(
     if (!id || tabs.empty() || width <= 0.0f)
         return result;
 
-    // Host child: no built-in border; we paint the column border manually so
-    // the bottom edge can extend past the child content height cleanly.
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme.palette.panelSoft);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 4.0f));
     ImGui::BeginChild(id, ImVec2(width, 0.0f), ImGuiChildFlags_Borders);
 
-    const ImDrawList* /*unused*/ drawList [[maybe_unused]] = ImGui::GetWindowDrawList();
     const float availWidth = ImGui::GetContentRegionAvail().x;
-    constexpr float kRowHeight = 54.0f;
-    constexpr float kRowPaddingX = 10.0f;
-    constexpr float kRowPaddingY = 8.0f;
 
     for (int i = 0; i < static_cast<int>(tabs.size()); ++i) {
-        const EditorVerticalTabItem& item = tabs[i];
-        const char* tabId = item.id ? item.id : "";
-        ImGui::PushID(tabId);
-
-        const ImVec2 rowStart = ImGui::GetCursorScreenPos();
-        const ImVec2 rowSize(availWidth, kRowHeight);
-
-        // Hit-test area
-        ImGui::InvisibleButton("##vtab_hit", rowSize);
-        const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-        const bool hovered = ImGui::IsItemHovered();
-
-        // Background
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const ImVec4 bg = item.selected ? theme.palette.selection
-                                        : (hovered ? theme.palette.cardHover
-                                                   : ImVec4(0, 0, 0, 0));
-        if (bg.w > 0.0f) {
-            dl->AddRectFilled(
-                rowStart,
-                ImVec2(rowStart.x + rowSize.x, rowStart.y + rowSize.y),
-                ImGui::ColorConvertFloat4ToU32(bg),
-                theme.rounding.button);
-        }
-
-        // Accent marker on the left edge when selected
-        if (item.selected) {
-            dl->AddRectFilled(
-                rowStart,
-                ImVec2(rowStart.x + 3.0f, rowStart.y + rowSize.y),
-                ImGui::ColorConvertFloat4ToU32(theme.palette.accent),
-                theme.rounding.button);
-        }
-
-        // Text
-        float textX = rowStart.x + kRowPaddingX;
-        const float textY = rowStart.y + kRowPaddingY;
-
-        if (item.icon && item.icon[0] != '\0') {
-            const ImVec2 iconSize = ImGui::CalcTextSize(item.icon);
-            dl->AddText(
-                ImVec2(textX, textY),
-                ImGui::ColorConvertFloat4ToU32(
-                    item.selected ? theme.palette.text : theme.palette.textMuted),
-                item.icon);
-            textX += iconSize.x + 8.0f;
-        }
-
-        if (item.label && item.label[0] != '\0') {
-            dl->AddText(
-                ImVec2(textX, textY),
-                ImGui::ColorConvertFloat4ToU32(theme.palette.text),
-                item.label);
-        }
-
-        if (item.description && item.description[0] != '\0') {
-            dl->AddText(
-                ImVec2(textX, textY + ImGui::GetFontSize() + 2.0f),
-                ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
-                item.description);
-        }
-
-        if (clicked)
+        if (RenderVerticalTabRow(theme, tabs[i], availWidth))
             result.clickedIndex = i;
-
-        ImGui::PopID();
     }
 
     ImGui::EndChild();
@@ -1152,8 +1160,7 @@ EditorSettingsFooterResult RenderEditorSettingsFooter(
     // Right-align: compute total width then SameLine-advance to align right edge.
     constexpr float kButtonSpacing = 8.0f;
     const float totalWidth = buttonWidth * 3.0f + kButtonSpacing * 2.0f;
-    const float avail = ImGui::GetContentRegionAvail().x;
-    if (avail > totalWidth)
+    if (const float avail = ImGui::GetContentRegionAvail().x; avail > totalWidth)
         ImGui::Dummy(ImVec2(avail - totalWidth, 0.0f));
     ImGui::SameLine();
 

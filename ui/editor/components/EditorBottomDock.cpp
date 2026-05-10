@@ -3,6 +3,7 @@
 #include "ui/editor/components/EditorBottomDock.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <format>
 #include <ranges>
@@ -62,10 +63,10 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
 
     const Ui::EditorTheme &theme = Ui::GetEditorTheme();
 
-    const Ui::EditorPanelTabItem tabs[] = {
-        {Ui::EditorPanelTab::Assets,  m_selectedTab == Tab::Assets},
-        {Ui::EditorPanelTab::Console, m_selectedTab == Tab::Console},
-        {Ui::EditorPanelTab::MCP,     m_selectedTab == Tab::MCP},
+    const std::array tabs = {
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::Assets,  m_selectedTab == Tab::Assets},
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::Console, m_selectedTab == Tab::Console},
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::MCP,     m_selectedTab == Tab::MCP},
     };
     const auto topBar = Ui::RenderEditorPanelTopBar(theme, "workspace_topbar", tabs, {});
     if (topBar.clickedTabIndex == 0) m_selectedTab = Tab::Assets;
@@ -82,7 +83,7 @@ void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
 }
 
 /** @copydoc EditorBottomDock::DrawAssetsTab */
-void EditorBottomDock::DrawAssetsTab() {
+void EditorBottomDock::DrawAssetsTab() const {
     if (m_assetsTabCallback) {
         m_assetsTabCallback();
     }
@@ -279,8 +280,8 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
 void EditorBottomDock::DrawMcpClientCard(const char* title, const char* pathLabel,
                                          const char* pathValue, const char* hint,
                                          std::string_view snippet,
-                                         const char* toastLabel,
-                                         Horo::Mcp::McpController* mcpController,
+                                         const char* /*toastLabel*/,
+                                         Horo::Mcp::McpController* /*mcpController*/,
                                          GLFWwindow* window) {
     ImGui::TableNextColumn();
     ImGui::BeginChild(title, ImVec2(0, 132.0f), true);
@@ -326,7 +327,7 @@ void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& stat
         Ui::RenderEditorStatusText(theme,
                                    entry.ok ? Ui::EditorStatusLevel::Success
                                             : Ui::EditorStatusLevel::Error,
-                                   "%s", entry.ok ? "OK" : "FAIL");
+                                   entry.ok ? "OK" : "FAIL");
         ImGui::TableSetColumnIndex(3);
         ImGui::Text("%.1f", entry.durationMs);
         ImGui::TableSetColumnIndex(4);

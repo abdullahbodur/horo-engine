@@ -172,7 +172,7 @@ void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
         ImGui::Spacing();
         ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 360.0f);
         Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
-                                         "%s", m_pendingDeleteAssetError.c_str());
+                                         m_pendingDeleteAssetError.c_str());
         ImGui::PopTextWrapPos();
     }
     ImGui::Separator();
@@ -211,7 +211,7 @@ void EditorUIWidgets::DrawExitConfirmModal() {
     const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     if (!m_exitConfirmError.empty())
         Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
-                                         "%s", m_exitConfirmError.c_str());
+                                         m_exitConfirmError.c_str());
 
     const auto result = Horo::Ui::RenderEditorModalFooter(
         theme, "Save", Horo::Ui::EditorModalFooterStyle::ThreeWay, "Discard");
@@ -260,7 +260,7 @@ void EditorUIWidgets::DrawRenameObjectModal() {
     const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
     if (!m_renameObjectError.empty())
         Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
-                                         "%s", m_renameObjectError.c_str());
+                                         m_renameObjectError.c_str());
 
     const auto result = Horo::Ui::RenderEditorModalFooter(
         theme, "Rename", Horo::Ui::EditorModalFooterStyle::OkCancel);

@@ -165,6 +165,6 @@ namespace Horo::Editor {
          *  @param thumbSize Size of the add-icon area in pixels. */
         void DrawAddAssetTile(bool& openNewAssetModal,
                               float tileW, float tileH,
-                              float thumbPad, float thumbSize);
+                              float thumbPad, float thumbSize) const;
     };
 }

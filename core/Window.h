@@ -96,18 +96,34 @@ public:
 
   void SetCursorMode(CursorMode mode);
 
-  void SetupNativeMenuBar();
+  void SetupNativeMenuBar() const;
   using MenuCallback = std::function<void()>;
-  void SetMenuCallbacks(
-      MenuCallback fileNew, MenuCallback fileOpen, MenuCallback fileResetLayout,
-      MenuCallback fileSettings, MenuCallback fileCloseEditor,
-      MenuCallback addPanel, MenuCallback addProp, MenuCallback addLight,
-      MenuCallback addCamera, MenuCallback addPropFromAsset,
-      MenuCallback editUndo, MenuCallback editRedo, MenuCallback editRename,
-      MenuCallback editCreatePrefab, MenuCallback editDuplicate,
-      MenuCallback editDelete, MenuCallback viewFlyMode, MenuCallback viewHelp,
-      MenuCallback viewQuickOpen, MenuCallback viewCommandPalette,
-      MenuCallback viewResetLayout);
+
+  /** @brief Groups all native menu bar callbacks into a single parameter object. */
+  struct MenuCallbacks {
+    MenuCallback fileNew;
+    MenuCallback fileOpen;
+    MenuCallback fileResetLayout;
+    MenuCallback fileSettings;
+    MenuCallback fileCloseEditor;
+    MenuCallback addPanel;
+    MenuCallback addProp;
+    MenuCallback addLight;
+    MenuCallback addCamera;
+    MenuCallback addPropFromAsset;
+    MenuCallback editUndo;
+    MenuCallback editRedo;
+    MenuCallback editRename;
+    MenuCallback editCreatePrefab;
+    MenuCallback editDuplicate;
+    MenuCallback editDelete;
+    MenuCallback viewFlyMode;
+    MenuCallback viewHelp;
+    MenuCallback viewQuickOpen;
+    MenuCallback viewCommandPalette;
+    MenuCallback viewResetLayout;
+  };
+  void SetMenuCallbacks(MenuCallbacks callbacks) const;
 
 private:
   GLFWwindow *m_window = nullptr;

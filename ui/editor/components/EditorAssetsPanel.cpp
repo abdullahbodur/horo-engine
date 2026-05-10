@@ -45,13 +45,13 @@ namespace {
     std::string ToLowerAscii(const std::string& str) {
         std::string result = str;
         for (auto& c : result)
-            c = std::tolower(static_cast<unsigned char>(c));
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return result;
     }
 }
 
 /** @copydoc EditorAssetsPanel::Draw */
-void EditorAssetsPanel::Draw(const EditorComponentContext& ctx,
+void EditorAssetsPanel::Draw(const EditorComponentContext& /*ctx*/,
                             const EditorAssetsPanelCallbacks& callbacks,
                             const EditorAssetsPanelState& state) {
     if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
@@ -155,8 +155,8 @@ void EditorAssetsPanel::DrawAssetSpotlightPopup(
         if (!AssetMatchesQuickOpenQuery(assetId, it->second,
                                        *state.assetSearchQuery))
             continue;
-        const auto label = std::format("{}##asset_spotlight_{}", assetId, assetId);
-        if (Horo::Ui::EditorPickerModalRow(label.c_str(),
+        if (const auto label = std::format("{}##asset_spotlight_{}", assetId, assetId);
+            Horo::Ui::EditorPickerModalRow(label.c_str(),
                                            *state.selectedAssetId == assetId)) {
             *state.selectedAssetId = assetId;
             picked = true;
@@ -283,7 +283,7 @@ void EditorAssetsPanel::DrawAssetTile(
 /** @copydoc EditorAssetsPanel::DrawAddAssetTile */
 void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
                                          float tileW, float tileH,
-                                         float thumbPad, float thumbSize) {
+                                         float thumbPad, float thumbSize) const {
     // Reserve enough height for the thumbnail area plus two label lines.
     const float lineH   = ImGui::GetTextLineHeight();
     const float labelH  = 4.0f + lineH + 2.0f + lineH + 4.0f; // gap + line1 + gap + line2 + bottom margin
@@ -424,8 +424,7 @@ void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
 
     // Always render the add-asset tile at the end of the grid
     {
-        const int addTileCol = shownAssetCount % columns;
-        if (addTileCol > 0)
+        if (const int addTileCol = shownAssetCount % columns; addTileCol > 0)
             ImGui::SameLine(0.0f, spacing);
         DrawAddAssetTile(openNewAssetModal, tileW, tileH, thumbPad, thumbSize);
     }
@@ -462,7 +461,7 @@ void EditorAssetsPanel::DrawCreateAssetModalContent(
     if (!state.assetImportError->empty())
         Horo::Ui::RenderEditorStatusText(Horo::Ui::GetEditorTheme(),
                                          Horo::Ui::EditorStatusLevel::Error,
-                                         "%s", state.assetImportError->c_str());
+                                         state.assetImportError->c_str());
 
     ImGui::Spacing();
 

@@ -117,79 +117,83 @@ namespace Horo::Editor {
     }
 
 
+namespace {
+/** @brief Picks the closest rotation ring axis to the given screen point. */
+GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
+                             float radius, const Camera& cam,
+                             int screenW, int screenH) {
+    constexpr float kRotateHitRadiusSq = 7.0f * 7.0f;
+    constexpr int kSegments = 48;
+    constexpr float kRingTwoPi = 6.28318530718f;
+
+    const std::array<Vec3, 3> kBasisU = {
+        Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f},
+        Vec3{1.0f, 0.0f, 0.0f}
+    };
+    const std::array<Vec3, 3> kBasisV = {
+        Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 0.0f, 1.0f},
+        Vec3{0.0f, 1.0f, 0.0f}
+    };
+
+    float bestRingDist = kRotateHitRadiusSq;
+    GizmoAxis bestRingAxis = GizmoAxis::None;
+
+    for (int i = 0; i < 3; ++i) {
+        const auto ringAxis = static_cast<GizmoAxis>(i + 1);
+        const Vec3 uVec = kBasisU[i];
+        const Vec3 vVec = kBasisV[i];
+
+        float prevX = 0.0f;
+        float prevY = 0.0f;
+        bool prevValid = false;
+
+        for (int j = 0; j <= kSegments; ++j) {
+            const float t = kRingTwoPi * static_cast<float>(j) /
+                            static_cast<float>(kSegments);
+            const Vec3 p = pos + uVec * (std::cos(t) * radius) +
+                           vVec * (std::sin(t) * radius);
+            float sx;
+            float sy;
+            if (!TransformGizmo::WorldToScreen(p, cam, screenW, screenH, sx, sy)) {
+                prevValid = false;
+                continue;
+            }
+            if (!prevValid) {
+                prevX = sx;
+                prevY = sy;
+                prevValid = true;
+                continue;
+            }
+            const float abx = sx - prevX;
+            const float aby = sy - prevY;
+            const float apx = mx - prevX;
+            const float apy = my - prevY;
+            const float abLen2 = abx * abx + aby * aby;
+            float segT = 0.0f;
+            if (abLen2 > 1e-8f)
+                segT = std::clamp(
+                    (apx * abx + apy * aby) / abLen2, 0.0f, 1.0f);
+            const float cx = prevX + segT * abx;
+            const float cy = prevY + segT * aby;
+            const float dx = mx - cx;
+            const float dy = my - cy;
+            if (const float distSq = dx * dx + dy * dy; distSq < bestRingDist) {
+                bestRingDist = distSq;
+                bestRingAxis = ringAxis;
+            }
+            prevX = sx;
+            prevY = sy;
+        }
+    }
+    return bestRingAxis;
+}
+}  // namespace
+
     /** @copydoc TransformGizmo::PickAxis */
     GizmoAxis TransformGizmo::PickAxis(float mx, float my, const Camera &cam,
                                        int screenW, int screenH) const {
-        // In rotate mode the visual handle is a circular ring, not a line.
-        // Testing distance to the axis line would let clicks far from the ring
-        // (but along the axis direction) trigger rotation, so dispatch to a
-        // dedicated ring-aware picker. Translate and scale share the
-        // segment-distance test below because their visible shafts are lines.
-        if (m_mode == GizmoMode::Rotate) {
-            const float radius = HandleSize(cam);
-            constexpr float kRotateHitRadiusSq = 7.0f * 7.0f;
-            constexpr int kSegments = 48;
-            constexpr float kRingTwoPi = 6.28318530718f;
-
-            const std::array<Vec3, 3> kBasisU = {
-                Vec3{0.0f, 1.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f},
-                Vec3{1.0f, 0.0f, 0.0f}
-            };
-            const std::array<Vec3, 3> kBasisV = {
-                Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 0.0f, 1.0f},
-                Vec3{0.0f, 1.0f, 0.0f}
-            };
-
-            float bestRingDist = kRotateHitRadiusSq;
-            GizmoAxis bestRingAxis = GizmoAxis::None;
-
-            for (int i = 0; i < 3; ++i) {
-                const auto ringAxis = static_cast<GizmoAxis>(i + 1);
-                const Vec3 uVec = kBasisU[i];
-                const Vec3 vVec = kBasisV[i];
-
-                float prevX = 0.0f;
-                float prevY = 0.0f;
-                bool prevValid = false;
-
-                for (int j = 0; j <= kSegments; ++j) {
-                    const float t = kRingTwoPi * static_cast<float>(j) /
-                                    static_cast<float>(kSegments);
-                    const Vec3 p = m_pos + uVec * (std::cos(t) * radius) +
-                                   vVec * (std::sin(t) * radius);
-                    float sx;
-                    float sy;
-                    if (!WorldToScreen(p, cam, screenW, screenH, sx, sy)) {
-                        prevValid = false;
-                        continue;
-                    }
-                    if (prevValid) {
-                        const float abx = sx - prevX;
-                        const float aby = sy - prevY;
-                        const float apx = mx - prevX;
-                        const float apy = my - prevY;
-                        const float abLen2 = abx * abx + aby * aby;
-                        float segT = 0.0f;
-                        if (abLen2 > 1e-8f)
-                            segT = std::clamp(
-                                (apx * abx + apy * aby) / abLen2, 0.0f, 1.0f);
-                        const float cx = prevX + segT * abx;
-                        const float cy = prevY + segT * aby;
-                        const float dx = mx - cx;
-                        const float dy = my - cy;
-                        const float distSq = dx * dx + dy * dy;
-                        if (distSq < bestRingDist) {
-                            bestRingDist = distSq;
-                            bestRingAxis = ringAxis;
-                        }
-                    }
-                    prevX = sx;
-                    prevY = sy;
-                    prevValid = true;
-                }
-            }
-            return bestRingAxis;
-        }
+        if (m_mode == GizmoMode::Rotate)
+            return PickRotateRingAxis(mx, my, m_pos, HandleSize(cam), cam, screenW, screenH);
 
         const float handleLen = HandleSize(cam);
         // Hit radius tuned to visual thickness (shaft ≈ 4-5 px, head ≈ 12 px on

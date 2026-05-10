@@ -318,7 +318,7 @@ void EditorLayer::DrawPropertiesSelectedAsset(
     }
     if (!m_assetImportError.empty())
       Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
-                                       "%s", m_assetImportError.c_str());
+                                       m_assetImportError.c_str());
   }
 
   ImGui::Spacing();
@@ -634,7 +634,7 @@ void EditorLayer::DrawPropertiesAssetSection(SceneObject &obj) {
     } else {
       const auto &theme = Horo::Ui::GetEditorTheme();
       Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Warning,
-                                       "Missing asset: %s", obj.assetId.c_str());
+                                       std::format("Missing asset: {}", obj.assetId).c_str());
     }
   }
 }

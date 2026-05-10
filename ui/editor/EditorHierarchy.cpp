@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <string>
 #include <unordered_map>
@@ -54,18 +55,18 @@ void EditorLayer::DrawObjectList() {
 
   // Top bar
   {
-    const Ui::EditorPanelDropdownItem addItems[] = {
-        {ICON_FA_EXPAND,    "Panel",  [this] { AddObject(Panel);  }},
-        {ICON_FA_CUBE,      "Prop",   [this] { AddObject(Prop);   }},
-        {ICON_FA_LIGHTBULB, "Light",  [this] { AddObject(Light);  }},
-        {ICON_FA_VIDEO,     "Camera", [this] { AddObject(Camera); }},
+    const std::array addItems = {
+        Ui::EditorPanelDropdownItem{ICON_FA_EXPAND,    "Panel",  [this] { AddObject(Panel);  }},
+        Ui::EditorPanelDropdownItem{ICON_FA_CUBE,      "Prop",   [this] { AddObject(Prop);   }},
+        Ui::EditorPanelDropdownItem{ICON_FA_LIGHTBULB, "Light",  [this] { AddObject(Light);  }},
+        Ui::EditorPanelDropdownItem{ICON_FA_VIDEO,     "Camera", [this] { AddObject(Camera); }},
     };
-    const Ui::EditorPanelTabItem tabs[] = {
-        {Ui::EditorPanelTab::Scene, true},
+    const std::array tabs = {
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::Scene, true},
     };
-    const Ui::EditorPanelActionItem actions[] = {
-        {ICON_FA_PLUS, nullptr, addItems},
-        {ICON_FA_ELLIPSIS_VERTICAL},
+    const std::array actions = {
+        Ui::EditorPanelActionItem{ICON_FA_PLUS, nullptr, addItems},
+        Ui::EditorPanelActionItem{ICON_FA_ELLIPSIS_VERTICAL},
     };
     Ui::RenderEditorPanelTopBar(theme, "hierarchy_topbar", tabs, actions);
   }

@@ -177,7 +177,7 @@ namespace Horo::Editor {
                             float leftDockWidth, float bottomDockHeight);
 
         /** @brief Renders the Assets tab content by invoking the registered callback. */
-        void DrawAssetsTab();
+        void DrawAssetsTab() const;
 
         /** @brief Renders the Console tab content, applying the active log-level filters. */
         void DrawConsoleTab();

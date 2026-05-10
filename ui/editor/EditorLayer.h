@@ -823,8 +823,8 @@ namespace Horo {
             EditorSettingsModal m_settingsModal;       /**< Settings modal component state. */
             EditorUserSettingsDocument m_userSettingsDocument{};
                                                        /**< Persisted user-wide editor preferences (theme preset). */
-            EditorToolbar m_toolbar;                   /**< Toolbar component state and actions. */
-            EditorAssetsPanel m_assetsPanel;           /**< Assets panel component state and renderer. */
+            [[no_unique_address]] EditorToolbar m_toolbar;                   /**< Toolbar component state and actions. */
+            [[no_unique_address]] EditorAssetsPanel m_assetsPanel;           /**< Assets panel component state and renderer. */
             EditorUIWidgets m_uiWidgets;               /**< Shared editor widget helpers. */
             int m_mcpSelectedActivityIndex = 0;        /**< Selected row index in MCP activity UI. */
             bool m_mcpUiClearToggle = false;           /**< Previous-frame MCP clear-history toggle state. */
