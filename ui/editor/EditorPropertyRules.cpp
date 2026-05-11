@@ -12,7 +12,7 @@ namespace Horo::Editor {
 
 /** @copydoc MakeObjectFromAsset */
 SceneObject MakeObjectFromAsset(const SceneDocument &doc,
-                                const std::string &assetId,
+                                std::string_view assetId,
                                 const EditorSchema &schema) {
   using enum SceneObjectType;
 

@@ -363,43 +363,44 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
 /** @copydoc EditorLayer::OnUpdate */
 bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
 
-  if (m_active) {
-    ProcessMcpCommands();
-
-    if (ShouldFinalizeEditorClose(m_closeRequested, m_wantsReload)) {
-      Toggle();
-      return false;
-    }
-
-    if (m_playMode) {
-      const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
-      if (currEsc && !m_prevEsc) {
-        ++m_playModeEscPresses;
-        if (m_playModeEscPresses >= 2) {
-          m_playMode = false;
-          m_playModeEscPresses = 0;
-        }
-        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-      }
-      m_prevEsc = currEsc;
-      PublishMcpSnapshot();
-      return false;
-    }
-
-    EditorTrace("OnUpdate frame=%u fly=%d",
-                static_cast<unsigned>(ImGui::GetFrameCount()),
-                m_flyMode ? 1 : 0);
-
-    HandleEditorKeyboardShortcuts(cam);
-
-    if (m_flyMode)
-      UpdateFlyCameraWithGizmoSync(dt, cam);
-    else
-      UpdateNonFlyModeInput(cam, screenW, screenH);
-
-    ApplyPendingViewSnap(cam);
-    PublishMcpSnapshot();
+  if (!m_active) {
+    const ImGuiIO &io = ImGui::GetIO();
+    return m_active && !m_flyMode &&
+           (io.WantCaptureMouse || io.WantCaptureKeyboard);
   }
+
+  ProcessMcpCommands();
+
+  if (ShouldFinalizeEditorClose(m_closeRequested, m_wantsReload)) {
+    Toggle();
+    return false;
+  }
+
+  if (m_playMode) {
+    const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+    if (currEsc && !m_prevEsc) {
+      ++m_playModeEscPresses;
+      if (m_playModeEscPresses >= 2) { m_playMode = false; m_playModeEscPresses = 0; }
+      glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+    m_prevEsc = currEsc;
+    PublishMcpSnapshot();
+    return false;
+  }
+
+  EditorTrace("OnUpdate frame=%u fly=%d",
+              static_cast<unsigned>(ImGui::GetFrameCount()),
+              m_flyMode ? 1 : 0);
+
+  HandleEditorKeyboardShortcuts(cam);
+
+  if (m_flyMode)
+    UpdateFlyCameraWithGizmoSync(dt, cam);
+  else
+    UpdateNonFlyModeInput(cam, screenW, screenH);
+
+  ApplyPendingViewSnap(cam);
+  PublishMcpSnapshot();
 
   const ImGuiIO &io = ImGui::GetIO();
   return m_active && !m_flyMode &&

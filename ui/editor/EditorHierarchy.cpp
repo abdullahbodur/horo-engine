@@ -239,6 +239,21 @@ void EditorLayer::HandleTreeNodeClickSelection(int idx) {
   }
 }
 
+namespace {
+/** @brief Validates and applies a reparent drag-drop payload. */
+void AcceptReparentDrop(int idx, SceneDocument &doc, SceneObject &obj,
+                        const ImGuiPayload *payload) {
+  if (payload->DataSize != sizeof(int))
+    return;
+  const int src = *static_cast<const int *>(payload->Data);
+  const bool srcValid = src >= 0 && src < static_cast<int>(doc.objects.size());
+  if (srcValid && src != idx && !IsDescendantOf(doc, idx, src)) {
+    doc.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
+    doc.dirty = true;
+  }
+}
+} // namespace
+
 /** @copydoc EditorLayer::HandleTreeNodeDragDrop */
 void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
                                          SceneObject &obj) {
@@ -251,17 +266,8 @@ void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
   }
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload *payload =
-            ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
-      if (payload->DataSize == sizeof(int)) {
-        const int src = *static_cast<const int *>(payload->Data);
-        const bool srcInRange = src >= 0 &&
-                                src < static_cast<int>(doc.objects.size());
-        if (srcInRange && src != idx && !IsDescendantOf(doc, idx, src)) {
-          doc.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
-          doc.dirty = true;
-        }
-      }
-    }
+            ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX"))
+      AcceptReparentDrop(idx, doc, obj, payload);
     if (const ImGuiPayload *payload =
             ImGui::AcceptDragDropPayload("ASSET_ID")) {
       const std::string assetId(static_cast<const char *>(payload->Data));

@@ -77,7 +77,7 @@ void EditorLayer::SetSelectedObjectIds(const std::vector<std::string> &ids) {
 
 /** @copydoc EditorLayer::MakeObjectFromAsset */
 SceneObject EditorLayer::MakeObjectFromAsset(const SceneDocument &doc,
-                                             const std::string &assetId,
+                                             std::string_view assetId,
                                              const EditorSchema &schema) {
   return Horo::Editor::MakeObjectFromAsset(doc, assetId, schema);
 }

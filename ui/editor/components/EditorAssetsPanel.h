@@ -46,7 +46,7 @@ namespace Horo::Editor {
         // Asset operations
         std::function<void(std::string_view)> requestDeleteAsset;           /**< Request deletion of the asset with the given identifier. */
         std::function<void()> markDirtyAndReload;                           /**< Mark the scene dirty and trigger an asset reload. */
-        std::function<SceneObject(const std::string&)> makeObjectFromAsset; /**< Construct a default scene object from the named asset. */
+        std::function<SceneObject(std::string_view)> makeObjectFromAsset; /**< Construct a default scene object from the named asset. */
 
         // File operations
         std::function<void(int)> setDeferredFilePick; /**< Request a deferred file-picker with the given DeferredFilePick enum value. */
@@ -106,7 +106,7 @@ namespace Horo::Editor {
          *  @param state     Mutable editor state used to read and write panel data. */
         void Draw(const EditorComponentContext& ctx,
                   const EditorAssetsPanelCallbacks& callbacks,
-                  const EditorAssetsPanelState& state);
+                  const EditorAssetsPanelState& state) const;
 
         /** @brief Renders only the asset grid content inside an already-open ImGui window.
          *
@@ -114,7 +114,7 @@ namespace Horo::Editor {
          *  @param callbacks Callable table for asset operations.
          *  @param state     Mutable editor state used to read and write panel data. */
         void DrawContent(const EditorAssetsPanelCallbacks& callbacks,
-                         const EditorAssetsPanelState& state);
+                         const EditorAssetsPanelState& state) const;
 
     private:
         /** @brief Draws the asset spotlight popup (quick-search overlay).

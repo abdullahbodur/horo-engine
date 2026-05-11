@@ -55,7 +55,7 @@ namespace Horo::Editor
     /** @copydoc EditorAssetsPanel::Draw */
     void EditorAssetsPanel::Draw(const EditorComponentContext& /*ctx*/,
                                  const EditorAssetsPanelCallbacks& callbacks,
-                                 const EditorAssetsPanelState& state)
+                                 const EditorAssetsPanelState& state) const
     {
         if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
             return;
@@ -111,7 +111,7 @@ namespace Horo::Editor
 
     /** @copydoc EditorAssetsPanel::DrawContent */
     void EditorAssetsPanel::DrawContent(const EditorAssetsPanelCallbacks& callbacks,
-                                        const EditorAssetsPanelState& state)
+                                        const EditorAssetsPanelState& state) const
     {
         if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
             return;

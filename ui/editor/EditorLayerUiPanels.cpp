@@ -645,7 +645,7 @@ namespace Horo::Editor
     {
       MarkDirtyAndReload();
     };
-    callbacks.makeObjectFromAsset = [this](const std::string& assetId)
+    callbacks.makeObjectFromAsset = [this](std::string_view assetId)
     {
       return MakeObjectFromAsset(m_document, assetId, m_schema);
     };
@@ -689,7 +689,7 @@ namespace Horo::Editor
     {
       MarkDirtyAndReload();
     };
-    callbacks.makeObjectFromAsset = [this](const std::string& assetId)
+    callbacks.makeObjectFromAsset = [this](std::string_view assetId)
     {
       return MakeObjectFromAsset(m_document, assetId, m_schema);
     };

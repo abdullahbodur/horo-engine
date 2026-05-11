@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 #include "ui/editor/EditorSchema.h"
 #include "ui/editor/SceneDocument.h"
@@ -22,7 +23,7 @@ namespace Horo::Editor {
  *  @return A fully initialised SceneObject ready for insertion.
  */
 SceneObject MakeObjectFromAsset(const SceneDocument &doc,
-                                const std::string &assetId,
+                                std::string_view assetId,
                                 const EditorSchema &schema);
 
 /** @brief Applies TypeSchema field defaults for obj.type to obj.props.

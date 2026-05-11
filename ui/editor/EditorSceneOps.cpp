@@ -402,7 +402,7 @@ void EditorLayer::RequestDeleteSelectedObjects() {
 void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
   if (assetId.empty())
     return;
-  if (!m_document.assets.contains(std::string(assetId)))
+  if (!m_document.assets.contains(assetId))
     return;
 
   m_uiWidgets.OpenConfirmDeleteAsset(assetId);
@@ -450,7 +450,7 @@ bool EditorLayer::CreateObjectFromAsset(std::string_view assetId,
   if (outError)
     outError->clear();
 
-  if (assetId.empty() || !m_document.assets.contains(std::string(assetId))) {
+  if (assetId.empty() || !m_document.assets.contains(assetId)) {
     if (outError)
       *outError = "Asset not found.";
     return false;
@@ -464,7 +464,7 @@ bool EditorLayer::CreateObjectFromAsset(std::string_view assetId,
   const EditorHistorySnapshot before = CaptureHistorySnapshot();
 
   SceneObject object =
-      MakeObjectFromAsset(m_document, std::string(assetId), m_schema);
+      MakeObjectFromAsset(m_document, assetId, m_schema);
   if (preferredId && !preferredId->empty()) {
     if (IsReservedObjectId(m_document, *preferredId)) {
       if (outError)
@@ -504,7 +504,7 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
                               screenW, screenH, cam);
 
   const SceneObject droppedObject =
-      MakeObjectFromAsset(m_document, std::string(assetId), m_schema);
+      MakeObjectFromAsset(m_document, assetId, m_schema);
   const Vec3 droppedHalf = ResolveObjectPlacementHalfExtents(droppedObject);
 
   RayAabbHit bestHit;

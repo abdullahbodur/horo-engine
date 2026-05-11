@@ -921,7 +921,7 @@ namespace Horo {
 
             /** @brief Creates a new Prop object initialised from the specified asset definition. */
             static SceneObject MakeObjectFromAsset(const SceneDocument &doc,
-                                                   const std::string &assetId,
+                                                   std::string_view assetId,
                                                    const EditorSchema &schema);
 
             /** @brief Creates a deep duplicate of a scene object with a newly generated ID. */

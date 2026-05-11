@@ -281,9 +281,7 @@ void EditorSettingsModal::Draw() {
         m_open = false;
         ImGui::CloseCurrentPopup();
     } else if (footer.applied) {
-        if (SaveAll()) {
-            // Stay open after Apply.
-        }
+        SaveAll();
         // On failure, m_error already set; modal remains open.
     } else if (footer.accepted && (!dirty || SaveAll())) {
         m_open = false;
