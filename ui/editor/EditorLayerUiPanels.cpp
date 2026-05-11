@@ -560,61 +560,63 @@ namespace Horo::Editor
     const auto& palette = theme.palette;
     ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
 
-    const ImGuiTreeNodeFlags topFlags =
-      ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-    const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
-
-    if (m_projectPanelCollapseAllRequested)
-      ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-    else
-      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-
-    Ui::EditorTreeItemSpec favSpec;
-    favSpec.id = "##project_favorites_node";
-    favSpec.label = "Favorites";
-    favSpec.prefixIcon = ICON_FA_FOLDER_OPEN;
-    favSpec.kind = Ui::EditorTreeItemKind::Node;
-    favSpec.treeFlags = topFlags;
-    favSpec.normalTextColor = &theme.palette.text;
-    if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open)
     {
-      ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
-      constexpr const char* kNoFavoritesText = "No favorites yet.";
-      const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
-      const float minX = ImGui::GetWindowContentRegionMin().x;
-      const float maxX = ImGui::GetWindowContentRegionMax().x;
-      const float centeredX = minX + (maxX - minX - textSize.x) * 0.5f;
-      constexpr float kPlaceholderBlockHeight = 24.0f;
-      const float blockStartY = ImGui::GetCursorPosY();
-      const float centeredY =
-        blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
-      ImGui::SetCursorPosY(centeredY);
-      ImGui::SetCursorPosX(centeredX);
-      ImGui::TextUnformatted(kNoFavoritesText);
-      ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
-      ImGui::PopStyleColor();
-      ImGui::TreePop();
-    }
+      const ImGuiTreeNodeFlags topFlags =
+        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
+      const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
 
-    std::string rootName = m_projectBrowserRoot.filename().string();
-    if (rootName.empty())
-      rootName = m_projectBrowserRoot.generic_string();
-    if (m_projectPanelCollapseAllRequested)
-      ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-    else
-      ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+      if (m_projectPanelCollapseAllRequested)
+        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+      else
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 
-    Ui::EditorTreeItemSpec rootSpec;
-    rootSpec.id = "##project_root_node";
-    rootSpec.label = rootName.c_str();
-    rootSpec.prefixIcon = ICON_FA_FOLDER;
-    rootSpec.kind = Ui::EditorTreeItemKind::Node;
-    rootSpec.treeFlags = topFlags;
-    rootSpec.normalTextColor = &theme.palette.text;
-    if (const auto rootRes = Ui::DrawEditorTreeItem(theme, rootSpec); rootRes.open)
-    {
-      DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
-      ImGui::TreePop();
+      Ui::EditorTreeItemSpec favSpec;
+      favSpec.id = "##project_favorites_node";
+      favSpec.label = "Favorites";
+      favSpec.prefixIcon = ICON_FA_FOLDER_OPEN;
+      favSpec.kind = Ui::EditorTreeItemKind::Node;
+      favSpec.treeFlags = topFlags;
+      favSpec.normalTextColor = &theme.palette.text;
+      if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open)
+      {
+        ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
+        constexpr const char* kNoFavoritesText = "No favorites yet.";
+        const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
+        const float minX = ImGui::GetWindowContentRegionMin().x;
+        const float maxX = ImGui::GetWindowContentRegionMax().x;
+        const float centeredX = minX + (maxX - minX - textSize.x) * 0.5f;
+        constexpr float kPlaceholderBlockHeight = 24.0f;
+        const float blockStartY = ImGui::GetCursorPosY();
+        const float centeredY =
+          blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
+        ImGui::SetCursorPosY(centeredY);
+        ImGui::SetCursorPosX(centeredX);
+        ImGui::TextUnformatted(kNoFavoritesText);
+        ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
+        ImGui::PopStyleColor();
+        ImGui::TreePop();
+      }
+
+      std::string rootName = m_projectBrowserRoot.filename().string();
+      if (rootName.empty())
+        rootName = m_projectBrowserRoot.generic_string();
+      if (m_projectPanelCollapseAllRequested)
+        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+      else
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+
+      Ui::EditorTreeItemSpec rootSpec;
+      rootSpec.id = "##project_root_node";
+      rootSpec.label = rootName.c_str();
+      rootSpec.prefixIcon = ICON_FA_FOLDER;
+      rootSpec.kind = Ui::EditorTreeItemKind::Node;
+      rootSpec.treeFlags = topFlags;
+      rootSpec.normalTextColor = &theme.palette.text;
+      if (const auto rootRes = Ui::DrawEditorTreeItem(theme, rootSpec); rootRes.open)
+      {
+        DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+        ImGui::TreePop();
+      }
     }
 
     ImGui::EndChild();
