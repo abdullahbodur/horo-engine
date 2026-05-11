@@ -129,9 +129,9 @@ namespace Horo::Editor {
          *  @param openNewAssetModal Output flag set to true when the user clicks the add-asset tile.
          *  @param callbacks        Callable table for asset operations. */
         void DrawAssetGrid(const EditorAssetsPanelState& state,
-                          const std::vector<std::string>& assetIds,
-                          bool& openNewAssetModal,
-                          const EditorAssetsPanelCallbacks& callbacks);
+                           const std::vector<std::string>& assetIds,
+                           bool& openNewAssetModal,
+                           const EditorAssetsPanelCallbacks& callbacks) const;
 
         /** @brief Draws a single asset tile inside the grid.
          *  @param state     Current panel state.
@@ -151,7 +151,7 @@ namespace Horo::Editor {
          *  @param callbacks Callable table for asset operations. */
         void DrawCreateAssetModal(const EditorAssetsPanelState& state,
                                   bool openModal,
-                                  const EditorAssetsPanelCallbacks& callbacks);
+                                  const EditorAssetsPanelCallbacks& callbacks) const;
 
         /** @brief Draws the form fields inside the create-asset modal.
          *  @param state     Current panel state.

@@ -198,8 +198,9 @@ namespace Horo::Editor
                         ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)),
                         6.0f);
 
-            RenderTargetHandle previewHandle;
-            if (TryGetAssetPreviewHandle(assetId, asset, &previewHandle) && previewHandle.IsValid())
+            if (RenderTargetHandle previewHandle;
+                TryGetAssetPreviewHandle(assetId, asset, &previewHandle) &&
+                previewHandle.IsValid())
             {
                 const ImVec2 uv0 = previewHandle.needsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
                 const ImVec2 uv1 = previewHandle.needsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
@@ -402,7 +403,7 @@ namespace Horo::Editor
     void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
                                           const std::vector<std::string>& assetIds,
                                           bool& openNewAssetModal,
-                                          const EditorAssetsPanelCallbacks& callbacks)
+                                          const EditorAssetsPanelCallbacks& callbacks) const
     {
         ImGui::BeginChild("##asset_grid", ImVec2(0, 0), false);
 
@@ -464,7 +465,7 @@ namespace Horo::Editor
     void EditorAssetsPanel::DrawCreateAssetModal(
         const EditorAssetsPanelState& state,
         bool openModal,
-        const EditorAssetsPanelCallbacks& callbacks)
+        const EditorAssetsPanelCallbacks& callbacks) const
     {
         if (Horo::Ui::BeginEditorModal({"Create Asset", 480.0f, true}, openModal))
         {

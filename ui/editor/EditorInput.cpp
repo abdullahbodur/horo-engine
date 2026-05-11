@@ -378,10 +378,8 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
         if (m_playModeEscPresses >= 2) {
           m_playMode = false;
           m_playModeEscPresses = 0;
-          glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        } else {
-          glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
+        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
       }
       m_prevEsc = currEsc;
       PublishMcpSnapshot();

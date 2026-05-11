@@ -9485,8 +9485,9 @@ TEST_CASE("FindViewGimbalHoverSnap: positive viewZ returns posSnap", "[editor][g
   // Use hitCache with no size limit (large hitPxSq so shaft hits work)
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(tipX, center, hitCache, kTestAxes,
-                                          kShaft, kHead, kHW, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipX, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
   CHECK(snap == VS::Right);
 }
 
@@ -9503,8 +9504,9 @@ TEST_CASE("FindViewGimbalHoverSnap: negative viewZ returns negSnap", "[editor][g
   const ImVec2 tipX{center.x + kShaft, center.y};
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(tipX, center, hitCache, kTestAxes,
-                                          kShaft, kHead, kHW, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipX, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
   CHECK(snap == VS::Left);
 }
 
@@ -9523,8 +9525,9 @@ TEST_CASE("FindViewGimbalHoverSnap: negative viewZ on Z axis returns Back", "[ed
   const ImVec2 tipZ{center.x - kShaft, center.y};
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(tipZ, center, hitCache, kTestAxes,
-                                          kShaft, kHead, kHW, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipZ, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
   CHECK(snap == VS::Back);
 }
 
@@ -9537,8 +9540,9 @@ TEST_CASE("FindViewGimbalHoverSnap: mouse far from all axes returns None", "[edi
   const ImVec2 farAway{500.0f, 500.0f};
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(farAway, center, hitCache, kTestAxes,
-                                          42.0f, 13.0f, 6.0f, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      farAway, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{42.0f, 13.0f, 6.0f, 9.0f * 9.0f});
   CHECK(snap == VS::None);
 }
 
@@ -9553,8 +9557,9 @@ TEST_CASE("FindViewGimbalHoverSnap: positive Y axis click returns Top", "[editor
   const ImVec2 tipY{center.x, center.y - kShaft};
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(tipY, center, hitCache, kTestAxes,
-                                          kShaft, 13.0f, 6.0f, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipY, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, 13.0f, 6.0f, 9.0f * 9.0f});
   CHECK(snap == VS::Top);
 }
 
@@ -9568,7 +9573,8 @@ TEST_CASE("FindViewGimbalHoverSnap: negative Y axis click returns Bottom", "[edi
   const ImVec2 tipY{center.x, center.y - kShaft};
   auto hitCache = cache;
   std::ranges::reverse(hitCache);
-  const VS snap = FindViewGimbalHoverSnap(tipY, center, hitCache, kTestAxes,
-                                          kShaft, 13.0f, 6.0f, 9.0f * 9.0f);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipY, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, 13.0f, 6.0f, 9.0f * 9.0f});
   CHECK(snap == VS::Bottom);
 }

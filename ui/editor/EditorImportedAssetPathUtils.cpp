@@ -6,6 +6,7 @@
  */
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 
+#include <ranges>
 #include <system_error>
 
 #include "core/ProjectPath.h"
@@ -20,12 +21,9 @@ bool IsValidManagedAssetGuid(std::string_view guid) {
   if (guid.empty())
     return false;
 
-  for (unsigned char ch : guid) {
-    if (!std::isalnum(ch) && ch != '-' && ch != '_')
-      return false;
-  }
-
-  return true;
+  return std::ranges::all_of(guid, [](unsigned char ch) {
+    return std::isalnum(ch) || ch == '-' || ch == '_';
+  });
 }
 
 } // namespace

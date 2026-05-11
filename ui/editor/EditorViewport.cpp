@@ -217,17 +217,21 @@ struct ViewGimbalAxisRenderParams {
   float endpointRadius;
 };
 
+struct ViewGimbalAxisDirections {
+  const std::array<float, 3>& dirDx;
+  const std::array<float, 3>& dirDy;
+  const std::array<float, 3>& dirVz;
+};
+
 void RenderViewGimbalAxes(ImDrawList* dl,
                           const ViewGimbalAxisRenderParams& params,
                           const std::array<AxisData, 3>& axes,
-                          const std::array<float, 3>& dirDx,
-                          const std::array<float, 3>& dirDy,
-                          const std::array<float, 3>& dirVz,
+                          const ViewGimbalAxisDirections& dirs,
                           const std::array<int, 3>& order,
                           ViewSnap hoverSnap) {
   for (int idx : order) {
     const AxisData &axis = axes[idx];
-    const bool isFront = dirVz[idx] >= 0.0f;
+    const bool isFront = dirs.dirVz[idx] >= 0.0f;
     const bool hl = (hoverSnap == axis.snapPos) || (hoverSnap == axis.snapNeg);
     ImU32 col = axis.col;
     float alpha = isFront ? 1.0f : 0.5f;
@@ -242,8 +246,8 @@ void RenderViewGimbalAxes(ImDrawList* dl,
         (col >> 16) & 0xFF,
         static_cast<int>(255 * alpha));
 
-    const float endX = params.center.x + dirDx[idx] * params.lineLength;
-    const float endY = params.center.y + dirDy[idx] * params.lineLength;
+    const float endX = params.center.x + dirs.dirDx[idx] * params.lineLength;
+    const float endY = params.center.y + dirs.dirDy[idx] * params.lineLength;
 
     dl->AddLine(params.center, ImVec2(endX, endY), lineCol, hl ? 3.0f : 2.0f);
 
@@ -340,8 +344,9 @@ void EditorLayer::DrawViewGimbal(const Camera &cam) {
   if (dirVz[order[1]] > dirVz[order[2]]) std::swap(order[1], order[2]);
   if (dirVz[order[0]] > dirVz[order[1]]) std::swap(order[0], order[1]);
 
-  RenderViewGimbalAxes(dl, {center, kLineLength, kEndpointRadius},
-                       kAxes, dirDx, dirDy, dirVz, order, hoverSnap);
+  RenderViewGimbalAxes(
+      dl, {center, kLineLength, kEndpointRadius}, kAxes,
+      {dirDx, dirDy, dirVz}, order, hoverSnap);
 
   if (hoverTooltip && canvasHovered) {
     ImGui::SetTooltip("%s", hoverTooltip);

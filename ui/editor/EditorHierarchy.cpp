@@ -252,15 +252,14 @@ void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload *payload =
             ImGui::AcceptDragDropPayload("SCENE_OBJECT_INDEX")) {
-      // Guard: wrong size or invalid parent → skip reparent
-      const bool sizeOk = payload->DataSize == sizeof(int);
-      const int src = sizeOk ? *static_cast<const int *>(payload->Data) : -1;
-      const bool valid = sizeOk && src >= 0 &&
-                         src < static_cast<int>(doc.objects.size()) &&
-                         src != idx && !IsDescendantOf(doc, idx, src);
-      if (valid) {
-        doc.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
-        doc.dirty = true;
+      if (payload->DataSize == sizeof(int)) {
+        const int src = *static_cast<const int *>(payload->Data);
+        const bool srcInRange = src >= 0 &&
+                                src < static_cast<int>(doc.objects.size());
+        if (srcInRange && src != idx && !IsDescendantOf(doc, idx, src)) {
+          doc.objects[static_cast<size_t>(src)].props["parentId"] = obj.id;
+          doc.dirty = true;
+        }
       }
     }
     if (const ImGuiPayload *payload =
@@ -273,26 +272,27 @@ void EditorLayer::HandleTreeNodeDragDrop(int idx, SceneDocument &doc,
     }
     ImGui::EndDragDropTarget();
   }
-  if (ImGui::BeginPopupContextItem("obj_ctx")) {
-    ImGui::Separator();
-    if (ImGui::MenuItem("Rename..."))
-      OpenRenameObjectModal(idx);
-    if (ImGui::MenuItem("Duplicate")) {
-      m_selectedIndices = {idx};
-      DuplicatePrimarySelection();
-    }
-    if (ImGui::MenuItem("Delete")) {
-      m_selectedIndices = {idx};
-      RequestDeleteSelectedObjects();
-    }
-    ImGui::Separator();
-    if (const bool hasParent = !GetParentId(obj).empty();
-        ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
-      obj.props.erase("parentId");
-      doc.dirty = true;
-    }
-    ImGui::EndPopup();
+  if (!ImGui::BeginPopupContextItem("obj_ctx"))
+    return;
+
+  ImGui::Separator();
+  if (ImGui::MenuItem("Rename..."))
+    OpenRenameObjectModal(idx);
+  if (ImGui::MenuItem("Duplicate")) {
+    m_selectedIndices = {idx};
+    DuplicatePrimarySelection();
   }
+  if (ImGui::MenuItem("Delete")) {
+    m_selectedIndices = {idx};
+    RequestDeleteSelectedObjects();
+  }
+  ImGui::Separator();
+  if (const bool hasParent = !GetParentId(obj).empty();
+      ImGui::MenuItem("Unparent", nullptr, false, hasParent)) {
+    obj.props.erase("parentId");
+    doc.dirty = true;
+  }
+  ImGui::EndPopup();
 }
 
 /** @copydoc EditorLayer::DrawTreeNode */
@@ -328,8 +328,7 @@ void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
 
   // After DrawEditorTreeItem (no suffixIcon), the last ImGui item is the tree
   // node — drag/drop and context menu correctly target it.
-  const bool clickedTreeNode = ImGui::IsItemClicked();
-  if (isPrimary && clickedTreeNode)
+  if (isPrimary && ImGui::IsItemClicked())
     HandleTreeNodeClickSelection(idx);
   if (isPrimary)
     HandleTreeNodeDragDrop(idx, doc, obj);

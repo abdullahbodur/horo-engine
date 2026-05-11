@@ -405,7 +405,7 @@ void EditorLayer::RequestDeleteAsset(std::string_view assetId) {
   if (!m_document.assets.contains(std::string(assetId)))
     return;
 
-  m_uiWidgets.OpenConfirmDeleteAsset(std::string(assetId));
+  m_uiWidgets.OpenConfirmDeleteAsset(assetId);
 }
 
 /** @copydoc EditorLayer::OpenRenameObjectModal */

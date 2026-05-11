@@ -102,7 +102,7 @@ void EditorUIWidgets::DrawStatusBar() const {
 }
 
 /** @copydoc EditorUIWidgets::DrawViewGimbal */
-void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
+void EditorUIWidgets::DrawViewGimbal(const Camera& cam) const {
     // Gimbal drawing is complex and needs viewport context from EditorLayer.
     // For now, this is deferred - the actual implementation stays in EditorLayer
     // because it needs access to m_viewportPanelRect and other viewport state.
@@ -117,7 +117,7 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     if (!Horo::Ui::BeginEditorModal({"Confirm Delete Objects", 400.0f, true}, false))
         return;
 
-    const int validCount = static_cast<int>(m_pendingDeleteObjectIndices.size());
+    const auto validCount = static_cast<int>(m_pendingDeleteObjectIndices.size());
     if (validCount <= 0) {
         m_confirmDeleteObjectsOpen = false;
         m_pendingDeleteObjectIndices.clear();

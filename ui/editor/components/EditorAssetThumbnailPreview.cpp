@@ -380,8 +380,8 @@ namespace {
 RenderTargetHandle LoadTextureHandleByPath(
     const std::filesystem::path& path,
     std::unordered_map<std::string, Texture, StringHash, std::equal_to<>>* cache) {
-    const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
-    if (!caps.supportsNativeTextureHandles)
+    if (const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+        !caps.supportsNativeTextureHandles)
         return {};
     if (path.empty())
         return {};
@@ -462,9 +462,9 @@ bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
   }
 
   // 3. Fall back to a diffuse/albedo texture extracted from the mesh file.
-  const std::filesystem::path meshPath =
-      ResolveProjectRelativeOrAbsolutePath(asset.mesh);
-  if (!meshPath.empty()) {
+  if (const std::filesystem::path meshPath =
+          ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+      !meshPath.empty()) {
     const std::string ext = ToLowerAscii(meshPath.extension().string());
     RenderTargetHandle handle;
     if (ext == ".obj")

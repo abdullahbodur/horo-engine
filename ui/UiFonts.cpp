@@ -47,8 +47,8 @@ FontResolutionResult ResolveFontPath(const FontFamilyConfig &config) {
 
 /** @copydoc LoadFonts */
 void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont) {
-  const FontResolutionResult resolved = ResolveFontPath(primaryFont);
-  if (resolved.found) {
+  if (const FontResolutionResult resolved = ResolveFontPath(primaryFont);
+      resolved.found) {
     if (ImFont *font = io.Fonts->AddFontFromFileTTF(
             resolved.resolvedPath.string().c_str(), primaryFont.size))
       io.FontDefault = font;

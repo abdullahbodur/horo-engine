@@ -25,13 +25,12 @@
 #include <string>
 
 namespace Horo::Editor {
-namespace {
 #if defined(_WIN32)
 /** @brief Converts a null-terminated UTF-16 path from the common-dialog API into UTF-8.
  *  @param path Wide-character path buffer from @c OPENFILENAMEW.
  *  @return UTF-8 string, or empty when conversion fails.
  */
-std::string WidePathToUtf8(const wchar_t *path) {
+static std::string WidePathToUtf8(const wchar_t *path) {
   const int size = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0,
                                        nullptr, nullptr);
   if (size <= 0)
@@ -51,7 +50,7 @@ std::string WidePathToUtf8(const wchar_t *path) {
  *  @param cmd Shell command line (typically @c osascript … choose file …).
  *  @return POSIX path string, or empty when the pipe fails or user cancels.
  */
-std::string ReadPathFromOsascript(const char *cmd) {
+static std::string ReadPathFromOsascript(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
   if (!pipe)
     return {};
@@ -66,7 +65,6 @@ std::string ReadPathFromOsascript(const char *cmd) {
 }
 // SONAR-ON
 #endif
-} // namespace
 
 // SONAR-OFF
 /** @copydoc PickObjFilePath */

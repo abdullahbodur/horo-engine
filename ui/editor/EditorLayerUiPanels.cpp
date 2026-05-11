@@ -35,6 +35,35 @@ namespace Horo::Editor
   namespace
   {
     constexpr uint32_t kProjectListingCacheFrames = 48;
+
+    std::string CreateProjectFolder(const std::filesystem::path& candidate)
+    {
+      namespace fs = std::filesystem;
+      std::error_code ec;
+      if (fs::exists(candidate, ec))
+        return "A file or folder with that name already exists.";
+      if (!fs::create_directories(candidate, ec) || ec)
+        return "Failed to create folder.";
+      return {};
+    }
+
+    std::string CreateProjectFile(const std::filesystem::path& candidate)
+    {
+      namespace fs = std::filesystem;
+      std::error_code ec;
+      if (const fs::path parent = candidate.parent_path(); !parent.empty())
+      {
+        fs::create_directories(parent, ec);
+        if (ec)
+          return "Failed to create parent folder(s).";
+      }
+      if (fs::exists(candidate, ec))
+        return "A file or folder with that name already exists.";
+      std::ofstream out(candidate, std::ios::out | std::ios::trunc);
+      if (!out.good())
+        return "Failed to create file.";
+      return {};
+    }
   }
 
   /** @copydoc EditorLayer::Render */
@@ -139,7 +168,7 @@ namespace Horo::Editor
     EditorToolbarState state;
 
     // Callbacks for scene actions and object operations
-    callbacks.requestSceneAction = [this](const std::string& action)
+    callbacks.requestSceneAction = [this](std::string_view action)
     {
       if (action == "NewScene")
         RequestSceneAction(PendingSceneAction::NewScene);
@@ -497,9 +526,9 @@ namespace Horo::Editor
     }
 
     const fs::path relPath = fs::path(m_projectPanelCreateName).lexically_normal();
-    const bool hasParentTraversal = std::ranges::any_of(
-      relPath, [](const auto& part) { return part == ".."; });
-    if (relPath.empty() || relPath == "." || relPath.is_absolute() || hasParentTraversal)
+    if (const bool hasParentTraversal =
+          std::ranges::any_of(relPath, [](const auto& part) { return part == ".."; });
+      relPath.empty() || relPath == "." || relPath.is_absolute() || hasParentTraversal)
     {
       fail("Use a relative path inside the project root.");
       return;
@@ -512,39 +541,10 @@ namespace Horo::Editor
       return;
     }
 
-    std::error_code ec;
-    if (m_projectPanelCreateFolder)
-    {
-      if (fs::exists(candidate, ec))
-        fail("A file or folder with that name already exists.");
-      else if (!fs::create_directories(candidate, ec) || ec)
-        fail("Failed to create folder.");
-    }
-    else
-    {
-      if (const fs::path parent = candidate.parent_path(); !parent.empty())
-      {
-        fs::create_directories(parent, ec);
-        if (ec)
-        {
-          fail("Failed to create parent folder(s).");
-          ec.clear();
-        }
-      }
-      if (m_projectPanelError.empty())
-      {
-        if (fs::exists(candidate, ec))
-        {
-          fail("A file or folder with that name already exists.");
-        }
-        else
-        {
-          std::ofstream out(candidate, std::ios::out | std::ios::trunc);
-          if (!out.good())
-            fail("Failed to create file.");
-        }
-      }
-    }
+    const std::string createError =
+      m_projectPanelCreateFolder ? CreateProjectFolder(candidate) : CreateProjectFile(candidate);
+    if (!createError.empty())
+      fail(createError);
 
     if (m_projectPanelError.empty())
     {

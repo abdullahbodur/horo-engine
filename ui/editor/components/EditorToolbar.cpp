@@ -51,21 +51,22 @@ void DrawGizmoModeButton(const char* icon, const ImVec2& buttonSize, bool active
 
 /** @brief Renders the four gizmo-mode buttons (Select, Translate, Rotate, Scale). */
 void DrawGizmoModeButtons(const EditorToolbarState& state, const ImVec2& buttonSize, float buttonGap) {
+    using enum GizmoMode;
     auto* gizmoMode = static_cast<GizmoMode*>(state.currentGizmoMode);
-    const bool isSelect = !gizmoMode || *gizmoMode == GizmoMode::None;
-    const bool isMove = gizmoMode && *gizmoMode == GizmoMode::Translate;
-    const bool isRotate = gizmoMode && *gizmoMode == GizmoMode::Rotate;
-    const bool isScale = gizmoMode && *gizmoMode == GizmoMode::Scale;
+    const bool isSelect = !gizmoMode || *gizmoMode == None;
+    const bool isMove = gizmoMode && *gizmoMode == Translate;
+    const bool isRotate = gizmoMode && *gizmoMode == Rotate;
+    const bool isScale = gizmoMode && *gizmoMode == Scale;
 
-    DrawGizmoModeButton(ICON_FA_MOUSE_POINTER, buttonSize, isSelect, gizmoMode, GizmoMode::None, buttonGap);
-    DrawGizmoModeButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, buttonSize, isMove, gizmoMode, GizmoMode::Translate, buttonGap);
-    DrawGizmoModeButton(ICON_FA_ROTATE, buttonSize, isRotate, gizmoMode, GizmoMode::Rotate, buttonGap);
+    DrawGizmoModeButton(ICON_FA_MOUSE_POINTER, buttonSize, isSelect, gizmoMode, None, buttonGap);
+    DrawGizmoModeButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, buttonSize, isMove, gizmoMode, Translate, buttonGap);
+    DrawGizmoModeButton(ICON_FA_ROTATE, buttonSize, isRotate, gizmoMode, Rotate, buttonGap);
 
     // Scale is the last button — skip the trailing SameLine by inlining.
     if (isScale)
         ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
     if (ImGui::Button(ICON_FA_EXPAND, buttonSize) && gizmoMode)
-        *gizmoMode = GizmoMode::Scale;
+        *gizmoMode = Scale;
     if (isScale)
         ImGui::PopStyleColor();
 }

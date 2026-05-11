@@ -164,6 +164,14 @@ struct ViewGimbalArrowGeometry {
   ImVec2 shaftEnd;  /**< Shaft endpoint where the arrowhead attaches (toward centre). */
 };
 
+/** @brief Tunables for gimbal hover hit testing and arrow shape. */
+struct ViewGimbalHoverParams {
+  float shaftPx = 0.0f;       /**< Length from centre to arrow tip in pixels. */
+  float headLength = 0.0f;    /**< Arrowhead triangle length in pixels. */
+  float headHalfWidth = 0.0f; /**< Arrowhead half-width in pixels. */
+  float hitPxSq = 0.0f;       /**< Maximum squared hit distance from axis shaft. */
+};
+
 /** @brief Builds the 2-D arrow geometry for a single gimbal axis.
  *  @param center        Screen-space centre of the gimbal circle.
  *  @param dx,dy         Normalised screen-space direction of the axis.
@@ -278,15 +286,14 @@ inline ViewSnap
 FindViewGimbalHoverSnap(const ImVec2 &mouse, const ImVec2 &center,
                         const std::array<ViewGimbalAxisCache, 3> &cache,
                         const std::array<ViewGimbalAxisDraw, 3> &axes,
-                        float shaftPx, float headLength, float headHalfWidth,
-                        float hitPxSq) {
-  float bestD = hitPxSq;
+                        const ViewGimbalHoverParams &params) {
+  float bestD = params.hitPxSq;
   ViewSnap snap = ViewSnap::None;
   for (const ViewGimbalAxisCache &c : cache) {
     const ViewGimbalAxisDraw &ad = axes[c.origIdx];
     const ViewGimbalArrowGeometry arrow =
-        BuildViewGimbalArrow(center, c.dx, c.dy, shaftPx, headLength,
-                             headHalfWidth);
+        BuildViewGimbalArrow(center, c.dx, c.dy, params.shaftPx,
+                             params.headLength, params.headHalfWidth);
     // Choose snap direction based on whether the axis faces the viewer.
     const ViewSnap thisSnap =
         c.viewZ >= 0.0f ? ad.posSnap : ad.negSnap;
@@ -622,6 +629,7 @@ using Internal::ResolvePreviewShaderPath;
 using Internal::ViewGimbalAxisDraw;
 using Internal::ViewGimbalAxisCache;
 using Internal::ViewGimbalArrowGeometry;
+using Internal::ViewGimbalHoverParams;
 using Internal::BuildViewGimbalArrow;
 using Internal::Cross2D;
 using Internal::PointInTriangle2D;

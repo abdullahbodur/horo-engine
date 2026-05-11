@@ -285,11 +285,9 @@ void EditorSettingsModal::Draw() {
             // Stay open after Apply.
         }
         // On failure, m_error already set; modal remains open.
-    } else if (footer.accepted) {
-        if (!dirty || SaveAll()) {
-            m_open = false;
-            ImGui::CloseCurrentPopup();
-        }
+    } else if (footer.accepted && (!dirty || SaveAll())) {
+        m_open = false;
+        ImGui::CloseCurrentPopup();
         // On save failure the modal remains open with m_error populated.
     }
 

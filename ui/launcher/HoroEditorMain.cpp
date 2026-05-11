@@ -83,51 +83,117 @@ public:
   using std::runtime_error::runtime_error;
 };
 
-/** @brief Shared editor pointer used by native menubar callbacks. */
-static Editor::EditorLayer *g_editorInstance = nullptr;
+/** @brief Returns the shared editor pointer slot used by native menubar callbacks. */
+Editor::EditorLayer *&EditorInstanceSlot() {
+  static Editor::EditorLayer *editorInstance = nullptr;
+  return editorInstance;
+}
 
 /** @brief Native menu callback that forwards "New Scene" to the current editor instance. */
-void MenuNewScene() { if (g_editorInstance) g_editorInstance->OnMenuNewScene(); }
+void MenuNewScene() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuNewScene();
+}
 /** @brief Native menu callback that forwards "Open Scene" to the current editor instance. */
-void MenuOpenScene() { if (g_editorInstance) g_editorInstance->OnMenuOpenScene(); }
+void MenuOpenScene() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuOpenScene();
+}
 /** @brief Native menu callback that forwards "Reset Layout" to the current editor instance. */
-void MenuResetLayout() { if (g_editorInstance) g_editorInstance->OnMenuResetLayout(); }
+void MenuResetLayout() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuResetLayout();
+}
 /** @brief Native menu callback that forwards "Settings" to the current editor instance. */
-void MenuSettings() { if (g_editorInstance) g_editorInstance->OnMenuSettings(); }
+void MenuSettings() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuSettings();
+}
 /** @brief Native menu callback that forwards "Close Editor" to the current editor instance. */
-void MenuCloseEditor() { if (g_editorInstance) g_editorInstance->OnMenuCloseEditor(); }
+void MenuCloseEditor() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuCloseEditor();
+}
 /** @brief Native menu callback that forwards "Add Panel" to the current editor instance. */
-void MenuAddPanel() { if (g_editorInstance) g_editorInstance->OnMenuAddPanel(); }
+void MenuAddPanel() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuAddPanel();
+}
 /** @brief Native menu callback that forwards "Add Prop" to the current editor instance. */
-void MenuAddProp() { if (g_editorInstance) g_editorInstance->OnMenuAddProp(); }
+void MenuAddProp() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuAddProp();
+}
 /** @brief Native menu callback that forwards "Add Light" to the current editor instance. */
-void MenuAddLight() { if (g_editorInstance) g_editorInstance->OnMenuAddLight(); }
+void MenuAddLight() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuAddLight();
+}
 /** @brief Native menu callback that forwards "Add Camera" to the current editor instance. */
-void MenuAddCamera() { if (g_editorInstance) g_editorInstance->OnMenuAddCamera(); }
+void MenuAddCamera() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuAddCamera();
+}
 /** @brief Native menu callback that forwards "Add Prop From Asset" to the current editor instance. */
-void MenuAddPropFromAsset() { if (g_editorInstance) g_editorInstance->OnMenuAddPropFromAsset(); }
+void MenuAddPropFromAsset() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuAddPropFromAsset();
+}
 /** @brief Native menu callback that forwards undo to the current editor instance. */
-void MenuUndo() { if (g_editorInstance) g_editorInstance->OnMenuUndo(); }
+void MenuUndo() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuUndo();
+}
 /** @brief Native menu callback that forwards redo to the current editor instance. */
-void MenuRedo() { if (g_editorInstance) g_editorInstance->OnMenuRedo(); }
+void MenuRedo() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuRedo();
+}
 /** @brief Native menu callback that forwards rename action to the current editor instance. */
-void MenuRename() { if (g_editorInstance) g_editorInstance->OnMenuRename(); }
+void MenuRename() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuRename();
+}
 /** @brief Native menu callback that forwards prefab creation to the current editor instance. */
-void MenuCreatePrefab() { if (g_editorInstance) g_editorInstance->OnMenuCreatePrefab(); }
+void MenuCreatePrefab() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuCreatePrefab();
+}
 /** @brief Native menu callback that forwards duplicate action to the current editor instance. */
-void MenuDuplicate() { if (g_editorInstance) g_editorInstance->OnMenuDuplicate(); }
+void MenuDuplicate() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuDuplicate();
+}
 /** @brief Native menu callback that forwards delete action to the current editor instance. */
-void MenuDelete() { if (g_editorInstance) g_editorInstance->OnMenuDelete(); }
+void MenuDelete() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuDelete();
+}
 /** @brief Native menu callback that forwards fly mode toggle to the current editor instance. */
-void MenuFlyMode() { if (g_editorInstance) g_editorInstance->OnMenuFlyMode(); }
+void MenuFlyMode() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuFlyMode();
+}
 /** @brief Native menu callback that forwards help action to the current editor instance. */
-void MenuHelp() { if (g_editorInstance) g_editorInstance->OnMenuHelp(); }
+void MenuHelp() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuHelp();
+}
 /** @brief Native menu callback that forwards quick-open action to the current editor instance. */
-void MenuQuickOpen() { if (g_editorInstance) g_editorInstance->OnMenuQuickOpen(); }
+void MenuQuickOpen() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuQuickOpen();
+}
 /** @brief Native menu callback that forwards command-palette action to the current editor instance. */
-void MenuCommandPalette() { if (g_editorInstance) g_editorInstance->OnMenuCommandPalette(); }
+void MenuCommandPalette() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuCommandPalette();
+}
 /** @brief Native menu callback that forwards view layout reset to the current editor instance. */
-void MenuViewResetLayout() { if (g_editorInstance) g_editorInstance->OnMenuViewResetLayout(); }
+void MenuViewResetLayout() {
+  if (auto *editor = EditorInstanceSlot())
+    editor->OnMenuViewResetLayout();
+}
 
 /** @brief Main application implementation for editor + launcher runtime integration. */
 class HoroEditorApp final : public Application {
@@ -204,7 +270,7 @@ private:
     m_editor.Init(GetWindow().GetNativeHandle());
     m_editor.SetLiveRegistry(&m_scene.GetRegistry());
 
-    g_editorInstance = &m_editor;
+    EditorInstanceSlot() = &m_editor;
     GetWindow().SetupNativeMenuBar();
     GetWindow().SetMenuCallbacks({
         .file = {MenuNewScene, MenuOpenScene, MenuResetLayout, MenuSettings, MenuCloseEditor},
@@ -319,6 +385,7 @@ private:
 #endif
     m_shell.Shutdown();
     m_editor.Shutdown();
+    EditorInstanceSlot() = nullptr;
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
     if (m_uiAutomation) {

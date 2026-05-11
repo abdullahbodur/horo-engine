@@ -449,7 +449,7 @@ void EditorLayer::SetHotReloadOverlay(bool active, float progress01,
                                       float spinnerAngleRad,
                                       std::string_view label) {
   if (active) {
-    m_uiWidgets.OnHotReloadStart(0.0f, std::string(label));
+    m_uiWidgets.OnHotReloadStart(0.0f, label);
     m_uiWidgets.OnHotReloadProgress(progress01, spinnerAngleRad);
   } else {
     m_uiWidgets.OnHotReloadEnd();

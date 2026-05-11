@@ -129,8 +129,7 @@ void EditorBottomDock::DrawConsoleTab() {
     ImGui::BeginChild("##console_scroll", ImVec2(0, 0), true,
                       ImGuiWindowFlags_HorizontalScrollbar);
     const LogBuffer& logBuf = LogBuffer::Instance();
-    const uint64_t rev = logBuf.Revision();
-    if (rev != m_consoleLogRevision) {
+    if (const uint64_t rev = logBuf.Revision(); rev != m_consoleLogRevision) {
         logBuf.CopyLinesTo(&m_consoleLinesCache);
         m_consoleLogRevision = rev;
     }

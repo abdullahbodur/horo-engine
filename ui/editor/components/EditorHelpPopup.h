@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace Horo::Editor {
 
@@ -22,7 +23,7 @@ public:
 
     /** @brief Pre-populates the search field with the given query string.
      *  @param query Initial search text to display in the filter box. */
-    void SetSearchQuery(const std::string &query) { m_searchQuery = query; }
+    void SetSearchQuery(std::string_view query) { m_searchQuery = query; }
 
 private:
     bool m_open = false;          /**< True while the help popup is visible. */

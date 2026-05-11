@@ -53,7 +53,7 @@ public:
 
     /** @brief Draws the view orientation gimbal based on the supplied camera.
      *  @param cam Current scene camera used to derive axis orientations. */
-    void DrawViewGimbal(const Camera& cam);
+    void DrawViewGimbal(const Camera& cam) const;
 
     // Confirmation modals
     /** @brief Draws the "confirm delete objects" modal dialog if it is open. */
