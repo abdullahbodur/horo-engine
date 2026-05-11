@@ -252,20 +252,22 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
     Horo::Ui::RenderEditorSectionDivider("Clients");
     if (ImGui::BeginTable("##mcp_clients", 3, ImGuiTableFlags_SizingStretchSame)) {
         ImGui::TableNextRow();
-        DrawMcpClientCard("Codex", "Config path", "~/.codex/config.toml or .codex/config.toml",
-                          "Use the built-in MCP server entry so /mcp can discover Horo Engine "
-                          "automatically.",
-                          mcpController->BuildCodexConfigSnippet(), "Codex MCP config copied",
-                          mcpController, window);
-        DrawMcpClientCard("Claude", "Config path", "~/.claude.json or .mcp.json",
-                          "Claude Code can connect over HTTP MCP using the endpoint shown above.",
-                          mcpController->BuildClaudeConfigSnippet(), "Claude MCP config copied",
-                          mcpController, window);
         DrawMcpClientCard(
-            "VS Code", "Config path", ".vscode/mcp.json or user mcp.json",
-            "VS Code MCP can be set per workspace or globally from the Command Palette.",
-            mcpController->BuildVsCodeConfigSnippet(), "VS Code MCP config copied", mcpController,
-            window);
+            {"Codex", "Config path", "~/.codex/config.toml or .codex/config.toml",
+             "Use the built-in MCP server entry so /mcp can discover Horo Engine "
+             "automatically."},
+            mcpController->BuildCodexConfigSnippet(), "Codex MCP config copied",
+            mcpController, window);
+        DrawMcpClientCard(
+            {"Claude", "Config path", "~/.claude.json or .mcp.json",
+             "Claude Code can connect over HTTP MCP using the endpoint shown above."},
+            mcpController->BuildClaudeConfigSnippet(), "Claude MCP config copied",
+            mcpController, window);
+        DrawMcpClientCard(
+            {"VS Code", "Config path", ".vscode/mcp.json or user mcp.json",
+             "VS Code MCP can be set per workspace or globally from the Command Palette."},
+            mcpController->BuildVsCodeConfigSnippet(), "VS Code MCP config copied",
+            mcpController, window);
         ImGui::EndTable();
     }
 
@@ -277,20 +279,19 @@ void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
 }
 
 /** @copydoc EditorBottomDock::DrawMcpClientCard */
-void EditorBottomDock::DrawMcpClientCard(const char* title, const char* pathLabel,
-                                         const char* pathValue, const char* hint,
+void EditorBottomDock::DrawMcpClientCard(const McpClientCardInfo& info,
                                          std::string_view snippet,
                                          const char* /*toastLabel*/,
                                          Horo::Mcp::McpController* /*mcpController*/,
-                                         GLFWwindow* window) {
+                                         GLFWwindow* window) const {
     ImGui::TableNextColumn();
-    ImGui::BeginChild(title, ImVec2(0, 132.0f), true);
-    ImGui::TextUnformatted(title);
+    ImGui::BeginChild(info.title, ImVec2(0, 132.0f), true);
+    ImGui::TextUnformatted(info.title);
     ImGui::Separator();
-    ImGui::TextWrapped("%s", hint);
-    ImGui::TextDisabled("%s", pathLabel);
-    ImGui::TextWrapped("%s", pathValue);
-    if (ImGui::Button((std::string("Copy Config##") + title).c_str())) {
+    ImGui::TextWrapped("%s", info.hint);
+    ImGui::TextDisabled("%s", info.pathLabel);
+    ImGui::TextWrapped("%s", info.pathValue);
+    if (ImGui::Button((std::string("Copy Config##") + info.title).c_str())) {
         glfwSetClipboardString(window, std::string(snippet).c_str());
         // Toast would be shown through context
     }

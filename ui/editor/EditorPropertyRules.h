@@ -2,8 +2,6 @@
  *  @brief Pure property mutation and object-creation rules extracted from EditorLayer.
  */
 #pragma once
-// Pure property mutation and object-creation rules extracted from EditorLayer.
-// No ImGui or GL dependencies; fully unit-testable.
 
 #include <string>
 

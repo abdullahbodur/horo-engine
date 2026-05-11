@@ -463,7 +463,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
       m_transformCb(obj);
   }
 
-  if (Horo::Ui::RenderEditorDragFloat("Yaw", "##Yaw", obj.yaw, 1.0f, -360.0f, 360.0f)) {
+  if (Horo::Ui::RenderEditorDragFloat("Yaw", "##Yaw", obj.yaw, 1.0f, {.vmin = -360.0f, .vmax = 360.0f})) {
     changedTransform = true;
     m_document.dirty = true;
     if (m_transformCb)
@@ -471,7 +471,7 @@ void EditorLayer::DrawPropertiesCameraSection(SceneObject &obj,
   }
 
   if (float pitch = obj.pitch;
-      Horo::Ui::RenderEditorDragFloat("Pitch", "##Pitch", pitch, 1.0f, -89.0f, 89.0f)) {
+      Horo::Ui::RenderEditorDragFloat("Pitch", "##Pitch", pitch, 1.0f, {.vmin = -89.0f, .vmax = 89.0f})) {
     obj.pitch = std::max(-89.0f, std::min(89.0f, pitch));
     changedTransform = true;
     m_document.dirty = true;
@@ -569,7 +569,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
   }
 
   if (std::array<float, 3> scl = {obj.scale.x, obj.scale.y, obj.scale.z};
-      Horo::Ui::RenderEditorDragFloat3("Scale", "##Scale", scl.data(), 0.02f, 0.01f, 200.0f)) {
+      Horo::Ui::RenderEditorDragFloat3("Scale", "##Scale", scl.data(), 0.02f, {.vmin = 0.01f, .vmax = 200.0f})) {
     obj.scale = {scl[0], scl[1], scl[2]};
     m_document.dirty = true;
     if (m_transformCb)
@@ -578,7 +578,7 @@ void EditorLayer::DrawPropertiesTransformSection(SceneObject &obj,
 
   if (std::array<float, 3> rot = {obj.pitch, obj.yaw, obj.roll};
       Horo::Ui::RenderEditorDragFloat3("Rotation (P/Y/R)", "##Rotation (P/Y/R)",
-                                       rot.data(), 1.0f, -360.0f, 360.0f)) {
+                                       rot.data(), 1.0f, {.vmin = -360.0f, .vmax = 360.0f})) {
     obj.pitch = rot[0];
     obj.yaw = rot[1];
     obj.roll = rot[2];
@@ -746,7 +746,7 @@ void EditorLayer::DrawLightComponentFields(ComponentDesc &comp) {
   float radius = comp.props.contains("radius")
                      ? std::strtof(comp.props["radius"].c_str(), nullptr)
                      : 5.0f;
-  if (Horo::Ui::RenderEditorDragFloat("Radius", "##Radius", radius, 0.1f, 0.0f, 100.0f)) {
+  if (Horo::Ui::RenderEditorDragFloat("Radius", "##Radius", radius, 0.1f, {.vmin = 0.0f, .vmax = 100.0f})) {
     comp.props["radius"] = std::format("{:.4f}", radius);
     m_document.dirty = true;
   }
@@ -759,7 +759,7 @@ void EditorLayer::DrawRigidBodyComponentFields(ComponentDesc &comp) {
   if (float mass = comp.props.contains("mass")
                        ? std::strtof(comp.props["mass"].c_str(), nullptr)
                        : 1.0f;
-      Horo::Ui::RenderEditorDragFloat("Mass", "##Mass", mass, 0.1f, 0.0f, 10000.0f)) {
+      Horo::Ui::RenderEditorDragFloat("Mass", "##Mass", mass, 0.1f, {.vmin = 0.0f, .vmax = 10000.0f})) {
     comp.props["mass"] = std::format("{:.4f}", mass);
     m_document.dirty = true;
   }

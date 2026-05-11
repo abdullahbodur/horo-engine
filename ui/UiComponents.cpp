@@ -575,13 +575,12 @@ int RenderPanelTabs(const EditorTheme& theme,
   for (int i = 0; i < static_cast<int>(tabs.size()); ++i) {
     if (i > 0)
       ImGui::SameLine(0.0f, kTabSpacing);
-    if (ImGui::GetCursorPosX() >= maxTabRight)
-      break;
 
     const EditorPanelTabItem &item = tabs[i];
     const char *label = EditorPanelTabLabel(item.tab);
     const float tabWidth = ImGui::CalcTextSize(label).x + kTabHorizontalPadding * 2.0f;
-    if (ImGui::GetCursorPosX() + tabWidth > maxTabRight)
+    if (const float cursorX = ImGui::GetCursorPosX();
+        cursorX >= maxTabRight || cursorX + tabWidth > maxTabRight)
       break;
 
     ImGui::PushID(i);
@@ -636,10 +635,9 @@ int RenderPanelActions(const EditorTheme& theme,
       btnLabel += action.text;
     }
 
-    const bool clicked =
-        EditorHeaderIconButton(theme, btnLabel.c_str(), ImVec2(actionButtonSize, 0.0f));
-
-    if (clicked && !action.dropdown.empty()) {
+    if (const bool clicked =
+            EditorHeaderIconButton(theme, btnLabel.c_str(), ImVec2(actionButtonSize, 0.0f));
+        clicked && !action.dropdown.empty()) {
       ImGui::OpenPopup(std::format("##action_popup_{}", i).c_str());
     } else if (clicked) {
       clickedAction = i;
@@ -909,25 +907,25 @@ bool RenderEditorToggle(const EditorTheme& theme, const char* id,
 /** @copydoc RenderEditorDragFloat */
 bool RenderEditorDragFloat(const char* label, const char* id,
                            float& value,
-                           float speed, float vmin, float vmax,
-                           const char* fmt, float width) {
+                           float speed,
+                           const DragFloatOptions& options) {
     if (label)
         ImGui::TextDisabled("%s", label);
-    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    const float w = (options.width > 0.0f) ? options.width : ImGui::GetContentRegionAvail().x;
     ImGui::SetNextItemWidth(w);
-    return ImGui::DragFloat(id, &value, speed, vmin, vmax, fmt);
+    return ImGui::DragFloat(id, &value, speed, options.vmin, options.vmax, options.fmt);
 }
 
 /** @copydoc RenderEditorDragFloat3 */
 bool RenderEditorDragFloat3(const char* label, const char* id,
                             float value[3],
-                            float speed, float vmin, float vmax,
-                            const char* fmt, float width) {
+                            float speed,
+                            const DragFloatOptions& options) {
     if (label)
         ImGui::TextDisabled("%s", label);
-    const float w = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    const float w = (options.width > 0.0f) ? options.width : ImGui::GetContentRegionAvail().x;
     ImGui::SetNextItemWidth(w);
-    return ImGui::DragFloat3(id, value, speed, vmin, vmax, fmt);
+    return ImGui::DragFloat3(id, value, speed, options.vmin, options.vmax, options.fmt);
 }
 
 /** @copydoc RenderEditorSliderFloat */

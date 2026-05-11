@@ -5,8 +5,9 @@
 #include "renderer/Camera.h"
 #include "ui/editor/ViewSnap.h"
 #include <functional>
-#include <vector>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace Horo {
     class Registry;
@@ -20,12 +21,25 @@ struct SceneDocument;
 /** @brief Draws and manages short-lived editor UI elements: toasts, overlays, and modal dialogs. */
 class EditorUIWidgets {
 public:
+    /** @brief Callback table used to dispatch editor-level actions from modals. */
+    struct Callbacks {
+        std::function<void(const std::vector<int>&)> onConfirmDeleteObjects; /**< Called when the user confirms deletion of the listed scene objects. */
+        std::function<void(const std::string&)> onConfirmDeleteAsset;        /**< Called when the user confirms deletion of the named asset. */
+        std::function<void()> onConfirmExit;                                  /**< Called when the user confirms the exit action. */
+        std::function<bool(int, const std::string&)> onApplyRenameObject;    /**< Called to apply a rename; returns true on success. */
+        std::function<std::string()> getStatusBarText;                        /**< Returns the string to display in the status bar. */
+    };
+
     /** @brief Constructs widget state for editor overlays and modal helpers. */
     EditorUIWidgets() = default;
 
     /** @brief Binds the widget set to its owning editor layer.
      *  @param editor Non-owning pointer to the editor layer. Must outlive this object. */
     void Initialize(EditorLayer* editor);
+
+    /** @brief Installs the callback table used by modal dialogs.
+     *  @param callbacks Callable table; individual fields may be left empty. */
+    void SetCallbacks(Callbacks callbacks) { m_callbacks = std::move(callbacks); }
 
     // Overlays & toasts
     /** @brief Draws the clipboard action toast if one is currently active. */
@@ -59,12 +73,12 @@ public:
     /** @brief Records a clipboard action and begins showing the toast.
      *  @param label  Human-readable label displayed in the toast.
      *  @param duration Seconds the toast remains visible. */
-    void OnClipboardAction(const std::string& label = "", float duration = 1.5f);
+    void OnClipboardAction(std::string_view label = {}, float duration = 1.5f);
 
     /** @brief Activates the hot-reload overlay with an initial label.
      *  @param duration  Expected total duration of the reload in seconds.
      *  @param label     Optional text shown in the overlay. */
-    void OnHotReloadStart(float duration, const std::string& label = "");
+    void OnHotReloadStart(float duration, std::string_view label = {});
 
     /** @brief Updates the hot-reload overlay's progress and spinner values.
      *  @param progress Normalised completion value in [0, 1].
@@ -80,7 +94,7 @@ public:
 
     /** @brief Opens the delete-asset confirmation modal for the given asset identifier.
      *  @param assetId Unique identifier of the asset pending deletion. */
-    void OpenConfirmDeleteAsset(const std::string& assetId);
+    void OpenConfirmDeleteAsset(std::string_view assetId);
 
     /** @brief Opens the exit-confirmation modal. */
     void OpenConfirmExit();
@@ -88,13 +102,6 @@ public:
     /** @brief Opens the rename-object input modal for the given scene object.
      *  @param objectIndex Scene index of the object to rename. */
     void OpenRenameObject(int objectIndex);
-
-    // Business logic callbacks - set by EditorLayer
-    std::function<void(const std::vector<int>&)> onConfirmDeleteObjects; /**< Called when the user confirms deletion of the listed scene objects. */
-    std::function<void(const std::string&)> onConfirmDeleteAsset;        /**< Called when the user confirms deletion of the named asset. */
-    std::function<void()> onConfirmExit;                                  /**< Called when the user confirms the exit action. */
-    std::function<bool(int, const std::string&)> onApplyRenameObject;    /**< Called to apply a rename; returns true on success. */
-    std::function<std::string()> getStatusBarText;                        /**< Returns the string to display in the status bar. */
 
     // Getters for state needed by EditorLayer
     /** @brief Returns the pending view-snap direction selected via the gimbal.
@@ -117,7 +124,7 @@ public:
 
     /** @brief Sets an error string displayed inside the rename modal.
      *  @param error Human-readable error message. */
-    void SetRenameObjectError(const std::string& error) { m_renameObjectError = error; }
+    void SetRenameObjectError(std::string_view error) { m_renameState.error = error; }
 
     // State getters (for EditorLayer to update)
     /** @brief Returns true if the delete-objects confirmation modal is currently open. */
@@ -130,10 +137,19 @@ public:
     bool IsConfirmExitOpen() const { return m_confirmExitOpen; }
 
     /** @brief Returns true if the rename-object modal is currently open. */
-    bool IsRenameObjectOpen() const { return m_renameObjectOpen; }
+    bool IsRenameObjectOpen() const { return m_renameState.open; }
 
 private:
-    EditorLayer* m_editor = nullptr; /**< Non-owning pointer to the parent editor layer. */
+    /** @brief Grouped state for the rename-object modal. */
+    struct RenameState {
+        bool open = false;         /**< True while the rename modal is visible. */
+        int index = -1;            /**< Scene index of the object being renamed; -1 when none. */
+        std::string draft;         /**< In-progress text entered by the user. */
+        std::string error;         /**< Validation error displayed inside the rename modal. */
+    };
+
+    EditorLayer* m_editor = nullptr;           /**< Non-owning pointer to the parent editor layer. */
+    Callbacks m_callbacks;                     /**< Editor-level callbacks invoked from modal actions. */
 
     // Toast/notification state
     mutable float m_clipboardToastTime = 0.0f; /**< Remaining display time for the clipboard toast in seconds (mutable for const draw). */
@@ -156,11 +172,7 @@ private:
     bool m_confirmExitOpen = false;  /**< True while the exit-confirmation modal is visible. */
     std::string m_exitConfirmError;  /**< Error message shown inside the exit modal. */
 
-    // Rename object modal state
-    bool m_renameObjectOpen = false;     /**< True while the rename modal is visible. */
-    int m_renameObjectIndex = -1;        /**< Scene index of the object being renamed; -1 when none. */
-    std::string m_renameObjectDraft;     /**< In-progress text entered by the user. */
-    std::string m_renameObjectError;     /**< Validation error displayed inside the rename modal. */
+    RenameState m_renameState;  /**< Grouped rename-modal state. */
 
     // View gimbal state
     ViewSnap m_pendingViewSnap = ViewSnap::None; /**< View-snap direction chosen via the gimbal, consumed by EditorLayer. */

@@ -744,7 +744,7 @@ TEST_CASE("RenderEditorDragFloat does not crash and returns false without intera
 
   float value = 3.14f;
   const bool changed = Horo::Ui::RenderEditorDragFloat(
-      "Mass", "##mass", value, 0.1f, 0.0f, 100.0f);
+      "Mass", "##mass", value, 0.1f, {.vmin = 0.0f, .vmax = 100.0f});
   CHECK_FALSE(changed);
   CHECK(value == 3.14f);
 

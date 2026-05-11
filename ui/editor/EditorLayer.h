@@ -46,6 +46,15 @@ namespace Horo {
              *  @param window The GLFW window that owns the render context. */
             void Init(GLFWwindow *window);
 
+            /** @brief Wires up all EditorUIWidgets callbacks (rename, delete, exit, status text). */
+            void InitUiWidgetCallbacks();
+
+            /** @brief Initialises ImGui context, fonts, theme, and persisted layout. */
+            void InitImGuiContext(GLFWwindow *window);
+
+            /** @brief Locates and loads the editor JSON schema from known paths. */
+            void LoadEditorSchema();
+
             /** @brief Shuts down the editor and releases all ImGui/backend resources. */
             void Shutdown();
 
@@ -169,7 +178,7 @@ namespace Horo {
             /** @brief Overrides the additional filename blocklist used by the project browser.
              *  @param names Set of filenames or directory names to hide in the project tree. */
             void SetProjectBrowserExtraBlocklist(
-                std::unordered_set<std::string, StringHash, std::equal_to<> > names);
+                const std::unordered_set<std::string, StringHash, std::equal_to<> >& names);
 
             /** @brief Clears the project-browser directory-listing cache so the next frame re-reads from disk. */
             void InvalidateProjectBrowserCache();
@@ -424,6 +433,23 @@ namespace Horo {
 
             /** @brief Draws the project browser panel. */
             void DrawProjectPanel();
+
+            /** @brief Draws the "+" popup menu for the project panel (new folder / new file). */
+            void DrawProjectAddPopup();
+
+            /** @brief Draws the "⋮" popup menu for the project panel (refresh / collapse all). */
+            void DrawProjectMorePopup();
+
+            /** @brief Draws the "Create Project Entry" modal dialog. */
+            void DrawProjectCreateModal();
+
+            /** @brief Validates and creates the requested project entry.
+             *  Populates m_projectPanelError on failure; clears it on success. */
+            void HandleProjectCreateSubmit();
+
+            /** @brief Draws the Favorites and root nodes of the project tree.
+             *  @param theme Active editor theme. */
+            void DrawProjectTree(const Ui::EditorTheme& theme);
 
             /** @brief Draws the draggable splitter handles between docked editor panels.
              *  @param io Current ImGui IO snapshot used to read pointer state and drag intent.

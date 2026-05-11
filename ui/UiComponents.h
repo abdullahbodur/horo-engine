@@ -827,42 +827,44 @@ bool RenderEditorToggle(
     bool              &value);
 
 /**
+ * @brief Optional parameters for RenderEditorDragFloat / RenderEditorDragFloat3.
+ */
+struct DragFloatOptions {
+    float vmin = 0.0f;         /**< Minimum clamp value (0 = unclamped). */
+    float vmax = 0.0f;         /**< Maximum clamp value (0 = unclamped). */
+    const char *fmt = "%.3f"; /**< printf-style format for the displayed number. */
+    float width = 0.0f;        /**< Field width; 0 = full available width. */
+};
+
+/**
  * @brief Renders a muted label above a DragFloat widget.
- * @param label  Label shown above the drag field; may be nullptr.
- * @param id     ImGui widget id for the DragFloat.
- * @param value  In/out float value.
- * @param speed  Drag sensitivity.
- * @param vmin   Minimum clamp value (0 = unclamped).
- * @param vmax   Maximum clamp value (0 = unclamped).
- * @param fmt    printf-style format string for the displayed number.
- * @param width  Field width; 0 = full available width.
+ * @param label   Label shown above the drag field; may be nullptr.
+ * @param id      ImGui widget id for the DragFloat.
+ * @param value   In/out float value.
+ * @param speed   Drag sensitivity.
+ * @param options Optional clamp range, format, and width.
  * @return True when @p value changes this frame.
  */
 bool RenderEditorDragFloat(
     const char *label, const char *id,
     float      &value,
-    float       speed = 0.1f, float vmin = 0.0f, float vmax = 0.0f,
-    const char *fmt   = "%.3f",
-    float       width = 0.0f);
+    float       speed = 0.1f,
+    const DragFloatOptions &options = {});
 
 /**
  * @brief Renders a muted label above a DragFloat3 widget (XYZ triple).
- * @param label  Label shown above the drag field; may be nullptr.
- * @param id     ImGui widget id.
- * @param value  In/out float[3] array (X, Y, Z).
- * @param speed  Drag sensitivity per component.
- * @param vmin   Minimum clamp value (0 = unclamped).
- * @param vmax   Maximum clamp value (0 = unclamped).
- * @param fmt    printf-style format for each component.
- * @param width  Field width; 0 = full available width.
+ * @param label   Label shown above the drag field; may be nullptr.
+ * @param id      ImGui widget id.
+ * @param value   In/out float[3] array (X, Y, Z).
+ * @param speed   Drag sensitivity per component.
+ * @param options Optional clamp range, format, and width.
  * @return True when any component changes this frame.
  */
 bool RenderEditorDragFloat3(
     const char *label, const char *id,
     float       value[3],
-    float       speed = 0.1f, float vmin = 0.0f, float vmax = 0.0f,
-    const char *fmt   = "%.3f",
-    float       width = 0.0f);
+    float       speed = 0.1f,
+    const DragFloatOptions &options = {});
 
 /**
  * @brief Renders a muted label above a SliderFloat widget.

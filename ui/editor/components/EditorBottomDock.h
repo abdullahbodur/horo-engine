@@ -193,15 +193,21 @@ namespace Horo::Editor {
          *  @param pathLabel    Label shown next to the config file path.
          *  @param pathValue    Actual config file path string.
          *  @param hint         Supplementary hint text shown below the path.
+         *  @param info         Display labels (title, path label/value, hint).
          *  @param snippet      JSON or text snippet shown in the code block.
          *  @param toastLabel   Label used in the clipboard toast when the snippet is copied.
          *  @param mcpController MCP controller used to query connection state.
          *  @param window        Host GLFW window used for clipboard writes. */
-        void DrawMcpClientCard(const char* title, const char* pathLabel,
-                               const char* pathValue, const char* hint,
+        struct McpClientCardInfo {
+            const char* title;       /**< Card title (e.g. "Codex"). */
+            const char* pathLabel;   /**< Label above the config path. */
+            const char* pathValue;   /**< Display value for the config path. */
+            const char* hint;        /**< Multi-line hint shown under the header. */
+        };
+        void DrawMcpClientCard(const McpClientCardInfo& info,
                                std::string_view snippet, const char* toastLabel,
                                Horo::Mcp::McpController* mcpController,
-                               struct GLFWwindow* window);
+                               struct GLFWwindow* window) const;
 
         /** @brief Draws the live-requests section of the MCP tab.
          *  @param status Current MCP status snapshot containing in-flight requests. */

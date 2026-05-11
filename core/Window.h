@@ -99,31 +99,51 @@ public:
   void SetupNativeMenuBar() const;
   using MenuCallback = std::function<void()>;
 
+  /** @brief File menu callback group. */
+  struct FileMenuCallbacks {
+    MenuCallback fileNew;          /**< File -> New Scene. */
+    MenuCallback fileOpen;         /**< File -> Open Scene. */
+    MenuCallback fileResetLayout;  /**< File -> Reset Layout. */
+    MenuCallback fileSettings;     /**< File -> Settings. */
+    MenuCallback fileCloseEditor;  /**< File -> Close Editor. */
+  };
+
+  /** @brief Add menu callback group. */
+  struct AddMenuCallbacks {
+    MenuCallback addPanel;          /**< Add -> Panel. */
+    MenuCallback addProp;           /**< Add -> Prop. */
+    MenuCallback addLight;          /**< Add -> Light. */
+    MenuCallback addCamera;         /**< Add -> Camera. */
+    MenuCallback addPropFromAsset;  /**< Add -> Prop from Selected Asset. */
+  };
+
+  /** @brief Edit menu callback group. */
+  struct EditMenuCallbacks {
+    MenuCallback editUndo;          /**< Edit -> Undo. */
+    MenuCallback editRedo;          /**< Edit -> Redo. */
+    MenuCallback editRename;        /**< Edit -> Rename. */
+    MenuCallback editCreatePrefab;  /**< Edit -> Create Prefab. */
+    MenuCallback editDuplicate;     /**< Edit -> Duplicate. */
+    MenuCallback editDelete;        /**< Edit -> Delete. */
+  };
+
+  /** @brief View menu callback group. */
+  struct ViewMenuCallbacks {
+    MenuCallback viewFlyMode;         /**< View -> Fly Mode. */
+    MenuCallback viewHelp;            /**< View -> Help. */
+    MenuCallback viewQuickOpen;       /**< View -> Quick Open. */
+    MenuCallback viewCommandPalette;  /**< View -> Command Palette. */
+    MenuCallback viewResetLayout;     /**< View -> Reset Layout. */
+  };
+
   /** @brief Groups all native menu bar callbacks into a single parameter object. */
   struct MenuCallbacks {
-    MenuCallback fileNew;
-    MenuCallback fileOpen;
-    MenuCallback fileResetLayout;
-    MenuCallback fileSettings;
-    MenuCallback fileCloseEditor;
-    MenuCallback addPanel;
-    MenuCallback addProp;
-    MenuCallback addLight;
-    MenuCallback addCamera;
-    MenuCallback addPropFromAsset;
-    MenuCallback editUndo;
-    MenuCallback editRedo;
-    MenuCallback editRename;
-    MenuCallback editCreatePrefab;
-    MenuCallback editDuplicate;
-    MenuCallback editDelete;
-    MenuCallback viewFlyMode;
-    MenuCallback viewHelp;
-    MenuCallback viewQuickOpen;
-    MenuCallback viewCommandPalette;
-    MenuCallback viewResetLayout;
+    FileMenuCallbacks file;  /**< File menu callbacks. */
+    AddMenuCallbacks add;    /**< Add menu callbacks. */
+    EditMenuCallbacks edit;  /**< Edit menu callbacks. */
+    ViewMenuCallbacks view;  /**< View menu callbacks. */
   };
-  void SetMenuCallbacks(MenuCallbacks callbacks) const;
+  void SetMenuCallbacks(const MenuCallbacks& callbacks) const;
 
 private:
   GLFWwindow *m_window = nullptr;

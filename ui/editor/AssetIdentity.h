@@ -8,7 +8,8 @@
 
 #include "ui/editor/SceneDocument.h"
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
     /**
      * @brief Generates a new unique GUID string for an asset.
      * @return A newly generated GUID string.
@@ -21,8 +22,8 @@ namespace Horo::Editor {
      * @param asset   The asset definition to derive the name from.
      * @return A display name string suitable for showing in the editor UI.
      */
-    std::string MakeAssetDisplayName(const std::string &assetId,
-                                     const AssetDef &asset);
+    std::string MakeAssetDisplayName(const std::string& assetId,
+                                     const AssetDef& asset);
 
     /**
      * @brief Ensures the given asset definition has a valid GUID and display name,
@@ -30,12 +31,12 @@ namespace Horo::Editor {
      * @param assetId Logical asset identifier used to derive the display name.
      * @param asset   The asset definition to update in place.
      */
-    void EnsureAssetIdentity(const std::string &assetId, AssetDef *asset);
+    void EnsureAssetIdentity(const std::string& assetId, AssetDef* asset);
 
     /**
      * @brief Ensures all assets in the document have valid GUIDs and display names,
      *        generating them for any asset that is missing identity fields.
      * @param doc The scene document whose assets are updated in place.
      */
-    void EnsureAssetIdentity(SceneDocument *doc);
+    void EnsureAssetIdentity(SceneDocument* doc);
 } // namespace Horo::Editor

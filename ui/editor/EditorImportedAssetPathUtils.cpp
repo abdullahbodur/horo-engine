@@ -6,7 +6,6 @@
  */
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 
-#include <cctype>
 #include <system_error>
 
 #include "core/ProjectPath.h"

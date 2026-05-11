@@ -93,20 +93,19 @@ void EditorUIWidgets::DrawStatusBar() const {
                      ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    if (getStatusBarText) {
-        ImGui::TextDisabled("%s", getStatusBarText().c_str());
-    } else {
+    if (m_callbacks.getStatusBarText)
+        ImGui::TextDisabled("%s", m_callbacks.getStatusBarText().c_str());
+    else
         ImGui::TextDisabled("Ready");
-    }
 
     ImGui::End();
 }
 
 /** @copydoc EditorUIWidgets::DrawViewGimbal */
 void EditorUIWidgets::DrawViewGimbal(const Camera& cam) {
-    // Gimbal drawing is complex and needs viewport context from EditorLayer
+    // Gimbal drawing is complex and needs viewport context from EditorLayer.
     // For now, this is deferred - the actual implementation stays in EditorLayer
-    // because it needs access to m_viewportPanelRect and other viewport state
+    // because it needs access to m_viewportPanelRect and other viewport state.
     (void)cam;
 }
 
@@ -118,7 +117,7 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     if (!Horo::Ui::BeginEditorModal({"Confirm Delete Objects", 400.0f, true}, false))
         return;
 
-    int validCount = static_cast<int>(m_pendingDeleteObjectIndices.size());
+    const int validCount = static_cast<int>(m_pendingDeleteObjectIndices.size());
     if (validCount <= 0) {
         m_confirmDeleteObjectsOpen = false;
         m_pendingDeleteObjectIndices.clear();
@@ -135,9 +134,8 @@ void EditorUIWidgets::DrawConfirmDeleteObjectsModal() {
     const auto result = Horo::Ui::RenderEditorModalFooter(
         theme, "Delete All", Horo::Ui::EditorModalFooterStyle::DestructiveCancel);
     if (result.confirmed) {
-        if (onConfirmDeleteObjects) {
-            onConfirmDeleteObjects(m_pendingDeleteObjectIndices);
-        }
+        if (m_callbacks.onConfirmDeleteObjects)
+            m_callbacks.onConfirmDeleteObjects(m_pendingDeleteObjectIndices);
         m_confirmDeleteObjectsOpen = false;
         m_pendingDeleteObjectIndices.clear();
         ImGui::CloseCurrentPopup();
@@ -180,9 +178,8 @@ void EditorUIWidgets::DrawConfirmDeleteAssetModal() {
     const auto result = Horo::Ui::RenderEditorModalFooter(
         theme, "Delete", Horo::Ui::EditorModalFooterStyle::DestructiveCancel);
     if (result.confirmed) {
-        if (onConfirmDeleteAsset) {
-            onConfirmDeleteAsset(m_pendingDeleteAssetId);
-        }
+        if (m_callbacks.onConfirmDeleteAsset)
+            m_callbacks.onConfirmDeleteAsset(m_pendingDeleteAssetId);
         m_confirmDeleteAssetOpen = false;
         m_pendingDeleteAssetId.clear();
         m_pendingDeleteAssetError.clear();
@@ -223,9 +220,8 @@ void EditorUIWidgets::DrawExitConfirmModal() {
         ImGui::CloseCurrentPopup();
     }
     if (result.alternate) {
-        if (onConfirmExit) {
-            onConfirmExit();
-        }
+        if (m_callbacks.onConfirmExit)
+            m_callbacks.onConfirmExit();
         m_confirmExitOpen = false;
         m_exitConfirmError.clear();
         ImGui::CloseCurrentPopup();
@@ -241,26 +237,27 @@ void EditorUIWidgets::DrawExitConfirmModal() {
 
 /** @copydoc EditorUIWidgets::DrawRenameObjectModal */
 void EditorUIWidgets::DrawRenameObjectModal() {
-    if (m_renameObjectOpen) {
+    if (m_renameState.open) {
         ImGui::OpenPopup("Rename Object");
-        m_renameObjectOpen = false;
+        m_renameState.open = false;
     }
     if (!Horo::Ui::BeginEditorModal({"Rename Object", 400.0f, true}, false))
         return;
 
     std::string nameBuf(256, '\0');
-    m_renameObjectDraft.copy(nameBuf.data(), nameBuf.size() - 1);
+    m_renameState.draft.copy(nameBuf.data(), nameBuf.size() - 1);
     if (ImGui::InputText("New ID", nameBuf.data(), nameBuf.size(),
                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-        m_renameObjectDraft = nameBuf.data();
-    } else if (std::string_view(nameBuf.data()) != m_renameObjectDraft) {
-        m_renameObjectDraft = nameBuf.data();
+        m_renameState.draft = nameBuf.data();
+    } else if (const auto entered = std::string_view(nameBuf.data());
+               entered != m_renameState.draft) {
+        m_renameState.draft = entered;
     }
 
     const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
-    if (!m_renameObjectError.empty())
+    if (!m_renameState.error.empty())
         Horo::Ui::RenderEditorStatusText(theme, Horo::Ui::EditorStatusLevel::Error,
-                                         m_renameObjectError.c_str());
+                                         m_renameState.error.c_str());
 
     const auto result = Horo::Ui::RenderEditorModalFooter(
         theme, "Rename", Horo::Ui::EditorModalFooterStyle::OkCancel);
@@ -274,19 +271,18 @@ void EditorUIWidgets::DrawRenameObjectModal() {
 
 /** @copydoc EditorUIWidgets::ApplyRenameObject */
 void EditorUIWidgets::ApplyRenameObject() {
-    if (m_renameObjectIndex < 0) {
+    if (m_renameState.index < 0) {
         CancelRenameObject();
         return;
     }
 
     bool success = false;
-    if (onApplyRenameObject) {
-        success = onApplyRenameObject(m_renameObjectIndex, m_renameObjectDraft);
-    }
+    if (m_callbacks.onApplyRenameObject)
+        success = m_callbacks.onApplyRenameObject(m_renameState.index, m_renameState.draft);
 
     if (success) {
-        m_renameObjectError.clear();
-        m_renameObjectIndex = -1;
+        m_renameState.error.clear();
+        m_renameState.index = -1;
         ImGui::CloseCurrentPopup();
     }
     // else: error message should be set by callback
@@ -294,20 +290,20 @@ void EditorUIWidgets::ApplyRenameObject() {
 
 /** @copydoc EditorUIWidgets::CancelRenameObject */
 void EditorUIWidgets::CancelRenameObject() {
-    m_renameObjectError.clear();
-    m_renameObjectIndex = -1;
+    m_renameState.error.clear();
+    m_renameState.index = -1;
     ImGui::CloseCurrentPopup();
 }
 
 
 /** @copydoc EditorUIWidgets::OnClipboardAction */
-void EditorUIWidgets::OnClipboardAction(const std::string& label, float duration) {
+void EditorUIWidgets::OnClipboardAction(std::string_view label, float duration) {
     m_clipboardToastTime = duration;
     m_clipboardToastLabel = label;
 }
 
 /** @copydoc EditorUIWidgets::OnHotReloadStart */
-void EditorUIWidgets::OnHotReloadStart(float duration, const std::string& label) {
+void EditorUIWidgets::OnHotReloadStart(float duration, std::string_view label) {
     m_hotReloadOverlayActive = true;
     m_hotReloadOverlayProgress = 0.0f;
     m_hotReloadOverlaySpinner = 0.0f;
@@ -333,7 +329,7 @@ void EditorUIWidgets::OpenConfirmDeleteObjects(const std::vector<int>& indices) 
 }
 
 /** @copydoc EditorUIWidgets::OpenConfirmDeleteAsset */
-void EditorUIWidgets::OpenConfirmDeleteAsset(const std::string& assetId) {
+void EditorUIWidgets::OpenConfirmDeleteAsset(std::string_view assetId) {
     m_confirmDeleteAssetOpen = true;
     m_pendingDeleteAssetId = assetId;
     m_pendingDeleteAssetError.clear();
@@ -346,9 +342,9 @@ void EditorUIWidgets::OpenConfirmExit() {
 
 /** @copydoc EditorUIWidgets::OpenRenameObject */
 void EditorUIWidgets::OpenRenameObject(int objectIndex) {
-    m_renameObjectOpen = true;
-    m_renameObjectIndex = objectIndex;
-    m_renameObjectError.clear();
+    m_renameState.open = true;
+    m_renameState.index = objectIndex;
+    m_renameState.error.clear();
 }
 
 }  // namespace Horo::Editor

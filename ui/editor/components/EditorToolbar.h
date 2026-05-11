@@ -18,7 +18,7 @@ namespace Horo::Editor {
      *  Each field is an optional callable; the toolbar checks validity before invoking. */
     struct EditorToolbarCallbacks {
         // Scene actions
-        std::function<void(std::string)> requestSceneAction;       /**< Request a named scene action (e.g. "save", "new"). */
+        std::function<void(const std::string&)> requestSceneAction;       /**< Request a named scene action (e.g. "save", "new"). */
         std::function<void(SceneObjectType)> addObject;            /**< Add a new scene object of the given type. */
         std::function<void()> addObjectFromSelectedAsset;          /**< Instantiate the currently selected asset as a scene object. */
 
@@ -92,43 +92,43 @@ namespace Horo::Editor {
         /** @brief Draws the full toolbar for this frame.
          *  @param callbacks Callable table used to trigger editor actions.
          *  @param state     Read-only state used to reflect the current editor state in the UI. */
-        void Draw(const EditorToolbarCallbacks& callbacks, const EditorToolbarState& state);
+        void Draw(const EditorToolbarCallbacks& callbacks, const EditorToolbarState& state) const;
 
     private:
         /** @brief Draws the File drop-down menu.
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawFileMenu(const EditorToolbarCallbacks& callbacks,
-                         const EditorToolbarState& state);
+                         const EditorToolbarState& state) const;
 
         /** @brief Draws the Add-object drop-down menu.
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawAddMenu(const EditorToolbarCallbacks& callbacks,
-                        const EditorToolbarState& state);
+                        const EditorToolbarState& state) const;
 
         /** @brief Draws the Edit drop-down menu.
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawEditMenu(const EditorToolbarCallbacks& callbacks,
-                         const EditorToolbarState& state);
+                         const EditorToolbarState& state) const;
 
         /** @brief Draws the items inside the Edit menu (factored out for reuse).
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawEditMenuItems(const EditorToolbarCallbacks& callbacks,
-                              const EditorToolbarState& state);
+                              const EditorToolbarState& state) const;
 
         /** @brief Draws the View drop-down menu.
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawViewMenu(const EditorToolbarCallbacks& callbacks,
-                         const EditorToolbarState& state);
+                         const EditorToolbarState& state) const;
 
         /** @brief Draws the icon toolbar row beneath the menu bar.
          *  @param callbacks Editor action callbacks.
          *  @param state     Current editor state. */
         void DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
-                            const EditorToolbarState& state);
+                            const EditorToolbarState& state) const;
     };
 }

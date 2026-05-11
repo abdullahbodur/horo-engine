@@ -7,6 +7,7 @@
 #include <cmath>
 #include <format>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -199,8 +200,7 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
   }
 
   const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z});
-  constexpr float kPi = 3.14159265358979323846f;
-  const float fov = 45.0f * kPi / 180.0f;
+  const float fov = 45.0f * std::numbers::pi_v<float> / 180.0f;
   const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
 
   const Vec3 camPos =
@@ -338,7 +338,7 @@ RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef& asset) {
       !useVulkanOffscreen && !thumbnailRenderer.Init())
     return {};
 #else
-  if (!thumbnailRenderer.Init())
+  if (auto& renderer = thumbnailRenderer; !renderer.Init())
     return {};
 #endif
 
@@ -375,6 +375,47 @@ RenderTargetHandle TryGetCachedGltfAlbedoPreview(
 
 } // namespace
 
+namespace {
+/** @brief Loads a texture from disk (with caching) and returns its native render-target handle. */
+RenderTargetHandle LoadTextureHandleByPath(
+    const std::filesystem::path& path,
+    std::unordered_map<std::string, Texture, StringHash, std::equal_to<>>* cache) {
+    const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+    if (!caps.supportsNativeTextureHandles)
+        return {};
+    if (path.empty())
+        return {};
+    if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
+        return {};
+    const std::string abs = path.generic_string();
+    auto it = cache->find(abs);
+    if (it == cache->end()) {
+        Texture tex = Texture::FromFile(abs, false);
+        it = cache->try_emplace(abs, std::move(tex)).first;
+    }
+    if (!it->second.IsValid())
+        return {};
+    return it->second.GetRenderTargetHandle();
+}
+
+/** @brief Attempts to resolve a preview handle for an .obj mesh via its associated diffuse texture. */
+RenderTargetHandle TryResolveObjMeshPreview(
+    const std::filesystem::path& meshPath,
+    std::unordered_map<std::string, Texture, StringHash, std::equal_to<>>* cache) {
+    const std::string diffusePath =
+        ObjLoader::FindDiffuseTexture(meshPath.generic_string());
+    return LoadTextureHandleByPath(
+        ResolveProjectRelativeOrAbsolutePath(diffusePath), cache);
+}
+
+/** @brief Attempts to resolve a preview handle for a glTF/glb mesh via its cached albedo texture. */
+RenderTargetHandle TryResolveGltfMeshPreview(
+    const std::filesystem::path& meshPath,
+    std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash, std::equal_to<>>* cache) {
+    return TryGetCachedGltfAlbedoPreview(meshPath, cache);
+}
+}  // namespace
+
 /** @copydoc TryGetAssetPreviewHandle */
 bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
                               RenderTargetHandle* outHandle) {
@@ -399,65 +440,40 @@ bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
   if (s_noPreviewCache.contains(key))
     return false;
 
-  auto loadTextureByPath = [&](const std::filesystem::path& path) -> RenderTargetHandle {
-    if (!caps.supportsNativeTextureHandles)
-      return {};
-    if (path.empty())
-      return {};
-    if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
-      return {};
-    const std::string abs = path.generic_string();
-    auto it = s_textureByPath.find(abs);
-    if (it == s_textureByPath.end()) {
-      Texture tex = Texture::FromFile(abs, false);
-      it = s_textureByPath.try_emplace(abs, std::move(tex)).first;
-    }
-    if (!it->second.IsValid())
-      return {};
-    return it->second.GetRenderTargetHandle();
-  };
-
+  // 1. Prefer an offscreen-rendered mesh preview when supported.
   if (caps.supportsOffscreenTargets && !asset.mesh.empty()) {
-    const RenderTargetHandle handle = TryRenderAssetMeshPreview(asset);
-    if (handle.IsValid()) {
+    if (const RenderTargetHandle handle = TryRenderAssetMeshPreview(asset);
+        handle.IsValid()) {
       *outHandle = handle;
       return true;
     }
   }
 
+  // 2. Fall back to the explicit albedo map when provided.
   if (!asset.albedoMap.empty()) {
     const std::filesystem::path albedo =
         ResolveProjectRelativeOrAbsolutePath(asset.albedoMap);
-    const RenderTargetHandle handle = loadTextureByPath(albedo);
-    if (handle.IsValid()) {
+    if (const RenderTargetHandle handle =
+            LoadTextureHandleByPath(albedo, &s_textureByPath);
+        handle.IsValid()) {
       *outHandle = handle;
       return true;
     }
   }
 
-  if (const std::filesystem::path meshPath =
-          ResolveProjectRelativeOrAbsolutePath(asset.mesh);
-      !meshPath.empty()) {
+  // 3. Fall back to a diffuse/albedo texture extracted from the mesh file.
+  const std::filesystem::path meshPath =
+      ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+  if (!meshPath.empty()) {
     const std::string ext = ToLowerAscii(meshPath.extension().string());
-
-    if (ext == ".obj") {
-      const std::string diffusePath =
-          ObjLoader::FindDiffuseTexture(meshPath.generic_string());
-      const RenderTargetHandle handle =
-          loadTextureByPath(ResolveProjectRelativeOrAbsolutePath(diffusePath));
-      if (handle.IsValid()) {
-        *outHandle = handle;
-        return true;
-      }
-    }
-
-    if (ext == ".gltf" || ext == ".glb") {
-      const RenderTargetHandle handle =
-          TryGetCachedGltfAlbedoPreview(meshPath, &s_gltfTextureByMesh);
-      if (handle.IsValid()) {
-        *outHandle = handle;
-        return true;
-      }
+    RenderTargetHandle handle;
+    if (ext == ".obj")
+      handle = TryResolveObjMeshPreview(meshPath, &s_textureByPath);
+    else if (ext == ".gltf" || ext == ".glb")
+      handle = TryResolveGltfMeshPreview(meshPath, &s_gltfTextureByMesh);
+    if (handle.IsValid()) {
+      *outHandle = handle;
+      return true;
     }
   }
 

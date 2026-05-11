@@ -207,11 +207,11 @@ private:
     g_editorInstance = &m_editor;
     GetWindow().SetupNativeMenuBar();
     GetWindow().SetMenuCallbacks({
-        MenuNewScene, MenuOpenScene, MenuResetLayout, MenuSettings,
-        MenuCloseEditor, MenuAddPanel, MenuAddProp, MenuAddLight, MenuAddCamera,
-        MenuAddPropFromAsset, MenuUndo, MenuRedo, MenuRename, MenuCreatePrefab,
-        MenuDuplicate, MenuDelete, MenuFlyMode, MenuHelp,
-        MenuQuickOpen, MenuCommandPalette, MenuViewResetLayout});
+        .file = {MenuNewScene, MenuOpenScene, MenuResetLayout, MenuSettings, MenuCloseEditor},
+        .add = {MenuAddPanel, MenuAddProp, MenuAddLight, MenuAddCamera, MenuAddPropFromAsset},
+        .edit = {MenuUndo, MenuRedo, MenuRename, MenuCreatePrefab, MenuDuplicate, MenuDelete},
+        .view = {MenuFlyMode, MenuHelp, MenuQuickOpen, MenuCommandPalette, MenuViewResetLayout},
+    });
     m_shell.Attach(&m_editor, &m_scene, m_runtime.get(), &m_camera);
     m_shell.Initialize();
 

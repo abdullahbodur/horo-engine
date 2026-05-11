@@ -7,14 +7,200 @@
 #include "ui/HoroTheme.h"
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+#include <array>
+
 #include "renderer/Renderer.h"
 #include "ui/editor/TransformGizmo.h"
 
 namespace Horo::Editor {
 
+namespace {
+/** @brief Renders a selectable row inside the toolbar combo popup. Returns true when clicked. */
+bool DrawToolbarComboRow(const char* label, bool selected) {
+    const ImVec2 rowSize(ImGui::GetContentRegionAvail().x, 24.0f);
+    const bool clicked = ImGui::InvisibleButton("##combo_row", rowSize);
+    const ImVec2 rowMin = ImGui::GetItemRectMin();
+    const ImVec2 rowMax = ImGui::GetItemRectMax();
+    if (const bool hovered = ImGui::IsItemHovered(); hovered || selected) {
+        const auto& palette = Ui::GetEditorTheme().palette;
+        const ImVec4 fill = selected ? palette.selection : palette.selectionHover;
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(rowMin.x + 1.0f, rowMin.y + 1.0f),
+            ImVec2(rowMax.x - 1.0f, rowMax.y - 1.0f),
+            ImGui::ColorConvertFloat4ToU32(fill), 5.0f);
+    }
+    ImGui::GetWindowDrawList()->AddText(ImVec2(rowMin.x + 5.0f, rowMin.y + 3.0f),
+                                        ImGui::GetColorU32(ImGuiCol_Text), label);
+    if (selected)
+        ImGui::SetItemDefaultFocus();
+    return clicked;
+}
+
+/** @brief Renders a single toolbar gizmo-mode button. */
+void DrawGizmoModeButton(const char* icon, const ImVec2& buttonSize, bool active,
+                         GizmoMode* gizmoMode, GizmoMode targetMode, float buttonGap) {
+    if (active)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+    if (ImGui::Button(icon, buttonSize) && gizmoMode)
+        *gizmoMode = targetMode;
+    if (active)
+        ImGui::PopStyleColor();
+    ImGui::SameLine(0, buttonGap);
+}
+
+/** @brief Renders the four gizmo-mode buttons (Select, Translate, Rotate, Scale). */
+void DrawGizmoModeButtons(const EditorToolbarState& state, const ImVec2& buttonSize, float buttonGap) {
+    auto* gizmoMode = static_cast<GizmoMode*>(state.currentGizmoMode);
+    const bool isSelect = !gizmoMode || *gizmoMode == GizmoMode::None;
+    const bool isMove = gizmoMode && *gizmoMode == GizmoMode::Translate;
+    const bool isRotate = gizmoMode && *gizmoMode == GizmoMode::Rotate;
+    const bool isScale = gizmoMode && *gizmoMode == GizmoMode::Scale;
+
+    DrawGizmoModeButton(ICON_FA_MOUSE_POINTER, buttonSize, isSelect, gizmoMode, GizmoMode::None, buttonGap);
+    DrawGizmoModeButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, buttonSize, isMove, gizmoMode, GizmoMode::Translate, buttonGap);
+    DrawGizmoModeButton(ICON_FA_ROTATE, buttonSize, isRotate, gizmoMode, GizmoMode::Rotate, buttonGap);
+
+    // Scale is the last button — skip the trailing SameLine by inlining.
+    if (isScale)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+    if (ImGui::Button(ICON_FA_EXPAND, buttonSize) && gizmoMode)
+        *gizmoMode = GizmoMode::Scale;
+    if (isScale)
+        ImGui::PopStyleColor();
+}
+
+/** @brief Handles the Play button click side-effects. */
+void OnPlayClicked(const EditorToolbarState& state) {
+    if (state.playMode)
+        *state.playMode = true;
+    if (state.playModeEscPresses)
+        *state.playModeEscPresses = 0;
+    if (state.flyMode && *state.flyMode && state.window) {
+        *state.flyMode = false;
+        if (state.flyCamInitialized)
+            *state.flyCamInitialized = false;
+        if (state.prevCursorInit)
+            *state.prevCursorInit = false;
+        glfwSetInputMode(state.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+}
+
+/** @brief Handles the Stop button click side-effects. */
+void OnStopClicked(const EditorToolbarState& state) {
+    if (state.playMode)
+        *state.playMode = false;
+    if (state.playModeEscPresses)
+        *state.playModeEscPresses = 0;
+    if (state.window)
+        glfwSetInputMode(state.window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+/** @brief Renders the Play/Stop + Pause button group. */
+void DrawPlayPauseStopButtons(const EditorToolbarState& state,
+                              const ImVec2& buttonSize, float buttonGap) {
+    if (const bool playMode = state.playMode && *state.playMode; !playMode) {
+        if (ImGui::Button(ICON_FA_PLAY, buttonSize))
+            OnPlayClicked(state);
+    } else {
+        if (ImGui::Button(ICON_FA_STOP, buttonSize))
+            OnStopClicked(state);
+    }
+
+    ImGui::SameLine(0, buttonGap);
+    if (ImGui::Button(ICON_FA_PAUSE, buttonSize)) {
+        // Pause is a placeholder for future play-mode pause; intentionally no-op.
+    }
+}
+
+/** @brief Renders the preset combo dropdown (Default/Layout/Animation + Wireframe toggle). */
+void DrawPresetCombo(const EditorToolbarState& state) {
+    static constexpr std::array<const char*, 3> kPresets = {"Default", "Layout", "Animation"};
+    static int presetIdx = 0;
+    const bool supportsWireframeOverlay =
+        Renderer::GetBackendCapabilities().supportsWireframeOverlay;
+
+    if (!supportsWireframeOverlay && state.wireframeMode)
+        *state.wireframeMode = false;
+
+    ImGui::SetNextItemWidth(100);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
+
+    if (ImGui::BeginCombo("##preset", kPresets[presetIdx])) {
+        for (int i = 0; i < static_cast<int>(kPresets.size()); i++) {
+            ImGui::PushID(i);
+            if (DrawToolbarComboRow(kPresets[i], presetIdx == i)) {
+                presetIdx = i;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+
+        if (!supportsWireframeOverlay)
+            ImGui::BeginDisabled();
+
+        ImGui::PushID("wireframe");
+        if (const bool wireframeMode = state.wireframeMode && *state.wireframeMode;
+            DrawToolbarComboRow("Wireframe", wireframeMode)) {
+            if (state.wireframeMode)
+                *state.wireframeMode = !wireframeMode;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopID();
+
+        if (!supportsWireframeOverlay)
+            ImGui::EndDisabled();
+
+        ImGui::EndCombo();
+    }
+    ImGui::PopStyleVar(3);
+}
+
+/** @brief Renders the right-aligned Scene / Help / Settings group. */
+void DrawRightAlignedGroup(const EditorToolbarCallbacks& callbacks,
+                           const ImVec2& buttonSize, float rightButtonGap) {
+    static constexpr std::array<const char*, 2> kScenes = {"Scene 1", "Scene 2"};
+    static int sceneIdx = 0;
+
+    float maxSceneWidth = 0;
+    for (const auto* scene : kScenes)
+        maxSceneWidth = std::max(maxSceneWidth, ImGui::CalcTextSize(scene).x);
+    const float comboWidth = maxSceneWidth + 24.0f;
+    ImGui::SetNextItemWidth(comboWidth);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
+
+    if (ImGui::BeginCombo("##scene", kScenes[sceneIdx])) {
+        for (int i = 0; i < static_cast<int>(kScenes.size()); i++) {
+            ImGui::PushID(i);
+            if (DrawToolbarComboRow(kScenes[i], sceneIdx == i)) {
+                sceneIdx = i;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopStyleVar(3);
+
+    ImGui::SameLine(0, rightButtonGap);
+    if (ImGui::Button(ICON_FA_CIRCLE_QUESTION, buttonSize) && callbacks.openHelpPopup)
+        callbacks.openHelpPopup();
+
+    ImGui::SameLine(0, rightButtonGap);
+    if (ImGui::Button(ICON_FA_GEAR, buttonSize) && callbacks.openSettings)
+        callbacks.openSettings();
+}
+}  // namespace
+
 /** @copydoc EditorToolbar::Draw */
 void EditorToolbar::Draw(const EditorToolbarCallbacks& callbacks,
-                         const EditorToolbarState& state) {
+                         const EditorToolbarState& state) const {
     const ImGuiIO& io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(0, 0));
 
@@ -61,77 +247,69 @@ void EditorToolbar::Draw(const EditorToolbarCallbacks& callbacks,
 
 /** @copydoc EditorToolbar::DrawFileMenu */
 void EditorToolbar::DrawFileMenu(const EditorToolbarCallbacks& callbacks,
-                                 const EditorToolbarState& state) {
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New Scene"))
-            if (callbacks.requestSceneAction)
-                callbacks.requestSceneAction("NewScene");
+                                 const EditorToolbarState& state) const {
+    if (!ImGui::BeginMenu("File"))
+        return;
 
-        if (ImGui::MenuItem("Open Scene..."))
-            if (callbacks.requestSceneAction)
-                callbacks.requestSceneAction("OpenSceneFile");
+    if (ImGui::MenuItem("New Scene") && callbacks.requestSceneAction)
+        callbacks.requestSceneAction("NewScene");
 
-        if (ImGui::MenuItem("Reset Layout"))
-            if (state.resetDockLayoutRequested)
-                *state.resetDockLayoutRequested = true;
+    if (ImGui::MenuItem("Open Scene...") && callbacks.requestSceneAction)
+        callbacks.requestSceneAction("OpenSceneFile");
 
+    if (ImGui::MenuItem("Reset Layout") && state.resetDockLayoutRequested)
+        *state.resetDockLayoutRequested = true;
+
+    ImGui::Separator();
+
+    if (ImGui::MenuItem("Settings...") && callbacks.openSettings)
+        callbacks.openSettings();
+
+    if (callbacks.fileMenuRenderCallback) {
         ImGui::Separator();
-
-        if (ImGui::MenuItem("Settings...")) {
-            if (callbacks.openSettings)
-                callbacks.openSettings();
-        }
-
-        if (callbacks.fileMenuRenderCallback) {
-            ImGui::Separator();
-            callbacks.fileMenuRenderCallback();
-        }
-
-        ImGui::EndMenu();
+        callbacks.fileMenuRenderCallback();
     }
+
+    ImGui::EndMenu();
 }
 
 /** @copydoc EditorToolbar::DrawAddMenu */
 void EditorToolbar::DrawAddMenu(const EditorToolbarCallbacks& callbacks,
-                                const EditorToolbarState& state) {
-    if (ImGui::BeginMenu("Add")) {
-        const bool hasSelectedAsset = state.selectedAssetId && !state.selectedAssetId->empty();
+                                const EditorToolbarState& state) const {
+    if (!ImGui::BeginMenu("Add"))
+        return;
 
-        if (ImGui::MenuItem("Panel"))
-            if (callbacks.addObject)
-                callbacks.addObject(SceneObjectType::Panel);
+    const bool hasSelectedAsset = state.selectedAssetId && !state.selectedAssetId->empty();
 
-        if (ImGui::MenuItem("Prop"))
-            if (callbacks.addObject)
-                callbacks.addObject(SceneObjectType::Prop);
+    if (ImGui::MenuItem("Panel") && callbacks.addObject)
+        callbacks.addObject(SceneObjectType::Panel);
 
-        if (ImGui::MenuItem("Light"))
-            if (callbacks.addObject)
-                callbacks.addObject(SceneObjectType::Light);
+    if (ImGui::MenuItem("Prop") && callbacks.addObject)
+        callbacks.addObject(SceneObjectType::Prop);
 
-        if (ImGui::MenuItem("Camera"))
-            if (callbacks.addObject)
-                callbacks.addObject(SceneObjectType::Camera);
+    if (ImGui::MenuItem("Light") && callbacks.addObject)
+        callbacks.addObject(SceneObjectType::Light);
 
-        ImGui::Separator();
+    if (ImGui::MenuItem("Camera") && callbacks.addObject)
+        callbacks.addObject(SceneObjectType::Camera);
 
-        if (!hasSelectedAsset)
-            ImGui::BeginDisabled();
+    ImGui::Separator();
 
-        if (ImGui::MenuItem("Prop from Selected Asset"))
-            if (callbacks.addObjectFromSelectedAsset)
-                callbacks.addObjectFromSelectedAsset();
+    if (!hasSelectedAsset)
+        ImGui::BeginDisabled();
 
-        if (!hasSelectedAsset)
-            ImGui::EndDisabled();
+    if (ImGui::MenuItem("Prop from Selected Asset") && callbacks.addObjectFromSelectedAsset)
+        callbacks.addObjectFromSelectedAsset();
 
-        ImGui::EndMenu();
-    }
+    if (!hasSelectedAsset)
+        ImGui::EndDisabled();
+
+    ImGui::EndMenu();
 }
 
 /** @copydoc EditorToolbar::DrawEditMenu */
 void EditorToolbar::DrawEditMenu(const EditorToolbarCallbacks& callbacks,
-                                 const EditorToolbarState& state) {
+                                 const EditorToolbarState& state) const {
     if (ImGui::BeginMenu("Edit")) {
         DrawEditMenuItems(callbacks, state);
         ImGui::EndMenu();
@@ -140,96 +318,80 @@ void EditorToolbar::DrawEditMenu(const EditorToolbarCallbacks& callbacks,
 
 /** @copydoc EditorToolbar::DrawEditMenuItems */
 void EditorToolbar::DrawEditMenuItems(const EditorToolbarCallbacks& callbacks,
-                                      const EditorToolbarState& state) {
-    bool canUndo = callbacks.canUndoHistory ? callbacks.canUndoHistory() : false;
-    bool canRedo = callbacks.canRedoHistory ? callbacks.canRedoHistory() : false;
+                                      const EditorToolbarState& state) const {
+    const bool canUndo = callbacks.canUndoHistory && callbacks.canUndoHistory();
+    const bool canRedo = callbacks.canRedoHistory && callbacks.canRedoHistory();
 
     const bool hasSelection = state.selectedIndices && !state.selectedIndices->empty();
-    const int primaryIdx = hasSelection && !state.selectedIndices->empty()
-                               ? state.selectedIndices->front()
-                               : -1;
-    const bool hasSingleSelection = hasSelection && state.selectedIndices && state.selectedIndices->size() == 1;
+    const int primaryIdx = hasSelection ? state.selectedIndices->front() : -1;
+    const bool hasSingleSelection = hasSelection && state.selectedIndices->size() == 1;
 
-    if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z", false, canUndo))
-        if (callbacks.undoHistory)
-            callbacks.undoHistory();
+    if (ImGui::MenuItem("Undo", "Ctrl/Cmd+Z", false, canUndo) && callbacks.undoHistory)
+        callbacks.undoHistory();
 
-    if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y", false, canRedo))
-        if (callbacks.redoHistory)
-            callbacks.redoHistory();
+    if (ImGui::MenuItem("Redo", "Ctrl/Cmd+Shift+Z / Ctrl+Y", false, canRedo) && callbacks.redoHistory)
+        callbacks.redoHistory();
 
     ImGui::Separator();
 
-    if (ImGui::MenuItem("Rename...", nullptr, false, hasSingleSelection))
-        if (callbacks.openRenameObjectModal)
-            callbacks.openRenameObjectModal(primaryIdx);
+    if (ImGui::MenuItem("Rename...", nullptr, false, hasSingleSelection) && callbacks.openRenameObjectModal)
+        callbacks.openRenameObjectModal(primaryIdx);
 
-    if (ImGui::MenuItem("Create Prefab", nullptr, false, hasSingleSelection))
-        if (callbacks.createPrefabFromSelection)
-            callbacks.createPrefabFromSelection();
+    if (ImGui::MenuItem("Create Prefab", nullptr, false, hasSingleSelection) && callbacks.createPrefabFromSelection)
+        callbacks.createPrefabFromSelection();
 
-    if (ImGui::MenuItem("Duplicate", nullptr, false, hasSelection))
-        if (callbacks.duplicateSelectedObjects)
-            callbacks.duplicateSelectedObjects();
+    if (ImGui::MenuItem("Duplicate", nullptr, false, hasSelection) && callbacks.duplicateSelectedObjects)
+        callbacks.duplicateSelectedObjects();
 
-    if (ImGui::MenuItem("Delete", nullptr, false, hasSelection))
-        if (callbacks.requestDeleteSelectedObjects)
-            callbacks.requestDeleteSelectedObjects();
+    if (ImGui::MenuItem("Delete", nullptr, false, hasSelection) && callbacks.requestDeleteSelectedObjects)
+        callbacks.requestDeleteSelectedObjects();
 
     ImGui::Separator();
 
-    if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C", false, hasSingleSelection)) {
-        if (callbacks.buildSelectionRefCode && primaryIdx >= 0) {
-            const std::string ref = callbacks.buildSelectionRefCode(primaryIdx);
-            ImGui::SetClipboardText(ref.c_str());
-        }
+    if (ImGui::MenuItem("Copy Ref", "Ctrl/Cmd+Shift+C", false, hasSingleSelection) &&
+        callbacks.buildSelectionRefCode && primaryIdx >= 0) {
+        const std::string ref = callbacks.buildSelectionRefCode(primaryIdx);
+        ImGui::SetClipboardText(ref.c_str());
     }
 }
 
 /** @copydoc EditorToolbar::DrawViewMenu */
 void EditorToolbar::DrawViewMenu(const EditorToolbarCallbacks& callbacks,
-                                 const EditorToolbarState& state) {
-    if (ImGui::BeginMenu("View")) {
-        const bool flyBefore = state.flyMode ? *state.flyMode : false;
+                                 const EditorToolbarState& state) const {
+    if (!ImGui::BeginMenu("View"))
+        return;
 
-        if (ImGui::MenuItem("Fly Mode", "Tab", state.flyMode ? *state.flyMode : false)) {
-            if (callbacks.setFlyMode) {
-                bool newFlyMode = !(state.flyMode ? *state.flyMode : false);
-                callbacks.setFlyMode(newFlyMode);
-            }
-        }
+    const bool flyBefore = state.flyMode && *state.flyMode;
 
-        if ((flyBefore || (state.flyMode && *state.flyMode)))
-            ImGui::TextDisabled("WASD + mouse");
+    if (ImGui::MenuItem("Fly Mode", "Tab", flyBefore) && callbacks.setFlyMode)
+        callbacks.setFlyMode(!flyBefore);
 
-        if (ImGui::MenuItem("Help", "? / F1"))
-            if (callbacks.openHelpPopup)
-                callbacks.openHelpPopup();
+    if (flyBefore || (state.flyMode && *state.flyMode))
+        ImGui::TextDisabled("WASD + mouse");
 
-        if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P"))
-            if (state.quickOpenOpen)
-                *state.quickOpenOpen = true;
+    if (ImGui::MenuItem("Help", "? / F1") && callbacks.openHelpPopup)
+        callbacks.openHelpPopup();
 
-        if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
-            if (state.commandPaletteOpen)
-                *state.commandPaletteOpen = true;
-            if (state.commandPaletteQuery)
-                state.commandPaletteQuery->clear();
-        }
+    if (ImGui::MenuItem("Quick Open", "Ctrl/Cmd+P") && state.quickOpenOpen)
+        *state.quickOpenOpen = true;
 
-        if (ImGui::MenuItem("Reset Layout"))
-            if (state.resetDockLayoutRequested)
-                *state.resetDockLayoutRequested = true;
-
-        ImGui::EndMenu();
+    if (ImGui::MenuItem("Command Palette", "Ctrl/Cmd+Shift+P")) {
+        if (state.commandPaletteOpen)
+            *state.commandPaletteOpen = true;
+        if (state.commandPaletteQuery)
+            state.commandPaletteQuery->clear();
     }
+
+    if (ImGui::MenuItem("Reset Layout") && state.resetDockLayoutRequested)
+        *state.resetDockLayoutRequested = true;
+
+    ImGui::EndMenu();
 }
 
 /** @copydoc EditorToolbar::DrawIconToolbar */
 void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
-                                    const EditorToolbarState& state) {
+                                    const EditorToolbarState& state) const {
     const ImVec2 buttonSize(28, 24);
-    auto GetCenteredY = [&]() { return (ImGui::GetWindowHeight() - buttonSize.y) * 0.5f; };
     constexpr float buttonGap = 10.0f;
     constexpr float rightButtonGap = 8.0f;
 
@@ -247,7 +409,7 @@ void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
     const float availableWidth = ImGui::GetWindowWidth() - rightGroupWidth - rightMargin;
     const float startX = (availableWidth - mainBlockWidth) * 0.5f;
 
-    const float centerY = GetCenteredY();
+    const float centerY = (ImGui::GetWindowHeight() - buttonSize.y) * 0.5f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 divColor = ImGui::GetColorU32(ImGuiCol_Separator);
     const float divTop = ImGui::GetWindowPos().y + centerY + 3.0f;
@@ -255,55 +417,9 @@ void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
 
     float curX = startX;
 
-    // Gizmo mode buttons (requires state.currentGizmoMode)
+    // Group 1: gizmo mode buttons
     ImGui::SetCursorPos(ImVec2(curX, centerY));
-    {
-        // Cast void* to GizmoMode* to avoid circular header dependency
-        GizmoMode* gizmoMode = static_cast<GizmoMode*>(state.currentGizmoMode);
-
-        const bool isSelect = !gizmoMode || *gizmoMode == GizmoMode::None;
-        if (isSelect)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-        if (ImGui::Button(ICON_FA_MOUSE_POINTER, buttonSize)) {
-            if (gizmoMode)
-                *gizmoMode = GizmoMode::None;
-        }
-        if (isSelect)
-            ImGui::PopStyleColor();
-        ImGui::SameLine(0, buttonGap);
-
-        const bool isMove = gizmoMode && *gizmoMode == GizmoMode::Translate;
-        if (isMove)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-        if (ImGui::Button(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, buttonSize)) {
-            if (gizmoMode)
-                *gizmoMode = GizmoMode::Translate;
-        }
-        if (isMove)
-            ImGui::PopStyleColor();
-        ImGui::SameLine(0, buttonGap);
-
-        const bool isRotate = gizmoMode && *gizmoMode == GizmoMode::Rotate;
-        if (isRotate)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-        if (ImGui::Button(ICON_FA_ROTATE, buttonSize)) {
-            if (gizmoMode)
-                *gizmoMode = GizmoMode::Rotate;
-        }
-        if (isRotate)
-            ImGui::PopStyleColor();
-        ImGui::SameLine(0, buttonGap);
-
-        const bool isScale = gizmoMode && *gizmoMode == GizmoMode::Scale;
-        if (isScale)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-        if (ImGui::Button(ICON_FA_EXPAND, buttonSize)) {
-            if (gizmoMode)
-                *gizmoMode = GizmoMode::Scale;
-        }
-        if (isScale)
-            ImGui::PopStyleColor();
-    }
+    DrawGizmoModeButtons(state, buttonSize, buttonGap);
     curX += g1Width;
 
     {
@@ -312,40 +428,9 @@ void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
         curX += divTotal;
     }
 
-    // Play / Pause / Stop buttons
+    // Group 2: Play / Pause / Stop
     ImGui::SetCursorPos(ImVec2(curX, centerY));
-    {
-        const bool playMode = state.playMode ? *state.playMode : false;
-
-        if (!playMode) {
-            if (ImGui::Button(ICON_FA_PLAY, buttonSize)) {
-                if (state.playMode)
-                    *state.playMode = true;
-                if (state.playModeEscPresses)
-                    *state.playModeEscPresses = 0;
-                if (state.flyMode && *state.flyMode && state.window) {
-                    *state.flyMode = false;
-                    if (state.flyCamInitialized)
-                        *state.flyCamInitialized = false;
-                    if (state.prevCursorInit)
-                        *state.prevCursorInit = false;
-                    glfwSetInputMode(state.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                }
-            }
-        } else {
-            if (ImGui::Button(ICON_FA_STOP, buttonSize)) {
-                if (state.playMode)
-                    *state.playMode = false;
-                if (state.playModeEscPresses)
-                    *state.playModeEscPresses = 0;
-                if (state.window)
-                    glfwSetInputMode(state.window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            }
-        }
-
-        ImGui::SameLine(0, buttonGap);
-        if (ImGui::Button(ICON_FA_PAUSE, buttonSize)) {}
-    }
+    DrawPlayPauseStopButtons(state, buttonSize, buttonGap);
     curX += g2Width;
 
     {
@@ -354,117 +439,14 @@ void EditorToolbar::DrawIconToolbar(const EditorToolbarCallbacks& callbacks,
         curX += divTotal;
     }
 
-    auto drawToolbarComboRow = [](const char* label, bool selected) {
-        const ImVec2 rowSize(ImGui::GetContentRegionAvail().x, 24.0f);
-        const bool clicked = ImGui::InvisibleButton("##combo_row", rowSize);
-        const ImVec2 rowMin = ImGui::GetItemRectMin();
-        const ImVec2 rowMax = ImGui::GetItemRectMax();
-        const bool hovered = ImGui::IsItemHovered();
-        if (hovered || selected) {
-            const auto& palette = Ui::GetEditorTheme().palette;
-            const ImVec4 fill = selected ? palette.selection : palette.selectionHover;
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                ImVec2(rowMin.x + 1.0f, rowMin.y + 1.0f),
-                ImVec2(rowMax.x - 1.0f, rowMax.y - 1.0f),
-                ImGui::ColorConvertFloat4ToU32(fill), 5.0f);
-        }
-        ImGui::GetWindowDrawList()->AddText(ImVec2(rowMin.x + 5.0f, rowMin.y + 3.0f),
-                                            ImGui::GetColorU32(ImGuiCol_Text), label);
-        if (selected)
-            ImGui::SetItemDefaultFocus();
-        return clicked;
-    };
-
-    // Preset dropdown
+    // Group 3: preset combo
     ImGui::SetCursorPos(ImVec2(curX, centerY));
-    {
-        const char* presets[] = {"Default", "Layout", "Animation"};
-        static int presetIdx = 0;
-        const bool supportsWireframeOverlay =
-            Renderer::GetBackendCapabilities().supportsWireframeOverlay;
-
-        if (!supportsWireframeOverlay && state.wireframeMode)
-            *state.wireframeMode = false;
-
-        ImGui::SetNextItemWidth(100);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
-
-        if (ImGui::BeginCombo("##preset", presets[presetIdx])) {
-            for (int i = 0; i < 3; i++) {
-                ImGui::PushID(i);
-                if (drawToolbarComboRow(presets[i], presetIdx == i)) {
-                    presetIdx = i;
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::PopID();
-            }
-            ImGui::Separator();
-
-            if (!supportsWireframeOverlay)
-                ImGui::BeginDisabled();
-
-            ImGui::PushID("wireframe");
-            const bool wireframeMode = state.wireframeMode ? *state.wireframeMode : false;
-            if (drawToolbarComboRow("Wireframe", wireframeMode)) {
-                if (state.wireframeMode)
-                    *state.wireframeMode = !wireframeMode;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::PopID();
-
-            if (!supportsWireframeOverlay)
-                ImGui::EndDisabled();
-
-            ImGui::EndCombo();
-        }
-        ImGui::PopStyleVar(3);
-    }
+    DrawPresetCombo(state);
 
     // Right-aligned group: Scene / Help / Settings
     ImGui::SetCursorPos(
         ImVec2(ImGui::GetWindowWidth() - rightGroupWidth - rightMargin, centerY));
-    {
-        const char* scenes[] = {"Scene 1", "Scene 2"};
-        static int sceneIdx = 0;
-
-        float maxSceneWidth = 0;
-        for (const auto* scene : scenes) {
-            maxSceneWidth = std::max(maxSceneWidth, ImGui::CalcTextSize(scene).x);
-        }
-        float comboWidth = maxSceneWidth + 24.0f;
-        ImGui::SetNextItemWidth(comboWidth);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
-
-        if (ImGui::BeginCombo("##scene", scenes[sceneIdx])) {
-            for (int i = 0; i < 2; i++) {
-                ImGui::PushID(i);
-                if (drawToolbarComboRow(scenes[i], sceneIdx == i)) {
-                    sceneIdx = i;
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::PopID();
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::PopStyleVar(3);
-
-        ImGui::SameLine(0, rightButtonGap);
-        if (ImGui::Button(ICON_FA_CIRCLE_QUESTION, buttonSize)) {
-            if (callbacks.openHelpPopup)
-                callbacks.openHelpPopup();
-        }
-
-        ImGui::SameLine(0, rightButtonGap);
-        if (ImGui::Button(ICON_FA_GEAR, buttonSize)) {
-            if (callbacks.openSettings)
-                callbacks.openSettings();
-        }
-    }
+    DrawRightAlignedGroup(callbacks, buttonSize, rightButtonGap);
 
     ImGui::PopStyleVar();
 }

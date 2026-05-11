@@ -453,29 +453,29 @@ void Window::SetupNativeMenuBar() const {
 #endif
 }
 
-void Window::SetMenuCallbacks(MenuCallbacks callbacks) const {
+void Window::SetMenuCallbacks(const MenuCallbacks& callbacks) const {
 #ifdef __APPLE__
-  g_fileNewCallback = std::move(callbacks.fileNew);
-  g_fileOpenCallback = std::move(callbacks.fileOpen);
-  g_fileResetLayoutCallback = std::move(callbacks.fileResetLayout);
-  g_fileSettingsCallback = std::move(callbacks.fileSettings);
-  g_fileCloseEditorCallback = std::move(callbacks.fileCloseEditor);
-  g_addPanelCallback = std::move(callbacks.addPanel);
-  g_addPropCallback = std::move(callbacks.addProp);
-  g_addLightCallback = std::move(callbacks.addLight);
-  g_addCameraCallback = std::move(callbacks.addCamera);
-  g_addPropFromAssetCallback = std::move(callbacks.addPropFromAsset);
-  g_editUndoCallback = std::move(callbacks.editUndo);
-  g_editRedoCallback = std::move(callbacks.editRedo);
-  g_editRenameCallback = std::move(callbacks.editRename);
-  g_editCreatePrefabCallback = std::move(callbacks.editCreatePrefab);
-  g_editDuplicateCallback = std::move(callbacks.editDuplicate);
-  g_editDeleteCallback = std::move(callbacks.editDelete);
-  g_viewFlyModeCallback = std::move(callbacks.viewFlyMode);
-  g_viewHelpCallback = std::move(callbacks.viewHelp);
-  g_viewQuickOpenCallback = std::move(callbacks.viewQuickOpen);
-  g_viewCommandPaletteCallback = std::move(callbacks.viewCommandPalette);
-  g_viewResetLayoutCallback = std::move(callbacks.viewResetLayout);
+  g_fileNewCallback = callbacks.file.fileNew;
+  g_fileOpenCallback = callbacks.file.fileOpen;
+  g_fileResetLayoutCallback = callbacks.file.fileResetLayout;
+  g_fileSettingsCallback = callbacks.file.fileSettings;
+  g_fileCloseEditorCallback = callbacks.file.fileCloseEditor;
+  g_addPanelCallback = callbacks.add.addPanel;
+  g_addPropCallback = callbacks.add.addProp;
+  g_addLightCallback = callbacks.add.addLight;
+  g_addCameraCallback = callbacks.add.addCamera;
+  g_addPropFromAssetCallback = callbacks.add.addPropFromAsset;
+  g_editUndoCallback = callbacks.edit.editUndo;
+  g_editRedoCallback = callbacks.edit.editRedo;
+  g_editRenameCallback = callbacks.edit.editRename;
+  g_editCreatePrefabCallback = callbacks.edit.editCreatePrefab;
+  g_editDuplicateCallback = callbacks.edit.editDuplicate;
+  g_editDeleteCallback = callbacks.edit.editDelete;
+  g_viewFlyModeCallback = callbacks.view.viewFlyMode;
+  g_viewHelpCallback = callbacks.view.viewHelp;
+  g_viewQuickOpenCallback = callbacks.view.viewQuickOpen;
+  g_viewCommandPaletteCallback = callbacks.view.viewCommandPalette;
+  g_viewResetLayoutCallback = callbacks.view.viewResetLayout;
 #else
   (void)callbacks;
 #endif

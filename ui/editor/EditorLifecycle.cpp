@@ -24,6 +24,9 @@
 // clang-format on
 #include <imgui.h>
 
+#include <algorithm>
+#include <array>
+
 #include "core/Logger.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/EditorAssetImport.h"
@@ -61,9 +64,9 @@ void LoadEditorFonts(ImGuiIO &io) {
     ImFontConfig faCfg;
     faCfg.MergeMode = true;
     faCfg.GlyphMinAdvanceX = 14.0f;
-    static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    static constexpr std::array<ImWchar, 3> iconRanges = {ICON_MIN_FA, ICON_MAX_FA, 0};
     io.Fonts->AddFontFromFileTTF(resolved.resolvedPath.string().c_str(),
-                                 14.0f, &faCfg, iconRanges);
+                                 14.0f, &faCfg, iconRanges.data());
   }
 }
 
@@ -76,58 +79,7 @@ void EditorLayer::Init(GLFWwindow *window) {
 
   m_bottomDock.SetAssetsTabCallback([this]() { DrawAssetsPanelInline(); });
 
-  m_uiWidgets.onApplyRenameObject = [this](int index, const std::string &newId) {
-    if (index < 0 || index >= static_cast<int>(m_document.objects.size())) {
-      m_uiWidgets.SetRenameObjectError("Invalid object index");
-      return false;
-    }
-
-    std::string error = ValidateRenameCandidate(m_document, index, newId);
-    if (!error.empty()) {
-      m_uiWidgets.SetRenameObjectError(error);
-      return false;
-    }
-
-    SceneObject &target = m_document.objects[static_cast<size_t>(index)];
-    const std::string oldId = target.id;
-    if (oldId != newId) {
-      target.id = newId;
-      RewriteObjectIdReferences(&m_document, oldId, newId);
-      m_document.dirty = true;
-    }
-    return true;
-  };
-
-  m_uiWidgets.onConfirmDeleteObjects = [this](const std::vector<int> &indices) {
-    std::vector<int> sorted = indices;
-    std::sort(sorted.rbegin(), sorted.rend());
-    for (int idx : sorted) {
-      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
-        m_document.objects.erase(m_document.objects.begin() + idx);
-    }
-    m_selectedIndices.clear();
-    MarkDirtyAndReload();
-  };
-
-  m_uiWidgets.onConfirmDeleteAsset = [this](const std::string &assetId) {
-    const AssetDeleteResult deleteResult = DeleteAssetDefinition(assetId);
-    if (!deleteResult.ok) {
-      LogWarn("[Editor] Failed to delete asset '{}': {}", assetId,
-              deleteResult.error.empty() ? "unknown error"
-                                         : deleteResult.error);
-    }
-  };
-
-  m_uiWidgets.onConfirmExit = [this]() { m_closeRequested = true; };
-
-  m_uiWidgets.getStatusBarText = [this]() -> std::string {
-    const EditorStatusText status = BuildEditorStatusText(
-        EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
-                             m_document.dirty, m_flyMode, m_wantsReload});
-    return std::format("Sel: {} | Dirty: {} | Fly: {} | Reload: {}",
-                       status.selectionCount, status.dirtyText, status.flyText,
-                       status.reloadText);
-  };
+  InitUiWidgetCallbacks();
 
   m_mcpController.Initialize();
   m_settingsModal.SetMcpController(&m_mcpController);
@@ -151,6 +103,83 @@ void EditorLayer::Init(GLFWwindow *window) {
         Ui::ApplyEditorTheme(ImGui::GetStyle());
       });
 
+  InitImGuiContext(window);
+
+  LoadEditorSchema();
+
+  try {
+    const std::filesystem::path wv = ResolvePreviewShaderPath("wire.vert");
+    const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
+    m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
+  } catch (const ShaderException &e) {
+    LogWarn("[Editor] Failed to load wireframe shader: {}", e.what());
+  }
+
+  ClearAssetThumbnailMeshCaches();
+  LogInfo("[Editor] Asset thumbnail caches cleared on Init");
+}
+
+/** @copydoc EditorLayer::InitUiWidgetCallbacks */
+void EditorLayer::InitUiWidgetCallbacks() {
+  EditorUIWidgets::Callbacks callbacks;
+
+  callbacks.onApplyRenameObject = [this](int index, const std::string &newId) {
+    if (index < 0 || index >= static_cast<int>(m_document.objects.size())) {
+      m_uiWidgets.SetRenameObjectError("Invalid object index");
+      return false;
+    }
+
+    if (std::string error = ValidateRenameCandidate(m_document, index, newId);
+        !error.empty()) {
+      m_uiWidgets.SetRenameObjectError(error);
+      return false;
+    }
+
+    SceneObject &target = m_document.objects[static_cast<size_t>(index)];
+    if (const std::string oldId = target.id; oldId != newId) {
+      target.id = newId;
+      RewriteObjectIdReferences(&m_document, oldId, newId);
+      m_document.dirty = true;
+    }
+    return true;
+  };
+
+  callbacks.onConfirmDeleteObjects = [this](const std::vector<int> &indices) {
+    std::vector<int> sorted = indices;
+    std::sort(sorted.rbegin(), sorted.rend());
+    for (int idx : sorted) {
+      if (idx >= 0 && idx < static_cast<int>(m_document.objects.size()))
+        m_document.objects.erase(m_document.objects.begin() + idx);
+    }
+    m_selectedIndices.clear();
+    MarkDirtyAndReload();
+  };
+
+  callbacks.onConfirmDeleteAsset = [this](const std::string &assetId) {
+    const AssetDeleteResult deleteResult = DeleteAssetDefinition(assetId);
+    if (!deleteResult.ok) {
+      LogWarn("[Editor] Failed to delete asset '{}': {}", assetId,
+              deleteResult.error.empty() ? "unknown error"
+                                         : deleteResult.error);
+    }
+  };
+
+  callbacks.onConfirmExit = [this]() { m_closeRequested = true; };
+
+  callbacks.getStatusBarText = [this]() {
+    const EditorStatusText status = BuildEditorStatusText(
+        EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
+                             m_document.dirty, m_flyMode, m_wantsReload});
+    return std::format("Sel: {} | Dirty: {} | Fly: {} | Reload: {}",
+                       status.selectionCount, status.dirtyText, status.flyText,
+                       status.reloadText);
+  };
+
+  m_uiWidgets.SetCallbacks(std::move(callbacks));
+}
+
+/** @copydoc EditorLayer::InitImGuiContext */
+void EditorLayer::InitImGuiContext(GLFWwindow *window) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
@@ -178,7 +207,10 @@ void EditorLayer::Init(GLFWwindow *window) {
     LogWarn("[Editor] No supported ImGui backend for renderer backend '{}'",
             ToString(backendId));
   }
+}
 
+/** @copydoc EditorLayer::LoadEditorSchema */
+void EditorLayer::LoadEditorSchema() {
   const std::array<std::filesystem::path, 4> schemaCandidates = {
       ProjectPath::ResolveSdk("assets/editor_schema.json"),
       ProjectPath::Root() / "assets" / "editor_schema.json",
@@ -192,17 +224,6 @@ void EditorLayer::Init(GLFWwindow *window) {
       break;
     }
   }
-
-  try {
-    const std::filesystem::path wv = ResolvePreviewShaderPath("wire.vert");
-    const std::filesystem::path wf = ResolvePreviewShaderPath("wire.frag");
-    m_wireframeShader = Shader::FromFiles(wv.generic_string(), wf.generic_string());
-  } catch (const ShaderException &e) {
-    LogWarn("[Editor] Failed to load wireframe shader: {}", e.what());
-  }
-
-  ClearAssetThumbnailMeshCaches();
-  LogInfo("[Editor] Asset thumbnail caches cleared on Init");
 }
 
 /** @copydoc EditorLayer::Shutdown */
@@ -285,7 +306,7 @@ void EditorLayer::SetProjectBrowserRoot(std::filesystem::path root) {
 
 /** @copydoc EditorLayer::SetProjectBrowserExtraBlocklist */
 void EditorLayer::SetProjectBrowserExtraBlocklist(
-    const std::unordered_set<std::string, StringHash, std::equal_to<>> names) {
+    const std::unordered_set<std::string, StringHash, std::equal_to<>>& names) {
   m_projectExtraBlocklist = names;
   m_bottomDock.SetProjectExtraBlocklist(names);
   m_bottomDock.InvalidateProjectBrowserCache();

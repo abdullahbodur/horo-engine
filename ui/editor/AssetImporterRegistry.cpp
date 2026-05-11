@@ -9,7 +9,6 @@
 #include "ui/editor/AssetImporterRegistry.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <string_view>

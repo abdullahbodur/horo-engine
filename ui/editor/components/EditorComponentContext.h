@@ -11,7 +11,7 @@ namespace Horo {
 }
 
 namespace Horo::Editor {
-    class SceneDocument;
+    struct SceneDocument;
     class EditorSchema;
     class TransformGizmo;
     enum class GizmoMode;

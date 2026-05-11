@@ -89,6 +89,14 @@ namespace Horo::Editor {
         Registry* liveRegistry = nullptr; /**< Non-owning pointer to the live ECS registry; may be null outside play mode. */
     };
 
+    /** @brief Pixel dimensions for a single asset tile. */
+    struct AssetTileDimensions {
+        float tileW;     /**< Tile width in pixels. */
+        float tileH;     /**< Tile height in pixels. */
+        float thumbPad;  /**< Padding between the tile border and the thumbnail. */
+        float thumbSize; /**< Size of the thumbnail image in pixels. */
+    };
+
     /** @brief Draws the asset browser panel, including the grid, spotlight popup, and create-asset modal. */
     class EditorAssetsPanel {
     public:
@@ -113,7 +121,7 @@ namespace Horo::Editor {
          *  @param state    Current panel state.
          *  @param assetIds Ordered list of asset identifiers to display. */
         void DrawAssetSpotlightPopup(const EditorAssetsPanelState& state,
-                                     const std::vector<std::string>& assetIds);
+                                     const std::vector<std::string>& assetIds) const;
 
         /** @brief Draws the main asset grid with one tile per asset.
          *  @param state            Current panel state.
@@ -129,19 +137,13 @@ namespace Horo::Editor {
          *  @param state     Current panel state.
          *  @param assetId   Unique identifier of the asset for this tile.
          *  @param asset     Asset definition data (name, mesh, textures, etc.).
-         *  @param tileW     Tile width in pixels.
-         *  @param tileH     Tile height in pixels.
-         *  @param thumbPad  Padding between the tile border and the thumbnail.
-         *  @param thumbSize Size of the thumbnail image in pixels.
+         *  @param dims      Tile pixel dimensions.
          *  @param callbacks Callable table for asset operations. */
         void DrawAssetTile(const EditorAssetsPanelState& state,
                           const std::string& assetId,
                           const AssetDef& asset,
-                          float tileW,
-                          float tileH,
-                          float thumbPad,
-                          float thumbSize,
-                          const EditorAssetsPanelCallbacks& callbacks);
+                          const AssetTileDimensions& dims,
+                          const EditorAssetsPanelCallbacks& callbacks) const;
 
         /** @brief Draws the create-asset modal, opening it when openModal is true.
          *  @param state     Current panel state.
@@ -155,16 +157,19 @@ namespace Horo::Editor {
          *  @param state     Current panel state.
          *  @param callbacks Callable table for asset operations. */
         void DrawCreateAssetModalContent(const EditorAssetsPanelState& state,
-                                        const EditorAssetsPanelCallbacks& callbacks);
+                                        const EditorAssetsPanelCallbacks& callbacks) const;
+
+        /** @brief Finalises the "Create Asset" confirm action: writes the AssetDef,
+         *  persists metadata, resets drafts, and closes the modal.
+         *  @param state     Current panel state.
+         *  @param callbacks Callable table for asset operations. */
+        void HandleAssetCreateConfirm(const EditorAssetsPanelState& state,
+                                      const EditorAssetsPanelCallbacks& callbacks) const;
 
         /** @brief Draws the special "Add asset" placeholder tile at the end of the grid.
          *  @param openNewAssetModal Output flag set to true when the tile is clicked.
-         *  @param tileW     Tile width in pixels.
-         *  @param tileH     Tile height in pixels.
-         *  @param thumbPad  Padding between the tile border and the icon.
-         *  @param thumbSize Size of the add-icon area in pixels. */
+         *  @param dims              Tile pixel dimensions. */
         void DrawAddAssetTile(bool& openNewAssetModal,
-                              float tileW, float tileH,
-                              float thumbPad, float thumbSize) const;
+                              const AssetTileDimensions& dims) const;
     };
 }

@@ -10,21 +10,24 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <filesystem>
 #include <random>
 #include <string>
 
-namespace Horo::Editor {
-    namespace {
+namespace Horo::Editor
+{
+    namespace
+    {
         /** @brief Removes leading and trailing ASCII whitespace from @p text. */
-        std::string Trim(std::string text) {
+        std::string Trim(std::string text)
+        {
             const auto first = std::ranges::find_if_not(
                 text, [](unsigned char c) { return std::isspace(c) != 0; });
             const auto last =
-                    std::find_if_not(text.rbegin(), text.rend(), [](unsigned char c) {
-                        return std::isspace(c) != 0;
-                    }).base();
+                std::find_if_not(text.rbegin(), text.rend(), [](unsigned char c)
+                {
+                    return std::isspace(c) != 0;
+                }).base();
             if (first >= last)
                 return {};
             return std::string(first, last);
@@ -32,7 +35,8 @@ namespace Horo::Editor {
     } // namespace
 
     /** @copydoc GenerateAssetGuid */
-    std::string GenerateAssetGuid() {
+    std::string GenerateAssetGuid()
+    {
         static constexpr std::array<char, 16> kHex = {
             '0', '1', '2', '3', '4', '5', '6', '7',
             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
@@ -40,12 +44,13 @@ namespace Horo::Editor {
 
         std::random_device rd;
         std::array<std::byte, 16> randomBytes{};
-        for (std::byte &byte: randomBytes)
+        for (std::byte& byte : randomBytes)
             byte = static_cast<std::byte>(rd());
 
         std::string guid;
         guid.reserve(32);
-        for (const std::byte byte: randomBytes) {
+        for (const std::byte byte : randomBytes)
+        {
             const std::byte highNibble = (byte >> 4) & std::byte{0x0f};
             const std::byte lowNibble = byte & std::byte{0x0f};
             guid.push_back(kHex[std::to_integer<size_t>(highNibble)]);
@@ -55,8 +60,9 @@ namespace Horo::Editor {
     }
 
     /** @copydoc MakeAssetDisplayName */
-    std::string MakeAssetDisplayName(const std::string &assetId,
-                                     const AssetDef &asset) {
+    std::string MakeAssetDisplayName(const std::string& assetId,
+                                     const AssetDef& asset)
+    {
         if (const std::string trimmedDisplay = Trim(asset.displayName);
             !trimmedDisplay.empty())
             return trimmedDisplay;
@@ -64,7 +70,8 @@ namespace Horo::Editor {
         if (const std::string trimmedAssetId = Trim(assetId); !trimmedAssetId.empty())
             return trimmedAssetId;
 
-        if (!asset.mesh.empty()) {
+        if (!asset.mesh.empty())
+        {
             const std::filesystem::path meshPath(asset.mesh);
             const std::string stem = Trim(meshPath.stem().string());
             if (!stem.empty())
@@ -75,7 +82,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EnsureAssetIdentity(const std::string &, AssetDef *) */
-    void EnsureAssetIdentity(const std::string &assetId, AssetDef *asset) {
+    void EnsureAssetIdentity(const std::string& assetId, AssetDef* asset)
+    {
         if (!asset)
             return;
         if (asset->guid.empty())
@@ -84,10 +92,11 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EnsureAssetIdentity(SceneDocument *) */
-    void EnsureAssetIdentity(SceneDocument *doc) {
+    void EnsureAssetIdentity(SceneDocument* doc)
+    {
         if (!doc)
             return;
-        for (auto &[assetId, assetDef]: doc->assets)
+        for (auto& [assetId, assetDef] : doc->assets)
             EnsureAssetIdentity(assetId, &assetDef);
     }
 } // namespace Horo::Editor
