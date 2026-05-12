@@ -21,6 +21,7 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportService.h"
 #include "ui/editor/AssetImporterRegistry.h"
+#include "ui/editor/AssetGuidRegistry.h"
 #include "ui/editor/AssetMetadata.h"
 #include "ui/editor/EditorDebugTrace.h"
 #include "ui/editor/EditorImGuiBackend.h"
@@ -2044,4 +2045,321 @@ TEST_CASE("AssetImportService: ReimportAssetWithDependents with null doc is no-o
       service.ReimportAssetWithDependents(nullptr, "some_guid", "test");
   // Result should indicate nothing was reimported.
   CHECK(result.order.empty());
+}
+
+// ===========================================================================
+// AssetGuidRegistry — in-memory GUID → metadata index
+// ===========================================================================
+
+namespace {
+// Helper: writes a sidecar at assets/models/<guid>/asset.meta.json under the
+// active ProjectPath::Root() and returns the metadata it produced. Caller is
+// responsible for managing the project root via ProjectPathGuard.
+AssetMetadata WriteSidecar(const std::string &assetId, const std::string &guid,
+                           const std::string &importerId,
+                           const std::vector<AssetDependencyRecord> &deps) {
+  AssetMetadata metadata;
+  metadata.assetId = assetId;
+  metadata.assetGuid = guid;
+  metadata.displayName = assetId;
+  metadata.importerId = importerId;
+  metadata.dependencies = deps;
+  std::error_code ec;
+  std::filesystem::create_directories(GetManagedAssetDirectory(guid), ec);
+  std::string error;
+  REQUIRE(SaveAssetMetadata(metadata, &error));
+  REQUIRE(error.empty());
+  return metadata;
+}
+} // namespace
+
+TEST_CASE("AssetGuidRegistry: empty registry returns null and no dependents", "[editor][asset-guid-registry]") {
+  AssetGuidRegistry registry;
+  CHECK(registry.Empty());
+  CHECK(registry.Size() == 0);
+  CHECK(registry.LookupByGuid("any") == nullptr);
+  CHECK(registry.Dependents("any").empty());
+  CHECK(registry.LastRefreshSource() ==
+        AssetGuidRegistryRefreshSource::Unknown);
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem on missing project root is a no-op", "[editor][asset-guid-registry]") {
+  ProjectPathGuard guard({});
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(registry.Empty());
+  CHECK(result.scanned == 0);
+  CHECK(result.loaded == 0);
+  CHECK_FALSE(result.warnings.empty());
+  CHECK(registry.LastRefreshSource() ==
+        AssetGuidRegistryRefreshSource::Filesystem);
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem on empty assets dir loads zero entries", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_empty_dir";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(result.scanned == 0);
+  CHECK(result.loaded == 0);
+  CHECK(registry.Empty());
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem indexes a single sidecar", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_single";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteSidecar("only_asset", "guid_only", "builtin.obj_mesh",
+               {AssetDependencyRecord{AssetDependencyKind::Source, "src.obj"}});
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(result.scanned == 1);
+  CHECK(result.loaded == 1);
+  CHECK(result.skipped == 0);
+  CHECK(registry.Size() == 1);
+
+  const AssetMetadata *cached = registry.LookupByGuid("guid_only");
+  REQUIRE(cached != nullptr);
+  CHECK(cached->assetId == "only_asset");
+  CHECK(cached->importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("AssetGuidRegistry: Dependents reflects DownstreamAsset edges", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_deps";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Two assets B and C declare DownstreamAsset edge to A; the registry's
+  // reverse index should report B and C as dependents of A.
+  WriteSidecar("a", "guid_a", "builtin.obj_mesh", {});
+  WriteSidecar(
+      "b", "guid_b", "builtin.obj_mesh",
+      {AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_a"}});
+  WriteSidecar(
+      "c", "guid_c", "builtin.obj_mesh",
+      {AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_a"}});
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(result.loaded == 3);
+
+  const std::vector<std::string> dependentsOfA = registry.Dependents("guid_a");
+  REQUIRE(dependentsOfA.size() == 2);
+  CHECK(dependentsOfA[0] == "guid_b");
+  CHECK(dependentsOfA[1] == "guid_c");
+  CHECK(registry.Dependents("guid_b").empty());
+  CHECK(registry.Dependents("guid_unknown").empty());
+}
+
+TEST_CASE("AssetGuidRegistry: Dependents ignores non-DownstreamAsset edges", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_deps_kind";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteSidecar(
+      "x", "guid_x", "builtin.obj_mesh",
+      {AssetDependencyRecord{AssetDependencyKind::Source, "guid_y"},
+       AssetDependencyRecord{AssetDependencyKind::ProducedOutput, "guid_y"}});
+  AssetGuidRegistry registry;
+  registry.RefreshFromFilesystem();
+  CHECK(registry.Dependents("guid_y").empty());
+}
+
+TEST_CASE("AssetGuidRegistry: Insert adds an entry without touching disk", "[editor][asset-guid-registry]") {
+  ProjectPathGuard guard({});
+  AssetMetadata metadata;
+  metadata.assetId = "in_mem";
+  metadata.assetGuid = "guid_in_mem";
+  metadata.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_target"});
+
+  AssetGuidRegistry registry;
+  CHECK(registry.Insert(metadata));
+  CHECK(registry.Size() == 1);
+  REQUIRE(registry.LookupByGuid("guid_in_mem") != nullptr);
+  CHECK(registry.Dependents("guid_target").size() == 1);
+}
+
+TEST_CASE("AssetGuidRegistry: Insert rejects metadata with empty GUID", "[editor][asset-guid-registry]") {
+  AssetGuidRegistry registry;
+  AssetMetadata metadata;
+  metadata.assetId = "no_guid";
+  CHECK_FALSE(registry.Insert(metadata));
+  CHECK(registry.Empty());
+}
+
+TEST_CASE("AssetGuidRegistry: Insert overwrites existing entry and re-indexes dependents", "[editor][asset-guid-registry]") {
+  AssetGuidRegistry registry;
+
+  AssetMetadata first;
+  first.assetGuid = "guid_x";
+  first.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_old"});
+  REQUIRE(registry.Insert(first));
+  CHECK(registry.Dependents("guid_old").size() == 1);
+
+  AssetMetadata replacement;
+  replacement.assetGuid = "guid_x";
+  replacement.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_new"});
+  REQUIRE(registry.Insert(replacement));
+
+  // Old reverse-edge must be gone, new one in place.
+  CHECK(registry.Dependents("guid_old").empty());
+  CHECK(registry.Dependents("guid_new").size() == 1);
+}
+
+TEST_CASE("AssetGuidRegistry: Invalidate removes an entry and prunes its reverse edges", "[editor][asset-guid-registry]") {
+  AssetGuidRegistry registry;
+  AssetMetadata metadata;
+  metadata.assetGuid = "guid_to_drop";
+  metadata.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_other"});
+  REQUIRE(registry.Insert(metadata));
+  CHECK(registry.Dependents("guid_other").size() == 1);
+
+  CHECK(registry.Invalidate("guid_to_drop"));
+  CHECK(registry.Empty());
+  CHECK(registry.Dependents("guid_other").empty());
+  CHECK(registry.LookupByGuid("guid_to_drop") == nullptr);
+  // Second invalidate is a no-op.
+  CHECK_FALSE(registry.Invalidate("guid_to_drop"));
+}
+
+TEST_CASE("AssetGuidRegistry: Clear empties everything", "[editor][asset-guid-registry]") {
+  AssetGuidRegistry registry;
+  AssetMetadata metadata;
+  metadata.assetGuid = "guid_clear";
+  metadata.dependencies.push_back(
+      AssetDependencyRecord{AssetDependencyKind::DownstreamAsset, "guid_dep"});
+  REQUIRE(registry.Insert(metadata));
+
+  registry.Clear();
+  CHECK(registry.Empty());
+  CHECK(registry.Dependents("guid_dep").empty());
+  CHECK(registry.LastRefreshSource() ==
+        AssetGuidRegistryRefreshSource::Unknown);
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem skips malformed sidecars and reports them", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_bad_json";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Good sidecar:
+  WriteSidecar("good", "guid_good", "builtin.obj_mesh", {});
+  // Malformed sidecar:
+  std::filesystem::create_directories(GetManagedAssetDirectory("guid_bad"), ec);
+  WriteFile(GetAssetMetadataPath("guid_bad"), "{ this is not json");
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(result.scanned == 2);
+  CHECK(result.loaded == 1);
+  CHECK(result.skipped == 1);
+  CHECK_FALSE(result.warnings.empty());
+  CHECK(registry.LookupByGuid("guid_good") != nullptr);
+  CHECK(registry.LookupByGuid("guid_bad") == nullptr);
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem replaces previous entries", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_replace";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteSidecar("a", "guid_a", "builtin.obj_mesh", {});
+  AssetGuidRegistry registry;
+  registry.RefreshFromFilesystem();
+  CHECK(registry.Size() == 1);
+
+  // Remove the sidecar's containing dir entirely.
+  std::filesystem::remove_all(GetManagedAssetDirectory("guid_a"), ec);
+  WriteSidecar("b", "guid_b", "builtin.obj_mesh", {});
+
+  registry.RefreshFromFilesystem();
+  CHECK(registry.Size() == 1);
+  CHECK(registry.LookupByGuid("guid_a") == nullptr);
+  CHECK(registry.LookupByGuid("guid_b") != nullptr);
+}
+
+TEST_CASE("AssetGuidRegistry: RefreshFromDocument loads entries listed in the document", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_doc";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteSidecar("a", "guid_a", "builtin.obj_mesh", {});
+  WriteSidecar("b", "guid_b", "builtin.obj_mesh", {});
+
+  SceneDocument doc;
+  doc.assets["a"] = AssetDef{};
+  doc.assets["a"].guid = "guid_a";
+  doc.assets["b"] = AssetDef{};
+  doc.assets["b"].guid = "guid_b";
+  // Asset 'c' has no GUID — must be skipped without crashing.
+  doc.assets["c"] = AssetDef{};
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromDocument(doc);
+  CHECK(result.loaded == 2);
+  CHECK(result.skipped >= 1);
+  CHECK(registry.Size() == 2);
+  CHECK(registry.LastRefreshSource() ==
+        AssetGuidRegistryRefreshSource::Document);
+}
+
+TEST_CASE("AssetImportService: GuidRegistry populated after a reimport call", "[editor][asset-guid-registry][asset-import]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_service";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  WriteSidecar("a", "guid_a", "builtin.obj_mesh", {});
+
+  SceneDocument doc;
+  doc.sceneId = "s1";
+  doc.assets["a"] = AssetDef{};
+  doc.assets["a"].guid = "guid_a";
+
+  AssetImportService service;
+  // The reimport will fail (no real source on disk) but the registry must
+  // still have been refreshed before the failure path executes.
+  service.ReimportAssetWithDependents(&doc, "guid_a", "test_refresh");
+  CHECK(service.GuidRegistry().LookupByGuid("guid_a") != nullptr);
+  CHECK(service.GuidRegistry().LastRefreshSource() ==
+        AssetGuidRegistryRefreshSource::Document);
 }

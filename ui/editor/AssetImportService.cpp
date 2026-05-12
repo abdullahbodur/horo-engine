@@ -124,43 +124,49 @@ namespace Horo::Editor {
             dependencyReason;
         };
 
-        /** @brief Fills @p assetIdByGuid and loads/builds @p metadataByGuid for every asset in @p doc. */
+        /** @brief Fills @p assetIdByGuid and @p metadataByGuid from a refreshed registry. */
         void BuildReimportLookupMaps(
             const SceneDocument *doc,
+            const AssetGuidRegistry &registry,
             std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
             &assetIdByGuid,
             std::unordered_map<std::string, AssetMetadata, StringHash, std::equal_to<> >
             &metadataByGuid) {
             for (const auto &[assetKey, assetDef]: doc->assets) {
+                if (assetDef.guid.empty())
+                    continue;
                 assetIdByGuid[assetDef.guid] = assetKey;
+                if (const AssetMetadata *cached = registry.LookupByGuid(assetDef.guid)) {
+                    metadataByGuid[assetDef.guid] = *cached;
+                    continue;
+                }
+                // Registry miss (e.g. brand-new asset without sidecar yet): fall back
+                // to building a default record from the AssetDef.
                 AssetMetadata metadata;
                 if (LoadOrBuildMetadata(assetKey, assetDef, &metadata))
                     metadataByGuid[assetDef.guid] = std::move(metadata);
             }
         }
 
-        /** @brief Breadth-first closure over reverse DownstreamAsset edges starting at @p rootAssetGuid. */
+        /** @brief Breadth-first closure over reverse DownstreamAsset edges starting at @p rootAssetGuid.
+         *
+         *  The reverse-dependents map is queried lazily from @p registry, so only
+         *  edges that touch the impacted set are materialised into @c reverseGraph.
+         */
         ReimportDepGraph BuildReimportDepGraph(
             const std::string &rootAssetGuid,
-            const std::unordered_map<std::string, AssetMetadata, StringHash,
-                std::equal_to<> > &metadataByGuid) {
+            const AssetGuidRegistry &registry) {
             ReimportDepGraph graph;
-            for (const auto &[assetGuid, depMeta]: metadataByGuid) {
-                for (const AssetDependencyRecord &dep: depMeta.dependencies) {
-                    if (dep.kind != AssetDependencyKind::DownstreamAsset || dep.value.empty())
-                        continue;
-                    graph.reverseGraph[dep.value].insert(assetGuid);
-                }
-            }
             std::vector<std::string> queue{rootAssetGuid};
             graph.impacted.insert(rootAssetGuid);
             while (!queue.empty()) {
                 const std::string current = queue.back();
                 queue.pop_back();
-                auto dependentsIt = graph.reverseGraph.find(current);
-                if (dependentsIt == graph.reverseGraph.end())
+                const std::vector<std::string> dependents = registry.Dependents(current);
+                if (dependents.empty())
                     continue;
-                for (const std::string &dependentGuid: dependentsIt->second) {
+                for (const std::string &dependentGuid: dependents) {
+                    graph.reverseGraph[current].insert(dependentGuid);
                     if (graph.impacted.insert(dependentGuid).second) {
                         queue.push_back(dependentGuid);
                         graph.dependencyReason[dependentGuid] = current;
@@ -370,7 +376,8 @@ namespace Horo::Editor {
                 assetIdByGuid;
         std::unordered_map<std::string, AssetMetadata, StringHash, std::equal_to<> >
                 metadataByGuid;
-        BuildReimportLookupMaps(doc, assetIdByGuid, metadataByGuid);
+        m_guidRegistry.RefreshFromDocument(*doc);
+        BuildReimportLookupMaps(doc, m_guidRegistry, assetIdByGuid, metadataByGuid);
 
         if (!assetIdByGuid.contains(rootAssetGuid)) {
             result.error = "Asset metadata not found for reimport.";
@@ -380,7 +387,7 @@ namespace Horo::Editor {
         }
 
         ReimportDepGraph depGraph =
-                BuildReimportDepGraph(rootAssetGuid, metadataByGuid);
+                BuildReimportDepGraph(rootAssetGuid, m_guidRegistry);
         result.order = ComputeImportOrder(depGraph.impacted, depGraph.reverseGraph);
 
         if (result.order.size() != depGraph.impacted.size()) {
@@ -543,6 +550,10 @@ namespace Horo::Editor {
             result.error = saveError;
             return false;
         }
+
+        // Keep the in-memory registry in sync so any later reimport in this run
+        // sees the updated dependencies.
+        m_guidRegistry.Insert(updatedMetadata);
 
         result.records.emplace_back(assetIt->first, guid, recordReason, true,
                                     std::string{});
