@@ -241,7 +241,7 @@ void EditorLayer::HandleTreeNodeClickSelection(int idx) {
 
 namespace {
 /** @brief Validates and applies a reparent drag-drop payload. */
-void AcceptReparentDrop(int idx, SceneDocument &doc, SceneObject &obj,
+void AcceptReparentDrop(int idx, SceneDocument &doc, const SceneObject &obj,
                         const ImGuiPayload *payload) {
   if (payload->DataSize != sizeof(int))
     return;

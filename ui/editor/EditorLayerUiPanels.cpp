@@ -59,8 +59,8 @@ namespace Horo::Editor
       }
       if (fs::exists(candidate, ec))
         return "A file or folder with that name already exists.";
-      std::ofstream out(candidate, std::ios::out | std::ios::trunc);
-      if (!out.good())
+      if (std::ofstream out(candidate, std::ios::out | std::ios::trunc);
+          !out.good())
         return "Failed to create file.";
       return {};
     }
@@ -541,9 +541,9 @@ namespace Horo::Editor
       return;
     }
 
-    const std::string createError =
+    if (const std::string createError =
       m_projectPanelCreateFolder ? CreateProjectFolder(candidate) : CreateProjectFile(candidate);
-    if (!createError.empty())
+        !createError.empty())
       fail(createError);
 
     if (m_projectPanelError.empty())
