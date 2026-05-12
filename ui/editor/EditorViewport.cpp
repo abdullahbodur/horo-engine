@@ -389,8 +389,12 @@ void EditorLayer::HandlePicking(const Camera &cam, int screenW, int screenH) {
                                    static_cast<float>(my), 2.0f))
     return;
 
-  Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my), screenW,
-                        screenH, cam);
+  // Scale screen coordinates to framebuffer pixels for ray casting.
+  float xscale = 1.0f;
+  float yscale = 1.0f;
+  glfwGetWindowContentScale(m_window, &xscale, &yscale);
+  Ray ray = ScreenToRay(static_cast<float>(mx) * xscale,
+                        static_cast<float>(my) * yscale, screenW, screenH, cam);
 
   float bestT = std::numeric_limits<float>::max();
   int bestIdx = -1;

@@ -336,8 +336,12 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
         double dmx;
         double dmy;
         glfwGetCursorPos(window, &dmx, &dmy);
-        auto mx = static_cast<float>(dmx);
-        auto my = static_cast<float>(dmy);
+        // Convert screen coordinates to framebuffer pixels (differs on HiDPI/Retina).
+        float xscale = 1.0f;
+        float yscale = 1.0f;
+        glfwGetWindowContentScale(window, &xscale, &yscale);
+        auto mx = static_cast<float>(dmx) * xscale;
+        auto my = static_cast<float>(dmy) * yscale;
 
         bool currMouseL =
                 glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
