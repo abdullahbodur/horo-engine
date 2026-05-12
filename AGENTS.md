@@ -36,6 +36,22 @@ Optimize for, in order:
 - Comments should explain invariants, ownership, or non-obvious intent. Do not add comments that restate the code.
 - Headers should expose the minimum necessary surface. Prefer forward declarations when they keep dependencies cleaner.
 
+## Documentation (Doxygen)
+
+Single source of truth: the **header declaration** owns the full contract (`@brief`, `@param`, `@return`, `@throws`, pre/postconditions). Definitions in `.cpp` stay thin.
+
+Rules:
+
+- **Header declarations** — document public API and types with full Doxygen (`@brief`, `@param`, `@return`). Use `@file` + `@brief` at the top of headers that form the documented surface.
+- **`.cpp` definitions** — use `/** @copydoc SymbolName */` above out-of-line definitions. Do not duplicate parameter/return blocks (drift risk).
+- **`@copydoc` naming** — free functions in the same namespace: simple name (`@copydoc MakeObjectFromAsset`). Class members: `ClassName::member` (`@copydoc EditorLayer::OnMenuSave`). Qualify further only when Doxygen cannot disambiguate overloads.
+- **File-local helpers** — symbols in anonymous namespaces or `static` functions with no header declaration: document at the definition in `.cpp` with `@brief` (and `@param`/`@return` only when behavior is non-obvious).
+- **Types** — `@brief` on the type; document non-obvious members with `/**< ... */` trailing briefs.
+- **Do not** maintain parallel full doc blocks on both declaration and definition for the same symbol.
+- **Do not** use `@copydoc` for symbols that exist only in `.cpp` with no header forward declaration.
+
+Exemplar pairs: `EditorPropertyRules.h`/`.cpp`, `Raycaster.h`/`.cpp`, `EditorLayer.h` + split `.cpp` files.
+
 ## How To Work In This Repo
 
 - Inspect the real implementation before changing it.

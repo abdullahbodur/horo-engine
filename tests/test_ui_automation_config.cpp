@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "launcher/UiAutomationConfig.h"
+#include "ui/launcher/UiAutomationConfig.h"
 
 using namespace Horo;
 

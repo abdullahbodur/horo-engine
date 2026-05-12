@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "math/Quaternion.h"
 #include "math/Vec3.h"
 #include "renderer/Light.h"
 #include "scene/components/BehaviorComponent.h"
@@ -15,6 +16,7 @@ namespace Horo {
     struct RuntimeScenePanel {
         Vec3 center = Vec3::Zero();
         Vec3 half = Vec3::One();
+        Quaternion rotation = Quaternion::Identity();
     };
 
     struct RuntimeSceneProp {

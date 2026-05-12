@@ -25,6 +25,7 @@ namespace Horo {
     inline float Cos(float v) { return std::cos(v); }
     inline float Tan(float v) { return std::tan(v); }
     inline float Acos(float v) { return std::acos(Clamp(v, -1.0f, 1.0f)); }
+    inline float Asin(float v) { return std::asin(Clamp(v, -1.0f, 1.0f)); }
     inline float Atan2(float y, float x) { return std::atan2(y, x); }
     inline float Pow(float base, float exp) { return std::pow(base, exp); }
     inline float Floor(float v) { return std::floor(v); }

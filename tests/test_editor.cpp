@@ -22,22 +22,22 @@
 #include "core/LogBuffer.h"
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
-#include "editor/AssetImportService.h"
-#include "editor/AssetImporterRegistry.h"
-#include "editor/AssetMetadata.h"
-#include "editor/EditorAssetImport.h"
-#include "editor/EditorImGuiBackend.h"
-#include "editor/EditorLayer.h"
-#include "editor/EditorSceneGraph.h"
-#include "editor/EditorSchema.h"
-#include "editor/EditorSearch.h"
-#include "editor/EditorUiLogic.h"
-#include "editor/EditorWorkspaceSettings.h"
-#include "editor/Raycaster.h"
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
-#include "editor/SceneRuntimeBridge.h"
-#include "editor/SceneSerializer.h"
+#include "ui/editor/AssetImportService.h"
+#include "ui/editor/AssetImporterRegistry.h"
+#include "ui/editor/AssetMetadata.h"
+#include "ui/editor/EditorAssetImport.h"
+#include "ui/editor/EditorImGuiBackend.h"
+#include "ui/editor/EditorLayer.h"
+#include "ui/editor/EditorSceneGraph.h"
+#include "ui/editor/EditorSchema.h"
+#include "ui/editor/EditorSearch.h"
+#include "ui/editor/EditorUiLogic.h"
+#include "ui/editor/EditorWorkspaceSettings.h"
+#include "ui/editor/Raycaster.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneProjectBridge.h"
+#include "ui/editor/SceneRuntimeBridge.h"
+#include "ui/editor/SceneSerializer.h"
 #include "renderer/Camera.h"
 #include "scene/Registry.h"
 #include "scene/components/MeshComponent.h"
@@ -49,7 +49,7 @@
 // functions (FindEnumOptionIndex, BuildImGuiComboItems,
 // SchemaAppliesToObjectType) that live inside anonymous namespaces and are
 // not reachable via EditorLayer's public surface.
-#include "editor/EditorLayerInternal.h"
+#include "ui/editor/EditorLayerInternal.h"
 
 using namespace Horo;
 using namespace Horo::Editor;
@@ -76,9 +76,7 @@ DuplicateObjectForTest(const Horo::Editor::SceneDocument &doc,
 } // namespace
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
   return (Horo::Tests::SecureTempBase() / name).string();
@@ -1696,9 +1694,11 @@ TEST_CASE("Editor UI logic: copy and delete actions gate correctly", "[editor]")
   REQUIRE(ShouldCopySelectionRef(true, false, false, false, true));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, false, false, false, false));
   REQUIRE_FALSE(ShouldCopySelectionRef(true, true, false, false, true));
-  REQUIRE(ShouldRequestDeleteSelection(true, false, true));
-  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true));
-  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false));
+  REQUIRE(ShouldRequestDeleteSelection(true, false, true, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, true, true, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, false, false, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, true, true, false));
+  REQUIRE_FALSE(ShouldRequestDeleteSelection(true, false, true, false, true));
 }
 
 TEST_CASE("Editor UI logic: escape handling respects modal and input gates", "[editor]") {
@@ -2240,9 +2240,9 @@ TEST_CASE("Editor layout helpers clamp dock widths and workspace height", "[edit
   REQUIRE(ComputeEditorLeftDockWidth(2400.0f) == Approx(320.0f));
   REQUIRE(ComputeEditorLeftDockWidth(0.0f) == Approx(220.0f));
 
-  REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(280.0f));
-  REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(380.0f));
-  REQUIRE(ComputeEditorRightPanelWidth(0.0f) == Approx(280.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(1200.0f) == Approx(360.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(2400.0f) == Approx(460.0f));
+  REQUIRE(ComputeEditorRightPanelWidth(0.0f) == Approx(360.0f));
 
   REQUIRE(ComputeEditorBottomDockHeight(720.0f) == Approx(180.0f));
   REQUIRE(ComputeEditorBottomDockHeight(1440.0f) == Approx(259.2f));
@@ -3987,11 +3987,10 @@ TEST_CASE("TransformGizmo: HandleSize returns reasonable value", "[editor][gizmo
   cam.fovY = 60.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size > 0.0f);
-  REQUIRE(size < 100.0f);
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
-TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same position", "[editor][gizmo]") {
+TEST_CASE("TransformGizmo: HandleSize returns unit size when camera at same position", "[editor][gizmo]") {
   TransformGizmo gizmo;
   gizmo.Activate(GizmoMode::Translate, {0.f, 0.f, 0.f}, Quaternion::Identity(),
                  Vec3::One());
@@ -4002,7 +4001,7 @@ TEST_CASE("TransformGizmo: HandleSize returns minimum when camera at same positi
   cam.fovY = 60.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size == Approx(0.1f));
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: AxisDir returns correct directions", "[editor][gizmo]") {
@@ -4059,7 +4058,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates internal position", "[editor][gizm
   cam.fovY = 45.f;
 
   const float size = gizmo.HandleSize(cam);
-  REQUIRE(size > 0.0f);
+  REQUIRE(size == Approx(1.0f).margin(1e-6f));
 }
 
 // ============================================================
@@ -4698,7 +4697,6 @@ static SceneDocument MakeRichDocument() {
   return doc;
 }
 
-// ---- Select AFTER Toggle: light component -----------------------------------
 
 TEST_CASE("EditorLayer render: light component selected after Toggle covers DrawLightComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4714,7 +4712,6 @@ TEST_CASE("EditorLayer render: light component selected after Toggle covers Draw
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: rigidbody component ------------------------------
 
 TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers DrawRigidBodyComponentFields", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4729,7 +4726,6 @@ TEST_CASE("EditorLayer render: rigidbody component selected after Toggle covers 
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: script component ---------------------------------
 
 TEST_CASE("EditorLayer render: script component selected after Toggle covers DrawScriptComponentField", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4745,7 +4741,6 @@ TEST_CASE("EditorLayer render: script component selected after Toggle covers Dra
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: all 3 component types ----------------------------
 
 TEST_CASE("EditorLayer render: all component types on one object after Toggle covers full ComponentsList", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4761,7 +4756,6 @@ TEST_CASE("EditorLayer render: all component types on one object after Toggle co
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: camera with follow target -------------------------
 
 TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle covers camera section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4777,7 +4771,6 @@ TEST_CASE("EditorLayer render: camera with followTargetId selected after Toggle 
   REQUIRE(true);
 }
 
-// ---- Select AFTER Toggle: camera without follow target ----------------------
 
 TEST_CASE("EditorLayer render: camera without followTargetId selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4793,7 +4786,6 @@ TEST_CASE("EditorLayer render: camera without followTargetId selected after Togg
   REQUIRE(true);
 }
 
-// ---- Multi-select: same assetId (covers "shared asset" path) ----------------
 
 TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows batch panel", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4811,7 +4803,6 @@ TEST_CASE("EditorLayer render: multi-select two objects with same assetId shows 
   REQUIRE(true);
 }
 
-// ---- Multi-select: different assetIds (covers "Mixed" path) -----------------
 
 TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4830,7 +4821,6 @@ TEST_CASE("EditorLayer render: multi-select with different assetIds shows Mixed 
   REQUIRE(true);
 }
 
-// ---- Multi-select: objects with no assetId (covers "<none>" path) -----------
 
 TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows none label", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4849,7 +4839,6 @@ TEST_CASE("EditorLayer render: multi-select objects with empty assetId shows non
   REQUIRE(true);
 }
 
-// ---- Multi-select 3 or more objects ----------------------------------------
 
 TEST_CASE("EditorLayer render: multi-select three objects covers batch transform UI", "[editor][render][properties][multiselect]") {
   ImGuiContextGuard imgui;
@@ -4866,8 +4855,6 @@ TEST_CASE("EditorLayer render: multi-select three objects covers batch transform
   editor.Render(cam, 1280, 720);
   REQUIRE(true);
 }
-
-// ---- Asset selected after Toggle then deleted: covers asset-not-found branch
 
 TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-found clear in DrawPropertiesPanel", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4895,9 +4882,6 @@ TEST_CASE("EditorLayer render: asset selected then deleted triggers asset-not-fo
   REQUIRE(editor.GetSelectedAssetId().empty());
 }
 
-// ---- Asset selected after Toggle: valid asset covers
-// DrawPropertiesSelectedAsset fully
-
 TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawPropertiesSelectedAsset", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -4916,7 +4900,6 @@ TEST_CASE("EditorLayer render: valid asset selected after Toggle covers DrawProp
   REQUIRE(true);
 }
 
-// ---- Prop with no assetId selected after Toggle ----------------------------
 
 TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle renders transform section", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4932,7 +4915,6 @@ TEST_CASE("EditorLayer render: prop with no assetId selected after Toggle render
   REQUIRE(true);
 }
 
-// ---- Panel object selected after Toggle ------------------------------------
 
 TEST_CASE("EditorLayer render: panel with no components selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4948,7 +4930,6 @@ TEST_CASE("EditorLayer render: panel with no components selected after Toggle", 
   REQUIRE(true);
 }
 
-// ---- Switching selection across multiple Render calls ----------------------
 
 TEST_CASE("EditorLayer render: cycling through all object types with select-after-toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -4967,7 +4948,6 @@ TEST_CASE("EditorLayer render: cycling through all object types with select-afte
   REQUIRE(true);
 }
 
-// ---- Overlay callback is invoked during Render ------------------------------
 
 TEST_CASE("EditorLayer render: overlay callback is invoked during active Render", "[editor][render]") {
   ImGuiContextGuard imgui;
@@ -4983,7 +4963,6 @@ TEST_CASE("EditorLayer render: overlay callback is invoked during active Render"
   REQUIRE(callCount == 1);
 }
 
-// ---- Overlay callback cleared -----------------------------------------------
 
 TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[editor][render]") {
   ImGuiContextGuard imgui;
@@ -4999,7 +4978,6 @@ TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[
   REQUIRE(true);
 }
 
-// ---- Script behavior options callback set ----------------------------------
 
 TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5032,7 +5010,6 @@ TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers op
   REQUIRE(true);
 }
 
-// ---- Script behavior options callback with unknown behavior ----------------
 
 TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in options list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5064,7 +5041,6 @@ TEST_CASE("EditorLayer render: script component with unknown behaviorTag not in 
   REQUIRE(true);
 }
 
-// ---- Object selected with assetId that exists in document ------------------
 
 TEST_CASE("EditorLayer render: prop with existing assetId shows asset section after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5090,7 +5066,6 @@ TEST_CASE("EditorLayer render: prop with existing assetId shows asset section af
   REQUIRE(true);
 }
 
-// ---- Object with parentId set — covers parent dropdown rendering -----------
 
 TEST_CASE("EditorLayer render: child object with parentId after Toggle shows parent dropdown", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5121,7 +5096,6 @@ TEST_CASE("EditorLayer render: child object with parentId after Toggle shows par
   REQUIRE(true);
 }
 
-// ---- Object with prefab instance set ----------------------------------------
 
 TEST_CASE("EditorLayer render: prop with prefabInstance selected after Toggle shows prefab label", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -5210,7 +5184,6 @@ TEST_CASE("TransformGizmo: Draw Translate at camera position (degenerate handleS
   REQUIRE(true);
 }
 
-// ---- TransformGizmo active in EditorLayer render ----------------------------
 
 TEST_CASE("EditorLayer render: active gizmo Draw is called from Render", "[editor][render][gizmo]") {
   ImGuiContextGuard imgui;
@@ -6191,8 +6164,6 @@ TEST_CASE("EditorLayer render: Render with large viewport dimensions", "[editor]
   REQUIRE(true);
 }
 
-// ---- Camera search path in DrawPropertiesCameraSection FollowTarget combo ---
-
 TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object is handled gracefully", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -6216,7 +6187,6 @@ TEST_CASE("EditorLayer render: camera followTargetId pointing to missing object 
   REQUIRE(true);
 }
 
-// ---- Prop with assetId referencing missing asset renders gracefully --------
 
 TEST_CASE("EditorLayer render: prop with assetId that is not in assets map renders without crash", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -6242,7 +6212,6 @@ TEST_CASE("EditorLayer render: prop with assetId that is not in assets map rende
   REQUIRE(true);
 }
 
-// ---- Light SceneObject type selection (different from light component) -----
 
 TEST_CASE("EditorLayer render: Light type object selected after Toggle", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
@@ -6266,9 +6235,6 @@ TEST_CASE("EditorLayer render: Light type object selected after Toggle", "[edito
   editor.Render(cam, 1280, 720);
   REQUIRE(true);
 }
-
-// ---- Inspect object renders with SyncGizmoToSelection exercised multiple
-// times
 
 TEST_CASE("EditorLayer render: selecting different objects across renders exercises gizmo sync", "[editor][render]") {
   ImGuiContextGuard imgui;
@@ -9060,8 +9026,8 @@ TEST_CASE("EditorLayerInternal: SchemaAppliesToObjectType respects appliesTo fil
 // ===========================================================================
 // EditorSelectionRules
 // ===========================================================================
-#include "editor/EditorPropertyRules.h"
-#include "editor/EditorSelectionRules.h"
+#include "ui/editor/EditorPropertyRules.h"
+#include "ui/editor/EditorSelectionRules.h"
 
 TEST_CASE("ValidateRenameCandidate: empty draft returns error", "[editor][selection-rules]") {
   SceneDocument doc;
@@ -9270,4 +9236,345 @@ TEST_CASE("ApplyCameraBuiltinDefaults: does not overwrite existing values", "[ed
 
   CHECK(obj.props.at("fov") == "90");
   CHECK(obj.props.at("nearClip") == "0.1");
+}
+
+// ============================================================================
+// View Gimbal — SnapCameraToAxis
+// ============================================================================
+
+namespace {
+
+Camera MakeDefaultCamera() {
+  Camera cam;
+  cam.position = {0, 3, 8};
+  cam.target = Vec3::Zero();
+  cam.up = Vec3::Up();
+  cam.fovY = 60.0f;
+  cam.aspect = 16.0f / 9.0f;
+  cam.zNear = 0.1f;
+  cam.zFar = 1000.0f;
+  return cam;
+}
+
+} // namespace
+
+TEST_CASE("SnapCameraToAxis: Right places camera on +X axis", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{1.0f, 2.0f, 3.0f};
+  constexpr float dist = 5.0f;
+  SnapCameraToAxis(cam, VS::Right, pivot, dist);
+
+  CHECK(cam.target.x == Approx(pivot.x));
+  CHECK(cam.target.y == Approx(pivot.y));
+  CHECK(cam.target.z == Approx(pivot.z));
+  CHECK(cam.position.x == Approx(pivot.x + dist));
+  CHECK(cam.position.y == Approx(pivot.y));
+  CHECK(cam.position.z == Approx(pivot.z));
+  // Default up should be +Y
+  CHECK(cam.up.y == Approx(1.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: Left places camera on -X axis", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{0.0f, 0.0f, 0.0f};
+  constexpr float dist = 4.0f;
+  SnapCameraToAxis(cam, VS::Left, pivot, dist);
+
+  CHECK(cam.position.x == Approx(-dist));
+  CHECK(cam.position.y == Approx(0.0f));
+  CHECK(cam.position.z == Approx(0.0f));
+  CHECK(cam.target.x == Approx(0.0f));
+  CHECK(cam.up.y == Approx(1.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: Top places camera on +Y axis with -Z up", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{0.0f, 0.0f, 0.0f};
+  constexpr float dist = 6.0f;
+  SnapCameraToAxis(cam, VS::Top, pivot, dist);
+
+  CHECK(cam.position.y == Approx(dist));
+  CHECK(cam.position.x == Approx(0.0f));
+  CHECK(cam.position.z == Approx(0.0f));
+  // Looking straight down: up must not be +Y (would be degenerate), use -Z
+  CHECK(cam.up.z == Approx(-1.0f));
+  CHECK(cam.up.y == Approx(0.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: Bottom places camera on -Y axis with +Z up", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{0.0f, 0.0f, 0.0f};
+  constexpr float dist = 6.0f;
+  SnapCameraToAxis(cam, VS::Bottom, pivot, dist);
+
+  CHECK(cam.position.y == Approx(-dist));
+  CHECK(cam.up.z == Approx(1.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: Front places camera on +Z axis", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{0.0f, 0.0f, 0.0f};
+  constexpr float dist = 3.0f;
+  SnapCameraToAxis(cam, VS::Front, pivot, dist);
+
+  CHECK(cam.position.z == Approx(dist));
+  CHECK(cam.position.x == Approx(0.0f));
+  CHECK(cam.position.y == Approx(0.0f));
+  CHECK(cam.up.y == Approx(1.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: Back places camera on -Z axis", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{0.0f, 0.0f, 0.0f};
+  constexpr float dist = 3.0f;
+  SnapCameraToAxis(cam, VS::Back, pivot, dist);
+
+  CHECK(cam.position.z == Approx(-dist));
+  CHECK(cam.up.y == Approx(1.0f));
+}
+
+TEST_CASE("SnapCameraToAxis: None is a no-op for position", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 originalPos = cam.position;
+  SnapCameraToAxis(cam, VS::None, Vec3::Zero(), 5.0f);
+
+  // target is always set; position should be untouched on None
+  CHECK(cam.position.x == Approx(originalPos.x));
+  CHECK(cam.position.y == Approx(originalPos.y));
+  CHECK(cam.position.z == Approx(originalPos.z));
+}
+
+TEST_CASE("SnapCameraToAxis: non-zero pivot offsets all positions", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  Camera cam = MakeDefaultCamera();
+  const Vec3 pivot{10.0f, 5.0f, -3.0f};
+  constexpr float dist = 7.0f;
+
+  // Front: camera at pivot + (0, 0, dist)
+  SnapCameraToAxis(cam, VS::Front, pivot, dist);
+  CHECK(cam.position.x == Approx(pivot.x));
+  CHECK(cam.position.y == Approx(pivot.y));
+  CHECK(cam.position.z == Approx(pivot.z + dist));
+  CHECK(cam.target.x == Approx(pivot.x));
+  CHECK(cam.target.y == Approx(pivot.y));
+  CHECK(cam.target.z == Approx(pivot.z));
+}
+
+// ============================================================================
+// View Gimbal — WorldAxisToScreenDir viewZ
+// ============================================================================
+// viewZ = -dot(camera_forward, world_axis) — positive when the world axis
+// opposes the camera forward direction (faces the viewer), negative when it
+// aligns with camera forward (points away from viewer).
+
+TEST_CASE("WorldAxisToScreenDir: camera at +Z (Front), world +Z axis has positive viewZ", "[editor][gimbal]") {
+  // Camera on the +Z side looking toward origin → forward = -Z.
+  // The +Z world axis opposes the camera's forward, so it faces the viewer:
+  // viewZ should be positive (bright arrow, posSnap = Front).
+  Camera cam;
+  cam.position = {0.0f, 0.0f, 5.0f};
+  cam.target   = {0.0f, 0.0f, 0.0f};
+  cam.up       = Vec3::Up();
+
+  float dx = 0, dy = 0, vz = 0;
+  WorldAxisToScreenDir(cam, {0.0f, 0.0f, 1.0f}, &dx, &dy, &vz);
+
+  // +Z world axis faces the camera → viewZ > 0 → posSnap = Front
+  CHECK(vz > 0.0f);
+}
+
+TEST_CASE("WorldAxisToScreenDir: camera at -Z (Back), world +Z axis has negative viewZ", "[editor][gimbal]") {
+  // Camera on the -Z side looking toward origin → forward = +Z.
+  // The +Z world axis aligns with camera forward (points away from viewer):
+  // viewZ should be negative (dim arrow, negSnap = Back).
+  Camera cam;
+  cam.position = {0.0f, 0.0f, -5.0f};
+  cam.target   = {0.0f, 0.0f,  0.0f};
+  cam.up       = Vec3::Up();
+
+  float dx = 0, dy = 0, vz = 0;
+  WorldAxisToScreenDir(cam, {0.0f, 0.0f, 1.0f}, &dx, &dy, &vz);
+
+  // +Z world axis is pointing away → viewZ < 0 → negSnap = Back
+  CHECK(vz < 0.0f);
+}
+
+TEST_CASE("WorldAxisToScreenDir: +Y world axis is perpendicular when looking along Z", "[editor][gimbal]") {
+  Camera cam;
+  cam.position = {0.0f, 0.0f, 5.0f};
+  cam.target   = {0.0f, 0.0f, 0.0f};
+  cam.up       = Vec3::Up();
+
+  // The +Y world axis is orthogonal to the view direction (looking along Z).
+  // viewZ should be ~0 (neither facing nor pointing away from camera).
+  float dx = 0, dy = 0, vz = 0;
+  WorldAxisToScreenDir(cam, {0.0f, 1.0f, 0.0f}, &dx, &dy, &vz);
+
+  CHECK(vz == Approx(0.0f).margin(1e-4f));
+}
+
+TEST_CASE("WorldAxisToScreenDir: camera at +X (Right), world +X axis has positive viewZ", "[editor][gimbal]") {
+  // Camera on the +X side looking toward origin: forward = -X.
+  // The +X world axis opposes camera forward → faces viewer → viewZ > 0.
+  Camera cam;
+  cam.position = {5.0f, 0.0f, 0.0f};
+  cam.target   = {0.0f, 0.0f, 0.0f};
+  cam.up       = Vec3::Up();
+
+  float dx = 0, dy = 0, vz = 0;
+  WorldAxisToScreenDir(cam, {1.0f, 0.0f, 0.0f}, &dx, &dy, &vz);
+
+  CHECK(vz > 0.0f);
+}
+
+// ============================================================================
+// View Gimbal — FindViewGimbalHoverSnap positive/negative axis selection
+// ============================================================================
+
+namespace {
+
+/// Builds a minimal axis cache with explicit viewZ so hover-snap tests can
+/// control which direction is considered "facing" vs "pointing away".
+std::array<ViewGimbalAxisCache, 3> MakeAxisCache(float xViewZ, float yViewZ,
+                                                 float zViewZ) {
+  std::array<ViewGimbalAxisCache, 3> cache{};
+  // X axis: points right on screen  (origIdx=0)
+  cache[0] = {1.0f, 0.0f, xViewZ, 0};
+  // Y axis: points up on screen     (origIdx=1)
+  cache[1] = {0.0f, -1.0f, yViewZ, 1};
+  // Z axis: points left on screen   (origIdx=2)
+  cache[2] = {-1.0f, 0.0f, zViewZ, 2};
+  return cache;
+}
+
+static const std::array<ViewGimbalAxisDraw, 3> kTestAxes = {{
+    {ViewSnap::Right, ViewSnap::Left,
+     {1.0f, 0.0f, 0.0f}, IM_COL32(255, 82, 58, 255),
+     IM_COL32(145, 48, 42, 210), "X"},
+    {ViewSnap::Top, ViewSnap::Bottom,
+     {0.0f, 1.0f, 0.0f}, IM_COL32(80, 230, 104, 255),
+     IM_COL32(42, 135, 60, 210), "Y"},
+    {ViewSnap::Front, ViewSnap::Back,
+     {0.0f, 0.0f, 1.0f}, IM_COL32(55, 155, 255, 255),
+     IM_COL32(38, 92, 170, 210), "Z"},
+}};
+
+} // namespace
+
+TEST_CASE("FindViewGimbalHoverSnap: positive viewZ returns posSnap", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  // All axes face the camera (viewZ > 0). Clicking on the X arrowhead tip should
+  // give Right (posSnap for X).
+  const ImVec2 center{100.0f, 100.0f};
+  auto cache = MakeAxisCache(1.0f, 1.0f, 1.0f);
+
+  constexpr float kShaft = 42.0f;
+  constexpr float kHead = 13.0f;
+  constexpr float kHW = 6.0f;
+
+  // X arrow tip is at center + (1,0)*42 = (142, 100)
+  // Mouse on top of the arrowhead triangle
+  const ImVec2 tipX{center.x + kShaft, center.y};
+  // Use hitCache with no size limit (large hitPxSq so shaft hits work)
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipX, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
+  CHECK(snap == VS::Right);
+}
+
+TEST_CASE("FindViewGimbalHoverSnap: negative viewZ returns negSnap", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  // X axis points away from camera (viewZ < 0). Clicking it should give Left.
+  const ImVec2 center{100.0f, 100.0f};
+  auto cache = MakeAxisCache(-1.0f, 1.0f, 1.0f); // X is pointing away
+
+  constexpr float kShaft = 42.0f;
+  constexpr float kHead = 13.0f;
+  constexpr float kHW = 6.0f;
+
+  const ImVec2 tipX{center.x + kShaft, center.y};
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipX, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
+  CHECK(snap == VS::Left);
+}
+
+TEST_CASE("FindViewGimbalHoverSnap: negative viewZ on Z axis returns Back", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  // Z axis points away (viewZ < 0). Cache[2] is Z, pointing left on screen.
+  // We set Z viewZ to -1 (pointing away) — clicking that arrow should give Back.
+  const ImVec2 center{100.0f, 100.0f};
+  auto cache = MakeAxisCache(1.0f, 1.0f, -1.0f); // Z points away
+
+  constexpr float kShaft = 42.0f;
+  constexpr float kHead = 13.0f;
+  constexpr float kHW = 6.0f;
+
+  // Z arrow points left (-1, 0), tip at (58, 100)
+  const ImVec2 tipZ{center.x - kShaft, center.y};
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipZ, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, kHead, kHW, 9.0f * 9.0f});
+  CHECK(snap == VS::Back);
+}
+
+TEST_CASE("FindViewGimbalHoverSnap: mouse far from all axes returns None", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  const ImVec2 center{100.0f, 100.0f};
+  auto cache = MakeAxisCache(1.0f, 1.0f, 1.0f);
+
+  // Mouse far away — well outside any axis hit region
+  const ImVec2 farAway{500.0f, 500.0f};
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      farAway, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{42.0f, 13.0f, 6.0f, 9.0f * 9.0f});
+  CHECK(snap == VS::None);
+}
+
+TEST_CASE("FindViewGimbalHoverSnap: positive Y axis click returns Top", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  const ImVec2 center{100.0f, 100.0f};
+  // Y axis points up on screen (dy = -1.0 in ImGui coords = up).
+  auto cache = MakeAxisCache(1.0f, 1.0f, 1.0f);
+
+  constexpr float kShaft = 42.0f;
+  // Y arrow tip: center + (0, -1)*42 = (100, 58)
+  const ImVec2 tipY{center.x, center.y - kShaft};
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipY, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, 13.0f, 6.0f, 9.0f * 9.0f});
+  CHECK(snap == VS::Top);
+}
+
+TEST_CASE("FindViewGimbalHoverSnap: negative Y axis click returns Bottom", "[editor][gimbal]") {
+  using VS = ViewSnap;
+  const ImVec2 center{100.0f, 100.0f};
+  // Y axis points away from camera.
+  auto cache = MakeAxisCache(1.0f, -1.0f, 1.0f);
+
+  constexpr float kShaft = 42.0f;
+  const ImVec2 tipY{center.x, center.y - kShaft};
+  auto hitCache = cache;
+  std::ranges::reverse(hitCache);
+  const VS snap = FindViewGimbalHoverSnap(
+      tipY, center, hitCache, kTestAxes,
+      ViewGimbalHoverParams{kShaft, 13.0f, 6.0f, 9.0f * 9.0f});
+  CHECK(snap == VS::Bottom);
 }

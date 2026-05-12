@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "editor/EditorAssetImport.h"
+#include "ui/editor/EditorAssetImport.h"
 #include "renderer/ObjLoader.h"
 #include "tests/TestTempPaths.h"
 
@@ -16,9 +16,7 @@ using namespace Horo::Editor;
 using namespace Horo::ObjLoader;
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 static std::string TmpPath(const std::string &name) {
   return (Horo::Tests::SecureTempBase() / name).string();

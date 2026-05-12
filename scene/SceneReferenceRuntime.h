@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneRuntimeCoordinatorBridge.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 #include "physics/RigidBody.h"
 #include "renderer/Light.h"
 #include "scene/Scene.h"
@@ -24,12 +24,14 @@ namespace Horo {
     struct SceneReferencePanel {
         SceneReferencePanel() = default;
 
-        SceneReferencePanel(const Vec3 &centerValue, const Vec3 &halfValue)
-            : center(centerValue), half(halfValue) {
+        SceneReferencePanel(const Vec3 &centerValue, const Vec3 &halfValue,
+                            const Quaternion &rotationValue = Quaternion::Identity())
+            : center(centerValue), half(halfValue), rotation(rotationValue) {
         }
 
         Vec3 center = Vec3::Zero();
         Vec3 half = Vec3::One();
+        Quaternion rotation = Quaternion::Identity();
     };
 
     class SceneReferenceRuntime {

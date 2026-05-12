@@ -1,5 +1,6 @@
 #include "math/Quaternion.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "math/Mat3.h"
@@ -13,6 +14,10 @@ namespace Horo {
         return {a.x * s, a.y * s, a.z * s, Cos(half)};
     }
 
+    // Euler convention: YXZ intrinsic (yaw around Y, then pitch around X,
+    // then roll around Z). This produces a quaternion equivalent to
+    // FromAxisAngle(Y, yaw) * FromAxisAngle(X, pitch) * FromAxisAngle(Z, roll)
+    // and is the inverse of ToEuler() below so round-trip preserves rotation.
     Quaternion Quaternion::FromEuler(float pitch, float yaw, float roll) {
         const float cp = Cos(pitch * 0.5f);
         const float sp = Sin(pitch * 0.5f);
@@ -22,8 +27,10 @@ namespace Horo {
         const float sr = Sin(roll * 0.5f);
 
         return {
-            sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy
+            cy * sp * cr + sy * cp * sr, // x
+            sy * cp * cr - cy * sp * sr, // y
+            cy * cp * sr - sy * sp * cr, // z
+            cy * cp * cr + sy * sp * sr  // w
         };
     }
 
@@ -135,21 +142,29 @@ namespace Horo {
     }
 
     Vec3 Quaternion::ToEuler() const {
-        // Returns pitch (X), yaw (Y), roll (Z) in radians
-        float sinP = 2.0f * (w * x + y * z);
-        float cosP = 1.0f - 2.0f * (x * x + y * y);
-        float pitch = Atan2(sinP, cosP);
+        // Returns pitch (X), yaw (Y), roll (Z) in radians.
+        // Inverse of FromEuler() using the YXZ intrinsic convention:
+        //   R = Ry(yaw) * Rx(pitch) * Rz(roll)
+        // Derivation uses the corresponding rotation matrix entries:
+        //   R[1][2] = -sin(pitch)
+        //   R[0][2] / R[2][2] = tan(yaw)
+        //   R[1][0] / R[1][1] = tan(roll)
+        float sinP = 2.0f * (w * x - y * z);
+        sinP = std::clamp(sinP, -1.0f, 1.0f);
+        const float pitch = Asin(sinP);
 
-        float sinY = 2.0f * (w * y - z * x);
         float yaw;
-        if (Abs(sinY) >= 1.0f)
-            yaw = Cos(sinY) * HALF_PI;
-        else
-            yaw = Acos(sinY) - HALF_PI;
-
-        float sinR = 2.0f * (w * z + x * y);
-        float cosR = 1.0f - 2.0f * (y * y + z * z);
-        float roll = Atan2(sinR, cosR);
+        float roll;
+        if (Abs(sinP) > 0.9999f) {
+            // Gimbal lock at ±90° pitch: roll and yaw are coupled. Attribute
+            // the combined rotation entirely to yaw so roll stays at 0 and the
+            // result is stable across frames.
+            yaw = Atan2(-2.0f * (x * z - w * y), 1.0f - 2.0f * (y * y + z * z));
+            roll = 0.0f;
+        } else {
+            yaw = Atan2(2.0f * (x * z + w * y), 1.0f - 2.0f * (x * x + y * y));
+            roll = Atan2(2.0f * (x * y + w * z), 1.0f - 2.0f * (x * x + z * z));
+        }
 
         return {pitch, yaw, roll};
     }

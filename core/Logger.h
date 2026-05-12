@@ -10,7 +10,6 @@ namespace Horo {
                  std::string_view message);
 } // namespace Horo
 
-// ---------------------------------------------------------------------------
 // Format-string logging helpers using CTAD + std::source_location (C++20).
 //
 // These are intentionally defined as template STRUCTS in the global namespace
@@ -34,7 +33,6 @@ namespace Horo {
 //
 //   LogWarn("failed to load '{}': {}", path, e.what());
 //   LogInfo("editor ready");
-// ---------------------------------------------------------------------------
 
 template<typename... Args>
 struct LogDebug {

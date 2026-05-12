@@ -28,7 +28,7 @@ public:
     virtual void DrawArrays(uint32_t count) const = 0;
 
     // Issue a non-indexed draw call using GL_LINES (two vertices per line segment).
-    virtual void DrawArraysLines(uint32_t count) const = 0;
+    virtual void DrawArraysLines(uint32_t count, float lineWidth = 1.0f) const = 0;
 };
 
 } // namespace Horo

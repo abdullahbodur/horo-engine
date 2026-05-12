@@ -5,8 +5,8 @@
 #include <memory>
 #include <string>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneProjectBridge.h"
 #include "scene/SceneProjectModel.h"
 
 using namespace Horo;

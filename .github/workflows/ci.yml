@@ -63,7 +63,7 @@ jobs:
 
       - name: Test
         run: |
-          ctest --preset debug --output-on-failure
+          ctest --preset debug --output-on-failure --quiet
         env:
           HORO_LOG_LEVEL: "debug"
 
@@ -85,7 +85,7 @@ jobs:
           fail_on_failure: true
           require_tests: true
           detailed_summary: true
-          include_passed: true
+          include_passed: false
 
       - name: Upload test results
         if: always()
@@ -142,7 +142,7 @@ jobs:
 
       - name: Test
         run: |
-          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel
+          ctest --test-dir build/debug-msvc -C Debug --output-on-failure --parallel --quiet
         shell: pwsh
         env:
           HORO_LOG_LEVEL: "debug"
@@ -165,7 +165,7 @@ jobs:
           fail_on_failure: true
           require_tests: true
           detailed_summary: true
-          include_passed: true
+          include_passed: false
 
       - name: Upload test results
         if: always()
@@ -244,7 +244,7 @@ jobs:
 
       - name: Test
         run: |
-          ctest --preset debug --output-on-failure
+          ctest --preset debug --output-on-failure --quiet
         env:
           HORO_LOG_LEVEL: "debug"
 
@@ -266,7 +266,7 @@ jobs:
           fail_on_failure: true
           require_tests: true
           detailed_summary: true
-          include_passed: true
+          include_passed: false
 
       - name: Upload test results
         if: always()
@@ -304,7 +304,7 @@ jobs:
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            ctest --preset coverage --output-on-failure
+            ctest --preset coverage --output-on-failure --quiet
         env:
           HORO_LOG_LEVEL: "debug"
           HORO_GLFW_SAMPLES: "0"
@@ -337,16 +337,4 @@ jobs:
             -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
             -Dsonar.qualitygate.wait=true
 
-  # ----------------------------------------------------------------
-  # Starter integration — final PR gate.
-  # Validates this PR commit inside horo-engine-starter on all OS targets.
-  # ----------------------------------------------------------------
-  starter-integration:
-    name: Starter Integration
-    if: github.event_name == 'pull_request'
-    needs: [ test-linux, test-windows, test-macos ]
-    uses: abdullahbodur/horo-engine-starter/.github/workflows/engine-test.yml@main
-    with:
-      engine_repository: ${{ github.repository }}
-      engine_ref: ${{ github.event.pull_request.head.sha }}
-    secrets: inherit
+

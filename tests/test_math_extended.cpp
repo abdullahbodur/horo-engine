@@ -598,30 +598,30 @@ TEST_CASE("Quaternion direction vectors from identity", "[math][quat]") {
   REQUIRE(rt.x == Approx(1).epsilon(1e-5f));
 }
 
-TEST_CASE("Quaternion FromEuler pitch=90deg matches AxisAngle Y rotation", "[math][quat]") {
+TEST_CASE("Quaternion FromEuler pitch=90deg matches AxisAngle X rotation", "[math][quat]") {
   float angle = ToRadians(90.0f);
   Quaternion qEuler = Quaternion::FromEuler(angle, 0.0f, 0.0f);
-  Quaternion qAxis = Quaternion::FromAxisAngle(Vec3::Up(), angle);
-
-  Vec3 v{1, 0, 0};
-  Vec3 r1 = qEuler * v;
-  Vec3 r2 = qAxis * v;
-  REQUIRE(r1.x == Approx(r2.x).epsilon(1e-4f));
-  REQUIRE(r1.y == Approx(r2.y).margin(1e-4f));
-  REQUIRE(r1.z == Approx(r2.z).epsilon(1e-4f));
-}
-
-TEST_CASE("Quaternion FromEuler roll=90deg matches AxisAngle X rotation", "[math][quat]") {
-  float angle = ToRadians(90.0f);
-  Quaternion qEuler = Quaternion::FromEuler(0.0f, 0.0f, angle);
   Quaternion qAxis = Quaternion::FromAxisAngle(Vec3::Right(), angle);
 
   Vec3 v{0, 1, 0};
   Vec3 r1 = qEuler * v;
   Vec3 r2 = qAxis * v;
   REQUIRE(r1.x == Approx(r2.x).margin(1e-4f));
-  REQUIRE(r1.y == Approx(r2.y).epsilon(1e-4f));
+  REQUIRE(r1.y == Approx(r2.y).margin(1e-4f));
   REQUIRE(r1.z == Approx(r2.z).epsilon(1e-4f));
+}
+
+TEST_CASE("Quaternion FromEuler roll=90deg matches AxisAngle Z rotation", "[math][quat]") {
+  float angle = ToRadians(90.0f);
+  Quaternion qEuler = Quaternion::FromEuler(0.0f, 0.0f, angle);
+  Quaternion qAxis = Quaternion::FromAxisAngle(Vec3{0.0f, 0.0f, 1.0f}, angle);
+
+  Vec3 v{1, 0, 0};
+  Vec3 r1 = qEuler * v;
+  Vec3 r2 = qAxis * v;
+  REQUIRE(r1.x == Approx(r2.x).margin(1e-4f));
+  REQUIRE(r1.y == Approx(r2.y).epsilon(1e-4f));
+  REQUIRE(r1.z == Approx(r2.z).margin(1e-4f));
 }
 
 TEST_CASE("Quaternion ToEuler: identity gives zero pitch and roll", "[math][quat]") {

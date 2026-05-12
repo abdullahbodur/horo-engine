@@ -1,0 +1,427 @@
+/** @file ExternalProcessRunner.cpp
+ *  @brief Implements cross-platform child-process spawning, polling, and shutdown. */
+#include "ui/launcher/ExternalProcessRunner.h"
+
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cstdio>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include "core/Logger.h"
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <csignal>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+namespace Horo::Launcher {
+    namespace {
+        /** @brief Emits one prefixed log line for process output forwarding. */
+        void LogProcessLine(const std::string &label, const std::string &line) {
+            if (line.empty())
+                return;
+            LogInfo("[{}] {}", label, line);
+        }
+
+#ifdef _WIN32
+        /** @brief Reads lines from a Windows pipe handle and logs them until EOF. */
+        void ReadWindowsPipe(HANDLE hRead, const std::string &label,
+                             std::atomic<bool> &readerDone) {
+            std::array<char, 512> buffer{};
+            std::string pending;
+            DWORD bytesRead = 0;
+            while (ReadFile(hRead, buffer.data(), static_cast<DWORD>(buffer.size()),
+                            &bytesRead, nullptr) &&
+                   bytesRead > 0) {
+                pending.append(buffer.data(), bytesRead);
+                size_t newlinePos = 0;
+                while ((newlinePos = pending.find('\n')) != std::string::npos) {
+                    std::string line = pending.substr(0, newlinePos);
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    LogProcessLine(label, line);
+                    pending.erase(0, newlinePos + 1);
+                }
+            }
+            if (!pending.empty())
+                LogProcessLine(label, pending);
+            readerDone = true;
+        }
+#else
+        /** @brief Reads lines from a POSIX file descriptor and logs them until EOF. */
+        void ReadPosixPipe(int fdRead, const std::string &label,
+                           std::atomic<bool> &readerDone) {
+            std::array<char, 512> buffer{};
+            std::string pending;
+            ssize_t bytesRead = 0;
+            while ((bytesRead = read(fdRead, buffer.data(), buffer.size())) > 0) {
+                pending.append(buffer.data(), static_cast<size_t>(bytesRead));
+                size_t newlinePos = 0;
+                while ((newlinePos = pending.find('\n')) != std::string::npos) {
+                    std::string line = pending.substr(0, newlinePos);
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    LogProcessLine(label, line);
+                    pending.erase(0, newlinePos + 1);
+                }
+            }
+            if (!pending.empty())
+                LogProcessLine(label, pending);
+            readerDone = true;
+        }
+#endif
+
+#ifdef _WIN32
+        /** @brief Converts a UTF-8 string to a wide string for Windows API calls. */
+        std::wstring Utf8ToWide(const std::string &value) {
+            if (value.empty())
+                return {};
+            const int length =
+                    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+            if (length <= 0)
+                return {};
+            std::wstring out(static_cast<size_t>(length - 1), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(), length);
+            return out;
+        }
+
+        /** @brief Builds a quoted wide-string command line from a resolved command. */
+        std::wstring BuildCommandLine(const ResolvedLauncherCommand &command) {
+            auto quote = [](const std::string &part) {
+                if (part.find(' ') == std::string::npos &&
+                    part.find('\t') == std::string::npos &&
+                    part.find('"') == std::string::npos) {
+                    return part;
+                }
+                std::string quoted = "\"";
+                for (char c: part) {
+                    if (c == '"')
+                        quoted += R"(\")";
+                    else
+                        quoted.push_back(c);
+                }
+                quoted += '"';
+                return quoted;
+            };
+
+            std::string commandLine = quote(command.executable.generic_string());
+            for (const std::string &arg: command.args) {
+                commandLine.push_back(' ');
+                commandLine += quote(arg);
+            }
+            return Utf8ToWide(commandLine);
+        }
+
+        /** @brief Terminates a Windows process and waits for it to exit. */
+        int StopWindowsProcess(HANDLE processHandle) {
+            if (!processHandle)
+                return 1;
+            TerminateProcess(processHandle, 1);
+            if (WaitForSingleObject(processHandle, 5000) != WAIT_OBJECT_0)
+                return 1;
+            DWORD nativeExitCode = 1;
+            if (!GetExitCodeProcess(processHandle, &nativeExitCode))
+                return 1;
+            return static_cast<int>(nativeExitCode);
+        }
+#endif
+
+#ifndef _WIN32
+        /** @brief Decodes a POSIX wait status into a conventional exit code. */
+        int DecodePosixExitCode(int status, int fallback = 1) {
+            if (WIFEXITED(status))
+                return WEXITSTATUS(status);
+            if (WIFSIGNALED(status))
+                return 128 + WTERMSIG(status);
+            return fallback;
+        }
+
+        /** @brief Attempts a non-blocking waitpid and reports whether the child was reaped. */
+        bool TryWaitForPid(pid_t pid, int *status, int options, bool *outReaped) {
+            if (!status || !outReaped)
+                return false;
+            const pid_t result = waitpid(pid, status, options);
+            if (result == pid) {
+                *outReaped = true;
+                return true;
+            }
+            if (result < 0)
+                return false;
+            *outReaped = false;
+            return true;
+        }
+
+        /** @brief Sends SIGTERM then SIGKILL to a POSIX child process and waits for exit. */
+        int StopPosixProcess(pid_t *pid) {
+            if (!pid || *pid <= 0)
+                return 1;
+
+            int status = 0;
+            bool reaped = false;
+            kill(*pid, SIGTERM);
+            for (int attempt = 0; attempt < 50; ++attempt) {
+                if (const bool ok = TryWaitForPid(*pid, &status, WNOHANG, &reaped);
+                    !ok || reaped)
+                    break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+
+            if (!reaped) {
+                kill(*pid, SIGKILL);
+                const pid_t result = waitpid(*pid, &status, 0);
+                reaped = result == *pid;
+            }
+            *pid = -1;
+            return reaped ? DecodePosixExitCode(status) : 1;
+        }
+#endif
+
+        using ReaderThread = std::thread;
+    } // namespace
+
+    /** @brief Owns native process resources and output reader state for a single spawn. */
+    struct ExternalProcessRunner::ProcessHandle {
+        ReaderThread readerThread;
+        std::mutex readerMutex;
+        std::atomic<bool> readerDone{false};
+#ifdef _WIN32
+        HANDLE process = nullptr;
+        HANDLE thread = nullptr;
+        HANDLE stdoutRead = nullptr;
+        HANDLE stdoutWrite = nullptr;
+#else
+        pid_t pid = -1;
+        int stdoutRead = -1;
+        int stdoutWrite = -1;
+#endif
+    };
+
+    /** @copydoc ExternalProcessRunner::ExternalProcessRunner */
+    ExternalProcessRunner::ExternalProcessRunner() = default;
+
+    /** @copydoc ExternalProcessRunner::~ExternalProcessRunner */
+    ExternalProcessRunner::~ExternalProcessRunner() {
+        try {
+            Stop();
+        } catch (...) {
+            std::terminate();
+        }
+    }
+
+    /** @copydoc ExternalProcessRunner::Start */
+    bool ExternalProcessRunner::Start(const ResolvedLauncherCommand &command,
+                                      // platform-specific process startup
+                                      const std::string &label,
+                                      std::string *outError) {
+        if (outError)
+            outError->clear();
+        if (m_process && !m_status.active)
+            Stop();
+        if (IsActive()) {
+            if (outError)
+                *outError = "Another external process is already running.";
+            return false;
+        }
+
+        m_status = {};
+        m_status.label = label;
+        m_status.commandLine = command.debugString;
+
+        auto process = std::make_unique<ProcessHandle>();
+
+#ifdef _WIN32
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(sa);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = nullptr;
+        if (!CreatePipe(&process->stdoutRead, &process->stdoutWrite, &sa, 0)) {
+            if (outError)
+                *outError = "CreatePipe failed.";
+            return false;
+        }
+        SetHandleInformation(process->stdoutRead, HANDLE_FLAG_INHERIT, 0);
+
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        startup.dwFlags = STARTF_USESTDHANDLES;
+        startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+        startup.hStdOutput = process->stdoutWrite;
+        startup.hStdError = process->stdoutWrite;
+
+        PROCESS_INFORMATION info{};
+        std::wstring commandLine = BuildCommandLine(command);
+        std::wstring workdir = Utf8ToWide(command.workingDirectory.generic_string());
+        if (const BOOL created = CreateProcessW(
+                nullptr, commandLine.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                nullptr, workdir.empty() ? nullptr : workdir.c_str(), &startup,
+                &info);
+            !created) {
+            CloseHandle(process->stdoutRead);
+            CloseHandle(process->stdoutWrite);
+            process->stdoutRead = nullptr;
+            process->stdoutWrite = nullptr;
+            if (outError)
+                *outError = "CreateProcessW failed.";
+            return false;
+        }
+
+        CloseHandle(process->stdoutWrite);
+        process->stdoutWrite = nullptr;
+        process->process = info.hProcess;
+        process->thread = info.hThread;
+
+        process->readerThread = ReaderThread([handle = process.get(), label]() {
+            ReadWindowsPipe(handle->stdoutRead, label, handle->readerDone);
+        });
+#else
+        std::array<int, 2> pipes{-1, -1};
+        if (pipe(pipes.data()) != 0) {
+            if (outError)
+                *outError = "pipe() failed.";
+            return false;
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            close(pipes[0]);
+            close(pipes[1]);
+            if (outError)
+                *outError = "fork() failed.";
+            return false;
+        }
+
+        if (pid == 0) {
+            if (pipes[1] < 0 || dup2(pipes[1], STDOUT_FILENO) < 0 ||
+                dup2(pipes[1], STDERR_FILENO) < 0)
+                _exit(127);
+            close(pipes[0]);
+            close(pipes[1]);
+            if (!command.workingDirectory.empty() &&
+                chdir(command.workingDirectory.string().c_str()) != 0) {
+                _exit(126);
+            }
+
+            std::vector<std::string> ownedArgs;
+            ownedArgs.reserve(command.args.size() + 1);
+            ownedArgs.push_back(command.executable.generic_string());
+            for (const std::string &arg: command.args)
+                ownedArgs.push_back(arg);
+
+            std::vector<char *> argv;
+            argv.reserve(ownedArgs.size() + 1);
+            for (std::string &arg: ownedArgs)
+                argv.push_back(arg.data());
+            argv.push_back(nullptr);
+
+            execvp(command.executable.generic_string().c_str(), argv.data());
+            _exit(127);
+        }
+
+        close(pipes[1]);
+        process->pid = pid;
+        process->stdoutRead = pipes[0];
+        process->readerThread = ReaderThread([handle = process.get(), label]() {
+            ReadPosixPipe(handle->stdoutRead, label, handle->readerDone);
+        });
+#endif
+
+        m_status.active = true;
+        m_process = std::move(process);
+        LogInfo("[{}] started: {}", label, command.debugString);
+        return true;
+    }
+
+    /** @copydoc ExternalProcessRunner::Poll */
+    void ExternalProcessRunner::Poll() {
+        if (!m_process || !m_status.active)
+            return;
+
+#ifdef _WIN32
+        if (const DWORD waitResult = WaitForSingleObject(m_process->process, 0);
+            waitResult != WAIT_OBJECT_0)
+            return;
+
+        DWORD exitCode = 0;
+        GetExitCodeProcess(m_process->process, &exitCode);
+        Finish(static_cast<int>(exitCode), false);
+#else
+        int status = 0;
+        if (const pid_t result = waitpid(m_process->pid, &status, WNOHANG);
+            result <= 0)
+            return;
+
+        int exitCode = 0;
+        if (WIFEXITED(status))
+            exitCode = WEXITSTATUS(status);
+        else if (WIFSIGNALED(status))
+            exitCode = 128 + WTERMSIG(status);
+        Finish(exitCode, false);
+#endif
+    }
+
+    /** @copydoc ExternalProcessRunner::Stop */
+    void ExternalProcessRunner::Stop() {
+        if (!m_process)
+            return;
+
+        if (m_status.active) {
+#ifdef _WIN32
+            const int exitCode = StopWindowsProcess(m_process->process);
+#else
+            const int exitCode = StopPosixProcess(&m_process->pid);
+#endif
+            Finish(exitCode, true);
+        }
+
+        if (m_process->readerThread.joinable())
+            m_process->readerThread.join();
+
+#ifdef _WIN32
+        if (m_process->stdoutRead)
+            CloseHandle(m_process->stdoutRead);
+        if (m_process->stdoutWrite)
+            CloseHandle(m_process->stdoutWrite);
+        if (m_process->thread)
+            CloseHandle(m_process->thread);
+        if (m_process->process)
+            CloseHandle(m_process->process);
+#else
+        if (m_process->stdoutRead >= 0)
+            close(m_process->stdoutRead);
+        if (m_process->stdoutWrite >= 0)
+            close(m_process->stdoutWrite);
+#endif
+
+        m_process.reset();
+    }
+
+    /** @copydoc ExternalProcessRunner::IsActive */
+    bool ExternalProcessRunner::IsActive() const { return m_status.active; }
+
+    /** @copydoc ExternalProcessRunner::Finish */
+    void ExternalProcessRunner::Finish(int exitCode, bool terminatedByUser,
+                                       std::string error) {
+        m_status.active = false;
+        m_status.finished = true;
+        m_status.terminatedByUser = terminatedByUser;
+        m_status.exitCode = exitCode;
+        m_status.error = std::move(error);
+
+        if (!m_status.error.empty())
+            LogError("[{}] failed: {}", m_status.label, m_status.error);
+        else if (m_status.terminatedByUser)
+            LogWarn("[{}] terminated by user", m_status.label);
+        else
+            LogInfo("[{}] exited with code {}", m_status.label, m_status.exitCode);
+    }
+} // namespace Horo::Launcher

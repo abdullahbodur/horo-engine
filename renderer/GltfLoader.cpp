@@ -29,10 +29,8 @@
 #include "renderer/Texture.h"
 
 namespace Horo {
-    // ---------------------------------------------------------------------------
     // Custom stb_image callback for tinygltf
     // (TINYGLTF_NO_STB_IMAGE suppresses the built-in one)
-    // ---------------------------------------------------------------------------
     static bool LoadImageDataCallback( // NOSONAR: cpp:S107 callback signature
         // required by tinygltf API
         tinygltf::Image *image, const int /*image_idx*/, std::string *err,
@@ -57,9 +55,7 @@ namespace Horo {
         return true;
     }
 
-    // ---------------------------------------------------------------------------
     // Accessor helpers
-    // ---------------------------------------------------------------------------
 
     // Returns the byte stride for a given accessor, falling back to the tightly-
     // packed size when bufferView.byteStride == 0.
@@ -130,9 +126,7 @@ namespace Horo {
                                    GetNumComponents(acc.type));
     }
 
-    // ---------------------------------------------------------------------------
     // Typed accessor read helpers
-    // ---------------------------------------------------------------------------
 
     // Read a float scalar at element `i` from an accessor known to be SCALAR FLOAT.
     static float ReadFloat(const unsigned char *base, size_t stride, size_t i) {
@@ -188,9 +182,7 @@ namespace Horo {
         return m;
     }
 
-    // ---------------------------------------------------------------------------
     // Topological sort of skin joints
-    // ---------------------------------------------------------------------------
     // Returns a sorted list of indices into skin.joints such that for every joint
     // its parent appears at a lower position.  Also fills jointToSorted: a map
     // from original skin.joints position → position in the sorted output.
@@ -258,9 +250,7 @@ namespace Horo {
         return sorted; // each entry is an index into skin.joints[]
     }
 
-    // ---------------------------------------------------------------------------
     // Parent-bone lookup — finds which already-sorted bone is the parent of nodeIdx
-    // ---------------------------------------------------------------------------
     static int FindParentBoneIndex(const tinygltf::Model &model,
                                    const tinygltf::Skin &skin,
                                    const std::vector<int> &sortedSlots, int nodeIdx,
@@ -275,9 +265,7 @@ namespace Horo {
         return -1;
     }
 
-    // ---------------------------------------------------------------------------
     // Skeleton section of Load()
-    // ---------------------------------------------------------------------------
     static void LoadGltfSkeleton(const tinygltf::Model &model,
                                  GltfLoadResult &result,
                                  std::vector<int> &outSortedSlots,
@@ -319,9 +307,7 @@ namespace Horo {
         result.skeleton = skeleton;
     }
 
-    // ---------------------------------------------------------------------------
     // Mesh section helpers
-    // ---------------------------------------------------------------------------
     struct VertexAccessors {
         const unsigned char *posData = nullptr;
         size_t posStride = 0;
@@ -451,9 +437,7 @@ namespace Horo {
         }
     }
 
-    // ---------------------------------------------------------------------------
     // Mesh section of Load()
-    // ---------------------------------------------------------------------------
     static void LoadGltfMesh(const tinygltf::Model &model,
                              const std::vector<int> &jointToSorted,
                              GltfLoadResult &result) {
@@ -510,9 +494,7 @@ namespace Horo {
         }
     }
 
-    // ---------------------------------------------------------------------------
     // Per-channel animation processing
-    // ---------------------------------------------------------------------------
     static void ProcessAnimationChannel(
         const tinygltf::Model &model, const tinygltf::AnimationChannel &channel,
         const tinygltf::AnimationSampler &sampler, int boneIdx, float &clipDuration,
@@ -560,9 +542,7 @@ namespace Horo {
         // "weights" (morph targets) are intentionally ignored.
     }
 
-    // ---------------------------------------------------------------------------
     // Animation section of Load()
-    // ---------------------------------------------------------------------------
     static void LoadGltfAnimations(const tinygltf::Model &model,
                                    const std::vector<int> &sortedSlots,
                                    GltfLoadResult &result) {
@@ -598,9 +578,7 @@ namespace Horo {
         }
     }
 
-    // ---------------------------------------------------------------------------
     // Texture section of Load()
-    // ---------------------------------------------------------------------------
     static void LoadGltfAlbedoTexture(const tinygltf::Model &model,
                                       const std::string &path,
                                       GltfLoadResult &result) {
@@ -628,9 +606,7 @@ namespace Horo {
             result.albedoTexture = std::move(texture);
     }
 
-    // ---------------------------------------------------------------------------
     // GltfLoader::Load
-    // ---------------------------------------------------------------------------
     GltfLoadResult GltfLoader::Load(const std::string &path) {
         GltfLoadResult result;
 

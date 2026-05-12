@@ -215,14 +215,15 @@ TEST_CASE("Quaternion Conjugate: conjugate then multiply gives scalar", "[math][
   REQUIRE(result.x == Approx(0.0f).margin(1e-4f));
 }
 
-TEST_CASE("Quaternion FromEuler yaw creates Z rotation", "[math][quat]") {
+TEST_CASE("Quaternion FromEuler yaw creates Y rotation", "[math][quat]") {
   float angle = ToRadians(90.0f);
   Quaternion q = Quaternion::FromEuler(0.0f, angle, 0.0f);
   Vec3 v{1, 0, 0};
   Vec3 r = q * v;
+  // yaw = 90° around Y should rotate +X onto -Z.
   REQUIRE(r.x == Approx(0.0f).margin(1e-4f));
-  REQUIRE(r.y == Approx(1.0f).epsilon(1e-4f));
-  REQUIRE(r.z == Approx(0.0f).margin(1e-4f));
+  REQUIRE(r.y == Approx(0.0f).margin(1e-4f));
+  REQUIRE(r.z == Approx(-1.0f).epsilon(1e-4f));
 }
 
 TEST_CASE("Transform scale affects TransformPoint", "[math][transform]") {

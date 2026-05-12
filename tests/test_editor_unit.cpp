@@ -18,22 +18,23 @@
 #include <vector>
 
 #include "core/ProjectPath.h"
-#include "editor/AssetIdentity.h"
-#include "editor/AssetImportService.h"
-#include "editor/AssetImporterRegistry.h"
-#include "editor/AssetMetadata.h"
-#include "editor/EditorDebugTrace.h"
-#include "editor/EditorImGuiBackend.h"
-#include "editor/EditorLayer.h"
-#include "editor/EditorSceneGraph.h"
-#include "editor/EditorSearch.h"
-#include "editor/EditorWorkspaceSettings.h"
-#include "editor/SceneDocument.h"
-#include "editor/SceneProjectBridge.h"
-#include "editor/SceneRuntimeBridge.h"
-#include "editor/SceneRuntimeCoordinatorBridge.h"
-#include "editor/SceneSerializer.h"
-#include "editor/TransformGizmo.h"
+#include "ui/editor/AssetIdentity.h"
+#include "ui/editor/AssetImportService.h"
+#include "ui/editor/AssetImporterRegistry.h"
+#include "ui/editor/AssetMetadata.h"
+#include "ui/editor/EditorDebugTrace.h"
+#include "ui/editor/EditorImGuiBackend.h"
+#include "ui/editor/EditorLayer.h"
+#include "ui/editor/EditorSceneGraph.h"
+#include "ui/editor/EditorSearch.h"
+#include "ui/editor/EditorUserSettings.h"
+#include "ui/editor/EditorWorkspaceSettings.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneProjectBridge.h"
+#include "ui/editor/SceneRuntimeBridge.h"
+#include "ui/editor/SceneRuntimeCoordinatorBridge.h"
+#include "ui/editor/SceneSerializer.h"
+#include "ui/editor/TransformGizmo.h"
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
@@ -46,9 +47,7 @@ using namespace Horo;
 using namespace Horo::Editor;
 using Catch::Approx;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 namespace {
 struct ProjectPathGuard {
@@ -723,6 +722,162 @@ TEST_CASE("EditorWorkspaceSettings: save then load round-trips state", "[editor]
 }
 
 // ===========================================================================
+// EditorUserSettings — ~/.horo/editor_settings.json (theme preset, etc.)
+// ===========================================================================
+
+TEST_CASE("EditorUserSettings: ResolveEditorUserSettingsPath lives under .horo", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_resolve";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  const std::filesystem::path path = ResolveEditorUserSettingsPath();
+  CHECK(path.filename() == "editor_settings.json");
+  CHECK(path.parent_path().filename() == ".horo");
+}
+
+TEST_CASE("EditorUserSettings: LoadEditorUserSettingsDocument returns DarkBlue default when file is absent", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_absent";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  EditorUserSettingsDocument doc = LoadEditorUserSettingsDocument();
+  CHECK_FALSE(doc.loadedFromDisk);
+  CHECK_FALSE(doc.parseError);
+  CHECK(doc.error.empty());
+  CHECK(doc.settings.themePreset == Horo::Ui::EditorThemePreset::DarkBlue);
+}
+
+TEST_CASE("EditorUserSettings: save then load round-trips a Graphite preset", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_roundtrip";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  EditorUserSettingsDocument doc;
+  doc.settings.themePreset = Horo::Ui::EditorThemePreset::Graphite;
+  std::string err;
+  REQUIRE(SaveEditorUserSettingsDocument(&doc, &err));
+  CHECK(err.empty());
+
+  // Verify the on-disk JSON actually contains the graphite id.
+  std::ifstream in(ResolveEditorUserSettingsPath());
+  REQUIRE(in.is_open());
+  nlohmann::json root;
+  in >> root;
+  REQUIRE(root.is_object());
+  REQUIRE(root.contains("editor"));
+  const auto editorJson = root.at("editor");
+  REQUIRE(editorJson.is_object());
+  CHECK(editorJson.at("themePreset").get<std::string>() == "graphite");
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  CHECK(loaded.loadedFromDisk);
+  CHECK_FALSE(loaded.parseError);
+  CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::Graphite);
+}
+
+TEST_CASE("EditorUserSettings: unknown preset id falls back to DarkBlue without crash", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_unknown";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  const std::filesystem::path settingsFile = ResolveEditorUserSettingsPath();
+  WriteFile(settingsFile, R"({"editor":{"themePreset":"nebula"}})");
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  CHECK(loaded.loadedFromDisk);
+  CHECK_FALSE(loaded.parseError);
+  CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::DarkBlue);
+  CHECK_FALSE(loaded.error.empty());
+}
+
+TEST_CASE("EditorUserSettings: invalid JSON falls back to DarkBlue and reports parse error", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_badjson";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  WriteFile(ResolveEditorUserSettingsPath(), "{{ not json");
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  CHECK(loaded.loadedFromDisk);
+  CHECK(loaded.parseError);
+  CHECK_FALSE(loaded.error.empty());
+  CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::DarkBlue);
+}
+
+TEST_CASE("EditorUserSettings: non-object root falls back to DarkBlue and reports parse error", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_arrayroot";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  WriteFile(ResolveEditorUserSettingsPath(), "[1,2,3]");
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  CHECK(loaded.loadedFromDisk);
+  CHECK(loaded.parseError);
+  CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::DarkBlue);
+}
+
+TEST_CASE("EditorUserSettings: unknown root and editor keys survive save round-trip", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_preserve";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  WriteFile(
+      ResolveEditorUserSettingsPath(),
+      R"({"future":{"flag":true},"editor":{"themePreset":"darkBlue","experimentalMode":"spatial"}})");
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  REQUIRE(loaded.loadedFromDisk);
+  REQUIRE_FALSE(loaded.parseError);
+  loaded.settings.themePreset = Horo::Ui::EditorThemePreset::HighContrast;
+
+  std::string err;
+  REQUIRE(SaveEditorUserSettingsDocument(&loaded, &err));
+
+  std::ifstream in(ResolveEditorUserSettingsPath());
+  REQUIRE(in.is_open());
+  nlohmann::json root;
+  in >> root;
+  REQUIRE(root.is_object());
+  REQUIRE(root.contains("future"));
+  REQUIRE(root.at("future").is_object());
+  CHECK(root.at("future").at("flag").get<bool>());
+  REQUIRE(root.contains("editor"));
+  const auto editorJson = root.at("editor");
+  CHECK(editorJson.at("themePreset").get<std::string>() == "highContrast");
+  REQUIRE(editorJson.contains("experimentalMode"));
+  CHECK(editorJson.at("experimentalMode").get<std::string>() == "spatial");
+}
+
+TEST_CASE("EditorUserSettings: SaveEditorUserSettingsDocument null returns false", "[editor][user-settings]") {
+  std::string err;
+  const bool ok = SaveEditorUserSettingsDocument(nullptr, &err);
+  CHECK_FALSE(ok);
+  CHECK_FALSE(err.empty());
+}
+
+// ===========================================================================
 // TransformGizmo — edge cases not yet in test_gizmo.cpp
 // ===========================================================================
 
@@ -736,14 +891,14 @@ TEST_CASE("TransformGizmo: AxisDir returns zero for None", "[gizmo][coverage]") 
   CHECK(none.z == Approx(0.0f));
 }
 
-TEST_CASE("TransformGizmo: HandleSize returns small fallback at near-zero distance", "[gizmo][coverage]") {
+TEST_CASE("TransformGizmo: HandleSize returns unit size at near-zero distance", "[gizmo][coverage]") {
   TransformGizmo g;
   // Place gizmo right at the camera position → distance ≈ 0
   Camera cam = MakeCam({0, 0, 0}, {0, 0, -1});
   g.Activate(GizmoMode::Translate, cam.position, Quaternion::Identity(),
              Vec3::One());
   const float size = g.HandleSize(cam);
-  CHECK(size == Approx(0.1f).margin(0.01f));
+  CHECK(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: SyncTarget updates position", "[gizmo][coverage]") {
@@ -756,7 +911,7 @@ TEST_CASE("TransformGizmo: SyncTarget updates position", "[gizmo][coverage]") {
   // origin so dist changes)
   Camera cam = MakeCam({0, 0, 0}, {0, 0, -1});
   const float size = g.HandleSize(cam);
-  CHECK(size > 0.0f);
+  CHECK(size == Approx(1.0f).margin(1e-6f));
 }
 
 TEST_CASE("TransformGizmo: RayHitPlane returns false for behind-origin hit", "[gizmo][coverage]") {

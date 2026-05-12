@@ -6,8 +6,8 @@
 #include <string>
 #include <string_view>
 
-#include "editor/SceneDocument.h"
-#include "editor/SceneSerializer.h"
+#include "ui/editor/SceneDocument.h"
+#include "ui/editor/SceneSerializer.h"
 #include "scene/SceneReferenceRuntime.h"
 #include "scene/components/BehaviorComponent.h"
 #include "scene/components/MeshComponent.h"

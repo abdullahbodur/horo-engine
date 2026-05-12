@@ -30,7 +30,7 @@ public:
 
     void DrawIndexed(uint32_t count) const override;
     void DrawArrays(uint32_t count)      const override;
-    void DrawArraysLines(uint32_t count) const override;
+    void DrawArraysLines(uint32_t count, float lineWidth = 1.0f) const override;
 
 private:
     uint32_t m_rendererId = 0;

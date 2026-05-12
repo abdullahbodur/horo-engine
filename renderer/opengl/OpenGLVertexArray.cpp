@@ -161,8 +161,12 @@ void OpenGLVertexArray::DrawArrays(uint32_t count) const {
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(count));
 }
 
-void OpenGLVertexArray::DrawArraysLines(uint32_t count) const {
+void OpenGLVertexArray::DrawArraysLines(uint32_t count, float lineWidth) const {
+    if (lineWidth != 1.0f)
+        glLineWidth(lineWidth);
     glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(count));
+    if (lineWidth != 1.0f)
+        glLineWidth(1.0f);
 }
 
 } // namespace Horo

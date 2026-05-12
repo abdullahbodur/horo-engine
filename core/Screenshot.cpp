@@ -32,7 +32,6 @@ namespace Horo {
         if (!f)
             return false;
 
-        // ---- File header (14 bytes) ----
         std::array<uint8_t, 14> fh{};
         fh[0] = 'B';
         fh[1] = 'M';
@@ -43,7 +42,6 @@ namespace Horo {
         fh[10] = 54; // pixel data offset = 14 + 40
         std::fwrite(fh.data(), 1, fh.size(), f);
 
-        // ---- DIB header (BITMAPINFOHEADER, 40 bytes) ----
         std::array<uint8_t, 40> dh{};
         dh[0] = 40; // biSize
         dh[4] = static_cast<uint8_t>(w);
@@ -62,7 +60,6 @@ namespace Horo {
         dh[23] = static_cast<uint8_t>(dataSize >> 24);
         std::fwrite(dh.data(), 1, dh.size(), f);
 
-        // ---- Pixel data (rows already bottom-up from glReadPixels) ----
         std::vector<uint8_t> row(static_cast<size_t>(rowPadded), 0);
         for (int y = 0; y < h; ++y) {
             std::memcpy(row.data(), pixels.data() + y * rowStride,

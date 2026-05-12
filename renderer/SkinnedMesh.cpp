@@ -26,9 +26,7 @@ namespace Horo {
 
     SkinnedMesh::SkinnedMesh() = default;
 
-    // ---------------------------------------------------------------------------
     // Lifecycle
-    // ---------------------------------------------------------------------------
 
     SkinnedMesh::~SkinnedMesh() { Release(); }
 
@@ -52,9 +50,7 @@ namespace Horo {
 
     bool SkinnedMesh::IsValid() const { return m_gpu && m_gpu->vao != nullptr; }
 
-    // ---------------------------------------------------------------------------
     // Public API
-    // ---------------------------------------------------------------------------
 
     void SkinnedMesh::SetData(const std::vector<SkinnedVertex> &vertices,
                               const std::vector<unsigned int> &indices) {
@@ -70,9 +66,7 @@ namespace Horo {
         m_gpu->vao->Unbind();
     }
 
-    // ---------------------------------------------------------------------------
     // Private helpers
-    // ---------------------------------------------------------------------------
 
     void SkinnedMesh::Upload(const std::vector<SkinnedVertex> &vertices,
                              const std::vector<unsigned int> &indices) {

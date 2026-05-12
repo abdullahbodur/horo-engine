@@ -17,12 +17,10 @@ out vec2 v_uv;
 
 void main()
 {
-    // -----------------------------------------------------------------------
     // GPU Skinning
     // Accumulate the weighted bone transforms for this vertex.
     // We iterate over all 4 influence slots and skip any with index == -1
     // or a weight of 0.0, so sparse rigs don't pay for unused slots.
-    // -----------------------------------------------------------------------
     mat4 skinMat    = mat4(0.0);
     float totalWeight = 0.0;
 
@@ -48,13 +46,11 @@ void main()
     if (totalWeight < 1e-4)
         skinMat = mat4(1.0);
 
-    // -----------------------------------------------------------------------
     // Transform: bind-pose -> world space
     // Apply skinMat first (bone deformation in local/bind space), then
     // u_model (object -> world).  Normal uses the upper-left 3x3 of skinMat;
     // the full per-model normalMat handles non-uniform scale on the model
     // matrix side.
-    // -----------------------------------------------------------------------
     vec4 skinnedPos    = skinMat * vec4(a_position, 1.0);
     vec3 skinnedNormal = normalize(mat3(skinMat) * a_normal);
 
