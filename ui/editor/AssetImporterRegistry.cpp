@@ -23,6 +23,7 @@
 #include "renderer/FbxLoader.h"
 #include "renderer/MeshBin.h"
 #include "renderer/ObjLoader.h"
+#include "renderer/SkinnedMeshBin.h"
 
 namespace Horo::Editor {
     namespace {
@@ -720,6 +721,88 @@ namespace Horo::Editor {
                     result.diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Error, code, result.error, request,
                         ImporterId()));
+                    return result;
+                }
+
+                if (loaded.hasSkinning) {
+                    FbxLoader::FbxSkeletalLoadResult skeletal =
+                            FbxLoader::LoadSkeletalMesh(sourcePath.string());
+                    if (!skeletal.ok) {
+                        const std::string_view code =
+                                skeletal.errorCode == "fbx.skeleton_missing"
+                                    ? DiagnosticCodes::FbxSkeletonMissing
+                                : skeletal.errorCode == "fbx.no_geometry"
+                                    ? DiagnosticCodes::FbxNoGeometry
+                                    : DiagnosticCodes::FbxParseFailed;
+                        result.error = skeletal.error.empty()
+                                           ? "FBX skeletal extraction failed."
+                                           : skeletal.error;
+                        result.diagnostics.push_back(MakeDiagnostic(
+                            AssetDiagnosticSeverity::Error, code, result.error, request,
+                            ImporterId()));
+                        return result;
+                    }
+
+                    const fs::path destSkinnedBin =
+                            destDir / (sourcePath.stem().string() + ".skinned.bin");
+                    SkinnedMeshBin::WriteResult skinnedWrite =
+                            SkinnedMeshBin::WriteSkinnedMesh(
+                                destSkinnedBin.string(), skeletal.vertices,
+                                skeletal.indices, skeletal.bones);
+                    if (!skinnedWrite.ok) {
+                        result.error = skinnedWrite.error.empty()
+                                           ? "Failed writing engine-native skinned mesh binary."
+                                           : skinnedWrite.error;
+                        result.diagnostics.push_back(MakeDiagnostic(
+                            AssetDiagnosticSeverity::Error,
+                            DiagnosticCodes::FbxSkeletonWriteFailed, result.error,
+                            request, ImporterId()));
+                        return result;
+                    }
+
+                    std::vector<std::string> producedFiles;
+                    producedFiles.push_back(
+                        fs::relative(destSkinnedBin, ProjectPath::Root()).generic_string());
+
+                    std::string albedoMapPath;
+                    std::vector<std::string> externalSourcePaths;
+                    ApplyFbxTextures(loaded.textures, sourcePath, destDir, request,
+                                     ImporterId(), result.diagnostics, producedFiles,
+                                     externalSourcePaths, albedoMapPath);
+
+                    AssetDef asset;
+                    asset.guid = request.assetGuid;
+                    asset.displayName = request.displayName.empty() ? request.assetId
+                                                                    : request.displayName;
+                    asset.mesh =
+                        fs::relative(destSkinnedBin, ProjectPath::Root()).generic_string();
+                    if (!albedoMapPath.empty())
+                        asset.albedoMap = albedoMapPath;
+                    {
+                        const float height = skeletal.aabbMax.y - skeletal.aabbMin.y;
+                        const float scale = (height < 1e-6f) ? 1.0f : (2.0f / height);
+                        char buffer[64];
+                        std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f,%.4f", scale,
+                                      scale, scale);
+                        asset.renderScale = buffer;
+                    }
+
+                    result.ok = true;
+                    result.asset = asset;
+                    result.metadata = BuildImportedMetadata(request, asset, ImporterId(),
+                                                            std::move(producedFiles));
+                    for (const std::string &externalSource: externalSourcePaths) {
+                        const auto duplicate = std::ranges::find_if(
+                            result.metadata.dependencies,
+                            [&](const AssetDependencyRecord &dep) {
+                                return dep.kind == AssetDependencyKind::Source &&
+                                       dep.value == externalSource;
+                            });
+                        if (duplicate == result.metadata.dependencies.end())
+                            result.metadata.dependencies.emplace_back(
+                                AssetDependencyKind::Source, externalSource);
+                    }
+                    result.metadata.diagnostics = result.diagnostics;
                     return result;
                 }
 

@@ -824,3 +824,137 @@ TEST_CASE("AssetImportService: reimporting an FBX asset alone keeps producedFile
   std::ranges::sort(afterSorted);
   CHECK(beforeSorted == afterSorted);
 }
+
+// ===========================================================================
+// HORO-107 — skeletal mesh import (FbxLoader::LoadSkeletalMesh + .skinned.bin)
+// ===========================================================================
+
+#include "renderer/SkinnedMeshBin.h"
+
+TEST_CASE("FbxLoader::LoadStaticMesh: skinned fixture sets hasSkinning=true",
+          "[fbx][loader][skeletal]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+  REQUIRE(result.ok);
+  CHECK(result.hasSkinning);
+}
+
+TEST_CASE("FbxLoader::LoadSkeletalMesh: extracts vertices, indices, and a topologically sorted bone array",
+          "[fbx][loader][skeletal]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const FbxLoader::FbxSkeletalLoadResult result =
+      FbxLoader::LoadSkeletalMesh(path);
+  REQUIRE(result.ok);
+  CHECK(result.error.empty());
+  CHECK_FALSE(result.vertices.empty());
+  CHECK_FALSE(result.indices.empty());
+  REQUIRE(result.indices.size() % 3 == 0);
+  REQUIRE_FALSE(result.bones.empty());
+
+  // Topological order: each non-root parent index must reference an earlier slot.
+  for (size_t i = 0; i < result.bones.size(); ++i) {
+    INFO("bone[" << i << "] name='" << result.bones[i].name
+                   << "' parent=" << result.bones[i].parentIndex);
+    if (result.bones[i].parentIndex >= 0) {
+      REQUIRE(result.bones[i].parentIndex < static_cast<int>(i));
+    }
+  }
+  // Every vertex's first bone index must be valid.
+  for (const SkinnedVertex &sv: result.vertices) {
+    REQUIRE(sv.boneIndices[0] >= 0);
+    REQUIRE(sv.boneIndices[0] < static_cast<int>(result.bones.size()));
+  }
+}
+
+TEST_CASE("SkinnedMeshBin: round-trip preserves vertices, indices, and bone hierarchy",
+          "[skinned-mesh-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_skinnedbin_roundtrip.skinned.bin";
+
+  std::vector<SkinnedVertex> vertices(3);
+  for (int i = 0; i < 3; ++i) {
+    vertices[i].position = {static_cast<float>(i), 0.0f, 0.0f};
+    vertices[i].normal = {0.0f, 0.0f, 1.0f};
+    vertices[i].uv = {0.0f, 0.0f};
+    vertices[i].boneIndices = {0, -1, -1, -1};
+    vertices[i].boneWeights = {1.0f, 0.0f, 0.0f, 0.0f};
+  }
+  const std::vector<uint32_t> indices = {0, 1, 2};
+
+  std::vector<Bone> bones;
+  Bone root;
+  root.parentIndex = -1;
+  root.name = "root";
+  root.inverseBindMatrix = Mat4::Identity();
+  bones.push_back(root);
+  Bone child;
+  child.parentIndex = 0;
+  child.name = "child";
+  child.inverseBindMatrix = Mat4::Identity();
+  bones.push_back(child);
+
+  REQUIRE(SkinnedMeshBin::WriteSkinnedMesh(path.string(), vertices, indices, bones).ok);
+
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(path.string());
+  REQUIRE(rr.ok);
+  REQUIRE(rr.vertices.size() == 3);
+  REQUIRE(rr.indices == indices);
+  REQUIRE(rr.bones.size() == 2);
+  CHECK(rr.bones[0].name == "root");
+  CHECK(rr.bones[0].parentIndex == -1);
+  CHECK(rr.bones[1].name == "child");
+  CHECK(rr.bones[1].parentIndex == 0);
+}
+
+TEST_CASE("SkinnedMeshBin: ReadSkinnedMesh rejects bad magic", "[skinned-mesh-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_skinnedbin_badmagic.skinned.bin";
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  const std::array<char, 80> zeros{};
+  stream.write(zeros.data(), zeros.size());
+  stream.close();
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(path.string());
+  REQUIRE_FALSE(rr.ok);
+}
+
+TEST_CASE("FbxAssetImporter: skinned FBX produces a managed .skinned.bin",
+          "[editor][asset-import][fbx][skeletal]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_skinned_import";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_a", "guid_skinned_a", "Skinned A", {});
+  REQUIRE(result.ok);
+  CHECK(result.asset.mesh.ends_with(".skinned.bin"));
+  CHECK(result.asset.mesh.find("assets/models/guid_skinned_a/") !=
+        std::string::npos);
+
+  const std::filesystem::path absoluteSkinned = root / result.asset.mesh;
+  REQUIRE(std::filesystem::is_regular_file(absoluteSkinned));
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(absoluteSkinned.string());
+  REQUIRE(rr.ok);
+  CHECK_FALSE(rr.vertices.empty());
+  CHECK_FALSE(rr.bones.empty());
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_a", &metadata, &metaError));
+  CHECK(metadata.importerId == "builtin.fbx_static_mesh");
+  CHECK(metadata.sourcePath == source);
+  CHECK(std::ranges::any_of(metadata.producedFiles, [&](const std::string &p) {
+    return p == result.asset.mesh;
+  }));
+}

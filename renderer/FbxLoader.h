@@ -30,6 +30,8 @@
 #include <vector>
 
 #include "renderer/Mesh.h"
+#include "renderer/Skeleton.h"
+#include "renderer/SkinnedVertex.h"
 
 namespace Horo::FbxLoader {
     /** @brief Single texture reference captured during FBX scene extraction.
@@ -59,8 +61,21 @@ namespace Horo::FbxLoader {
         Vec3 aabbMin = {};                  /**< Per-component minimum over @c vertices, populated on success. */
         Vec3 aabbMax = {};                  /**< Per-component maximum over @c vertices, populated on success. */
         std::vector<FbxTextureRecord> textures; /**< Diffuse texture references captured from materials reachable from the rendered meshes. */
+        bool hasSkinning = false;           /**< True when at least one walked mesh has a non-empty @c skin_deformers list — caller should follow up with @ref LoadSkeletalMesh. */
         std::string error;                  /**< Human-readable diagnostic on failure; empty on success. */
         std::string errorCode;              /**< Short tag (e.g. @c "fbx.parse_failed") used by the importer to pick a diagnostic code. */
+    };
+
+    /** @brief Result of a skeletal-mesh load operation. */
+    struct FbxSkeletalLoadResult {
+        bool ok = false;                  /**< True on success. */
+        std::vector<SkinnedVertex> vertices; /**< Combined skinned vertex array. */
+        std::vector<uint32_t> indices;    /**< Combined triangle index array. */
+        std::vector<Bone> bones;          /**< Bone hierarchy in topological order (parent index < self for non-root bones). */
+        Vec3 aabbMin = {};                /**< Per-component minimum over @c vertices. */
+        Vec3 aabbMax = {};                /**< Per-component maximum over @c vertices. */
+        std::string error;                /**< Human-readable diagnostic on failure; empty on success. */
+        std::string errorCode;            /**< Short tag (e.g. @c "fbx.skeleton_missing") used by the importer to pick a diagnostic code. */
     };
 
     /** @brief Loads static geometry from an FBX file at @p sourcePath.
@@ -72,4 +87,20 @@ namespace Horo::FbxLoader {
      *  - @c errorCode == "fbx.no_geometry"  — file parsed cleanly but contained no triangulable mesh data.
      */
     FbxLoadResult LoadStaticMesh(const std::string &sourcePath);
+
+    /** @brief Loads skeletal mesh geometry + skeleton from an FBX file at @p sourcePath.
+     *  @param sourcePath Absolute path to the FBX source file.
+     *  @return @ref FbxSkeletalLoadResult populated with skinned vertex / index / bone data on success.
+     *
+     *  Walks every renderable mesh that has a non-empty @c skin_deformers list, takes the
+     *  first deformer per mesh, and emits @ref SkinnedVertex records using up to the first
+     *  4 cluster influences per vertex sorted by descending weight. Bones are topologically
+     *  sorted so each parent index is strictly less than the bone's own index.
+     *
+     *  Failure modes:
+     *  - @c errorCode == "fbx.parse_failed"     — ufbx rejected the file.
+     *  - @c errorCode == "fbx.no_geometry"      — no triangulable skinned mesh data.
+     *  - @c errorCode == "fbx.skeleton_missing" — file has skin clusters but no bone nodes.
+     */
+    FbxSkeletalLoadResult LoadSkeletalMesh(const std::string &sourcePath);
 } // namespace Horo::FbxLoader
