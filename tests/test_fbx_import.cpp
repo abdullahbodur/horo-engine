@@ -17,6 +17,7 @@
 #include "renderer/FbxLoader.h"
 #include "renderer/Mesh.h"
 #include "renderer/MeshBin.h"
+#include "renderer/MeshCache.h"
 #include "tests/TestTempPaths.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/AssetImportService.h"
@@ -337,4 +338,52 @@ TEST_CASE("AssetImportService: imports vendored cube FBX into managed mesh.bin",
     return p == result.asset.mesh;
   }));
   CHECK(metadata.lastImportSucceeded);
+}
+
+// ===========================================================================
+// HORO-100 — end-to-end: imported FBX asset is loadable through MeshCache
+// ===========================================================================
+// The FBX importer in HORO-94 produces a managed assets/<guid>/<stem>.mesh.bin
+// artefact. HORO-99 made MeshCache route by extension. HORO-100 wires .mesh.bin
+// into the runtime side. This test pins the full loop:
+//
+//   AssetImportService::ImportAssetFromSource(<cube.fbx>) ->
+//       AssetDef.mesh = "assets/models/<guid>/cube.mesh.bin"
+//   MeshCache::Get(asset.mesh) ->
+//       Real Mesh with vertex/index data matching the imported geometry.
+
+TEST_CASE("AssetImportService + MeshCache: imported FBX is loadable end-to-end",
+          "[editor][asset-import][fbx][meshbin][runtime]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_runtime_e2e";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("cube_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+
+  const AssetImportResult import = service.ImportAssetFromSource(
+      source, "cube_e2e", "guid_cube_e2e", "Cube E2E", {});
+  REQUIRE(import.ok);
+  REQUIRE(import.asset.mesh.ends_with(".mesh.bin"));
+
+  // The asset.mesh string is project-relative; resolve it against root for
+  // MeshCache, which expects an absolute or cwd-relative path.
+  const std::filesystem::path absoluteMeshPath =
+      root / std::filesystem::path(import.asset.mesh);
+  REQUIRE(std::filesystem::exists(absoluteMeshPath));
+
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(absoluteMeshPath.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() > 0);
+  REQUIRE(!mesh->GetVertices().empty());
+  REQUIRE(!mesh->GetIndices().empty());
+  // Repeat hits return the same cached pointer.
+  const std::shared_ptr<Mesh> mesh2 = cache.Get(absoluteMeshPath.string());
+  REQUIRE(mesh == mesh2);
 }
