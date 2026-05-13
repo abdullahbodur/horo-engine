@@ -4,8 +4,10 @@
 #include "renderer/SkinnedMeshBin.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <limits>
 
@@ -23,8 +25,8 @@ namespace Horo::SkinnedMeshBin {
             uint32_t vertexStride;
             uint32_t reserved0;
             uint32_t reserved1;
-            float aabbMin[3];
-            float aabbMax[3];
+            std::array<float, 3> aabbMin;
+            std::array<float, 3> aabbMax;
             uint32_t reserved2;
             uint32_t reserved3;
         };
@@ -32,13 +34,15 @@ namespace Horo::SkinnedMeshBin {
         static_assert(sizeof(Header) == 64,
                       "SkinnedMeshBin header layout must remain 64 bytes; bump kSkinnedMeshBinVersion before changing it.");
 
-        bool WriteBytes(std::ofstream &stream, const void *data, std::size_t size) {
-            stream.write(static_cast<const char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
+            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
-        bool ReadBytes(std::ifstream &stream, void *data, std::size_t size) {
-            stream.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
+            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
@@ -63,21 +67,21 @@ namespace Horo::SkinnedMeshBin {
 
         /** @brief Writes a single Mat4 as 16 column-major float32s. */
         bool WriteMatrix(std::ofstream &stream, const Mat4 &m) {
-            float buf[16];
+            std::array<float, 16> buf{};
             for (int col = 0; col < 4; ++col)
                 for (int row = 0; row < 4; ++row)
-                    buf[col * 4 + row] = m(row, col);
-            return WriteBytes(stream, buf, sizeof(buf));
+                    buf[static_cast<std::size_t>(col * 4 + row)] = m(row, col);
+            return WriteBytes(stream, buf.data(), sizeof(buf));
         }
 
         /** @brief Reads a Mat4 from 16 column-major float32s. */
         bool ReadMatrix(std::ifstream &stream, Mat4 &out) {
-            float buf[16];
-            if (!ReadBytes(stream, buf, sizeof(buf)))
+            std::array<float, 16> buf{};
+            if (!ReadBytes(stream, buf.data(), sizeof(buf)))
                 return false;
             for (int col = 0; col < 4; ++col)
                 for (int row = 0; row < 4; ++row)
-                    out(row, col) = buf[col * 4 + row];
+                    out(row, col) = buf[static_cast<std::size_t>(col * 4 + row)];
             return true;
         }
     } // namespace
@@ -152,8 +156,8 @@ namespace Horo::SkinnedMeshBin {
             return result;
         }
         for (const Bone &bone: bones) {
-            const int32_t parent = static_cast<int32_t>(bone.parentIndex);
-            if (!WriteBytes(stream, &parent, sizeof(parent))) {
+            if (const auto parent = static_cast<int32_t>(bone.parentIndex);
+                !WriteBytes(stream, &parent, sizeof(parent))) {
                 result.error = "SkinnedMeshBin write: failed writing bone parent.";
                 return result;
             }
@@ -161,7 +165,7 @@ namespace Horo::SkinnedMeshBin {
                 result.error = "SkinnedMeshBin write: failed writing bone matrix.";
                 return result;
             }
-            const uint32_t nameLength = static_cast<uint32_t>(bone.name.size());
+            const auto nameLength = static_cast<uint32_t>(bone.name.size());
             if (!WriteBytes(stream, &nameLength, sizeof(nameLength))) {
                 result.error = "SkinnedMeshBin write: failed writing bone name length.";
                 return result;
@@ -186,8 +190,7 @@ namespace Horo::SkinnedMeshBin {
     ReadResult ReadSkinnedMesh(const std::string &sourcePath) {
         ReadResult result;
 
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(sourcePath, ec) || ec) {
+        if (std::error_code ec; !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
             result.error = "SkinnedMeshBin read: source path is not a regular file.";
             return result;
         }
@@ -208,15 +211,13 @@ namespace Horo::SkinnedMeshBin {
             return result;
         }
         if (header.version != kSkinnedMeshBinVersion) {
-            result.error = "SkinnedMeshBin read: unsupported version " +
-                           std::to_string(header.version) + " (expected " +
-                           std::to_string(kSkinnedMeshBinVersion) + ").";
+            result.error = std::format("SkinnedMeshBin read: unsupported version {} (expected {}).",
+                                       header.version, kSkinnedMeshBinVersion);
             return result;
         }
         if (header.vertexStride != sizeof(SkinnedVertex)) {
-            result.error = "SkinnedMeshBin read: vertex stride mismatch; expected " +
-                           std::to_string(sizeof(SkinnedVertex)) + ", got " +
-                           std::to_string(header.vertexStride) + ".";
+            result.error = std::format("SkinnedMeshBin read: vertex stride mismatch; expected {}, got {}.",
+                                       sizeof(SkinnedVertex), header.vertexStride);
             return result;
         }
         if (header.vertexCount == 0 || header.indexCount == 0 ||

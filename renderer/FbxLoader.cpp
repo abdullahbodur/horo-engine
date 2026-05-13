@@ -381,8 +381,8 @@ namespace Horo::FbxLoader {
             // bones whose parents do not appear as cluster bone nodes).
             std::vector<const ufbx_node *> work;
             work.reserve(boneNodeById.size());
-            for (const auto &kv: boneNodeById)
-                work.push_back(kv.second);
+            for (const auto &[id, node]: boneNodeById)
+                work.push_back(node);
             for (const ufbx_node *node: work) {
                 const ufbx_node *cur = node->parent;
                 while (cur != nullptr && cur->bone != nullptr) {
@@ -396,8 +396,8 @@ namespace Horo::FbxLoader {
             // Topological sort: emit roots first, then bones whose parent is already emitted.
             std::vector<const ufbx_node *> remaining;
             remaining.reserve(boneNodeById.size());
-            for (const auto &kv: boneNodeById)
-                remaining.push_back(kv.second);
+            for (const auto &[id, node]: boneNodeById)
+                remaining.push_back(node);
 
             while (!remaining.empty()) {
                 bool madeProgress = false;
@@ -405,13 +405,14 @@ namespace Horo::FbxLoader {
                     const ufbx_node *node = *it;
                     const bool parentInSet =
                         node->parent != nullptr && node->parent->bone != nullptr &&
-                        boneNodeById.count(node->parent->element_id) > 0;
-                    const int parentIndex =
-                        parentInSet
-                            ? outBoneIndexByNodeId.count(node->parent->element_id) > 0
-                                  ? outBoneIndexByNodeId.at(node->parent->element_id)
-                                  : -2
-                            : -1;
+                        boneNodeById.contains(node->parent->element_id);
+                    int parentIndex = -1;
+                    if (parentInSet) {
+                        if (outBoneIndexByNodeId.contains(node->parent->element_id))
+                            parentIndex = outBoneIndexByNodeId.at(node->parent->element_id);
+                        else
+                            parentIndex = -2;
+                    }
                     if (parentIndex == -2) {
                         ++it;
                         continue;
@@ -471,6 +472,27 @@ namespace Horo::FbxLoader {
                 // Triangulate and emit per-corner SkinnedVertex.
                 std::vector<std::uint32_t> triBuffer(
                     static_cast<std::size_t>(mesh->max_face_triangles) * 3 + 16);
+
+                const auto gatherInfluences = [&](std::uint32_t vertexIndex) {
+                    std::vector<VertexInfluence> influences;
+                    if (vertexIndex >= skin->vertices.count)
+                        return influences;
+                    const ufbx_skin_vertex sv = skin->vertices.data[vertexIndex];
+                    for (std::uint32_t w = 0; w < sv.num_weights; ++w) {
+                        const ufbx_skin_weight &sw = skin->weights.data[sv.weight_begin + w];
+                        if (sw.cluster_index >= skin->clusters.count)
+                            continue;
+                        const ufbx_skin_cluster *cluster = skin->clusters.data[sw.cluster_index];
+                        if (cluster == nullptr || cluster->bone_node == nullptr)
+                            continue;
+                        const auto it = boneIndexByNodeId.find(cluster->bone_node->element_id);
+                        if (it == boneIndexByNodeId.end())
+                            continue;
+                        influences.push_back({it->second, static_cast<float>(sw.weight)});
+                    }
+                    return influences;
+                };
+
                 for (std::size_t faceIdx = 0; faceIdx < mesh->num_faces; ++faceIdx) {
                     const ufbx_face &face = mesh->faces.data[faceIdx];
                     const std::uint32_t triCount = ufbx_triangulate_face(
@@ -487,28 +509,8 @@ namespace Horo::FbxLoader {
                             base.normal = SampleNormal(mesh, fbxIndex);
                             base.uv = SampleUv(mesh, fbxIndex);
 
-                            const std::uint32_t vertexIndex =
-                                mesh->vertex_indices.data[fbxIndex];
-                            std::vector<VertexInfluence> influences;
-                            if (vertexIndex < skin->vertices.count) {
-                                const ufbx_skin_vertex sv = skin->vertices.data[vertexIndex];
-                                for (std::uint32_t w = 0; w < sv.num_weights; ++w) {
-                                    const ufbx_skin_weight &sw =
-                                        skin->weights.data[sv.weight_begin + w];
-                                    if (sw.cluster_index >= skin->clusters.count)
-                                        continue;
-                                    const ufbx_skin_cluster *cluster =
-                                        skin->clusters.data[sw.cluster_index];
-                                    if (cluster == nullptr || cluster->bone_node == nullptr)
-                                        continue;
-                                    const auto it = boneIndexByNodeId.find(
-                                        cluster->bone_node->element_id);
-                                    if (it == boneIndexByNodeId.end())
-                                        continue;
-                                    influences.push_back(
-                                        {it->second, static_cast<float>(sw.weight)});
-                                }
-                            }
+                            const std::uint32_t vertexIndex = mesh->vertex_indices.data[fbxIndex];
+                            const auto influences = gatherInfluences(vertexIndex);
                             const SkinnedVertex skinnedVertex =
                                 BuildSkinnedVertex(base, influences);
                             result.indices.push_back(

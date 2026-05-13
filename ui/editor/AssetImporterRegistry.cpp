@@ -728,12 +728,11 @@ namespace Horo::Editor {
                     FbxLoader::FbxSkeletalLoadResult skeletal =
                             FbxLoader::LoadSkeletalMesh(sourcePath.string());
                     if (!skeletal.ok) {
-                        const std::string_view code =
-                                skeletal.errorCode == "fbx.skeleton_missing"
-                                    ? DiagnosticCodes::FbxSkeletonMissing
-                                : skeletal.errorCode == "fbx.no_geometry"
-                                    ? DiagnosticCodes::FbxNoGeometry
-                                    : DiagnosticCodes::FbxParseFailed;
+                        std::string_view code = DiagnosticCodes::FbxParseFailed;
+                        if (skeletal.errorCode == "fbx.skeleton_missing")
+                            code = DiagnosticCodes::FbxSkeletonMissing;
+                        else if (skeletal.errorCode == "fbx.no_geometry")
+                            code = DiagnosticCodes::FbxNoGeometry;
                         result.error = skeletal.error.empty()
                                            ? "FBX skeletal extraction failed."
                                            : skeletal.error;
@@ -745,11 +744,11 @@ namespace Horo::Editor {
 
                     const fs::path destSkinnedBin =
                             destDir / (sourcePath.stem().string() + ".skinned.bin");
-                    SkinnedMeshBin::WriteResult skinnedWrite =
+                    if (auto skinnedWrite =
                             SkinnedMeshBin::WriteSkinnedMesh(
                                 destSkinnedBin.string(), skeletal.vertices,
                                 skeletal.indices, skeletal.bones);
-                    if (!skinnedWrite.ok) {
+                        !skinnedWrite.ok) {
                         result.error = skinnedWrite.error.empty()
                                            ? "Failed writing engine-native skinned mesh binary."
                                            : skinnedWrite.error;
@@ -766,8 +765,9 @@ namespace Horo::Editor {
 
                     std::string albedoMapPath;
                     std::vector<std::string> externalSourcePaths;
-                    ApplyFbxTextures(loaded.textures, sourcePath, destDir, request,
-                                     ImporterId(), result.diagnostics, producedFiles,
+                    ApplyFbxTextures(loaded.textures,
+                                     {sourcePath, destDir, request, ImporterId()},
+                                     result.diagnostics, producedFiles,
                                      externalSourcePaths, albedoMapPath);
 
                     AssetDef asset;
@@ -781,10 +781,8 @@ namespace Horo::Editor {
                     {
                         const float height = skeletal.aabbMax.y - skeletal.aabbMin.y;
                         const float scale = (height < 1e-6f) ? 1.0f : (2.0f / height);
-                        char buffer[64];
-                        std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f,%.4f", scale,
-                                      scale, scale);
-                        asset.renderScale = buffer;
+                        asset.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scale,
+                                                       scale, scale);
                     }
 
                     result.ok = true;
