@@ -11,3 +11,10 @@ bw-output/
 compile_commands.json
 .opencode
 **build**
+
+# Local helper worktrees
+.worktrees/
+
+# Generated test artefacts written into the project assets dir during tests
+assets/prefabs/pf_source_prefab*.horo
+assets/scenes/scene.json
