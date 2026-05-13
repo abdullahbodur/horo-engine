@@ -124,34 +124,24 @@ namespace Horo::Editor {
             dependencyReason;
         };
 
-        /** @brief Fills @p assetIdByGuid and @p metadataByGuid from a refreshed registry. */
-        void BuildReimportLookupMaps(
+        /** @brief Fills @p assetIdByGuid for every document asset with a non-empty GUID. */
+        void BuildReimportAssetIdLookup(
             const SceneDocument *doc,
-            const AssetGuidRegistry &registry,
             std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
-            &assetIdByGuid,
-            std::unordered_map<std::string, AssetMetadata, StringHash, std::equal_to<> >
-            &metadataByGuid) {
+            &assetIdByGuid) {
             for (const auto &[assetKey, assetDef]: doc->assets) {
                 if (assetDef.guid.empty())
                     continue;
                 assetIdByGuid[assetDef.guid] = assetKey;
-                if (const AssetMetadata *cached = registry.LookupByGuid(assetDef.guid)) {
-                    metadataByGuid[assetDef.guid] = *cached;
-                    continue;
-                }
-                // Registry miss (e.g. brand-new asset without sidecar yet): fall back
-                // to building a default record from the AssetDef.
-                AssetMetadata metadata;
-                if (LoadOrBuildMetadata(assetKey, assetDef, &metadata))
-                    metadataByGuid[assetDef.guid] = std::move(metadata);
             }
         }
 
-        /** @brief Breadth-first closure over reverse DownstreamAsset edges starting at @p rootAssetGuid.
+        /** @brief Depth-first closure over reverse DownstreamAsset edges starting at @p rootAssetGuid.
          *
-         *  The reverse-dependents map is queried lazily from @p registry, so only
-         *  edges that touch the impacted set are materialised into @c reverseGraph.
+         *  Order doesn't matter for the impacted set; the topological sort over
+         *  the resulting subgraph determines processing order. The reverse-dependents
+         *  map is queried lazily from @p registry, so only edges that touch the
+         *  impacted set are materialised into @c reverseGraph.
          */
         ReimportDepGraph BuildReimportDepGraph(
             const std::string &rootAssetGuid,
@@ -374,10 +364,11 @@ namespace Horo::Editor {
 
         std::unordered_map<std::string, std::string, StringHash, std::equal_to<> >
                 assetIdByGuid;
-        std::unordered_map<std::string, AssetMetadata, StringHash, std::equal_to<> >
-                metadataByGuid;
-        m_guidRegistry.RefreshFromDocument(*doc);
-        BuildReimportLookupMaps(doc, m_guidRegistry, assetIdByGuid, metadataByGuid);
+        const AssetGuidRegistryRefreshResult refreshResult =
+                m_guidRegistry.RefreshFromDocument(*doc);
+        for (const std::string &warning: refreshResult.warnings)
+            LogWarn("[AssetImport] Registry refresh warning: {}", warning);
+        BuildReimportAssetIdLookup(doc, assetIdByGuid);
 
         if (!assetIdByGuid.contains(rootAssetGuid)) {
             result.error = "Asset metadata not found for reimport.";

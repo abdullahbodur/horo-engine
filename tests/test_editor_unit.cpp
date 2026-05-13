@@ -2310,6 +2310,63 @@ TEST_CASE("AssetGuidRegistry: RefreshFromFilesystem replaces previous entries", 
   CHECK(registry.LookupByGuid("guid_b") != nullptr);
 }
 
+TEST_CASE("AssetGuidRegistry: filesystem refresh forces directory GUID and warns on mismatch", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_fs_mismatch";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Sidecar is stored under the directory "guid_dir" but its embedded
+  // assetGuid disagrees. The directory name is canonical.
+  AssetMetadata metadata;
+  metadata.assetId = "mismatched_asset";
+  metadata.assetGuid = "guid_in_json";
+  metadata.displayName = "Mismatched";
+  metadata.importerId = "builtin.obj_mesh";
+  std::filesystem::create_directories(GetManagedAssetDirectory("guid_dir"), ec);
+  WriteFile(GetAssetMetadataPath("guid_dir"),
+            R"({"version":1,"assetId":"mismatched_asset","assetGuid":"guid_in_json","displayName":"Mismatched","importerId":"builtin.obj_mesh"})");
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromFilesystem();
+  CHECK(result.loaded == 1);
+  // Mismatch warning recorded.
+  REQUIRE_FALSE(result.warnings.empty());
+  // The entry is indexed by the directory name, not the JSON value.
+  CHECK(registry.LookupByGuid("guid_dir") != nullptr);
+  CHECK(registry.LookupByGuid("guid_in_json") == nullptr);
+}
+
+TEST_CASE("AssetGuidRegistry: document refresh forces document GUID and warns on mismatch", "[editor][asset-guid-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_guid_reg_doc_mismatch";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Sidecar lives under "doc_guid" but its embedded GUID is different.
+  std::filesystem::create_directories(GetManagedAssetDirectory("doc_guid"), ec);
+  WriteFile(GetAssetMetadataPath("doc_guid"),
+            R"({"version":1,"assetId":"a","assetGuid":"stale_guid","displayName":"A","importerId":"builtin.obj_mesh"})");
+
+  SceneDocument doc;
+  doc.assets["a"] = AssetDef{};
+  doc.assets["a"].guid = "doc_guid";
+
+  AssetGuidRegistry registry;
+  const AssetGuidRegistryRefreshResult result = registry.RefreshFromDocument(doc);
+  CHECK(result.loaded == 1);
+  REQUIRE_FALSE(result.warnings.empty());
+  // The entry is indexed by the document GUID, not the sidecar's embedded value.
+  CHECK(registry.LookupByGuid("doc_guid") != nullptr);
+  CHECK(registry.LookupByGuid("stale_guid") == nullptr);
+}
+
 TEST_CASE("AssetGuidRegistry: RefreshFromDocument loads entries listed in the document", "[editor][asset-guid-registry]") {
   const std::filesystem::path root =
       Horo::Tests::SecureTempBase() / "horo_guid_reg_doc";

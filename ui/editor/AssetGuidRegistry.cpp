@@ -27,13 +27,6 @@ namespace Horo::Editor {
                 return {};
             return projectRoot / "assets" / "models";
         }
-
-        /** @brief True when @p p is a non-empty asset.meta.json sidecar. */
-        bool IsAssetMetadataFile(const std::filesystem::directory_entry &entry) {
-            std::error_code ec;
-            return entry.is_regular_file(ec) && !ec &&
-                   entry.path().filename() == "asset.meta.json";
-        }
     } // namespace
 
     /** @copydoc AssetGuidRegistry::RefreshFromFilesystem */
@@ -57,7 +50,7 @@ namespace Horo::Editor {
 
         for (std::error_code iterEc;
              const std::filesystem::directory_entry &entry:
-             std::filesystem::recursive_directory_iterator(
+             std::filesystem::directory_iterator(
                  root,
                  std::filesystem::directory_options::skip_permission_denied,
                  iterEc)) {
@@ -67,19 +60,22 @@ namespace Horo::Editor {
                 iterEc.clear();
                 continue;
             }
-            if (!IsAssetMetadataFile(entry))
+            std::error_code dirEc;
+            if (!entry.is_directory(dirEc) || dirEc)
+                continue;
+
+            // The expected layout is assets/models/<guid>/asset.meta.json — probe
+            // that exact path rather than walking arbitrary depth.
+            const std::string assetGuid = entry.path().filename().string();
+            if (assetGuid.empty())
+                continue;
+            const std::filesystem::path sidecarPath =
+                    entry.path() / "asset.meta.json";
+            std::error_code existsEc;
+            if (!std::filesystem::is_regular_file(sidecarPath, existsEc) ||
+                existsEc)
                 continue;
             ++result.scanned;
-
-            // The parent directory name is the GUID for managed assets.
-            const std::string assetGuid = entry.path().parent_path().filename().string();
-            if (assetGuid.empty()) {
-                ++result.skipped;
-                result.warnings.emplace_back(std::format(
-                    "Sidecar at {} has no GUID directory; skipping.",
-                    entry.path().generic_string()));
-                continue;
-            }
 
             AssetMetadata metadata;
             if (std::string loadError;
@@ -90,8 +86,15 @@ namespace Horo::Editor {
                                 assetGuid, loadError));
                 continue;
             }
-            if (metadata.assetGuid.empty())
-                metadata.assetGuid = assetGuid;
+            // Directory name is canonical: warn if the sidecar's embedded GUID
+            // disagrees, then force it to keep the registry consistent with disk.
+            if (!metadata.assetGuid.empty() && metadata.assetGuid != assetGuid) {
+                result.warnings.emplace_back(std::format(
+                    "Sidecar for {} declared assetGuid '{}' that disagrees with "
+                    "directory name; using directory name.",
+                    assetGuid, metadata.assetGuid));
+            }
+            metadata.assetGuid = assetGuid;
             IndexMetadata(std::move(metadata));
             ++result.loaded;
         }
@@ -124,8 +127,16 @@ namespace Horo::Editor {
                                 assetId, assetDef.guid, loadError));
                 continue;
             }
-            if (metadata.assetGuid.empty())
-                metadata.assetGuid = assetDef.guid;
+            // Document's assetDef.guid is canonical: warn if the sidecar declared
+            // a different GUID, then force it to keep the registry aligned with the
+            // document and on-disk layout.
+            if (!metadata.assetGuid.empty() && metadata.assetGuid != assetDef.guid) {
+                result.warnings.emplace_back(std::format(
+                    "Sidecar for asset '{}' declared assetGuid '{}' that disagrees "
+                    "with document GUID '{}'; using document GUID.",
+                    assetId, metadata.assetGuid, assetDef.guid));
+            }
+            metadata.assetGuid = assetDef.guid;
             if (metadata.assetId.empty())
                 metadata.assetId = assetId;
             IndexMetadata(std::move(metadata));
