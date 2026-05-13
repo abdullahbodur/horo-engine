@@ -20,9 +20,11 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/EditorAssetImport.h"
+#include "renderer/AnimBin.h"
 #include "renderer/FbxLoader.h"
 #include "renderer/MeshBin.h"
 #include "renderer/ObjLoader.h"
+#include "renderer/SkinnedMeshBin.h"
 
 namespace Horo::Editor {
     namespace {
@@ -720,6 +722,113 @@ namespace Horo::Editor {
                     result.diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Error, code, result.error, request,
                         ImporterId()));
+                    return result;
+                }
+
+                if (loaded.hasSkinning) {
+                    FbxLoader::FbxSkeletalLoadResult skeletal =
+                            FbxLoader::LoadSkeletalMesh(sourcePath.string());
+                    if (!skeletal.ok) {
+                        std::string_view code = DiagnosticCodes::FbxParseFailed;
+                        if (skeletal.errorCode == "fbx.skeleton_missing")
+                            code = DiagnosticCodes::FbxSkeletonMissing;
+                        else if (skeletal.errorCode == "fbx.no_geometry")
+                            code = DiagnosticCodes::FbxNoGeometry;
+                        result.error = skeletal.error.empty()
+                                           ? "FBX skeletal extraction failed."
+                                           : skeletal.error;
+                        result.diagnostics.push_back(MakeDiagnostic(
+                            AssetDiagnosticSeverity::Error, code, result.error, request,
+                            ImporterId()));
+                        return result;
+                    }
+
+                    const fs::path destSkinnedBin =
+                            destDir / (sourcePath.stem().string() + ".skinned.bin");
+                    if (auto skinnedWrite =
+                            SkinnedMeshBin::WriteSkinnedMesh(
+                                destSkinnedBin.string(), skeletal.vertices,
+                                skeletal.indices, skeletal.bones);
+                        !skinnedWrite.ok) {
+                        result.error = skinnedWrite.error.empty()
+                                           ? "Failed writing engine-native skinned mesh binary."
+                                           : skinnedWrite.error;
+                        result.diagnostics.push_back(MakeDiagnostic(
+                            AssetDiagnosticSeverity::Error,
+                            DiagnosticCodes::FbxSkeletonWriteFailed, result.error,
+                            request, ImporterId()));
+                        return result;
+                    }
+
+                    std::vector<std::string> producedFiles;
+                    producedFiles.push_back(
+                        fs::relative(destSkinnedBin, ProjectPath::Root()).generic_string());
+
+                    // HORO-108: extract animation clips for the skeleton's bones.
+                    std::vector<std::string> boneNames;
+                    boneNames.reserve(skeletal.bones.size());
+                    for (const Bone &bone: skeletal.bones)
+                        boneNames.push_back(bone.name);
+                    if (auto animResult =
+                            FbxLoader::LoadAnimations(sourcePath.string(), boneNames);
+                        animResult.ok && !animResult.clips.empty()) {
+                        const fs::path destAnimBin =
+                            destDir / (sourcePath.stem().string() + ".anim.bin");
+                        const AnimBin::WriteResult animWrite =
+                            AnimBin::WriteClips(destAnimBin.string(), animResult.clips);
+                        if (animWrite.ok) {
+                            producedFiles.push_back(
+                                fs::relative(destAnimBin, ProjectPath::Root())
+                                    .generic_string());
+                        } else {
+                            result.diagnostics.push_back(MakeDiagnostic(
+                                AssetDiagnosticSeverity::Warning,
+                                DiagnosticCodes::FbxAnimationWriteFailed,
+                                animWrite.error.empty()
+                                    ? "Failed writing animation binary."
+                                    : animWrite.error,
+                                request, ImporterId()));
+                        }
+                    }
+
+                    std::string albedoMapPath;
+                    std::vector<std::string> externalSourcePaths;
+                    ApplyFbxTextures(loaded.textures,
+                                     {sourcePath, destDir, request, ImporterId()},
+                                     result.diagnostics, producedFiles,
+                                     externalSourcePaths, albedoMapPath);
+
+                    AssetDef asset;
+                    asset.guid = request.assetGuid;
+                    asset.displayName = request.displayName.empty() ? request.assetId
+                                                                    : request.displayName;
+                    asset.mesh =
+                        fs::relative(destSkinnedBin, ProjectPath::Root()).generic_string();
+                    if (!albedoMapPath.empty())
+                        asset.albedoMap = albedoMapPath;
+                    {
+                        const float height = skeletal.aabbMax.y - skeletal.aabbMin.y;
+                        const float scale = (height < 1e-6f) ? 1.0f : (2.0f / height);
+                        asset.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scale,
+                                                       scale, scale);
+                    }
+
+                    result.ok = true;
+                    result.asset = asset;
+                    result.metadata = BuildImportedMetadata(request, asset, ImporterId(),
+                                                            std::move(producedFiles));
+                    for (const std::string &externalSource: externalSourcePaths) {
+                        const auto duplicate = std::ranges::find_if(
+                            result.metadata.dependencies,
+                            [&](const AssetDependencyRecord &dep) {
+                                return dep.kind == AssetDependencyKind::Source &&
+                                       dep.value == externalSource;
+                            });
+                        if (duplicate == result.metadata.dependencies.end())
+                            result.metadata.dependencies.emplace_back(
+                                AssetDependencyKind::Source, externalSource);
+                    }
+                    result.metadata.diagnostics = result.diagnostics;
                     return result;
                 }
 

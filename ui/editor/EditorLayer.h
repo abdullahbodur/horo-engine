@@ -304,8 +304,8 @@ namespace Horo {
              */
             bool TryApplySelectedAssetAlbedoDrop(const std::string &path);
 
-            /** @brief Processes queued OBJ drops and imports accepted assets. */
-            void ProcessPendingObjDrops();
+            /** @brief Processes queued mesh-source (.obj / .fbx) drops and imports accepted assets. */
+            void ProcessPendingMeshDrops();
 
             /** @brief Polls the Import Asset modal for a pending import request and dispatches it. */
             void ProcessImportAssetModalRequest();
