@@ -5283,8 +5283,8 @@ TEST_CASE("AssetImporterRegistry: texture importer rejects non-existent source f
 
 TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown extension", "[editor][importer]") {
   AssetImporterRegistry registry;
-  REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("data.bin") == nullptr);
+  REQUIRE(registry.FindByExtension("archive.zip") == nullptr);
   REQUIRE(registry.FindByExtension("noextension") == nullptr);
 }
 

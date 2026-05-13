@@ -235,6 +235,13 @@ target_link_libraries(test_obj_import PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2
 horo_set_test_output_dir(test_obj_import)
 add_test(NAME test_obj_import COMMAND $<TARGET_FILE:test_obj_import>)
 
+# ---- test_fbx_import ----
+add_executable(test_fbx_import test_fbx_import.cpp)
+target_link_libraries(test_fbx_import PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+target_compile_definitions(test_fbx_import PRIVATE HORO_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests")
+horo_set_test_output_dir(test_fbx_import)
+add_test(NAME test_fbx_import COMMAND $<TARGET_FILE:test_fbx_import>)
+
 # ---- test_gizmo ----
 add_executable(test_gizmo test_gizmo.cpp)
 target_link_libraries(test_gizmo PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)

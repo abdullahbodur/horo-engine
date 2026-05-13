@@ -157,8 +157,8 @@ TEST_CASE("AssetImporterRegistry: Register nullptr is a no-op", "[editor][import
 
 TEST_CASE("AssetImporterRegistry: FindByExtension returns null for unknown ext", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
-  REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("doc.pdf") == nullptr);
+  REQUIRE(registry.FindByExtension("archive.zip") == nullptr);
   REQUIRE(registry.FindByExtension("noext") == nullptr);
 }
 

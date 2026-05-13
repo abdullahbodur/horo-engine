@@ -299,3 +299,30 @@ endif()
 
 set(HORO_VENDOR_GLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm" CACHE INTERNAL "" FORCE)
 set(HORO_VENDOR_STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb" CACHE INTERNAL "" FORCE)
+
+# ---- ufbx (single-source FBX parser, MIT) ----
+# Vendored amalgamation pinned at v0.21.3 (commit 83bc7cf) under vendor/ufbx/.
+# The library compiles ufbx.c as C99 and exposes ufbx.h to consumers; the
+# upstream project is dual-licensed MIT / public domain — see vendor/ufbx/LICENSE.
+if(NOT TARGET ufbx)
+    add_library(ufbx STATIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/ufbx/ufbx.c
+    )
+    target_include_directories(ufbx PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ufbx>
+        $<INSTALL_INTERFACE:include/vendor/ufbx>
+    )
+    set_target_properties(ufbx PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
+    # Suppress vendor warnings so the engine's -Wall -Wextra -Wpedantic / /WX
+    # flags do not fail on third-party code.
+    target_compile_options(ufbx PRIVATE
+        $<$<C_COMPILER_ID:MSVC>:/W0>
+        $<$<NOT:$<C_COMPILER_ID:MSVC>>:-w>
+    )
+    if(UNIX AND NOT APPLE)
+        # ufbx uses libm symbols (sqrt, fmod, etc.) and pthread for optional
+        # threading helpers. macOS provides both via the system libc.
+        target_link_libraries(ufbx PUBLIC m)
+    endif()
+endif()
+set(HORO_VENDOR_UFBX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ufbx" CACHE INTERNAL "" FORCE)

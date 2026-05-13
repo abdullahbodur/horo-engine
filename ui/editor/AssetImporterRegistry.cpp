@@ -9,6 +9,7 @@
 #include "ui/editor/AssetImporterRegistry.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string_view>
@@ -17,6 +18,8 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/EditorAssetImport.h"
+#include "renderer/FbxLoader.h"
+#include "renderer/MeshBin.h"
 #include "renderer/ObjLoader.h"
 
 namespace Horo::Editor {
@@ -363,12 +366,133 @@ namespace Horo::Editor {
                 return result;
             }
         };
+
+        /** @brief Built-in importer that extracts static-mesh geometry from an FBX file
+         *         into the engine-native @c .mesh.bin format under managed asset storage.
+         *
+         *  Pipeline:
+         *  - Validate extension and source-file presence.
+         *  - Create the per-GUID managed directory under @c assets/&lt;guid&gt;/.
+         *  - Run @ref Horo::FbxLoader::LoadStaticMesh for combined CPU vertex/index data.
+         *  - Persist the result via @ref Horo::MeshBin::WriteStaticMesh as @c &lt;stem&gt;.mesh.bin.
+         *  - Compute @c renderScale via the shared height-fitting helper using the
+         *    decoded vertex AABB so the asset matches the established 2-unit-tall convention.
+         *  - Record the produced @c .mesh.bin in @c producedFiles and emit metadata
+         *    sidecar identical in shape to the OBJ importer.
+         *
+         *  Source-side textures and materials are intentionally out of scope; HORO-95 / HORO-96
+         *  introduce external + embedded texture handling on top of this base.
+         */
+        class FbxAssetImporter final : public AssetImporter {
+        public:
+            const char *ImporterId() const override { return "builtin.fbx_static_mesh"; }
+            const char *AssetKind() const override { return "static_mesh"; }
+
+            std::vector<std::string> SupportedExtensions() const override {
+                return {".fbx"};
+            }
+
+            /** @brief Extracts static geometry from @p request.sourcePath, writes a managed @c .mesh.bin,
+             *         and returns the populated @ref AssetImportResult.
+             */
+            AssetImportResult Import(const AssetImportRequest &request) const override {
+                namespace fs = std::filesystem;
+                AssetImportResult result;
+                if (!IsFbxFilePath(request.sourcePath)) {
+                    result.error = "Selected file is not .fbx";
+                    result.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::FbxUnsupportedType,
+                        result.error, request, ImporterId()));
+                    return result;
+                }
+
+                const fs::path sourcePath(request.sourcePath);
+                std::error_code ec;
+                if (!fs::is_regular_file(sourcePath, ec) || ec) {
+                    result.error = "FBX source path is not a file.";
+                    result.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::FbxSourceMissing,
+                        result.error, request, ImporterId()));
+                    return result;
+                }
+
+                const fs::path destDir = GetManagedAssetDirectory(request.assetGuid);
+                fs::create_directories(destDir, ec);
+                if (ec) {
+                    result.error = "Cannot create " + destDir.string() + ": " + ec.message();
+                    result.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::FbxCreateDirectoryFailed,
+                        result.error, request, ImporterId()));
+                    return result;
+                }
+
+                FbxLoader::FbxLoadResult loaded =
+                        FbxLoader::LoadStaticMesh(sourcePath.string());
+                if (!loaded.ok) {
+                    const std::string_view code =
+                            loaded.errorCode == "fbx.no_geometry"
+                                ? DiagnosticCodes::FbxNoGeometry
+                                : DiagnosticCodes::FbxParseFailed;
+                    result.error = loaded.error.empty()
+                                       ? "FBX parse failed."
+                                       : loaded.error;
+                    result.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Error, code, result.error, request,
+                        ImporterId()));
+                    return result;
+                }
+
+                const fs::path destMeshBin =
+                        destDir / (sourcePath.stem().string() + ".mesh.bin");
+                MeshBin::WriteResult writeResult =
+                        MeshBin::WriteStaticMesh(destMeshBin.string(), loaded.vertices,
+                                                 loaded.indices);
+                if (!writeResult.ok) {
+                    result.error = writeResult.error.empty()
+                                       ? "Failed writing engine-native mesh binary."
+                                       : writeResult.error;
+                    result.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::FbxMeshWriteFailed,
+                        result.error, request, ImporterId()));
+                    return result;
+                }
+
+                std::vector<std::string> producedFiles;
+                producedFiles.push_back(
+                    fs::relative(destMeshBin, ProjectPath::Root()).generic_string());
+
+                AssetDef asset;
+                asset.guid = request.assetGuid;
+                asset.displayName =
+                        request.displayName.empty() ? request.assetId : request.displayName;
+                asset.mesh = fs::relative(destMeshBin, ProjectPath::Root()).generic_string();
+                {
+                    // Fit-to-2-units along Y, mirroring SuggestRenderScale's
+                    // behaviour but using the AABB the loader already computed
+                    // so we never re-parse the source FBX.
+                    const float height = loaded.aabbMax.y - loaded.aabbMin.y;
+                    const float scale = (height < 1e-6f) ? 1.0f : (2.0f / height);
+                    char buffer[64];
+                    std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f,%.4f", scale,
+                                  scale, scale);
+                    asset.renderScale = buffer;
+                }
+
+                result.ok = true;
+                result.asset = asset;
+                result.metadata = BuildImportedMetadata(request, asset, ImporterId(),
+                                                        std::move(producedFiles));
+                result.metadata.diagnostics = result.diagnostics;
+                return result;
+            }
+        };
     } // namespace
 
     /** @copydoc AssetImporterRegistry::AssetImporterRegistry */
     AssetImporterRegistry::AssetImporterRegistry() {
         Register(std::make_unique<ObjAssetImporter>());
         Register(std::make_unique<TextureCopyImporter>());
+        Register(std::make_unique<FbxAssetImporter>());
     }
 
     /** @copydoc AssetImporterRegistry::Register */
