@@ -607,12 +607,18 @@ namespace Horo::FbxLoader {
         }
 
         // Resolve bone-name -> ufbx_node*.
-        std::unordered_map<std::string, const ufbx_node *> nodeByName;
+        struct StringHash {
+            using is_transparent = void;
+            std::size_t operator()(std::string_view sv) const noexcept {
+                return std::hash<std::string_view>{}(sv);
+            }
+        };
+        std::unordered_map<std::string, const ufbx_node *, StringHash, std::equal_to<>> nodeByName;
         for (std::size_t i = 0; i < scene->nodes.count; ++i) {
             const ufbx_node *node = scene->nodes.data[i];
             if (node == nullptr || node->name.length == 0)
                 continue;
-            nodeByName.emplace(std::string(node->name.data, node->name.length), node);
+            nodeByName.try_emplace(std::string(node->name.data, node->name.length), node);
         }
 
         constexpr float kSampleRateHz = 30.0f;
@@ -622,8 +628,8 @@ namespace Horo::FbxLoader {
             const ufbx_anim_stack *stack = scene->anim_stacks.data[si];
             if (stack == nullptr || stack->anim == nullptr)
                 continue;
-            const float t0 = static_cast<float>(stack->time_begin);
-            const float t1 = static_cast<float>(stack->time_end);
+            const auto t0 = static_cast<float>(stack->time_begin);
+            const auto t1 = static_cast<float>(stack->time_end);
             if (t1 <= t0)
                 continue;
 

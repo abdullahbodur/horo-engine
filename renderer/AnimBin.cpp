@@ -7,8 +7,10 @@
  */
 #include "renderer/AnimBin.h"
 
+#include <array>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 
 namespace Horo::AnimBin {
@@ -28,19 +30,21 @@ namespace Horo::AnimBin {
         static_assert(sizeof(Header) == 32,
                       "AnimBin header layout must remain 32 bytes; bump kAnimBinVersion before changing it.");
 
-        bool WriteBytes(std::ofstream &stream, const void *data, std::size_t size) {
-            stream.write(static_cast<const char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
+            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
-        bool ReadBytes(std::ifstream &stream, void *data, std::size_t size) {
-            stream.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
+            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
         bool WriteFloatArray(std::ofstream &stream, const std::vector<float> &v) {
-            const uint32_t count = static_cast<uint32_t>(v.size());
-            if (!WriteBytes(stream, &count, sizeof(count)))
+            if (const auto count = static_cast<uint32_t>(v.size());
+                !WriteBytes(stream, &count, sizeof(count)))
                 return false;
             return v.empty() || WriteBytes(stream, v.data(), v.size() * sizeof(float));
         }
@@ -54,12 +58,12 @@ namespace Horo::AnimBin {
         }
 
         bool WriteVec3Array(std::ofstream &stream, const std::vector<Vec3> &v) {
-            const uint32_t count = static_cast<uint32_t>(v.size());
-            if (!WriteBytes(stream, &count, sizeof(count)))
+            if (const auto count = static_cast<uint32_t>(v.size());
+                !WriteBytes(stream, &count, sizeof(count)))
                 return false;
             for (const Vec3 &p: v) {
-                const float buf[3] = {p.x, p.y, p.z};
-                if (!WriteBytes(stream, buf, sizeof(buf)))
+                const std::array<float, 3> buf = {p.x, p.y, p.z};
+                if (!WriteBytes(stream, buf.data(), sizeof(buf)))
                     return false;
             }
             return true;
@@ -71,8 +75,8 @@ namespace Horo::AnimBin {
                 return false;
             v.resize(count);
             for (uint32_t i = 0; i < count; ++i) {
-                float buf[3];
-                if (!ReadBytes(stream, buf, sizeof(buf)))
+                std::array<float, 3> buf{};
+                if (!ReadBytes(stream, buf.data(), sizeof(buf)))
                     return false;
                 v[i] = {buf[0], buf[1], buf[2]};
             }
@@ -80,12 +84,12 @@ namespace Horo::AnimBin {
         }
 
         bool WriteQuatArray(std::ofstream &stream, const std::vector<Quaternion> &v) {
-            const uint32_t count = static_cast<uint32_t>(v.size());
-            if (!WriteBytes(stream, &count, sizeof(count)))
+            if (const auto count = static_cast<uint32_t>(v.size());
+                !WriteBytes(stream, &count, sizeof(count)))
                 return false;
             for (const Quaternion &q: v) {
-                const float buf[4] = {q.x, q.y, q.z, q.w};
-                if (!WriteBytes(stream, buf, sizeof(buf)))
+                const std::array<float, 4> buf = {q.x, q.y, q.z, q.w};
+                if (!WriteBytes(stream, buf.data(), sizeof(buf)))
                     return false;
             }
             return true;
@@ -97,8 +101,8 @@ namespace Horo::AnimBin {
                 return false;
             v.resize(count);
             for (uint32_t i = 0; i < count; ++i) {
-                float buf[4];
-                if (!ReadBytes(stream, buf, sizeof(buf)))
+                std::array<float, 4> buf{};
+                if (!ReadBytes(stream, buf.data(), sizeof(buf)))
                     return false;
                 v[i] = Quaternion{buf[0], buf[1], buf[2], buf[3]};
             }
@@ -143,27 +147,27 @@ namespace Horo::AnimBin {
         }
 
         for (const AnimationClip &clip: clips) {
-            const uint32_t nameLength = static_cast<uint32_t>(clip.name.size());
-            if (!WriteBytes(stream, &nameLength, sizeof(nameLength)) ||
+            if (const auto nameLength = static_cast<uint32_t>(clip.name.size());
+                !WriteBytes(stream, &nameLength, sizeof(nameLength)) ||
                 (nameLength > 0 &&
                  !WriteBytes(stream, clip.name.data(), nameLength))) {
                 result.error = "AnimBin write: failed writing clip name.";
                 return result;
             }
-            const float duration = clip.duration;
-            if (!WriteBytes(stream, &duration, sizeof(duration))) {
+            if (const float duration = clip.duration;
+                !WriteBytes(stream, &duration, sizeof(duration))) {
                 result.error = "AnimBin write: failed writing clip duration.";
                 return result;
             }
             const std::vector<BoneTrack> &tracks = clip.GetTracks();
-            const uint32_t trackCount = static_cast<uint32_t>(tracks.size());
-            if (!WriteBytes(stream, &trackCount, sizeof(trackCount))) {
+            if (const auto trackCount = static_cast<uint32_t>(tracks.size());
+                !WriteBytes(stream, &trackCount, sizeof(trackCount))) {
                 result.error = "AnimBin write: failed writing track count.";
                 return result;
             }
             for (const BoneTrack &track: tracks) {
-                const int32_t boneIndex = static_cast<int32_t>(track.boneIndex);
-                if (!WriteBytes(stream, &boneIndex, sizeof(boneIndex))) {
+                if (const auto boneIndex = static_cast<int32_t>(track.boneIndex);
+                    !WriteBytes(stream, &boneIndex, sizeof(boneIndex))) {
                     result.error = "AnimBin write: failed writing track bone index.";
                     return result;
                 }
@@ -191,8 +195,7 @@ namespace Horo::AnimBin {
     /** @copydoc Horo::AnimBin::ReadClips */
     ReadResult ReadClips(const std::string &sourcePath) {
         ReadResult result;
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(sourcePath, ec) || ec) {
+        if (std::error_code ec; !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
             result.error = "AnimBin read: source path is not a regular file.";
             return result;
         }
@@ -211,9 +214,8 @@ namespace Horo::AnimBin {
             return result;
         }
         if (header.version != kAnimBinVersion) {
-            result.error = "AnimBin read: unsupported version " +
-                           std::to_string(header.version) +
-                           " (expected " + std::to_string(kAnimBinVersion) + ").";
+            result.error = std::format("AnimBin read: unsupported version {} (expected {}).",
+                                       header.version, kAnimBinVersion);
             return result;
         }
 

@@ -769,9 +769,9 @@ namespace Horo::Editor {
                     boneNames.reserve(skeletal.bones.size());
                     for (const Bone &bone: skeletal.bones)
                         boneNames.push_back(bone.name);
-                    FbxLoader::FbxAnimLoadResult animResult =
-                        FbxLoader::LoadAnimations(sourcePath.string(), boneNames);
-                    if (animResult.ok && !animResult.clips.empty()) {
+                    if (auto animResult =
+                            FbxLoader::LoadAnimations(sourcePath.string(), boneNames);
+                        animResult.ok && !animResult.clips.empty()) {
                         const fs::path destAnimBin =
                             destDir / (sourcePath.stem().string() + ".anim.bin");
                         const AnimBin::WriteResult animWrite =
