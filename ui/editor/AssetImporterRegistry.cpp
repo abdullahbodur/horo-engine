@@ -14,6 +14,7 @@
 #include <format>
 #include <fstream>
 #include <string_view>
+#include <unordered_set>
 
 #include "core/ProjectPath.h"
 #include "ui/editor/AssetIdentity.h"
@@ -386,21 +387,33 @@ namespace Horo::Editor {
             namespace fs = std::filesystem;
             std::error_code ec;
 
+            // FBX files exported on Windows ship backslash-separated paths even
+            // when the engine runs on POSIX. Normalise once before constructing
+            // any std::filesystem::path so the host-side resolver does not see
+            // them as a single filename literal.
+            const auto normalise = [](std::string_view path) {
+                std::string out(path);
+                std::ranges::replace(out, '\\', '/');
+                return out;
+            };
+
             std::vector<fs::path> candidates;
             if (!record.absolutePath.empty()) {
-                fs::path abs(record.absolutePath);
+                fs::path abs(normalise(record.absolutePath));
                 if (abs.is_absolute())
                     candidates.push_back(std::move(abs));
             }
             if (!record.relativePath.empty()) {
-                candidates.emplace_back(sourceDir / record.relativePath);
-                const fs::path baseFromRel = fs::path(record.relativePath).filename();
+                const std::string normalisedRelative = normalise(record.relativePath);
+                candidates.emplace_back(sourceDir / normalisedRelative);
+                const fs::path baseFromRel = fs::path(normalisedRelative).filename();
                 if (!baseFromRel.empty())
                     candidates.emplace_back(sourceDir / baseFromRel);
             }
             if (!record.filename.empty()) {
-                candidates.emplace_back(sourceDir / record.filename);
-                candidates.emplace_back(sourceDir / "textures" / record.filename);
+                const std::string normalisedFilename = normalise(record.filename);
+                candidates.emplace_back(sourceDir / normalisedFilename);
+                candidates.emplace_back(sourceDir / "textures" / normalisedFilename);
             }
 
             for (const fs::path &candidate: candidates) {
@@ -475,70 +488,157 @@ namespace Horo::Editor {
          *    @c FbxExternalTextureMissing / @c FbxExternalTextureCopyFailed /
          *    @c FbxEmbeddedTextureExtractFailed; they never fail the overall import.
          */
+        /** @brief True when @p filename is safe as a leaf inside the managed asset directory.
+         *
+         *  Rejects any candidate that would escape the per-asset folder via path
+         *  components (`/`, `\`, `..`) or absolute paths.
+         */
+        bool IsSafeBasename(std::string_view filename) {
+            if (filename.empty() || filename == "." || filename == "..")
+                return false;
+            for (const char ch: filename) {
+                if (ch == '/' || ch == '\\')
+                    return false;
+            }
+            return true;
+        }
+
+        /** @brief Sanitises an FBX-derived filename hint into a single-segment basename.
+         *
+         *  Keeps the basename of the candidate path; replaces any residual unsafe
+         *  characters with @c '_' so callers cannot escape the managed asset
+         *  directory. Falls back to a generic name when the input collapses to
+         *  empty or @c "." / @c "..".
+         */
+        std::string SanitiseTextureBasename(std::string_view raw) {
+            if (raw.empty())
+                return std::string{"texture.png"};
+            const std::filesystem::path candidate(raw);
+            std::string base = candidate.filename().string();
+            for (char &ch: base) {
+                if (ch == '/' || ch == '\\' || ch == ':')
+                    ch = '_';
+            }
+            if (base.empty() || base == "." || base == "..")
+                return std::string{"texture.png"};
+            return base;
+        }
+
+        /** @brief Inputs to @ref ApplyFbxTextures bundled to keep the parameter count manageable. */
+        struct ApplyFbxTexturesContext {
+            const std::filesystem::path &sourcePath; /**< Absolute path to the source FBX file. */
+            const std::filesystem::path &destDir;    /**< Managed asset destination directory. */
+            const AssetImportRequest &request;       /**< Import request used for diagnostics. */
+            const char *importerId;                  /**< Importer id stamped on diagnostics. */
+        };
+
+        /** @brief Resolves and copies / writes every texture record from @p loaded into managed storage.
+         *
+         *  - Embedded textures (@c record.embeddedBytes non-empty) are written to
+         *    @p ctx.destDir / sanitised(record.filename). Missing extensions are
+         *    sniffed from the byte signature.
+         *  - External textures are resolved via @ref ResolveExternalTexturePath and
+         *    copied into @p ctx.destDir.
+         *  - On-disk filenames are deduplicated against the running
+         *    @p producedFiles list so two textures sharing a basename do not
+         *    overwrite each other.
+         *  - On the first successful diffuse texture, @p outAlbedoMap is set to the
+         *    project-relative produced-file path so the importer can wire it into
+         *    @c AssetDef::albedoMap.
+         *  - Per-texture failures are appended as @c Warning diagnostics keyed on
+         *    @c FbxExternalTextureMissing / @c FbxExternalTextureCopyFailed /
+         *    @c FbxEmbeddedTextureExtractFailed; they never fail the overall import.
+         */
         void ApplyFbxTextures(const std::vector<FbxLoader::FbxTextureRecord> &textures,
-                              const std::filesystem::path &sourcePath,
-                              const std::filesystem::path &destDir,
-                              const AssetImportRequest &request,
-                              const char *importerId,
+                              const ApplyFbxTexturesContext &ctx,
                               std::vector<AssetImportDiagnostic> &diagnostics,
                               std::vector<std::string> &producedFiles,
                               std::string &outAlbedoMap) {
             namespace fs = std::filesystem;
-            const fs::path sourceDir = sourcePath.parent_path();
+            const fs::path sourceDir = ctx.sourcePath.parent_path();
+
+            std::unordered_set<std::string> usedBasenames;
+            for (const std::string &produced: producedFiles)
+                usedBasenames.insert(fs::path(produced).filename().string());
+
+            const auto pickUniqueBasename = [&](std::string base) {
+                if (!usedBasenames.contains(base))
+                    return base;
+                const fs::path baseAsPath(base);
+                const std::string stem = baseAsPath.stem().string();
+                const std::string ext = baseAsPath.extension().string();
+                for (int suffix = 1; suffix < 1024; ++suffix) {
+                    std::string candidate =
+                        stem + "_" + std::to_string(suffix) + ext;
+                    if (!usedBasenames.contains(candidate))
+                        return candidate;
+                }
+                return base;
+            };
 
             for (const FbxLoader::FbxTextureRecord &record: textures) {
-                std::string filename = record.filename;
-                if (filename.empty())
+                std::string filename = SanitiseTextureBasename(record.filename);
+                if (!IsSafeBasename(filename))
                     continue;
 
                 if (!record.embeddedBytes.empty()) {
-                    if (fs::path(filename).extension().empty())
-                        filename = EnsureExtension(filename, SniffImageExtension(record.embeddedBytes));
-                    const fs::path dest = destDir / filename;
+                    if (fs::path(filename).extension().empty()) {
+                        filename = EnsureExtension(
+                            filename, SniffImageExtension(record.embeddedBytes));
+                    }
+                    filename = pickUniqueBasename(filename);
+                    const fs::path dest = ctx.destDir / filename;
                     std::ofstream out(dest, std::ios::binary | std::ios::trunc);
-                    if (!out.is_open() ||
-                        !out.write(reinterpret_cast<const char *>(
+                    const bool wrote =
+                        out.is_open() &&
+                        out.write(reinterpret_cast<const char *>(
                                        record.embeddedBytes.data()),
-                                   static_cast<std::streamsize>(record.embeddedBytes.size())) ||
-                        !out.good()) {
+                                   static_cast<std::streamsize>(
+                                       record.embeddedBytes.size())) &&
+                        out.good();
+                    if (!wrote) {
                         diagnostics.push_back(MakeDiagnostic(
                             AssetDiagnosticSeverity::Warning,
                             DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
                             "Failed to extract embedded texture '" + filename + "'.",
-                            request, importerId));
+                            ctx.request, ctx.importerId));
                         continue;
                     }
                     const std::string projectRelative =
-                            fs::relative(dest, ProjectPath::Root()).generic_string();
+                        fs::relative(dest, ProjectPath::Root()).generic_string();
                     producedFiles.push_back(projectRelative);
+                    usedBasenames.insert(filename);
                     if (record.isDiffuseAlbedo && outAlbedoMap.empty())
                         outAlbedoMap = projectRelative;
                     continue;
                 }
 
-                const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
+                const fs::path resolved =
+                    ResolveExternalTexturePath(record, sourceDir);
                 if (resolved.empty()) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureMissing,
                         "External texture '" + filename + "' not found near source FBX.",
-                        request, importerId));
+                        ctx.request, ctx.importerId));
                     continue;
                 }
-                const fs::path dest = destDir / filename;
-                std::error_code ec;
-                if (!CopyFileReplacing(resolved, dest, ec) || ec) {
+                filename = pickUniqueBasename(filename);
+                const fs::path dest = ctx.destDir / filename;
+                if (std::error_code ec;
+                    !CopyFileReplacing(resolved, dest, ec) || ec) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureCopyFailed,
                         "Failed to copy external texture '" + filename + "' (" +
                             ec.message() + ").",
-                        request, importerId));
+                        ctx.request, ctx.importerId));
                     continue;
                 }
                 const std::string projectRelative =
-                        fs::relative(dest, ProjectPath::Root()).generic_string();
+                    fs::relative(dest, ProjectPath::Root()).generic_string();
                 producedFiles.push_back(projectRelative);
+                usedBasenames.insert(filename);
                 if (record.isDiffuseAlbedo && outAlbedoMap.empty())
                     outAlbedoMap = projectRelative;
             }
@@ -639,9 +739,10 @@ namespace Horo::Editor {
                     fs::relative(destMeshBin, ProjectPath::Root()).generic_string());
 
                 std::string albedoMapPath;
-                ApplyFbxTextures(loaded.textures, sourcePath, destDir, request,
-                                 ImporterId(), result.diagnostics, producedFiles,
-                                 albedoMapPath);
+                ApplyFbxTextures(loaded.textures,
+                                 ApplyFbxTexturesContext{sourcePath, destDir, request,
+                                                          ImporterId()},
+                                 result.diagnostics, producedFiles, albedoMapPath);
 
                 AssetDef asset;
                 asset.guid = request.assetGuid;

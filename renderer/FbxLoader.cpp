@@ -12,6 +12,7 @@
 #include "renderer/FbxLoader.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
@@ -129,9 +130,8 @@ namespace Horo::FbxLoader {
         template <typename HasFilenames>
         std::string MakeTextureBasename(const HasFilenames *src) {
             namespace fs = std::filesystem;
-            const ufbx_string *candidates[] = {&src->filename,
-                                                &src->relative_filename,
-                                                &src->absolute_filename};
+            const std::array<const ufbx_string *, 3> candidates = {
+                &src->filename, &src->relative_filename, &src->absolute_filename};
             for (const ufbx_string *raw: candidates) {
                 if (raw->data == nullptr || raw->length == 0)
                     continue;
@@ -209,7 +209,7 @@ namespace Horo::FbxLoader {
                             static_cast<const unsigned char *>(video->content.data);
                     record.embeddedBytes.assign(src, src + video->content.size);
                 }
-                if (diffuseVideoIds.count(video->element_id) > 0)
+                if (diffuseVideoIds.contains(video->element_id))
                     record.isDiffuseAlbedo = true;
                 else if (NameHintsDiffuse(MakeString(video->name)) ||
                          NameHintsDiffuse(MakeString(video->filename)))
@@ -218,8 +218,8 @@ namespace Horo::FbxLoader {
             }
 
             if (!result.textures.empty()) {
-                const bool anyDiffuse = std::any_of(
-                    result.textures.begin(), result.textures.end(),
+                const bool anyDiffuse = std::ranges::any_of(
+                    result.textures,
                     [](const FbxTextureRecord &r) { return r.isDiffuseAlbedo; });
                 if (!anyDiffuse)
                     result.textures.front().isDiffuseAlbedo = true;
