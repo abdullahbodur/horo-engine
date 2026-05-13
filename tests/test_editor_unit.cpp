@@ -282,6 +282,70 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file", "[ed
   REQUIRE_FALSE(result.diagnostics.empty());
 }
 
+TEST_CASE("AssetImporterRegistry: ObjImporter reports copy failure when destination path is blocked", "[editor][importer-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_obj_copy_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceObj = root / "ship.obj";
+  WriteFile(sourceObj, "v 0 0 0\n");
+
+  const std::string assetGuid = "guid_obj_copy_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+  std::filesystem::create_directories(managedDir / sourceObj.filename(), ec);
+  REQUIRE_FALSE(ec);
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "mesh_copy_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceObj.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::ObjCopyFailed);
+}
+
+TEST_CASE("AssetImporterRegistry: TextureCopy reports create-directory failure when managed path is a file", "[editor][importer-registry]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_tex_create_dir_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceTexture = root / "brick.png";
+  WriteFile(sourceTexture, "png-bytes");
+
+  const std::string assetGuid = "guid_tex_create_dir_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir.parent_path(), ec);
+  REQUIRE_FALSE(ec);
+  WriteFile(managedDir, "not-a-directory");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "tex_create_dir_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceTexture.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code ==
+        DiagnosticCodes::TextureCreateDirectoryFailed);
+}
+
 // ===========================================================================
 // AssetImportDiagnosticCodes — taxonomy contract
 // ===========================================================================
