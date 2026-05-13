@@ -1,0 +1,27 @@
+{
+  "assets": {},
+  "objects": [
+    {
+      "id": "pf_source",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "props": {
+        "color": "red"
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "Prop",
+      "yaw": 0.0
+    }
+  ],
+  "sceneId": "pf_source_prefab_5",
+  "sceneName": "pf_source",
+  "settings": {},
+  "version": 1
+}
