@@ -17,6 +17,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ui/editor/AssetImporterRegistry.h"
@@ -57,7 +58,7 @@ namespace Horo::Editor {
          *  @param initialSourcePath Absolute path to seed; pass an empty string to start blank.
          *  @param registry Non-owning pointer to the importer registry; must outlive this object.
          */
-        void Open(const std::string &initialSourcePath,
+        void Open(std::string_view initialSourcePath,
                   const AssetImporterRegistry *registry);
 
         /** @brief Closes the modal and clears any pending request / outcome state. */
@@ -89,10 +90,10 @@ namespace Horo::Editor {
         // ---- Test seam ---------------------------------------------------------
 
         /** @brief Test-only: directly seed the draft state without opening a file picker. */
-        void SetDraftForTest(const std::string &sourcePath,
-                              const std::string &assetId,
-                              const std::string &displayName,
-                              const std::string &importerId);
+        void SetDraftForTest(std::string_view sourcePath,
+                              std::string_view assetId,
+                              std::string_view displayName,
+                              std::string_view importerId);
 
         /** @brief Test-only: emulate the user clicking Import. */
         void RequestImportForTest();
@@ -109,6 +110,9 @@ namespace Horo::Editor {
 
         /** @brief Recomputes @c m_draft.assetId / @c displayName from the current @c sourcePath when they were auto-derived. */
         void RefreshIdentitiesFromPath();
+
+        /** @brief Draws the result/diagnostics panel when an import outcome is available. */
+        void DrawResultPanel();
 
         bool m_open = false;
         bool m_hasPendingRequest = false;

@@ -20,7 +20,7 @@
 
 namespace Horo::Editor {
     /** @copydoc EditorImportAssetModal::Open */
-    void EditorImportAssetModal::Open(const std::string &initialSourcePath,
+    void EditorImportAssetModal::Open(std::string_view initialSourcePath,
                                        const AssetImporterRegistry *registry) {
         m_open = true;
         m_hasPendingRequest = false;
@@ -61,10 +61,10 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorImportAssetModal::SetDraftForTest */
-    void EditorImportAssetModal::SetDraftForTest(const std::string &sourcePath,
-                                                  const std::string &assetId,
-                                                  const std::string &displayName,
-                                                  const std::string &importerId) {
+    void EditorImportAssetModal::SetDraftForTest(std::string_view sourcePath,
+                                                  std::string_view assetId,
+                                                  std::string_view displayName,
+                                                  std::string_view importerId) {
         m_draft.sourcePath = sourcePath;
         m_draft.assetId = assetId;
         m_draft.displayName = displayName;
@@ -119,7 +119,7 @@ namespace Horo::Editor {
 
         // ---- Path + Browse -----------------------------------------------------
         ImGui::TextUnformatted("Source file");
-        char pathBuffer[1024]{};
+        char pathBuffer[1024]{}; // NOSONAR - ImGui InputText requires mutable char buffer
         const std::size_t copyLen =
             std::min<std::size_t>(m_draft.sourcePath.size(), sizeof(pathBuffer) - 1);
         std::memcpy(pathBuffer, m_draft.sourcePath.data(), copyLen);
@@ -144,10 +144,10 @@ namespace Horo::Editor {
         std::vector<std::string> importerIds;
         if (m_registry != nullptr)
             importerIds = m_registry->RegisteredImporterIds();
-        const char *currentLabel = m_draft.importerId.empty()
-                                       ? "(no importer matched extension)"
-                                       : m_draft.importerId.c_str();
-        if (ImGui::BeginCombo("##ImportImporter", currentLabel)) {
+        if (const char *currentLabel = m_draft.importerId.empty()
+                                           ? "(no importer matched extension)"
+                                           : m_draft.importerId.c_str();
+            ImGui::BeginCombo("##ImportImporter", currentLabel)) {
             for (const std::string &id: importerIds) {
                 const bool selected = (id == m_draft.importerId);
                 if (ImGui::Selectable(id.c_str(), selected))
@@ -163,7 +163,7 @@ namespace Horo::Editor {
 
         // ---- Asset identity ----------------------------------------------------
         ImGui::Spacing();
-        char idBuffer[256]{};
+        char idBuffer[256]{}; // NOSONAR - ImGui InputText requires mutable char buffer
         const std::size_t idLen =
             std::min<std::size_t>(m_draft.assetId.size(), sizeof(idBuffer) - 1);
         std::memcpy(idBuffer, m_draft.assetId.data(), idLen);
@@ -172,7 +172,7 @@ namespace Horo::Editor {
             m_assetIdAutoDerived = false;
         }
 
-        char displayBuffer[256]{};
+        char displayBuffer[256]{}; // NOSONAR - ImGui InputText requires mutable char buffer
         const std::size_t displayLen = std::min<std::size_t>(
             m_draft.displayName.size(), sizeof(displayBuffer) - 1);
         std::memcpy(displayBuffer, m_draft.displayName.data(), displayLen);
@@ -183,26 +183,8 @@ namespace Horo::Editor {
         }
 
         // ---- Result panel ------------------------------------------------------
-        if (m_hasResult) {
-            ImGui::Spacing();
-            ImGui::Separator();
-            if (m_lastResult.ok)
-                ImGui::TextUnformatted("Imported successfully.");
-            else
-                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error: %s",
-                                    m_lastResult.error.empty() ? "(no detail)"
-                                                                : m_lastResult.error.c_str());
-            for (const AssetImportDiagnostic &d: m_lastResult.diagnostics) {
-                const ImVec4 colour =
-                    d.severity == AssetDiagnosticSeverity::Error
-                        ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f)
-                    : d.severity == AssetDiagnosticSeverity::Warning
-                        ? ImVec4(1.0f, 0.8f, 0.3f, 1.0f)
-                        : ImVec4(0.8f, 0.8f, 1.0f, 1.0f);
-                ImGui::TextColored(colour, "[%s] %s", d.code.c_str(),
-                                    d.message.c_str());
-            }
-        }
+        if (m_hasResult)
+            DrawResultPanel();
 
         // ---- Actions -----------------------------------------------------------
         ImGui::Spacing();
@@ -222,5 +204,26 @@ namespace Horo::Editor {
 
         if (!m_open)
             ImGui::CloseCurrentPopup();
+    }
+
+    /** @copydoc EditorImportAssetModal::DrawResultPanel */
+    void EditorImportAssetModal::DrawResultPanel() {
+        ImGui::Spacing();
+        ImGui::Separator();
+        if (m_lastResult.ok)
+            ImGui::TextUnformatted("Imported successfully.");
+        else
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error: %s",
+                                m_lastResult.error.empty() ? "(no detail)"
+                                                            : m_lastResult.error.c_str());
+        for (const AssetImportDiagnostic &d: m_lastResult.diagnostics) {
+            ImVec4 colour{0.8f, 0.8f, 1.0f, 1.0f};
+            if (d.severity == AssetDiagnosticSeverity::Error)
+                colour = {1.0f, 0.4f, 0.4f, 1.0f};
+            else if (d.severity == AssetDiagnosticSeverity::Warning)
+                colour = {1.0f, 0.8f, 0.3f, 1.0f};
+            ImGui::TextColored(colour, "[%s] %s", d.code.c_str(),
+                                d.message.c_str());
+        }
     }
 } // namespace Horo::Editor
