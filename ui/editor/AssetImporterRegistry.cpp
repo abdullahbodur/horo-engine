@@ -15,6 +15,7 @@
 
 #include "core/ProjectPath.h"
 #include "ui/editor/AssetIdentity.h"
+#include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/EditorAssetImport.h"
 #include "renderer/ObjLoader.h"
 
@@ -183,14 +184,18 @@ namespace Horo::Editor {
             return metadata;
         }
 
-        /** @brief Convenience factory for @ref AssetImportDiagnostic rows tied to @p request. */
+        /** @brief Convenience factory for @ref AssetImportDiagnostic rows tied to @p request.
+         *
+         *  @p code is taken by @c std::string_view so that call sites can pass either a
+         *  @c DiagnosticCodes constant or a string literal without an extra allocation.
+         */
         AssetImportDiagnostic MakeDiagnostic(AssetDiagnosticSeverity severity,
-                                             std::string code, std::string message,
+                                             std::string_view code, std::string message,
                                              const AssetImportRequest &request,
                                              std::string importerId) {
             AssetImportDiagnostic diagnostic;
             diagnostic.severity = severity;
-            diagnostic.code = std::move(code);
+            diagnostic.code = code;
             diagnostic.message = std::move(message);
             diagnostic.assetGuid = request.assetGuid;
             diagnostic.sourcePath = request.sourcePath;
@@ -217,7 +222,7 @@ namespace Horo::Editor {
                 if (!IsObjFilePath(request.sourcePath)) {
                     result.error = "Selected file is not .obj";
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.obj.unsupported_type",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::ObjUnsupportedType,
                         result.error, request, ImporterId()));
                     return result;
                 }
@@ -227,7 +232,7 @@ namespace Horo::Editor {
                 if (!fs::is_regular_file(sourcePath, ec) || ec) {
                     result.error = "OBJ source path is not a file.";
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.obj.source_missing",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::ObjSourceMissing,
                         result.error, request, ImporterId()));
                     return result;
                 }
@@ -237,7 +242,7 @@ namespace Horo::Editor {
                 if (ec) {
                     result.error = "Cannot create " + destDir.string() + ": " + ec.message();
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.obj.create_directory_failed",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::ObjCreateDirectoryFailed,
                         result.error, request, ImporterId()));
                     return result;
                 }
@@ -247,7 +252,7 @@ namespace Horo::Editor {
                 if (ec) {
                     result.error = "Copy failed: " + ec.message();
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.obj.copy_failed", result.error,
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::ObjCopyFailed, result.error,
                         request, ImporterId()));
                     return result;
                 }
@@ -307,7 +312,7 @@ namespace Horo::Editor {
                     result.error =
                             "Unsupported image type (use png, jpg, bmp, tga, webp, …).";
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.texture.unsupported_type",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::TextureUnsupportedType,
                         result.error, request, ImporterId()));
                     return result;
                 }
@@ -317,7 +322,7 @@ namespace Horo::Editor {
                 if (!fs::is_regular_file(sourcePath, ec) || ec) {
                     result.error = "Texture source path is not a file.";
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.texture.source_missing",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::TextureSourceMissing,
                         result.error, request, ImporterId()));
                     return result;
                 }
@@ -328,7 +333,7 @@ namespace Horo::Editor {
                     result.error = "Cannot create " + destDir.string() + ": " + ec.message();
                     result.diagnostics.push_back(
                         MakeDiagnostic(AssetDiagnosticSeverity::Error,
-                                       "asset.texture.create_directory_failed", result.error,
+                                       DiagnosticCodes::TextureCreateDirectoryFailed, result.error,
                                        request, ImporterId()));
                     return result;
                 }
@@ -338,7 +343,7 @@ namespace Horo::Editor {
                 if (ec) {
                     result.error = "Copy failed: " + ec.message();
                     result.diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Error, "asset.texture.copy_failed",
+                        AssetDiagnosticSeverity::Error, DiagnosticCodes::TextureCopyFailed,
                         result.error, request, ImporterId()));
                     return result;
                 }

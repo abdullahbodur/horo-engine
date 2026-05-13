@@ -17,6 +17,7 @@
 #include "core/Logger.h"
 #include "core/StringHash.h"
 #include "ui/editor/AssetIdentity.h"
+#include "ui/editor/AssetImportDiagnosticCodes.h"
 
 namespace Horo::Editor {
     namespace {
@@ -59,15 +60,19 @@ namespace Horo::Editor {
             return true;
         }
 
-        /** @brief Fills an @ref AssetImportDiagnostic with string payloads for logging/UI. */
+        /** @brief Fills an @ref AssetImportDiagnostic with string payloads for logging/UI.
+         *
+         *  @p code is taken by @c std::string_view so call sites can pass either a
+         *  @c DiagnosticCodes constant or a string literal without an extra allocation.
+         */
         AssetImportDiagnostic MakeDiagnostic(AssetDiagnosticSeverity severity,
-                                             std::string code, std::string message,
+                                             std::string_view code, std::string message,
                                              std::string_view assetGuid,
                                              std::string_view sourcePath,
                                              std::string_view importerId) {
             AssetImportDiagnostic diagnostic;
             diagnostic.severity = severity;
-            diagnostic.code = std::move(code);
+            diagnostic.code = code;
             diagnostic.message = std::move(message);
             diagnostic.assetGuid = assetGuid;
             diagnostic.sourcePath = sourcePath;
@@ -223,7 +228,7 @@ namespace Horo::Editor {
         if (!result.ok) {
             if (result.diagnostics.empty()) {
                 result.diagnostics.push_back(MakeDiagnostic(
-                    AssetDiagnosticSeverity::Error, "asset.import.failed",
+                    AssetDiagnosticSeverity::Error, DiagnosticCodes::ImportFailed,
                     result.error.empty() ? "Import failed." : result.error,
                     request.assetGuid, request.sourcePath, importer.ImporterId()));
             }
@@ -252,7 +257,7 @@ namespace Horo::Editor {
         if (!importer) {
             result.error = "No importer registered for this file type.";
             result.diagnostics.push_back(MakeDiagnostic(
-                AssetDiagnosticSeverity::Error, "asset.importer.not_found",
+                AssetDiagnosticSeverity::Error, DiagnosticCodes::ImporterNotFound,
                 result.error, assetGuid, sourcePath, {}));
             LogDiagnostics(result.diagnostics);
             return result;
@@ -269,7 +274,7 @@ namespace Horo::Editor {
         if (!SaveAssetMetadata(result.metadata, &result.error)) {
             result.ok = false;
             result.diagnostics.push_back(MakeDiagnostic(
-                AssetDiagnosticSeverity::Error, "asset.metadata.save_failed",
+                AssetDiagnosticSeverity::Error, DiagnosticCodes::MetadataSaveFailed,
                 result.error, assetGuid, sourcePath, importer->ImporterId()));
             LogDiagnostics(result.diagnostics);
         }
@@ -392,14 +397,14 @@ namespace Horo::Editor {
                     &rootMetadata, reason,
                     {
                         MakeDiagnostic(AssetDiagnosticSeverity::Error,
-                                       "asset.reimport.dependency_cycle", result.error,
+                                       DiagnosticCodes::ReimportDependencyCycle, result.error,
                                        rootAssetGuid, rootMetadata.sourcePath,
                                        rootMetadata.importerId)
                     });
             }
             LogDiagnostics({
                 MakeDiagnostic(AssetDiagnosticSeverity::Error,
-                               "asset.reimport.dependency_cycle",
+                               DiagnosticCodes::ReimportDependencyCycle,
                                result.error, rootAssetGuid, {}, {})
             });
             result.records.emplace_back(assetIdByGuid[rootAssetGuid], rootAssetGuid,
@@ -443,7 +448,7 @@ namespace Horo::Editor {
                 &metadata, recordReason,
                 {
                     MakeDiagnostic(AssetDiagnosticSeverity::Error,
-                                   "asset.reimport.metadata_missing", error, guid,
+                                   DiagnosticCodes::ReimportMetadataMissing, error, guid,
                                    metadata.sourcePath, metadata.importerId)
                 });
             LogDiagnostics(metadata.diagnostics);
@@ -462,7 +467,7 @@ namespace Horo::Editor {
                 &metadata, recordReason,
                 {
                     MakeDiagnostic(AssetDiagnosticSeverity::Error,
-                                   "asset.reimport.importer_missing", error, guid,
+                                   DiagnosticCodes::ReimportImporterMissing, error, guid,
                                    metadata.sourcePath, metadata.importerId)
                 });
             LogDiagnostics(metadata.diagnostics);
