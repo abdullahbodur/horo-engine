@@ -68,7 +68,7 @@ namespace Horo {
             // vertex stride, but a malformed payload could still reference
             // out-of-range indices. Reject before uploading so downstream
             // renderer code cannot read past the vertex buffer.
-            const std::uint32_t vertexCount =
+            const auto vertexCount =
                     static_cast<std::uint32_t>(readResult.vertices.size());
             for (std::uint32_t index: readResult.indices) {
                 if (index >= vertexCount) {
