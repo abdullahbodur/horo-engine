@@ -1067,3 +1067,134 @@ TEST_CASE("FbxAssetImporter: skinned FBX without animation does NOT produce .ani
                                      return p.ends_with(".anim.bin");
                                    }));
 }
+
+// ===========================================================================
+// HORO-104 + HORO-105 + HORO-110 — bundled FBX import test sweep
+// ===========================================================================
+// HORO-104 (importer fixtures), HORO-105 (editor integration), and HORO-110
+// (skinned + animation regression) were planned as a final bundled test pass.
+// The per-feature PRs in this stack already shipped most of the coverage; this
+// section adds the end-to-end consolidations that tie everything together
+// across the public surface.
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+TEST_CASE("E2E: Import Asset modal drives FBX import all the way to producedFiles",
+          "[editor][asset-import][fbx][e2e]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_e2e_modal_fbx";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+
+  // 1. User opens the modal seeded with an FBX path; importer is auto-selected.
+  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry);
+  REQUIRE(modal.IsOpen());
+  REQUIRE(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
+  REQUIRE(modal.DraftForTest().assetId == "cube_5800_binary");
+
+  // 2. User clicks Import → caller drives the actual import via AssetImportService.
+  modal.RequestImportForTest();
+  REQUIRE(modal.HasPendingRequest());
+  const ImportAssetRequest req = modal.ConsumePendingRequest();
+
+  AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      req.sourcePath, req.assetId, "guid_e2e_cube",
+      req.displayName.empty() ? req.assetId : req.displayName);
+  REQUIRE(result.ok);
+
+  // 3. Caller pushes the outcome back into the modal; clean import auto-closes it.
+  ImportAssetOutcome outcome;
+  outcome.ok = result.ok;
+  outcome.error = result.error;
+  outcome.assetMesh = result.asset.mesh;
+  outcome.assetAlbedoMap = result.asset.albedoMap;
+  outcome.diagnostics = result.diagnostics;
+  modal.SetLastResult(outcome);
+  CHECK_FALSE(modal.IsOpen());
+
+  // 4. The produced .mesh.bin is on disk and loadable via MeshCache.
+  const std::filesystem::path meshAbs = root / result.asset.mesh;
+  REQUIRE(std::filesystem::is_regular_file(meshAbs));
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(meshAbs.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() > 0);
+  REQUIRE_FALSE(mesh->GetVertices().empty());
+}
+
+TEST_CASE("E2E: skinned + animated FBX yields .skinned.bin and (when present) .anim.bin",
+          "[editor][asset-import][fbx][skeletal][animation][e2e]") {
+  // Pin the regression: the skinned fixture has no anim_stacks, so the import
+  // must produce .skinned.bin but not a .anim.bin. This confirms HORO-107 +
+  // HORO-108 cooperate without false positives.
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_e2e_skinned_no_anim";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_e2e", "guid_skinned_e2e", "Skinned E2E", {});
+  REQUIRE(result.ok);
+  CHECK(result.asset.mesh.ends_with(".skinned.bin"));
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_e2e", &metadata, &metaError));
+
+  bool sawSkinnedBin = false;
+  bool sawAnimBin = false;
+  for (const std::string &p: metadata.producedFiles) {
+    if (p.ends_with(".skinned.bin")) sawSkinnedBin = true;
+    if (p.ends_with(".anim.bin")) sawAnimBin = true;
+  }
+  CHECK(sawSkinnedBin);
+  CHECK_FALSE(sawAnimBin); // fixture has no anim_stacks
+}
+
+TEST_CASE("E2E: drag-drop predicate accepts both .obj and .fbx",
+          "[editor][asset-import][fbx][drag-drop][e2e]") {
+  // ProcessPendingMeshDrops dispatches by IsObjFilePath || IsFbxFilePath.
+  // Pin both predicates here so a future widening that re-introduces an
+  // .fbx-only or .obj-only path breaks this test loudly.
+  REQUIRE(IsObjFilePath("/x/y/cube.obj"));
+  REQUIRE(IsFbxFilePath("/x/y/cube.fbx"));
+  REQUIRE_FALSE(IsObjFilePath("/x/y/cube.fbx"));
+  REQUIRE_FALSE(IsFbxFilePath("/x/y/cube.obj"));
+}
+
+TEST_CASE("E2E: every vendored FBX fixture loads without parse error",
+          "[fbx][loader][e2e]") {
+  // Coverage map for the fixtures vendored across this stack:
+  // - cube_5800_binary           HORO-94 + HORO-108 (animation extraction).
+  // - cube_texture_5800_binary   HORO-95/96 (embedded video texture).
+  // - embedded_textures_7400     HORO-95/96 (multi-channel embedded textures).
+  // - external_texture_6100      HORO-95   (external reference, no embedded).
+  // - skinned_7400_binary        HORO-107  (skinned mesh + skeleton).
+  const std::vector<std::string> fixtures = {
+      "cube_5800_binary.fbx",
+      "cube_texture_5800_binary.fbx",
+      "embedded_textures_7400_binary.fbx",
+      "external_texture_6100_binary.fbx",
+      "skinned_7400_binary.fbx",
+  };
+  for (const std::string &f: fixtures) {
+    INFO("fixture: " << f);
+    const std::string path = FixturePath(f);
+    REQUIRE(std::filesystem::exists(path));
+    const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+    REQUIRE(result.ok);
+    CHECK(result.error.empty());
+  }
+}
