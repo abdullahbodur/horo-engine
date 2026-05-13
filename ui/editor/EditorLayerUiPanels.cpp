@@ -112,6 +112,8 @@ namespace Horo::Editor
       DrawCommandPalettePopup();
       DrawQuickOpenPopup();
       m_settingsModal.Draw();
+      m_importAssetModal.Draw();
+      ProcessImportAssetModalRequest();
       DrawDeleteConfirmModals();
       m_uiWidgets.DrawExitConfirmModal();
       if (!m_playMode)

@@ -701,3 +701,500 @@ TEST_CASE("FbxAssetImporter: embedded texture only adds the FBX as a Source depe
       });
   CHECK(producedCount >= 2);
 }
+
+// ===========================================================================
+// HORO-98 — reimport propagation: an FBX root reimport refreshes downstream
+// assets that record it as a DownstreamAsset dependency.
+// ===========================================================================
+//
+// Wires through AssetImportService::ReimportAssetWithDependents which already
+// existed for OBJ; this is a regression pin for FBX participation. We import
+// an FBX cube as the root, manually attach a small OBJ asset to the document
+// whose metadata declares the FBX guid as a DownstreamAsset dependency, run
+// reimport on the FBX root, and verify both assets appear in the result order
+// with successful records and freshly-touched metadata sidecars.
+
+TEST_CASE("AssetImportService: reimporting an FBX asset propagates to dependent OBJ asset",
+          "[editor][asset-import][fbx][reimport]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_reimport";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  SceneDocument doc;
+
+  // Root asset: FBX cube (no textures = simplest happy path).
+  const std::string fbxSource = FixturePath("cube_5800_binary.fbx");
+  const AssetImportResult fbxImport = service.ImportAssetFromSource(
+      fbxSource, "fbx_root", "guid_fbx_root", "FBX Root", {});
+  REQUIRE(fbxImport.ok);
+  doc.assets["fbx_root"] = fbxImport.asset;
+
+  // Downstream asset: a synthetic OBJ asset that declares the FBX as a
+  // DownstreamAsset dependency. The OBJ source is written into the project so
+  // ObjAssetImporter can re-run during reimport.
+  const std::filesystem::path objSource = root / "downstream.obj";
+  WriteFile(objSource, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  const AssetImportResult objImport = service.ImportAssetFromSource(
+      objSource.string(), "obj_dep", "guid_obj_dep", "OBJ Dep", {});
+  REQUIRE(objImport.ok);
+  doc.assets["obj_dep"] = objImport.asset;
+
+  // Wire the dependency edge: obj_dep declares fbx_root as a DownstreamAsset.
+  // (Naming is from the perspective of the root: "asset has guid_fbx_root as
+  //  a downstream dependency that fans out reimports".)
+  AssetMetadata objMeta;
+  std::string err;
+  REQUIRE(LoadAssetMetadata("guid_obj_dep", &objMeta, &err));
+  objMeta.dependencies.emplace_back(AssetDependencyKind::DownstreamAsset,
+                                    "guid_fbx_root");
+  REQUIRE(SaveAssetMetadata(objMeta, &err));
+
+  const AssetReimportResult result = service.ReimportAssetWithDependents(
+      &doc, "guid_fbx_root", "fbx source touched");
+  REQUIRE(result.ok);
+  CHECK(result.error.empty());
+
+  // Both guids must appear in the topological order, root first.
+  REQUIRE(result.order.size() == 2);
+  CHECK(result.order[0] == "guid_fbx_root");
+  CHECK(result.order[1] == "guid_obj_dep");
+
+  // Each record must be a success.
+  REQUIRE(result.records.size() == 2);
+  for (const AssetReimportRecord &rec: result.records) {
+    INFO("record assetId=" << rec.assetId << " guid=" << rec.assetGuid
+                           << " ok=" << rec.ok << " error=" << rec.error);
+    CHECK(rec.ok);
+  }
+
+  // Sidecars exist and reflect the reimport reason.
+  AssetMetadata fbxMetaAfter;
+  AssetMetadata objMetaAfter;
+  REQUIRE(LoadAssetMetadata("guid_fbx_root", &fbxMetaAfter, &err));
+  REQUIRE(LoadAssetMetadata("guid_obj_dep", &objMetaAfter, &err));
+  CHECK(fbxMetaAfter.lastImportSucceeded);
+  CHECK(objMetaAfter.lastImportSucceeded);
+  CHECK(fbxMetaAfter.lastImportReason == "fbx source touched");
+  CHECK(objMetaAfter.lastImportReason ==
+        "Dependency changed: guid_fbx_root");
+}
+
+TEST_CASE("AssetImportService: reimporting an FBX asset alone keeps producedFiles consistent",
+          "[editor][asset-import][fbx][reimport]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_reimport_alone";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  SceneDocument doc;
+
+  const std::string source = FixturePath("embedded_textures_7400_binary.fbx");
+  const AssetImportResult firstImport = service.ImportAssetFromSource(
+      source, "embed_r", "guid_embed_r", "Embed R", {});
+  REQUIRE(firstImport.ok);
+  doc.assets["embed_r"] = firstImport.asset;
+
+  AssetMetadata before;
+  std::string err;
+  REQUIRE(LoadAssetMetadata("guid_embed_r", &before, &err));
+
+  const AssetReimportResult result = service.ReimportAssetWithDependents(
+      &doc, "guid_embed_r", "manual reimport");
+  REQUIRE(result.ok);
+  REQUIRE(result.records.size() == 1);
+  REQUIRE(result.records[0].ok);
+
+  AssetMetadata after;
+  REQUIRE(LoadAssetMetadata("guid_embed_r", &after, &err));
+  CHECK(after.lastImportSucceeded);
+  CHECK(after.lastImportReason == "manual reimport");
+  // Same set of producedFiles up to ordering.
+  std::vector<std::string> beforeSorted = before.producedFiles;
+  std::vector<std::string> afterSorted = after.producedFiles;
+  std::ranges::sort(beforeSorted);
+  std::ranges::sort(afterSorted);
+  CHECK(beforeSorted == afterSorted);
+}
+
+// ===========================================================================
+// HORO-107 — skeletal mesh import (FbxLoader::LoadSkeletalMesh + .skinned.bin)
+// ===========================================================================
+
+#include "renderer/SkinnedMeshBin.h"
+
+TEST_CASE("FbxLoader::LoadStaticMesh: skinned fixture sets hasSkinning=true",
+          "[fbx][loader][skeletal]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+  REQUIRE(result.ok);
+  CHECK(result.hasSkinning);
+}
+
+TEST_CASE("FbxLoader::LoadSkeletalMesh: extracts vertices, indices, and a topologically sorted bone array",
+          "[fbx][loader][skeletal]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const FbxLoader::FbxSkeletalLoadResult result =
+      FbxLoader::LoadSkeletalMesh(path);
+  REQUIRE(result.ok);
+  CHECK(result.error.empty());
+  CHECK_FALSE(result.vertices.empty());
+  CHECK_FALSE(result.indices.empty());
+  REQUIRE(result.indices.size() % 3 == 0);
+  REQUIRE_FALSE(result.bones.empty());
+
+  // Topological order: each non-root parent index must reference an earlier slot.
+  for (size_t i = 0; i < result.bones.size(); ++i) {
+    INFO("bone[" << i << "] name='" << result.bones[i].name
+                   << "' parent=" << result.bones[i].parentIndex);
+    if (result.bones[i].parentIndex >= 0) {
+      REQUIRE(result.bones[i].parentIndex < static_cast<int>(i));
+    }
+  }
+  // Every vertex's first bone index must be valid.
+  for (const SkinnedVertex &sv: result.vertices) {
+    REQUIRE(sv.boneIndices[0] >= 0);
+    REQUIRE(sv.boneIndices[0] < static_cast<int>(result.bones.size()));
+  }
+}
+
+TEST_CASE("SkinnedMeshBin: round-trip preserves vertices, indices, and bone hierarchy",
+          "[skinned-mesh-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_skinnedbin_roundtrip.skinned.bin";
+
+  std::vector<SkinnedVertex> vertices(3);
+  for (int i = 0; i < 3; ++i) {
+    vertices[i].position = {static_cast<float>(i), 0.0f, 0.0f};
+    vertices[i].normal = {0.0f, 0.0f, 1.0f};
+    vertices[i].uv = {0.0f, 0.0f};
+    vertices[i].boneIndices = {0, -1, -1, -1};
+    vertices[i].boneWeights = {1.0f, 0.0f, 0.0f, 0.0f};
+  }
+  const std::vector<uint32_t> indices = {0, 1, 2};
+
+  std::vector<Bone> bones;
+  Bone root;
+  root.parentIndex = -1;
+  root.name = "root";
+  root.inverseBindMatrix = Mat4::Identity();
+  bones.push_back(root);
+  Bone child;
+  child.parentIndex = 0;
+  child.name = "child";
+  child.inverseBindMatrix = Mat4::Identity();
+  bones.push_back(child);
+
+  REQUIRE(SkinnedMeshBin::WriteSkinnedMesh(path.string(), vertices, indices, bones).ok);
+
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(path.string());
+  REQUIRE(rr.ok);
+  REQUIRE(rr.vertices.size() == 3);
+  REQUIRE(rr.indices == indices);
+  REQUIRE(rr.bones.size() == 2);
+  CHECK(rr.bones[0].name == "root");
+  CHECK(rr.bones[0].parentIndex == -1);
+  CHECK(rr.bones[1].name == "child");
+  CHECK(rr.bones[1].parentIndex == 0);
+}
+
+TEST_CASE("SkinnedMeshBin: ReadSkinnedMesh rejects bad magic", "[skinned-mesh-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_skinnedbin_badmagic.skinned.bin";
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  const std::array<char, 80> zeros{};
+  stream.write(zeros.data(), zeros.size());
+  stream.close();
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(path.string());
+  REQUIRE_FALSE(rr.ok);
+}
+
+TEST_CASE("FbxAssetImporter: skinned FBX produces a managed .skinned.bin",
+          "[editor][asset-import][fbx][skeletal]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_skinned_import";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_a", "guid_skinned_a", "Skinned A", {});
+  REQUIRE(result.ok);
+  CHECK(result.asset.mesh.ends_with(".skinned.bin"));
+  CHECK(result.asset.mesh.find("assets/models/guid_skinned_a/") !=
+        std::string::npos);
+
+  const std::filesystem::path absoluteSkinned = root / result.asset.mesh;
+  REQUIRE(std::filesystem::is_regular_file(absoluteSkinned));
+  const SkinnedMeshBin::ReadResult rr =
+      SkinnedMeshBin::ReadSkinnedMesh(absoluteSkinned.string());
+  REQUIRE(rr.ok);
+  CHECK_FALSE(rr.vertices.empty());
+  CHECK_FALSE(rr.bones.empty());
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_a", &metadata, &metaError));
+  CHECK(metadata.importerId == "builtin.fbx_static_mesh");
+  CHECK(metadata.sourcePath == source);
+  CHECK(std::ranges::any_of(metadata.producedFiles, [&](const std::string &p) {
+    return p == result.asset.mesh;
+  }));
+}
+
+// ===========================================================================
+// HORO-108 — animation clip extraction + AnimBin round-trip
+// ===========================================================================
+
+#include "renderer/AnimBin.h"
+
+TEST_CASE("FbxLoader::LoadAnimations: animated cube fixture exposes a non-empty clip",
+          "[fbx][loader][animation]") {
+  // The static-cube fixture happens to ship with a 'Take 001' animation stack
+  // covering 0..2s; sampling the cube node by name produces tracks with
+  // multiple keyframes per channel.
+  const std::string path = FixturePath("cube_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const std::vector<std::string> boneNames = {"Box01"};
+  const FbxLoader::FbxAnimLoadResult result =
+      FbxLoader::LoadAnimations(path, boneNames);
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.clips.empty());
+  const AnimationClip &clip = result.clips.front();
+  CHECK(clip.duration > 0.0f);
+  REQUIRE_FALSE(clip.GetTracks().empty());
+  const BoneTrack &track = clip.GetTracks().front();
+  CHECK(track.boneIndex == 0);
+  CHECK(track.positionTimes.size() >= 2);
+  CHECK(track.rotationTimes.size() == track.positionTimes.size());
+  CHECK(track.scaleTimes.size() == track.positionTimes.size());
+}
+
+TEST_CASE("FbxLoader::LoadAnimations: file with no anim_stacks returns ok with empty clips",
+          "[fbx][loader][animation]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  const std::vector<std::string> boneNames = {"Bone"};
+  const FbxLoader::FbxAnimLoadResult result =
+      FbxLoader::LoadAnimations(path, boneNames);
+  REQUIRE(result.ok);
+  CHECK(result.clips.empty());
+}
+
+TEST_CASE("AnimBin: round-trip preserves clip name, duration, and track keys",
+          "[anim-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_animbin_roundtrip.anim.bin";
+
+  AnimationClip clip;
+  clip.name = "Walk";
+  clip.duration = 1.5f;
+  BoneTrack track;
+  track.boneIndex = 2;
+  track.positionTimes = {0.0f, 0.5f, 1.0f};
+  track.positions = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}};
+  track.rotationTimes = {0.0f, 0.5f, 1.0f};
+  track.rotations = {Quaternion{0, 0, 0, 1}, Quaternion{0, 0, 0, 1},
+                      Quaternion{0, 0, 0, 1}};
+  track.scaleTimes = {0.0f, 1.0f};
+  track.scales = {{1, 1, 1}, {1, 1, 1}};
+  clip.AddTrack(std::move(track));
+
+  REQUIRE(AnimBin::WriteClips(path.string(), {clip}).ok);
+  const AnimBin::ReadResult rr = AnimBin::ReadClips(path.string());
+  REQUIRE(rr.ok);
+  REQUIRE(rr.clips.size() == 1);
+  CHECK(rr.clips[0].name == "Walk");
+  CHECK(rr.clips[0].duration == 1.5f);
+  REQUIRE(rr.clips[0].GetTracks().size() == 1);
+  const BoneTrack &back = rr.clips[0].GetTracks().front();
+  CHECK(back.boneIndex == 2);
+  REQUIRE(back.positions.size() == 3);
+  CHECK(back.positions[2].x == 2.0f);
+  CHECK(back.rotations.size() == 3);
+  CHECK(back.scales.size() == 2);
+}
+
+TEST_CASE("AnimBin: ReadClips rejects bad magic", "[anim-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_animbin_badmagic.anim.bin";
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  const std::array<char, 64> zeros{};
+  stream.write(zeros.data(), zeros.size());
+  stream.close();
+  const AnimBin::ReadResult rr = AnimBin::ReadClips(path.string());
+  REQUIRE_FALSE(rr.ok);
+}
+
+TEST_CASE("FbxAssetImporter: skinned FBX without animation does NOT produce .anim.bin",
+          "[editor][asset-import][fbx][animation]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_skinned_no_anim";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_b", "guid_skinned_b", "Skinned B", {});
+  REQUIRE(result.ok);
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_b", &metadata, &metaError));
+  // No anim.bin should appear in producedFiles when the FBX has zero anim_stacks.
+  CHECK_FALSE(std::ranges::any_of(metadata.producedFiles,
+                                   [](const std::string &p) {
+                                     return p.ends_with(".anim.bin");
+                                   }));
+}
+
+// ===========================================================================
+// HORO-104 + HORO-105 + HORO-110 — bundled FBX import test sweep
+// ===========================================================================
+// HORO-104 (importer fixtures), HORO-105 (editor integration), and HORO-110
+// (skinned + animation regression) were planned as a final bundled test pass.
+// The per-feature PRs in this stack already shipped most of the coverage; this
+// section adds the end-to-end consolidations that tie everything together
+// across the public surface.
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+TEST_CASE("E2E: Import Asset modal drives FBX import all the way to producedFiles",
+          "[editor][asset-import][fbx][e2e]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_e2e_modal_fbx";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+
+  // 1. User opens the modal seeded with an FBX path; importer is auto-selected.
+  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry);
+  REQUIRE(modal.IsOpen());
+  REQUIRE(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
+  REQUIRE(modal.DraftForTest().assetId == "cube_5800_binary");
+
+  // 2. User clicks Import → caller drives the actual import via AssetImportService.
+  modal.RequestImportForTest();
+  REQUIRE(modal.HasPendingRequest());
+  const ImportAssetRequest req = modal.ConsumePendingRequest();
+
+  AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      req.sourcePath, req.assetId, "guid_e2e_cube",
+      req.displayName.empty() ? req.assetId : req.displayName);
+  REQUIRE(result.ok);
+
+  // 3. Caller pushes the outcome back into the modal; clean import auto-closes it.
+  ImportAssetOutcome outcome;
+  outcome.ok = result.ok;
+  outcome.error = result.error;
+  outcome.assetMesh = result.asset.mesh;
+  outcome.assetAlbedoMap = result.asset.albedoMap;
+  outcome.diagnostics = result.diagnostics;
+  modal.SetLastResult(outcome);
+  CHECK_FALSE(modal.IsOpen());
+
+  // 4. The produced .mesh.bin is on disk and loadable via MeshCache.
+  const std::filesystem::path meshAbs = root / result.asset.mesh;
+  REQUIRE(std::filesystem::is_regular_file(meshAbs));
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(meshAbs.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() > 0);
+  REQUIRE_FALSE(mesh->GetVertices().empty());
+}
+
+TEST_CASE("E2E: skinned + animated FBX yields .skinned.bin and (when present) .anim.bin",
+          "[editor][asset-import][fbx][skeletal][animation][e2e]") {
+  // Pin the regression: the skinned fixture has no anim_stacks, so the import
+  // must produce .skinned.bin but not a .anim.bin. This confirms HORO-107 +
+  // HORO-108 cooperate without false positives.
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_e2e_skinned_no_anim";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_e2e", "guid_skinned_e2e", "Skinned E2E", {});
+  REQUIRE(result.ok);
+  CHECK(result.asset.mesh.ends_with(".skinned.bin"));
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_e2e", &metadata, &metaError));
+
+  bool sawSkinnedBin = false;
+  bool sawAnimBin = false;
+  for (const std::string &p: metadata.producedFiles) {
+    if (p.ends_with(".skinned.bin")) sawSkinnedBin = true;
+    if (p.ends_with(".anim.bin")) sawAnimBin = true;
+  }
+  CHECK(sawSkinnedBin);
+  CHECK_FALSE(sawAnimBin); // fixture has no anim_stacks
+}
+
+TEST_CASE("E2E: drag-drop predicate accepts both .obj and .fbx",
+          "[editor][asset-import][fbx][drag-drop][e2e]") {
+  // ProcessPendingMeshDrops dispatches by IsObjFilePath || IsFbxFilePath.
+  // Pin both predicates here so a future widening that re-introduces an
+  // .fbx-only or .obj-only path breaks this test loudly.
+  REQUIRE(IsObjFilePath("/x/y/cube.obj"));
+  REQUIRE(IsFbxFilePath("/x/y/cube.fbx"));
+  REQUIRE_FALSE(IsObjFilePath("/x/y/cube.fbx"));
+  REQUIRE_FALSE(IsFbxFilePath("/x/y/cube.obj"));
+}
+
+TEST_CASE("E2E: every vendored FBX fixture loads without parse error",
+          "[fbx][loader][e2e]") {
+  // Coverage map for the fixtures vendored across this stack:
+  // - cube_5800_binary           HORO-94 + HORO-108 (animation extraction).
+  // - cube_texture_5800_binary   HORO-95/96 (embedded video texture).
+  // - embedded_textures_7400     HORO-95/96 (multi-channel embedded textures).
+  // - external_texture_6100      HORO-95   (external reference, no embedded).
+  // - skinned_7400_binary        HORO-107  (skinned mesh + skeleton).
+  const std::vector<std::string> fixtures = {
+      "cube_5800_binary.fbx",
+      "cube_texture_5800_binary.fbx",
+      "embedded_textures_7400_binary.fbx",
+      "external_texture_6100_binary.fbx",
+      "skinned_7400_binary.fbx",
+  };
+  for (const std::string &f: fixtures) {
+    INFO("fixture: " << f);
+    const std::string path = FixturePath(f);
+    REQUIRE(std::filesystem::exists(path));
+    const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+    REQUIRE(result.ok);
+    CHECK(result.error.empty());
+  }
+}
