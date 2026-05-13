@@ -3,17 +3,19 @@
 // Unit tests for renderer/MeshCache.
 //
 // Coverage:
-//   - MeshCache::Get: cache miss (fallback box mesh), cache hit (same ptr),
-//     .fbx/.glb/.gltf extension redirected to .obj with warning,
-//     .fbx and its resolved .obj path share the same cached entry.
+//   - MeshCache::Get: cache miss (fallback box mesh on ObjLoader failure),
+//     cache hit (same shared_ptr for the same path), unsupported runtime
+//     formats fall back to a box mesh with an explicit warning, and each
+//     distinct path gets its own cache entry (HORO-99: removed the silent
+//     .fbx/.glb/.gltf → .obj rewrite hack).
 //   - MeshCache::Clear: invalidates all entries.
 //
 // Constraints:
 //   - No OpenGL context required: Mesh::Upload() skips GPU calls when
-//     glfwGetCurrentContext()==nullptr but still populates CPU vertex data
+//     glfwGetCurrentContext() == nullptr but still populates CPU vertex data
 //     and m_indexCount.
-//   - No file system files need to exist; missing .obj files trigger the
-//     fallback box-mesh code path.
+//   - No file system files need to exist; missing or unsupported paths
+//     trigger the fallback box-mesh code path.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -84,20 +86,22 @@ TEST_CASE("MeshCache: Clear leaves cache empty so subsequent Get is a miss", "[r
 }
 
 // ===========================================================================
-// MeshCache — extension redirects: .fbx / .glb / .gltf → .obj
+// MeshCache — unsupported runtime formats fall back to box mesh (HORO-99)
 // ===========================================================================
+// Before HORO-99: .fbx / .glb / .gltf were silently rewritten to .obj and
+// shared a cache entry with the rewritten path. After HORO-99 the runtime is
+// honest: anything that is not currently a supported runtime format gets the
+// fallback box and its own cache entry.
 
-TEST_CASE("MeshCache: Get with .fbx extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .fbx falls back to box mesh without rewriting the path", "[renderer][mesh_cache]") {
   MeshCache cache;
-  // .fbx triggers ResolveRuntimeMeshPath which rewrites to .obj.
-  // The redirected .obj is also missing, so the fallback box is returned.
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.fbx");
 
   REQUIRE(mesh != nullptr);
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: Get with .glb extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .glb falls back to box mesh without rewriting the path", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.glb");
 
@@ -105,7 +109,7 @@ TEST_CASE("MeshCache: Get with .glb extension succeeds (redirected to .obj)", "[
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: Get with .gltf extension succeeds (redirected to .obj)", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .gltf falls back to box mesh without rewriting the path", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.gltf");
 
@@ -113,28 +117,42 @@ TEST_CASE("MeshCache: Get with .gltf extension succeeds (redirected to .obj)", "
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: .fbx and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
-  // .fbx → /assets/models/rock.obj (resolved internally)
-  // Direct .obj request should hit the same cache slot.
+TEST_CASE("MeshCache: .mesh.bin falls back to box mesh until HORO-100 wires it in", "[renderer][mesh_cache]") {
+  MeshCache cache;
+  std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.mesh.bin");
+
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() > 0);
+}
+
+// ===========================================================================
+// MeshCache — distinct paths must not share cache entries (HORO-99)
+// ===========================================================================
+// The pre-HORO-99 rewrite hack made .fbx and .obj share a slot. After HORO-99
+// each path gets its own slot regardless of extension.
+
+TEST_CASE("MeshCache: .fbx and .obj with the same stem do NOT share a cache entry", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> via_fbx = cache.Get("/assets/models/rock.fbx");
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/rock.obj");
 
-  REQUIRE(via_fbx == via_obj);
+  REQUIRE(via_fbx != nullptr);
+  REQUIRE(via_obj != nullptr);
+  REQUIRE(via_fbx != via_obj);
 }
 
-TEST_CASE("MeshCache: .glb and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .glb and .obj with the same stem do NOT share a cache entry", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> via_glb = cache.Get("/assets/models/barrel.glb");
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/barrel.obj");
 
-  REQUIRE(via_glb == via_obj);
+  REQUIRE(via_glb != via_obj);
 }
 
-TEST_CASE("MeshCache: .gltf and equivalent .obj path share the same cached entry", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .gltf and .obj with the same stem do NOT share a cache entry", "[renderer][mesh_cache]") {
   MeshCache cache;
   std::shared_ptr<Mesh> via_gltf = cache.Get("/assets/models/pillar.gltf");
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/pillar.obj");
 
-  REQUIRE(via_gltf == via_obj);
+  REQUIRE(via_gltf != via_obj);
 }
