@@ -40,6 +40,8 @@
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
+#include "renderer/Mesh.h"
+#include "renderer/MeshBin.h"
 #include "renderer/RenderBackend.h"
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeCoordinator.h"
@@ -280,6 +282,45 @@ TEST_CASE("AssetImporterRegistry: TextureCopy rejects missing source file", "[ed
   const AssetImportResult result = imp->Import(req);
   CHECK_FALSE(result.ok);
   REQUIRE_FALSE(result.diagnostics.empty());
+}
+
+// ===========================================================================
+// EditorAssetThumbnailPreview — .mesh.bin support (HORO-101)
+// ===========================================================================
+// FBX-imported assets land as engine-native .mesh.bin files via HORO-94 +
+// HORO-100. The thumbnail preview cache must therefore route .mesh.bin paths
+// through MeshBin::ReadStaticMesh and produce a real preview Mesh, mirroring
+// the OBJ branch that already drove static-mesh thumbnails.
+
+#include "ui/editor/components/EditorAssetThumbnailPreview.h"
+
+TEST_CASE("EditorAssetThumbnailPreview: .mesh.bin path resolves to a real preview mesh",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_thumb_meshbin.mesh.bin";
+  std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{2.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 3.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  std::vector<uint32_t> indices = {0, 1, 2};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  const Mesh *mesh = TryGetAssetPreviewStaticMesh(path.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() == 3);
+  REQUIRE(mesh->GetVertices().size() == 3);
+  CHECK(mesh->GetVertices()[2].position.y == 3.0f);
+}
+
+TEST_CASE("EditorAssetThumbnailPreview: missing .mesh.bin path returns nullptr without crashing",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+  const Mesh *mesh =
+      TryGetAssetPreviewStaticMesh("/nonexistent/path/missing.mesh.bin");
+  REQUIRE(mesh == nullptr);
 }
 
 // ===========================================================================
