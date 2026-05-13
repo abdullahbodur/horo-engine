@@ -958,3 +958,112 @@ TEST_CASE("FbxAssetImporter: skinned FBX produces a managed .skinned.bin",
     return p == result.asset.mesh;
   }));
 }
+
+// ===========================================================================
+// HORO-108 — animation clip extraction + AnimBin round-trip
+// ===========================================================================
+
+#include "renderer/AnimBin.h"
+
+TEST_CASE("FbxLoader::LoadAnimations: animated cube fixture exposes a non-empty clip",
+          "[fbx][loader][animation]") {
+  // The static-cube fixture happens to ship with a 'Take 001' animation stack
+  // covering 0..2s; sampling the cube node by name produces tracks with
+  // multiple keyframes per channel.
+  const std::string path = FixturePath("cube_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+  const std::vector<std::string> boneNames = {"Box01"};
+  const FbxLoader::FbxAnimLoadResult result =
+      FbxLoader::LoadAnimations(path, boneNames);
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.clips.empty());
+  const AnimationClip &clip = result.clips.front();
+  CHECK(clip.duration > 0.0f);
+  REQUIRE_FALSE(clip.GetTracks().empty());
+  const BoneTrack &track = clip.GetTracks().front();
+  CHECK(track.boneIndex == 0);
+  CHECK(track.positionTimes.size() >= 2);
+  CHECK(track.rotationTimes.size() == track.positionTimes.size());
+  CHECK(track.scaleTimes.size() == track.positionTimes.size());
+}
+
+TEST_CASE("FbxLoader::LoadAnimations: file with no anim_stacks returns ok with empty clips",
+          "[fbx][loader][animation]") {
+  const std::string path = FixturePath("skinned_7400_binary.fbx");
+  const std::vector<std::string> boneNames = {"Bone"};
+  const FbxLoader::FbxAnimLoadResult result =
+      FbxLoader::LoadAnimations(path, boneNames);
+  REQUIRE(result.ok);
+  CHECK(result.clips.empty());
+}
+
+TEST_CASE("AnimBin: round-trip preserves clip name, duration, and track keys",
+          "[anim-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_animbin_roundtrip.anim.bin";
+
+  AnimationClip clip;
+  clip.name = "Walk";
+  clip.duration = 1.5f;
+  BoneTrack track;
+  track.boneIndex = 2;
+  track.positionTimes = {0.0f, 0.5f, 1.0f};
+  track.positions = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}};
+  track.rotationTimes = {0.0f, 0.5f, 1.0f};
+  track.rotations = {Quaternion{0, 0, 0, 1}, Quaternion{0, 0, 0, 1},
+                      Quaternion{0, 0, 0, 1}};
+  track.scaleTimes = {0.0f, 1.0f};
+  track.scales = {{1, 1, 1}, {1, 1, 1}};
+  clip.AddTrack(std::move(track));
+
+  REQUIRE(AnimBin::WriteClips(path.string(), {clip}).ok);
+  const AnimBin::ReadResult rr = AnimBin::ReadClips(path.string());
+  REQUIRE(rr.ok);
+  REQUIRE(rr.clips.size() == 1);
+  CHECK(rr.clips[0].name == "Walk");
+  CHECK(rr.clips[0].duration == 1.5f);
+  REQUIRE(rr.clips[0].GetTracks().size() == 1);
+  const BoneTrack &back = rr.clips[0].GetTracks().front();
+  CHECK(back.boneIndex == 2);
+  REQUIRE(back.positions.size() == 3);
+  CHECK(back.positions[2].x == 2.0f);
+  CHECK(back.rotations.size() == 3);
+  CHECK(back.scales.size() == 2);
+}
+
+TEST_CASE("AnimBin: ReadClips rejects bad magic", "[anim-bin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_animbin_badmagic.anim.bin";
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  const std::array<char, 64> zeros{};
+  stream.write(zeros.data(), zeros.size());
+  stream.close();
+  const AnimBin::ReadResult rr = AnimBin::ReadClips(path.string());
+  REQUIRE_FALSE(rr.ok);
+}
+
+TEST_CASE("FbxAssetImporter: skinned FBX without animation does NOT produce .anim.bin",
+          "[editor][asset-import][fbx][animation]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_skinned_no_anim";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "skinned_b", "guid_skinned_b", "Skinned B", {});
+  REQUIRE(result.ok);
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_skinned_b", &metadata, &metaError));
+  // No anim.bin should appear in producedFiles when the FBX has zero anim_stacks.
+  CHECK_FALSE(std::ranges::any_of(metadata.producedFiles,
+                                   [](const std::string &p) {
+                                     return p.ends_with(".anim.bin");
+                                   }));
+}

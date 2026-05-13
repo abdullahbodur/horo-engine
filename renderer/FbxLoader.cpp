@@ -582,3 +582,104 @@ namespace Horo::FbxLoader {
         return result;
     }
 } // namespace Horo::FbxLoader
+
+namespace Horo::FbxLoader {
+    /** @copydoc Horo::FbxLoader::LoadAnimations */
+    FbxAnimLoadResult LoadAnimations(const std::string &sourcePath,
+                                      const std::vector<std::string> &boneNames) {
+        FbxAnimLoadResult result;
+
+        ufbx_load_opts opts{};
+        opts.target_axes = ufbx_axes_right_handed_y_up;
+        opts.target_unit_meters = 1.0f;
+        opts.evaluate_skinning = false;
+        opts.load_external_files = false;
+
+        ufbx_error error{};
+        ufbx_scene *scene = ufbx_load_file(sourcePath.c_str(), &opts, &error);
+        if (scene == nullptr) {
+            result.errorCode = "fbx.parse_failed";
+            result.error = std::string("ufbx parse failed: ") +
+                           (error.description.length > 0
+                                ? std::string(error.description.data, error.description.length)
+                                : std::string("unknown error"));
+            return result;
+        }
+
+        // Resolve bone-name -> ufbx_node*.
+        std::unordered_map<std::string, const ufbx_node *> nodeByName;
+        for (std::size_t i = 0; i < scene->nodes.count; ++i) {
+            const ufbx_node *node = scene->nodes.data[i];
+            if (node == nullptr || node->name.length == 0)
+                continue;
+            nodeByName.emplace(std::string(node->name.data, node->name.length), node);
+        }
+
+        constexpr float kSampleRateHz = 30.0f;
+        constexpr float kFrameDt = 1.0f / kSampleRateHz;
+
+        for (std::size_t si = 0; si < scene->anim_stacks.count; ++si) {
+            const ufbx_anim_stack *stack = scene->anim_stacks.data[si];
+            if (stack == nullptr || stack->anim == nullptr)
+                continue;
+            const float t0 = static_cast<float>(stack->time_begin);
+            const float t1 = static_cast<float>(stack->time_end);
+            if (t1 <= t0)
+                continue;
+
+            AnimationClip clip;
+            clip.name =
+                std::string(stack->name.data, static_cast<std::size_t>(stack->name.length));
+            clip.duration = t1 - t0;
+
+            // Determine number of samples (inclusive of both endpoints).
+            const float duration = t1 - t0;
+            const std::size_t sampleCount =
+                std::max<std::size_t>(2, static_cast<std::size_t>(
+                                              std::ceil(duration * kSampleRateHz)) + 1);
+
+            for (std::size_t bi = 0; bi < boneNames.size(); ++bi) {
+                const auto it = nodeByName.find(boneNames[bi]);
+                if (it == nodeByName.end())
+                    continue;
+                const ufbx_node *node = it->second;
+
+                BoneTrack track;
+                track.boneIndex = static_cast<int>(bi);
+                track.positionTimes.reserve(sampleCount);
+                track.positions.reserve(sampleCount);
+                track.rotationTimes.reserve(sampleCount);
+                track.rotations.reserve(sampleCount);
+                track.scaleTimes.reserve(sampleCount);
+                track.scales.reserve(sampleCount);
+
+                for (std::size_t s = 0; s < sampleCount; ++s) {
+                    const float t = std::min(duration, static_cast<float>(s) * kFrameDt);
+                    const ufbx_transform xform =
+                        ufbx_evaluate_transform(stack->anim, node,
+                                                static_cast<double>(t0 + t));
+                    track.positionTimes.push_back(t);
+                    track.positions.push_back({static_cast<float>(xform.translation.x),
+                                                static_cast<float>(xform.translation.y),
+                                                static_cast<float>(xform.translation.z)});
+                    track.rotationTimes.push_back(t);
+                    track.rotations.push_back(
+                        Quaternion{static_cast<float>(xform.rotation.x),
+                                    static_cast<float>(xform.rotation.y),
+                                    static_cast<float>(xform.rotation.z),
+                                    static_cast<float>(xform.rotation.w)});
+                    track.scaleTimes.push_back(t);
+                    track.scales.push_back({static_cast<float>(xform.scale.x),
+                                              static_cast<float>(xform.scale.y),
+                                              static_cast<float>(xform.scale.z)});
+                }
+                clip.AddTrack(std::move(track));
+            }
+            result.clips.push_back(std::move(clip));
+        }
+
+        ufbx_free_scene(scene);
+        result.ok = true;
+        return result;
+    }
+} // namespace Horo::FbxLoader

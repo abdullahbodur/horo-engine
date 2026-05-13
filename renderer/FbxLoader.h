@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#include "renderer/AnimationClip.h"
 #include "renderer/Mesh.h"
 #include "renderer/Skeleton.h"
 #include "renderer/SkinnedVertex.h"
@@ -103,4 +104,27 @@ namespace Horo::FbxLoader {
      *  - @c errorCode == "fbx.skeleton_missing" — file has skin clusters but no bone nodes.
      */
     FbxSkeletalLoadResult LoadSkeletalMesh(const std::string &sourcePath);
+
+    /** @brief Result of an animation extraction operation. */
+    struct FbxAnimLoadResult {
+        bool ok = false;                  /**< True on success (a successful parse with zero clips is still ok). */
+        std::vector<AnimationClip> clips; /**< Decoded animation clips, one per FBX anim_stack. */
+        std::string error;                /**< Diagnostic on parse failure. */
+        std::string errorCode;            /**< Short tag e.g. @c "fbx.parse_failed". */
+    };
+
+    /** @brief Loads animation clips from an FBX file using uniform 30 fps sampling.
+     *  @param sourcePath Absolute path to the FBX source file.
+     *  @param boneNames  Bone names that match the engine-side skeleton order;
+     *                    each track's @c boneIndex matches the index of the bone
+     *                    name in this vector.
+     *
+     *  Tracks are produced only for bones whose names match an FBX node. Each
+     *  track is uniformly sampled at 30 fps via @c ufbx_evaluate_transform over
+     *  the stack's @c [time_begin, time_end] range and split into separate
+     *  position / rotation / scale arrays so the engine sampler can SLERP
+     *  rotations and LERP positions / scales without re-deriving them.
+     */
+    FbxAnimLoadResult LoadAnimations(const std::string &sourcePath,
+                                      const std::vector<std::string> &boneNames);
 } // namespace Horo::FbxLoader

@@ -20,6 +20,7 @@
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/EditorAssetImport.h"
+#include "renderer/AnimBin.h"
 #include "renderer/FbxLoader.h"
 #include "renderer/MeshBin.h"
 #include "renderer/ObjLoader.h"
@@ -762,6 +763,33 @@ namespace Horo::Editor {
                     std::vector<std::string> producedFiles;
                     producedFiles.push_back(
                         fs::relative(destSkinnedBin, ProjectPath::Root()).generic_string());
+
+                    // HORO-108: extract animation clips for the skeleton's bones.
+                    std::vector<std::string> boneNames;
+                    boneNames.reserve(skeletal.bones.size());
+                    for (const Bone &bone: skeletal.bones)
+                        boneNames.push_back(bone.name);
+                    FbxLoader::FbxAnimLoadResult animResult =
+                        FbxLoader::LoadAnimations(sourcePath.string(), boneNames);
+                    if (animResult.ok && !animResult.clips.empty()) {
+                        const fs::path destAnimBin =
+                            destDir / (sourcePath.stem().string() + ".anim.bin");
+                        const AnimBin::WriteResult animWrite =
+                            AnimBin::WriteClips(destAnimBin.string(), animResult.clips);
+                        if (animWrite.ok) {
+                            producedFiles.push_back(
+                                fs::relative(destAnimBin, ProjectPath::Root())
+                                    .generic_string());
+                        } else {
+                            result.diagnostics.push_back(MakeDiagnostic(
+                                AssetDiagnosticSeverity::Warning,
+                                DiagnosticCodes::FbxAnimationWriteFailed,
+                                animWrite.error.empty()
+                                    ? "Failed writing animation binary."
+                                    : animWrite.error,
+                                request, ImporterId()));
+                        }
+                    }
 
                     std::string albedoMapPath;
                     std::vector<std::string> externalSourcePaths;
