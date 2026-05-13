@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "ui/editor/AssetGuidRegistry.h"
 #include "ui/editor/AssetImporterRegistry.h"
 
 namespace Horo::Editor {
@@ -81,6 +82,16 @@ namespace Horo::Editor {
          */
         const AssetImporterRegistry &Registry() const { return m_registry; }
 
+        /** @brief Returns the in-memory GUID → metadata index used for cross-asset lookups.
+         *
+         *  The registry is refreshed at the start of every reimport flow and may be
+         *  read at any time for dependents/lookup queries. Callers that mutate
+         *  metadata on disk should call @ref AssetGuidRegistry::Invalidate or
+         *  @ref AssetGuidRegistry::Insert to keep the cache consistent.
+         *  @return Const reference to the owned registry.
+         */
+        const AssetGuidRegistry &GuidRegistry() const { return m_guidRegistry; }
+
     private:
         /** @brief Dispatches a single import request to the given importer.
          *  @param importer The concrete importer to run.
@@ -102,5 +113,6 @@ namespace Horo::Editor {
                                  AssetReimportResult &result) const;
 
         AssetImporterRegistry m_registry; /**< Registry of all registered importers. */
+        mutable AssetGuidRegistry m_guidRegistry; /**< In-memory GUID → metadata cache, refreshed by reimport flows. */
     };
 } // namespace Horo::Editor

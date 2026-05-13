@@ -111,6 +111,21 @@ Rules:
 - keep one commit focused on one coherent intent
 - avoid placeholder subjects such as `wip`, `misc`, `tmp`, `update`, or `fix stuff`
 
+### Branch Naming
+
+Branches must follow the pattern `<type>/<JIRA-KEY>_<short_topic>`:
+
+- `<type>` is the Conventional Commit type: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`
+- `<JIRA-KEY>` is the upstream issue identifier (e.g. `HORO-22`)
+- `<short_topic>` is a lowercase snake_case slug summarising the change
+
+Examples:
+- `feat/HORO-22_asset_guid_registry`
+- `fix/HORO-58_gizmo_hidpi_picking`
+- `chore/HORO-104_clang_tidy_pass`
+
+Use `<JIRA-KEY>_topic_name` exactly once per branch; do not append extra suffixes such as `_v2` or `_final`. Open a new branch with a fresh ticket if the work scope changes.
+
 Use [`.github/pull_request_template.md`](.github/pull_request_template.md) for PR structure.
 
 ## References
