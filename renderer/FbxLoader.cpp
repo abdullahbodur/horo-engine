@@ -13,7 +13,10 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "ufbx.h"
@@ -104,6 +107,124 @@ namespace Horo::FbxLoader {
                 }
             }
         }
+
+        /** @brief Converts a ufbx string to a std::string, skipping null/empty inputs. */
+        std::string MakeString(const ufbx_string &s) {
+            return (s.data != nullptr && s.length > 0)
+                       ? std::string(s.data, s.length)
+                       : std::string{};
+        }
+
+        /** @brief Returns a basename suitable for the on-disk texture filename in managed storage.
+         *
+         *  Prefers (in order): the basename of @c filename, the basename of
+         *  @c relative_filename, the basename of @c absolute_filename, and finally
+         *  the element @c name with a generic @c .png extension. The result never
+         *  contains a directory separator and is safe to use as a filename inside
+         *  the per-asset managed directory.
+         *
+         *  Templated so the same logic applies to both @c ufbx_texture and
+         *  @c ufbx_video, whose filename surfaces share the same shape.
+         */
+        template <typename HasFilenames>
+        std::string MakeTextureBasename(const HasFilenames *src) {
+            namespace fs = std::filesystem;
+            const ufbx_string *candidates[] = {&src->filename,
+                                                &src->relative_filename,
+                                                &src->absolute_filename};
+            for (const ufbx_string *raw: candidates) {
+                if (raw->data == nullptr || raw->length == 0)
+                    continue;
+                const fs::path candidate(MakeString(*raw));
+                if (!candidate.empty()) {
+                    const std::string base = candidate.filename().string();
+                    if (!base.empty())
+                        return base;
+                }
+            }
+            std::string baseName = MakeString(src->name);
+            if (baseName.empty())
+                baseName = "texture";
+            return baseName + ".png";
+        }
+
+        /** @brief True when @p prop names a diffuse / albedo channel across legacy FBX and PBR. */
+        bool IsDiffuseChannelProp(std::string_view prop) {
+            return prop == "DiffuseColor" || prop == "Diffuse" ||
+                   prop == "diffuse_color" || prop == "BaseColor" ||
+                   prop == "base_color";
+        }
+
+        /** @brief Filename / element-name fallback heuristic for diffuse identification. */
+        bool NameHintsDiffuse(std::string_view name) {
+            const auto contains = [&](std::string_view needle) {
+                return name.find(needle) != std::string_view::npos;
+            };
+            return contains("diffuse") || contains("Diffuse") ||
+                   contains("albedo") || contains("Albedo") ||
+                   contains("base_color") || contains("BaseColor") ||
+                   contains("basecolor");
+        }
+
+        /** @brief Walks @p scene and captures every texture image source.
+         *
+         *  Walks @c scene->videos because that is the canonical FBX image-source
+         *  container and is populated by every exporter, including FBX 5800-era
+         *  files that do not expose @c scene->textures at all. For each video we
+         *  record the filename trio (for external resolution) and the embedded
+         *  byte blob if present.
+         *
+         *  Diffuse classification uses @c material->textures bindings when
+         *  available (every modern FBX exposes them) and falls back to a
+         *  filename-substring heuristic. If no record is flagged as diffuse, the
+         *  first record is promoted so single-texture assets always resolve an
+         *  @c albedoMap.
+         */
+        void ExtractAllTextures(const ufbx_scene *scene, FbxLoadResult &result) {
+            std::unordered_set<std::uint32_t> diffuseVideoIds;
+            for (std::size_t mi = 0; mi < scene->materials.count; ++mi) {
+                const ufbx_material *material = scene->materials.data[mi];
+                if (material == nullptr)
+                    continue;
+                for (std::size_t ti = 0; ti < material->textures.count; ++ti) {
+                    const ufbx_material_texture &mtex = material->textures.data[ti];
+                    if (mtex.texture == nullptr || mtex.texture->video == nullptr)
+                        continue;
+                    if (!IsDiffuseChannelProp(MakeString(mtex.material_prop)))
+                        continue;
+                    diffuseVideoIds.insert(mtex.texture->video->element_id);
+                }
+            }
+
+            for (std::size_t vi = 0; vi < scene->videos.count; ++vi) {
+                const ufbx_video *video = scene->videos.data[vi];
+                if (video == nullptr)
+                    continue;
+                FbxTextureRecord record;
+                record.filename = MakeTextureBasename(video);
+                record.absolutePath = MakeString(video->absolute_filename);
+                record.relativePath = MakeString(video->relative_filename);
+                if (video->content.data != nullptr && video->content.size > 0) {
+                    const auto *src =
+                            static_cast<const unsigned char *>(video->content.data);
+                    record.embeddedBytes.assign(src, src + video->content.size);
+                }
+                if (diffuseVideoIds.count(video->element_id) > 0)
+                    record.isDiffuseAlbedo = true;
+                else if (NameHintsDiffuse(MakeString(video->name)) ||
+                         NameHintsDiffuse(MakeString(video->filename)))
+                    record.isDiffuseAlbedo = true;
+                result.textures.push_back(std::move(record));
+            }
+
+            if (!result.textures.empty()) {
+                const bool anyDiffuse = std::any_of(
+                    result.textures.begin(), result.textures.end(),
+                    [](const FbxTextureRecord &r) { return r.isDiffuseAlbedo; });
+                if (!anyDiffuse)
+                    result.textures.front().isDiffuseAlbedo = true;
+            }
+        }
     } // namespace
 
     /** @copydoc Horo::FbxLoader::LoadStaticMesh */
@@ -129,6 +250,7 @@ namespace Horo::FbxLoader {
         }
 
         ExtractAllMeshes(scene, result);
+        ExtractAllTextures(scene, result);
         ufbx_free_scene(scene);
 
         if (result.vertices.empty() || result.indices.empty()) {

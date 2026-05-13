@@ -387,3 +387,199 @@ TEST_CASE("AssetImportService + MeshCache: imported FBX is loadable end-to-end",
   const std::shared_ptr<Mesh> mesh2 = cache.Get(absoluteMeshPath.string());
   REQUIRE(mesh == mesh2);
 }
+
+// ===========================================================================
+// HORO-95 — external texture reference resolution
+// ===========================================================================
+
+TEST_CASE("FbxLoader: cube_texture fixture exposes a diffuse texture record", "[fbx][loader][textures]") {
+  // Note: cube_texture_5800_binary.fbx stores its texture as an embedded video
+  // blob (FBX 5800 era). The loader still produces a texture record; the
+  // diffuse-by-name heuristic flags the only entry.
+  const std::string path = FixturePath("cube_texture_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+
+  const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.textures.empty());
+  CHECK(std::ranges::any_of(result.textures, [](const auto &t) {
+    return t.isDiffuseAlbedo;
+  }));
+}
+
+TEST_CASE("FbxLoader: external-only fixture exposes paths but no embedded bytes",
+          "[fbx][loader][textures]") {
+  const std::string path = FixturePath("external_texture_6100_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+
+  const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.textures.empty());
+  const auto &record = result.textures.front();
+  CHECK(record.embeddedBytes.empty());
+  CHECK_FALSE(record.filename.empty());
+  CHECK(record.isDiffuseAlbedo);
+}
+
+TEST_CASE("FbxAssetImporter: copies sibling external texture into managed storage and sets albedoMap",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_external_tex";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Stage the external-only FBX next to a sibling PNG named to match the
+  // basename the FBX references.
+  const std::filesystem::path stagingDir = root / "source";
+  std::filesystem::create_directories(stagingDir, ec);
+  const std::filesystem::path stagedFbx = stagingDir / "ext.fbx";
+  std::filesystem::copy_file(FixturePath("external_texture_6100_binary.fbx"),
+                             stagedFbx,
+                             std::filesystem::copy_options::overwrite_existing,
+                             ec);
+  REQUIRE_FALSE(ec);
+
+  // Discover the texture filename via the loader so the test stays correct
+  // even if the upstream fixture changes.
+  const FbxLoader::FbxLoadResult loaded =
+      FbxLoader::LoadStaticMesh(stagedFbx.string());
+  REQUIRE(loaded.ok);
+  REQUIRE_FALSE(loaded.textures.empty());
+  const std::string textureBasename = loaded.textures.front().filename;
+  REQUIRE_FALSE(textureBasename.empty());
+
+  // Drop a tiny PNG next to the FBX with the basename the FBX expects.
+  const unsigned char png1x1[] = {
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+      0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+      0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00,
+      0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82};
+  {
+    const std::filesystem::path texPath = stagingDir / textureBasename;
+    std::ofstream f(texPath, std::ios::binary | std::ios::trunc);
+    f.write(reinterpret_cast<const char *>(png1x1), sizeof(png1x1));
+  }
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      stagedFbx.string(), "extimg", "guid_extimg", "ExtImg", {});
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.asset.albedoMap.empty());
+  CHECK(result.asset.albedoMap.find("assets/models/guid_extimg/") !=
+        std::string::npos);
+
+  // Diffuse albedo path must resolve to a real file under managed storage.
+  const std::filesystem::path absoluteAlbedo = root / result.asset.albedoMap;
+  REQUIRE(std::filesystem::is_regular_file(absoluteAlbedo));
+
+  // Metadata sidecar must list both the mesh.bin and the texture.
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_extimg", &metadata, &metaError));
+  CHECK(std::ranges::any_of(metadata.producedFiles, [&](const std::string &p) {
+    return p.ends_with(".mesh.bin");
+  }));
+  CHECK(std::ranges::any_of(metadata.producedFiles,
+                            [&](const std::string &p) {
+                              return p == result.asset.albedoMap;
+                            }));
+}
+
+TEST_CASE("FbxAssetImporter: missing external texture emits FbxExternalTextureMissing warning",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_external_tex_missing";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  // Stage the external-only FBX without any sibling texture file.
+  const std::filesystem::path stagingDir = root / "source";
+  std::filesystem::create_directories(stagingDir, ec);
+  const std::filesystem::path stagedFbx = stagingDir / "ext.fbx";
+  std::filesystem::copy_file(FixturePath("external_texture_6100_binary.fbx"),
+                             stagedFbx,
+                             std::filesystem::copy_options::overwrite_existing,
+                             ec);
+  REQUIRE_FALSE(ec);
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      stagedFbx.string(), "extimg_m", "guid_extimg_m", "ExtImg M", {});
+  // The mesh import must still succeed; texture failure is just a warning.
+  REQUIRE(result.ok);
+  CHECK(result.asset.albedoMap.empty());
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_extimg_m", &metadata, &metaError));
+  CHECK(std::ranges::any_of(metadata.diagnostics, [](const auto &d) {
+    return d.code == DiagnosticCodes::FbxExternalTextureMissing;
+  }));
+}
+
+// ===========================================================================
+// HORO-96 — embedded texture extraction
+// ===========================================================================
+
+TEST_CASE("FbxLoader: embedded fixture exposes textures with non-empty content blobs",
+          "[fbx][loader][textures]") {
+  const std::string path = FixturePath("embedded_textures_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(path));
+
+  const FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path);
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.textures.empty());
+  CHECK(std::ranges::any_of(result.textures, [](const auto &t) {
+    return !t.embeddedBytes.empty();
+  }));
+}
+
+TEST_CASE("FbxAssetImporter: extracts embedded texture into managed storage",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_embedded_tex";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("embedded_textures_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "embed", "guid_embed", "Embed", {});
+  REQUIRE(result.ok);
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_embed", &metadata, &metaError));
+  // Multiple producedFiles: at least the .mesh.bin and one texture.
+  CHECK(metadata.producedFiles.size() >= 2);
+  CHECK(std::ranges::any_of(metadata.producedFiles, [&](const std::string &p) {
+    return p.ends_with(".mesh.bin");
+  }));
+
+  // At least one produced file must be a real texture file under managed storage.
+  bool foundExtractedTexture = false;
+  for (const std::string &p: metadata.producedFiles) {
+    if (p.ends_with(".mesh.bin"))
+      continue;
+    const std::filesystem::path abs = root / p;
+    if (std::filesystem::is_regular_file(abs) &&
+        std::filesystem::file_size(abs) > 0) {
+      foundExtractedTexture = true;
+      break;
+    }
+  }
+  CHECK(foundExtractedTexture);
+}

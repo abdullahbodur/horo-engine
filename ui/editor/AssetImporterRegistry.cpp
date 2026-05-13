@@ -368,6 +368,182 @@ namespace Horo::Editor {
             }
         };
 
+        /** @brief Resolves an external FBX texture reference against on-disk candidate paths.
+         *  @param record   Texture record captured by @ref Horo::FbxLoader.
+         *  @param sourceDir Directory containing the FBX source file.
+         *  @return Existing absolute file path on success; empty when no candidate resolves.
+         *
+         *  Search order (first hit wins):
+         *  1. @c absolutePath if absolute and the file exists;
+         *  2. @c sourceDir / @c relativePath;
+         *  3. @c sourceDir / basename(@c relativePath);
+         *  4. @c sourceDir / @c filename (basename hint);
+         *  5. @c sourceDir / "textures" / @c filename — many DCCs export here.
+         */
+        std::filesystem::path
+        ResolveExternalTexturePath(const FbxLoader::FbxTextureRecord &record,
+                                   const std::filesystem::path &sourceDir) {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+
+            std::vector<fs::path> candidates;
+            if (!record.absolutePath.empty()) {
+                fs::path abs(record.absolutePath);
+                if (abs.is_absolute())
+                    candidates.push_back(std::move(abs));
+            }
+            if (!record.relativePath.empty()) {
+                candidates.emplace_back(sourceDir / record.relativePath);
+                const fs::path baseFromRel = fs::path(record.relativePath).filename();
+                if (!baseFromRel.empty())
+                    candidates.emplace_back(sourceDir / baseFromRel);
+            }
+            if (!record.filename.empty()) {
+                candidates.emplace_back(sourceDir / record.filename);
+                candidates.emplace_back(sourceDir / "textures" / record.filename);
+            }
+
+            for (const fs::path &candidate: candidates) {
+                if (candidate.empty())
+                    continue;
+                if (fs::is_regular_file(candidate, ec) && !ec)
+                    return candidate;
+                ec.clear();
+            }
+            return {};
+        }
+
+        /** @brief Detects the file format suffix from a small image byte signature.
+         *  @return Lowercase suffix including the leading dot, or empty when nothing matches.
+         *
+         *  Supports the formats the engine accepts elsewhere (see TextureCopyImporter):
+         *  PNG, JPG/JPEG, BMP, TGA, WebP, HDR. Used when an embedded blob lacks a
+         *  filename hint (rare; usually the FBX has a basename for the texture).
+         */
+        std::string SniffImageExtension(const std::vector<unsigned char> &bytes) {
+            const auto starts = [&](std::initializer_list<unsigned char> magic) {
+                if (bytes.size() < magic.size())
+                    return false;
+                std::size_t i = 0;
+                for (unsigned char b: magic) {
+                    if (bytes[i++] != b)
+                        return false;
+                }
+                return true;
+            };
+            if (starts({0x89, 0x50, 0x4E, 0x47}))
+                return ".png";
+            if (starts({0xFF, 0xD8, 0xFF}))
+                return ".jpg";
+            if (starts({0x42, 0x4D}))
+                return ".bmp";
+            if (bytes.size() > 12 && bytes[0] == 0x52 && bytes[1] == 0x49 &&
+                bytes[2] == 0x46 && bytes[3] == 0x46 && bytes[8] == 0x57 &&
+                bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+                return ".webp";
+            if (bytes.size() > 11 && bytes[0] == '#' && bytes[1] == '?' &&
+                bytes[2] == 'R' && bytes[3] == 'A')
+                return ".hdr";
+            return {};
+        }
+
+        /** @brief Returns @p baseName with its extension replaced by @p ext, or with
+         *         @p ext appended when @p baseName has no extension. Pass @c "" to leave it alone.
+         */
+        std::string EnsureExtension(std::string baseName, const std::string &ext) {
+            if (ext.empty())
+                return baseName;
+            namespace fs = std::filesystem;
+            fs::path p(baseName);
+            if (p.extension().empty())
+                return baseName + ext;
+            p.replace_extension(ext);
+            return p.string();
+        }
+
+        /** @brief Resolves and copies / writes every texture record from @p loaded into managed storage.
+         *
+         *  - Embedded textures (@c record.embeddedBytes non-empty) are written to
+         *    @p destDir / @p record.filename. When the captured filename has no
+         *    extension, one is sniffed from the byte signature.
+         *  - External textures are resolved via @ref ResolveExternalTexturePath and
+         *    copied into @p destDir.
+         *  - On the first successful diffuse texture, @p outAlbedoMap is set to the
+         *    project-relative produced-file path so the importer can wire it into
+         *    @c AssetDef::albedoMap.
+         *  - Per-texture failures are appended as @c Warning diagnostics keyed on
+         *    @c FbxExternalTextureMissing / @c FbxExternalTextureCopyFailed /
+         *    @c FbxEmbeddedTextureExtractFailed; they never fail the overall import.
+         */
+        void ApplyFbxTextures(const std::vector<FbxLoader::FbxTextureRecord> &textures,
+                              const std::filesystem::path &sourcePath,
+                              const std::filesystem::path &destDir,
+                              const AssetImportRequest &request,
+                              const char *importerId,
+                              std::vector<AssetImportDiagnostic> &diagnostics,
+                              std::vector<std::string> &producedFiles,
+                              std::string &outAlbedoMap) {
+            namespace fs = std::filesystem;
+            const fs::path sourceDir = sourcePath.parent_path();
+
+            for (const FbxLoader::FbxTextureRecord &record: textures) {
+                std::string filename = record.filename;
+                if (filename.empty())
+                    continue;
+
+                if (!record.embeddedBytes.empty()) {
+                    if (fs::path(filename).extension().empty())
+                        filename = EnsureExtension(filename, SniffImageExtension(record.embeddedBytes));
+                    const fs::path dest = destDir / filename;
+                    std::ofstream out(dest, std::ios::binary | std::ios::trunc);
+                    if (!out.is_open() ||
+                        !out.write(reinterpret_cast<const char *>(
+                                       record.embeddedBytes.data()),
+                                   static_cast<std::streamsize>(record.embeddedBytes.size())) ||
+                        !out.good()) {
+                        diagnostics.push_back(MakeDiagnostic(
+                            AssetDiagnosticSeverity::Warning,
+                            DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
+                            "Failed to extract embedded texture '" + filename + "'.",
+                            request, importerId));
+                        continue;
+                    }
+                    const std::string projectRelative =
+                            fs::relative(dest, ProjectPath::Root()).generic_string();
+                    producedFiles.push_back(projectRelative);
+                    if (record.isDiffuseAlbedo && outAlbedoMap.empty())
+                        outAlbedoMap = projectRelative;
+                    continue;
+                }
+
+                const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
+                if (resolved.empty()) {
+                    diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Warning,
+                        DiagnosticCodes::FbxExternalTextureMissing,
+                        "External texture '" + filename + "' not found near source FBX.",
+                        request, importerId));
+                    continue;
+                }
+                const fs::path dest = destDir / filename;
+                std::error_code ec;
+                if (!CopyFileReplacing(resolved, dest, ec) || ec) {
+                    diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Warning,
+                        DiagnosticCodes::FbxExternalTextureCopyFailed,
+                        "Failed to copy external texture '" + filename + "' (" +
+                            ec.message() + ").",
+                        request, importerId));
+                    continue;
+                }
+                const std::string projectRelative =
+                        fs::relative(dest, ProjectPath::Root()).generic_string();
+                producedFiles.push_back(projectRelative);
+                if (record.isDiffuseAlbedo && outAlbedoMap.empty())
+                    outAlbedoMap = projectRelative;
+            }
+        }
+
         /** @brief Built-in importer that extracts static-mesh geometry from an FBX file
          *         into the engine-native @c .mesh.bin format under managed asset storage.
          *
@@ -462,11 +638,18 @@ namespace Horo::Editor {
                 producedFiles.push_back(
                     fs::relative(destMeshBin, ProjectPath::Root()).generic_string());
 
+                std::string albedoMapPath;
+                ApplyFbxTextures(loaded.textures, sourcePath, destDir, request,
+                                 ImporterId(), result.diagnostics, producedFiles,
+                                 albedoMapPath);
+
                 AssetDef asset;
                 asset.guid = request.assetGuid;
                 asset.displayName =
                         request.displayName.empty() ? request.assetId : request.displayName;
                 asset.mesh = fs::relative(destMeshBin, ProjectPath::Root()).generic_string();
+                if (!albedoMapPath.empty())
+                    asset.albedoMap = albedoMapPath;
                 {
                     // Fit-to-2-units along Y, mirroring SuggestRenderScale's
                     // behaviour but using the AABB the loader already computed
