@@ -93,6 +93,30 @@ std::string PickObjFilePath() {
 // SONAR-ON
 
 // SONAR-OFF
+/** @copydoc PickMeshFilePath */
+std::string PickMeshFilePath() {
+#if defined(_WIN32)
+  wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
+  // requires a wchar_t[] output buffer
+  OPENFILENAMEW ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = L"Mesh Files\0*.obj;*.fbx\0OBJ Files\0*.obj\0FBX Files\0*.fbx\0All Files\0*.*\0";
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath) / sizeof(filePath[0]);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameW(&ofn))
+    return WidePathToUtf8(filePath);
+  return {};
+#elif defined(__APPLE__)
+  return ReadPathFromOsascript(
+      R"OS(/usr/bin/osascript -e 'try' -e 'POSIX path of (choose file with prompt "Select mesh source (.obj or .fbx)")' -e 'on error' -e 'return ""' -e 'end try' 2>/dev/null)OS");
+#else
+  return {};
+#endif
+}
+// SONAR-ON
+
+// SONAR-OFF
 /** @copydoc PickTextureFilePath */
 std::string PickTextureFilePath() {
 #ifdef _WIN32
