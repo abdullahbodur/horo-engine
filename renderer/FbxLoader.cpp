@@ -93,9 +93,9 @@ namespace Horo::FbxLoader {
 
                 // Resize the triangulation buffer once per mesh to its maximum
                 // needs (3 indices per triangle, max_face_triangles per face).
-                const std::size_t requiredSize =
-                        static_cast<std::size_t>(mesh->max_face_triangles) * 3;
-                if (triBuffer.size() < requiredSize)
+                if (const auto requiredSize =
+                            static_cast<std::size_t>(mesh->max_face_triangles) * 3;
+                    triBuffer.size() < requiredSize)
                     triBuffer.resize(requiredSize);
 
                 for (std::size_t faceIdx = 0; faceIdx < mesh->num_faces; ++faceIdx) {

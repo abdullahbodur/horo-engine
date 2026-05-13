@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <string_view>
 
@@ -444,10 +445,10 @@ namespace Horo::Editor {
 
                 const fs::path destMeshBin =
                         destDir / (sourcePath.stem().string() + ".mesh.bin");
-                MeshBin::WriteResult writeResult =
+                if (auto writeResult =
                         MeshBin::WriteStaticMesh(destMeshBin.string(), loaded.vertices,
                                                  loaded.indices);
-                if (!writeResult.ok) {
+                    !writeResult.ok) {
                     result.error = writeResult.error.empty()
                                        ? "Failed writing engine-native mesh binary."
                                        : writeResult.error;
@@ -472,10 +473,8 @@ namespace Horo::Editor {
                     // so we never re-parse the source FBX.
                     const float height = loaded.aabbMax.y - loaded.aabbMin.y;
                     const float scale = (height < 1e-6f) ? 1.0f : (2.0f / height);
-                    char buffer[64];
-                    std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f,%.4f", scale,
-                                  scale, scale);
-                    asset.renderScale = buffer;
+                    asset.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scale,
+                                                   scale, scale);
                 }
 
                 result.ok = true;

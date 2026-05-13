@@ -4,8 +4,10 @@
 #include "renderer/MeshBin.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <limits>
 
@@ -28,22 +30,24 @@ namespace Horo::MeshBin {
             uint32_t indexCount;
             uint32_t vertexStride;
             uint32_t reserved0;
-            float aabbMin[3];
-            float aabbMax[3];
+            std::array<float, 3> aabbMin;
+            std::array<float, 3> aabbMax;
         };
 
         static_assert(sizeof(Header) == 48,
                       "MeshBin header layout must remain 48 bytes; bump kMeshBinVersion before changing it.");
 
         /** @brief Writes raw bytes from @p data to @p stream. */
-        bool WriteBytes(std::ofstream &stream, const void *data, std::size_t size) {
-            stream.write(static_cast<const char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
+            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
         /** @brief Reads raw bytes into @p data from @p stream. */
-        bool ReadBytes(std::ifstream &stream, void *data, std::size_t size) {
-            stream.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
+        template <typename T>
+        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
+            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
@@ -144,8 +148,7 @@ namespace Horo::MeshBin {
     ReadResult ReadStaticMesh(const std::string &sourcePath) {
         ReadResult result;
 
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(sourcePath, ec) || ec) {
+        if (std::error_code ec; !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
             result.error = "MeshBin read: source path is not a regular file.";
             return result;
         }
@@ -166,15 +169,13 @@ namespace Horo::MeshBin {
             return result;
         }
         if (header.version != kMeshBinVersion) {
-            result.error = "MeshBin read: unsupported version " +
-                           std::to_string(header.version) +
-                           " (expected " + std::to_string(kMeshBinVersion) + ").";
+            result.error = std::format("MeshBin read: unsupported version {} (expected {}).",
+                                       header.version, kMeshBinVersion);
             return result;
         }
         if (header.vertexStride != sizeof(Vertex)) {
-            result.error = "MeshBin read: vertex stride mismatch; expected " +
-                           std::to_string(sizeof(Vertex)) + ", got " +
-                           std::to_string(header.vertexStride) + ".";
+            result.error = std::format("MeshBin read: vertex stride mismatch; expected {}, got {}.",
+                                       sizeof(Vertex), header.vertexStride);
             return result;
         }
         if (header.vertexCount == 0 || header.indexCount == 0 ||
