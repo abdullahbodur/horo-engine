@@ -583,3 +583,121 @@ TEST_CASE("FbxAssetImporter: extracts embedded texture into managed storage",
   }
   CHECK(foundExtractedTexture);
 }
+
+// ===========================================================================
+// HORO-97 — persisted produced files and dependency metadata
+// ===========================================================================
+// AssetMetadata::dependencies is the contract the reimport propagator (HORO-98)
+// reads to decide which downstream assets to refresh. The FBX importer must:
+// - record the .fbx as a Source dependency;
+// - record every produced file as a ProducedOutput dependency;
+// - record every resolved external texture source path as an extra Source
+//   dependency so reimport sees changes to those files.
+
+TEST_CASE("FbxAssetImporter: external texture is recorded as both Source and ProducedOutput dependencies",
+          "[editor][asset-import][fbx][metadata]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_deps_external";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path stagingDir = root / "source";
+  std::filesystem::create_directories(stagingDir, ec);
+  const std::filesystem::path stagedFbx = stagingDir / "ext.fbx";
+  std::filesystem::copy_file(FixturePath("external_texture_6100_binary.fbx"),
+                             stagedFbx,
+                             std::filesystem::copy_options::overwrite_existing,
+                             ec);
+  REQUIRE_FALSE(ec);
+
+  const FbxLoader::FbxLoadResult loaded =
+      FbxLoader::LoadStaticMesh(stagedFbx.string());
+  REQUIRE(loaded.ok);
+  REQUIRE_FALSE(loaded.textures.empty());
+  const std::string textureBasename = loaded.textures.front().filename;
+  REQUIRE_FALSE(textureBasename.empty());
+
+  const unsigned char png1x1[] = {
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+      0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+      0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00,
+      0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82};
+  const std::filesystem::path externalTexture = stagingDir / textureBasename;
+  {
+    std::ofstream f(externalTexture, std::ios::binary | std::ios::trunc);
+    f.write(reinterpret_cast<const char *>(png1x1), sizeof(png1x1));
+  }
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      stagedFbx.string(), "deps_e", "guid_deps_e", "Deps E", {});
+  REQUIRE(result.ok);
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_deps_e", &metadata, &metaError));
+
+  // Source dependencies: FBX itself + resolved external texture.
+  const auto isSource = [](const AssetDependencyRecord &d) {
+    return d.kind == AssetDependencyKind::Source;
+  };
+  const auto isProduced = [](const AssetDependencyRecord &d) {
+    return d.kind == AssetDependencyKind::ProducedOutput;
+  };
+  CHECK(std::ranges::any_of(metadata.dependencies, [&](const auto &d) {
+    return isSource(d) && d.value == stagedFbx.string();
+  }));
+  CHECK(std::ranges::any_of(metadata.dependencies, [&](const auto &d) {
+    return isSource(d) && d.value == externalTexture.string();
+  }));
+  // ProducedOutput dependencies: mesh.bin and the copied texture.
+  CHECK(std::ranges::any_of(metadata.dependencies, [&](const auto &d) {
+    return isProduced(d) && d.value.ends_with(".mesh.bin");
+  }));
+  CHECK(std::ranges::any_of(metadata.dependencies, [&](const auto &d) {
+    return isProduced(d) && d.value == result.asset.albedoMap;
+  }));
+}
+
+TEST_CASE("FbxAssetImporter: embedded texture only adds the FBX as a Source dependency",
+          "[editor][asset-import][fbx][metadata]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_deps_embedded";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const AssetImportService service;
+  const std::string source = FixturePath("embedded_textures_7400_binary.fbx");
+  const AssetImportResult result = service.ImportAssetFromSource(
+      source, "deps_emb", "guid_deps_emb", "Deps Emb", {});
+  REQUIRE(result.ok);
+
+  AssetMetadata metadata;
+  std::string metaError;
+  REQUIRE(LoadAssetMetadata("guid_deps_emb", &metadata, &metaError));
+
+  const std::size_t sourceCount = std::ranges::count_if(
+      metadata.dependencies, [](const AssetDependencyRecord &d) {
+        return d.kind == AssetDependencyKind::Source;
+      });
+  // Exactly one Source dep: the FBX itself. Embedded textures live inside it,
+  // so they do not get their own Source row.
+  CHECK(sourceCount == 1);
+  CHECK(std::ranges::any_of(metadata.dependencies, [&](const auto &d) {
+    return d.kind == AssetDependencyKind::Source && d.value == source;
+  }));
+  // ProducedOutput count: at least mesh.bin + 1 texture.
+  const std::size_t producedCount = std::ranges::count_if(
+      metadata.dependencies, [](const AssetDependencyRecord &d) {
+        return d.kind == AssetDependencyKind::ProducedOutput;
+      });
+  CHECK(producedCount >= 2);
+}

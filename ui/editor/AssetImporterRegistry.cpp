@@ -481,6 +481,10 @@ namespace Horo::Editor {
          *    extension, one is sniffed from the byte signature.
          *  - External textures are resolved via @ref ResolveExternalTexturePath and
          *    copied into @p destDir.
+         *  - Each successfully resolved external source path is appended to
+         *    @p outExternalSourcePaths so the importer can record them as additional
+         *    @c Source dependencies in the metadata sidecar (HORO-97). Embedded
+         *    textures do not contribute a Source row beyond the FBX itself.
          *  - On the first successful diffuse texture, @p outAlbedoMap is set to the
          *    project-relative produced-file path so the importer can wire it into
          *    @c AssetDef::albedoMap.
@@ -551,6 +555,7 @@ namespace Horo::Editor {
                               const ApplyFbxTexturesContext &ctx,
                               std::vector<AssetImportDiagnostic> &diagnostics,
                               std::vector<std::string> &producedFiles,
+                              std::vector<std::string> &outExternalSourcePaths,
                               std::string &outAlbedoMap) {
             namespace fs = std::filesystem;
             const fs::path sourceDir = ctx.sourcePath.parent_path();
@@ -639,6 +644,7 @@ namespace Horo::Editor {
                     continue;
                 }
                 recordProducedTexture(dest, filename, record);
+                outExternalSourcePaths.push_back(resolved.string());
             }
         }
 
@@ -737,10 +743,11 @@ namespace Horo::Editor {
                     fs::relative(destMeshBin, ProjectPath::Root()).generic_string());
 
                 std::string albedoMapPath;
+                std::vector<std::string> externalSourcePaths;
                 ApplyFbxTextures(loaded.textures,
-                                 ApplyFbxTexturesContext{sourcePath, destDir, request,
-                                                          ImporterId()},
-                                 result.diagnostics, producedFiles, albedoMapPath);
+                                 {sourcePath, destDir, request, ImporterId()},
+                                 result.diagnostics, producedFiles,
+                                 externalSourcePaths, albedoMapPath);
 
                 AssetDef asset;
                 asset.guid = request.assetGuid;
@@ -763,6 +770,21 @@ namespace Horo::Editor {
                 result.asset = asset;
                 result.metadata = BuildImportedMetadata(request, asset, ImporterId(),
                                                         std::move(producedFiles));
+                // Resolved external texture source paths participate in
+                // dependency tracking so reimport propagation observes
+                // upstream texture changes. Embedded textures do not add a
+                // Source row beyond the FBX itself.
+                for (const std::string &externalSource: externalSourcePaths) {
+                    const auto duplicate = std::ranges::find_if(
+                        result.metadata.dependencies,
+                        [&](const AssetDependencyRecord &dep) {
+                            return dep.kind == AssetDependencyKind::Source &&
+                                   dep.value == externalSource;
+                        });
+                    if (duplicate == result.metadata.dependencies.end())
+                        result.metadata.dependencies.emplace_back(
+                            AssetDependencyKind::Source, externalSource);
+                }
                 result.metadata.diagnostics = result.diagnostics;
                 return result;
             }
