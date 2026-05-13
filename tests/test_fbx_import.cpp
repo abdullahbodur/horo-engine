@@ -701,3 +701,126 @@ TEST_CASE("FbxAssetImporter: embedded texture only adds the FBX as a Source depe
       });
   CHECK(producedCount >= 2);
 }
+
+// ===========================================================================
+// HORO-98 — reimport propagation: an FBX root reimport refreshes downstream
+// assets that record it as a DownstreamAsset dependency.
+// ===========================================================================
+//
+// Wires through AssetImportService::ReimportAssetWithDependents which already
+// existed for OBJ; this is a regression pin for FBX participation. We import
+// an FBX cube as the root, manually attach a small OBJ asset to the document
+// whose metadata declares the FBX guid as a DownstreamAsset dependency, run
+// reimport on the FBX root, and verify both assets appear in the result order
+// with successful records and freshly-touched metadata sidecars.
+
+TEST_CASE("AssetImportService: reimporting an FBX asset propagates to dependent OBJ asset",
+          "[editor][asset-import][fbx][reimport]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_reimport";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  SceneDocument doc;
+
+  // Root asset: FBX cube (no textures = simplest happy path).
+  const std::string fbxSource = FixturePath("cube_5800_binary.fbx");
+  const AssetImportResult fbxImport = service.ImportAssetFromSource(
+      fbxSource, "fbx_root", "guid_fbx_root", "FBX Root", {});
+  REQUIRE(fbxImport.ok);
+  doc.assets["fbx_root"] = fbxImport.asset;
+
+  // Downstream asset: a synthetic OBJ asset that declares the FBX as a
+  // DownstreamAsset dependency. The OBJ source is written into the project so
+  // ObjAssetImporter can re-run during reimport.
+  const std::filesystem::path objSource = root / "downstream.obj";
+  WriteFile(objSource, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  const AssetImportResult objImport = service.ImportAssetFromSource(
+      objSource.string(), "obj_dep", "guid_obj_dep", "OBJ Dep", {});
+  REQUIRE(objImport.ok);
+  doc.assets["obj_dep"] = objImport.asset;
+
+  // Wire the dependency edge: obj_dep declares fbx_root as a DownstreamAsset.
+  // (Naming is from the perspective of the root: "asset has guid_fbx_root as
+  //  a downstream dependency that fans out reimports".)
+  AssetMetadata objMeta;
+  std::string err;
+  REQUIRE(LoadAssetMetadata("guid_obj_dep", &objMeta, &err));
+  objMeta.dependencies.emplace_back(AssetDependencyKind::DownstreamAsset,
+                                    "guid_fbx_root");
+  REQUIRE(SaveAssetMetadata(objMeta, &err));
+
+  const AssetReimportResult result = service.ReimportAssetWithDependents(
+      &doc, "guid_fbx_root", "fbx source touched");
+  REQUIRE(result.ok);
+  CHECK(result.error.empty());
+
+  // Both guids must appear in the topological order, root first.
+  REQUIRE(result.order.size() == 2);
+  CHECK(result.order[0] == "guid_fbx_root");
+  CHECK(result.order[1] == "guid_obj_dep");
+
+  // Each record must be a success.
+  REQUIRE(result.records.size() == 2);
+  for (const AssetReimportRecord &rec: result.records) {
+    INFO("record assetId=" << rec.assetId << " guid=" << rec.assetGuid
+                           << " ok=" << rec.ok << " error=" << rec.error);
+    CHECK(rec.ok);
+  }
+
+  // Sidecars exist and reflect the reimport reason.
+  AssetMetadata fbxMetaAfter;
+  AssetMetadata objMetaAfter;
+  REQUIRE(LoadAssetMetadata("guid_fbx_root", &fbxMetaAfter, &err));
+  REQUIRE(LoadAssetMetadata("guid_obj_dep", &objMetaAfter, &err));
+  CHECK(fbxMetaAfter.lastImportSucceeded);
+  CHECK(objMetaAfter.lastImportSucceeded);
+  CHECK(fbxMetaAfter.lastImportReason == "fbx source touched");
+  CHECK(objMetaAfter.lastImportReason ==
+        "Dependency changed: guid_fbx_root");
+}
+
+TEST_CASE("AssetImportService: reimporting an FBX asset alone keeps producedFiles consistent",
+          "[editor][asset-import][fbx][reimport]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_reimport_alone";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  AssetImportService service;
+  SceneDocument doc;
+
+  const std::string source = FixturePath("embedded_textures_7400_binary.fbx");
+  const AssetImportResult firstImport = service.ImportAssetFromSource(
+      source, "embed_r", "guid_embed_r", "Embed R", {});
+  REQUIRE(firstImport.ok);
+  doc.assets["embed_r"] = firstImport.asset;
+
+  AssetMetadata before;
+  std::string err;
+  REQUIRE(LoadAssetMetadata("guid_embed_r", &before, &err));
+
+  const AssetReimportResult result = service.ReimportAssetWithDependents(
+      &doc, "guid_embed_r", "manual reimport");
+  REQUIRE(result.ok);
+  REQUIRE(result.records.size() == 1);
+  REQUIRE(result.records[0].ok);
+
+  AssetMetadata after;
+  REQUIRE(LoadAssetMetadata("guid_embed_r", &after, &err));
+  CHECK(after.lastImportSucceeded);
+  CHECK(after.lastImportReason == "manual reimport");
+  // Same set of producedFiles up to ordering.
+  std::vector<std::string> beforeSorted = before.producedFiles;
+  std::vector<std::string> afterSorted = after.producedFiles;
+  std::ranges::sort(beforeSorted);
+  std::ranges::sort(afterSorted);
+  CHECK(beforeSorted == afterSorted);
+}
