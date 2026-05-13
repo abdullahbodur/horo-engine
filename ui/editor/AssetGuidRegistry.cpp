@@ -49,8 +49,8 @@ namespace Horo::Editor {
                 "ProjectPath::Root() is empty; no assets directory to scan.");
             return result;
         }
-        std::error_code rootEc;
-        if (!std::filesystem::is_directory(root, rootEc) || rootEc) {
+        if (std::error_code rootEc;
+            !std::filesystem::is_directory(root, rootEc) || rootEc) {
             // No managed dir yet; not an error - empty registry is a valid state.
             return result;
         }
