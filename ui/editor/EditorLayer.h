@@ -22,6 +22,7 @@
 #include "ui/editor/components/EditorBottomDock.h"
 #include "ui/editor/components/EditorHelpPopup.h"
 #include "ui/editor/components/EditorSettingsModal.h"
+#include "ui/editor/components/EditorImportAssetModal.h"
 #include "ui/editor/components/EditorToolbar.h"
 #include "ui/editor/components/EditorUIWidgets.h"
 #include "mcp/McpController.h"
@@ -66,6 +67,9 @@ namespace Horo {
             void OnMenuResetLayout();
             /** @brief Menu handler: open the editor settings modal. */
             void OnMenuSettings();
+
+            /** @brief Opens the dedicated Import Asset modal — multi-format chooser via the importer registry. */
+            void OnMenuImportAsset();
             /** @brief Menu handler: close the editor (prompts to save if dirty). */
             void OnMenuCloseEditor();
             /** @brief Menu handler: add a new Panel object to the scene. */
@@ -300,8 +304,11 @@ namespace Horo {
              */
             bool TryApplySelectedAssetAlbedoDrop(const std::string &path);
 
-            /** @brief Processes queued OBJ drops and imports accepted assets. */
-            void ProcessPendingObjDrops();
+            /** @brief Processes queued mesh-source (.obj / .fbx) drops and imports accepted assets. */
+            void ProcessPendingMeshDrops();
+
+            /** @brief Polls the Import Asset modal for a pending import request and dispatches it. */
+            void ProcessImportAssetModalRequest();
 
             GLFWwindow *m_window = nullptr;           /**< GLFW window owning the render context. */
             bool m_active = false;                    /**< True when the editor overlay is shown. */
@@ -847,6 +854,7 @@ namespace Horo {
             bool m_prevHelpToggle = false;             /**< Previous-frame help-toggle shortcut state. */
             EditorHelpPopup m_helpPopup;               /**< Help/shortcuts popup component state. */
             EditorSettingsModal m_settingsModal;       /**< Settings modal component state. */
+            EditorImportAssetModal m_importAssetModal; /**< Import Asset modal — multi-format chooser via the importer registry. */
             EditorUserSettingsDocument m_userSettingsDocument{};
                                                        /**< Persisted user-wide editor preferences (theme preset). */
             [[no_unique_address]] EditorToolbar m_toolbar;                   /**< Toolbar component state and actions. */

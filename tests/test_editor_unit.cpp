@@ -40,6 +40,8 @@
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
+#include "renderer/Mesh.h"
+#include "renderer/MeshBin.h"
 #include "renderer/RenderBackend.h"
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeCoordinator.h"
@@ -502,6 +504,45 @@ TEST_CASE("DiagnosticCodes: TextureCopyImporter emits typed code for unsupported
 }
 
 // ===========================================================================
+// EditorAssetThumbnailPreview — .mesh.bin support (HORO-101)
+// ===========================================================================
+// FBX-imported assets land as engine-native .mesh.bin files via HORO-94 +
+// HORO-100. The thumbnail preview cache must therefore route .mesh.bin paths
+// through MeshBin::ReadStaticMesh and produce a real preview Mesh, mirroring
+// the OBJ branch that already drove static-mesh thumbnails.
+
+#include "ui/editor/components/EditorAssetThumbnailPreview.h"
+
+TEST_CASE("EditorAssetThumbnailPreview: .mesh.bin path resolves to a real preview mesh",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_thumb_meshbin.mesh.bin";
+  std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{2.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 3.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  std::vector<uint32_t> indices = {0, 1, 2};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  const Mesh *mesh = TryGetAssetPreviewStaticMesh(path.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() == 3);
+  REQUIRE(mesh->GetVertices().size() == 3);
+  CHECK(mesh->GetVertices()[2].position.y == 3.0f);
+}
+
+TEST_CASE("EditorAssetThumbnailPreview: missing .mesh.bin path returns nullptr without crashing",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+  const Mesh *mesh =
+      TryGetAssetPreviewStaticMesh("/nonexistent/path/missing.mesh.bin");
+  REQUIRE(mesh == nullptr);
+}
+
+// ===========================================================================
 // AssetImportDiagnosticCodes — taxonomy contract
 // ===========================================================================
 //
@@ -654,6 +695,115 @@ TEST_CASE("DiagnosticCodes: TextureCopyImporter emits typed code for unsupported
   CHECK_FALSE(result.ok);
   REQUIRE_FALSE(result.diagnostics.empty());
   CHECK(result.diagnostics[0].code == DiagnosticCodes::TextureUnsupportedType);
+}
+
+// ===========================================================================
+// EditorImportAssetModal — state transitions (HORO-92)
+// ===========================================================================
+// Exercises the modal as a state machine; the Draw call short-circuits when
+// no ImGui context is current, so these tests run cleanly in unit-test mode.
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+TEST_CASE("EditorImportAssetModal: Open seeds draft and infers importer from extension",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  REQUIRE_FALSE(modal.IsOpen());
+
+  modal.Open("/some/path/cube.fbx", &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath == "/some/path/cube.fbx");
+  CHECK(modal.DraftForTest().assetId == "cube");
+  CHECK(modal.DraftForTest().displayName == "cube");
+  CHECK(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with .obj routes to OBJ importer",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/x/y/crate.obj", &registry);
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with no path leaves importer empty",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+  CHECK(modal.DraftForTest().assetId.empty());
+  CHECK(modal.DraftForTest().importerId.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: RequestImportForTest signals HasPendingRequest exactly once",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  CHECK_FALSE(modal.HasPendingRequest());
+
+  modal.RequestImportForTest();
+  REQUIRE(modal.HasPendingRequest());
+  const ImportAssetRequest req = modal.ConsumePendingRequest();
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(req.sourcePath == "/p/cube.fbx");
+  CHECK(req.assetId == "cube");
+  CHECK(req.importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with ok+no diagnostics closes the modal",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  modal.SetLastResult(outcome);
+  CHECK_FALSE(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with warning diagnostics keeps the modal open",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  AssetImportDiagnostic warn;
+  warn.severity = AssetDiagnosticSeverity::Warning;
+  warn.code = "asset.fbx.external_texture_missing";
+  warn.message = "missing.png";
+  outcome.diagnostics.push_back(warn);
+  modal.SetLastResult(outcome);
+  CHECK(modal.IsOpen());
+  CHECK(modal.LastResultForTest().ok);
+}
+
+TEST_CASE("EditorImportAssetModal: Close clears pending state",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  modal.RequestImportForTest();
+  modal.Close();
+  CHECK_FALSE(modal.IsOpen());
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw is a no-op without an ImGui context",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  // No ImGui context attached; Draw must not crash and the modal stays open.
+  modal.Draw();
+  CHECK(modal.IsOpen());
 }
 
 // ===========================================================================
