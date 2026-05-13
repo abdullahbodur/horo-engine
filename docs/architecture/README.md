@@ -11,6 +11,7 @@ This directory documents the current engine architecture, calls out temporary ex
 - [ownership-lifecycle.md](./ownership-lifecycle.md)
 - [error-result-model.md](./error-result-model.md)
 - [threading-and-mutation.md](./threading-and-mutation.md)
+- [fbx-import-support-matrix.md](./fbx-import-support-matrix.md)
 
 ## Reviewer Rules
 
