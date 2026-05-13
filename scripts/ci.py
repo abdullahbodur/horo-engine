@@ -174,14 +174,25 @@ def path_regex(path: Path) -> str:
     return re.escape(normalized).replace("/", r"[\\/]")
 
 
+def gcovr_path_regex(path: Path) -> str:
+    """Return a regex matching @p path with forward-slash separators only.
+
+    gcovr normalises filter targets to forward slashes before matching and
+    rejects character classes like ``[\\/]`` with a "filters must use forward
+    slashes" warning. Keep the regex straightforward for that consumer.
+    """
+    normalized = str(path.resolve()).replace("\\", "/")
+    return re.escape(normalized)
+
+
 def to_gcovr(patterns: list[str], repo_root: Path) -> list[str]:
     out: list[str] = []
     for pattern in patterns:
         if pattern.endswith("/**"):
-            directory = path_regex(repo_root / pattern[:-3])
-            out.append(f"--exclude ^{directory}[\\/].*$")
+            directory = gcovr_path_regex(repo_root / pattern[:-3])
+            out.append(f"--exclude ^{directory}/.*$")
         else:
-            exact = path_regex(repo_root / pattern)
+            exact = gcovr_path_regex(repo_root / pattern)
             out.append(f"--exclude ^{exact}$")
     return out
 
