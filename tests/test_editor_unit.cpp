@@ -438,6 +438,115 @@ TEST_CASE("DiagnosticCodes: TextureCopyImporter emits typed code for unsupported
 }
 
 // ===========================================================================
+// EditorImportAssetModal — state transitions (HORO-92)
+// ===========================================================================
+// Exercises the modal as a state machine; the Draw call short-circuits when
+// no ImGui context is current, so these tests run cleanly in unit-test mode.
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+TEST_CASE("EditorImportAssetModal: Open seeds draft and infers importer from extension",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  REQUIRE_FALSE(modal.IsOpen());
+
+  modal.Open("/some/path/cube.fbx", &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath == "/some/path/cube.fbx");
+  CHECK(modal.DraftForTest().assetId == "cube");
+  CHECK(modal.DraftForTest().displayName == "cube");
+  CHECK(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with .obj routes to OBJ importer",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/x/y/crate.obj", &registry);
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with no path leaves importer empty",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+  CHECK(modal.DraftForTest().assetId.empty());
+  CHECK(modal.DraftForTest().importerId.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: RequestImportForTest signals HasPendingRequest exactly once",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  CHECK_FALSE(modal.HasPendingRequest());
+
+  modal.RequestImportForTest();
+  REQUIRE(modal.HasPendingRequest());
+  const ImportAssetRequest req = modal.ConsumePendingRequest();
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(req.sourcePath == "/p/cube.fbx");
+  CHECK(req.assetId == "cube");
+  CHECK(req.importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with ok+no diagnostics closes the modal",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  modal.SetLastResult(outcome);
+  CHECK_FALSE(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with warning diagnostics keeps the modal open",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  AssetImportDiagnostic warn;
+  warn.severity = AssetDiagnosticSeverity::Warning;
+  warn.code = "asset.fbx.external_texture_missing";
+  warn.message = "missing.png";
+  outcome.diagnostics.push_back(warn);
+  modal.SetLastResult(outcome);
+  CHECK(modal.IsOpen());
+  CHECK(modal.LastResultForTest().ok);
+}
+
+TEST_CASE("EditorImportAssetModal: Close clears pending state",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  modal.RequestImportForTest();
+  modal.Close();
+  CHECK_FALSE(modal.IsOpen());
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw is a no-op without an ImGui context",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  // No ImGui context attached; Draw must not crash and the modal stays open.
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+// ===========================================================================
 // AssetImportService — ImportTextureForAsset + SaveMetadataForAsset
 // ===========================================================================
 

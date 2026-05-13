@@ -65,6 +65,11 @@ void EditorLayer::OnMenuSettings() {
                        m_userSettingsDocument.settings);
 }
 
+/** @copydoc EditorLayer::OnMenuImportAsset */
+void EditorLayer::OnMenuImportAsset() {
+  m_importAssetModal.Open({}, &m_assetImportService.Registry());
+}
+
 /** @copydoc EditorLayer::OnMenuCloseEditor */
 void EditorLayer::OnMenuCloseEditor() {
   RequestSceneAction(PendingSceneAction::CloseEditor);

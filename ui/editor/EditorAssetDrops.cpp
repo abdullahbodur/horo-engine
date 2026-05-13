@@ -163,4 +163,34 @@ namespace Horo::Editor
     ProcessPendingObjDrops();
     m_pendingPathDropPaths.clear();
   }
+
+  /** @copydoc EditorLayer::ProcessImportAssetModalRequest */
+  void EditorLayer::ProcessImportAssetModalRequest()
+  {
+    if (!m_importAssetModal.HasPendingRequest())
+      return;
+    const ImportAssetRequest req = m_importAssetModal.ConsumePendingRequest();
+    ImportAssetOutcome outcome;
+    if (req.sourcePath.empty() || req.assetId.empty()) {
+      outcome.error = "Source path and asset id are required.";
+      m_importAssetModal.SetLastResult(outcome);
+      return;
+    }
+
+    const std::string assetGuid = GenerateAssetGuid();
+    const AssetImportResult result = m_assetImportService.ImportAssetFromSource(
+      req.sourcePath, req.assetId, assetGuid, req.displayName.empty()
+        ? req.assetId : req.displayName);
+
+    outcome.ok = result.ok;
+    outcome.error = result.error;
+    outcome.diagnostics = result.diagnostics;
+    if (result.ok) {
+      outcome.assetMesh = result.asset.mesh;
+      outcome.assetAlbedoMap = result.asset.albedoMap;
+      m_document.assets[req.assetId] = result.asset;
+      m_document.dirty = true;
+    }
+    m_importAssetModal.SetLastResult(outcome);
+  }
 } // namespace Horo::Editor
