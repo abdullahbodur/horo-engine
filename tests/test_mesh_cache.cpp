@@ -19,10 +19,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "renderer/Mesh.h"
+#include "renderer/MeshBin.h"
 #include "renderer/MeshCache.h"
+#include "tests/TestTempPaths.h"
 
 using namespace Horo;
 
@@ -117,12 +121,41 @@ TEST_CASE("MeshCache: .gltf falls back to box mesh without rewriting the path", 
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
-TEST_CASE("MeshCache: .mesh.bin falls back to box mesh until HORO-100 wires it in", "[renderer][mesh_cache]") {
+TEST_CASE("MeshCache: .mesh.bin with bad bytes falls back to box mesh", "[renderer][mesh_cache]") {
+  // Pre-HORO-100 placeholder: a .mesh.bin path always fell back to box mesh.
+  // Post-HORO-100: only malformed/missing .mesh.bin paths fall back.
   MeshCache cache;
   std::shared_ptr<Mesh> mesh = cache.Get("/assets/models/crate.mesh.bin");
 
   REQUIRE(mesh != nullptr);
   REQUIRE(mesh->GetIndexCount() > 0);
+}
+
+TEST_CASE("MeshCache: .mesh.bin with out-of-range indices falls back to box mesh",
+          "[renderer][mesh_cache][meshbin][validation]") {
+  // Cubic-flagged regression: a malformed .mesh.bin (valid header + valid
+  // vertex stride, but indices that reference past the vertex array) must not
+  // be uploaded into a Mesh — the renderer would read past the vertex buffer.
+  // The cache falls back to a box mesh and emits a warning.
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_meshcache_meshbin_bad_indices.mesh.bin";
+
+  std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  // Index 999 is past the vertex array — the writer accepts it because
+  // MeshBin::WriteStaticMesh only validates count constraints, not bounds.
+  std::vector<uint32_t> indices = {0, 1, 999};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(path.string());
+  REQUIRE(mesh != nullptr);
+  // Fallback box mesh has well-defined non-empty geometry.
+  REQUIRE(mesh->GetIndexCount() > 0);
+  REQUIRE_FALSE(mesh->GetVertices().empty());
 }
 
 // ===========================================================================
@@ -155,4 +188,57 @@ TEST_CASE("MeshCache: .gltf and .obj with the same stem do NOT share a cache ent
   std::shared_ptr<Mesh> via_obj = cache.Get("/assets/models/pillar.obj");
 
   REQUIRE(via_gltf != via_obj);
+}
+
+// ===========================================================================
+// MeshCache — engine-native .mesh.bin runtime path (HORO-100)
+// ===========================================================================
+// Validates that an engine-native mesh binary written via MeshBin::WriteStaticMesh
+// (the artefact format produced by the FBX importer in HORO-94) is loaded by
+// MeshCache::Get into a real mesh that mirrors the on-disk vertex/index data.
+// This is the runtime-side completion of the FBX import → managed asset →
+// runtime load loop.
+
+TEST_CASE("MeshCache: loads an engine-native .mesh.bin into a real mesh", "[renderer][mesh_cache][meshbin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_meshcache_meshbin_real.mesh.bin";
+
+  // A non-degenerate triangle that does not match the fallback box mesh.
+  const std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  const std::vector<uint32_t> indices = {0, 1, 2};
+
+  const MeshBin::WriteResult wr =
+      MeshBin::WriteStaticMesh(path.string(), vertices, indices);
+  REQUIRE(wr.ok);
+
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(path.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() == 3);
+  REQUIRE(mesh->GetVertices().size() == 3);
+  REQUIRE(mesh->GetIndices() == indices);
+  // Position parity with what was written.
+  REQUIRE(mesh->GetVertices()[2].position.y == 2.0f);
+}
+
+TEST_CASE("MeshCache: caches loaded .mesh.bin so repeat Get returns the same shared_ptr", "[renderer][mesh_cache][meshbin]") {
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_meshcache_meshbin_cache.mesh.bin";
+
+  const std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  const std::vector<uint32_t> indices = {0, 1, 2};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  MeshCache cache;
+  const std::shared_ptr<Mesh> first = cache.Get(path.string());
+  const std::shared_ptr<Mesh> second = cache.Get(path.string());
+  REQUIRE(first == second);
 }
