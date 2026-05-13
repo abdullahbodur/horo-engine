@@ -404,14 +404,14 @@ namespace Horo::Editor {
                     candidates.push_back(std::move(abs));
             }
             if (!record.relativePath.empty()) {
-                const std::string normalisedRelative = normalise(record.relativePath);
+                const fs::path normalisedRelative(normalise(record.relativePath));
                 candidates.emplace_back(sourceDir / normalisedRelative);
-                const fs::path baseFromRel = fs::path(normalisedRelative).filename();
+                const fs::path baseFromRel = normalisedRelative.filename();
                 if (!baseFromRel.empty())
                     candidates.emplace_back(sourceDir / baseFromRel);
             }
             if (!record.filename.empty()) {
-                const std::string normalisedFilename = normalise(record.filename);
+                const fs::path normalisedFilename(normalise(record.filename));
                 candidates.emplace_back(sourceDir / normalisedFilename);
                 candidates.emplace_back(sourceDir / "textures" / normalisedFilename);
             }
@@ -496,11 +496,9 @@ namespace Horo::Editor {
         bool IsSafeBasename(std::string_view filename) {
             if (filename.empty() || filename == "." || filename == "..")
                 return false;
-            for (const char ch: filename) {
-                if (ch == '/' || ch == '\\')
-                    return false;
-            }
-            return true;
+            return std::ranges::none_of(filename, [](char ch) {
+                return ch == '/' || ch == '\\';
+            });
         }
 
         /** @brief Sanitises an FBX-derived filename hint into a single-segment basename.
@@ -557,7 +555,13 @@ namespace Horo::Editor {
             namespace fs = std::filesystem;
             const fs::path sourceDir = ctx.sourcePath.parent_path();
 
-            std::unordered_set<std::string> usedBasenames;
+            struct StringHash {
+                using is_transparent = void;
+                std::size_t operator()(std::string_view sv) const noexcept {
+                    return std::hash<std::string_view>{}(sv);
+                }
+            };
+            std::unordered_set<std::string, StringHash, std::equal_to<>> usedBasenames;
             for (const std::string &produced: producedFiles)
                 usedBasenames.insert(fs::path(produced).filename().string());
 
@@ -576,71 +580,65 @@ namespace Horo::Editor {
                 return base;
             };
 
+            const auto recordProducedTexture = [&](const fs::path &dest,
+                                                   const std::string &basename,
+                                                   const FbxLoader::FbxTextureRecord &rec) {
+                const std::string projectRelative =
+                    fs::relative(dest, ProjectPath::Root()).generic_string();
+                producedFiles.push_back(projectRelative);
+                usedBasenames.insert(basename);
+                if (rec.isDiffuseAlbedo && outAlbedoMap.empty())
+                    outAlbedoMap = projectRelative;
+            };
+
             for (const FbxLoader::FbxTextureRecord &record: textures) {
                 std::string filename = SanitiseTextureBasename(record.filename);
                 if (!IsSafeBasename(filename))
                     continue;
 
                 if (!record.embeddedBytes.empty()) {
-                    if (fs::path(filename).extension().empty()) {
-                        filename = EnsureExtension(
-                            filename, SniffImageExtension(record.embeddedBytes));
-                    }
+                    if (fs::path(filename).extension().empty())
+                        filename = EnsureExtension(filename, SniffImageExtension(record.embeddedBytes));
                     filename = pickUniqueBasename(filename);
                     const fs::path dest = ctx.destDir / filename;
                     std::ofstream out(dest, std::ios::binary | std::ios::trunc);
-                    const bool wrote =
-                        out.is_open() &&
-                        out.write(reinterpret_cast<const char *>(
-                                       record.embeddedBytes.data()),
-                                   static_cast<std::streamsize>(
-                                       record.embeddedBytes.size())) &&
-                        out.good();
-                    if (!wrote) {
+                    if (const bool wrote =
+                            out.is_open() &&
+                            out.write(reinterpret_cast<const char *>(record.embeddedBytes.data()),
+                                       static_cast<std::streamsize>(record.embeddedBytes.size())) &&
+                            out.good();
+                        !wrote) {
                         diagnostics.push_back(MakeDiagnostic(
                             AssetDiagnosticSeverity::Warning,
                             DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
-                            "Failed to extract embedded texture '" + filename + "'.",
+                            std::format("Failed to extract embedded texture '{}'.", filename),
                             ctx.request, ctx.importerId));
                         continue;
                     }
-                    const std::string projectRelative =
-                        fs::relative(dest, ProjectPath::Root()).generic_string();
-                    producedFiles.push_back(projectRelative);
-                    usedBasenames.insert(filename);
-                    if (record.isDiffuseAlbedo && outAlbedoMap.empty())
-                        outAlbedoMap = projectRelative;
+                    recordProducedTexture(dest, filename, record);
                     continue;
                 }
 
-                const fs::path resolved =
-                    ResolveExternalTexturePath(record, sourceDir);
+                const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
                 if (resolved.empty()) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureMissing,
-                        "External texture '" + filename + "' not found near source FBX.",
+                        std::format("External texture '{}' not found near source FBX.", filename),
                         ctx.request, ctx.importerId));
                     continue;
                 }
                 filename = pickUniqueBasename(filename);
                 const fs::path dest = ctx.destDir / filename;
-                if (std::error_code ec;
-                    !CopyFileReplacing(resolved, dest, ec) || ec) {
+                if (std::error_code ec; !CopyFileReplacing(resolved, dest, ec) || ec) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureCopyFailed,
-                        "Failed to copy external texture '" + filename + "' (" +
-                            ec.message() + ").",
+                        std::format("Failed to copy external texture '{}' ({}).", filename, ec.message()),
                         ctx.request, ctx.importerId));
                     continue;
                 }
-                const std::string projectRelative =
-                    fs::relative(dest, ProjectPath::Root()).generic_string();
-                producedFiles.push_back(projectRelative);
-                usedBasenames.insert(filename);
-                if (record.isDiffuseAlbedo && outAlbedoMap.empty())
-                    outAlbedoMap = projectRelative;
+                recordProducedTexture(dest, filename, record);
             }
         }
 
