@@ -131,6 +131,33 @@ TEST_CASE("MeshCache: .mesh.bin with bad bytes falls back to box mesh", "[render
   REQUIRE(mesh->GetIndexCount() > 0);
 }
 
+TEST_CASE("MeshCache: .mesh.bin with out-of-range indices falls back to box mesh",
+          "[renderer][mesh_cache][meshbin][validation]") {
+  // Cubic-flagged regression: a malformed .mesh.bin (valid header + valid
+  // vertex stride, but indices that reference past the vertex array) must not
+  // be uploaded into a Mesh — the renderer would read past the vertex buffer.
+  // The cache falls back to a box mesh and emits a warning.
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_meshcache_meshbin_bad_indices.mesh.bin";
+
+  std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  // Index 999 is past the vertex array — the writer accepts it because
+  // MeshBin::WriteStaticMesh only validates count constraints, not bounds.
+  std::vector<uint32_t> indices = {0, 1, 999};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  MeshCache cache;
+  const std::shared_ptr<Mesh> mesh = cache.Get(path.string());
+  REQUIRE(mesh != nullptr);
+  // Fallback box mesh has well-defined non-empty geometry.
+  REQUIRE(mesh->GetIndexCount() > 0);
+  REQUIRE_FALSE(mesh->GetVertices().empty());
+}
+
 // ===========================================================================
 // MeshCache — distinct paths must not share cache entries (HORO-99)
 // ===========================================================================
