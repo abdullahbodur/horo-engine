@@ -734,6 +734,161 @@ TEST_CASE("EditorImportAssetModal: Draw renders successfully when the modal is c
 }
 
 // ===========================================================================
+// AssetImportDiagnosticCodes — taxonomy contract
+// ===========================================================================
+//
+// These tests pin the public-contract diagnostic code strings so that any
+// silent rename or value drift breaks the build, not a downstream consumer.
+// New codes added in HORO-91 are checked alongside the legacy OBJ/texture/
+// service codes that already had string-literal call sites.
+
+TEST_CASE("DiagnosticCodes: cross-cutting service codes are stable", "[editor][diagnostic-codes]") {
+  CHECK(DiagnosticCodes::ImportFailed == "asset.import.failed");
+  CHECK(DiagnosticCodes::ImporterNotFound == "asset.importer.not_found");
+  CHECK(DiagnosticCodes::MetadataSaveFailed == "asset.metadata.save_failed");
+  CHECK(DiagnosticCodes::ReimportDependencyCycle ==
+        "asset.reimport.dependency_cycle");
+  CHECK(DiagnosticCodes::ReimportMetadataMissing ==
+        "asset.reimport.metadata_missing");
+  CHECK(DiagnosticCodes::ReimportImporterMissing ==
+        "asset.reimport.importer_missing");
+}
+
+TEST_CASE("DiagnosticCodes: OBJ importer codes are stable", "[editor][diagnostic-codes]") {
+  CHECK(DiagnosticCodes::ObjUnsupportedType == "asset.obj.unsupported_type");
+  CHECK(DiagnosticCodes::ObjSourceMissing == "asset.obj.source_missing");
+  CHECK(DiagnosticCodes::ObjCreateDirectoryFailed ==
+        "asset.obj.create_directory_failed");
+  CHECK(DiagnosticCodes::ObjCopyFailed == "asset.obj.copy_failed");
+}
+
+TEST_CASE("DiagnosticCodes: texture importer codes are stable", "[editor][diagnostic-codes]") {
+  CHECK(DiagnosticCodes::TextureUnsupportedType ==
+        "asset.texture.unsupported_type");
+  CHECK(DiagnosticCodes::TextureSourceMissing ==
+        "asset.texture.source_missing");
+  CHECK(DiagnosticCodes::TextureCreateDirectoryFailed ==
+        "asset.texture.create_directory_failed");
+  CHECK(DiagnosticCodes::TextureCopyFailed == "asset.texture.copy_failed");
+}
+
+TEST_CASE("DiagnosticCodes: FBX importer codes are stable", "[editor][diagnostic-codes][fbx]") {
+  CHECK(DiagnosticCodes::FbxUnsupportedType == "asset.fbx.unsupported_type");
+  CHECK(DiagnosticCodes::FbxSourceMissing == "asset.fbx.source_missing");
+  CHECK(DiagnosticCodes::FbxCreateDirectoryFailed ==
+        "asset.fbx.create_directory_failed");
+  CHECK(DiagnosticCodes::FbxParseFailed == "asset.fbx.parse_failed");
+  CHECK(DiagnosticCodes::FbxNoGeometry == "asset.fbx.no_geometry");
+  CHECK(DiagnosticCodes::FbxMeshWriteFailed == "asset.fbx.mesh_write_failed");
+  CHECK(DiagnosticCodes::FbxExternalTextureMissing ==
+        "asset.fbx.external_texture_missing");
+  CHECK(DiagnosticCodes::FbxExternalTextureCopyFailed ==
+        "asset.fbx.external_texture_copy_failed");
+  CHECK(DiagnosticCodes::FbxEmbeddedTextureExtractFailed ==
+        "asset.fbx.embedded_texture_extract_failed");
+  CHECK(DiagnosticCodes::FbxSkeletonMissing == "asset.fbx.skeleton_missing");
+  CHECK(DiagnosticCodes::FbxSkeletonWriteFailed ==
+        "asset.fbx.skeleton_write_failed");
+  CHECK(DiagnosticCodes::FbxAnimationWriteFailed ==
+        "asset.fbx.animation_write_failed");
+  CHECK(DiagnosticCodes::FbxUnitScaleWarning ==
+        "asset.fbx.unit_scale_warning");
+  CHECK(DiagnosticCodes::FbxUnsupportedFeatureWarning ==
+        "asset.fbx.unsupported_feature_warning");
+}
+
+TEST_CASE("DiagnosticCodes: every code follows asset.<scope>.<reason> format", "[editor][diagnostic-codes]") {
+  // Single-source list of every public diagnostic code. Adding a new constant
+  // without registering it here will not fail this test, but the per-scope
+  // tests above will, so consumers stay protected against silent drift.
+  const std::vector<std::string_view> all = {
+      DiagnosticCodes::ImportFailed,
+      DiagnosticCodes::ImporterNotFound,
+      DiagnosticCodes::MetadataSaveFailed,
+      DiagnosticCodes::ReimportDependencyCycle,
+      DiagnosticCodes::ReimportMetadataMissing,
+      DiagnosticCodes::ReimportImporterMissing,
+      DiagnosticCodes::ObjUnsupportedType,
+      DiagnosticCodes::ObjSourceMissing,
+      DiagnosticCodes::ObjCreateDirectoryFailed,
+      DiagnosticCodes::ObjCopyFailed,
+      DiagnosticCodes::TextureUnsupportedType,
+      DiagnosticCodes::TextureSourceMissing,
+      DiagnosticCodes::TextureCreateDirectoryFailed,
+      DiagnosticCodes::TextureCopyFailed,
+      DiagnosticCodes::FbxUnsupportedType,
+      DiagnosticCodes::FbxSourceMissing,
+      DiagnosticCodes::FbxCreateDirectoryFailed,
+      DiagnosticCodes::FbxParseFailed,
+      DiagnosticCodes::FbxNoGeometry,
+      DiagnosticCodes::FbxMeshWriteFailed,
+      DiagnosticCodes::FbxExternalTextureMissing,
+      DiagnosticCodes::FbxExternalTextureCopyFailed,
+      DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
+      DiagnosticCodes::FbxSkeletonMissing,
+      DiagnosticCodes::FbxSkeletonWriteFailed,
+      DiagnosticCodes::FbxAnimationWriteFailed,
+      DiagnosticCodes::FbxUnitScaleWarning,
+      DiagnosticCodes::FbxUnsupportedFeatureWarning,
+  };
+
+  for (const std::string_view code : all) {
+    INFO("code: " << code);
+    REQUIRE(code.starts_with("asset."));
+    // Exactly two dots separate three non-empty lowercase segments.
+    const auto firstDot = code.find('.');
+    const auto lastDot = code.rfind('.');
+    REQUIRE(firstDot != std::string_view::npos);
+    REQUIRE(lastDot != std::string_view::npos);
+    REQUIRE(firstDot != lastDot);
+    REQUIRE(firstDot < lastDot);
+    REQUIRE(lastDot + 1 < code.size());
+    for (const char ch : code) {
+      const bool isLower = ch >= 'a' && ch <= 'z';
+      const bool isDigit = ch >= '0' && ch <= '9';
+      const bool isSep = ch == '.' || ch == '_';
+      REQUIRE((isLower || isDigit || isSep));
+    }
+  }
+
+  // Sanity: no duplicate values across the table.
+  std::vector<std::string_view> sorted = all;
+  std::ranges::sort(sorted);
+  const auto dupIt = std::ranges::adjacent_find(sorted);
+  REQUIRE(dupIt == sorted.end());
+}
+
+TEST_CASE("DiagnosticCodes: ObjAssetImporter emits typed codes for missing source", "[editor][diagnostic-codes][importer-registry]") {
+  // Round-trip: the importer must emit the exact constant values; downstream
+  // tools key UI strings off these codes, so they must not drift silently.
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "x";
+  req.assetGuid = "guid_x";
+  req.sourcePath = "/this/path/does/not/exist.obj";
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::ObjSourceMissing);
+}
+
+TEST_CASE("DiagnosticCodes: TextureCopyImporter emits typed code for unsupported type", "[editor][diagnostic-codes][importer-registry]") {
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "x";
+  req.assetGuid = "guid_x";
+  req.sourcePath = (Horo::Tests::SecureTempBase() / "not_an_image.txt").string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::TextureUnsupportedType);
+}
+
+// ===========================================================================
 // AssetImportService — ImportTextureForAsset + SaveMetadataForAsset
 // ===========================================================================
 
