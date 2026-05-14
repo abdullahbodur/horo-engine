@@ -13,20 +13,74 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "ufbx.h"
+#include "renderer/BinaryMeshIoShared.h"
 
 namespace Horo::FbxLoader {
     namespace {
         /** @brief Triangulation buffer growth heuristic — most FBX faces are tris/quads. */
         constexpr std::size_t kInitialTriBufferSize = 32;
+        using SceneHandle = std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)>;
+
+        /** @brief Builds shared ufbx loading options for static/skeletal/animation paths. */
+        ufbx_load_opts MakeLoadOptions(bool generateMissingNormals) {
+            ufbx_load_opts opts{};
+            opts.target_axes = ufbx_axes_right_handed_y_up;
+            opts.target_unit_meters = 1.0f;
+            opts.generate_missing_normals = generateMissingNormals;
+            opts.evaluate_skinning = false;
+            opts.load_external_files = false;
+            return opts;
+        }
+
+        /** @brief Formats a stable parse error from ufbx diagnostics. */
+        std::string MakeParseError(const ufbx_error &error) {
+            const std::string detail = error.description.length > 0
+                                           ? std::string(error.description.data,
+                                                         error.description.length)
+                                           : std::string("unknown error");
+            return "ufbx parse failed: " + detail;
+        }
+
+        /** @brief Loads an FBX scene and reports parse failures into result fields. */
+        SceneHandle LoadSceneOrFail(const std::string &sourcePath, const ufbx_load_opts &opts,
+                                    std::string *errorCodeOut,
+                                    std::string *errorOut) {
+            ufbx_error error{};
+            ufbx_scene *scene = ufbx_load_file(sourcePath.c_str(), &opts, &error);
+            if (scene == nullptr) {
+                *errorCodeOut = "fbx.parse_failed";
+                *errorOut = MakeParseError(error);
+                return {nullptr, ufbx_free_scene};
+            }
+            return {scene, ufbx_free_scene};
+        }
+
+        template <typename VertexT>
+        void ComputeResultAabb(const std::vector<VertexT> &vertices, Vec3 *outMin,
+                               Vec3 *outMax) {
+            BinaryMeshIoShared::ComputePositionAabb(vertices, outMin, outMax);
+        }
+
+        bool SceneHasSkinning(const ufbx_scene *scene) {
+            for (std::size_t i = 0; i < scene->nodes.count; ++i) {
+                const ufbx_node *node = scene->nodes.data[i];
+                if (node != nullptr && node->mesh != nullptr &&
+                    node->mesh->skin_deformers.count > 0)
+                    return true;
+            }
+            return false;
+        }
 
         /** @brief Returns true when @p mesh has at least one face and a vertex_position channel. */
         bool MeshHasGeometry(const ufbx_mesh *mesh) {
@@ -232,35 +286,15 @@ namespace Horo::FbxLoader {
     FbxLoadResult LoadStaticMesh(const std::string &sourcePath) {
         FbxLoadResult result;
 
-        ufbx_load_opts opts{};
-        opts.target_axes = ufbx_axes_right_handed_y_up;
-        opts.target_unit_meters = 1.0f;
-        opts.generate_missing_normals = true;
-        opts.evaluate_skinning = false;
-        opts.load_external_files = false;
-
-        ufbx_error error{};
-        ufbx_scene *scene = ufbx_load_file(sourcePath.c_str(), &opts, &error);
-        if (scene == nullptr) {
-            result.errorCode = "fbx.parse_failed";
-            result.error = std::string("ufbx parse failed: ") +
-                           (error.description.length > 0
-                                ? std::string(error.description.data, error.description.length)
-                                : std::string("unknown error"));
+        const ufbx_load_opts opts = MakeLoadOptions(true);
+        SceneHandle scene =
+            LoadSceneOrFail(sourcePath, opts, &result.errorCode, &result.error);
+        if (!scene)
             return result;
-        }
 
-        ExtractAllMeshes(scene, result);
-        ExtractAllTextures(scene, result);
-        // Probe for skinning so the importer can branch into the skeletal path.
-        for (std::size_t i = 0; i < scene->nodes.count && !result.hasSkinning; ++i) {
-            const ufbx_node *node = scene->nodes.data[i];
-            if (node == nullptr || node->mesh == nullptr)
-                continue;
-            if (node->mesh->skin_deformers.count > 0)
-                result.hasSkinning = true;
-        }
-        ufbx_free_scene(scene);
+        ExtractAllMeshes(scene.get(), result);
+        ExtractAllTextures(scene.get(), result);
+        result.hasSkinning = SceneHasSkinning(scene.get());
 
         if (result.vertices.empty() || result.indices.empty()) {
             result.errorCode = "fbx.no_geometry";
@@ -268,20 +302,7 @@ namespace Horo::FbxLoader {
             return result;
         }
 
-        result.aabbMin = {std::numeric_limits<float>::infinity(),
-                          std::numeric_limits<float>::infinity(),
-                          std::numeric_limits<float>::infinity()};
-        result.aabbMax = {-std::numeric_limits<float>::infinity(),
-                          -std::numeric_limits<float>::infinity(),
-                          -std::numeric_limits<float>::infinity()};
-        for (const Vertex &vertex: result.vertices) {
-            result.aabbMin.x = std::min(result.aabbMin.x, vertex.position.x);
-            result.aabbMin.y = std::min(result.aabbMin.y, vertex.position.y);
-            result.aabbMin.z = std::min(result.aabbMin.z, vertex.position.z);
-            result.aabbMax.x = std::max(result.aabbMax.x, vertex.position.x);
-            result.aabbMax.y = std::max(result.aabbMax.y, vertex.position.y);
-            result.aabbMax.z = std::max(result.aabbMax.z, vertex.position.z);
-        }
+        ComputeResultAabb(result.vertices, &result.aabbMin, &result.aabbMax);
 
         result.ok = true;
         return result;
@@ -569,58 +590,35 @@ namespace Horo::FbxLoader {
         }
     } // namespace
 
+    /** @brief Assigns skeletal @c no_geometry diagnostics when extraction yields nothing drawable. */
+    static void SetSkinnedMeshMissingGeometryError(FbxSkeletalLoadResult &out) {
+        out.errorCode = "fbx.no_geometry";
+        out.error = "FBX parsed but contained no skinned mesh data.";
+    }
+
     /** @copydoc Horo::FbxLoader::LoadSkeletalMesh */
     FbxSkeletalLoadResult LoadSkeletalMesh(const std::string &sourcePath) {
         FbxSkeletalLoadResult result;
 
-        ufbx_load_opts opts{};
-        opts.target_axes = ufbx_axes_right_handed_y_up;
-        opts.target_unit_meters = 1.0f;
-        opts.generate_missing_normals = true;
-        opts.evaluate_skinning = false;
-        opts.load_external_files = false;
-
-        ufbx_error error{};
-        ufbx_scene *scene = ufbx_load_file(sourcePath.c_str(), &opts, &error);
-        if (scene == nullptr) {
-            result.errorCode = "fbx.parse_failed";
-            result.error = std::string("ufbx parse failed: ") +
-                           (error.description.length > 0
-                                ? std::string(error.description.data, error.description.length)
-                                : std::string("unknown error"));
+        const ufbx_load_opts opts = MakeLoadOptions(true);
+        SceneHandle scene =
+            LoadSceneOrFail(sourcePath, opts, &result.errorCode, &result.error);
+        if (!scene)
             return result;
-        }
 
-        const bool extracted = ExtractSkeletalMesh(scene, result);
-        ufbx_free_scene(scene);
+        const bool extracted = ExtractSkeletalMesh(scene.get(), result);
 
         if (!extracted) {
-            if (result.errorCode.empty()) {
-                result.errorCode = "fbx.no_geometry";
-                result.error = "FBX parsed but contained no skinned mesh data.";
-            }
+            if (result.errorCode.empty())
+                SetSkinnedMeshMissingGeometryError(result);
             return result;
         }
         if (result.vertices.empty() || result.indices.empty()) {
-            result.errorCode = "fbx.no_geometry";
-            result.error = "FBX parsed but contained no skinned mesh data.";
+            SetSkinnedMeshMissingGeometryError(result);
             return result;
         }
 
-        result.aabbMin = {std::numeric_limits<float>::infinity(),
-                          std::numeric_limits<float>::infinity(),
-                          std::numeric_limits<float>::infinity()};
-        result.aabbMax = {-std::numeric_limits<float>::infinity(),
-                          -std::numeric_limits<float>::infinity(),
-                          -std::numeric_limits<float>::infinity()};
-        for (const SkinnedVertex &v: result.vertices) {
-            result.aabbMin.x = std::min(result.aabbMin.x, v.position.x);
-            result.aabbMin.y = std::min(result.aabbMin.y, v.position.y);
-            result.aabbMin.z = std::min(result.aabbMin.z, v.position.z);
-            result.aabbMax.x = std::max(result.aabbMax.x, v.position.x);
-            result.aabbMax.y = std::max(result.aabbMax.y, v.position.y);
-            result.aabbMax.z = std::max(result.aabbMax.z, v.position.z);
-        }
+        ComputeResultAabb(result.vertices, &result.aabbMin, &result.aabbMax);
 
         result.ok = true;
         return result;

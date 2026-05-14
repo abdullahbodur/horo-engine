@@ -624,10 +624,56 @@ namespace Horo::Editor
     ImGui::EndChild();
   }
 
+  /** @copydoc EditorLayer::MakeAssetsPanelCallbacks */
+  EditorAssetsPanelCallbacks EditorLayer::MakeAssetsPanelCallbacks()
+  {
+    EditorAssetsPanelCallbacks callbacks;
+    callbacks.requestDeleteAsset = [this](std::string_view assetId)
+    {
+      RequestDeleteAsset(assetId);
+    };
+    callbacks.markDirtyAndReload = [this]()
+    {
+      MarkDirtyAndReload();
+    };
+    callbacks.makeObjectFromAsset = [this](std::string_view assetId)
+    {
+      return MakeObjectFromAsset(m_document, assetId, m_schema);
+    };
+    callbacks.setDeferredFilePick = [this](int deferredType)
+    {
+      m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
+    };
+    return callbacks;
+  }
+
+  /** @copydoc EditorLayer::MakeAssetsPanelState */
+  EditorAssetsPanelState EditorLayer::MakeAssetsPanelState()
+  {
+    EditorAssetsPanelState state;
+    state.selectedAssetId = &m_selectedAssetId;
+    state.selectedIndices = &m_selectedIndices;
+    state.assetDraftId = &m_assetDraftId;
+    state.assetDraftGuid = &m_assetDraftGuid;
+    state.assetDraftDisplayName = &m_assetDraftDisplayName;
+    state.assetDraftMesh = &m_assetDraftMesh;
+    state.assetDraftRenderScale = &m_assetDraftRenderScale;
+    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
+    state.assetImportError = &m_assetImportError;
+    state.openNewAssetHeader = &m_openNewAssetHeader;
+    state.albedoDraftDrop = &m_albedoDraftDrop;
+    state.albedoSelDrop = &m_albedoSelDrop;
+    state.assetSearchOpen = &m_assetSearchOpen;
+    state.assetSearchQuery = &m_assetSearchQuery;
+    state.document = &m_document;
+    state.assetImportService = &m_assetImportService;
+    state.liveRegistry = m_liveRegistry;
+    return state;
+  }
+
   /** @copydoc EditorLayer::DrawAssetsPanel */
   void EditorLayer::DrawAssetsPanel()
   {
-    // Build component context
     EditorComponentContext ctx;
     ctx.document = &m_document;
     ctx.lastSavedDocument = &m_lastSavedDocument;
@@ -637,89 +683,13 @@ namespace Horo::Editor
     ctx.assetImportService = &m_assetImportService;
     ctx.liveRegistry = m_liveRegistry;
 
-    // Build callbacks
-    EditorAssetsPanelCallbacks callbacks;
-    callbacks.requestDeleteAsset = [this](std::string_view assetId)
-    {
-      RequestDeleteAsset(assetId);
-    };
-    callbacks.markDirtyAndReload = [this]()
-    {
-      MarkDirtyAndReload();
-    };
-    callbacks.makeObjectFromAsset = [this](std::string_view assetId)
-    {
-      return MakeObjectFromAsset(m_document, assetId, m_schema);
-    };
-    callbacks.setDeferredFilePick = [this](int deferredType)
-    {
-      m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
-    };
-
-    // Build state
-    EditorAssetsPanelState state;
-    state.selectedAssetId = &m_selectedAssetId;
-    state.selectedIndices = &m_selectedIndices;
-    state.assetDraftId = &m_assetDraftId;
-    state.assetDraftGuid = &m_assetDraftGuid;
-    state.assetDraftDisplayName = &m_assetDraftDisplayName;
-    state.assetDraftMesh = &m_assetDraftMesh;
-    state.assetDraftRenderScale = &m_assetDraftRenderScale;
-    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
-    state.assetImportError = &m_assetImportError;
-    state.openNewAssetHeader = &m_openNewAssetHeader;
-    state.albedoDraftDrop = &m_albedoDraftDrop;
-    state.albedoSelDrop = &m_albedoSelDrop;
-    state.assetSearchOpen = &m_assetSearchOpen;
-    state.assetSearchQuery = &m_assetSearchQuery;
-    state.document = &m_document;
-    state.assetImportService = &m_assetImportService;
-    state.liveRegistry = m_liveRegistry;
-
-    m_assetsPanel.Draw(ctx, callbacks, state);
+    m_assetsPanel.Draw(ctx, MakeAssetsPanelCallbacks(), MakeAssetsPanelState());
   }
 
   /** @copydoc EditorLayer::DrawAssetsPanelInline */
   void EditorLayer::DrawAssetsPanelInline()
   {
-    EditorAssetsPanelCallbacks callbacks;
-    callbacks.requestDeleteAsset = [this](std::string_view assetId)
-    {
-      RequestDeleteAsset(assetId);
-    };
-    callbacks.markDirtyAndReload = [this]()
-    {
-      MarkDirtyAndReload();
-    };
-    callbacks.makeObjectFromAsset = [this](std::string_view assetId)
-    {
-      return MakeObjectFromAsset(m_document, assetId, m_schema);
-    };
-    callbacks.setDeferredFilePick = [this](int deferredType)
-    {
-      m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
-    };
-
-    EditorAssetsPanelState state;
-    state.selectedAssetId = &m_selectedAssetId;
-    state.selectedIndices = &m_selectedIndices;
-    state.assetDraftId = &m_assetDraftId;
-    state.assetDraftGuid = &m_assetDraftGuid;
-    state.assetDraftDisplayName = &m_assetDraftDisplayName;
-    state.assetDraftMesh = &m_assetDraftMesh;
-    state.assetDraftRenderScale = &m_assetDraftRenderScale;
-    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
-    state.assetImportError = &m_assetImportError;
-    state.openNewAssetHeader = &m_openNewAssetHeader;
-    state.albedoDraftDrop = &m_albedoDraftDrop;
-    state.albedoSelDrop = &m_albedoSelDrop;
-    state.assetSearchOpen = &m_assetSearchOpen;
-    state.assetSearchQuery = &m_assetSearchQuery;
-    state.document = &m_document;
-    state.assetImportService = &m_assetImportService;
-    state.liveRegistry = m_liveRegistry;
-
-    m_assetsPanel.DrawContent(callbacks, state);
+    m_assetsPanel.DrawContent(MakeAssetsPanelCallbacks(), MakeAssetsPanelState());
   }
 
   /** @copydoc EditorLayer::DrawCommandPalettePopup */
@@ -934,3 +904,4 @@ namespace Horo::Editor
       ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
   }
 } // namespace Horo::Editor
+

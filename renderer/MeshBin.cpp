@@ -3,15 +3,14 @@
  */
 #include "renderer/MeshBin.h"
 
-#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <limits>
 
 #include "core/Logger.h"
 #include "renderer/BinaryStream.h"
+#include "renderer/BinaryMeshIoShared.h"
 
 namespace Horo::MeshBin {
     namespace {
@@ -37,24 +36,6 @@ namespace Horo::MeshBin {
         static_assert(sizeof(Header) == 48,
                       "MeshBin header layout must remain 48 bytes; bump kMeshBinVersion before changing it.");
 
-        /** @brief Computes the per-component AABB over @p vertices. */
-        void ComputeAabb(const std::vector<Vertex> &vertices, Vec3 *outMin,
-                         Vec3 *outMax) {
-            *outMin = {std::numeric_limits<float>::infinity(),
-                       std::numeric_limits<float>::infinity(),
-                       std::numeric_limits<float>::infinity()};
-            *outMax = {-std::numeric_limits<float>::infinity(),
-                       -std::numeric_limits<float>::infinity(),
-                       -std::numeric_limits<float>::infinity()};
-            for (const Vertex &vertex: vertices) {
-                outMin->x = std::min(outMin->x, vertex.position.x);
-                outMin->y = std::min(outMin->y, vertex.position.y);
-                outMin->z = std::min(outMin->z, vertex.position.z);
-                outMax->x = std::max(outMax->x, vertex.position.x);
-                outMax->y = std::max(outMax->y, vertex.position.y);
-                outMax->z = std::max(outMax->z, vertex.position.z);
-            }
-        }
     } // namespace
 
     /** @copydoc Horo::MeshBin::WriteStaticMesh */
@@ -78,7 +59,7 @@ namespace Horo::MeshBin {
 
         Vec3 aabbMin{};
         Vec3 aabbMax{};
-        ComputeAabb(vertices, &aabbMin, &aabbMax);
+        BinaryMeshIoShared::ComputePositionAabb(vertices, &aabbMin, &aabbMax);
 
         Header header{};
         header.magic = kMeshBinMagic;
@@ -89,22 +70,12 @@ namespace Horo::MeshBin {
         header.reserved0 = 0;
         BinaryStream::StoreAabbToHeader(header, aabbMin, aabbMax);
 
-        if (!BinaryStream::WriteValue(stream, header)) {
-            result.error = "MeshBin write: failed writing header.";
-            return result;
-        }
-        if (!BinaryStream::WriteArray(stream, vertices.data(), vertices.size())) {
-            result.error = "MeshBin write: failed writing vertex array.";
-            return result;
-        }
-        if (!BinaryStream::WriteArray(stream, indices.data(), indices.size())) {
-            result.error = "MeshBin write: failed writing index array.";
+        if (!BinaryMeshIoShared::WriteHeaderVerticesIndices(
+                stream, header, vertices, indices, "MeshBin write", &result.error)) {
             return result;
         }
 
-        stream.flush();
-        if (!stream.good()) {
-            result.error = "MeshBin write: stream entered fail state during flush.";
+        if (!BinaryMeshIoShared::FlushStream(stream, "MeshBin write", &result.error)) {
             return result;
         }
 
@@ -121,8 +92,8 @@ namespace Horo::MeshBin {
             return result;
 
         Header header{};
-        if (!BinaryStream::ReadValue(stream, header)) {
-            result.error = "MeshBin read: file too short for header.";
+        if (!BinaryMeshIoShared::ReadHeaderBlob(stream, header, "MeshBin read",
+                                                &result.error)) {
             return result;
         }
         if (header.magic != kMeshBinMagic) {
@@ -145,17 +116,9 @@ namespace Horo::MeshBin {
             return result;
         }
 
-        result.vertices.resize(header.vertexCount);
-        if (!BinaryStream::ReadArray(stream, result.vertices.data(),
-                                     static_cast<std::size_t>(header.vertexCount))) {
-            result.error = "MeshBin read: failed reading vertex array.";
-            return result;
-        }
-
-        result.indices.resize(header.indexCount);
-        if (!BinaryStream::ReadArray(stream, result.indices.data(),
-                                     static_cast<std::size_t>(header.indexCount))) {
-            result.error = "MeshBin read: failed reading index array.";
+        if (!BinaryMeshIoShared::ReadVerticesIndices(
+                stream, header, result.vertices, result.indices, "MeshBin read",
+                &result.error)) {
             return result;
         }
 

@@ -8,10 +8,10 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <limits>
 
 #include "core/Logger.h"
 #include "renderer/BinaryStream.h"
+#include "renderer/BinaryMeshIoShared.h"
 
 namespace Horo::SkinnedMeshBin {
     namespace {
@@ -33,25 +33,6 @@ namespace Horo::SkinnedMeshBin {
 
         static_assert(sizeof(Header) == 64,
                       "SkinnedMeshBin header layout must remain 64 bytes; bump kSkinnedMeshBinVersion before changing it.");
-
-        /** @brief Computes the per-component AABB over @p vertices. */
-        void ComputeAabb(const std::vector<SkinnedVertex> &vertices, Vec3 *outMin,
-                         Vec3 *outMax) {
-            *outMin = {std::numeric_limits<float>::infinity(),
-                       std::numeric_limits<float>::infinity(),
-                       std::numeric_limits<float>::infinity()};
-            *outMax = {-std::numeric_limits<float>::infinity(),
-                       -std::numeric_limits<float>::infinity(),
-                       -std::numeric_limits<float>::infinity()};
-            for (const SkinnedVertex &v: vertices) {
-                outMin->x = std::min(outMin->x, v.position.x);
-                outMin->y = std::min(outMin->y, v.position.y);
-                outMin->z = std::min(outMin->z, v.position.z);
-                outMax->x = std::max(outMax->x, v.position.x);
-                outMax->y = std::max(outMax->y, v.position.y);
-                outMax->z = std::max(outMax->z, v.position.z);
-            }
-        }
 
         /** @brief Writes a Mat4 as 16 column-major float32s. */
         bool WriteMatrix(std::ofstream &stream, const Mat4 &m) {
@@ -176,7 +157,7 @@ namespace Horo::SkinnedMeshBin {
 
         Vec3 aabbMin{};
         Vec3 aabbMax{};
-        ComputeAabb(vertices, &aabbMin, &aabbMax);
+        BinaryMeshIoShared::ComputePositionAabb(vertices, &aabbMin, &aabbMax);
 
         Header header{};
         header.magic = kSkinnedMeshBinMagic;
@@ -187,16 +168,8 @@ namespace Horo::SkinnedMeshBin {
         header.vertexStride = static_cast<uint32_t>(sizeof(SkinnedVertex));
         BinaryStream::StoreAabbToHeader(header, aabbMin, aabbMax);
 
-        if (!BinaryStream::WriteValue(stream, header)) {
-            result.error = "SkinnedMeshBin write: failed writing header.";
-            return result;
-        }
-        if (!BinaryStream::WriteArray(stream, vertices.data(), vertices.size())) {
-            result.error = "SkinnedMeshBin write: failed writing vertex array.";
-            return result;
-        }
-        if (!BinaryStream::WriteArray(stream, indices.data(), indices.size())) {
-            result.error = "SkinnedMeshBin write: failed writing index array.";
+        if (!BinaryMeshIoShared::WriteHeaderVerticesIndices(
+                stream, header, vertices, indices, "SkinnedMeshBin write", &result.error)) {
             return result;
         }
         for (const Bone &bone: bones) {
@@ -204,9 +177,7 @@ namespace Horo::SkinnedMeshBin {
                 return result;
         }
 
-        stream.flush();
-        if (!stream.good()) {
-            result.error = "SkinnedMeshBin write: stream entered fail state during flush.";
+        if (!BinaryMeshIoShared::FlushStream(stream, "SkinnedMeshBin write", &result.error)) {
             return result;
         }
         result.ok = true;
@@ -223,23 +194,17 @@ namespace Horo::SkinnedMeshBin {
             return result;
 
         Header header{};
-        if (!BinaryStream::ReadValue(stream, header)) {
-            result.error = "SkinnedMeshBin read: file too short for header.";
+        if (!BinaryMeshIoShared::ReadHeaderBlob(stream, header,
+                                                "SkinnedMeshBin read",
+                                                &result.error)) {
             return result;
         }
         if (!ValidateHeader(header, &result.error))
             return result;
 
-        result.vertices.resize(header.vertexCount);
-        if (!BinaryStream::ReadArray(stream, result.vertices.data(),
-                                     static_cast<std::size_t>(header.vertexCount))) {
-            result.error = "SkinnedMeshBin read: failed reading vertex array.";
-            return result;
-        }
-        result.indices.resize(header.indexCount);
-        if (!BinaryStream::ReadArray(stream, result.indices.data(),
-                                     static_cast<std::size_t>(header.indexCount))) {
-            result.error = "SkinnedMeshBin read: failed reading index array.";
+        if (!BinaryMeshIoShared::ReadVerticesIndices(
+                stream, header, result.vertices, result.indices, "SkinnedMeshBin read",
+                &result.error)) {
             return result;
         }
 

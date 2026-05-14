@@ -23,8 +23,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <span>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace Horo::BinaryStream {
@@ -68,6 +72,8 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool WriteValue(std::ofstream &stream, const T &value) {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "BinaryStream::WriteValue requires trivially copyable T.");
         return WriteRaw(stream, std::as_bytes(std::span(&value, 1)));
     }
 
@@ -77,6 +83,8 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool ReadValue(std::ifstream &stream, T &out) {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "BinaryStream::ReadValue requires trivially copyable T.");
         return ReadRaw(stream, std::as_writable_bytes(std::span(&out, 1)));
     }
 
@@ -86,6 +94,8 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool WriteArray(std::ofstream &stream, const T *data, std::size_t count) {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "BinaryStream::WriteArray requires trivially copyable T.");
         if (count == 0)
             return stream.good();
         return WriteRaw(stream, std::as_bytes(std::span(data, count)));
@@ -97,6 +107,8 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool ReadArray(std::ifstream &stream, T *data, std::size_t count) {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "BinaryStream::ReadArray requires trivially copyable T.");
         if (count == 0)
             return stream.good();
         return ReadRaw(stream, std::as_writable_bytes(std::span(data, count)));
@@ -121,6 +133,27 @@ namespace Horo::BinaryStream {
             return false;
         out.resize(count);
         return ReadArray(stream, out.data(), out.size());
+    }
+
+    /**
+     *  @brief Writes a uint32 length prefix followed by raw string bytes.
+     */
+    inline bool WriteLengthPrefixedString(std::ofstream &stream, std::string_view value) {
+        if (const auto length = static_cast<std::uint32_t>(value.size());
+            !WriteValue(stream, length))
+            return false;
+        return value.empty() || WriteArray(stream, value.data(), value.size());
+    }
+
+    /**
+     *  @brief Reads a uint32-prefixed string written by @ref WriteLengthPrefixedString.
+     */
+    inline bool ReadLengthPrefixedString(std::ifstream &stream, std::string &out) {
+        std::uint32_t length = 0;
+        if (!ReadValue(stream, length))
+            return false;
+        out.resize(length);
+        return length == 0 || ReadArray(stream, out.data(), out.size());
     }
 
     /**

@@ -3,6 +3,7 @@
  */
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -73,7 +74,7 @@ namespace Horo::Editor {
          *  @param sourcePath Path whose extension is used for lookup.
          *  @return Pointer to a matching importer, or nullptr if none is registered.
          */
-        const AssetImporter *FindByExtension(const std::string &sourcePath) const;
+        const AssetImporter *FindByExtension(const std::filesystem::path &sourcePath) const;
 
         /** @brief Finds an importer by its stable importer ID string.
          *  @param importerId The importer ID to look up.

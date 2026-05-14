@@ -471,6 +471,12 @@ namespace Horo {
              */
             void DrawAssetsPanelInline();
 
+            /** @brief Shared callback wiring for @ref DrawAssetsPanel / @ref DrawAssetsPanelInline. */
+            EditorAssetsPanelCallbacks MakeAssetsPanelCallbacks();
+
+            /** @brief Captures mutable editor bindings required by EditorAssetsPanel. */
+            EditorAssetsPanelState MakeAssetsPanelState();
+
             /** @brief Draws the properties panel for object and asset editing. */
             void DrawPropertiesPanel();
 

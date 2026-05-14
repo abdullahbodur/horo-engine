@@ -8,9 +8,7 @@
 #include "renderer/AnimBin.h"
 
 #include <array>
-#include <filesystem>
 #include <format>
-#include <fstream>
 
 #include "renderer/BinaryStream.h"
 
@@ -83,25 +81,6 @@ namespace Horo::AnimBin {
             return true;
         }
 
-        bool WriteName(std::ofstream &stream, std::string_view name) {
-            const auto len = static_cast<uint32_t>(name.size());
-            if (!BinaryStream::WriteValue(stream, len))
-                return false;
-            return len == 0 || BinaryStream::WriteArray(stream, name.data(), len);
-        }
-
-        bool ReadName(std::ifstream &stream, std::string &out) {
-            uint32_t len = 0;
-            if (!BinaryStream::ReadValue(stream, len))
-                return false;
-            if (len == 0) {
-                out.clear();
-                return true;
-            }
-            out.resize(len);
-            return BinaryStream::ReadArray(stream, out.data(), len);
-        }
-
         bool WriteTrack(std::ofstream &stream, const BoneTrack &track) {
             const auto boneIndex = static_cast<int32_t>(track.boneIndex);
             return BinaryStream::WriteValue(stream, boneIndex) &&
@@ -128,7 +107,7 @@ namespace Horo::AnimBin {
 
         bool WriteClip(std::ofstream &stream, const AnimationClip &clip,
                        std::string *errorOut) {
-            if (!WriteName(stream, clip.name)) {
+            if (!BinaryStream::WriteLengthPrefixedString(stream, clip.name)) {
                 *errorOut = "AnimBin write: failed writing clip name.";
                 return false;
             }
@@ -154,7 +133,7 @@ namespace Horo::AnimBin {
 
         bool ReadClip(std::ifstream &stream, AnimationClip &clip,
                       std::string *errorOut) {
-            if (!ReadName(stream, clip.name)) {
+            if (!BinaryStream::ReadLengthPrefixedString(stream, clip.name)) {
                 *errorOut = "AnimBin read: failed reading clip name.";
                 return false;
             }
@@ -179,6 +158,20 @@ namespace Horo::AnimBin {
             }
             return true;
         }
+
+        bool ValidateHeader(const Header &header, std::string *errorOut) {
+            if (header.magic != kAnimBinMagic) {
+                *errorOut = "AnimBin read: bad magic bytes; not a HoroAnimBin file.";
+                return false;
+            }
+            if (header.version != kAnimBinVersion) {
+                *errorOut = std::format(
+                    "AnimBin read: unsupported version {} (expected {}).",
+                    header.version, kAnimBinVersion);
+                return false;
+            }
+            return true;
+        }
     } // namespace
 
     /** @copydoc Horo::AnimBin::WriteClips */
@@ -190,21 +183,9 @@ namespace Horo::AnimBin {
             return result;
         }
 
-        const std::filesystem::path path(destPath);
-        if (path.has_parent_path()) {
-            std::error_code ec;
-            std::filesystem::create_directories(path.parent_path(), ec);
-            if (ec) {
-                result.error =
-                        "AnimBin write: cannot create destination directory: " +
-                        ec.message();
-                return result;
-            }
-        }
-
-        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        std::ofstream stream =
+            BinaryStream::OpenForWrite(destPath, "AnimBin write", &result.error);
         if (!stream.is_open()) {
-            result.error = "AnimBin write: cannot open destination file.";
             return result;
         }
 
@@ -234,13 +215,9 @@ namespace Horo::AnimBin {
     /** @copydoc Horo::AnimBin::ReadClips */
     ReadResult ReadClips(const std::string &sourcePath) {
         ReadResult result;
-        if (std::error_code ec; !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
-            result.error = "AnimBin read: source path is not a regular file.";
-            return result;
-        }
-        std::ifstream stream(sourcePath, std::ios::binary);
+        std::ifstream stream =
+            BinaryStream::OpenForRead(sourcePath, "AnimBin read", &result.error);
         if (!stream.is_open()) {
-            result.error = "AnimBin read: cannot open source file.";
             return result;
         }
 
@@ -249,15 +226,8 @@ namespace Horo::AnimBin {
             result.error = "AnimBin read: file too short for header.";
             return result;
         }
-        if (header.magic != kAnimBinMagic) {
-            result.error = "AnimBin read: bad magic bytes; not a HoroAnimBin file.";
+        if (!ValidateHeader(header, &result.error))
             return result;
-        }
-        if (header.version != kAnimBinVersion) {
-            result.error = std::format("AnimBin read: unsupported version {} (expected {}).",
-                                       header.version, kAnimBinVersion);
-            return result;
-        }
 
         result.clips.reserve(header.clipCount);
         for (uint32_t c = 0; c < header.clipCount; ++c) {

@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 #include "core/ProjectPath.h"
+#include "core/StringHash.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
 #include "ui/editor/EditorAssetImport.h"
@@ -552,7 +553,7 @@ namespace Horo::Editor {
                                     std::string basename,
                                     const FbxLoader::FbxTextureRecord &rec,
                                     std::unordered_set<std::string,
-                                                       std::hash<std::string>,
+                                                       Horo::StringHash,
                                                        std::equal_to<>> &usedBasenames) {
             namespace fs = std::filesystem;
             const std::string projectRelative =
@@ -565,20 +566,21 @@ namespace Horo::Editor {
 
         /** @brief Writes an embedded-texture record to managed storage, emitting a warning on failure. */
         void WriteEmbeddedTexture(const FbxLoader::FbxTextureRecord &record,
-                                   std::filesystem::path filename,
+                                   const std::filesystem::path &filename,
                                    ApplyFbxTextureState &st,
                                    std::unordered_set<std::string,
-                                                      std::hash<std::string>,
+                                                      Horo::StringHash,
                                                       std::equal_to<>> &usedBasenames) {
             namespace fs = std::filesystem;
             const fs::path dest = st.ctx.destDir / filename;
             std::ofstream out(dest, std::ios::binary | std::ios::trunc);
-            const bool wrote =
-                out.is_open() &&
-                out.write(reinterpret_cast<const char *>(record.embeddedBytes.data()),
-                           static_cast<std::streamsize>(record.embeddedBytes.size())) &&
-                out.good();
-            if (!wrote) {
+            if (const bool wrote = out.is_open() &&
+                                   out.write(reinterpret_cast<const char *>(
+                                                 record.embeddedBytes.data()),
+                                             static_cast<std::streamsize>(
+                                                 record.embeddedBytes.size())) &&
+                                   out.good();
+                !wrote) {
                 st.diagnostics.push_back(MakeDiagnostic(
                     AssetDiagnosticSeverity::Warning,
                     DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
@@ -594,10 +596,10 @@ namespace Horo::Editor {
          */
         void CopyExternalTexture(const FbxLoader::FbxTextureRecord &record,
                                   const std::filesystem::path &sourceDir,
-                                  std::filesystem::path filename,
+                                  const std::filesystem::path &filename,
                                   ApplyFbxTextureState &st,
                                   std::unordered_set<std::string,
-                                                     std::hash<std::string>,
+                                                     Horo::StringHash,
                                                      std::equal_to<>> &usedBasenames) {
             namespace fs = std::filesystem;
             const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
@@ -650,7 +652,7 @@ namespace Horo::Editor {
             const fs::path sourceDir = ctx.sourcePath.parent_path();
             ApplyFbxTextureState st{ctx, diagnostics, producedFiles, outExternalSourcePaths, outAlbedoMap};
 
-            std::unordered_set<std::string, std::hash<std::string>, std::equal_to<>> usedBasenames;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> usedBasenames;
             for (const std::string &produced: producedFiles)
                 usedBasenames.insert(fs::path(produced).filename().string());
 
@@ -696,8 +698,8 @@ namespace Horo::Editor {
 
         /** @brief Builds an @ref AssetDef from import inputs plus the produced primary mesh path. */
         AssetDef BuildFbxAssetDef(const AssetImportRequest &request,
-                                   const std::string &meshProjectRelative,
-                                   const std::string &albedoMapPath,
+                                   std::string_view meshProjectRelative,
+                                   std::string_view albedoMapPath,
                                    float aabbMinY, float aabbMaxY) {
             AssetDef asset;
             asset.guid = request.assetGuid;
@@ -998,9 +1000,10 @@ namespace Horo::Editor {
 
     /** @copydoc AssetImporterRegistry::FindByExtension */
     const AssetImporter *
-    AssetImporterRegistry::FindByExtension(const std::string &sourcePath) const {
+    AssetImporterRegistry::FindByExtension(const std::filesystem::path &sourcePath)
+        const {
         const std::string ext =
-                ToLowerAscii(std::filesystem::path(sourcePath).extension().string());
+                ToLowerAscii(sourcePath.extension().string());
         for (const auto &importer: m_importers) {
             const std::vector<std::string> extensions = importer->SupportedExtensions();
             if (std::ranges::find(extensions, ext) != extensions.end())

@@ -3,7 +3,6 @@
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <format>
 #include <memory>
@@ -14,7 +13,6 @@
 #include <vector>
 
 #include "core/Logger.h"
-#include "core/ProjectPath.h"
 #include "renderer/GltfLoader.h"
 #include "renderer/IFramebuffer.h"
 #include "renderer/ITexture.h"
@@ -31,30 +29,6 @@
 
 namespace Horo::Editor {
 namespace {
-
-/** @brief Resolves a preview-shader file path by probing SDK and source-tree locations. */
-std::filesystem::path ResolvePreviewShaderPath(const char* fileName) {
-  namespace fs = std::filesystem;
-  const fs::path root = ProjectPath::Root();
-  const fs::path sdkRoot = ProjectPath::SdkRoot();
-  const std::array<fs::path, 7> candidates = {
-      sdkRoot / "renderer" / "shaders" / fileName,
-      sdkRoot / "bin" / "shaders" / fileName,
-      sdkRoot / "sdk" / "renderer" / "shaders" / fileName,
-      root / "engine" / "renderer" / "shaders" / fileName,
-      root.parent_path() / "horo-engine" / "renderer" / "shaders" / fileName,
-      root / "horo-engine" / "renderer" / "shaders" / fileName,
-      root / "renderer" / "shaders" / fileName,
-  };
-
-  for (const auto& candidate : candidates) {
-    std::error_code ec;
-    if (fs::is_regular_file(candidate, ec) && !ec)
-      return candidate;
-  }
-
-  return candidates.front();
-}
 
 /** @brief Singleton renderer/cache used to generate and store asset thumbnail resources. */
 struct AssetThumbnailRenderer {
