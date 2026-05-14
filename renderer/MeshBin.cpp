@@ -72,20 +72,9 @@ namespace Horo::MeshBin {
         }
 
         const std::filesystem::path path(destPath);
-        if (path.has_parent_path()) {
-            std::error_code ec;
-            std::filesystem::create_directories(path.parent_path(), ec);
-            if (ec) {
-                result.error = "MeshBin write: cannot create destination directory: " + ec.message();
-                return result;
-            }
-        }
-
-        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-        if (!stream.is_open()) {
-            result.error = "MeshBin write: cannot open destination file for writing.";
+        std::ofstream stream = BinaryStream::OpenForWrite(path, "MeshBin write", &result.error);
+        if (!stream.is_open())
             return result;
-        }
 
         Vec3 aabbMin{};
         Vec3 aabbMax{};
@@ -98,12 +87,7 @@ namespace Horo::MeshBin {
         header.indexCount = static_cast<uint32_t>(indices.size());
         header.vertexStride = static_cast<uint32_t>(sizeof(Vertex));
         header.reserved0 = 0;
-        header.aabbMin[0] = aabbMin.x;
-        header.aabbMin[1] = aabbMin.y;
-        header.aabbMin[2] = aabbMin.z;
-        header.aabbMax[0] = aabbMax.x;
-        header.aabbMax[1] = aabbMax.y;
-        header.aabbMax[2] = aabbMax.z;
+        BinaryStream::StoreAabbToHeader(header, aabbMin, aabbMax);
 
         if (!BinaryStream::WriteValue(stream, header)) {
             result.error = "MeshBin write: failed writing header.";
@@ -132,16 +116,9 @@ namespace Horo::MeshBin {
     ReadResult ReadStaticMesh(const std::string &sourcePath) {
         ReadResult result;
 
-        if (std::error_code ec; !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
-            result.error = "MeshBin read: source path is not a regular file.";
+        std::ifstream stream = BinaryStream::OpenForRead(sourcePath, "MeshBin read", &result.error);
+        if (!stream.is_open())
             return result;
-        }
-
-        std::ifstream stream(sourcePath, std::ios::binary);
-        if (!stream.is_open()) {
-            result.error = "MeshBin read: cannot open source file.";
-            return result;
-        }
 
         Header header{};
         if (!BinaryStream::ReadValue(stream, header)) {
@@ -182,8 +159,7 @@ namespace Horo::MeshBin {
             return result;
         }
 
-        result.aabbMin = {header.aabbMin[0], header.aabbMin[1], header.aabbMin[2]};
-        result.aabbMax = {header.aabbMax[0], header.aabbMax[1], header.aabbMax[2]};
+        BinaryStream::LoadAabbFromHeader(header, result.aabbMin, result.aabbMax);
         result.ok = true;
         return result;
     }

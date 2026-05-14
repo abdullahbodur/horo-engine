@@ -122,4 +122,68 @@ namespace Horo::BinaryStream {
         out.resize(count);
         return ReadArray(stream, out.data(), out.size());
     }
+
+    /**
+     *  @brief Opens @p destPath for binary writing, creating parent directories as needed.
+     *
+     *  On failure, sets @p errorOut to a descriptive message prefixed with
+     *  @p errorContext (e.g. @c "MeshBin write") and returns a closed @ref std::ofstream.
+     *  The returned stream is convertible to @c bool via @c stream.is_open().
+     *
+     *  @param destPath      Filesystem path the stream should be opened on.
+     *  @param errorContext  Per-format prefix used when filling @p errorOut.
+     *  @param errorOut      Output error buffer; must remain alive for the call duration.
+     */
+    inline std::ofstream OpenForWrite(const std::filesystem::path &destPath,
+                                       std::string_view errorContext,
+                                       std::string *errorOut) {
+        if (destPath.has_parent_path()) {
+            std::error_code ec;
+            std::filesystem::create_directories(destPath.parent_path(), ec);
+            if (ec) {
+                *errorOut = std::string(errorContext) +
+                            ": cannot create destination directory: " + ec.message();
+                return std::ofstream{};
+            }
+        }
+        std::ofstream stream(destPath, std::ios::binary | std::ios::trunc);
+        if (!stream.is_open())
+            *errorOut = std::string(errorContext) + ": cannot open destination file.";
+        return stream;
+    }
+
+    /**
+     *  @brief Opens @p sourcePath for binary reading.
+     *
+     *  Validates that the path is a regular file before opening; on failure
+     *  sets @p errorOut to a descriptive message prefixed with @p errorContext
+     *  (e.g. @c "MeshBin read") and returns a closed @ref std::ifstream.
+     */
+    inline std::ifstream OpenForRead(const std::filesystem::path &sourcePath,
+                                      std::string_view errorContext,
+                                      std::string *errorOut) {
+        if (std::error_code ec;
+            !std::filesystem::is_regular_file(sourcePath, ec) || ec) {
+            *errorOut = std::string(errorContext) + ": source path is not a regular file.";
+            return std::ifstream{};
+        }
+        std::ifstream stream(sourcePath, std::ios::binary);
+        if (!stream.is_open())
+            *errorOut = std::string(errorContext) + ": cannot open source file.";
+        return stream;
+    }
+
+    /// Header concept: any aggregate exposing 3-element float arrays @c aabbMin / @c aabbMax.
+    template <typename HeaderT, typename Vec3T>
+    void StoreAabbToHeader(HeaderT &header, const Vec3T &aabbMin, const Vec3T &aabbMax) {
+        header.aabbMin = {aabbMin.x, aabbMin.y, aabbMin.z};
+        header.aabbMax = {aabbMax.x, aabbMax.y, aabbMax.z};
+    }
+
+    /// Reads back the @c aabbMin / @c aabbMax arrays as a Vec3 pair.
+    template <typename Vec3T, typename HeaderT>
+    void LoadAabbFromHeader(const HeaderT &header, Vec3T &outMin, Vec3T &outMax) {
+        outMin = {header.aabbMin[0], header.aabbMin[1], header.aabbMin[2]};
+        outMax = {header.aabbMax[0], header.aabbMax[1], header.aabbMax[2]};
+    }
 } // namespace Horo::BinaryStream
