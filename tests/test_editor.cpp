@@ -4979,6 +4979,26 @@ TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[
 }
 
 
+TEST_CASE("EditorLayer render: file menu callback setter does not crash and Render succeeds", "[editor][render][coverage]") {
+  ImGuiContextGuard imgui;
+  EditorLayer editor;
+  editor.LoadDocument(SceneDocument{});
+  editor.Toggle();
+
+  int callCount = 0;
+  editor.SetFileMenuRenderCallback([&callCount]() { ++callCount; });
+
+  Camera cam;
+  editor.Render(cam, 1280, 720);
+  // The callback is only invoked when the File menu is open; verify no crash.
+  REQUIRE(true);
+
+  // Clearing to nullptr is also safe.
+  editor.SetFileMenuRenderCallback(nullptr);
+  editor.Render(cam, 1280, 720);
+  REQUIRE(true);
+}
+
 TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -6963,6 +6983,20 @@ TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload", "[editor][la
   REQUIRE(editor.WantsSceneReload());
   editor.AcknowledgeReload();
   REQUIRE_FALSE(editor.WantsSceneReload());
+}
+
+TEST_CASE("EditorLayer: GetPendingDocument returns document when reload is pending", "[editor][layer][coverage]") {
+  EditorLayer editor;
+  SceneDocument doc;
+  doc.sceneId = "pending_test";
+  doc.sceneName = "Pending";
+  editor.LoadDocument(doc);
+  editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json::object());
+  REQUIRE(editor.WantsSceneReload());
+  const SceneDocument &pending = editor.GetPendingDocument();
+  // GetPendingDocument must return a valid document reference.
+  CHECK_FALSE(pending.sceneId.empty());
+  editor.AcknowledgeReload();
 }
 
 TEST_CASE("EditorLayer MCP: reparent_object with nonexistent child returns error", "[editor][mcp]") {

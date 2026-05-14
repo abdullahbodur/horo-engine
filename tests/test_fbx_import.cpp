@@ -1198,3 +1198,234 @@ TEST_CASE("E2E: every vendored FBX fixture loads without parse error",
     CHECK(result.error.empty());
   }
 }
+
+// ===========================================================================
+// Coverage: FbxCreateDirectoryFailed error path (AssetImporterRegistry.cpp:800)
+// ===========================================================================
+
+TEST_CASE("FbxAssetImporter: emits FbxCreateDirectoryFailed when managed dir is blocked",
+          "[editor][asset-import][fbx][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_create_dir_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::string source = FixturePath("cube_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+
+  const std::string assetGuid = "guid_fbx_dir_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir.parent_path(), ec);
+  REQUIRE_FALSE(ec);
+  // Block directory creation by placing a regular file at the managed path.
+  WriteFile(managedDir, "not-a-directory");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.fbx_static_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "fbx_dir_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = source;
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::FbxCreateDirectoryFailed);
+}
+
+// ===========================================================================
+// Coverage: CopyFileReplacing same-file branch (AssetImporterRegistry.cpp:61)
+// ===========================================================================
+
+TEST_CASE("ObjImporter: importing OBJ already inside managed dir succeeds (same-file copy path)",
+          "[editor][asset-import][obj][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_obj_same_file";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::string assetGuid = "guid_obj_same";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+
+  // Place the OBJ directly inside the managed directory (source == destination).
+  const std::filesystem::path objInManaged = managedDir / "cube.obj";
+  WriteFile(objInManaged, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "same_file";
+  req.assetGuid = assetGuid;
+  req.sourcePath = objInManaged.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+  CHECK_FALSE(result.asset.mesh.empty());
+}
+
+// ===========================================================================
+// Coverage: ScanMtlForTextureNames branches (AssetImporterRegistry.cpp:89-103)
+// ===========================================================================
+
+TEST_CASE("ObjImporter: OBJ with MTL containing multiple map_ directives copies all textures",
+          "[editor][asset-import][obj][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_obj_mtl_multi_tex";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path srcDir = root / "source";
+  std::filesystem::create_directories(srcDir, ec);
+
+  const std::filesystem::path objPath = srcDir / "model.obj";
+  WriteFile(objPath, "mtllib model.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  // MTL with multiple map_ directives including short lines and no-space lines
+  const std::filesystem::path mtlPath = srcDir / "model.mtl";
+  WriteFile(mtlPath, "newmtl Mat\n"
+                     "map_Kd diffuse.png\n"
+                     "map_Ks specular.png\n"
+                     "short\n"           // line < 8 chars, should be skipped
+                     "notmap_ x.png\n"); // prefix != "map_", should be skipped
+
+  WriteFile(srcDir / "diffuse.png", "PNG");
+  WriteFile(srcDir / "specular.png", "PNG");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "multi_tex";
+  req.assetGuid = "guid_multi_tex";
+  req.sourcePath = objPath.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+}
+
+// ===========================================================================
+// Coverage: OBJ with MTL that has no texture references (empty scan result)
+// ===========================================================================
+
+TEST_CASE("ObjImporter: OBJ with MTL containing no map_ lines still succeeds",
+          "[editor][asset-import][obj][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_obj_mtl_no_tex";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path srcDir = root / "source";
+  std::filesystem::create_directories(srcDir, ec);
+
+  const std::filesystem::path objPath = srcDir / "plain.obj";
+  WriteFile(objPath, "mtllib plain.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  const std::filesystem::path mtlPath = srcDir / "plain.mtl";
+  WriteFile(mtlPath, "newmtl Material\nKd 0.8 0.8 0.8\n");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "plain_obj";
+  req.assetGuid = "guid_plain_obj";
+  req.sourcePath = objPath.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+}
+
+// ===========================================================================
+// Coverage: FbxMeshWriteFailed error path (AssetImporterRegistry.cpp:889)
+// ===========================================================================
+
+TEST_CASE("FbxAssetImporter: emits FbxMeshWriteFailed when mesh.bin destination is blocked",
+          "[editor][asset-import][fbx][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_mesh_write_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::string source = FixturePath("cube_5800_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+
+  const std::string assetGuid = "guid_fbx_mesh_write_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+  // Block the mesh.bin write by creating a directory with the same name.
+  std::filesystem::create_directories(managedDir / "cube_5800_binary.mesh.bin", ec);
+  REQUIRE_FALSE(ec);
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.fbx_static_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "mesh_write_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = source;
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::FbxMeshWriteFailed);
+}
+
+// ===========================================================================
+// Coverage: FbxSkeletonWriteFailed error path (AssetImporterRegistry.cpp:949)
+// ===========================================================================
+
+TEST_CASE("FbxAssetImporter: emits FbxSkeletonWriteFailed when skinned.bin destination is blocked",
+          "[editor][asset-import][fbx][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_skinned_write_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::string source = FixturePath("skinned_7400_binary.fbx");
+  REQUIRE(std::filesystem::exists(source));
+
+  const std::string assetGuid = "guid_fbx_skinned_write_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+  // Block the skinned.bin write by creating a directory with the same name.
+  std::filesystem::create_directories(
+      managedDir / "skinned_7400_binary.skinned.bin", ec);
+  REQUIRE_FALSE(ec);
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.fbx_static_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "skinned_write_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = source;
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::FbxSkeletonWriteFailed);
+}

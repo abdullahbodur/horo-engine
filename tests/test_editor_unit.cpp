@@ -2872,3 +2872,119 @@ TEST_CASE("AssetImportService: GuidRegistry populated after a reimport call", "[
   CHECK(service.GuidRegistry().LastRefreshSource() ==
         AssetGuidRegistryRefreshSource::Document);
 }
+
+// ===========================================================================
+// Coverage: ObjCreateDirectoryFailed error path (AssetImporterRegistry.cpp:252)
+// ===========================================================================
+
+TEST_CASE("AssetImporterRegistry: ObjImporter reports create-directory failure when managed path is a file",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_obj_create_dir_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceObj = root / "mesh.obj";
+  WriteFile(sourceObj, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  const std::string assetGuid = "guid_obj_create_dir_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir.parent_path(), ec);
+  REQUIRE_FALSE(ec);
+  // Block directory creation by placing a regular file at the managed path.
+  WriteFile(managedDir, "not-a-directory");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "obj_dir_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceObj.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::ObjCreateDirectoryFailed);
+}
+
+// ===========================================================================
+// Coverage: TextureCopyFailed error path (AssetImporterRegistry.cpp:353)
+// ===========================================================================
+
+TEST_CASE("AssetImporterRegistry: TextureCopy reports copy failure when destination is blocked",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_tex_copy_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceTexture = root / "brick.png";
+  WriteFile(sourceTexture, "png-bytes");
+
+  const std::string assetGuid = "guid_tex_copy_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+  // Block the copy by creating a directory with the same name as the destination file.
+  std::filesystem::create_directories(managedDir / "brick.png", ec);
+  REQUIRE_FALSE(ec);
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "tex_copy_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceTexture.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::TextureCopyFailed);
+}
+
+// ===========================================================================
+// Coverage: EditorImportAssetModal SetDraftForTest + RefreshImporterFromExtension
+//           + RefreshIdentitiesFromPath (EditorImportAssetModal.cpp:64-74)
+// ===========================================================================
+
+TEST_CASE("EditorImportAssetModal: SetDraftForTest overrides auto-derived fields",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  // Override via test seam
+  modal.SetDraftForTest("/other/path/ship.obj", "ship_id", "Ship Model", "builtin.obj_mesh");
+  CHECK(modal.DraftForTest().sourcePath == "/other/path/ship.obj");
+  CHECK(modal.DraftForTest().assetId == "ship_id");
+  CHECK(modal.DraftForTest().displayName == "Ship Model");
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: RefreshImporterFromExtension updates importer from draft path",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+
+  // Manually set a path and refresh
+  modal.SetDraftForTest("/x/model.obj", "model", "Model", "");
+  // Re-open with the new path to trigger refresh
+  modal.Open("/x/model.obj", &registry);
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: RefreshIdentitiesFromPath derives assetId from source path",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/some/dir/my_asset.fbx", &registry);
+  CHECK(modal.DraftForTest().assetId == "my_asset");
+  CHECK(modal.DraftForTest().displayName == "my_asset");
+}
