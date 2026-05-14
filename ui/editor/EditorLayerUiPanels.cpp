@@ -581,10 +581,6 @@ namespace Horo::Editor
       favSpec.normalTextColor = &theme.palette.text;
       if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open)
       {
-        // Left-aligned placeholder under Favorites; the open TreeNode already
-        // applies the proper child indent so we just render at the natural
-        // cursor X. Vertical centering inside a fixed-height block keeps the
-        // row visually balanced regardless of the current font size.
         ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
         constexpr const char* kNoFavoritesText = "No favorites yet.";
         const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
@@ -599,8 +595,6 @@ namespace Horo::Editor
         ImGui::TreePop();
       }
 
-      // Visual divider between the Favorites section and the project root tree
-      // (matches IntelliJ's project panel grouping).
       ImGui::Separator();
 
       std::string rootName = m_projectBrowserRoot.filename().string();

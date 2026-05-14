@@ -477,8 +477,6 @@ EditorTreeItemResult DrawEditorTreeItem(const EditorTheme &theme,
   if (item.prefixIcon != nullptr && item.prefixIcon[0] != '\0') {
     displayLabel = item.prefixIcon;
     if (item.label != nullptr && item.label[0] != '\0') {
-      // Single space keeps the icon visually attached to its label, matching
-      // the compact spacing used by IntelliJ-style project trees.
       displayLabel += " ";
       displayLabel += item.label;
     }
