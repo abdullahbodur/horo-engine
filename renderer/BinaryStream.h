@@ -11,10 +11,13 @@
  *  per-format unit (e.g. @ref Horo::MeshBin) layers its own header + payload
  *  logic on top.
  *
- *  The byte buffer is typed as `std::span<const std::byte>` /
- *  `std::span<std::byte>` so the byte-oriented intent is explicit at the
- *  boundary; the single `reinterpret_cast<char *>` needed to talk to the
- *  iostreams interface is confined to this file.
+ *  The byte buffer is typed as @c std::span<const std::byte> /
+ *  @c std::span<std::byte> so the byte-oriented intent is explicit at the
+ *  boundary. Pointer interconversion uses @c std::as_bytes /
+ *  @c std::as_writable_bytes (which take @c std::span and return a
+ *  @c std::byte view) for value-side conversions, and a static-cast chain
+ *  through @c void* for the unavoidable iostream `char_type` interface —
+ *  no @c reinterpret_cast is needed.
  */
 #pragma once
 
@@ -25,12 +28,25 @@
 #include <vector>
 
 namespace Horo::BinaryStream {
+    namespace detail {
+        /// Static-cast pointer interconversion through @c void* — the standards-blessed
+        /// alternative to @c reinterpret_cast for taking a stream's @c char_type view
+        /// over a byte buffer.
+        inline const char *AsCharPointer(const std::byte *bytes) {
+            return static_cast<const char *>(static_cast<const void *>(bytes));
+        }
+
+        inline char *AsCharPointer(std::byte *bytes) {
+            return static_cast<char *>(static_cast<void *>(bytes));
+        }
+    } // namespace detail
+
     /**
      *  @brief Writes the entire byte run @p bytes to @p stream.
      *  @return @c true on success, @c false on stream failure.
      */
     inline bool WriteRaw(std::ofstream &stream, std::span<const std::byte> bytes) {
-        stream.write(reinterpret_cast<const char *>(bytes.data()),
+        stream.write(detail::AsCharPointer(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
         return stream.good();
     }
@@ -40,7 +56,7 @@ namespace Horo::BinaryStream {
      *  @return @c true on success, @c false on stream failure / short read.
      */
     inline bool ReadRaw(std::ifstream &stream, std::span<std::byte> bytes) {
-        stream.read(reinterpret_cast<char *>(bytes.data()),
+        stream.read(detail::AsCharPointer(bytes.data()),
                     static_cast<std::streamsize>(bytes.size()));
         return stream.good();
     }
@@ -52,7 +68,7 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool WriteValue(std::ofstream &stream, const T &value) {
-        return WriteRaw(stream, std::span(reinterpret_cast<const std::byte *>(&value), sizeof(T)));
+        return WriteRaw(stream, std::as_bytes(std::span(&value, 1)));
     }
 
     /**
@@ -61,7 +77,7 @@ namespace Horo::BinaryStream {
      */
     template <typename T>
     bool ReadValue(std::ifstream &stream, T &out) {
-        return ReadRaw(stream, std::span(reinterpret_cast<std::byte *>(&out), sizeof(T)));
+        return ReadRaw(stream, std::as_writable_bytes(std::span(&out, 1)));
     }
 
     /**
@@ -72,8 +88,7 @@ namespace Horo::BinaryStream {
     bool WriteArray(std::ofstream &stream, const T *data, std::size_t count) {
         if (count == 0)
             return stream.good();
-        return WriteRaw(stream, std::span(reinterpret_cast<const std::byte *>(data),
-                                          count * sizeof(T)));
+        return WriteRaw(stream, std::as_bytes(std::span(data, count)));
     }
 
     /**
@@ -84,15 +99,15 @@ namespace Horo::BinaryStream {
     bool ReadArray(std::ifstream &stream, T *data, std::size_t count) {
         if (count == 0)
             return stream.good();
-        return ReadRaw(stream, std::span(reinterpret_cast<std::byte *>(data), count * sizeof(T)));
+        return ReadRaw(stream, std::as_writable_bytes(std::span(data, count)));
     }
 
     /**
      *  @brief Writes a length-prefixed `std::vector<float>` (uint32 count then floats).
      */
     inline bool WriteFloatVector(std::ofstream &stream, const std::vector<float> &v) {
-        const auto count = static_cast<std::uint32_t>(v.size());
-        if (!WriteValue(stream, count))
+        if (const auto count = static_cast<std::uint32_t>(v.size());
+            !WriteValue(stream, count))
             return false;
         return WriteArray(stream, v.data(), v.size());
     }

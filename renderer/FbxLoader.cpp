@@ -392,10 +392,10 @@ namespace Horo::FbxLoader {
         int ResolveParentIndex(const ufbx_node *node,
                                const std::unordered_map<std::uint32_t, const ufbx_node *> &boneNodeById,
                                const std::unordered_map<std::uint32_t, int> &outBoneIndexByNodeId) {
-            const bool parentInSet =
-                node->parent != nullptr && node->parent->bone != nullptr &&
-                boneNodeById.contains(node->parent->element_id);
-            if (!parentInSet)
+            if (const bool parentInSet =
+                    node->parent != nullptr && node->parent->bone != nullptr &&
+                    boneNodeById.contains(node->parent->element_id);
+                !parentInSet)
                 return -1;
             const auto it = outBoneIndexByNodeId.find(node->parent->element_id);
             return it != outBoneIndexByNodeId.end() ? it->second : -2;

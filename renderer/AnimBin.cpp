@@ -32,8 +32,8 @@ namespace Horo::AnimBin {
                       "AnimBin header layout must remain 32 bytes; bump kAnimBinVersion before changing it.");
 
         bool WriteVec3Array(std::ofstream &stream, const std::vector<Vec3> &v) {
-            const auto count = static_cast<uint32_t>(v.size());
-            if (!BinaryStream::WriteValue(stream, count))
+            if (const auto count = static_cast<uint32_t>(v.size());
+                !BinaryStream::WriteValue(stream, count))
                 return false;
             for (const Vec3 &p: v) {
                 const std::array<float, 3> buf = {p.x, p.y, p.z};
@@ -58,8 +58,8 @@ namespace Horo::AnimBin {
         }
 
         bool WriteQuatArray(std::ofstream &stream, const std::vector<Quaternion> &v) {
-            const auto count = static_cast<uint32_t>(v.size());
-            if (!BinaryStream::WriteValue(stream, count))
+            if (const auto count = static_cast<uint32_t>(v.size());
+                !BinaryStream::WriteValue(stream, count))
                 return false;
             for (const Quaternion &q: v) {
                 const std::array<float, 4> buf = {q.x, q.y, q.z, q.w};
@@ -83,7 +83,7 @@ namespace Horo::AnimBin {
             return true;
         }
 
-        bool WriteName(std::ofstream &stream, const std::string &name) {
+        bool WriteName(std::ofstream &stream, std::string_view name) {
             const auto len = static_cast<uint32_t>(name.size());
             if (!BinaryStream::WriteValue(stream, len))
                 return false;
@@ -138,8 +138,8 @@ namespace Horo::AnimBin {
                 return false;
             }
             const std::vector<BoneTrack> &tracks = clip.GetTracks();
-            const auto trackCount = static_cast<uint32_t>(tracks.size());
-            if (!BinaryStream::WriteValue(stream, trackCount)) {
+            if (const auto trackCount = static_cast<uint32_t>(tracks.size());
+                !BinaryStream::WriteValue(stream, trackCount)) {
                 *errorOut = "AnimBin write: failed writing track count.";
                 return false;
             }

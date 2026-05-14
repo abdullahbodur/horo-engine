@@ -75,8 +75,8 @@ namespace Horo::SkinnedMeshBin {
 
         /** @brief Writes the on-disk record for one @p bone. Sets @p errorOut on failure. */
         bool WriteBone(std::ofstream &stream, const Bone &bone, std::string *errorOut) {
-            const auto parent = static_cast<int32_t>(bone.parentIndex);
-            if (!BinaryStream::WriteValue(stream, parent)) {
+            if (const auto parent = static_cast<int32_t>(bone.parentIndex);
+                !BinaryStream::WriteValue(stream, parent)) {
                 *errorOut = "SkinnedMeshBin write: failed writing bone parent.";
                 return false;
             }
