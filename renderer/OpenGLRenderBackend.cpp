@@ -90,21 +90,88 @@ namespace Horo {
     }
 
     bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(
-        uint32_t, uint32_t, std::string *outError) {
-        if (outError)
-            *outError = "Editor viewport render-target provisioning is unavailable on "
-                    "OpenGL backend.";
-        return false;
+        uint32_t width, uint32_t height, std::string *outError) {
+        if (width == 0 || height == 0) {
+            if (outError)
+                *outError = "Editor viewport: zero-sized render target requested.";
+            return false;
+        }
+
+        // Defensive: in unit tests there is no GL context, so glGenFramebuffers
+        // is a null function pointer (glad has not been loaded). Refuse to
+        // touch GL state in that environment so the headless render tests
+        // remain stable.
+        if (glGenFramebuffers == nullptr) {
+            if (outError)
+                *outError = "Editor viewport: OpenGL context not initialised.";
+            return false;
+        }
+
+        if (m_editorViewportFbo &&
+            m_editorViewportFboWidth == width &&
+            m_editorViewportFboHeight == height)
+            return true;
+
+        if (!m_editorViewportFbo) {
+            FramebufferSpec spec{};
+            spec.width = width;
+            spec.height = height;
+            spec.attachmentSpec.attachments = {
+                {FramebufferTextureFormat::RGBA8},
+                {FramebufferTextureFormat::DEPTH24STENCIL8},
+            };
+            m_editorViewportFbo = CreateFramebuffer(spec);
+            if (!m_editorViewportFbo) {
+                if (outError)
+                    *outError = "Editor viewport: failed to create framebuffer.";
+                return false;
+            }
+        } else {
+            m_editorViewportFbo->Resize(width, height);
+        }
+        m_editorViewportFboWidth = width;
+        m_editorViewportFboHeight = height;
+        ++m_editorViewportFboGeneration;
+        return true;
     }
 
     bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(
-        RenderTargetHandle *outHandle, bool, std::string *outError) {
-        if (outHandle)
+        RenderTargetHandle *outHandle, bool needsYFlip, std::string *outError) {
+        if (!outHandle) {
+            if (outError)
+                *outError = "Editor viewport: null output handle pointer.";
+            return false;
+        }
+        if (!m_editorViewportFbo) {
             *outHandle = {};
-        if (outError)
-            *outError = "Editor viewport render-target handle is unavailable on OpenGL "
-                    "backend.";
-        return false;
+            if (outError)
+                *outError = "Editor viewport: render target not yet provisioned.";
+            return false;
+        }
+        *outHandle = RenderTargetHandle::OpenGLTexture(
+            m_editorViewportFbo->GetColorAttachmentId(0),
+            needsYFlip,
+            m_editorViewportFboWidth,
+            m_editorViewportFboHeight,
+            m_editorViewportFboGeneration);
+        return true;
+    }
+
+    bool OpenGLRenderBackend::BindEditorViewportRenderTarget() {
+        if (!m_editorViewportFbo)
+            return false;
+        m_editorViewportFbo->Bind();
+        glViewport(0, 0,
+                   static_cast<GLsizei>(m_editorViewportFboWidth),
+                   static_cast<GLsizei>(m_editorViewportFboHeight));
+        glClearColor(0.05f, 0.05f, 0.07f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        return true;
+    }
+
+    void OpenGLRenderBackend::UnbindEditorViewportRenderTarget() {
+        if (m_editorViewportFbo)
+            m_editorViewportFbo->Unbind();
     }
 
     void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig &frame) {

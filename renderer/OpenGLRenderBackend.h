@@ -44,6 +44,9 @@ namespace Horo {
                                                     bool needsYFlip,
                                                     std::string *outError) override;
 
+        bool BindEditorViewportRenderTarget() override;
+        void UnbindEditorViewportRenderTarget() override;
+
         // ── Resource Factory (implemented in renderer/opengl/) ──────────────
         std::shared_ptr<IShader>       CreateShader(const std::string& vertSrc,
                                                     const std::string& fragSrc) override;
@@ -86,5 +89,11 @@ namespace Horo {
         bool m_overlayDepthWas = false;
         bool m_overlayBlendWas = false;
         bool m_overlayCullWas  = false;
+
+        // Editor viewport render target (HORO-41).
+        std::shared_ptr<IFramebuffer> m_editorViewportFbo;
+        uint32_t m_editorViewportFboWidth = 0;
+        uint32_t m_editorViewportFboHeight = 0;
+        uint64_t m_editorViewportFboGeneration = 0;
     };
 } // namespace Horo

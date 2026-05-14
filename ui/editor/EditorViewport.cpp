@@ -105,7 +105,13 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
     }
     return false;
   }
-  ImGui::Image(textureId, ImVec2(targetW, targetH));
+  // OpenGL textures are bottom-up; ImGui sources image UVs top-down.
+  // Flip vertically by swapping V on the corner UVs.
+  const bool flipV =
+      viewportHandle.nativeType == RenderNativeHandleType::OpenGLTexture2D;
+  const ImVec2 uv0 = flipV ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+  const ImVec2 uv1 = flipV ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+  ImGui::Image(textureId, ImVec2(targetW, targetH), uv0, uv1);
   s_lastViewportRenderError.clear();
   return true;
 }
