@@ -43,6 +43,10 @@
 #include "renderer/Mesh.h"
 #include "renderer/MeshBin.h"
 #include "renderer/RenderBackend.h"
+#include "renderer/Skeleton.h"
+#include "renderer/SkinnedMesh.h"
+#include "renderer/SkinnedMeshBin.h"
+#include "renderer/SkinnedVertex.h"
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeCoordinator.h"
 #include "tests/TestTempPaths.h"
@@ -540,6 +544,53 @@ TEST_CASE("EditorAssetThumbnailPreview: missing .mesh.bin path returns nullptr w
   const Mesh *mesh =
       TryGetAssetPreviewStaticMesh("/nonexistent/path/missing.mesh.bin");
   REQUIRE(mesh == nullptr);
+}
+
+// ===========================================================================
+// EditorAssetThumbnailPreview — .skinned.bin support (HORO-41)
+// ===========================================================================
+// Skeletal FBX assets land as engine-native .skinned.bin files via HORO-107.
+// The thumbnail preview cache must therefore route .skinned.bin paths through
+// SkinnedMeshBin::ReadSkinnedMesh and produce a real preview SkinnedMesh,
+// mirroring the GLTF-skinned branch.
+
+TEST_CASE("EditorAssetThumbnailPreview: .skinned.bin path resolves to a real preview skinned mesh",
+          "[editor][thumbnail-preview][skinnedmeshbin]") {
+  ClearAssetThumbnailMeshCaches();
+
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_thumb_skinnedmeshbin.skinned.bin";
+
+  std::vector<SkinnedVertex> vertices(3);
+  for (int i = 0; i < 3; ++i) {
+    vertices[i].position = {static_cast<float>(i), 0.0f, 0.0f};
+    vertices[i].normal = {0.0f, 0.0f, 1.0f};
+    vertices[i].uv = {0.0f, 0.0f};
+    vertices[i].boneIndices = {0, -1, -1, -1};
+    vertices[i].boneWeights = {1.0f, 0.0f, 0.0f, 0.0f};
+  }
+  const std::vector<uint32_t> indices = {0, 1, 2};
+
+  std::vector<Bone> bones;
+  Bone root;
+  root.parentIndex = -1;
+  root.name = "root";
+  root.inverseBindMatrix = Mat4::Identity();
+  bones.push_back(root);
+
+  REQUIRE(SkinnedMeshBin::WriteSkinnedMesh(path.string(), vertices, indices, bones).ok);
+
+  const SkinnedMesh *skinned = TryGetAssetPreviewSkinnedMesh(path.string());
+  REQUIRE(skinned != nullptr);
+  CHECK(skinned->GetIndexCount() == 3);
+}
+
+TEST_CASE("EditorAssetThumbnailPreview: missing .skinned.bin path returns nullptr without crashing",
+          "[editor][thumbnail-preview][skinnedmeshbin]") {
+  ClearAssetThumbnailMeshCaches();
+  const SkinnedMesh *skinned =
+      TryGetAssetPreviewSkinnedMesh("/nonexistent/path/missing.skinned.bin");
+  REQUIRE(skinned == nullptr);
 }
 
 // ===========================================================================

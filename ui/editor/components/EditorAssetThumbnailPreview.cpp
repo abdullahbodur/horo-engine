@@ -20,7 +20,9 @@
 #include "renderer/ObjLoader.h"
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
+#include "renderer/Skeleton.h"
 #include "renderer/SkinnedMesh.h"
+#include "renderer/SkinnedMeshBin.h"
 #include "renderer/Texture.h"
 #if defined(HORO_HAS_VULKAN)
 #include "renderer/VulkanRenderBackend.h"
@@ -144,6 +146,24 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
       mesh->SetData(result.vertices, result.indices);
       entry.mesh = std::move(mesh);
       entry.isSkinned = false;
+    } else if (cacheKey.ends_with(".skinned.bin")) {
+      // Engine-native skinned binary produced by FBX skeletal import (HORO-107).
+      const SkinnedMeshBin::ReadResult result =
+          SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
+      if (!result.ok) {
+        LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})",
+                cacheKey, result.error);
+        renderer.noPreviewKeys.insert(cacheKey);
+        return nullptr;
+      }
+      auto skinnedMesh = std::make_shared<SkinnedMesh>();
+      skinnedMesh->SetData(result.vertices, result.indices);
+      auto skeleton = std::make_shared<Skeleton>();
+      for (const auto& bone : result.bones)
+        skeleton->AddBone(bone);
+      entry.skinnedMesh = std::move(skinnedMesh);
+      entry.skeleton = std::move(skeleton);
+      entry.isSkinned = true;
     } else if (ext == ".gltf" || ext == ".glb") {
       GltfLoadResult result = GltfLoader::Load(path.generic_string());
       if (result.mesh) {
@@ -493,6 +513,14 @@ const Mesh* TryGetAssetPreviewStaticMesh(std::string_view meshPath) {
   if (!meshEntry || !meshEntry->mesh)
     return nullptr;
   return meshEntry->mesh.get();
+}
+
+/** @copydoc TryGetAssetPreviewSkinnedMesh */
+const SkinnedMesh* TryGetAssetPreviewSkinnedMesh(std::string_view meshPath) {
+  const auto* meshEntry = TryLoadAssetMesh(meshPath);
+  if (!meshEntry || !meshEntry->skinnedMesh)
+    return nullptr;
+  return meshEntry->skinnedMesh.get();
 }
 
 /** @copydoc ClearAssetThumbnailMeshCaches */
