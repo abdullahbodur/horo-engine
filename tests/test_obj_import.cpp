@@ -284,3 +284,24 @@ TEST_CASE("SuggestRenderScale scales mesh to target height", "[editor][import]")
   REQUIRE(y == Approx(4.0f).epsilon(0.01f));
   REQUIRE(z == Approx(4.0f).epsilon(0.01f));
 }
+
+// ===========================================================================
+// Coverage: SuggestRenderScale with degenerate (zero-height) mesh
+// ===========================================================================
+
+TEST_CASE("SuggestRenderScale returns 1,1,1 for flat mesh with zero height",
+          "[editor][import][coverage]") {
+  // A flat mesh where all vertices have the same Y coordinate.
+  const std::string path = TmpPath("flat_mesh.obj");
+  WriteFile(path, "v 0.0 1.0 0.0\n"
+                  "v 1.0 1.0 0.0\n"
+                  "v 0.0 1.0 1.0\n"
+                  "f 1 2 3\n");
+
+  const std::string result = SuggestRenderScale(path, 2.0f);
+  float x = 0.f, y = 0.f, z = 0.f;
+  REQUIRE(ParseVec3String(result, x, y, z));
+  CHECK(x == Approx(1.0f).epsilon(0.01f));
+  CHECK(y == Approx(1.0f).epsilon(0.01f));
+  CHECK(z == Approx(1.0f).epsilon(0.01f));
+}

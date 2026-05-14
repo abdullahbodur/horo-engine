@@ -96,6 +96,7 @@ function(horo_configure_engine_target target_name imgui_target)
             stb
             nlohmann_json
             tinygltf
+            ufbx
     )
 
     if(HORO_ENGINE_ENABLE_VULKAN)
@@ -311,7 +312,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND HORO_ENGINE_BUILD_STAN
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    install(TARGETS HoroEngine horo-renderer-opengl glad imgui_lib glfw glm stb tinygltf nlohmann_json
+    install(TARGETS HoroEngine horo-renderer-opengl glad imgui_lib glfw glm stb tinygltf nlohmann_json ufbx
         EXPORT HoroEngineTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

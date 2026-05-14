@@ -24,6 +24,18 @@ namespace Horo::Editor {
         return ext == ".obj";
     }
 
+    /** @copydoc IsFbxFilePath */
+    bool IsFbxFilePath(const std::string &path) {
+        if (path.empty())
+            return false;
+        const std::filesystem::path p(path);
+        std::string ext = p.extension().string();
+        std::ranges::transform(ext, ext.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return ext == ".fbx";
+    }
+
     /** @copydoc AssetIdFromImportedPath */
     std::string AssetIdFromImportedPath(const std::string &path) {
         if (path.empty())

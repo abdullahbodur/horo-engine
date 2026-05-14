@@ -12,6 +12,12 @@ namespace Horo::Editor {
      */
     bool IsObjFilePath(const std::string &path);
 
+    /** @brief Returns true when path has an ".fbx" extension (case-insensitive).
+     *  @param path File path to test.
+     *  @return True if path refers to an FBX source file.
+     */
+    bool IsFbxFilePath(const std::string &path);
+
     /** @brief Derives a canonical asset ID from an imported file path.
      *  @param path Absolute or project-relative path to the imported asset file.
      *  @return Asset ID string derived from the path stem and parent directory.

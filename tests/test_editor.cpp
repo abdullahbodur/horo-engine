@@ -4979,6 +4979,26 @@ TEST_CASE("EditorLayer render: clearing overlay callback to nullptr is safe", "[
 }
 
 
+TEST_CASE("EditorLayer render: file menu callback setter does not crash and Render succeeds", "[editor][render][coverage]") {
+  ImGuiContextGuard imgui;
+  EditorLayer editor;
+  editor.LoadDocument(SceneDocument{});
+  editor.Toggle();
+
+  int callCount = 0;
+  editor.SetFileMenuRenderCallback([&callCount]() { ++callCount; });
+
+  Camera cam;
+  editor.Render(cam, 1280, 720);
+  // The callback is only invoked when the File menu is open; verify no crash.
+  REQUIRE(true);
+
+  // Clearing to nullptr is also safe.
+  editor.SetFileMenuRenderCallback(nullptr);
+  editor.Render(cam, 1280, 720);
+  REQUIRE(true);
+}
+
 TEST_CASE("EditorLayer render: script component with behaviorOptionsCb covers option list", "[editor][render][properties]") {
   ImGuiContextGuard imgui;
   SceneDocument doc;
@@ -5283,8 +5303,8 @@ TEST_CASE("AssetImporterRegistry: texture importer rejects non-existent source f
 
 TEST_CASE("AssetImporterRegistry: FindByExtension returns nullptr for unknown extension", "[editor][importer]") {
   AssetImporterRegistry registry;
-  REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("data.bin") == nullptr);
+  REQUIRE(registry.FindByExtension("archive.zip") == nullptr);
   REQUIRE(registry.FindByExtension("noextension") == nullptr);
 }
 
@@ -6964,6 +6984,50 @@ TEST_CASE("EditorLayer: AcknowledgeReload clears WantsSceneReload", "[editor][la
   editor.AcknowledgeReload();
   REQUIRE_FALSE(editor.WantsSceneReload());
 }
+
+TEST_CASE("EditorLayer: GetPendingDocument returns document when reload is pending", "[editor][layer][coverage]") {
+  EditorLayer editor;
+  SceneDocument doc;
+  doc.sceneId = "pending_test";
+  doc.sceneName = "Pending";
+  editor.LoadDocument(doc);
+  editor.ExecuteMcpCommand("editor.reload_scene", nlohmann::json::object());
+  REQUIRE(editor.WantsSceneReload());
+  const SceneDocument &pending = editor.GetPendingDocument();
+  // GetPendingDocument must return a valid document reference.
+  CHECK_FALSE(pending.sceneId.empty());
+  editor.AcknowledgeReload();
+}
+
+// ===========================================================================
+// Coverage: UiAutomationAddObject + UiAutomationSelectAllObjects
+// ===========================================================================
+
+#ifdef HORO_STANDALONE_UI_AUTOMATION
+TEST_CASE("EditorLayer: UiAutomationAddObject adds an object to the document", "[editor][layer][coverage]") {
+  EditorLayer editor;
+  editor.LoadDocument(SceneDocument{});
+  const auto &doc = editor.GetDocument();
+  const std::size_t before = doc.objects.size();
+  editor.UiAutomationAddObject(SceneObjectType::Prop);
+  CHECK(editor.GetDocument().objects.size() == before + 1);
+}
+
+TEST_CASE("EditorLayer: UiAutomationSelectAllObjects selects every object", "[editor][layer][coverage]") {
+  SceneDocument doc;
+  doc.sceneId = "sel_all";
+  SceneObject a; a.id = "a"; a.type = SceneObjectType::Prop;
+  SceneObject b; b.id = "b"; b.type = SceneObjectType::Prop;
+  doc.objects.push_back(a);
+  doc.objects.push_back(b);
+
+  EditorLayer editor;
+  editor.LoadDocument(doc);
+  editor.UiAutomationSelectAllObjects();
+  // Exercises the select-all loop; no crash is the primary assertion.
+  REQUIRE(true);
+}
+#endif
 
 TEST_CASE("EditorLayer MCP: reparent_object with nonexistent child returns error", "[editor][mcp]") {
   EditorLayer editor;

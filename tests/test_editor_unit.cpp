@@ -40,6 +40,8 @@
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
+#include "renderer/Mesh.h"
+#include "renderer/MeshBin.h"
 #include "renderer/RenderBackend.h"
 #include "scene/SceneProjectModel.h"
 #include "scene/SceneRuntimeCoordinator.h"
@@ -157,8 +159,8 @@ TEST_CASE("AssetImporterRegistry: Register nullptr is a no-op", "[editor][import
 
 TEST_CASE("AssetImporterRegistry: FindByExtension returns null for unknown ext", "[editor][importer-registry]") {
   AssetImporterRegistry registry;
-  REQUIRE(registry.FindByExtension("model.fbx") == nullptr);
   REQUIRE(registry.FindByExtension("doc.pdf") == nullptr);
+  REQUIRE(registry.FindByExtension("archive.zip") == nullptr);
   REQUIRE(registry.FindByExtension("noext") == nullptr);
 }
 
@@ -499,6 +501,236 @@ TEST_CASE("DiagnosticCodes: TextureCopyImporter emits typed code for unsupported
   CHECK_FALSE(result.ok);
   REQUIRE_FALSE(result.diagnostics.empty());
   CHECK(result.diagnostics[0].code == DiagnosticCodes::TextureUnsupportedType);
+}
+
+// ===========================================================================
+// EditorAssetThumbnailPreview — .mesh.bin support (HORO-101)
+// ===========================================================================
+// FBX-imported assets land as engine-native .mesh.bin files via HORO-94 +
+// HORO-100. The thumbnail preview cache must therefore route .mesh.bin paths
+// through MeshBin::ReadStaticMesh and produce a real preview Mesh, mirroring
+// the OBJ branch that already drove static-mesh thumbnails.
+
+#include "ui/editor/components/EditorAssetThumbnailPreview.h"
+
+TEST_CASE("EditorAssetThumbnailPreview: .mesh.bin path resolves to a real preview mesh",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+
+  const std::filesystem::path path =
+      Horo::Tests::SecureTempBase() / "horo_thumb_meshbin.mesh.bin";
+  std::vector<Vertex> vertices = {
+      {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+      {{2.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+      {{0.0f, 3.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  };
+  std::vector<uint32_t> indices = {0, 1, 2};
+  REQUIRE(MeshBin::WriteStaticMesh(path.string(), vertices, indices).ok);
+
+  const Mesh *mesh = TryGetAssetPreviewStaticMesh(path.string());
+  REQUIRE(mesh != nullptr);
+  REQUIRE(mesh->GetIndexCount() == 3);
+  REQUIRE(mesh->GetVertices().size() == 3);
+  CHECK(mesh->GetVertices()[2].position.y == 3.0f);
+}
+
+TEST_CASE("EditorAssetThumbnailPreview: missing .mesh.bin path returns nullptr without crashing",
+          "[editor][thumbnail-preview][meshbin]") {
+  ClearAssetThumbnailMeshCaches();
+  const Mesh *mesh =
+      TryGetAssetPreviewStaticMesh("/nonexistent/path/missing.mesh.bin");
+  REQUIRE(mesh == nullptr);
+}
+
+// ===========================================================================
+// EditorImportAssetModal — state transitions (HORO-92)
+// ===========================================================================
+// Exercises the modal as a state machine; the Draw call short-circuits when
+// no ImGui context is current, so these tests run cleanly in unit-test mode.
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+TEST_CASE("EditorImportAssetModal: Open seeds draft and infers importer from extension",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  REQUIRE_FALSE(modal.IsOpen());
+
+  modal.Open("/some/path/cube.fbx", &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath == "/some/path/cube.fbx");
+  CHECK(modal.DraftForTest().assetId == "cube");
+  CHECK(modal.DraftForTest().displayName == "cube");
+  CHECK(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with .obj routes to OBJ importer",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/x/y/crate.obj", &registry);
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: Open with no path leaves importer empty",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+  CHECK(modal.IsOpen());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+  CHECK(modal.DraftForTest().assetId.empty());
+  CHECK(modal.DraftForTest().importerId.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: RequestImportForTest signals HasPendingRequest exactly once",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  CHECK_FALSE(modal.HasPendingRequest());
+
+  modal.RequestImportForTest();
+  REQUIRE(modal.HasPendingRequest());
+  const ImportAssetRequest req = modal.ConsumePendingRequest();
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(req.sourcePath == "/p/cube.fbx");
+  CHECK(req.assetId == "cube");
+  CHECK(req.importerId == "builtin.fbx_static_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with ok+no diagnostics closes the modal",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  modal.SetLastResult(outcome);
+  CHECK_FALSE(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: SetLastResult with warning diagnostics keeps the modal open",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = true;
+  AssetImportDiagnostic warn;
+  warn.severity = AssetDiagnosticSeverity::Warning;
+  warn.code = "asset.fbx.external_texture_missing";
+  warn.message = "missing.png";
+  outcome.diagnostics.push_back(warn);
+  modal.SetLastResult(outcome);
+  CHECK(modal.IsOpen());
+  CHECK(modal.LastResultForTest().ok);
+}
+
+TEST_CASE("EditorImportAssetModal: Close clears pending state",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  modal.RequestImportForTest();
+  modal.Close();
+  CHECK_FALSE(modal.IsOpen());
+  CHECK_FALSE(modal.HasPendingRequest());
+  CHECK(modal.DraftForTest().sourcePath.empty());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw is a no-op without an ImGui context",
+          "[editor][import-asset-modal]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  // No ImGui context attached; Draw must not crash and the modal stays open.
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+#include <imgui.h>
+
+namespace {
+/** @brief Sets up a minimal ImGui frame so widget calls do not crash. Caller must End() + DestroyContext(). */
+struct ImGuiFrameFixture {
+  ImGuiContext *context = nullptr;
+  explicit ImGuiFrameFixture() {
+    context = ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = ImVec2(640.0f, 480.0f);
+    io.DeltaTime = 1.0f / 60.0f;
+    io.Fonts->Build();
+    ImGui::NewFrame();
+  }
+  ~ImGuiFrameFixture() {
+    ImGui::EndFrame();
+    ImGui::DestroyContext(context);
+  }
+  ImGuiFrameFixture(const ImGuiFrameFixture &) = delete;
+  ImGuiFrameFixture &operator=(const ImGuiFrameFixture &) = delete;
+};
+} // namespace
+
+TEST_CASE("EditorImportAssetModal: Draw renders without crash with ImGui frame and FBX path",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  // Drives DrawPathSection / DrawImporterSection / DrawIdentitySection /
+  // DrawActionsSection through the BeginPopupModal + EndPopup path.
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw renders without crash with no path (importer empty branch)",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw with prior result renders the result panel branch",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = false;
+  outcome.error = "boom";
+  AssetImportDiagnostic warn;
+  warn.severity = AssetDiagnosticSeverity::Warning;
+  warn.code = "asset.fbx.external_texture_missing";
+  warn.message = "missing.png";
+  AssetImportDiagnostic err;
+  err.severity = AssetDiagnosticSeverity::Error;
+  err.code = "asset.fbx.parse_failed";
+  err.message = "parse";
+  outcome.diagnostics.push_back(warn);
+  outcome.diagnostics.push_back(err);
+  modal.SetLastResult(outcome);
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw renders successfully when the modal is closed",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  // Modal not opened — Draw must short-circuit before BeginPopupModal.
+  modal.Draw();
+  CHECK_FALSE(modal.IsOpen());
 }
 
 // ===========================================================================
@@ -2639,4 +2871,244 @@ TEST_CASE("AssetImportService: GuidRegistry populated after a reimport call", "[
   CHECK(service.GuidRegistry().LookupByGuid("guid_a") != nullptr);
   CHECK(service.GuidRegistry().LastRefreshSource() ==
         AssetGuidRegistryRefreshSource::Document);
+}
+
+// ===========================================================================
+// Coverage: ObjCreateDirectoryFailed error path (AssetImporterRegistry.cpp:252)
+// ===========================================================================
+
+TEST_CASE("AssetImporterRegistry: ObjImporter reports create-directory failure when managed path is a file",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_obj_create_dir_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceObj = root / "mesh.obj";
+  WriteFile(sourceObj, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  const std::string assetGuid = "guid_obj_create_dir_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir.parent_path(), ec);
+  REQUIRE_FALSE(ec);
+  // Block directory creation by placing a regular file at the managed path.
+  WriteFile(managedDir, "not-a-directory");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "obj_dir_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceObj.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::ObjCreateDirectoryFailed);
+}
+
+// ===========================================================================
+// Coverage: TextureCopyFailed error path (AssetImporterRegistry.cpp:353)
+// ===========================================================================
+
+TEST_CASE("AssetImporterRegistry: TextureCopy reports copy failure when destination is blocked",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_imp_tex_copy_fail";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceTexture = root / "brick.png";
+  WriteFile(sourceTexture, "png-bytes");
+
+  const std::string assetGuid = "guid_tex_copy_fail";
+  const std::filesystem::path managedDir = GetManagedAssetDirectory(assetGuid);
+  std::filesystem::create_directories(managedDir, ec);
+  REQUIRE_FALSE(ec);
+  // Block the copy by creating a directory with the same name as the destination file.
+  std::filesystem::create_directories(managedDir / "brick.png", ec);
+  REQUIRE_FALSE(ec);
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "tex_copy_fail";
+  req.assetGuid = assetGuid;
+  req.sourcePath = sourceTexture.string();
+  const AssetImportResult result = imp->Import(req);
+  CHECK_FALSE(result.ok);
+  REQUIRE_FALSE(result.diagnostics.empty());
+  CHECK(result.diagnostics[0].code == DiagnosticCodes::TextureCopyFailed);
+}
+
+// ===========================================================================
+// Coverage: EditorImportAssetModal SetDraftForTest + RefreshImporterFromExtension
+//           + RefreshIdentitiesFromPath (EditorImportAssetModal.cpp:64-74)
+// ===========================================================================
+
+TEST_CASE("EditorImportAssetModal: SetDraftForTest overrides auto-derived fields",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  // Override via test seam
+  modal.SetDraftForTest("/other/path/ship.obj", "ship_id", "Ship Model", "builtin.obj_mesh");
+  CHECK(modal.DraftForTest().sourcePath == "/other/path/ship.obj");
+  CHECK(modal.DraftForTest().assetId == "ship_id");
+  CHECK(modal.DraftForTest().displayName == "Ship Model");
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: RefreshImporterFromExtension updates importer from draft path",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+
+  // Manually set a path and refresh
+  modal.SetDraftForTest("/x/model.obj", "model", "Model", "");
+  // Re-open with the new path to trigger refresh
+  modal.Open("/x/model.obj", &registry);
+  CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
+}
+
+TEST_CASE("EditorImportAssetModal: RefreshIdentitiesFromPath derives assetId from source path",
+          "[editor][import-asset-modal][coverage]") {
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/some/dir/my_asset.fbx", &registry);
+  CHECK(modal.DraftForTest().assetId == "my_asset");
+  CHECK(modal.DraftForTest().displayName == "my_asset");
+}
+
+// ===========================================================================
+// Coverage: TextureCopyImporter success with empty displayName
+// ===========================================================================
+
+TEST_CASE("TextureCopyImporter: empty displayName falls back to assetId",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_tex_empty_display";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceTexture = root / "tile.png";
+  WriteFile(sourceTexture, "png-bytes");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "tile_tex";
+  req.assetGuid = "guid_tile_tex";
+  req.displayName = ""; // empty — should fall back to assetId
+  req.sourcePath = sourceTexture.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+  CHECK(result.asset.displayName == "tile_tex");
+}
+
+// ===========================================================================
+// Coverage: AssetImporterInternal helpers (SniffImageExtension, EnsureExtension,
+//           IsSafeBasename, SanitiseTextureBasename)
+// ===========================================================================
+
+#include "ui/editor/AssetImporterInternal.h"
+
+using namespace Horo::Editor::ImporterDetail;
+
+TEST_CASE("SniffImageExtension: detects PNG magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> png = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A};
+  CHECK(SniffImageExtension(png) == ".png");
+}
+
+TEST_CASE("SniffImageExtension: detects JPG magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> jpg = {0xFF, 0xD8, 0xFF, 0xE0};
+  CHECK(SniffImageExtension(jpg) == ".jpg");
+}
+
+TEST_CASE("SniffImageExtension: detects BMP magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> bmp = {0x42, 0x4D, 0x00, 0x00};
+  CHECK(SniffImageExtension(bmp) == ".bmp");
+}
+
+TEST_CASE("SniffImageExtension: detects WebP magic", "[editor][importer-internal][coverage]") {
+  std::vector<unsigned char> webp(16, 0);
+  webp[0] = 0x52; webp[1] = 0x49; webp[2] = 0x46; webp[3] = 0x46;
+  webp[8] = 0x57; webp[9] = 0x45; webp[10] = 0x42; webp[11] = 0x50;
+  CHECK(SniffImageExtension(webp) == ".webp");
+}
+
+TEST_CASE("SniffImageExtension: detects HDR magic", "[editor][importer-internal][coverage]") {
+  std::vector<unsigned char> hdr(16, 0);
+  hdr[0] = '#'; hdr[1] = '?'; hdr[2] = 'R'; hdr[3] = 'A';
+  CHECK(SniffImageExtension(hdr) == ".hdr");
+}
+
+TEST_CASE("SniffImageExtension: returns empty for unknown bytes", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> unknown = {0x00, 0x01, 0x02, 0x03};
+  CHECK(SniffImageExtension(unknown).empty());
+}
+
+TEST_CASE("SniffImageExtension: returns empty for too-short input", "[editor][importer-internal][coverage]") {
+  CHECK(SniffImageExtension({}).empty());
+  CHECK(SniffImageExtension({0x89}).empty());
+}
+
+TEST_CASE("EnsureExtension: appends extension when basename has none", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture", ".png") == "texture.png");
+}
+
+TEST_CASE("EnsureExtension: replaces existing extension", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture.tga", ".png") == "texture.png");
+}
+
+TEST_CASE("EnsureExtension: returns unchanged when ext is empty", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture.tga", "") == "texture.tga");
+}
+
+TEST_CASE("IsSafeBasename: rejects empty and dot names", "[editor][importer-internal][coverage]") {
+  CHECK_FALSE(IsSafeBasename(""));
+  CHECK_FALSE(IsSafeBasename("."));
+  CHECK_FALSE(IsSafeBasename(".."));
+}
+
+TEST_CASE("IsSafeBasename: rejects paths with separators", "[editor][importer-internal][coverage]") {
+  CHECK_FALSE(IsSafeBasename("sub/file.png"));
+  CHECK_FALSE(IsSafeBasename("sub\\file.png"));
+}
+
+TEST_CASE("IsSafeBasename: accepts normal filenames", "[editor][importer-internal][coverage]") {
+  CHECK(IsSafeBasename("texture.png"));
+  CHECK(IsSafeBasename("my_file"));
+}
+
+TEST_CASE("SanitiseTextureBasename: empty input returns fallback", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("") == "texture.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: extracts filename from path", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("textures/diffuse.png") == "diffuse.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: replaces unsafe characters", "[editor][importer-internal][coverage]") {
+  // On POSIX, backslash is not a separator so filename() returns the whole string;
+  // the sanitiser replaces backslashes and colons with '_'.
+  const std::string result = SanitiseTextureBasename("sub/diffuse.png");
+  CHECK(result == "diffuse.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: dot-dot returns fallback", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("..") == "texture.png");
 }

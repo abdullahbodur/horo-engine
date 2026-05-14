@@ -1,11 +1,12 @@
 /**
  * @file EditorAssetDrops.cpp
- * @brief OS file-drop integration for texture albedo assignment and OBJ draft import.
+ * @brief OS file-drop integration for texture albedo assignment and mesh-source draft import.
  *
  * @ref EditorLayer::OnPathsDropped queues UTF-8 paths and cursor coordinates;
  * @ref EditorLayer::ProcessPendingPathDrops drains them after the frame boundary.
- * Texture paths hit-test draft vs. selected-asset albedo drop zones; OBJ paths drive
- * @ref AssetImportService::ImportAssetFromSource into the new-asset draft state.
+ * Texture paths hit-test draft vs. selected-asset albedo drop zones; OBJ and FBX
+ * paths drive @ref AssetImportService::ImportAssetFromSource into the new-asset
+ * draft state.
  */
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorLayerInternal.h"
@@ -117,12 +118,14 @@ namespace Horo::Editor
     }
   }
 
-  /** @copydoc EditorLayer::ProcessPendingObjDrops */
-  void EditorLayer::ProcessPendingObjDrops()
+  /** @copydoc EditorLayer::ProcessPendingMeshDrops */
+  void EditorLayer::ProcessPendingMeshDrops()
   {
     for (const std::string& path : m_pendingPathDropPaths)
     {
-      if (!IsObjFilePath(path))
+      const bool isObj = IsObjFilePath(path);
+      const bool isFbx = IsFbxFilePath(path);
+      if (!isObj && !isFbx)
         continue;
       if (m_assetDraftGuid.empty())
         m_assetDraftGuid = GenerateAssetGuid();
@@ -147,7 +150,8 @@ namespace Horo::Editor
       m_assetDraftRenderScale = importResult.asset.renderScale;
       m_assetImportError.clear();
       m_openNewAssetHeader = true;
-      m_uiWidgets.OnClipboardAction("OBJ dropped — draft ready", 2.2f);
+      m_uiWidgets.OnClipboardAction(
+        isFbx ? "FBX dropped — draft ready" : "OBJ dropped — draft ready", 2.2f);
       m_pendingPathDropPaths.clear();
       return;
     }
@@ -160,7 +164,37 @@ namespace Horo::Editor
       return;
     m_hasPendingPathDrop = false;
     ProcessPendingTextureDrops();
-    ProcessPendingObjDrops();
+    ProcessPendingMeshDrops();
     m_pendingPathDropPaths.clear();
+  }
+
+  /** @copydoc EditorLayer::ProcessImportAssetModalRequest */
+  void EditorLayer::ProcessImportAssetModalRequest()
+  {
+    if (!m_importAssetModal.HasPendingRequest())
+      return;
+    const ImportAssetRequest req = m_importAssetModal.ConsumePendingRequest();
+    ImportAssetOutcome outcome;
+    if (req.sourcePath.empty() || req.assetId.empty()) {
+      outcome.error = "Source path and asset id are required.";
+      m_importAssetModal.SetLastResult(outcome);
+      return;
+    }
+
+    const std::string assetGuid = GenerateAssetGuid();
+    const AssetImportResult result = m_assetImportService.ImportAssetFromSource(
+      req.sourcePath, req.assetId, assetGuid, req.displayName.empty()
+        ? req.assetId : req.displayName);
+
+    outcome.ok = result.ok;
+    outcome.error = result.error;
+    outcome.diagnostics = result.diagnostics;
+    if (result.ok) {
+      outcome.assetMesh = result.asset.mesh;
+      outcome.assetAlbedoMap = result.asset.albedoMap;
+      m_document.assets[req.assetId] = result.asset;
+      m_document.dirty = true;
+    }
+    m_importAssetModal.SetLastResult(outcome);
   }
 } // namespace Horo::Editor

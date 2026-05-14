@@ -142,6 +142,7 @@ add_test(NAME test_physics_coverage COMMAND $<TARGET_FILE:test_physics_coverage>
 # ---- test_editor ----
 add_executable(test_editor test_editor.cpp)
 target_link_libraries(test_editor PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+target_compile_definitions(test_editor PRIVATE HORO_STANDALONE_UI_AUTOMATION=1)
 horo_set_test_output_dir(test_editor)
 add_test(NAME test_editor COMMAND $<TARGET_FILE:test_editor>)
 
@@ -234,6 +235,13 @@ add_executable(test_obj_import test_obj_import.cpp)
 target_link_libraries(test_obj_import PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
 horo_set_test_output_dir(test_obj_import)
 add_test(NAME test_obj_import COMMAND $<TARGET_FILE:test_obj_import>)
+
+# ---- test_fbx_import ----
+add_executable(test_fbx_import test_fbx_import.cpp)
+target_link_libraries(test_fbx_import PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+target_compile_definitions(test_fbx_import PRIVATE HORO_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests")
+horo_set_test_output_dir(test_fbx_import)
+add_test(NAME test_fbx_import COMMAND $<TARGET_FILE:test_fbx_import>)
 
 # ---- test_gizmo ----
 add_executable(test_gizmo test_gizmo.cpp)
