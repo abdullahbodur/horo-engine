@@ -160,10 +160,10 @@ namespace Horo::Editor {
         std::vector<std::string> importerIds;
         if (m_registry != nullptr)
             importerIds = m_registry->RegisteredImporterIds();
-        if (const char *currentLabel = m_draft.importerId.empty()
-                                           ? "(no importer matched extension)"
-                                           : m_draft.importerId.c_str();
-            ImGui::BeginCombo("##ImportImporter", currentLabel)) {
+        const char *currentLabel = m_draft.importerId.empty()
+                                       ? "(no importer matched extension)"
+                                       : m_draft.importerId.c_str();
+        if (ImGui::BeginCombo("##ImportImporter", currentLabel)) {
             for (const std::string &id: importerIds) {
                 const bool selected = (id == m_draft.importerId);
                 if (ImGui::Selectable(id.c_str(), selected))
