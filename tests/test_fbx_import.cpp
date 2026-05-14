@@ -1429,3 +1429,76 @@ TEST_CASE("FbxAssetImporter: emits FbxSkeletonWriteFailed when skinned.bin desti
   REQUIRE_FALSE(result.diagnostics.empty());
   CHECK(result.diagnostics[0].code == DiagnosticCodes::FbxSkeletonWriteFailed);
 }
+
+// ===========================================================================
+// Coverage: OBJ with mtllib referencing a non-existent MTL file
+// ===========================================================================
+
+TEST_CASE("ObjImporter: OBJ referencing missing MTL file still imports successfully",
+          "[editor][asset-import][obj][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_obj_missing_mtl";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path srcDir = root / "source";
+  std::filesystem::create_directories(srcDir, ec);
+
+  // OBJ references an MTL that does not exist on disk
+  const std::filesystem::path objPath = srcDir / "ghost_mtl.obj";
+  WriteFile(objPath, "mtllib nonexistent.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "ghost_mtl";
+  req.assetGuid = "guid_ghost_mtl";
+  req.sourcePath = objPath.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+}
+
+// ===========================================================================
+// Coverage: OBJ with MTL that has map_ line without space separator
+// ===========================================================================
+
+TEST_CASE("ObjImporter: OBJ with MTL having malformed map_ lines still imports",
+          "[editor][asset-import][obj][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_obj_mtl_malformed";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path srcDir = root / "source";
+  std::filesystem::create_directories(srcDir, ec);
+
+  const std::filesystem::path objPath = srcDir / "malformed.obj";
+  WriteFile(objPath, "mtllib malformed.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+  // MTL with map_ line that has no space (malformed) — triggers spacePos == npos branch
+  const std::filesystem::path mtlPath = srcDir / "malformed.mtl";
+  WriteFile(mtlPath, "newmtl Mat\n"
+                     "map_KdNoSpace\n"  // no space after map_Kd — triggers continue
+                     "map_Kd trailing_whitespace.png  \r\n"); // trailing whitespace + \r
+
+  WriteFile(srcDir / "trailing_whitespace.png", "PNG");
+
+  const AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.obj_mesh");
+  REQUIRE(imp != nullptr);
+
+  AssetImportRequest req;
+  req.assetId = "malformed_mtl";
+  req.assetGuid = "guid_malformed_mtl";
+  req.sourcePath = objPath.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+}

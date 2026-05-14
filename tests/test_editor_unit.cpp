@@ -2988,3 +2988,33 @@ TEST_CASE("EditorImportAssetModal: RefreshIdentitiesFromPath derives assetId fro
   CHECK(modal.DraftForTest().assetId == "my_asset");
   CHECK(modal.DraftForTest().displayName == "my_asset");
 }
+
+// ===========================================================================
+// Coverage: TextureCopyImporter success with empty displayName
+// ===========================================================================
+
+TEST_CASE("TextureCopyImporter: empty displayName falls back to assetId",
+          "[editor][importer-registry][coverage]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_tex_empty_display";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path sourceTexture = root / "tile.png";
+  WriteFile(sourceTexture, "png-bytes");
+
+  AssetImporterRegistry registry;
+  const AssetImporter *imp = registry.FindById("builtin.texture_copy");
+  REQUIRE(imp != nullptr);
+  AssetImportRequest req;
+  req.assetId = "tile_tex";
+  req.assetGuid = "guid_tile_tex";
+  req.displayName = ""; // empty — should fall back to assetId
+  req.sourcePath = sourceTexture.string();
+  const AssetImportResult result = imp->Import(req);
+  REQUIRE(result.ok);
+  CHECK(result.asset.displayName == "tile_tex");
+}
