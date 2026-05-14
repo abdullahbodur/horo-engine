@@ -9,7 +9,6 @@
 #include "ui/editor/AssetImporterRegistry.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -449,24 +448,6 @@ namespace Horo::Editor {
             return ImporterDetail::EnsureExtension(std::move(baseName), ext);
         }
 
-        /** @brief Resolves and copies / writes every texture record from @p loaded into managed storage.
-         *
-         *  - Embedded textures (@c record.embeddedBytes non-empty) are written to
-         *    @p destDir / @p record.filename. When the captured filename has no
-         *    extension, one is sniffed from the byte signature.
-         *  - External textures are resolved via @ref ResolveExternalTexturePath and
-         *    copied into @p destDir.
-         *  - Each successfully resolved external source path is appended to
-         *    @p outExternalSourcePaths so the importer can record them as additional
-         *    @c Source dependencies in the metadata sidecar (HORO-97). Embedded
-         *    textures do not contribute a Source row beyond the FBX itself.
-         *  - On the first successful diffuse texture, @p outAlbedoMap is set to the
-         *    project-relative produced-file path so the importer can wire it into
-         *    @c AssetDef::albedoMap.
-         *  - Per-texture failures are appended as @c Warning diagnostics keyed on
-         *    @c FbxExternalTextureMissing / @c FbxExternalTextureCopyFailed /
-         *    @c FbxEmbeddedTextureExtractFailed; they never fail the overall import.
-         */
         /** @brief True when @p filename is safe as a leaf inside the managed asset directory.
          *
          *  Rejects any candidate that would escape the per-asset folder via path
