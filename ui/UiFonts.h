@@ -48,8 +48,13 @@ FontResolutionResult ResolveFontPath(const FontFamilyConfig &config);
  *
  * @param io           ImGui IO object whose font atlas will be updated.
  * @param primaryFont  Configuration for the primary text font to load.
+ * @param dpiScale     Per-display content scale (e.g. 2.0 on Retina). Used
+ *                     to set @c ImFontConfig::RasterizerDensity so the atlas
+ *                     is rasterised at native pixel density without changing
+ *                     layout sizes. Pass 1.0f on non-HiDPI displays.
  */
-void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont);
+void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont,
+               float dpiScale = 1.0f);
 
 /**
  * @brief Load the built-in ImGui default font with the icon font merged in.

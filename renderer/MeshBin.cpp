@@ -122,16 +122,6 @@ namespace Horo::MeshBin {
             return result;
         }
 
-<<<<<<< HEAD
-=======
-        result.indices.resize(header.indexCount);
-        if (!BinaryStream::ReadArray(stream, result.indices.data(),
-                                     static_cast<std::size_t>(header.indexCount))) {
-            result.error = "MeshBin read: failed reading index array.";
-            return result;
-        }
-
->>>>>>> 488af99 (chore: refactor)
         BinaryStream::LoadAabbFromHeader(header, result.aabbMin, result.aabbMax);
         result.ok = true;
         return result;

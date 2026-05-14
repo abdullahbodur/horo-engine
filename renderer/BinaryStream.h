@@ -138,7 +138,6 @@ namespace Horo::BinaryStream {
     }
 
     /**
-<<<<<<< HEAD
      *  @brief Writes a uint32 length prefix followed by raw string bytes.
      */
     inline bool WriteLengthPrefixedString(std::ofstream &stream, std::string_view value) {
@@ -162,8 +161,6 @@ namespace Horo::BinaryStream {
     }
 
     /**
-=======
->>>>>>> 488af99 (chore: refactor)
      *  @brief Opens @p destPath for binary writing, creating parent directories as needed.
      *
      *  On failure, sets @p errorOut to a descriptive message prefixed with
