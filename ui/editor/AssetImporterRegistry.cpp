@@ -579,8 +579,7 @@ namespace Horo::Editor {
                 const std::string stem = baseAsPath.stem().string();
                 const std::string ext = baseAsPath.extension().string();
                 for (int suffix = 1; suffix < 1024; ++suffix) {
-                    std::string candidate =
-                        stem + "_" + std::to_string(suffix) + ext;
+                    std::string candidate = std::format("{}_{}{}", stem, suffix, ext);
                     if (!usedBasenames.contains(candidate))
                         return candidate;
                 }
@@ -599,14 +598,16 @@ namespace Horo::Editor {
             };
 
             for (const FbxLoader::FbxTextureRecord &record: textures) {
-                std::string filename = SanitiseTextureBasename(record.filename);
-                if (!IsSafeBasename(filename))
+                std::string sanitised = SanitiseTextureBasename(record.filename);
+                if (!IsSafeBasename(sanitised))
                     continue;
+                fs::path filename = sanitised;
 
                 if (!record.embeddedBytes.empty()) {
-                    if (fs::path(filename).extension().empty())
-                        filename = EnsureExtension(filename, SniffImageExtension(record.embeddedBytes));
-                    filename = pickUniqueBasename(filename);
+                    if (filename.extension().empty())
+                        filename = EnsureExtension(filename.string(),
+                                                    SniffImageExtension(record.embeddedBytes));
+                    filename = pickUniqueBasename(filename.string());
                     const fs::path dest = ctx.destDir / filename;
                     std::ofstream out(dest, std::ios::binary | std::ios::trunc);
                     if (const bool wrote =
@@ -618,11 +619,11 @@ namespace Horo::Editor {
                         diagnostics.push_back(MakeDiagnostic(
                             AssetDiagnosticSeverity::Warning,
                             DiagnosticCodes::FbxEmbeddedTextureExtractFailed,
-                            std::format("Failed to extract embedded texture '{}'.", filename),
+                            std::format("Failed to extract embedded texture '{}'.", filename.string()),
                             ctx.request, ctx.importerId));
                         continue;
                     }
-                    recordProducedTexture(dest, filename, record);
+                    recordProducedTexture(dest, filename.string(), record);
                     continue;
                 }
 
@@ -631,21 +632,22 @@ namespace Horo::Editor {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureMissing,
-                        std::format("External texture '{}' not found near source FBX.", filename),
+                        std::format("External texture '{}' not found near source FBX.", filename.string()),
                         ctx.request, ctx.importerId));
                     continue;
                 }
-                filename = pickUniqueBasename(filename);
+                filename = pickUniqueBasename(filename.string());
                 const fs::path dest = ctx.destDir / filename;
                 if (std::error_code ec; !CopyFileReplacing(resolved, dest, ec) || ec) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureCopyFailed,
-                        std::format("Failed to copy external texture '{}' ({}).", filename, ec.message()),
+                        std::format("Failed to copy external texture '{}' ({}).",
+                                    filename.string(), ec.message()),
                         ctx.request, ctx.importerId));
                     continue;
                 }
-                recordProducedTexture(dest, filename, record);
+                recordProducedTexture(dest, filename.string(), record);
                 outExternalSourcePaths.push_back(resolved.string());
             }
         }

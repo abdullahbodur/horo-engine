@@ -8,10 +8,11 @@
 #include "renderer/AnimBin.h"
 
 #include <array>
-#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
+
+#include "renderer/BinaryStream.h"
 
 namespace Horo::AnimBin {
     namespace {
@@ -30,40 +31,13 @@ namespace Horo::AnimBin {
         static_assert(sizeof(Header) == 32,
                       "AnimBin header layout must remain 32 bytes; bump kAnimBinVersion before changing it.");
 
-        template <typename T>
-        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
-            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
-
-        template <typename T>
-        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
-            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
-
-        bool WriteFloatArray(std::ofstream &stream, const std::vector<float> &v) {
-            if (const auto count = static_cast<uint32_t>(v.size());
-                !WriteBytes(stream, &count, sizeof(count)))
-                return false;
-            return v.empty() || WriteBytes(stream, v.data(), v.size() * sizeof(float));
-        }
-
-        bool ReadFloatArray(std::ifstream &stream, std::vector<float> &v) {
-            uint32_t count = 0;
-            if (!ReadBytes(stream, &count, sizeof(count)))
-                return false;
-            v.resize(count);
-            return count == 0 || ReadBytes(stream, v.data(), count * sizeof(float));
-        }
-
         bool WriteVec3Array(std::ofstream &stream, const std::vector<Vec3> &v) {
-            if (const auto count = static_cast<uint32_t>(v.size());
-                !WriteBytes(stream, &count, sizeof(count)))
+            const auto count = static_cast<uint32_t>(v.size());
+            if (!BinaryStream::WriteValue(stream, count))
                 return false;
             for (const Vec3 &p: v) {
                 const std::array<float, 3> buf = {p.x, p.y, p.z};
-                if (!WriteBytes(stream, buf.data(), sizeof(buf)))
+                if (!BinaryStream::WriteValue(stream, buf))
                     return false;
             }
             return true;
@@ -71,12 +45,12 @@ namespace Horo::AnimBin {
 
         bool ReadVec3Array(std::ifstream &stream, std::vector<Vec3> &v) {
             uint32_t count = 0;
-            if (!ReadBytes(stream, &count, sizeof(count)))
+            if (!BinaryStream::ReadValue(stream, count))
                 return false;
             v.resize(count);
             for (uint32_t i = 0; i < count; ++i) {
                 std::array<float, 3> buf{};
-                if (!ReadBytes(stream, buf.data(), sizeof(buf)))
+                if (!BinaryStream::ReadValue(stream, buf))
                     return false;
                 v[i] = {buf[0], buf[1], buf[2]};
             }
@@ -84,12 +58,12 @@ namespace Horo::AnimBin {
         }
 
         bool WriteQuatArray(std::ofstream &stream, const std::vector<Quaternion> &v) {
-            if (const auto count = static_cast<uint32_t>(v.size());
-                !WriteBytes(stream, &count, sizeof(count)))
+            const auto count = static_cast<uint32_t>(v.size());
+            if (!BinaryStream::WriteValue(stream, count))
                 return false;
             for (const Quaternion &q: v) {
                 const std::array<float, 4> buf = {q.x, q.y, q.z, q.w};
-                if (!WriteBytes(stream, buf.data(), sizeof(buf)))
+                if (!BinaryStream::WriteValue(stream, buf))
                     return false;
             }
             return true;
@@ -97,14 +71,111 @@ namespace Horo::AnimBin {
 
         bool ReadQuatArray(std::ifstream &stream, std::vector<Quaternion> &v) {
             uint32_t count = 0;
-            if (!ReadBytes(stream, &count, sizeof(count)))
+            if (!BinaryStream::ReadValue(stream, count))
                 return false;
             v.resize(count);
             for (uint32_t i = 0; i < count; ++i) {
                 std::array<float, 4> buf{};
-                if (!ReadBytes(stream, buf.data(), sizeof(buf)))
+                if (!BinaryStream::ReadValue(stream, buf))
                     return false;
                 v[i] = Quaternion{buf[0], buf[1], buf[2], buf[3]};
+            }
+            return true;
+        }
+
+        bool WriteName(std::ofstream &stream, const std::string &name) {
+            const auto len = static_cast<uint32_t>(name.size());
+            if (!BinaryStream::WriteValue(stream, len))
+                return false;
+            return len == 0 || BinaryStream::WriteArray(stream, name.data(), len);
+        }
+
+        bool ReadName(std::ifstream &stream, std::string &out) {
+            uint32_t len = 0;
+            if (!BinaryStream::ReadValue(stream, len))
+                return false;
+            if (len == 0) {
+                out.clear();
+                return true;
+            }
+            out.resize(len);
+            return BinaryStream::ReadArray(stream, out.data(), len);
+        }
+
+        bool WriteTrack(std::ofstream &stream, const BoneTrack &track) {
+            const auto boneIndex = static_cast<int32_t>(track.boneIndex);
+            return BinaryStream::WriteValue(stream, boneIndex) &&
+                   BinaryStream::WriteFloatVector(stream, track.positionTimes) &&
+                   WriteVec3Array(stream, track.positions) &&
+                   BinaryStream::WriteFloatVector(stream, track.rotationTimes) &&
+                   WriteQuatArray(stream, track.rotations) &&
+                   BinaryStream::WriteFloatVector(stream, track.scaleTimes) &&
+                   WriteVec3Array(stream, track.scales);
+        }
+
+        bool ReadTrack(std::ifstream &stream, BoneTrack &track) {
+            int32_t boneIndex = 0;
+            if (!BinaryStream::ReadValue(stream, boneIndex))
+                return false;
+            track.boneIndex = static_cast<int>(boneIndex);
+            return BinaryStream::ReadFloatVector(stream, track.positionTimes) &&
+                   ReadVec3Array(stream, track.positions) &&
+                   BinaryStream::ReadFloatVector(stream, track.rotationTimes) &&
+                   ReadQuatArray(stream, track.rotations) &&
+                   BinaryStream::ReadFloatVector(stream, track.scaleTimes) &&
+                   ReadVec3Array(stream, track.scales);
+        }
+
+        bool WriteClip(std::ofstream &stream, const AnimationClip &clip,
+                       std::string *errorOut) {
+            if (!WriteName(stream, clip.name)) {
+                *errorOut = "AnimBin write: failed writing clip name.";
+                return false;
+            }
+            if (const float duration = clip.duration;
+                !BinaryStream::WriteValue(stream, duration)) {
+                *errorOut = "AnimBin write: failed writing clip duration.";
+                return false;
+            }
+            const std::vector<BoneTrack> &tracks = clip.GetTracks();
+            const auto trackCount = static_cast<uint32_t>(tracks.size());
+            if (!BinaryStream::WriteValue(stream, trackCount)) {
+                *errorOut = "AnimBin write: failed writing track count.";
+                return false;
+            }
+            for (const BoneTrack &track: tracks) {
+                if (!WriteTrack(stream, track)) {
+                    *errorOut = "AnimBin write: failed writing track keys.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool ReadClip(std::ifstream &stream, AnimationClip &clip,
+                      std::string *errorOut) {
+            if (!ReadName(stream, clip.name)) {
+                *errorOut = "AnimBin read: failed reading clip name.";
+                return false;
+            }
+            float duration = 0.0f;
+            if (!BinaryStream::ReadValue(stream, duration)) {
+                *errorOut = "AnimBin read: failed reading clip duration.";
+                return false;
+            }
+            clip.duration = duration;
+            uint32_t trackCount = 0;
+            if (!BinaryStream::ReadValue(stream, trackCount)) {
+                *errorOut = "AnimBin read: failed reading track count.";
+                return false;
+            }
+            for (uint32_t t = 0; t < trackCount; ++t) {
+                BoneTrack track;
+                if (!ReadTrack(stream, track)) {
+                    *errorOut = "AnimBin read: failed reading track keys.";
+                    return false;
+                }
+                clip.AddTrack(std::move(track));
             }
             return true;
         }
@@ -119,9 +190,9 @@ namespace Horo::AnimBin {
             return result;
         }
 
-        std::error_code ec;
         const std::filesystem::path path(destPath);
         if (path.has_parent_path()) {
+            std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
             if (ec) {
                 result.error =
@@ -141,46 +212,14 @@ namespace Horo::AnimBin {
         header.magic = kAnimBinMagic;
         header.version = kAnimBinVersion;
         header.clipCount = static_cast<uint32_t>(clips.size());
-        if (!WriteBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::WriteValue(stream, header)) {
             result.error = "AnimBin write: failed writing header.";
             return result;
         }
 
         for (const AnimationClip &clip: clips) {
-            if (const auto nameLength = static_cast<uint32_t>(clip.name.size());
-                !WriteBytes(stream, &nameLength, sizeof(nameLength)) ||
-                (nameLength > 0 &&
-                 !WriteBytes(stream, clip.name.data(), nameLength))) {
-                result.error = "AnimBin write: failed writing clip name.";
+            if (!WriteClip(stream, clip, &result.error))
                 return result;
-            }
-            if (const float duration = clip.duration;
-                !WriteBytes(stream, &duration, sizeof(duration))) {
-                result.error = "AnimBin write: failed writing clip duration.";
-                return result;
-            }
-            const std::vector<BoneTrack> &tracks = clip.GetTracks();
-            if (const auto trackCount = static_cast<uint32_t>(tracks.size());
-                !WriteBytes(stream, &trackCount, sizeof(trackCount))) {
-                result.error = "AnimBin write: failed writing track count.";
-                return result;
-            }
-            for (const BoneTrack &track: tracks) {
-                if (const auto boneIndex = static_cast<int32_t>(track.boneIndex);
-                    !WriteBytes(stream, &boneIndex, sizeof(boneIndex))) {
-                    result.error = "AnimBin write: failed writing track bone index.";
-                    return result;
-                }
-                if (!WriteFloatArray(stream, track.positionTimes) ||
-                    !WriteVec3Array(stream, track.positions) ||
-                    !WriteFloatArray(stream, track.rotationTimes) ||
-                    !WriteQuatArray(stream, track.rotations) ||
-                    !WriteFloatArray(stream, track.scaleTimes) ||
-                    !WriteVec3Array(stream, track.scales)) {
-                    result.error = "AnimBin write: failed writing track keys.";
-                    return result;
-                }
-            }
         }
 
         stream.flush();
@@ -204,8 +243,9 @@ namespace Horo::AnimBin {
             result.error = "AnimBin read: cannot open source file.";
             return result;
         }
+
         Header header{};
-        if (!ReadBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::ReadValue(stream, header)) {
             result.error = "AnimBin read: file too short for header.";
             return result;
         }
@@ -222,48 +262,8 @@ namespace Horo::AnimBin {
         result.clips.reserve(header.clipCount);
         for (uint32_t c = 0; c < header.clipCount; ++c) {
             AnimationClip clip;
-            uint32_t nameLength = 0;
-            if (!ReadBytes(stream, &nameLength, sizeof(nameLength))) {
-                result.error = "AnimBin read: failed reading clip name length.";
+            if (!ReadClip(stream, clip, &result.error))
                 return result;
-            }
-            if (nameLength > 0) {
-                clip.name.resize(nameLength);
-                if (!ReadBytes(stream, clip.name.data(), nameLength)) {
-                    result.error = "AnimBin read: failed reading clip name.";
-                    return result;
-                }
-            }
-            float duration = 0.0f;
-            if (!ReadBytes(stream, &duration, sizeof(duration))) {
-                result.error = "AnimBin read: failed reading clip duration.";
-                return result;
-            }
-            clip.duration = duration;
-            uint32_t trackCount = 0;
-            if (!ReadBytes(stream, &trackCount, sizeof(trackCount))) {
-                result.error = "AnimBin read: failed reading track count.";
-                return result;
-            }
-            for (uint32_t t = 0; t < trackCount; ++t) {
-                BoneTrack track;
-                int32_t boneIndex = 0;
-                if (!ReadBytes(stream, &boneIndex, sizeof(boneIndex))) {
-                    result.error = "AnimBin read: failed reading track bone index.";
-                    return result;
-                }
-                track.boneIndex = static_cast<int>(boneIndex);
-                if (!ReadFloatArray(stream, track.positionTimes) ||
-                    !ReadVec3Array(stream, track.positions) ||
-                    !ReadFloatArray(stream, track.rotationTimes) ||
-                    !ReadQuatArray(stream, track.rotations) ||
-                    !ReadFloatArray(stream, track.scaleTimes) ||
-                    !ReadVec3Array(stream, track.scales)) {
-                    result.error = "AnimBin read: failed reading track keys.";
-                    return result;
-                }
-                clip.AddTrack(std::move(track));
-            }
             result.clips.push_back(std::move(clip));
         }
 

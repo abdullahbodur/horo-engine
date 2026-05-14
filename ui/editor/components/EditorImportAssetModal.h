@@ -112,7 +112,19 @@ namespace Horo::Editor {
         void RefreshIdentitiesFromPath();
 
         /** @brief Draws the result/diagnostics panel when an import outcome is available. */
-        void DrawResultPanel();
+        void DrawResultPanel() const;
+
+        /** @brief Renders the path field + Browse button; updates draft + auto-derived state. */
+        void DrawPathSection();
+
+        /** @brief Renders the importer dropdown for the current registry / draft. */
+        void DrawImporterSection();
+
+        /** @brief Renders the asset id and display name input fields. */
+        void DrawIdentitySection();
+
+        /** @brief Renders the Import / Cancel buttons; sets @c m_hasPendingRequest on click. */
+        void DrawActionsSection();
 
         bool m_open = false;
         bool m_hasPendingRequest = false;

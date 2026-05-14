@@ -5,13 +5,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <limits>
 
 #include "core/Logger.h"
+#include "renderer/BinaryStream.h"
 
 namespace Horo::SkinnedMeshBin {
     namespace {
@@ -34,18 +34,6 @@ namespace Horo::SkinnedMeshBin {
         static_assert(sizeof(Header) == 64,
                       "SkinnedMeshBin header layout must remain 64 bytes; bump kSkinnedMeshBinVersion before changing it.");
 
-        template <typename T>
-        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
-            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
-
-        template <typename T>
-        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
-            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
-
         /** @brief Computes the per-component AABB over @p vertices. */
         void ComputeAabb(const std::vector<SkinnedVertex> &vertices, Vec3 *outMin,
                          Vec3 *outMax) {
@@ -65,23 +53,98 @@ namespace Horo::SkinnedMeshBin {
             }
         }
 
-        /** @brief Writes a single Mat4 as 16 column-major float32s. */
+        /** @brief Writes a Mat4 as 16 column-major float32s. */
         bool WriteMatrix(std::ofstream &stream, const Mat4 &m) {
             std::array<float, 16> buf{};
             for (int col = 0; col < 4; ++col)
                 for (int row = 0; row < 4; ++row)
                     buf[static_cast<std::size_t>(col * 4 + row)] = m(row, col);
-            return WriteBytes(stream, buf.data(), sizeof(buf));
+            return BinaryStream::WriteValue(stream, buf);
         }
 
         /** @brief Reads a Mat4 from 16 column-major float32s. */
         bool ReadMatrix(std::ifstream &stream, Mat4 &out) {
             std::array<float, 16> buf{};
-            if (!ReadBytes(stream, buf.data(), sizeof(buf)))
+            if (!BinaryStream::ReadValue(stream, buf))
                 return false;
             for (int col = 0; col < 4; ++col)
                 for (int row = 0; row < 4; ++row)
                     out(row, col) = buf[static_cast<std::size_t>(col * 4 + row)];
+            return true;
+        }
+
+        /** @brief Writes the on-disk record for one @p bone. Sets @p errorOut on failure. */
+        bool WriteBone(std::ofstream &stream, const Bone &bone, std::string *errorOut) {
+            const auto parent = static_cast<int32_t>(bone.parentIndex);
+            if (!BinaryStream::WriteValue(stream, parent)) {
+                *errorOut = "SkinnedMeshBin write: failed writing bone parent.";
+                return false;
+            }
+            if (!WriteMatrix(stream, bone.inverseBindMatrix)) {
+                *errorOut = "SkinnedMeshBin write: failed writing bone matrix.";
+                return false;
+            }
+            const auto nameLength = static_cast<uint32_t>(bone.name.size());
+            if (!BinaryStream::WriteValue(stream, nameLength)) {
+                *errorOut = "SkinnedMeshBin write: failed writing bone name length.";
+                return false;
+            }
+            if (nameLength > 0 &&
+                !BinaryStream::WriteArray(stream, bone.name.data(), nameLength)) {
+                *errorOut = "SkinnedMeshBin write: failed writing bone name.";
+                return false;
+            }
+            return true;
+        }
+
+        /** @brief Reads one bone record. Sets @p errorOut on failure. */
+        bool ReadBone(std::ifstream &stream, Bone &out, std::string *errorOut) {
+            int32_t parent = -1;
+            if (!BinaryStream::ReadValue(stream, parent)) {
+                *errorOut = "SkinnedMeshBin read: failed reading bone parent.";
+                return false;
+            }
+            out.parentIndex = static_cast<int>(parent);
+            if (!ReadMatrix(stream, out.inverseBindMatrix)) {
+                *errorOut = "SkinnedMeshBin read: failed reading bone matrix.";
+                return false;
+            }
+            uint32_t nameLength = 0;
+            if (!BinaryStream::ReadValue(stream, nameLength)) {
+                *errorOut = "SkinnedMeshBin read: failed reading bone name length.";
+                return false;
+            }
+            if (nameLength > 0) {
+                out.name.resize(nameLength);
+                if (!BinaryStream::ReadArray(stream, out.name.data(), nameLength)) {
+                    *errorOut = "SkinnedMeshBin read: failed reading bone name.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** @brief Validates header counts for a sane payload. */
+        bool ValidateHeader(const Header &h, std::string *errorOut) {
+            if (h.magic != kSkinnedMeshBinMagic) {
+                *errorOut = "SkinnedMeshBin read: bad magic bytes; not a HoroSkinnedBin file.";
+                return false;
+            }
+            if (h.version != kSkinnedMeshBinVersion) {
+                *errorOut = std::format("SkinnedMeshBin read: unsupported version {} (expected {}).",
+                                        h.version, kSkinnedMeshBinVersion);
+                return false;
+            }
+            if (h.vertexStride != sizeof(SkinnedVertex)) {
+                *errorOut = std::format("SkinnedMeshBin read: vertex stride mismatch; expected {}, got {}.",
+                                        sizeof(SkinnedVertex), h.vertexStride);
+                return false;
+            }
+            if (h.vertexCount == 0 || h.indexCount == 0 ||
+                h.indexCount % 3 != 0 || h.boneCount == 0) {
+                *errorOut = "SkinnedMeshBin read: invalid vertex/index/bone counts in header.";
+                return false;
+            }
             return true;
         }
     } // namespace
@@ -105,9 +168,9 @@ namespace Horo::SkinnedMeshBin {
             return result;
         }
 
-        std::error_code ec;
         const std::filesystem::path path(destPath);
         if (path.has_parent_path()) {
+            std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
             if (ec) {
                 result.error =
@@ -141,40 +204,21 @@ namespace Horo::SkinnedMeshBin {
         header.aabbMax[1] = aabbMax.y;
         header.aabbMax[2] = aabbMax.z;
 
-        if (!WriteBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::WriteValue(stream, header)) {
             result.error = "SkinnedMeshBin write: failed writing header.";
             return result;
         }
-        if (!WriteBytes(stream, vertices.data(),
-                        vertices.size() * sizeof(SkinnedVertex))) {
+        if (!BinaryStream::WriteArray(stream, vertices.data(), vertices.size())) {
             result.error = "SkinnedMeshBin write: failed writing vertex array.";
             return result;
         }
-        if (!WriteBytes(stream, indices.data(),
-                        indices.size() * sizeof(uint32_t))) {
+        if (!BinaryStream::WriteArray(stream, indices.data(), indices.size())) {
             result.error = "SkinnedMeshBin write: failed writing index array.";
             return result;
         }
         for (const Bone &bone: bones) {
-            if (const auto parent = static_cast<int32_t>(bone.parentIndex);
-                !WriteBytes(stream, &parent, sizeof(parent))) {
-                result.error = "SkinnedMeshBin write: failed writing bone parent.";
+            if (!WriteBone(stream, bone, &result.error))
                 return result;
-            }
-            if (!WriteMatrix(stream, bone.inverseBindMatrix)) {
-                result.error = "SkinnedMeshBin write: failed writing bone matrix.";
-                return result;
-            }
-            const auto nameLength = static_cast<uint32_t>(bone.name.size());
-            if (!WriteBytes(stream, &nameLength, sizeof(nameLength))) {
-                result.error = "SkinnedMeshBin write: failed writing bone name length.";
-                return result;
-            }
-            if (nameLength > 0 &&
-                !WriteBytes(stream, bone.name.data(), nameLength)) {
-                result.error = "SkinnedMeshBin write: failed writing bone name.";
-                return result;
-            }
         }
 
         stream.flush();
@@ -202,39 +246,22 @@ namespace Horo::SkinnedMeshBin {
         }
 
         Header header{};
-        if (!ReadBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::ReadValue(stream, header)) {
             result.error = "SkinnedMeshBin read: file too short for header.";
             return result;
         }
-        if (header.magic != kSkinnedMeshBinMagic) {
-            result.error = "SkinnedMeshBin read: bad magic bytes; not a HoroSkinnedBin file.";
+        if (!ValidateHeader(header, &result.error))
             return result;
-        }
-        if (header.version != kSkinnedMeshBinVersion) {
-            result.error = std::format("SkinnedMeshBin read: unsupported version {} (expected {}).",
-                                       header.version, kSkinnedMeshBinVersion);
-            return result;
-        }
-        if (header.vertexStride != sizeof(SkinnedVertex)) {
-            result.error = std::format("SkinnedMeshBin read: vertex stride mismatch; expected {}, got {}.",
-                                       sizeof(SkinnedVertex), header.vertexStride);
-            return result;
-        }
-        if (header.vertexCount == 0 || header.indexCount == 0 ||
-            header.indexCount % 3 != 0 || header.boneCount == 0) {
-            result.error = "SkinnedMeshBin read: invalid vertex/index/bone counts in header.";
-            return result;
-        }
 
         result.vertices.resize(header.vertexCount);
-        if (!ReadBytes(stream, result.vertices.data(),
-                       static_cast<std::size_t>(header.vertexCount) * sizeof(SkinnedVertex))) {
+        if (!BinaryStream::ReadArray(stream, result.vertices.data(),
+                                     static_cast<std::size_t>(header.vertexCount))) {
             result.error = "SkinnedMeshBin read: failed reading vertex array.";
             return result;
         }
         result.indices.resize(header.indexCount);
-        if (!ReadBytes(stream, result.indices.data(),
-                       static_cast<std::size_t>(header.indexCount) * sizeof(uint32_t))) {
+        if (!BinaryStream::ReadArray(stream, result.indices.data(),
+                                     static_cast<std::size_t>(header.indexCount))) {
             result.error = "SkinnedMeshBin read: failed reading index array.";
             return result;
         }
@@ -242,28 +269,8 @@ namespace Horo::SkinnedMeshBin {
         result.bones.reserve(header.boneCount);
         for (uint32_t i = 0; i < header.boneCount; ++i) {
             Bone bone;
-            int32_t parent = -1;
-            if (!ReadBytes(stream, &parent, sizeof(parent))) {
-                result.error = "SkinnedMeshBin read: failed reading bone parent.";
+            if (!ReadBone(stream, bone, &result.error))
                 return result;
-            }
-            bone.parentIndex = static_cast<int>(parent);
-            if (!ReadMatrix(stream, bone.inverseBindMatrix)) {
-                result.error = "SkinnedMeshBin read: failed reading bone matrix.";
-                return result;
-            }
-            uint32_t nameLength = 0;
-            if (!ReadBytes(stream, &nameLength, sizeof(nameLength))) {
-                result.error = "SkinnedMeshBin read: failed reading bone name length.";
-                return result;
-            }
-            if (nameLength > 0) {
-                bone.name.resize(nameLength);
-                if (!ReadBytes(stream, bone.name.data(), nameLength)) {
-                    result.error = "SkinnedMeshBin read: failed reading bone name.";
-                    return result;
-                }
-            }
             result.bones.push_back(std::move(bone));
         }
 

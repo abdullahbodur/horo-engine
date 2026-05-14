@@ -5,13 +5,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <limits>
 
 #include "core/Logger.h"
+#include "renderer/BinaryStream.h"
 
 namespace Horo::MeshBin {
     namespace {
@@ -36,20 +36,6 @@ namespace Horo::MeshBin {
 
         static_assert(sizeof(Header) == 48,
                       "MeshBin header layout must remain 48 bytes; bump kMeshBinVersion before changing it.");
-
-        /** @brief Writes raw bytes from @p data to @p stream. */
-        template <typename T>
-        bool WriteBytes(std::ofstream &stream, const T *data, std::size_t size) {
-            stream.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
-
-        /** @brief Reads raw bytes into @p data from @p stream. */
-        template <typename T>
-        bool ReadBytes(std::ifstream &stream, T *data, std::size_t size) {
-            stream.read(reinterpret_cast<char *>(data), static_cast<std::streamsize>(size));
-            return stream.good();
-        }
 
         /** @brief Computes the per-component AABB over @p vertices. */
         void ComputeAabb(const std::vector<Vertex> &vertices, Vec3 *outMin,
@@ -85,9 +71,9 @@ namespace Horo::MeshBin {
             return result;
         }
 
-        std::error_code ec;
         const std::filesystem::path path(destPath);
         if (path.has_parent_path()) {
+            std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
             if (ec) {
                 result.error = "MeshBin write: cannot create destination directory: " + ec.message();
@@ -119,17 +105,15 @@ namespace Horo::MeshBin {
         header.aabbMax[1] = aabbMax.y;
         header.aabbMax[2] = aabbMax.z;
 
-        if (!WriteBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::WriteValue(stream, header)) {
             result.error = "MeshBin write: failed writing header.";
             return result;
         }
-        if (!WriteBytes(stream, vertices.data(),
-                        vertices.size() * sizeof(Vertex))) {
+        if (!BinaryStream::WriteArray(stream, vertices.data(), vertices.size())) {
             result.error = "MeshBin write: failed writing vertex array.";
             return result;
         }
-        if (!WriteBytes(stream, indices.data(),
-                        indices.size() * sizeof(uint32_t))) {
+        if (!BinaryStream::WriteArray(stream, indices.data(), indices.size())) {
             result.error = "MeshBin write: failed writing index array.";
             return result;
         }
@@ -160,7 +144,7 @@ namespace Horo::MeshBin {
         }
 
         Header header{};
-        if (!ReadBytes(stream, &header, sizeof(header))) {
+        if (!BinaryStream::ReadValue(stream, header)) {
             result.error = "MeshBin read: file too short for header.";
             return result;
         }
@@ -185,15 +169,15 @@ namespace Horo::MeshBin {
         }
 
         result.vertices.resize(header.vertexCount);
-        if (!ReadBytes(stream, result.vertices.data(),
-                       static_cast<std::size_t>(header.vertexCount) * sizeof(Vertex))) {
+        if (!BinaryStream::ReadArray(stream, result.vertices.data(),
+                                     static_cast<std::size_t>(header.vertexCount))) {
             result.error = "MeshBin read: failed reading vertex array.";
             return result;
         }
 
         result.indices.resize(header.indexCount);
-        if (!ReadBytes(stream, result.indices.data(),
-                       static_cast<std::size_t>(header.indexCount) * sizeof(uint32_t))) {
+        if (!BinaryStream::ReadArray(stream, result.indices.data(),
+                                     static_cast<std::size_t>(header.indexCount))) {
             result.error = "MeshBin read: failed reading index array.";
             return result;
         }

@@ -117,7 +117,21 @@ namespace Horo::Editor {
             return;
         }
 
-        // ---- Path + Browse -----------------------------------------------------
+        DrawPathSection();
+        DrawImporterSection();
+        DrawIdentitySection();
+        if (m_hasResult)
+            DrawResultPanel();
+        DrawActionsSection();
+
+        ImGui::EndPopup();
+
+        if (!m_open)
+            ImGui::CloseCurrentPopup();
+    }
+
+    /** @copydoc EditorImportAssetModal::DrawPathSection */
+    void EditorImportAssetModal::DrawPathSection() {
         ImGui::TextUnformatted("Source file");
         char pathBuffer[1024]{}; // NOSONAR - ImGui InputText requires mutable char buffer
         const std::size_t copyLen =
@@ -137,17 +151,19 @@ namespace Horo::Editor {
                 RefreshIdentitiesFromPath();
             }
         }
+    }
 
-        // ---- Importer dropdown -------------------------------------------------
+    /** @copydoc EditorImportAssetModal::DrawImporterSection */
+    void EditorImportAssetModal::DrawImporterSection() {
         ImGui::Spacing();
         ImGui::TextUnformatted("Importer");
         std::vector<std::string> importerIds;
         if (m_registry != nullptr)
             importerIds = m_registry->RegisteredImporterIds();
-        if (const char *currentLabel = m_draft.importerId.empty()
-                                           ? "(no importer matched extension)"
-                                           : m_draft.importerId.c_str();
-            ImGui::BeginCombo("##ImportImporter", currentLabel)) {
+        const char *currentLabel = m_draft.importerId.empty()
+                                       ? "(no importer matched extension)"
+                                       : m_draft.importerId.c_str();
+        if (ImGui::BeginCombo("##ImportImporter", currentLabel)) {
             for (const std::string &id: importerIds) {
                 const bool selected = (id == m_draft.importerId);
                 if (ImGui::Selectable(id.c_str(), selected))
@@ -157,11 +173,12 @@ namespace Horo::Editor {
             }
             ImGui::EndCombo();
         }
-        if (m_draft.importerId.empty()) {
+        if (m_draft.importerId.empty())
             ImGui::TextDisabled("Pick a path with a supported extension (.obj / .fbx / image)");
-        }
+    }
 
-        // ---- Asset identity ----------------------------------------------------
+    /** @copydoc EditorImportAssetModal::DrawIdentitySection */
+    void EditorImportAssetModal::DrawIdentitySection() {
         ImGui::Spacing();
         char idBuffer[256]{}; // NOSONAR - ImGui InputText requires mutable char buffer
         const std::size_t idLen =
@@ -181,12 +198,10 @@ namespace Horo::Editor {
             m_draft.displayName.assign(displayBuffer);
             m_displayNameAutoDerived = false;
         }
+    }
 
-        // ---- Result panel ------------------------------------------------------
-        if (m_hasResult)
-            DrawResultPanel();
-
-        // ---- Actions -----------------------------------------------------------
+    /** @copydoc EditorImportAssetModal::DrawActionsSection */
+    void EditorImportAssetModal::DrawActionsSection() {
         ImGui::Spacing();
         ImGui::Separator();
         const bool canImport = !m_draft.sourcePath.empty() &&
@@ -199,15 +214,10 @@ namespace Horo::Editor {
         ImGui::SameLine();
         if (ImGui::Button("Cancel##ImportCancel"))
             Close();
-
-        ImGui::EndPopup();
-
-        if (!m_open)
-            ImGui::CloseCurrentPopup();
     }
 
     /** @copydoc EditorImportAssetModal::DrawResultPanel */
-    void EditorImportAssetModal::DrawResultPanel() {
+    void EditorImportAssetModal::DrawResultPanel() const {
         ImGui::Spacing();
         ImGui::Separator();
         if (m_lastResult.ok)
