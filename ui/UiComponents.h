@@ -346,7 +346,9 @@ bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
  * to ensure every row in a tree view has a consistent fixed height and inset.
  */
 struct EditorTreeRowMetrics {
-  ImVec2 framePadding{12.0f, 6.0f}; /**< ImGuiStyleVar_FramePadding pushed for each row. */
+  ImVec2 framePadding{4.0f, 6.0f};  /**< ImGuiStyleVar_FramePadding pushed for each row. The X
+                                          component also drives the gap between the tree-node arrow
+                                          and the row content (TreeNodeEx uses FramePadding.x * 2). */
   ImVec2 itemSpacing{0.0f, 2.0f};   /**< ImGuiStyleVar_ItemSpacing pushed for each row. */
   float  rounding       = 6.0f;     /**< Corner rounding for the selection highlight rect. */
   float  horizontalSlop = 4.0f;     /**< Extra horizontal margin on each side of the highlight. */
