@@ -314,18 +314,23 @@ TEST_CASE("OpenGLRenderBackend: invalid readback requests preserve output buffer
   CHECK(depthError.find("positive dimensions") != std::string::npos);
 }
 
-TEST_CASE("OpenGLRenderBackend: viewport target APIs remain unavailable", "[renderer][backend][opengl]") {
+TEST_CASE("OpenGLRenderBackend: viewport target APIs reject zero size and unprovisioned handles", "[renderer][backend][opengl]") {
   OpenGLRenderBackend backend;
   std::string error;
   RenderTargetHandle handle = RenderTargetHandle::OpenGLTexture(33u);
 
-  REQUIRE_FALSE(backend.EnsureEditorViewportRenderTarget(800u, 600u, &error));
-  CHECK(error.find("unavailable") != std::string::npos);
+  // Zero-size requests are rejected without touching GL state.
+  REQUIRE_FALSE(backend.EnsureEditorViewportRenderTarget(0u, 0u, &error));
+  CHECK_FALSE(error.empty());
+
+  // Without a successful Ensure(), TryGet must report not-yet-provisioned.
+  error.clear();
   REQUIRE_FALSE(
       backend.TryGetEditorViewportRenderTargetHandle(&handle, true, &error));
-  CHECK(error.find("unavailable") != std::string::npos);
   CHECK_FALSE(handle.IsValid());
+  CHECK_FALSE(error.empty());
 
+  // Null output handle pointer is rejected.
   REQUIRE_FALSE(
       backend.TryGetEditorViewportRenderTargetHandle(nullptr, false, nullptr));
 }

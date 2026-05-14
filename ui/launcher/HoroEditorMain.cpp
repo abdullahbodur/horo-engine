@@ -346,10 +346,23 @@ private:
 
     Renderer::BeginFrame(frameConfig);
     if (m_shell.HasActiveProject()) {
-      Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(m_camera),
-                           "horo-editor-scene"});
-      m_scene.RenderSystems(alpha);
-      Renderer::EndPass();
+      const auto &vp = m_editor.GetViewportRect();
+      const auto vpW = static_cast<uint32_t>(std::max(0.0f, vp.maxX - vp.minX));
+      const auto vpH = static_cast<uint32_t>(std::max(0.0f, vp.maxY - vp.minY));
+      if (vpW > 0 && vpH > 0) {
+        m_camera.aspect = static_cast<float>(vpW) / static_cast<float>(vpH);
+        std::string fboError;
+        if (Renderer::EnsureEditorViewportRenderTarget(vpW, vpH, &fboError) &&
+            Renderer::BindEditorViewportRenderTarget()) {
+          Renderer::BeginPass({RenderPassId::OpaqueScene,
+                               BuildRenderView(m_camera),
+                               "horo-editor-scene"});
+          m_scene.RenderSystems(alpha);
+          Renderer::EndPass();
+          Renderer::UnbindEditorViewportRenderTarget();
+          Renderer::SetViewport(0, 0, fbWidth, fbHeight);
+        }
+      }
     }
     m_editor.Render(m_camera, fbWidth, fbHeight);
 

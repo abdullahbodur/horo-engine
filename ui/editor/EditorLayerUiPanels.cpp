@@ -136,10 +136,22 @@ namespace Horo::Editor
       CommitHistoryChange(frameHistoryBefore);
     }
 
+    // 3D overlays (wireframe, debug lines, gizmos) render into the editor
+    // viewport FBO so they stay inside the viewport panel and are composited
+    // via DrawViewportImage rather than drawn over panel chrome.
+    const bool boundEditorViewport =
+        m_active && Renderer::BindEditorViewportRenderTarget();
+
     if (m_active && !m_playMode)
       DrawWireframeOverlay(cam);
 
     DebugDraw::Flush(cam, 2.0f);
+
+    if (boundEditorViewport) {
+      Renderer::UnbindEditorViewportRenderTarget();
+      if (Renderer::IsFrameActive())
+        Renderer::SetViewport(0, 0, screenW, screenH);
+    }
 
     ImGui::Render();
     if (m_imguiBackendInitialized)

@@ -200,6 +200,17 @@ namespace Horo {
             outHandle, needsYFlip, outError);
     }
 
+    bool Renderer::BindEditorViewportRenderTarget() {
+        if (auto *backend = ActiveBackendImpl())
+            return backend->BindEditorViewportRenderTarget();
+        return false;
+    }
+
+    void Renderer::UnbindEditorViewportRenderTarget() {
+        if (auto *backend = ActiveBackendImpl())
+            backend->UnbindEditorViewportRenderTarget();
+    }
+
     std::shared_ptr<IShader> Renderer::CreateShader(const std::string &vert,
                                                      const std::string &frag) {
         return ActiveBackend()->CreateShader(vert, frag);
@@ -246,6 +257,18 @@ namespace Horo {
         // Guard against resize callbacks firing before a backend is set.
         if (auto *backend = ActiveBackendImpl())
             backend->SetViewport(x, y, w, h);
+    }
+
+    void Renderer::EnableScissor(int x, int y, int w, int h) {
+        if (auto *backend = ActiveBackendImpl()) {
+            backend->EnableScissor(x, y, w, h);
+        }
+    }
+
+    void Renderer::DisableScissor() {
+        if (auto *backend = ActiveBackendImpl()) {
+            backend->DisableScissor();
+        }
     }
 
     std::array<int, 4> Renderer::GetViewport() {

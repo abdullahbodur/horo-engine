@@ -87,6 +87,9 @@ namespace Horo {
                                                bool needsYFlip = false,
                                                std::string *outError = nullptr);
 
+        static bool BindEditorViewportRenderTarget();
+        static void UnbindEditorViewportRenderTarget();
+
         // ── Resource Factory ────────────────────────────────────────────────────
         static std::shared_ptr<IShader>       CreateShader(const std::string& vert, const std::string& frag);
         static std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath, const std::string& fragPath);
@@ -101,6 +104,8 @@ namespace Horo {
         // ── Backend-agnostic render helpers ─────────────────────────────────────
         static void SetViewport(int x, int y, int w, int h);
         static std::array<int, 4> GetViewport();
+        static void EnableScissor(int x, int y, int w, int h);
+        static void DisableScissor();
         static void Begin2dOverlay();
         static void End2dOverlay();
         static void SetupOpaqueRenderState();

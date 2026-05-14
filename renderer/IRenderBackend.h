@@ -57,9 +57,17 @@ namespace Horo {
                                                bool needsYFlip,
                                                std::string *outError) = 0;
 
+        /** @brief Binds the editor viewport offscreen FBO so subsequent draws render into it. */
+        virtual bool BindEditorViewportRenderTarget() { return false; }
+
+        /** @brief Unbinds the editor viewport FBO and restores the default framebuffer. */
+        virtual void UnbindEditorViewportRenderTarget() {}
+
         // ── Viewport ────────────────────────────────────────────────────────────
         virtual void SetViewport(int, int, int, int) { /* default no-op */ }
         virtual std::array<int, 4> GetViewport() const { return {0, 0, 0, 0}; }
+        virtual void EnableScissor(int, int, int, int) { /* default no-op */ }
+        virtual void DisableScissor() { /* default no-op */ }
 
         // ── 2-D overlay state ────────────────────────────────────────────────────
         virtual void Begin2dOverlay() { /* default no-op */ }
