@@ -651,6 +651,88 @@ TEST_CASE("EditorImportAssetModal: Draw is a no-op without an ImGui context",
   CHECK(modal.IsOpen());
 }
 
+#include "ui/editor/components/EditorImportAssetModal.h"
+
+#include <imgui.h>
+
+namespace {
+/** @brief Sets up a minimal ImGui frame so widget calls do not crash. Caller must End() + DestroyContext(). */
+struct ImGuiFrameFixture {
+  ImGuiContext *context = nullptr;
+  explicit ImGuiFrameFixture() {
+    context = ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = ImVec2(640.0f, 480.0f);
+    io.DeltaTime = 1.0f / 60.0f;
+    io.Fonts->Build();
+    ImGui::NewFrame();
+  }
+  ~ImGuiFrameFixture() {
+    ImGui::EndFrame();
+    ImGui::DestroyContext(context);
+  }
+  ImGuiFrameFixture(const ImGuiFrameFixture &) = delete;
+  ImGuiFrameFixture &operator=(const ImGuiFrameFixture &) = delete;
+};
+} // namespace
+
+TEST_CASE("EditorImportAssetModal: Draw renders without crash with ImGui frame and FBX path",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+  // Drives DrawPathSection / DrawImporterSection / DrawIdentitySection /
+  // DrawActionsSection through the BeginPopupModal + EndPopup path.
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw renders without crash with no path (importer empty branch)",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open({}, &registry);
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw with prior result renders the result panel branch",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  modal.Open("/p/cube.fbx", &registry);
+
+  ImportAssetOutcome outcome;
+  outcome.ok = false;
+  outcome.error = "boom";
+  AssetImportDiagnostic warn;
+  warn.severity = AssetDiagnosticSeverity::Warning;
+  warn.code = "asset.fbx.external_texture_missing";
+  warn.message = "missing.png";
+  AssetImportDiagnostic err;
+  err.severity = AssetDiagnosticSeverity::Error;
+  err.code = "asset.fbx.parse_failed";
+  err.message = "parse";
+  outcome.diagnostics.push_back(warn);
+  outcome.diagnostics.push_back(err);
+  modal.SetLastResult(outcome);
+  modal.Draw();
+  CHECK(modal.IsOpen());
+}
+
+TEST_CASE("EditorImportAssetModal: Draw renders successfully when the modal is closed",
+          "[editor][import-asset-modal]") {
+  ImGuiFrameFixture frame;
+  AssetImporterRegistry registry;
+  EditorImportAssetModal modal;
+  // Modal not opened — Draw must short-circuit before BeginPopupModal.
+  modal.Draw();
+  CHECK_FALSE(modal.IsOpen());
+}
+
 // ===========================================================================
 // AssetImportService — ImportTextureForAsset + SaveMetadataForAsset
 // ===========================================================================
