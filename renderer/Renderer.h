@@ -101,6 +101,8 @@ namespace Horo {
         // ── Backend-agnostic render helpers ─────────────────────────────────────
         static void SetViewport(int x, int y, int w, int h);
         static std::array<int, 4> GetViewport();
+        static void EnableScissor(int x, int y, int w, int h);
+        static void DisableScissor();
         static void Begin2dOverlay();
         static void End2dOverlay();
         static void SetupOpaqueRenderState();

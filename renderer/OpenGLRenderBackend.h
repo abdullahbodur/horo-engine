@@ -57,6 +57,8 @@ namespace Horo {
         std::shared_ptr<IIndexBuffer>  CreateIndexBuffer(uint32_t* indices, uint32_t count) override;
         std::shared_ptr<IVertexArray>  CreateVertexArray() override;
         void SetViewport(int x, int y, int w, int h) override;
+        void EnableScissor(int x, int y, int w, int h) override;
+        void DisableScissor() override;
         std::array<int, 4> GetViewport() const override;
 
         void Begin2dOverlay() override;

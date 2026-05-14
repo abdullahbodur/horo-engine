@@ -346,10 +346,20 @@ private:
 
     Renderer::BeginFrame(frameConfig);
     if (m_shell.HasActiveProject()) {
+      const auto &vp = m_editor.GetViewportRect();
+      const int vpX = static_cast<int>(vp.minX);
+      const int vpY = fbHeight - static_cast<int>(vp.maxY);
+      const int vpW = static_cast<int>(vp.maxX - vp.minX);
+      const int vpH = static_cast<int>(vp.maxY - vp.minY);
+      if (vpW > 0 && vpH > 0) {
+        Renderer::SetViewport(vpX, vpY, vpW, vpH);
+        Renderer::EnableScissor(vpX, vpY, vpW, vpH);
+      }
       Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(m_camera),
                            "horo-editor-scene"});
       m_scene.RenderSystems(alpha);
       Renderer::EndPass();
+      // Keep scissor active — editor wireframe + debug draw also render in 3D.
     }
     m_editor.Render(m_camera, fbWidth, fbHeight);
 

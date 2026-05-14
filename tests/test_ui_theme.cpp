@@ -35,9 +35,9 @@ TEST_CASE("shared Horo theme exposes launcher and editor density variants") {
                 ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f));
   CheckVec4Near(launcher.palette.backgroundBottom,
                 ImVec4(1.0f / 255.0f, 7.0f / 255.0f, 17.0f / 255.0f, 1.0f));
-  CheckVec4Near(launcher.palette.panel, ImVec4(0.05f, 0.09f, 0.15f, 0.94f));
-  CheckVec4Near(launcher.palette.panelSoft, ImVec4(0.07f, 0.11f, 0.18f, 0.90f));
-  CheckVec4Near(launcher.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 0.68f));
+  CheckVec4Near(launcher.palette.panel, ImVec4(0.05f, 0.09f, 0.15f, 1.0f));
+  CheckVec4Near(launcher.palette.panelSoft, ImVec4(0.07f, 0.11f, 0.18f, 1.0f));
+  CheckVec4Near(launcher.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 1.0f));
   CheckVec4Near(launcher.palette.textMuted, ImVec4(0.68f, 0.74f, 0.84f, 1.0f));
   CheckVec4Near(launcher.palette.accent, ImVec4(0.23f, 0.54f, 0.93f, 1.0f));
   CheckVec4Near(launcher.palette.accentHover, ImVec4(0.28f, 0.60f, 0.99f, 1.0f));
@@ -60,7 +60,7 @@ TEST_CASE("shared Horo theme preserves launcher accent hierarchy") {
   CHECK(launcher.palette.accentHover.x >= launcher.palette.accent.x);
   CHECK(launcher.palette.accentActive.z <= launcher.palette.accent.z);
   CHECK(launcher.palette.textMuted.w == 1.0f);
-  CHECK(launcher.palette.border.w == 0.68f);
+  CHECK(launcher.palette.border.w == 1.0f);
 }
 
 TEST_CASE("style scopes restore ImGui style stacks") {
@@ -974,7 +974,7 @@ TEST_CASE("DarkBlue preset preserves the canonical editor palette") {
   const auto &theme = Horo::Ui::GetEditorTheme();
   CheckVec4Near(theme.palette.accent, ImVec4(0.23f, 0.54f, 0.93f, 1.0f));
   CheckVec4Near(theme.palette.textMuted, ImVec4(0.68f, 0.74f, 0.84f, 1.0f));
-  CheckVec4Near(theme.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 0.68f));
+  CheckVec4Near(theme.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 1.0f));
   CHECK(theme.palette.panel.w == 0.88f);
   Horo::Ui::SetEditorThemePreset(previous);
 }

@@ -275,6 +275,15 @@ namespace Horo {
         glViewport(x, y, w, h);
     }
 
+    void OpenGLRenderBackend::EnableScissor(int x, int y, int w, int h) {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(x, y, w, h);
+    }
+
+    void OpenGLRenderBackend::DisableScissor() {
+        glDisable(GL_SCISSOR_TEST);
+    }
+
     std::array<int, 4> OpenGLRenderBackend::GetViewport() const {
         std::array<int, 4> vp{};
         glGetIntegerv(GL_VIEWPORT, vp.data());

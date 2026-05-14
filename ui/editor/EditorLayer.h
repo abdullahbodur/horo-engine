@@ -245,6 +245,9 @@ namespace Horo {
             /** @brief Returns the asset ID of the currently selected asset in the assets panel. */
             const std::string &GetSelectedAssetId() const { return m_selectedAssetId; }
 
+            /** @brief Returns the cached viewport panel bounds in screen pixels. */
+            const EditorViewportRect &GetViewportRect() const { return m_viewportPanelRect; }
+
             /** @brief Returns the IDs of all currently selected scene objects.
              *  @return Vector of object ID strings; last element is the primary selection. */
             std::vector<std::string> GetSelectedObjectIds() const;

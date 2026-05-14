@@ -248,6 +248,18 @@ namespace Horo {
             backend->SetViewport(x, y, w, h);
     }
 
+    void Renderer::EnableScissor(int x, int y, int w, int h) {
+        if (auto *backend = ActiveBackendImpl()) {
+            backend->EnableScissor(x, y, w, h);
+        }
+    }
+
+    void Renderer::DisableScissor() {
+        if (auto *backend = ActiveBackendImpl()) {
+            backend->DisableScissor();
+        }
+    }
+
     std::array<int, 4> Renderer::GetViewport() {
         return ActiveBackend()->GetViewport();
     }

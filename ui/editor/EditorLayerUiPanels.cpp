@@ -141,6 +141,12 @@ namespace Horo::Editor
 
     DebugDraw::Flush(cam, 2.0f);
 
+    // Restore full-window rendering before ImGui draws its panels.
+    if (Renderer::IsFrameActive()) {
+      Renderer::DisableScissor();
+      Renderer::SetViewport(0, 0, screenW, screenH);
+    }
+
     ImGui::Render();
     if (m_imguiBackendInitialized)
       RenderEditorImGuiDrawData(Renderer::GetBackendId(), ImGui::GetDrawData());
