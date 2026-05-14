@@ -142,6 +142,7 @@ add_test(NAME test_physics_coverage COMMAND $<TARGET_FILE:test_physics_coverage>
 # ---- test_editor ----
 add_executable(test_editor test_editor.cpp)
 target_link_libraries(test_editor PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
+target_compile_definitions(test_editor PRIVATE HORO_STANDALONE_UI_AUTOMATION=1)
 horo_set_test_output_dir(test_editor)
 add_test(NAME test_editor COMMAND $<TARGET_FILE:test_editor>)
 
