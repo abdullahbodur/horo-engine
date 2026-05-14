@@ -596,6 +596,7 @@ namespace Horo::Editor
       }
 
       ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
       std::string rootName = m_projectBrowserRoot.filename().string();
       if (rootName.empty())
