@@ -21,6 +21,7 @@
 #include "core/StringHash.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportDiagnosticCodes.h"
+#include "ui/editor/AssetImporterInternal.h"
 #include "ui/editor/EditorAssetImport.h"
 #include "renderer/AnimBin.h"
 #include "renderer/FbxLoader.h"
@@ -438,44 +439,14 @@ namespace Horo::Editor {
          *  filename hint (rare; usually the FBX has a basename for the texture).
          */
         std::string SniffImageExtension(const std::vector<unsigned char> &bytes) {
-            const auto starts = [&](std::initializer_list<unsigned char> magic) {
-                if (bytes.size() < magic.size())
-                    return false;
-                std::size_t i = 0;
-                for (unsigned char b: magic) {
-                    if (bytes[i++] != b)
-                        return false;
-                }
-                return true;
-            };
-            if (starts({0x89, 0x50, 0x4E, 0x47}))
-                return ".png";
-            if (starts({0xFF, 0xD8, 0xFF}))
-                return ".jpg";
-            if (starts({0x42, 0x4D}))
-                return ".bmp";
-            if (bytes.size() > 12 && bytes[0] == 0x52 && bytes[1] == 0x49 &&
-                bytes[2] == 0x46 && bytes[3] == 0x46 && bytes[8] == 0x57 &&
-                bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
-                return ".webp";
-            if (bytes.size() > 11 && bytes[0] == '#' && bytes[1] == '?' &&
-                bytes[2] == 'R' && bytes[3] == 'A')
-                return ".hdr";
-            return {};
+            return ImporterDetail::SniffImageExtension(bytes);
         }
 
         /** @brief Returns @p baseName with its extension replaced by @p ext, or with
          *         @p ext appended when @p baseName has no extension. Pass @c "" to leave it alone.
          */
         std::string EnsureExtension(std::string baseName, const std::string &ext) {
-            if (ext.empty())
-                return baseName;
-            namespace fs = std::filesystem;
-            fs::path p(baseName);
-            if (p.extension().empty())
-                return baseName + ext;
-            p.replace_extension(ext);
-            return p.string();
+            return ImporterDetail::EnsureExtension(std::move(baseName), ext);
         }
 
         /** @brief Resolves and copies / writes every texture record from @p loaded into managed storage.
@@ -502,11 +473,7 @@ namespace Horo::Editor {
          *  components (`/`, `\`, `..`) or absolute paths.
          */
         bool IsSafeBasename(std::string_view filename) {
-            if (filename.empty() || filename == "." || filename == "..")
-                return false;
-            return std::ranges::none_of(filename, [](char ch) {
-                return ch == '/' || ch == '\\';
-            });
+            return ImporterDetail::IsSafeBasename(filename);
         }
 
         /** @brief Sanitises an FBX-derived filename hint into a single-segment basename.
@@ -517,17 +484,7 @@ namespace Horo::Editor {
          *  empty or @c "." / @c "..".
          */
         std::string SanitiseTextureBasename(std::string_view raw) {
-            if (raw.empty())
-                return std::string{"texture.png"};
-            const std::filesystem::path candidate(raw);
-            std::string base = candidate.filename().string();
-            for (char &ch: base) {
-                if (ch == '/' || ch == '\\' || ch == ':')
-                    ch = '_';
-            }
-            if (base.empty() || base == "." || base == "..")
-                return std::string{"texture.png"};
-            return base;
+            return ImporterDetail::SanitiseTextureBasename(raw);
         }
 
         /** @brief Inputs to @ref ApplyFbxTextures bundled to keep the parameter count manageable. */

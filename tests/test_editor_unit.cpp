@@ -3018,3 +3018,97 @@ TEST_CASE("TextureCopyImporter: empty displayName falls back to assetId",
   REQUIRE(result.ok);
   CHECK(result.asset.displayName == "tile_tex");
 }
+
+// ===========================================================================
+// Coverage: AssetImporterInternal helpers (SniffImageExtension, EnsureExtension,
+//           IsSafeBasename, SanitiseTextureBasename)
+// ===========================================================================
+
+#include "ui/editor/AssetImporterInternal.h"
+
+using namespace Horo::Editor::ImporterDetail;
+
+TEST_CASE("SniffImageExtension: detects PNG magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> png = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A};
+  CHECK(SniffImageExtension(png) == ".png");
+}
+
+TEST_CASE("SniffImageExtension: detects JPG magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> jpg = {0xFF, 0xD8, 0xFF, 0xE0};
+  CHECK(SniffImageExtension(jpg) == ".jpg");
+}
+
+TEST_CASE("SniffImageExtension: detects BMP magic", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> bmp = {0x42, 0x4D, 0x00, 0x00};
+  CHECK(SniffImageExtension(bmp) == ".bmp");
+}
+
+TEST_CASE("SniffImageExtension: detects WebP magic", "[editor][importer-internal][coverage]") {
+  std::vector<unsigned char> webp(16, 0);
+  webp[0] = 0x52; webp[1] = 0x49; webp[2] = 0x46; webp[3] = 0x46;
+  webp[8] = 0x57; webp[9] = 0x45; webp[10] = 0x42; webp[11] = 0x50;
+  CHECK(SniffImageExtension(webp) == ".webp");
+}
+
+TEST_CASE("SniffImageExtension: detects HDR magic", "[editor][importer-internal][coverage]") {
+  std::vector<unsigned char> hdr(16, 0);
+  hdr[0] = '#'; hdr[1] = '?'; hdr[2] = 'R'; hdr[3] = 'A';
+  CHECK(SniffImageExtension(hdr) == ".hdr");
+}
+
+TEST_CASE("SniffImageExtension: returns empty for unknown bytes", "[editor][importer-internal][coverage]") {
+  const std::vector<unsigned char> unknown = {0x00, 0x01, 0x02, 0x03};
+  CHECK(SniffImageExtension(unknown).empty());
+}
+
+TEST_CASE("SniffImageExtension: returns empty for too-short input", "[editor][importer-internal][coverage]") {
+  CHECK(SniffImageExtension({}).empty());
+  CHECK(SniffImageExtension({0x89}).empty());
+}
+
+TEST_CASE("EnsureExtension: appends extension when basename has none", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture", ".png") == "texture.png");
+}
+
+TEST_CASE("EnsureExtension: replaces existing extension", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture.tga", ".png") == "texture.png");
+}
+
+TEST_CASE("EnsureExtension: returns unchanged when ext is empty", "[editor][importer-internal][coverage]") {
+  CHECK(EnsureExtension("texture.tga", "") == "texture.tga");
+}
+
+TEST_CASE("IsSafeBasename: rejects empty and dot names", "[editor][importer-internal][coverage]") {
+  CHECK_FALSE(IsSafeBasename(""));
+  CHECK_FALSE(IsSafeBasename("."));
+  CHECK_FALSE(IsSafeBasename(".."));
+}
+
+TEST_CASE("IsSafeBasename: rejects paths with separators", "[editor][importer-internal][coverage]") {
+  CHECK_FALSE(IsSafeBasename("sub/file.png"));
+  CHECK_FALSE(IsSafeBasename("sub\\file.png"));
+}
+
+TEST_CASE("IsSafeBasename: accepts normal filenames", "[editor][importer-internal][coverage]") {
+  CHECK(IsSafeBasename("texture.png"));
+  CHECK(IsSafeBasename("my_file"));
+}
+
+TEST_CASE("SanitiseTextureBasename: empty input returns fallback", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("") == "texture.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: extracts filename from path", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("textures/diffuse.png") == "diffuse.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: replaces unsafe characters", "[editor][importer-internal][coverage]") {
+  // On POSIX, backslash is not a separator so filename() returns the whole string;
+  // the sanitiser replaces backslashes and colons with '_'.
+  const std::string result = SanitiseTextureBasename("sub/diffuse.png");
+  CHECK(result == "diffuse.png");
+}
+
+TEST_CASE("SanitiseTextureBasename: dot-dot returns fallback", "[editor][importer-internal][coverage]") {
+  CHECK(SanitiseTextureBasename("..") == "texture.png");
+}
