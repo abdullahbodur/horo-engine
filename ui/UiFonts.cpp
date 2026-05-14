@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 
+#include <algorithm>
 #include <array>
 
 #include "core/Logger.h"
@@ -46,11 +47,20 @@ FontResolutionResult ResolveFontPath(const FontFamilyConfig &config) {
 }
 
 /** @copydoc LoadFonts */
-void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont) {
+void LoadFonts(ImGuiIO &io, const FontFamilyConfig &primaryFont, float dpiScale) {
+  // Clamp the scale to a sane range so very high DPI drivers (or test fakes
+  // that report 0) cannot blow the atlas size or short-circuit rasterisation.
+  const float density = std::clamp(dpiScale, 1.0f, 4.0f);
+
   if (const FontResolutionResult resolved = ResolveFontPath(primaryFont);
       resolved.found) {
+    ImFontConfig cfg;
+    cfg.RasterizerDensity = density;
+    cfg.OversampleH = 3;
+    cfg.OversampleV = 2;
+    cfg.PixelSnapH = false;
     if (ImFont *font = io.Fonts->AddFontFromFileTTF(
-            resolved.resolvedPath.string().c_str(), primaryFont.size))
+            resolved.resolvedPath.string().c_str(), primaryFont.size, &cfg))
       io.FontDefault = font;
     else
       LogWarn("[UiFonts] Failed to load font from '{}'",

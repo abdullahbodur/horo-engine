@@ -732,7 +732,6 @@ TEST_CASE("EditorImportAssetModal: Draw renders successfully when the modal is c
   modal.Draw();
   CHECK_FALSE(modal.IsOpen());
 }
-
 // ===========================================================================
 // AssetImportService — ImportTextureForAsset + SaveMetadataForAsset
 // ===========================================================================
