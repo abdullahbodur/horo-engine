@@ -681,11 +681,11 @@ namespace Horo::Editor {
                         filename = EnsureExtension(filename.string(),
                                                     SniffImageExtension(record.embeddedBytes));
                     filename = pickUniqueBasename(filename.string());
-                    WriteEmbeddedTexture(record, std::move(filename), st, usedBasenames);
+                    WriteEmbeddedTexture(record, filename, st, usedBasenames);
                     continue;
                 }
                 filename = pickUniqueBasename(filename.string());
-                CopyExternalTexture(record, sourceDir, std::move(filename), st, usedBasenames);
+                CopyExternalTexture(record, sourceDir, filename, st, usedBasenames);
             }
         }
 

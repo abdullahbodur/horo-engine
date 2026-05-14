@@ -61,9 +61,9 @@ namespace Horo::FbxLoader {
             if (scene == nullptr) {
                 *errorCodeOut = "fbx.parse_failed";
                 *errorOut = MakeParseError(error);
-                return {nullptr, ufbx_free_scene};
+                return {nullptr, &ufbx_free_scene};
             }
-            return {scene, ufbx_free_scene};
+            return {scene, &ufbx_free_scene};
         }
 
         template <typename VertexT>
@@ -606,9 +606,8 @@ namespace Horo::FbxLoader {
         if (!scene)
             return result;
 
-        const bool extracted = ExtractSkeletalMesh(scene.get(), result);
-
-        if (!extracted) {
+        if (const bool extracted = ExtractSkeletalMesh(scene.get(), result);
+            !extracted) {
             if (result.errorCode.empty())
                 SetSkinnedMeshMissingGeometryError(result);
             return result;
