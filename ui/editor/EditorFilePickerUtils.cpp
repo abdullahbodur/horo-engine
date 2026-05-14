@@ -3,8 +3,8 @@
  * @brief Native file-picker implementations for OBJ and texture imports.
  *
  * Windows uses @c GetOpenFileNameW with UTF-8 conversion. macOS shells out to
- * @c osascript choose file (OBJ filters are validated after pick). Other hosts
- * return empty paths until a picker is wired.
+ * @c osascript choose file (extension filters are validated after pick). Other
+ * hosts return empty paths until a picker is wired.
  */
 #include "ui/editor/EditorFilePickerUtils.h"
 
@@ -25,12 +25,10 @@
 #include <string>
 
 namespace Horo::Editor {
+namespace {
 #if defined(_WIN32)
-/** @brief Converts a null-terminated UTF-16 path from the common-dialog API into UTF-8.
- *  @param path Wide-character path buffer from @c OPENFILENAMEW.
- *  @return UTF-8 string, or empty when conversion fails.
- */
-static std::string WidePathToUtf8(const wchar_t *path) {
+/** @brief Converts a null-terminated UTF-16 path from the common-dialog API into UTF-8. */
+std::string WidePathToUtf8(const wchar_t *path) {
   const int size = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0,
                                        nullptr, nullptr);
   if (size <= 0)
@@ -42,15 +40,31 @@ static std::string WidePathToUtf8(const wchar_t *path) {
     return {};
   return utf8;
 }
+
+/** @brief Runs the Windows common-dialog open-file picker with @p filter and returns the
+ *         selected path in UTF-8, or an empty string on cancellation / error.
+ */
+std::string OpenWin32Picker(const wchar_t *filter) {
+  wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
+                                    // requires a wchar_t[] output buffer.
+  OPENFILENAMEW ofn = {};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.lpstrFilter = filter;
+  ofn.lpstrFile = filePath;
+  ofn.nMaxFile = sizeof(filePath) / sizeof(filePath[0]);
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (GetOpenFileNameW(&ofn))
+    return WidePathToUtf8(filePath);
+  return {};
+}
 #endif
 
 #if defined(__APPLE__)
 // SONAR-OFF
 /** @brief Runs @p cmd with @c popen and returns trimmed line-oriented stdout.
- *  @param cmd Shell command line (typically @c osascript … choose file …).
  *  @return POSIX path string, or empty when the pipe fails or user cancels.
  */
-static std::string ReadPathFromOsascript(const char *cmd) {
+std::string ReadPathFromOsascript(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
   if (!pipe)
     return {};
@@ -66,81 +80,48 @@ static std::string ReadPathFromOsascript(const char *cmd) {
 // SONAR-ON
 #endif
 
-// SONAR-OFF
+/** @brief Cross-platform file-picker dispatch.
+ *
+ *  Linux / other hosts return an empty string until a picker is wired in;
+ *  the editor falls back to typed path entry for those targets.
+ *
+ *  @param winFilter  Win32 OPENFILENAMEW lpstrFilter double-null-terminated string.
+ *  @param macCommand Full macOS @c osascript command line that emits a POSIX path.
+ */
+std::string PickFile([[maybe_unused]] const wchar_t *winFilter,
+                      [[maybe_unused]] const char *macCommand) {
+#if defined(_WIN32)
+  return OpenWin32Picker(winFilter);
+#elif defined(__APPLE__)
+  return ReadPathFromOsascript(macCommand);
+#else
+  return {};
+#endif
+}
+} // namespace
+
 /** @copydoc PickObjFilePath */
 std::string PickObjFilePath() {
-#if defined(_WIN32)
-  wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
-  // requires a wchar_t[] output buffer
-  OPENFILENAMEW ofn = {};
-  ofn.lStructSize = sizeof(ofn);
-  ofn.lpstrFilter = L"OBJ Files\0*.obj\0All Files\0*.*\0";
-  ofn.lpstrFile = filePath;
-  ofn.nMaxFile = sizeof(filePath) / sizeof(filePath[0]);
-  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-  if (GetOpenFileNameW(&ofn))
-    return WidePathToUtf8(filePath);
-  return {};
-#elif defined(__APPLE__)
-  // Avoid `of type {"obj"}` — it often fails on modern macOS; we validate
-  // extension in code.
-  return ReadPathFromOsascript(
+  return PickFile(
+      L"OBJ Files\0*.obj\0All Files\0*.*\0",
       R"(/usr/bin/osascript -e 'try' -e 'POSIX path of (choose file with prompt "Select OBJ file")' -e 'on error' -e 'return ""' -e 'end try' 2>/dev/null)");
-#else
-  return {};
-#endif
 }
-// SONAR-ON
 
-// SONAR-OFF
 /** @copydoc PickMeshFilePath */
 std::string PickMeshFilePath() {
-#if defined(_WIN32)
-  wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
-  // requires a wchar_t[] output buffer
-  OPENFILENAMEW ofn = {};
-  ofn.lStructSize = sizeof(ofn);
-  ofn.lpstrFilter = L"Mesh Files\0*.obj;*.fbx\0OBJ Files\0*.obj\0FBX Files\0*.fbx\0All Files\0*.*\0";
-  ofn.lpstrFile = filePath;
-  ofn.nMaxFile = sizeof(filePath) / sizeof(filePath[0]);
-  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-  if (GetOpenFileNameW(&ofn))
-    return WidePathToUtf8(filePath);
-  return {};
-#elif defined(__APPLE__)
-  return ReadPathFromOsascript(
+  return PickFile(
+      L"Mesh Files\0*.obj;*.fbx\0OBJ Files\0*.obj\0FBX Files\0*.fbx\0All Files\0*.*\0",
       R"OS(/usr/bin/osascript -e 'try' -e 'POSIX path of (choose file with prompt "Select mesh source (.obj or .fbx)")' -e 'on error' -e 'return ""' -e 'end try' 2>/dev/null)OS");
-#else
-  return {};
-#endif
 }
-// SONAR-ON
 
-// SONAR-OFF
 /** @copydoc PickTextureFilePath */
 std::string PickTextureFilePath() {
-#ifdef _WIN32
-  wchar_t filePath[MAX_PATH] = {}; // NOSONAR: cpp:S3003 Windows OPENFILENAMEW
-  // requires a wchar_t[] output buffer
-  OPENFILENAMEW ofn = {};
-  ofn.lStructSize = sizeof(ofn);
-  ofn.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.webp\0"
-                    L"PNG\0*.png\0"
-                    L"JPEG\0*.jpg;*.jpeg\0"
-                    L"All Files\0*.*\0";
-  ofn.lpstrFile = filePath;
-  ofn.nMaxFile = sizeof(filePath) / sizeof(filePath[0]);
-  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-  if (GetOpenFileNameW(&ofn))
-    return WidePathToUtf8(filePath);
-  return {};
-#elif defined(__APPLE__)
-  return ReadPathFromOsascript(
+  return PickFile(
+      L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.webp\0"
+      L"PNG\0*.png\0"
+      L"JPEG\0*.jpg;*.jpeg\0"
+      L"All Files\0*.*\0",
       R"(/usr/bin/osascript -e 'try' -e 'POSIX path of (choose file with prompt "Select texture image")' -e 'on error' -e 'return ""' -e 'end try' 2>/dev/null)");
-#else
-  return {};
-#endif
 }
-// SONAR-ON
 
 } // namespace Horo::Editor
