@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "ufbx.h"
+#include "core/StringHash.h"
 #include "renderer/BinaryMeshIoShared.h"
 
 namespace Horo::FbxLoader {
@@ -637,24 +638,16 @@ namespace Horo::FbxLoader {
         opts.load_external_files = false;
 
         ufbx_error error{};
-        ufbx_scene *scene = ufbx_load_file(sourcePath.c_str(), &opts, &error);
-        if (scene == nullptr) {
+        SceneHandle scene{ufbx_load_file(sourcePath.c_str(), &opts, &error),
+                          &ufbx_free_scene};
+        if (!scene) {
             result.errorCode = "fbx.parse_failed";
-            result.error = std::string("ufbx parse failed: ") +
-                           (error.description.length > 0
-                                ? std::string(error.description.data, error.description.length)
-                                : std::string("unknown error"));
+            result.error = MakeParseError(error);
             return result;
         }
 
         // Resolve bone-name -> ufbx_node*.
-        struct StringHash {
-            using is_transparent = void;
-            std::size_t operator()(std::string_view sv) const noexcept {
-                return std::hash<std::string_view>{}(sv);
-            }
-        };
-        std::unordered_map<std::string, const ufbx_node *, StringHash, std::equal_to<>> nodeByName;
+        std::unordered_map<std::string, const ufbx_node *, Horo::StringHash, std::equal_to<>> nodeByName;
         for (std::size_t i = 0; i < scene->nodes.count; ++i) {
             const ufbx_node *node = scene->nodes.data[i];
             if (node == nullptr || node->name.length == 0)
@@ -725,7 +718,6 @@ namespace Horo::FbxLoader {
             result.clips.push_back(std::move(clip));
         }
 
-        ufbx_free_scene(scene);
         result.ok = true;
         return result;
     }

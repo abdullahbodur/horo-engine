@@ -131,6 +131,8 @@ namespace Horo::BinaryStream {
         std::uint32_t count = 0;
         if (!ReadValue(stream, count))
             return false;
+        if (count > 16'777'216) // 64 MiB worth of floats — reject obviously corrupt lengths.
+            return false;
         out.resize(count);
         return ReadArray(stream, out.data(), out.size());
     }
@@ -151,6 +153,8 @@ namespace Horo::BinaryStream {
     inline bool ReadLengthPrefixedString(std::ifstream &stream, std::string &out) {
         std::uint32_t length = 0;
         if (!ReadValue(stream, length))
+            return false;
+        if (length > 16'777'216) // 16 MiB — reject obviously corrupt lengths.
             return false;
         out.resize(length);
         return length == 0 || ReadArray(stream, out.data(), out.size());
