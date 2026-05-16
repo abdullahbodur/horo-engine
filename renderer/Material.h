@@ -12,7 +12,12 @@ namespace Horo {
         float roughness = 0.5f;
         float metallic = 0.0f;
 
-        std::shared_ptr<Texture> albedoMap; // optional; falls back to u_color if null
+        std::shared_ptr<Texture> albedoMap;             /**< Optional baseColor texture; falls back to u_color when null. */
+        std::shared_ptr<Texture> normalMap;             /**< Optional tangent-space normal map. */
+        std::shared_ptr<Texture> metallicRoughnessMap;  /**< Optional combined metallic-roughness map (glTF: G=roughness, B=metallic). */
+        std::shared_ptr<Texture> emissiveMap;           /**< Optional emissive texture. */
+        std::shared_ptr<Texture> occlusionMap;          /**< Optional ambient-occlusion texture (glTF: R channel). */
+
         float uvScale =
                 1.0f; // texture tiling multiplier (>1 = more tiles = zoomed out)
 

@@ -386,8 +386,16 @@ McpEditorSnapshot MakeSnapshot() {
 
   snapshot.assets.emplace_back("crate", "assets/models/crate.obj", "1,1,1",
                                "assets/textures/crate.png");
+  snapshot.assets.back().normalMap = "assets/textures/crate_normal.png";
+  snapshot.assets.back().metallicRoughnessMap = "assets/textures/crate_mr.png";
+  snapshot.assets.back().emissiveMap = "assets/textures/crate_emissive.png";
+  snapshot.assets.back().occlusionMap = "assets/textures/crate_occlusion.png";
   snapshot.assets.emplace_back("hero", "assets/models/hero.glb", "1,2,1",
                                "assets/textures/hero.png");
+  snapshot.assets.back().normalMap = "assets/textures/hero_normal.png";
+  snapshot.assets.back().metallicRoughnessMap = "assets/textures/hero_mr.png";
+  snapshot.assets.back().emissiveMap = "assets/textures/hero_emissive.png";
+  snapshot.assets.back().occlusionMap = "assets/textures/hero_occlusion.png";
   snapshot.assets.emplace_back("floor", "assets/models/floor.obj", "8,1,8", "");
 
   snapshot.consoleEntries.emplace_back("12:00:00", "INFO",
@@ -460,7 +468,9 @@ MakeSnapshotFromDocument(const SceneDocument &doc,
   }
   for (const auto &[assetId, assetDef] : doc.assets) {
     snapshot.assets.emplace_back(assetId, assetDef.mesh, assetDef.renderScale,
-                                 assetDef.albedoMap);
+                                 assetDef.albedoMap, assetDef.normalMap,
+                                 assetDef.metallicRoughnessMap,
+                                 assetDef.emissiveMap, assetDef.occlusionMap);
   }
   return snapshot;
 }
@@ -636,6 +646,14 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(selection["selectedObjectIds"].size() == 2);
   REQUIRE(selection["objects"].size() == 2);
   REQUIRE(selection["asset"]["id"] == "crate");
+  REQUIRE(selection["asset"]["albedoMap"] == "assets/textures/crate.png");
+  REQUIRE(selection["asset"]["normalMap"] == "assets/textures/crate_normal.png");
+  REQUIRE(selection["asset"]["metallicRoughnessMap"] ==
+          "assets/textures/crate_mr.png");
+  REQUIRE(selection["asset"]["emissiveMap"] ==
+          "assets/textures/crate_emissive.png");
+  REQUIRE(selection["asset"]["occlusionMap"] ==
+          "assets/textures/crate_occlusion.png");
 
   const json assets = BuildAssetsJson(snapshot, 2);
   REQUIRE(assets["assetCount"] == 3);
@@ -646,6 +664,8 @@ TEST_CASE("McpSnapshot builders cover compact MCP resources", "[mcp][snapshot]")
   REQUIRE(assetSelection["selectedAssetId"] == "crate");
   REQUIRE(assetSelection["hasSelection"].get<bool>());
   REQUIRE(assetSelection["asset"]["objectReferenceCount"] == 1);
+  REQUIRE(assetSelection["asset"]["normalMap"] ==
+          "assets/textures/crate_normal.png");
 
   const json catalog = BuildAssetsCatalogJson(snapshot, 8, "hero");
   REQUIRE(catalog["matchedAssets"] == 1);
@@ -3024,11 +3044,18 @@ TEST_CASE("McpProtocol: editor.update_asset and editor.delete_asset preview mode
   const json updateAsset = CallTool(protocol, "editor.update_asset",
                                     json{{"id", "crate"},
                                          {"mesh", "assets/models/crate_v2.obj"},
+                                         {"albedoMap", "assets/models/crate_albedo.png"},
+                                         {"normalMap", "assets/models/crate_normal.png"},
+                                         {"metallicRoughnessMap", "assets/models/crate_mr.png"},
+                                         {"emissiveMap", "assets/models/crate_emissive.png"},
+                                         {"occlusionMap", "assets/models/crate_occlusion.png"},
                                          {"mode", "preview"}},
                                     1);
   REQUIRE(updateAsset["result"]["structuredContent"]["mode"] == "preview");
   REQUIRE(
       updateAsset["result"]["structuredContent"]["previewToken"].is_string());
+  REQUIRE(updateAsset["result"]["structuredContent"]["preview"]["after"]["normalMap"] ==
+          "assets/models/crate_normal.png");
   REQUIRE(invoked.empty());
 
   // editor.delete_asset with mode="preview" on an existing asset

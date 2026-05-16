@@ -142,11 +142,19 @@ namespace Horo {
             float metallic = 0.0f;
             float uvScale = 1.0f;
             bool usesAlbedoMap = false;
+            bool usesNormalMap = false;
+            bool usesMetallicRoughnessMap = false;
+            bool usesEmissiveMap = false;
+            bool usesOcclusionMap = false;
             bool usesCustomShader = false;
         };
 
         struct OpaquePipelineKey {
             bool usesAlbedoMap = false;
+            bool usesNormalMap = false;
+            bool usesMetallicRoughnessMap = false;
+            bool usesEmissiveMap = false;
+            bool usesOcclusionMap = false;
             bool usesCustomShader = false;
             bool writesDepth = true;
             bool depthTestEnabled = true;

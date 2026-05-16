@@ -1339,6 +1339,10 @@ TEST_CASE("GltfLoader::Load parses skinned animated ascii glTF fixtures", "[rend
 
   // Fixture intentionally references a missing texture file.
   CHECK(result.albedoTexture == nullptr);
+  CHECK(result.normalTexture == nullptr);
+  CHECK(result.metallicRoughnessTexture == nullptr);
+  CHECK(result.emissiveTexture == nullptr);
+  CHECK(result.occlusionTexture == nullptr);
 }
 
 TEST_CASE("GltfLoader::Load skips non-triangle primitives", "[renderer][gltf]") {

@@ -34,6 +34,10 @@ namespace Horo {
         std::string mesh;
         Vec3 renderScale = Vec3::One();
         std::string albedoMap;
+        std::string normalMap;
+        std::string metallicRoughnessMap;
+        std::string emissiveMap;
+        std::string occlusionMap;
         std::string guid;
         std::string displayName;
     };

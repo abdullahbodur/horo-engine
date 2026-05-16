@@ -750,6 +750,11 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
         component.material = std::make_shared<Material>();
         component.material->shader = EnsureSceneShader();
         component.material->albedoMap = LoadTexture(prop.albedoMap);
+        component.material->normalMap = LoadTexture(prop.normalMap);
+        component.material->metallicRoughnessMap =
+            LoadTexture(prop.metallicRoughnessMap);
+        component.material->emissiveMap = LoadTexture(prop.emissiveMap);
+        component.material->occlusionMap = LoadTexture(prop.occlusionMap);
         sceneRef.GetRegistry().Add<MeshComponent>(entity, std::move(component));
       });
   m_editor->SetTransformCallback([this](const Editor::SceneObject &object) {

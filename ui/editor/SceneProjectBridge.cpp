@@ -121,6 +121,23 @@ namespace Horo::Editor {
             model->scene.assets.push_back(asset);
         }
 
+        SceneAssetDefinition BuildTypedAssetDefinition(const std::string &assetId,
+                                                       AssetDef asset) {
+            EnsureAssetIdentity(assetId, &asset);
+            SceneAssetDefinition typedAsset;
+            typedAsset.id = assetId;
+            typedAsset.mesh = asset.mesh;
+            typedAsset.renderScale = ParseVec3Csv(asset.renderScale, Vec3::One());
+            typedAsset.albedoMap = asset.albedoMap;
+            typedAsset.normalMap = asset.normalMap;
+            typedAsset.metallicRoughnessMap = asset.metallicRoughnessMap;
+            typedAsset.emissiveMap = asset.emissiveMap;
+            typedAsset.occlusionMap = asset.occlusionMap;
+            typedAsset.guid = asset.guid;
+            typedAsset.displayName = MakeAssetDisplayName(assetId, asset);
+            return typedAsset;
+        }
+
         SceneCameraProperties BuildCameraFromNode(SceneNodeDefinition &node) {
             SceneCameraProperties camera;
             if (const std::string *fov = FindProp(node.extraProps, "fov"))
@@ -302,15 +319,7 @@ namespace Horo::Editor {
             if (prefabDoc.objects.empty())
                 return;
             for (const auto &[assetId, asset]: prefabDoc.assets) {
-                AssetDef normalizedAsset = asset;
-                EnsureAssetIdentity(assetId, &normalizedAsset);
-                MergeTypedAsset(&model,
-                                SceneAssetDefinition{
-                                    assetId, normalizedAsset.mesh,
-                                    ParseVec3Csv(normalizedAsset.renderScale, Vec3::One()),
-                                    normalizedAsset.albedoMap, normalizedAsset.guid,
-                                    MakeAssetDisplayName(assetId, normalizedAsset)
-                                });
+                MergeTypedAsset(&model, BuildTypedAssetDefinition(assetId, asset));
             }
             SceneNodeDefinition prefabNode =
                     BuildNodeDefinitionFromObject(prefabDoc.objects.front());
@@ -445,16 +454,8 @@ namespace Horo::Editor {
         std::ranges::sort(assetIds);
 
         for (const auto &assetId: assetIds) {
-            AssetDef asset = doc.assets.at(assetId);
-            EnsureAssetIdentity(assetId, &asset);
-            SceneAssetDefinition typedAsset;
-            typedAsset.id = assetId;
-            typedAsset.mesh = asset.mesh;
-            typedAsset.renderScale = ParseVec3Csv(asset.renderScale, Vec3::One());
-            typedAsset.albedoMap = asset.albedoMap;
-            typedAsset.guid = asset.guid;
-            typedAsset.displayName = MakeAssetDisplayName(assetId, asset);
-            model.scene.assets.push_back(std::move(typedAsset));
+            model.scene.assets.push_back(
+                    BuildTypedAssetDefinition(assetId, doc.assets.at(assetId)));
         }
 
         model.scene.nodes.reserve(doc.objects.size());
@@ -488,11 +489,13 @@ namespace Horo::Editor {
         doc.settings["spawnPoint"] = FormatVec3Csv(model.scene.settings.spawnPoint);
 
         for (const auto &asset: model.scene.assets) {
-            doc.assets[asset.id] =
-                    AssetDef{
-                        asset.mesh, FormatVec3Csv(asset.renderScale), asset.albedoMap,
-                        asset.guid, asset.displayName
-                    };
+            AssetDef def{asset.mesh, FormatVec3Csv(asset.renderScale),
+                         asset.albedoMap, asset.guid, asset.displayName};
+            def.normalMap = asset.normalMap;
+            def.metallicRoughnessMap = asset.metallicRoughnessMap;
+            def.emissiveMap = asset.emissiveMap;
+            def.occlusionMap = asset.occlusionMap;
+            doc.assets[asset.id] = std::move(def);
         }
 
         doc.objects.reserve(model.scene.nodes.size());

@@ -579,21 +579,16 @@ namespace Horo {
     }
 
     // Texture section of Load()
-    static void LoadGltfAlbedoTexture(const tinygltf::Model &model,
-                                      const std::string &path,
-                                      GltfLoadResult &result) {
-        if (model.materials.empty())
-            return;
-        const int texIdx =
-                model.materials[0].pbrMetallicRoughness.baseColorTexture.index;
+    static std::shared_ptr<Texture> LoadGltfTextureByIndex(
+        const tinygltf::Model &model, const std::string &path, int texIdx) {
         if (texIdx < 0)
-            return;
+            return nullptr;
         const tinygltf::Texture &tex = model.textures[texIdx];
         if (tex.source < 0)
-            return;
+            return nullptr;
         const tinygltf::Image &img = model.images[tex.source];
         if (img.uri.empty())
-            return;
+            return nullptr;
 
         std::string dir = path;
         if (const auto slash = dir.find_last_of("/\\"); slash != std::string::npos)
@@ -603,7 +598,26 @@ namespace Horo {
 
         auto texture = std::make_shared<Texture>(Texture::FromFile(dir + img.uri));
         if (texture->IsValid())
-            result.albedoTexture = std::move(texture);
+            return texture;
+        return nullptr;
+    }
+
+    static void LoadGltfMaterialTextures(const tinygltf::Model &model,
+                                         const std::string &path,
+                                         GltfLoadResult &result) {
+        if (model.materials.empty())
+            return;
+        const tinygltf::Material &material = model.materials[0];
+        result.albedoTexture = LoadGltfTextureByIndex(
+            model, path, material.pbrMetallicRoughness.baseColorTexture.index);
+        result.normalTexture =
+            LoadGltfTextureByIndex(model, path, material.normalTexture.index);
+        result.metallicRoughnessTexture = LoadGltfTextureByIndex(
+            model, path, material.pbrMetallicRoughness.metallicRoughnessTexture.index);
+        result.emissiveTexture =
+            LoadGltfTextureByIndex(model, path, material.emissiveTexture.index);
+        result.occlusionTexture =
+            LoadGltfTextureByIndex(model, path, material.occlusionTexture.index);
     }
 
     // GltfLoader::Load
@@ -633,7 +647,7 @@ namespace Horo {
         LoadGltfSkeleton(model, result, sortedSlots, jointToSorted);
         LoadGltfMesh(model, jointToSorted, result);
         LoadGltfAnimations(model, sortedSlots, result);
-        LoadGltfAlbedoTexture(model, path, result);
+        LoadGltfMaterialTextures(model, path, result);
 
         return result;
     }

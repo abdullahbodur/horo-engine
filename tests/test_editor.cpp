@@ -952,6 +952,10 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
   asset.mesh = "prop.obj";
   asset.renderScale = "1.0000,1.0000,1.0000";
   asset.albedoMap = "assets/models/custom_Albedo.png";
+  asset.normalMap = "assets/models/custom_Normal.png";
+  asset.metallicRoughnessMap = "assets/models/custom_MetallicRoughness.png";
+  asset.emissiveMap = "assets/models/custom_Emissive.png";
+  asset.occlusionMap = "assets/models/custom_Occlusion.png";
   doc.assets["tex_asset"] = asset;
 
   SceneObject obj;
@@ -966,6 +970,14 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
 
   REQUIRE(loaded.assets.at("tex_asset").albedoMap ==
           "assets/models/custom_Albedo.png");
+  REQUIRE(loaded.assets.at("tex_asset").normalMap ==
+          "assets/models/custom_Normal.png");
+  REQUIRE(loaded.assets.at("tex_asset").metallicRoughnessMap ==
+          "assets/models/custom_MetallicRoughness.png");
+  REQUIRE(loaded.assets.at("tex_asset").emissiveMap ==
+          "assets/models/custom_Emissive.png");
+  REQUIRE(loaded.assets.at("tex_asset").occlusionMap ==
+          "assets/models/custom_Occlusion.png");
 }
 
 TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]") {
@@ -982,6 +994,36 @@ TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][seri
   std::string saved((std::istreambuf_iterator<char>(in)),
                     std::istreambuf_iterator<char>());
   REQUIRE(saved.find("albedoMap") == std::string::npos);
+  REQUIRE(saved.find("normalMap") == std::string::npos);
+  REQUIRE(saved.find("metallicRoughnessMap") == std::string::npos);
+  REQUIRE(saved.find("emissiveMap") == std::string::npos);
+  REQUIRE(saved.find("occlusionMap") == std::string::npos);
+}
+
+TEST_CASE("SceneSerializer: legacy asset entries remain compatible with albedo-only JSON", "[editor][serializer]") {
+  const std::string path = TmpPath("legacy_albedo_only_asset_scene.json");
+  const std::string json = R"({
+      "version": 1,
+      "sceneId": "legacy",
+      "assets": {
+        "crate": {
+          "mesh": "assets/models/crate/crate.obj",
+          "renderScale": "1.0000,1.0000,1.0000",
+          "albedoMap": "assets/models/crate/crate.png"
+        }
+      },
+      "objects": []
+    })";
+  WriteFile(path, json);
+
+  SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+  REQUIRE(loaded.assets.count("crate") == 1);
+  REQUIRE(loaded.assets.at("crate").albedoMap ==
+          "assets/models/crate/crate.png");
+  REQUIRE(loaded.assets.at("crate").normalMap.empty());
+  REQUIRE(loaded.assets.at("crate").metallicRoughnessMap.empty());
+  REQUIRE(loaded.assets.at("crate").emissiveMap.empty());
+  REQUIRE(loaded.assets.at("crate").occlusionMap.empty());
 }
 
 TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
@@ -2606,7 +2648,14 @@ TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId", "[e
 
 TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly", "[editor][bridge]") {
   SceneDocument doc;
-  doc.assets["crate"] = AssetDef{"models/crate.obj", "2.0,3.0,4.0", ""};
+  AssetDef crate;
+  crate.mesh = "models/crate.obj";
+  crate.renderScale = "2.0,3.0,4.0";
+  crate.normalMap = "models/crate_n.png";
+  crate.metallicRoughnessMap = "models/crate_mr.png";
+  crate.emissiveMap = "models/crate_e.png";
+  crate.occlusionMap = "models/crate_ao.png";
+  doc.assets["crate"] = crate;
 
   const SceneProjectModel model = BuildSceneProjectModel(doc);
   REQUIRE(model.scene.assets.size() == 1);
@@ -2614,6 +2663,10 @@ TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly", "[
   REQUIRE(model.scene.assets[0].renderScale.x == Approx(2.0f));
   REQUIRE(model.scene.assets[0].renderScale.y == Approx(3.0f));
   REQUIRE(model.scene.assets[0].renderScale.z == Approx(4.0f));
+  REQUIRE(model.scene.assets[0].normalMap == "models/crate_n.png");
+  REQUIRE(model.scene.assets[0].metallicRoughnessMap == "models/crate_mr.png");
+  REQUIRE(model.scene.assets[0].emissiveMap == "models/crate_e.png");
+  REQUIRE(model.scene.assets[0].occlusionMap == "models/crate_ao.png");
 }
 
 TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node", "[editor][bridge]") {

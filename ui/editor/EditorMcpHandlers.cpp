@@ -301,8 +301,16 @@ namespace Horo::Editor {
         std::ranges::sort(assetIds);
         for (const std::string &assetId: assetIds) {
             const AssetDef &asset = m_document.assets.at(assetId);
-            snapshot.assets.emplace_back(assetId, asset.mesh, asset.renderScale,
-                                         asset.albedoMap);
+            Mcp::McpAssetSnapshot snap;
+            snap.id = assetId;
+            snap.mesh = asset.mesh;
+            snap.renderScale = asset.renderScale;
+            snap.albedoMap = asset.albedoMap;
+            snap.normalMap = asset.normalMap;
+            snap.metallicRoughnessMap = asset.metallicRoughnessMap;
+            snap.emissiveMap = asset.emissiveMap;
+            snap.occlusionMap = asset.occlusionMap;
+            snapshot.assets.push_back(std::move(snap));
         }
 
         std::vector<LogLine> lines;
@@ -370,6 +378,10 @@ namespace Horo::Editor {
             {"mesh", asset.mesh},
             {"renderScale", asset.renderScale},
             {"albedoMap", asset.albedoMap},
+            {"normalMap", asset.normalMap},
+            {"metallicRoughnessMap", asset.metallicRoughnessMap},
+            {"emissiveMap", asset.emissiveMap},
+            {"occlusionMap", asset.occlusionMap},
             {"objectReferenceCount", referenceCount}
         };
     }
@@ -868,6 +880,23 @@ namespace Horo::Editor {
             it->second.albedoMap = arguments["albedoMap"].is_null()
                                        ? std::string()
                                        : arguments["albedoMap"].get<std::string>();
+        if (arguments.contains("normalMap"))
+            it->second.normalMap = arguments["normalMap"].is_null()
+                                       ? std::string()
+                                       : arguments["normalMap"].get<std::string>();
+        if (arguments.contains("metallicRoughnessMap"))
+            it->second.metallicRoughnessMap =
+                    arguments["metallicRoughnessMap"].is_null()
+                        ? std::string()
+                        : arguments["metallicRoughnessMap"].get<std::string>();
+        if (arguments.contains("emissiveMap"))
+            it->second.emissiveMap = arguments["emissiveMap"].is_null()
+                                         ? std::string()
+                                         : arguments["emissiveMap"].get<std::string>();
+        if (arguments.contains("occlusionMap"))
+            it->second.occlusionMap = arguments["occlusionMap"].is_null()
+                                          ? std::string()
+                                          : arguments["occlusionMap"].get<std::string>();
         if (arguments.contains("displayName"))
             it->second.displayName = arguments["displayName"].is_null()
                                          ? std::string()

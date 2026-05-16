@@ -31,6 +31,10 @@ namespace Horo {
         std::string albedoMap;
         bool isLight = false;
         std::string scriptTag;
+        std::string normalMap;
+        std::string metallicRoughnessMap;
+        std::string emissiveMap;
+        std::string occlusionMap;
     };
 
     struct RuntimeSceneRoom {

@@ -65,6 +65,11 @@ namespace Horo {
                 } else {
                     prop.meshTag = assetIt->second->mesh;
                     prop.albedoMap = assetIt->second->albedoMap;
+                    prop.normalMap = assetIt->second->normalMap;
+                    prop.metallicRoughnessMap =
+                            assetIt->second->metallicRoughnessMap;
+                    prop.emissiveMap = assetIt->second->emissiveMap;
+                    prop.occlusionMap = assetIt->second->occlusionMap;
                     prop.scale = MultiplyComponents(node.scale, assetIt->second->renderScale);
                 }
             } else {
@@ -79,6 +84,19 @@ namespace Horo {
                 const auto albedoIt = node.extraProps.find("albedoMap");
                 if (albedoIt != node.extraProps.end())
                     prop.albedoMap = albedoIt->second;
+                const auto normalIt = node.extraProps.find("normalMap");
+                if (normalIt != node.extraProps.end())
+                    prop.normalMap = normalIt->second;
+                const auto metallicRoughnessIt =
+                        node.extraProps.find("metallicRoughnessMap");
+                if (metallicRoughnessIt != node.extraProps.end())
+                    prop.metallicRoughnessMap = metallicRoughnessIt->second;
+                const auto emissiveIt = node.extraProps.find("emissiveMap");
+                if (emissiveIt != node.extraProps.end())
+                    prop.emissiveMap = emissiveIt->second;
+                const auto occlusionIt = node.extraProps.find("occlusionMap");
+                if (occlusionIt != node.extraProps.end())
+                    prop.occlusionMap = occlusionIt->second;
             }
 
             prop.isLight = node.light.has_value();

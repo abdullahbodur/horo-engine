@@ -352,6 +352,10 @@ namespace Horo {
             packed |= key.usesCustomShader ? (1u << 1) : 0u;
             packed |= key.writesDepth ? (1u << 2) : 0u;
             packed |= key.depthTestEnabled ? (1u << 3) : 0u;
+            packed |= key.usesNormalMap ? (1u << 4) : 0u;
+            packed |= key.usesMetallicRoughnessMap ? (1u << 5) : 0u;
+            packed |= key.usesEmissiveMap ? (1u << 6) : 0u;
+            packed |= key.usesOcclusionMap ? (1u << 7) : 0u;
             return packed;
         }
     } // namespace
@@ -365,6 +369,14 @@ namespace Horo {
         translated.uvScale = material.uvScale;
         translated.usesAlbedoMap =
                 material.albedoMap && material.albedoMap->IsValid();
+        translated.usesNormalMap =
+                material.normalMap && material.normalMap->IsValid();
+        translated.usesMetallicRoughnessMap =
+                material.metallicRoughnessMap && material.metallicRoughnessMap->IsValid();
+        translated.usesEmissiveMap =
+                material.emissiveMap && material.emissiveMap->IsValid();
+        translated.usesOcclusionMap =
+                material.occlusionMap && material.occlusionMap->IsValid();
         translated.usesCustomShader = material.shader && material.shader->IsValid();
         return translated;
     }
@@ -378,6 +390,10 @@ namespace Horo {
         const TranslatedMaterialState &materialState) {
         OpaquePipelineKey key;
         key.usesAlbedoMap = materialState.usesAlbedoMap;
+        key.usesNormalMap = materialState.usesNormalMap;
+        key.usesMetallicRoughnessMap = materialState.usesMetallicRoughnessMap;
+        key.usesEmissiveMap = materialState.usesEmissiveMap;
+        key.usesOcclusionMap = materialState.usesOcclusionMap;
         key.usesCustomShader = materialState.usesCustomShader;
         key.writesDepth = true;
         key.depthTestEnabled = true;

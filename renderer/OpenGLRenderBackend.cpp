@@ -44,13 +44,41 @@ namespace Horo {
             shader->SetVec4("u_color", material.color);
             shader->SetFloat("u_roughness", material.roughness);
             shader->SetFloat("u_metallic", material.metallic);
-            shader->SetInt("u_albedoMap", 0);
             shader->SetFloat("u_uvScale", material.uvScale);
 
-            const bool hasTexture = material.albedoMap && material.albedoMap->IsValid();
-            if (hasTexture)
-                material.albedoMap->Bind(0);
-            shader->SetInt("u_hasTexture", hasTexture ? 1 : 0);
+            // glTF-aligned PBR texture slots (HORO-67). Slot order is fixed and
+            // mirrored by the fragment shaders' sampler declarations.
+            //   slot 0 = albedoMap        / u_hasTexture
+            //   slot 1 = normalMap        / u_hasNormalMap
+            //   slot 2 = metallicRoughnessMap / u_hasMetallicRoughnessMap
+            //   slot 3 = emissiveMap      / u_hasEmissiveMap
+            //   slot 4 = occlusionMap     / u_hasOcclusionMap
+            shader->SetInt("u_albedoMap", 0);
+            shader->SetInt("u_normalMap", 1);
+            shader->SetInt("u_metallicRoughnessMap", 2);
+            shader->SetInt("u_emissiveMap", 3);
+            shader->SetInt("u_occlusionMap", 4);
+
+            const auto bindOptional = [](const std::shared_ptr<Texture> &tex,
+                                          int slot) -> int {
+                if (tex && tex->IsValid()) {
+                    tex->Bind(slot);
+                    return 1;
+                }
+                return 0;
+            };
+
+            const int hasAlbedo  = bindOptional(material.albedoMap, 0);
+            const int hasNormal  = bindOptional(material.normalMap, 1);
+            const int hasMR      = bindOptional(material.metallicRoughnessMap, 2);
+            const int hasEmiss   = bindOptional(material.emissiveMap, 3);
+            const int hasOccl    = bindOptional(material.occlusionMap, 4);
+
+            shader->SetInt("u_hasTexture", hasAlbedo);
+            shader->SetInt("u_hasNormalMap", hasNormal);
+            shader->SetInt("u_hasMetallicRoughnessMap", hasMR);
+            shader->SetInt("u_hasEmissiveMap", hasEmiss);
+            shader->SetInt("u_hasOcclusionMap", hasOccl);
         }
     } // namespace
 

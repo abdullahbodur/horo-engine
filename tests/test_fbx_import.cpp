@@ -403,7 +403,7 @@ TEST_CASE("FbxLoader: cube_texture fixture exposes a diffuse texture record", "[
   REQUIRE(result.ok);
   REQUIRE_FALSE(result.textures.empty());
   CHECK(std::ranges::any_of(result.textures, [](const auto &t) {
-    return t.isDiffuseAlbedo;
+    return t.slot == FbxLoader::FbxTextureSlot::Albedo;
   }));
 }
 
@@ -418,7 +418,8 @@ TEST_CASE("FbxLoader: external-only fixture exposes paths but no embedded bytes"
   const auto &record = result.textures.front();
   CHECK(record.embeddedBytes.empty());
   CHECK_FALSE(record.filename.empty());
-  CHECK(record.isDiffuseAlbedo);
+  CHECK(record.slot == FbxLoader::FbxTextureSlot::Albedo);
+  CHECK(record.slot == FbxLoader::FbxTextureSlot::Albedo);
 }
 
 TEST_CASE("FbxAssetImporter: copies sibling external texture into managed storage and sets albedoMap",

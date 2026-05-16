@@ -206,6 +206,10 @@ namespace Horo::Editor {
                 ad.mesh = def.value("mesh", "");
                 ad.renderScale = def.value("renderScale", "1.0000,1.0000,1.0000");
                 ad.albedoMap = def.value("albedoMap", "");
+                ad.normalMap = def.value("normalMap", "");
+                ad.metallicRoughnessMap = def.value("metallicRoughnessMap", "");
+                ad.emissiveMap = def.value("emissiveMap", "");
+                ad.occlusionMap = def.value("occlusionMap", "");
                 ad.guid = def.value("guid", "");
                 ad.displayName = def.value("displayName", "");
                 EnsureAssetIdentity(id, &ad);
@@ -262,6 +266,14 @@ namespace Horo::Editor {
             d["renderScale"] = def.renderScale;
             if (!def.albedoMap.empty())
                 d["albedoMap"] = def.albedoMap;
+            if (!def.normalMap.empty())
+                d["normalMap"] = def.normalMap;
+            if (!def.metallicRoughnessMap.empty())
+                d["metallicRoughnessMap"] = def.metallicRoughnessMap;
+            if (!def.emissiveMap.empty())
+                d["emissiveMap"] = def.emissiveMap;
+            if (!def.occlusionMap.empty())
+                d["occlusionMap"] = def.occlusionMap;
             assets[id] = d;
         }
         j["assets"] = assets;

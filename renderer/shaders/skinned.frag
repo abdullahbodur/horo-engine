@@ -8,8 +8,18 @@ uniform vec4      u_color      = vec4(1.0);
 uniform float     u_roughness  = 0.5;
 uniform float     u_metallic   = 0.0;
 uniform vec3      u_cameraPos;
+
+// glTF-aligned PBR texture slots (HORO-67); see basic.frag for slot order.
 uniform sampler2D u_albedoMap;
-uniform int       u_hasTexture = 0;
+uniform sampler2D u_normalMap;
+uniform sampler2D u_metallicRoughnessMap;
+uniform sampler2D u_emissiveMap;
+uniform sampler2D u_occlusionMap;
+uniform int       u_hasTexture              = 0;
+uniform int       u_hasNormalMap            = 0;
+uniform int       u_hasMetallicRoughnessMap = 0;
+uniform int       u_hasEmissiveMap          = 0;
+uniform int       u_hasOcclusionMap         = 0;
 uniform float     u_uvScale    = 1.0;
 
 struct Light {
@@ -48,15 +58,42 @@ vec3 CalcLight(Light L, vec3 pos, vec3 N, vec3 V, vec3 albedo, float rough, floa
 
 void main()
 {
-    vec3 N      = normalize(v_worldNormal);
+    vec2 uv = v_uv * u_uvScale;
+
+    vec3 N = normalize(v_worldNormal);
+    if (u_hasNormalMap != 0) {
+        // HORO-67 plumbing: TBN tangent-space transform deferred (no vertex tangents yet).
+        vec3 nMap = texture(u_normalMap, uv).rgb * 2.0 - 1.0;
+        N = normalize(nMap);
+    }
+
     vec3 V      = normalize(u_cameraPos - v_worldPos);
     vec3 albedo = (u_hasTexture != 0)
-                  ? texture(u_albedoMap, v_uv * u_uvScale).rgb * u_color.rgb
+                  ? texture(u_albedoMap, uv).rgb * u_color.rgb
                   : u_color.rgb;
-    vec3 result = 0.05 * albedo;
+
+    float roughness = u_roughness;
+    float metallic  = u_metallic;
+    if (u_hasMetallicRoughnessMap != 0) {
+        vec3 mr   = texture(u_metallicRoughnessMap, uv).rgb;
+        roughness = mr.g;
+        metallic  = mr.b;
+    }
+
+    float ao = 1.0;
+    if (u_hasOcclusionMap != 0)
+        ao = texture(u_occlusionMap, uv).r;
+
+    vec3 emissive = vec3(0.0);
+    if (u_hasEmissiveMap != 0)
+        emissive = texture(u_emissiveMap, uv).rgb;
+
+    vec3 result = 0.05 * ao * albedo;
 
     for (int i = 0; i < u_lightCount; ++i)
-        result += CalcLight(u_lights[i], v_worldPos, N, V, albedo, u_roughness, u_metallic);
+        result += CalcLight(u_lights[i], v_worldPos, N, V, albedo, roughness, metallic);
+
+    result += emissive;
 
     result = result / (result + 1.0);
 

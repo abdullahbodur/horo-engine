@@ -50,17 +50,26 @@ namespace Horo::Editor {
         std::string mesh;        /**< Mesh tag, e.g. "stone.obj". */
         std::string renderScale; /**< Render scale as "x,y,z"; matches the renderScale prop convention. */
         std::string
-        albedoMap;               /**< Optional diffuse texture path, e.g. "assets/models/foo.png". */
+        albedoMap;               /**< Optional diffuse / glTF baseColor texture path, e.g. "assets/models/foo.png". */
+        std::string normalMap;   /**< Optional tangent-space normal map texture path. */
+        std::string
+        metallicRoughnessMap;    /**< Optional combined metallic-roughness texture (glTF convention: G=roughness, B=metallic). */
+        std::string emissiveMap; /**< Optional emissive texture path. */
+        std::string occlusionMap;/**< Optional ambient-occlusion texture path (R channel; glTF convention). */
         std::string guid;        /**< Stable path-independent identity for imported content. */
         std::string displayName; /**< Human-facing label shown in the editor. */
 
         /** @brief Constructs an empty asset definition. */
         AssetDef() = default;
 
-        /** @brief Constructs an asset definition from explicit field values.
+        /** @brief Constructs an asset definition from the legacy field set (mesh, renderScale, albedoMap, guid, displayName).
+         *
+         *  This overload preserves source compatibility with existing call sites. New
+         *  PBR texture slots (@c normalMap, @c metallicRoughnessMap, @c emissiveMap,
+         *  @c occlusionMap) default to empty and can be assigned after construction.
          *  @param meshValue         Mesh tag/path string.
          *  @param renderScaleValue  Render scale encoded as "x,y,z".
-         *  @param albedoMapValue    Optional albedo texture path.
+         *  @param albedoMapValue    Optional albedo / baseColor texture path.
          *  @param guidValue         Stable GUID for imported content.
          *  @param displayNameValue  Human-facing asset label.
          */
