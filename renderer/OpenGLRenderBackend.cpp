@@ -65,6 +65,8 @@ namespace Horo {
                     tex->Bind(slot);
                     return 1;
                 }
+                static const OpenGLTexture s_defaultTex = OpenGLTexture::CreateWhite1x1();
+                s_defaultTex.Bind(slot);
                 return 0;
             };
 
@@ -139,6 +141,14 @@ namespace Horo {
         HORO_ASSERT(
             !m_frameActive,
             "OpenGLRenderBackend::BeginFrame called while a frame is active");
+
+        // Bind default textures to all shader sampler slots so the GPU
+        // always has a loadable texture, preventing "GLD_TEXTURE_INDEX_2D
+        // is unloadable" warnings on Apple's Metal OpenGL driver.
+        static const OpenGLTexture s_defaultTex = OpenGLTexture::CreateWhite1x1();
+        for (int slot = 0; slot < 5; ++slot)
+            s_defaultTex.Bind(slot);
+
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
         glEnable(GL_CULL_FACE);
@@ -347,13 +357,16 @@ namespace Horo {
     }
 
     bool OpenGLRenderBackend::ReadbackRegionRgba8(int x, int y, int w, int h,
-                                                   uint32_t *pixels,
-                                                   std::string *outError) {
+                                                    uint32_t *pixels,
+                                                    std::string *outError) {
         if (!pixels || w <= 0 || h <= 0) {
             if (outError)
                 *outError = "ReadbackRegionRgba8: invalid parameters.";
             return false;
         }
+        static constexpr GLenum kPackAlignment = 0x0D05;
+        glPixelStorei(kPackAlignment, 1);
+        while (glGetError() != GL_NO_ERROR) {} // Drain prior errors so glReadPixels result is accurate
         glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         if (const GLenum err = glGetError(); err != GL_NO_ERROR) {
             if (outError)

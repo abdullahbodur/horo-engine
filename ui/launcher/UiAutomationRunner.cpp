@@ -20,6 +20,7 @@
 // clang-format on
 
 #include "core/Logger.h"
+#include "renderer/Renderer.h"
 #include "ui/launcher/LauncherEditorShell.h"
 #include "ui/launcher/UiAutomationConfig.h"
 #include "ui/launcher/UiTestHarness.h"

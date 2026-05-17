@@ -191,8 +191,18 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
       return nullptr;
     }
   } catch (const ObjLoader::ObjLoaderException& e) {
+    LogWarn("[Thumbnail] Failed to load OBJ for preview: {} (error: {})",
+            cacheKey, e.what());
+    renderer.noPreviewKeys.insert(cacheKey);
+    return nullptr;
+  } catch (const std::exception& e) {
     LogWarn("[Thumbnail] Failed to load mesh for preview: {} (error: {})",
             cacheKey, e.what());
+    renderer.noPreviewKeys.insert(cacheKey);
+    return nullptr;
+  } catch (...) {
+    LogWarn("[Thumbnail] Failed to load mesh for preview: {} (unknown error)",
+            cacheKey);
     renderer.noPreviewKeys.insert(cacheKey);
     return nullptr;
   }
@@ -219,7 +229,7 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
     return;
   }
 
-  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z});
+  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z, 0.1f});
   const float fov = 45.0f * std::numbers::pi_v<float> / 180.0f;
   const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
 

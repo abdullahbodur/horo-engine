@@ -249,11 +249,10 @@ void DrawIcon(ImDrawList *dl, const char *icon, ImVec2 pos,
     ImFont *font = ImGui::GetFont();
     const float baseFontSize = ImGui::GetFontSize();
     const float targetSize = (size > 0.0f) ? size : baseFontSize;
-    const float oldScale = font->Scale;
-    font->Scale = targetSize / baseFontSize;
-    const ImVec2 iconSz = ImGui::CalcTextSize(icon);
-    dl->AddText(ImVec2(pos.x - iconSz.x * 0.5f, pos.y - iconSz.y * 0.5f), color, icon);
-    font->Scale = oldScale;
+    const ImVec2 iconSz = font->CalcTextSizeA(targetSize, FLT_MAX, 0.0f, icon);
+    dl->AddText(font, targetSize,
+                ImVec2(pos.x - iconSz.x * 0.5f, pos.y - iconSz.y * 0.5f),
+                color, icon);
 }
 
 /** @copydoc GetIconSize(const char *, float) */
@@ -261,11 +260,7 @@ ImVec2 GetIconSize(const char *icon, float size) {
     ImFont *font = ImGui::GetFont();
     const float baseFontSize = ImGui::GetFontSize();
     const float targetSize = (size > 0.0f) ? size : baseFontSize;
-    const float oldScale = font->Scale;
-    font->Scale = targetSize / baseFontSize;
-    const ImVec2 sz = ImGui::CalcTextSize(icon);
-    font->Scale = oldScale;
-    return sz;
+    return font->CalcTextSizeA(targetSize, FLT_MAX, 0.0f, icon);
 }
 
 /** @copydoc GetIconSize(const EditorTheme &) */

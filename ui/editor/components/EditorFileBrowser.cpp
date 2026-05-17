@@ -16,14 +16,21 @@
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
 #include "renderer/Renderer.h"
 #include "renderer/ITexture.h"
+#include "renderer/Texture.h"
 
 namespace Horo::Editor {
+
+ImFont* EditorFileBrowser::s_largeIconFont = nullptr;
+
+/** @copydoc EditorFileBrowser::SetLargeIconFont */
+void EditorFileBrowser::SetLargeIconFont(ImFont* font) {
+    s_largeIconFont = font;
+}
 
 namespace {
 bool IsMeshExtension(std::string_view ext) {
     return ext == ".fbx" || ext == ".obj" || ext == ".mesh.bin" ||
-           ext == ".skinned.bin" || ext == ".skinned" || ext == ".gltf" || ext == ".glb" ||
-           ext == ".bin"; // handles .fbx.bin, .mesh.bin, etc.
+           ext == ".skinned.bin" || ext == ".skinned" || ext == ".gltf" || ext == ".glb";
 }
 bool IsTextureExtension(std::string_view ext) {
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
@@ -53,6 +60,18 @@ ImTextureID TryLoadMeshPreviewTexture(const std::string& filePath) {
     }
 
     LogInfo("[FileBrowser] Preview loaded for {}", filePath);
+    return ToImTextureId(handle);
+}
+
+/** @brief Loads an image file as a thumbnail texture for supported formats (PNG, JPG, etc.). */
+ImTextureID TryLoadTexturePreview(const std::string& filePath) {
+    const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
+    if (!caps.supportsNativeTextureHandles) return 0;
+
+    auto tex = Renderer::CreateTextureFromFile(filePath);
+    if (!tex) return 0;
+
+    const RenderTargetHandle handle = tex->GetRenderTargetHandle(true);
     return ToImTextureId(handle);
 }
 } // namespace
@@ -89,7 +108,7 @@ void EditorFileBrowser::NavigateUp() {
 void EditorFileBrowser::Refresh() { RefreshEntries(); }
 
 bool EditorFileBrowser::Draw(float gridHeight) {
-    bool selectionChanged = false;
+    const std::string previousSelection = m_state.selectedFilePath;
     const ImVec2 windowMin = ImGui::GetWindowPos();
     const ImVec2 windowSize = ImGui::GetWindowSize();
     const ImVec2 windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
@@ -107,7 +126,7 @@ bool EditorFileBrowser::Draw(float gridHeight) {
         DrawThumbnailGrid();
     }
     m_gridMaxY = ImGui::GetCursorScreenPos().y;
-    return selectionChanged;
+    return m_state.selectedFilePath != previousSelection;
 }
 
 bool EditorFileBrowser::HandleFileDrop(float x, float y, const std::string& path) {
@@ -136,12 +155,31 @@ void EditorFileBrowser::RefreshEntries() {
     if (!std::filesystem::is_directory(m_state.currentDir, ec) || ec) return;
     for (const auto& entry : std::filesystem::directory_iterator(m_state.currentDir, ec)) {
         if (ec) break;
+        const std::string fileName = entry.path().filename().string();
+        // Skip hidden files, macOS resource forks, and entries with empty names
+        if (fileName.empty() || fileName.starts_with('.') ||
+            fileName.starts_with("._") || fileName == "__MACOSX")
+            continue;
         FileBrowserEntry fbEntry;
-        fbEntry.name = entry.path().filename().string();
+        fbEntry.name = fileName;
         fbEntry.fullPath = entry.path().generic_string();
         fbEntry.isDirectory = entry.is_directory(ec);
         fbEntry.extension = Horo::ToLowerAscii(entry.path().extension().string());
+        // Resolve compound extensions: model.fbx.bin → extension stored as .fbx
+        if (fbEntry.extension == ".bin") {
+            const std::string stemExt =
+                Horo::ToLowerAscii(entry.path().stem().extension().string());
+            if (!stemExt.empty()) fbEntry.extension = stemExt;
+        }
         if (!fbEntry.isDirectory) fbEntry.sizeBytes = entry.file_size(ec);
+        else {
+            std::error_code countEc;
+            int count = 0;
+            for (auto it = std::filesystem::directory_iterator(entry.path(), countEc);
+                 it != std::filesystem::directory_iterator() && !countEc; ++it)
+                ++count;
+            if (!countEc) fbEntry.itemCount = count;
+        }
         m_state.entries.push_back(std::move(fbEntry));
     }
     std::ranges::sort(m_state.entries, [](const FileBrowserEntry& a, const FileBrowserEntry& b) {
@@ -282,17 +320,43 @@ void EditorFileBrowser::DrawThumbnailGrid() {
     const float tileW = (availW - spacing * static_cast<float>(columns - 1)) / static_cast<float>(columns);
     const float thumbSize = tileW - kThumbPad * 2.0f;
     const float tileH = thumbSize + kThumbPad * 2.0f + 36.0f;
+    const float rowHeight = tileH + ImGui::GetStyle().ItemSpacing.y;
 
-    // No BeginChild — draw directly so content flows naturally without expanding to fill parent
-    int shownCount = 0;
-    for (const auto& entry : m_state.filteredEntries) {
-        if (const int col = shownCount % columns; col > 0) ImGui::SameLine(0.0f, spacing);
+    const int totalEntries = static_cast<int>(m_state.filteredEntries.size());
+    if (totalEntries == 0) {
+        ImGui::TextDisabled("No files found");
+        return;
+    }
+
+    // Only process visible rows for performance with large directories
+    const int totalRows = (totalEntries + columns - 1) / columns;
+    const float scrollY = ImGui::GetScrollY();
+    const int firstVisibleRow = std::max(0, static_cast<int>(scrollY / rowHeight));
+    const int visibleRows = static_cast<int>(std::ceil(ImGui::GetWindowHeight() / rowHeight)) + 1;
+    const int lastVisibleRow = std::min(totalRows, firstVisibleRow + visibleRows);
+
+    if (firstVisibleRow > 0)
+        ImGui::Dummy(ImVec2(0, firstVisibleRow * rowHeight));
+
+    const int firstVisibleIndex = firstVisibleRow * columns;
+    const int lastVisibleIndex = std::min(totalEntries, lastVisibleRow * columns);
+    for (int i = firstVisibleIndex; i < lastVisibleIndex; ++i) {
+        const auto& entry = m_state.filteredEntries[static_cast<size_t>(i)];
+        const int col = (i - firstVisibleIndex) % columns;
+        if (col > 0) ImGui::SameLine(0.0f, spacing);
         ImGui::PushID(entry.fullPath.c_str());
         DrawThumbnailTile(entry, thumbSize, tileH);
         ImGui::PopID();
-        ++shownCount;
     }
-    if (shownCount == 0) ImGui::TextDisabled("No files found");
+
+    const int remainingRows = totalRows - lastVisibleRow;
+    if (remainingRows > 0)
+        ImGui::Dummy(ImVec2(0, remainingRows * rowHeight));
+
+    if (m_pendingNavigate) {
+        NavigateTo(*m_pendingNavigate);
+        m_pendingNavigate.reset();
+    }
 }
 
 void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float thumbSize, float tileH) {
@@ -319,12 +383,22 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
 
     // Try to render mesh preview for supported formats
     const bool isMesh = IsMeshExtension(entry.extension);
+    const bool isTexture = IsTextureExtension(entry.extension);
     ImTextureID previewTex = 0;
     if (isMesh) {
         auto& cache = m_previewCache[entry.fullPath];
         if (!cache.loaded && !cache.failed) {
             cache.path = entry.fullPath;
             cache.textureId = TryLoadMeshPreviewTexture(entry.fullPath);
+            cache.loaded = true;
+            if (!cache.textureId) cache.failed = true;
+        }
+        previewTex = cache.textureId;
+    } else if (isTexture) {
+        auto& cache = m_texturePreviewCache[entry.fullPath];
+        if (!cache.loaded && !cache.failed) {
+            cache.path = entry.fullPath;
+            cache.textureId = TryLoadTexturePreview(entry.fullPath);
             cache.loaded = true;
             if (!cache.textureId) cache.failed = true;
         }
@@ -336,7 +410,8 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
         dl->AddImage(previewTex, thumbMin, thumbMax);
     } else {
         const ImVec2 thumbCenter = ImVec2((thumbMin.x + thumbMax.x) * 0.5f, (thumbMin.y + thumbMax.y) * 0.5f);
-        const float iconSize = Ui::GetIconSize(Ui::GetEditorTheme()) * 3.0f;
+        const float iconSize = Ui::GetIconSize(Ui::GetEditorTheme()) * 5.0f;
+        if (s_largeIconFont) ImGui::PushFont(s_largeIconFont);
         if (entry.isDirectory) {
             const ImU32 folderCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.70f, 0.60f, 0.30f, 0.95f));
             Ui::DrawIcon(dl, ICON_FA_FOLDER, thumbCenter, folderCol, iconSize);
@@ -350,6 +425,7 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
             const ImU32 iconCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
             Ui::DrawIcon(dl, ICON_FA_FILE, thumbCenter, iconCol, iconSize);
         }
+        if (s_largeIconFont) ImGui::PopFont();
     }
     std::string displayName = entry.name;
     const float maxLabelW = thumbSize;
@@ -366,12 +442,9 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
                                 : ImGui::GetColorU32(ImGuiCol_Text);
     dl->AddText(ImVec2(nameX, nameY), nameColor, displayName.c_str());
     if (entry.isDirectory) {
-        std::error_code ec;
-        int count = 0;
-        for (auto it = std::filesystem::directory_iterator(entry.fullPath, ec);
-             it != std::filesystem::directory_iterator() && !ec; ++it)
-            ++count;
-        const std::string sizeLabel = std::format("{} items", count);
+        const std::string sizeLabel = entry.itemCount >= 0
+            ? std::format("{} items", entry.itemCount)
+            : std::string("-- items");
         const ImVec2 sizeSz = ImGui::CalcTextSize(sizeLabel.c_str());
         const ImVec2 sizePos = ImVec2(
             tileMin.x + std::max(4.0f, (thumbSize + kThumbPad * 2.0f - sizeSz.x) * 0.5f),
@@ -386,7 +459,7 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
         dl->AddText(sizePos, ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)), sizeLabel.c_str());
     }
     if (clicked) {
-        if (entry.isDirectory) NavigateTo(std::filesystem::path(entry.fullPath));
+        if (entry.isDirectory) m_pendingNavigate = entry.fullPath;
         else SelectEntry(entry);
     }
     ImGui::EndChild();

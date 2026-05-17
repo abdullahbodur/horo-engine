@@ -156,6 +156,8 @@ void OpenGLFramebuffer::Bind() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferId);
     glViewport(0, 0, static_cast<GLsizei>(m_spec.width),
                static_cast<GLsizei>(m_spec.height));
+    if (!m_colorAttachments.empty())
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
 }
 
 void OpenGLFramebuffer::Unbind() {

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,6 +22,7 @@ struct FileBrowserEntry {
     std::string name;           /**< Display name (file or directory name). */
     std::string fullPath;       /**< Absolute filesystem path. */
     uint64_t sizeBytes = 0;     /**< File size in bytes (0 for directories). */
+    int itemCount = -1;         /**< Number of items in directory (-1 = not a directory / not counted). */
     bool isDirectory = false;   /**< True for directories. */
     bool isSelected = false;    /**< True when this entry is the current selection. */
     std::string extension;      /**< Lowercase extension including dot (e.g. ".fbx"). */
@@ -104,6 +106,15 @@ public:
     /** @brief Returns the current state for external inspection (read-only). */
     const FileBrowserState& State() const { return m_state; }
 
+    /** @brief Sets the large FA font used for thumbnail icon rendering.
+     *
+     *  This font is only pushed during DrawThumbnailTile and does not affect
+     *  toolbar, search, or any other UI icon rendering.  Call once during
+     *  editor initialisation after loading the large FA font.
+     *  @param font  Standalone FontAwesome font loaded at a larger pixel size.
+     */
+    static void SetLargeIconFont(ImFont* font);
+
 private:
     /** @brief Reads the current directory and populates m_state.entries. */
     void RefreshEntries();
@@ -140,6 +151,8 @@ private:
 
     FileBrowserState m_state;
 
+    static ImFont* s_largeIconFont;   /**< Standalone FA font for thumbnail icons (not merged). */
+
     // Drag-and-drop hit testing
     float m_modalMinX = 0, m_modalMinY = 0, m_modalMaxX = 0, m_modalMaxY = 0;
     float m_dropZoneMinY = 0, m_dropZoneMaxY = 0;
@@ -151,13 +164,16 @@ private:
     static constexpr float kThumbPad = 10.0f;
 
     // Mesh preview cache keyed by absolute file path
-    struct MeshPreviewCache {
+    struct PreviewCacheEntry {
         std::string path;
         ImTextureID textureId = 0;
         bool loaded = false;
         bool failed = false;
     };
-    std::unordered_map<std::string, MeshPreviewCache> m_previewCache;
+    std::unordered_map<std::string, PreviewCacheEntry> m_previewCache;
+    std::unordered_map<std::string, PreviewCacheEntry> m_texturePreviewCache; /**< Cached texture image previews (PNG, JPG, etc.). */
+
+    std::optional<std::filesystem::path> m_pendingNavigate; /**< Deferred directory navigation to avoid invalidating grid iteration. */
 };
 
 } // namespace Horo::Editor

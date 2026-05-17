@@ -317,7 +317,14 @@ void EditorImportAssetModal::DrawLeftPanel() {
     ImGui::Spacing();
 
     // File browser: nav/search fixed, grid scrolls internally
-    m_fileBrowser.Draw(gridH);
+    if (m_fileBrowser.Draw(gridH)) {
+        if (m_fileBrowser.HasSelection()) {
+            m_draft.sourcePath = m_fileBrowser.GetSelectedFilePath();
+            RefreshImporterFromExtension();
+            RefreshIdentitiesFromPath();
+            RefreshTextureSlotsFromFbxPreview();
+        }
+    }
 
     // Status bar at the bottom
     m_fileBrowser.DrawStatusBar();
@@ -937,9 +944,13 @@ ImportAssetRequest EditorImportAssetModal::ConsumePendingRequest() {
 void EditorImportAssetModal::SetLastResult(const ImportAssetOutcome &outcome) {
     m_lastResult = outcome;
     m_hasResult = true;
-    // Auto-close on success with no diagnostics
-    if (outcome.ok && outcome.diagnostics.empty())
-        m_open = false;
+    if (outcome.ok) {
+        const bool hasErrors = std::ranges::any_of(outcome.diagnostics, [](const auto& d) {
+            return d.severity == AssetDiagnosticSeverity::Error;
+        });
+        if (!hasErrors)
+            m_open = false;
+    }
 }
 
 /** @copydoc EditorImportAssetModal::SetDraftForTest */

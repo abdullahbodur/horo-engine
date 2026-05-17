@@ -418,6 +418,12 @@ namespace Horo::Editor {
                 const fs::path normalisedFilename(normalise(record.filename));
                 candidates.emplace_back(sourceDir / normalisedFilename);
                 candidates.emplace_back(sourceDir / "textures" / normalisedFilename);
+                // Also search parent directories for shared texture folders
+                if (sourceDir.has_parent_path()) {
+                    candidates.emplace_back(sourceDir.parent_path() / "textures" / normalisedFilename);
+                    if (sourceDir.parent_path().has_parent_path())
+                        candidates.emplace_back(sourceDir.parent_path().parent_path() / "textures" / normalisedFilename);
+                }
             }
 
             for (const fs::path &candidate: candidates) {

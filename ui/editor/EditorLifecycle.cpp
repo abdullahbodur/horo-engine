@@ -47,6 +47,7 @@
 #include "ui/HoroTheme.h"
 #include "ui/IconsFontAwesome6.h"
 #include "ui/UiFonts.h"
+#include "ui/editor/components/EditorFileBrowser.h"
 
 namespace Horo::Editor {
 namespace {
@@ -67,6 +68,21 @@ void LoadEditorFonts(ImGuiIO &io) {
     static constexpr std::array<ImWchar, 3> iconRanges = {ICON_MIN_FA, ICON_MAX_FA, 0};
     io.Fonts->AddFontFromFileTTF(resolved.resolvedPath.string().c_str(),
                                  14.0f, &faCfg, iconRanges.data());
+  }
+
+  // Standalone large FA font for thumbnail icons (not merged — keeps toolbar/search unaffected)
+  const Ui::FontFamilyConfig faLargeConfig{.relativePath = "assets/fonts/FontAwesome6.ttf",
+                                           .size = 72.0f};
+  if (const Ui::FontResolutionResult faLargeResolved = Ui::ResolveFontPath(faLargeConfig);
+      faLargeResolved.found) {
+    ImFontConfig faLargeCfg;
+    faLargeCfg.GlyphMinAdvanceX = 72.0f;
+    static constexpr std::array<ImWchar, 3> iconRangesLarge = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    if (ImFont *largeFont = io.Fonts->AddFontFromFileTTF(
+            faLargeResolved.resolvedPath.string().c_str(),
+            72.0f, &faLargeCfg, iconRangesLarge.data())) {
+      EditorFileBrowser::SetLargeIconFont(largeFont);
+    }
   }
 }
 
