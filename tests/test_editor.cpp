@@ -2037,6 +2037,22 @@ TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[ed
   REQUIRE(ray.direction.z < 0.0f); // pointing toward -Z (into the scene)
 }
 
+TEST_CASE("ScaleScreenPointToRenderTarget: scales window coordinates to render pixels", "[editor][raycaster]") {
+  const Vec2 scaled =
+      ScaleScreenPointToRenderTarget(360.0f, 230.0f, 1440, 920, 2880, 1840);
+
+  CHECK(scaled.x == Approx(720.0f));
+  CHECK(scaled.y == Approx(460.0f));
+}
+
+TEST_CASE("ScaleScreenPointToRenderTarget: invalid dimensions leave point unchanged", "[editor][raycaster]") {
+  const Vec2 scaled =
+      ScaleScreenPointToRenderTarget(360.0f, 230.0f, 0, 920, 2880, 1840);
+
+  CHECK(scaled.x == Approx(360.0f));
+  CHECK(scaled.y == Approx(230.0f));
+}
+
 TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]") {
   Camera cam;
   cam.position = {0.0f, 0.0f, 5.0f};

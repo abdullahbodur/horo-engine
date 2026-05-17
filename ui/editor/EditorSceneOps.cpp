@@ -500,21 +500,33 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
   double mx = 0.0;
   double my = 0.0;
   glfwGetCursorPos(m_window, &mx, &my);
-  const Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my),
-                              screenW, screenH, cam);
+  int windowW = 0;
+  int windowH = 0;
+  glfwGetWindowSize(m_window, &windowW, &windowH);
+  const Vec2 mouse = ScaleScreenPointToRenderTarget(
+      static_cast<float>(mx), static_cast<float>(my), windowW, windowH,
+      screenW, screenH);
+  const Ray ray = ScreenToRay(mouse.x, mouse.y, screenW, screenH, cam);
+  LogInfo("[Editor] Drop ray: origin=({}, {}, {}), dir=({}, {}, {})",
+          ray.origin.x, ray.origin.y, ray.origin.z,
+          ray.direction.x, ray.direction.y, ray.direction.z);
 
   const SceneObject droppedObject =
       MakeObjectFromAsset(m_document, assetId, m_schema);
   const Vec3 droppedHalf = ResolveObjectPlacementHalfExtents(droppedObject);
+  LogInfo("[Editor] Dropped object half-extents: ({}, {}, {})",
+          droppedHalf.x, droppedHalf.y, droppedHalf.z);
 
   RayAabbHit bestHit;
   bool hasSurfaceHit = false;
+  int surfaceCandidates = 0;
   for (const SceneObject &object : m_document.objects) {
     Vec3 center = Vec3::Zero();
     Vec3 half = Vec3::Zero();
     if (!TryGetPlacementSurfaceBounds(m_liveRegistry, object, &center, &half))
       continue;
-
+    ++surfaceCandidates;
+    
     RayAabbHit hit;
     if (!RayVsAABBHit(ray, center, half, &hit))
       continue;
@@ -523,20 +535,29 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
       hasSurfaceHit = true;
     }
   }
+  LogInfo("[Editor] Checked {} surface candidates, hasSurfaceHit={}",
+          surfaceCandidates, hasSurfaceHit);
 
   if (hasSurfaceHit) {
     *outPosition = bestHit.point +
                    bestHit.normal *
                        ProjectHalfExtentOntoNormal(droppedHalf, bestHit.normal);
+    LogInfo("[Editor] Surface hit at distance {}, point=({}, {}, {})",
+            bestHit.distance, bestHit.point.x, bestHit.point.y, bestHit.point.z);
     return true;
   }
 
   Vec3 groundHit = Vec3::Zero();
-  if (!TryIntersectGroundPlane(ray, &groundHit))
+  if (!TryIntersectGroundPlane(ray, &groundHit)) {
+    LogInfo("[Editor] Ground plane intersection failed: ray.direction.y={}",
+            ray.direction.y);
     return false;
+  }
 
   *outPosition = groundHit + Vec3::Up() * ProjectHalfExtentOntoNormal(
                                               droppedHalf, Vec3::Up());
+  LogInfo("[Editor] Ground plane hit at ({}, {}, {})",
+          groundHit.x, groundHit.y, groundHit.z);
   return true;
 }
 

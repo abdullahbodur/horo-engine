@@ -578,6 +578,8 @@ const char *EditorPanelTabLabel(EditorPanelTab tab) {
     return "Scene";
   case Project:
     return "Project";
+  case Favorites:
+    return "Favorites";
   case Viewport:
     return "Viewport";
   case Assets:

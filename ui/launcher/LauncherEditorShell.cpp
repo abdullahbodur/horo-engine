@@ -1504,32 +1504,60 @@ std::shared_ptr<Shader> LauncherEditorShell::EnsureSceneShader() {
 /** @copydoc LauncherEditorShell::LoadMeshForTag */
 std::shared_ptr<Mesh>
 LauncherEditorShell::LoadMeshForTag(const std::string &meshTag) {
-  if (meshTag.empty())
-    return {};
-
-  if (const auto it = m_meshCache.find(meshTag); it != m_meshCache.end())
-    return it->second;
-
-  auto mesh = std::make_shared<Mesh>();
-  try {
-    if (meshTag == "box")
-      *mesh = Mesh::CreateBox();
-    else if (meshTag == "sphere")
-      *mesh = Mesh::CreateSphere();
-    else if (meshTag == "cylinder")
-      *mesh = Mesh::CreateCylinder();
-    else if (meshTag == "pyramid")
-      *mesh = Mesh::CreatePyramid();
-    else if (meshTag == "plane")
-      *mesh = Mesh::CreatePlane();
-    else
-      *mesh = ObjLoader::Load(ResolveAssetPath(meshTag).string());
-  } catch (const ObjLoader::ObjLoaderException &e) {
-    LogWarn("[Launcher] Failed to load mesh '{}': {}", meshTag, e.what());
+  if (meshTag.empty()) {
+    LogWarn("[Launcher] LoadMeshForTag: empty meshTag");
     return {};
   }
 
-  m_meshCache[meshTag] = mesh;
+  LogInfo("[Launcher] LoadMeshForTag: loading '{}'", meshTag);
+
+  if (const auto it = m_tagMeshCache.find(meshTag); it != m_tagMeshCache.end()) {
+    LogInfo("[Launcher] LoadMeshForTag: '{}' found in tag cache", meshTag);
+    return it->second;
+  }
+
+  auto mesh = std::make_shared<Mesh>();
+  if (meshTag == "box") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'box'");
+    *mesh = Mesh::CreateBox();
+  } else if (meshTag == "sphere") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'sphere'");
+    *mesh = Mesh::CreateSphere();
+  } else if (meshTag == "cylinder") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'cylinder'");
+    *mesh = Mesh::CreateCylinder();
+  } else if (meshTag == "pyramid") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'pyramid'");
+    *mesh = Mesh::CreatePyramid();
+  } else if (meshTag == "plane") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'plane'");
+    *mesh = Mesh::CreatePlane();
+  } else {
+    const std::filesystem::path resolvedPath = ResolveAssetPath(meshTag);
+    LogInfo("[Launcher] LoadMeshForTag: loading mesh from path '{}'", resolvedPath.string());
+
+    if (!std::filesystem::exists(resolvedPath)) {
+      LogWarn("[Launcher] LoadMeshForTag: mesh file does not exist: {}", resolvedPath.string());
+      return {};
+    }
+
+    mesh = m_meshCache.Get(resolvedPath.string());
+    if (!mesh) {
+      LogWarn("[Launcher] LoadMeshForTag: MeshCache returned null for '{}'", resolvedPath.string());
+      return {};
+    }
+
+    if (!mesh->IsValid()) {
+      LogWarn("[Launcher] LoadMeshForTag: mesh '{}' is not valid (empty or failed to load)", meshTag);
+      return {};
+    }
+
+    LogInfo("[Launcher] LoadMeshForTag: successfully loaded '{}' with {} vertices",
+            meshTag, mesh->GetVertices().size());
+  }
+
+  m_tagMeshCache[meshTag] = mesh;
+  LogInfo("[Launcher] LoadMeshForTag: '{}' cached and returned", meshTag);
   return mesh;
 }
 

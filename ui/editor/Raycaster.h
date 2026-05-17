@@ -2,6 +2,7 @@
  *  @brief Ray construction and intersection utilities for viewport picking.
  */
 #pragma once
+#include "math/Vec2.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
 
@@ -29,6 +30,19 @@ namespace Horo::Editor {
      */
     Ray ScreenToRay(float mouseX, float mouseY, int screenW, int screenH,
                     const Camera &cam);
+
+    /** @brief Converts a point from window coordinates to render-target pixel coordinates.
+     *  @param x       Point X in the source window coordinate space.
+     *  @param y       Point Y in the source window coordinate space.
+     *  @param sourceW Width of the source window coordinate space.
+     *  @param sourceH Height of the source window coordinate space.
+     *  @param renderW Width of the render target being ray-cast.
+     *  @param renderH Height of the render target being ray-cast.
+     *  @return The point scaled into render-target coordinates; unchanged if any dimension is invalid.
+     */
+    Vec2 ScaleScreenPointToRenderTarget(float x, float y, int sourceW,
+                                        int sourceH, int renderW,
+                                        int renderH);
 
     /** @brief Tests a ray against an axis-aligned bounding box (slab method) and fills hit details.
      *  @param ray    The ray to test.

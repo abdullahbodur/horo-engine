@@ -316,8 +316,6 @@ void EditorLayer::DrawTreeNode(int idx, SceneDocument &doc, bool isPrimary,
   const bool hasChildren = !children[static_cast<size_t>(idx)].empty();
 
   auto nodeLabel = std::format("{}  {}", ObjectTypeIcon(obj.type), obj.id);
-  if (!obj.assetId.empty())
-    nodeLabel += std::format("  [{}]", obj.assetId);
 
   const Ui::EditorTheme &theme = Ui::GetEditorTheme();
   Ui::EditorTreeItemSpec spec;
@@ -394,22 +392,14 @@ void EditorLayer::DrawObjectsTreeSearchMode( // NOSONAR: cpp:S3776 search-mode
 
     const float lineH = ImGui::GetTextLineHeight();
 
-    if (const float rowH = obj.assetId.empty() ? lineH : lineH * 2.0f + 2.0f;
-        ImGui::Selectable(selectableId.c_str(), IsSelected(i), 0,
-                          ImVec2(0, rowH)))
+    if (ImGui::Selectable(selectableId.c_str(), IsSelected(i), 0,
+                          ImVec2(0, lineH)))
       applySearchSelection(i);
     ImGui::SameLine();
     {
-      const ImVec2 pos = ImGui::GetCursorScreenPos();
-      ImGui::BeginGroup();
       ImGui::TextDisabled("%s", icon);
       ImGui::SameLine(0.0f, 4.0f);
       ImGui::Text("%s", obj.id.c_str());
-      if (!obj.assetId.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + lineH + 2.0f));
-        ImGui::TextDisabled("  > %s", obj.assetId.c_str());
-      }
-      ImGui::EndGroup();
     }
 
     ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 20.0f);

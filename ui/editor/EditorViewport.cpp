@@ -26,6 +26,7 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 #include "ui/IconsFontAwesome6.h"
+#include "ui/editor/Raycaster.h"
 #include "ui/HoroTheme.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
@@ -114,24 +115,38 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
 bool EditorLayer::HandleViewportAssetDrop(const Camera &cam, int screenW,
                                           int screenH,
                                           const char *assetIdText) {
-  if (!assetIdText)
+  if (!assetIdText) {
+    LogWarn("[Editor] Viewport drop rejected: null assetIdText");
     return false;
+  }
   const std::string assetId(assetIdText);
+  LogInfo("[Editor] Viewport drop started for asset '{}'", assetId);
+
   if (!m_document.assets.contains(assetId)) {
     LogWarn("[Editor] Viewport drop rejected: missing asset '{}'", assetId);
     return false;
   }
+
+  const auto& asset = m_document.assets.at(assetId);
+  LogInfo("[Editor] Asset '{}' mesh path: '{}', albedo: '{}'",
+          assetId, asset.mesh, asset.albedoMap);
+
   Vec3 dropPos = Vec3::Zero();
   if (!TryBuildViewportDropPosition(cam, screenW, screenH, assetId, &dropPos)) {
     LogWarn("[Editor] Viewport drop rejected: camera ray did not hit "
-            "a placement surface");
+            "a placement surface (ray origin: {}, dir: {})",
+            cam.position.ToString(), (cam.target - cam.position).ToString());
     return false;
   }
+  LogInfo("[Editor] Viewport drop position calculated: ({}, {}, {})",
+          dropPos.x, dropPos.y, dropPos.z);
+
   if (std::string createError; !CreateObjectFromAsset(
           assetId, "", &dropPos, nullptr, nullptr, &createError)) {
     LogWarn("[Editor] Viewport drop failed: {}", createError);
     return false;
   }
+  LogInfo("[Editor] Viewport drop succeeded for asset '{}'", assetId);
   return true;
 }
 
@@ -389,12 +404,13 @@ void EditorLayer::HandlePicking(const Camera &cam, int screenW, int screenH) {
                                    static_cast<float>(my), 2.0f))
     return;
 
-  // Scale screen coordinates to framebuffer pixels for ray casting.
-  float xscale = 1.0f;
-  float yscale = 1.0f;
-  glfwGetWindowContentScale(m_window, &xscale, &yscale);
-  Ray ray = ScreenToRay(static_cast<float>(mx) * xscale,
-                        static_cast<float>(my) * yscale, screenW, screenH, cam);
+  int windowW = 0;
+  int windowH = 0;
+  glfwGetWindowSize(m_window, &windowW, &windowH);
+  const Vec2 mouse = ScaleScreenPointToRenderTarget(
+      static_cast<float>(mx), static_cast<float>(my), windowW, windowH,
+      screenW, screenH);
+  Ray ray = ScreenToRay(mouse.x, mouse.y, screenW, screenH, cam);
 
   float bestT = std::numeric_limits<float>::max();
   int bestIdx = -1;

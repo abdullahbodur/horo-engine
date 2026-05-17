@@ -175,6 +175,7 @@ namespace Horo::Editor {
             outcome.assetAlbedoMap = result.asset.albedoMap;
             m_document.assets[req.assetId] = result.asset;
             m_document.dirty = true;
+            SaveDocument(nullptr);
         }
         m_importAssetModal.SetLastResult(outcome);
     }

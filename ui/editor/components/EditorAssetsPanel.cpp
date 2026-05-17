@@ -229,8 +229,11 @@ namespace Horo::Editor
 
         ImGui::InvisibleButton("##asset_tile_select",
                                ImVec2(dims.tileW - 2.0f, dims.tileH - 2.0f));
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             *state.selectedAssetId = isSelectedAsset ? std::string() : assetId;
+            if (!isSelectedAsset && state.selectedIndices)
+                state.selectedIndices->clear();
+        }
 
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
         {
@@ -282,9 +285,8 @@ namespace Horo::Editor
     void EditorAssetsPanel::DrawAddAssetTile(const EditorAssetsPanelCallbacks& callbacks,
                                               const AssetTileDimensions& dims) const
     {
-        // Reserve enough height for the thumbnail area plus two label lines.
         const float lineH = ImGui::GetTextLineHeight();
-        const float labelH = 4.0f + lineH + 2.0f + lineH + 4.0f; // gap + line1 + gap + line2 + bottom margin
+        const float labelH = 6.0f + lineH + 4.0f;
         const float addTileH = dims.thumbPad * 2.0f + dims.thumbSize + labelH;
         // Use at least tileH so the tile is never shorter than regular tiles
         const float childH = std::max(dims.tileH, addTileH);
@@ -351,23 +353,13 @@ namespace Horo::Editor
 
         dl->AddText(font, iconFontSize, iconPos, iconColor, ICON_FA_PLUS);
 
-        // Labels below thumbnail — both lines are guaranteed to fit inside childH
-        const float labelY = thumbMax.y + 4.0f;
-
-        const char* line1 = "Drag & Drop";
-        const ImVec2 sz1 = ImGui::CalcTextSize(line1);
+        const float labelY = thumbMax.y + 6.0f;
+        const char* label = "Add Asset";
+        const ImVec2 sz = ImGui::CalcTextSize(label);
         dl->AddText(
-            ImVec2(tileMin.x + std::max(0.0f, (dims.tileW - sz1.x) * 0.5f), labelY),
-            ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)),
-            line1);
-
-        const char* line2 = "Add Asset";
-        const ImVec2 sz2 = ImGui::CalcTextSize(line2);
-        dl->AddText(
-            ImVec2(tileMin.x + std::max(0.0f, (dims.tileW - sz2.x) * 0.5f),
-                   labelY + lineH + 2.0f),
+            ImVec2(tileMin.x + std::max(7.0f, (dims.tileW - sz.x) * 0.5f), labelY),
             ImGui::GetColorU32(ImGuiCol_Text),
-            line2);
+            label);
 
         ImGui::EndChild();
     }
@@ -389,7 +381,9 @@ namespace Horo::Editor
             static_cast<float>(columns);
         dims.thumbPad = 8.0f;
         dims.thumbSize = dims.tileW - dims.thumbPad * 2.0f;
-        dims.tileH = dims.thumbSize + dims.thumbPad * 2.0f + 22.0f;
+        const float lineH = ImGui::GetTextLineHeight();
+        const float labelH = 6.0f + lineH + 4.0f;
+        dims.tileH = dims.thumbPad * 2.0f + dims.thumbSize + labelH;
 
         int shownAssetCount = 0;
         for (const auto& assetId : assetIds)

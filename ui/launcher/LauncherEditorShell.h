@@ -15,6 +15,7 @@
 #include "ui/launcher/LauncherProject.h"
 #include "renderer/Camera.h"
 #include "renderer/Mesh.h"
+#include "renderer/MeshCache.h"
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"
 #include "scene/Scene.h"
@@ -113,9 +114,10 @@ private:
   ExternalProcessRunner m_processRunner;           /**< Manages the build/run child process. */
 
   std::shared_ptr<Shader> m_sceneShader;           /**< Shader used to render the scene preview. */
+  MeshCache m_meshCache;                           /**< File-path keyed mesh cache for runtime loading. */
   std::unordered_map<std::string, std::shared_ptr<Mesh>, StringHash,
                      std::equal_to<>>
-      m_meshCache;                                 /**< Cache of loaded meshes keyed by tag. */
+      m_tagMeshCache;                              /**< Cache of loaded meshes keyed by tag. */
   std::unordered_map<std::string, std::shared_ptr<Texture>, StringHash,
                      std::equal_to<>>
       m_textureCache;                              /**< Cache of loaded textures keyed by path. */

@@ -580,6 +580,7 @@ void ErrorText(const EditorTheme &theme, const char *text);
 enum class EditorPanelTab {
   Scene,     /**< Hierarchy / scene graph view. */
   Project,   /**< Project file browser. */
+  Favorites, /**< Favorited project files. */
   Viewport,  /**< 3D viewport. */
   Assets,    /**< Asset registry grid. */
   Console,   /**< Log / console output. */

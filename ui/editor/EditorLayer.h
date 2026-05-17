@@ -25,6 +25,7 @@
 #include "ui/editor/components/EditorImportAssetModal.h"
 #include "ui/editor/components/EditorToolbar.h"
 #include "ui/editor/components/EditorUIWidgets.h"
+#include "ui/UiComponents.h"
 #include "mcp/McpController.h"
 #include "renderer/Camera.h"
 #include "renderer/Shader.h"
@@ -446,7 +447,11 @@ namespace Horo {
              *  Populates m_projectPanelError on failure; clears it on success. */
             void HandleProjectCreateSubmit();
 
-            /** @brief Draws the Favorites and root nodes of the project tree.
+            /** @brief Draws the Favorites tree view with placeholder content.
+ *  @param theme Editor theme for styling. */
+void DrawProjectFavoritesTree(const Ui::EditorTheme& theme);
+
+/** @brief Draws the Favorites and root nodes of the project tree.
              *  @param theme Active editor theme. */
             void DrawProjectTree(const Ui::EditorTheme& theme);
 
@@ -873,6 +878,7 @@ namespace Horo {
             bool m_projectPanelCreateFolder = true;         /**< Create modal target type: folder when true, file when false. */
             std::string m_projectPanelCreateName;           /**< Draft name entered in project create modal. */
             std::string m_projectPanelError;                /**< Latest project panel filesystem error message. */
+            Ui::EditorPanelTab m_projectPanelTab = Ui::EditorPanelTab::Project; /**< Active tab in the project panel. */
             EditorWorkspaceDocument m_workspaceDocument;    /**< Persisted workspace settings and layout state. */
             bool m_workspaceStateDirty = false;             /**< True when workspace state has unsaved changes. */
             std::function<void()> m_fileMenuRenderCallback; /**< Optional host callback for extra File menu items. */

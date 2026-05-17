@@ -39,6 +39,17 @@ namespace Horo::Editor {
         return r;
     }
 
+    /** @copydoc ScaleScreenPointToRenderTarget */
+    Vec2 ScaleScreenPointToRenderTarget(float x, float y, int sourceW,
+                                        int sourceH, int renderW,
+                                        int renderH) {
+        if (sourceW <= 0 || sourceH <= 0 || renderW <= 0 || renderH <= 0)
+            return {x, y};
+
+        return {x * static_cast<float>(renderW) / static_cast<float>(sourceW),
+                y * static_cast<float>(renderH) / static_cast<float>(sourceH)};
+    }
+
     /** @copydoc RayVsAABBHit */
     bool RayVsAABBHit(const Ray &ray, const Vec3 &center, const Vec3 &half,
                       RayAabbHit *outHit) {

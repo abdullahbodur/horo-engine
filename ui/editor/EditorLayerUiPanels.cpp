@@ -388,7 +388,8 @@ namespace Horo::Editor
     const Ui::EditorTheme& theme = Ui::GetEditorTheme();
 
     const std::array projectTabs = {
-      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Project, true},
+      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Project,   m_projectPanelTab == Ui::EditorPanelTab::Project},
+      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Favorites, m_projectPanelTab == Ui::EditorPanelTab::Favorites},
     };
     const std::array projectActions = {
       Ui::EditorPanelActionItem{ICON_FA_PLUS},
@@ -401,6 +402,13 @@ namespace Horo::Editor
       ImGui::OpenPopup("##project_add_menu");
     if (topBar.clickedActionIndex == 1)
       ImGui::OpenPopup("##project_panel_menu");
+    if (topBar.clickedTabIndex >= 0)
+    {
+      if (topBar.clickedTabIndex == 0)
+        m_projectPanelTab = Ui::EditorPanelTab::Project;
+      else if (topBar.clickedTabIndex == 1)
+        m_projectPanelTab = Ui::EditorPanelTab::Favorites;
+    }
 
     DrawProjectAddPopup();
     DrawProjectMorePopup();
@@ -423,6 +431,10 @@ namespace Horo::Editor
       !std::filesystem::is_directory(m_projectBrowserRoot))
     {
       ImGui::TextDisabled("Set project root to browse files.");
+    }
+    else if (m_projectPanelTab == Ui::EditorPanelTab::Favorites)
+    {
+      DrawProjectFavoritesTree(theme);
     }
     else
     {
@@ -556,66 +568,26 @@ namespace Horo::Editor
   /** @copydoc EditorLayer::DrawProjectTree */
   void EditorLayer::DrawProjectTree(const Ui::EditorTheme& theme)
   {
-    const auto& palette = theme.palette;
     ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
+    DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+    ImGui::EndChild();
+  }
 
-    {
-      const ImGuiTreeNodeFlags topFlags =
-        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-      const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
+  /** @brief Draws the favorites tree with placeholder content. */
+  void EditorLayer::DrawProjectFavoritesTree(const Ui::EditorTheme& theme)
+  {
+    const auto& palette = theme.palette;
+    ImGui::BeginChild("##project_favorites_tree", ImVec2(0, 0), false);
 
-      if (m_projectPanelCollapseAllRequested)
-        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-      else
-        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-
-      Ui::EditorTreeItemSpec favSpec;
-      favSpec.id = "##project_favorites_node";
-      favSpec.label = "Favorites";
-      favSpec.prefixIcon = ICON_FA_FOLDER_OPEN;
-      favSpec.kind = Ui::EditorTreeItemKind::Node;
-      favSpec.treeFlags = topFlags;
-      favSpec.normalTextColor = &theme.palette.text;
-      if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open)
-      {
-        ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
-        constexpr const char* kNoFavoritesText = "No favorites yet.";
-        const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
-        constexpr float kPlaceholderBlockHeight = 24.0f;
-        const float blockStartY = ImGui::GetCursorPosY();
-        const float centeredY =
-          blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
-        ImGui::SetCursorPosY(centeredY);
-        ImGui::TextUnformatted(kNoFavoritesText);
-        ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
-        ImGui::PopStyleColor();
-        ImGui::TreePop();
-      }
-
-      ImGui::Separator();
-      ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-      std::string rootName = m_projectBrowserRoot.filename().string();
-      if (rootName.empty())
-        rootName = m_projectBrowserRoot.generic_string();
-      if (m_projectPanelCollapseAllRequested)
-        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-      else
-        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-
-      Ui::EditorTreeItemSpec rootSpec;
-      rootSpec.id = "##project_root_node";
-      rootSpec.label = rootName.c_str();
-      rootSpec.prefixIcon = ICON_FA_FOLDER;
-      rootSpec.kind = Ui::EditorTreeItemKind::Node;
-      rootSpec.treeFlags = topFlags;
-      rootSpec.normalTextColor = &theme.palette.text;
-      if (const auto rootRes = Ui::DrawEditorTreeItem(theme, rootSpec); rootRes.open)
-      {
-        DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
-        ImGui::TreePop();
-      }
-    }
+    ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
+    constexpr const char* kNoFavoritesText = "No favorites yet.";
+    const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
+    const float contentW = ImGui::GetContentRegionAvail().x;
+    const float contentH = ImGui::GetContentRegionAvail().y;
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + contentH * 0.4f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (contentW - textSize.x) * 0.5f);
+    ImGui::TextUnformatted(kNoFavoritesText);
+    ImGui::PopStyleColor();
 
     ImGui::EndChild();
   }
@@ -896,4 +868,3 @@ namespace Horo::Editor
       ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
   }
 } // namespace Horo::Editor
-
