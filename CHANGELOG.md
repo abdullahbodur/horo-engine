@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.0](https://github.com/abdullahbodur/horo-engine/compare/HoroEngine-v0.2.0...HoroEngine-v0.3.0) (2026-05-17)
+
+
+### Features
+
+* **editor,launcher:** reorganize UI modules and add editor panel theme HORO-58 ([905650b](https://github.com/abdullahbodur/horo-engine/commit/905650ba1e7166911b4c471f257718ea4b3a3e9b))
+* **editor:** add AssetGuidRegistry for cross-asset GUID lookup ([#215](https://github.com/abdullahbodur/horo-engine/issues/215)) ([6143ace](https://github.com/abdullahbodur/horo-engine/commit/6143ace483221d9760df6432e557397df039d503))
+* **editor:** compact project tree layout (HORO-41) ([#232](https://github.com/abdullahbodur/horo-engine/issues/232)) ([5839dbb](https://github.com/abdullahbodur/horo-engine/commit/5839dbb9e154137836366b408c2747bde73443f7))
+* **editor:** introduce typed diagnostic codes for asset importers ([8fcffab](https://github.com/abdullahbodur/horo-engine/commit/8fcffabfe4444e4a3d433e931198c560958e9896))
+* **editor:** typed diagnostic codes for asset importers (HORO-91) ([#216](https://github.com/abdullahbodur/horo-engine/issues/216)) ([40a36d1](https://github.com/abdullahbodur/horo-engine/commit/40a36d1bb82202d6cddd80dfef508c00dd984891))
+* **renderer:** FBX support (HORO-94) ([#217](https://github.com/abdullahbodur/horo-engine/issues/217)) ([9812590](https://github.com/abdullahbodur/horo-engine/commit/981259036a65102f7a16e398a28944ef553d5ef4))
+
+
+### Bug Fixes
+
+* **editor:** HiDPI gizmo and viewport picking HORO-58 ([#214](https://github.com/abdullahbodur/horo-engine/issues/214)) ([b3074c7](https://github.com/abdullahbodur/horo-engine/commit/b3074c7a49e7b567f0cd85304ecb1f1636f2c865))
+* remove file CTestCostData.txt HORO-38 ([5d022f9](https://github.com/abdullahbodur/horo-engine/commit/5d022f90444eed460bcdf5a5a297956e0d4dffca))
+* **renderer:** suppress MSVC C4100/C4189 for assert-only vars in release build ([11be3a8](https://github.com/abdullahbodur/horo-engine/commit/11be3a834a7be5c17472cb6e3dc3967a9b49ca09))
+* solve macOS NSImage crash and UI test item lookup regressions HORO-59 ([#208](https://github.com/abdullahbodur/horo-engine/issues/208)) ([652bd54](https://github.com/abdullahbodur/horo-engine/commit/652bd54394bae745f4b40e59299089c61eed7a04))
+
+
+### Refactoring
+
+* **renderer,editor:** adopt init-statements and span-based byte conversion ([c09c7cf](https://github.com/abdullahbodur/horo-engine/commit/c09c7cf3bf3c5a28722c052686fc7e41ee4e46f4))
+* **renderer,editor:** centralise binary IO and reduce cognitive complexity ([4d0c37e](https://github.com/abdullahbodur/horo-engine/commit/4d0c37ece5f88f7de4d7e212e4e00f0cb525f73e))
+* **renderer:** explicit MeshCache dispatch, no .fbx/.glb/.gltf rewrite (HORO-99) ([#218](https://github.com/abdullahbodur/horo-engine/issues/218)) ([c9de505](https://github.com/abdullahbodur/horo-engine/commit/c9de505dff4cd369de600c726cf503c4d95aee49))
+
 ## [0.2.0](https://github.com/abdullahbodur/horo-engine/compare/HoroEngine-v0.1.0...HoroEngine-v0.2.0) (2026-05-01)
 
 

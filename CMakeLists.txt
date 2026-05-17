@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 # x-release-please-start-version
-set(HORO_ENGINE_VERSION "0.2.0")
+set(HORO_ENGINE_VERSION "0.3.0")
 # x-release-please-end
 
 # Detect if this is a launcher build or embedded via add_subdirectory()
