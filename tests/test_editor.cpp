@@ -2230,6 +2230,24 @@ TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]")
   REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
 }
 
+TEST_CASE("Drop ray can fall back to camera focus plane", "[editor][dragdrop]") {
+  Camera cam;
+  cam.position = {0.0f, 1.0f, 5.0f};
+  cam.target = {0.0f, 1.0f, 0.0f};
+  cam.up = Vec3::Up();
+
+  Ray r;
+  r.origin = cam.position;
+  r.direction = cam.GetForward();
+
+  Vec3 hit = Vec3::Zero();
+  REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
+  REQUIRE(TryIntersectCameraFocusPlane(r, cam, &hit));
+  REQUIRE(hit.x == Approx(cam.target.x).margin(1e-4f));
+  REQUIRE(hit.y == Approx(cam.target.y).margin(1e-4f));
+  REQUIRE(hit.z == Approx(cam.target.z).margin(1e-4f));
+}
+
 TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdrop]") {
   Ray ray;
   ray.origin = {0.0f, 5.0f, 0.0f};

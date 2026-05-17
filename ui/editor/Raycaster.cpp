@@ -144,4 +144,26 @@ namespace Horo::Editor {
         };
         return true;
     }
+
+    /** @copydoc TryIntersectCameraFocusPlane */
+    bool TryIntersectCameraFocusPlane(const Ray &ray, const Camera &cam,
+                                      Vec3 *outHitPoint) {
+        if (!outHitPoint)
+            return false;
+
+        const Vec3 planeNormal = cam.GetForward();
+        if (planeNormal.LengthSq() <= 1e-10f)
+            return false;
+
+        const float denom = Vec3::Dot(planeNormal, ray.direction);
+        if (std::abs(denom) <= 1e-5f)
+            return false;
+
+        const float t = Vec3::Dot(planeNormal, cam.target - ray.origin) / denom;
+        if (t <= 0.0f)
+            return false;
+
+        *outHitPoint = ray.origin + ray.direction * t;
+        return true;
+    }
 } // namespace Horo::Editor

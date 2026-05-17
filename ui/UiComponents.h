@@ -358,6 +358,25 @@ bool InputTextWithHint(const LauncherTheme &theme, const char *id,
                        ImGuiInputTextFlags flags = 0);
 
 /**
+ * @brief Renders a themed editor text input with an icon drawn inside the left edge.
+ *
+ * The icon is drawn separately from the hint text, and the input frame padding
+ * is widened so typed text and the caret begin after the icon.
+ * @param theme      Active editor theme.
+ * @param id         ImGui widget id.
+ * @param icon       Leading icon glyph, usually from IconsFontAwesome6.h.
+ * @param hint       Placeholder text shown when the buffer is empty.
+ * @param buffer     Writable text buffer.
+ * @param bufferSize Size of @p buffer in bytes.
+ * @param flags      Optional ImGuiInputTextFlags.
+ * @return True when the buffer content changes this frame.
+ */
+bool InputTextWithLeadingIcon(const EditorTheme &theme, const char *id,
+                              const char *icon, const char *hint,
+                              char *buffer, size_t bufferSize,
+                              ImGuiInputTextFlags flags = 0);
+
+/**
  * @brief Renders a themed combo box backed by a C string array (editor theme).
  *
  * Applies ScopedComboStyle and calls ImGui::Combo with the supplied items array.
@@ -373,6 +392,28 @@ bool Combo(const EditorTheme &theme, const char *label, int *currentItem,
 /** @brief Launcher-theme variant of Combo(). */
 bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount);
+
+/** @brief One selectable row in a themed multi-select dropdown. */
+struct MultiSelectDropdownItem {
+  const char *label = ""; /**< Visible option label. */
+  bool *selected = nullptr; /**< Pointer to the mutable selected state. */
+};
+
+/**
+ * @brief Renders a themed editor dropdown that allows selecting multiple items.
+ *
+ * When no options are selected, @p allLabel is shown and the list behaves as an
+ * unfiltered "all" state. Selecting the all row clears every option. Option
+ * rows keep the popup open so users can toggle several file types in one pass.
+ * @param theme    Active editor theme.
+ * @param id       ImGui widget id.
+ * @param items    Mutable item selection state.
+ * @param allLabel Label used for the all/none-selected state.
+ * @return True when any selection state changes this frame.
+ */
+bool MultiSelectDropdown(const EditorTheme &theme, const char *id,
+                         std::span<MultiSelectDropdownItem> items,
+                         const char *allLabel = "All");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tree row primitives
@@ -482,7 +523,7 @@ struct EditorTreeSearchSlotConfig {
   size_t              bufferSize   = 0;                   /**< Size of @p buffer in bytes. */
   float               width        = 0.0f;                /**< Input width; 0 = full available width. */
   ImGuiInputTextFlags flags        = 0;                   /**< Optional ImGuiInputTextFlags. */
-  bool                showFilterIcon = true;              /**< Prepend a filter/funnel icon to the field. */
+  bool                showFilterIcon = true;              /**< Draw a leading search icon inside the field. */
 };
 
 /**

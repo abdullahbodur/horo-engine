@@ -4,9 +4,12 @@
  */
 #include "ui/UiComponents.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <format>
 #include <string>
+#include <string_view>
 
 #include "ui/IconsFontAwesome6.h"
 
@@ -379,6 +382,34 @@ bool InputTextWithHint(const LauncherTheme &theme, const char *id,
   return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
 }
 
+/** @copydoc InputTextWithLeadingIcon */
+bool InputTextWithLeadingIcon(const EditorTheme &theme, const char *id,
+                              const char *icon, const char *hint,
+                              char *buffer, size_t bufferSize,
+                              ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  const float iconSize = GetIconSize(theme);
+  const float iconGap = std::max(6.0f, theme.density.itemSpacing);
+  const ImVec2 basePadding = theme.density.inputPadding;
+  ImGui::PushStyleVar(
+      ImGuiStyleVar_FramePadding,
+      ImVec2(basePadding.x + iconSize + iconGap, basePadding.y));
+  const bool changed =
+      ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
+  ImGui::PopStyleVar();
+
+  if (icon && icon[0] != '\0') {
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    const ImVec2 iconCenter(min.x + basePadding.x + iconSize * 0.5f,
+                            (min.y + max.y) * 0.5f);
+    DrawIcon(ImGui::GetWindowDrawList(), icon, iconCenter,
+             ImGui::GetColorU32(theme.palette.textMuted), iconSize);
+  }
+
+  return changed;
+}
+
 /** @copydoc Combo(const EditorTheme &, const char *, int *, const char *const[], int) */
 bool Combo(const EditorTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
@@ -391,6 +422,60 @@ bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
   ScopedComboStyle style(theme);
   return ImGui::Combo(label, currentItem, items, itemCount);
+}
+
+/** @copydoc MultiSelectDropdown */
+bool MultiSelectDropdown(const EditorTheme &theme, const char *id,
+                         std::span<MultiSelectDropdownItem> items,
+                         const char *allLabel) {
+  int selectedCount = 0;
+  const char *singleSelectedLabel = nullptr;
+  for (const MultiSelectDropdownItem &item : items) {
+    if (item.selected && *item.selected) {
+      ++selectedCount;
+      singleSelectedLabel = item.label;
+    }
+  }
+
+  std::string preview;
+  if (selectedCount == 0)
+    preview = allLabel ? allLabel : "All";
+  else if (selectedCount == 1)
+    preview = singleSelectedLabel ? singleSelectedLabel : "1 selected";
+  else
+    preview = std::format("{} selected", selectedCount);
+
+  bool changed = false;
+  ScopedComboStyle style(theme);
+  if (ImGui::BeginCombo(id, preview.c_str())) {
+    const bool allSelected = selectedCount == 0;
+    if (ImGui::Selectable(allLabel ? allLabel : "All", allSelected)) {
+      for (const MultiSelectDropdownItem &item : items) {
+        if (item.selected && *item.selected) {
+          *item.selected = false;
+          changed = true;
+        }
+      }
+    }
+    if (allSelected)
+      ImGui::SetItemDefaultFocus();
+
+    ImGui::Separator();
+    for (const MultiSelectDropdownItem &item : items) {
+      if (!item.selected)
+        continue;
+      bool selected = *item.selected;
+      if (ImGui::Selectable(item.label, selected,
+                            ImGuiSelectableFlags_DontClosePopups)) {
+        *item.selected = !selected;
+        changed = true;
+      }
+      if (*item.selected)
+        ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+  return changed;
 }
 
 /** @copydoc GetEditorTreeRowMetrics */
@@ -473,9 +558,14 @@ bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
   if (config.width > 0.0f)
     ImGui::SetNextItemWidth(config.width);
   ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
-  bool changed = InputTextWithHint(theme, config.id, config.placeholder,
-                                   config.buffer, config.bufferSize,
-                                   config.flags);
+  bool changed = config.showFilterIcon
+                     ? InputTextWithLeadingIcon(
+                           theme, config.id, ICON_FA_MAGNIFYING_GLASS,
+                           config.placeholder, config.buffer,
+                           config.bufferSize, config.flags)
+                     : InputTextWithHint(theme, config.id, config.placeholder,
+                                         config.buffer, config.bufferSize,
+                                         config.flags);
   ImGui::PopItemFlag();
 
   if (config.showFilterIcon && config.buffer != nullptr) {
@@ -488,8 +578,6 @@ bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
         changed = true;
       }
       ImGui::PopStyleColor();
-    } else {
-      ImGui::TextDisabled("%s", ICON_FA_FILTER);
     }
   }
 
@@ -885,7 +973,9 @@ bool BeginEditorPickerModal(const EditorPickerConfig& cfg,
         ImGui::TextDisabled("%s", cfg.prompt);
     ImGui::SetNextItemWidth(cfg.width - 32.0f);
     const char* hint = cfg.fieldHint ? cfg.fieldHint : "Search...";
-    ImGui::InputTextWithHint("##picker_query", hint, queryBuf, queryBufSize);
+    InputTextWithLeadingIcon(GetEditorTheme(), "##picker_query",
+                             ICON_FA_MAGNIFYING_GLASS, hint, queryBuf,
+                             queryBufSize);
     ImGui::Separator();
     ImGui::BeginChild("##picker_scroll", ImVec2(0.0f, 240.0f), false);
     return true;
@@ -928,12 +1018,51 @@ bool RenderEditorLabeledInput(const char* label, const char* id,
 /** @copydoc RenderEditorCheckbox */
 bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
                           bool& value, const char* tooltip) {
-    ImGui::PushStyleColor(ImGuiCol_CheckMark, theme.palette.accent);
-    const bool changed = ImGui::Checkbox(label, &value);
-    ImGui::PopStyleColor();
-    if (tooltip && ImGui::IsItemHovered())
+    const char* safeLabel = label ? label : "##checkbox";
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float frameHeight = ImGui::GetFrameHeight();
+    const float boxSize = std::round(frameHeight * 0.74f);
+    const float yOffset = std::max(0.0f, (frameHeight - boxSize) * 0.5f);
+
+    ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y + yOffset));
+    ImGui::InvisibleButton(safeLabel, ImVec2(boxSize, boxSize));
+    const bool hovered = ImGui::IsItemHovered();
+    const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+    if (clicked)
+        value = !value;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    const ImU32 bg = ImGui::GetColorU32(
+        value ? theme.palette.inputActive
+              : (hovered ? theme.palette.inputHover : theme.palette.input));
+    const ImU32 border = ImGui::GetColorU32(theme.palette.border);
+    drawList->AddRectFilled(min, max, bg, theme.rounding.input);
+    drawList->AddRect(min, max, border, theme.rounding.input, 0, 1.0f);
+
+    if (value) {
+        const ImU32 check = ImGui::GetColorU32(theme.palette.accent);
+        const float thickness = std::max(2.0f, boxSize * 0.12f);
+        const ImVec2 p0(min.x + boxSize * 0.24f, min.y + boxSize * 0.54f);
+        const ImVec2 p1(min.x + boxSize * 0.43f, min.y + boxSize * 0.72f);
+        const ImVec2 p2(min.x + boxSize * 0.78f, min.y + boxSize * 0.28f);
+        drawList->AddLine(p0, p1, check, thickness);
+        drawList->AddLine(p1, p2, check, thickness);
+    }
+
+    const bool hasVisibleLabel =
+        label && label[0] != '\0' && std::string_view(label).find("##") != 0;
+    if (hasVisibleLabel) {
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+    }
+
+    if (tooltip && hovered)
         ImGui::SetTooltip("%s", tooltip);
-    return changed;
+    return clicked;
 }
 
 /** @copydoc RenderEditorToggle */

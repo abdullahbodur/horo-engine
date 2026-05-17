@@ -483,22 +483,28 @@ void EditorImportAssetModal::DrawImportSettings() {
         });
 
         // Checkboxes — each on its own row
+        const auto& theme = Ui::GetEditorTheme();
         FormRow("Auto Generate Collision", [&]() {
-            ImGui::Checkbox("##AutoCollision", &m_draft.settings.autoGenerateCollision);
+            Ui::RenderEditorCheckbox(theme, "##AutoCollision",
+                                     m_draft.settings.autoGenerateCollision);
         });
         FormRow("Import Materials", [&]() {
-            ImGui::Checkbox("##ImportMaterials", &m_draft.settings.importMaterials);
+            Ui::RenderEditorCheckbox(theme, "##ImportMaterials",
+                                     m_draft.settings.importMaterials);
         });
         FormRow("Import Textures", [&]() {
-            ImGui::Checkbox("##ImportTextures", &m_draft.settings.importTextures);
+            Ui::RenderEditorCheckbox(theme, "##ImportTextures",
+                                     m_draft.settings.importTextures);
         });
         FormRow("Combine Meshes", [&]() {
             ImGui::BeginDisabled();
-            ImGui::Checkbox("##CombineMeshes", &m_draft.settings.combineMeshes);
+            Ui::RenderEditorCheckbox(theme, "##CombineMeshes",
+                                     m_draft.settings.combineMeshes);
             ImGui::EndDisabled();
         });
         FormRow("Transform Vertex to Absolute", [&]() {
-            ImGui::Checkbox("##TransformVertex", &m_draft.settings.transformVertexToAbsolute);
+            Ui::RenderEditorCheckbox(theme, "##TransformVertex",
+                                     m_draft.settings.transformVertexToAbsolute);
         });
 
         // Normal Import Method
@@ -558,20 +564,23 @@ void EditorImportAssetModal::DrawImportSettings() {
             ImGui::TableNextColumn();
             ImGui::TextUnformatted("Remove Degenerates");
             ImGui::TableNextColumn();
-            ImGui::Checkbox("##RemoveDegenerates", &m_draft.settings.removeDegenerates);
+            Ui::RenderEditorCheckbox(theme, "##RemoveDegenerates",
+                                     m_draft.settings.removeDegenerates);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted("Optimize Mesh");
             ImGui::TableNextColumn();
-            ImGui::Checkbox("##OptimizeMesh", &m_draft.settings.optimizeMesh);
+            Ui::RenderEditorCheckbox(theme, "##OptimizeMesh",
+                                     m_draft.settings.optimizeMesh);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted("Import Animations");
             ImGui::TableNextColumn();
             ImGui::BeginDisabled();
-            ImGui::Checkbox("##ImportAnimations", &m_draft.settings.importAnimations);
+            Ui::RenderEditorCheckbox(theme, "##ImportAnimations",
+                                     m_draft.settings.importAnimations);
             ImGui::EndDisabled();
         }
 

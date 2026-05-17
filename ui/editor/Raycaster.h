@@ -68,4 +68,13 @@ namespace Horo::Editor {
      *  @return True when the ray hits the ground plane at a positive distance.
      */
     bool TryIntersectGroundPlane(const Ray &ray, Vec3 *outHitPoint);
+
+    /** @brief Tests whether a ray intersects the camera-facing plane through the camera target.
+     *  @param ray         The ray to test.
+     *  @param cam         Camera whose forward direction and target define the fallback plane.
+     *  @param outHitPoint Receives the world-space intersection point on success.
+     *  @return True when the ray reaches the camera focus plane at a positive distance.
+     */
+    bool TryIntersectCameraFocusPlane(const Ray &ray, const Camera &cam,
+                                      Vec3 *outHitPoint);
 } // namespace Horo::Editor

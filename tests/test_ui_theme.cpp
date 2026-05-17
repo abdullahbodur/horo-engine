@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "ui/HoroTheme.h"
+#include "ui/IconsFontAwesome6.h"
 #include "ui/UiComponents.h"
 #include "ui/UiFonts.h"
 
@@ -308,6 +309,13 @@ TEST_CASE("shared widget wrappers restore ImGui style stacks") {
   Horo::Ui::InputTextWithHint(Horo::Ui::GetEditorTheme(),
                               "##wrapper_test_hint", "Search", buffer,
                               sizeof(buffer));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  Horo::Ui::InputTextWithLeadingIcon(Horo::Ui::GetEditorTheme(),
+                                     "##wrapper_test_icon_hint",
+                                     ICON_FA_MAGNIFYING_GLASS, "Search",
+                                     buffer, sizeof(buffer));
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 

@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -28,12 +30,28 @@ struct FileBrowserEntry {
     std::string extension;      /**< Lowercase extension including dot (e.g. ".fbx"). */
 };
 
+/** @brief Type filter applied to file browser entries. */
+enum class FileBrowserTypeFilter {
+    Folders,
+    Meshes,
+    Textures,
+    Scenes,
+    Scripts,
+    Shaders,
+    Code,
+    Count,
+};
+
+inline constexpr size_t kFileBrowserTypeFilterCount =
+    static_cast<size_t>(FileBrowserTypeFilter::Count);
+
 /** @brief Mutable state for the file browser component. */
 struct FileBrowserState {
     std::filesystem::path currentDir;       /**< Currently displayed directory. */
     std::filesystem::path rootDir;          /**< Project root — navigation boundary (can't go above). */
     std::vector<FileBrowserEntry> entries;  /**< All entries in currentDir (unfiltered). */
     std::string searchQuery;                /**< Current search filter text. */
+    std::array<bool, kFileBrowserTypeFilterCount> typeFilters{}; /**< Active file type filters; none selected means all files. */
     std::vector<FileBrowserEntry> filteredEntries; /**< Entries matching searchQuery. */
     std::string selectedFilePath;           /**< Absolute path of the selected file (empty = none). */
     bool hasSelection = false;              /**< True when a file (not directory) is selected. */
@@ -160,8 +178,8 @@ private:
 
     // Thumbnail grid layout
     static constexpr int kColumns = 4;
-    static constexpr float kTileSpacing = 8.0f;
-    static constexpr float kThumbPad = 10.0f;
+    static constexpr float kTileSpacing = 9.0f;
+    static constexpr float kThumbPad = 9.0f;
 
     // Mesh preview cache keyed by absolute file path
     struct PreviewCacheEntry {

@@ -14,7 +14,9 @@
 
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
+#include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneSerializer.h"
+#include "ui/launcher/LauncherEditorShellInternal.h"
 #include "ui/launcher/LauncherProjectTemplate.h"
 #include "ui/launcher/NativeFolderDialog.h"
 #include "math/MathUtils.h"
@@ -128,6 +130,22 @@ bool IsBuildTreeEnginePrefix(const fs::path &candidate) {
   return hasConfig && hasTargets;
 }
 
+} // namespace
+
+/** @copydoc ResolveRuntimeScaleFromEditorObject */
+Vec3 ResolveRuntimeScaleFromEditorObject(const Editor::SceneObject &object) {
+  Vec3 assetRenderScale = Vec3::One();
+  if (const auto it = object.props.find("_assetRenderScale");
+      it != object.props.end())
+    Editor::TryParseVec3Csv(it->second, &assetRenderScale);
+
+  return {object.scale.x * assetRenderScale.x,
+          object.scale.y * assetRenderScale.y,
+          object.scale.z * assetRenderScale.z};
+}
+
+namespace {
+
 /** @brief Canonicalizes a path for use as a cache lookup key. */
 fs::path NormalizePathForLookup(const fs::path &rawPath) {
   if (rawPath.empty())
@@ -157,8 +175,8 @@ void ApplyTransformUpdateFromObject(Scene *scene,
         auto &transform = scene->GetRegistry().Get<TransformComponent>(entity);
         transform.current.position = object.position;
         transform.previous.position = object.position;
-        transform.current.scale = object.scale;
-        transform.previous.scale = object.scale;
+        transform.current.scale = ResolveRuntimeScaleFromEditorObject(object);
+        transform.previous.scale = transform.current.scale;
         transform.current.rotation = Quaternion::FromEuler(
             ToRadians(object.pitch), ToRadians(object.yaw),
             ToRadians(object.roll));

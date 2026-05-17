@@ -803,16 +803,58 @@ namespace Horo::Editor {
         /** @brief Applies texture overrides from request.settings to texturePaths.
          *
          *  Reads settings keys "texture.albedoMap", "texture.normalMap", etc.
-         *  and replaces auto-detected paths with override paths.
+         *  Copies override textures into the managed asset directory and replaces
+         *  auto-detected paths with the managed project-relative paths.
          */
         void ApplyTextureOverrides(const AssetImportRequest &request,
+                                   const std::filesystem::path &destDir,
+                                   const char *importerId,
+                                   std::vector<AssetImportDiagnostic> &diagnostics,
+                                   std::vector<std::string> &producedFiles,
+                                   std::vector<std::string> &externalSourcePaths,
                                    FbxTexturePaths &texturePaths) {
+            namespace fs = std::filesystem;
             const auto &settings = request.settings;
             const auto applyOverride = [&](const char *key, std::string &path) {
                 const auto it = settings.find(key);
-                if (it != settings.end() && !it->second.empty()) {
-                    path = it->second;
+                if (it == settings.end() || it->second.empty())
+                    return;
+
+                const fs::path sourcePath(it->second);
+                std::error_code ec;
+                if (!fs::is_regular_file(sourcePath, ec) || ec) {
+                    diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Warning,
+                        DiagnosticCodes::FbxExternalTextureMissing,
+                        std::format("Texture override '{}' is not a file.",
+                                    sourcePath.string()),
+                        request, importerId));
+                    return;
                 }
+
+                const std::string basename =
+                        SanitiseTextureBasename(sourcePath.filename().string());
+                if (!IsSafeBasename(basename))
+                    return;
+
+                const fs::path destPath = destDir / basename;
+                if (!CopyFileReplacing(sourcePath, destPath, ec) || ec) {
+                    diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Warning,
+                        DiagnosticCodes::FbxExternalTextureCopyFailed,
+                        std::format("Failed to copy texture override '{}' ({}).",
+                                    sourcePath.string(), ec.message()),
+                        request, importerId));
+                    return;
+                }
+
+                const std::string projectRelative =
+                        fs::relative(destPath, ProjectPath::Root()).generic_string();
+                path = projectRelative;
+                if (std::ranges::find(producedFiles, projectRelative) ==
+                    producedFiles.end())
+                    producedFiles.push_back(projectRelative);
+                externalSourcePaths.push_back(sourcePath.string());
             };
             applyOverride("texture.albedoMap", texturePaths.albedoMap);
             applyOverride("texture.normalMap", texturePaths.normalMap);
@@ -913,7 +955,9 @@ namespace Horo::Editor {
                                  externalSourcePaths, texturePaths);
                 
                 // Apply user overrides from modal
-                ApplyTextureOverrides(request, texturePaths);
+                ApplyTextureOverrides(request, destDir, ImporterId(),
+                                      result.diagnostics, producedFiles,
+                                      externalSourcePaths, texturePaths);
 
                 AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   loaded.aabbMin.y, loaded.aabbMax.y);
@@ -980,7 +1024,9 @@ namespace Horo::Editor {
                                  externalSourcePaths, texturePaths);
                 
                 // Apply user overrides from modal
-                ApplyTextureOverrides(request, texturePaths);
+                ApplyTextureOverrides(request, destDir, ImporterId(),
+                                      result.diagnostics, producedFiles,
+                                      externalSourcePaths, texturePaths);
 
                 AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   skeletal.aabbMin.y, skeletal.aabbMax.y);

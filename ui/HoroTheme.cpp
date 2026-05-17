@@ -115,8 +115,8 @@ constexpr HoroRounding kEditorRounding{
 constexpr HoroDensity kEditorDensity{
     .panelPadding = ImVec2(10.0f, 8.0f),
     .cardPadding = ImVec2(10.0f, 8.0f),
-    .buttonPadding = ImVec2(9.0f, 5.0f),
-    .inputPadding = ImVec2(8.0f, 5.0f),
+    .buttonPadding = ImVec2(10.0f, 7.0f),
+    .inputPadding = ImVec2(12.0f, 8.0f),
     .itemSpacing = 5.0f,
     .iconSize = 18.0f,
 };

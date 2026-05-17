@@ -491,6 +491,35 @@ TEST_CASE("FbxAssetImporter: copies sibling external texture into managed storag
                             }));
 }
 
+TEST_CASE("FbxAssetImporter: texture override is copied and wired as albedoMap",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_texture_override";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path overrideTexture = root / "override_albedo.png";
+  WriteFile(overrideTexture, "png bytes are not decoded by the importer");
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      FixturePath("cube_5800_binary.fbx"), "cube_override",
+      "guid_cube_override", "Cube Override", {},
+      TextureOverrides{.albedoMap = overrideTexture.string()});
+
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.asset.albedoMap.empty());
+  CHECK(result.asset.albedoMap ==
+        "assets/models/guid_cube_override/override_albedo.png");
+  CHECK(std::filesystem::is_regular_file(root / result.asset.albedoMap));
+  CHECK(std::ranges::find(result.metadata.producedFiles,
+                          result.asset.albedoMap) !=
+        result.metadata.producedFiles.end());
+}
+
 TEST_CASE("FbxAssetImporter: missing external texture emits FbxExternalTextureMissing warning",
           "[editor][asset-import][fbx][textures]") {
   const std::filesystem::path root =

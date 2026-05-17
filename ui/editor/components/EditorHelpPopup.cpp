@@ -4,6 +4,8 @@
 
 #include <imgui.h>
 
+#include "ui/IconsFontAwesome6.h"
+#include "ui/UiComponents.h"
 #include "ui/editor/EditorSearch.h"
 
 namespace Horo::Editor {
@@ -29,8 +31,11 @@ void EditorHelpPopup::Draw() {
     ImGui::TextDisabled("Search by category, command, or key");
     std::string searchBuf(256, '\0');
     m_searchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
-    if (ImGui::InputTextWithHint("##shortcut_search", "Find shortcut...",
-                                 searchBuf.data(), searchBuf.size()))
+    const auto& theme = Ui::GetEditorTheme();
+    if (Ui::InputTextWithLeadingIcon(theme, "##shortcut_search",
+                                     ICON_FA_MAGNIFYING_GLASS,
+                                     "Find shortcut...", searchBuf.data(),
+                                     searchBuf.size()))
         m_searchQuery = searchBuf.data();
 
     ImGui::Separator();

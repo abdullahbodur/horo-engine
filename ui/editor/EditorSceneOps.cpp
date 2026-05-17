@@ -551,7 +551,14 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
   if (!TryIntersectGroundPlane(ray, &groundHit)) {
     LogInfo("[Editor] Ground plane intersection failed: ray.direction.y={}",
             ray.direction.y);
-    return false;
+    Vec3 focusHit = Vec3::Zero();
+    if (!TryIntersectCameraFocusPlane(ray, cam, &focusHit))
+      return false;
+
+    *outPosition = focusHit;
+    LogInfo("[Editor] Camera focus plane fallback hit at ({}, {}, {})",
+            focusHit.x, focusHit.y, focusHit.z);
+    return true;
   }
 
   *outPosition = groundHit + Vec3::Up() * ProjectHalfExtentOntoNormal(

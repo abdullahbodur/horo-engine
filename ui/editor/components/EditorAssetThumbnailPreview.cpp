@@ -239,9 +239,29 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
   outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
 }
 
+/** @brief Resolves an optional asset path without treating an empty value as the project root. */
+std::filesystem::path ResolveOptionalAssetPath(std::string_view path) {
+  if (path.empty())
+    return {};
+  return ResolveProjectRelativeOrAbsolutePath(path);
+}
+
+/** @brief Loads an optional albedo texture used by mesh thumbnail rendering. */
+Texture LoadThumbnailAlbedoTexture(const std::filesystem::path& path) {
+  if (path.empty())
+    return {};
+
+  std::error_code ec;
+  if (!std::filesystem::is_regular_file(path, ec) || ec)
+    return {};
+
+  return Texture::FromFile(path.generic_string());
+}
+
 /** @brief Renders the cached mesh into an off-screen target and returns the resulting texture handle. */
 RenderTargetHandle RenderMeshToThumbnail(
-    const AssetThumbnailRenderer::CachedMesh& mesh, const std::string& meshKey) {
+    const AssetThumbnailRenderer::CachedMesh& mesh, const std::string& meshKey,
+    const std::filesystem::path& albedoPath) {
   if (const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
       !caps.supportsOffscreenTargets || !caps.supportsNativeTextureHandles)
     return {};
@@ -300,7 +320,24 @@ RenderTargetHandle RenderMeshToThumbnail(
   renderer.shader.SetMat4("u_projection", proj);
   renderer.shader.SetVec3("u_cameraPos", view.Inverse().GetTranslation());
   renderer.shader.SetVec4("u_color", Vec4(0.8f, 0.8f, 0.8f, 1.0f));
-  renderer.shader.SetInt("u_hasTexture", 0);
+  renderer.shader.SetFloat("u_roughness", 0.5f);
+  renderer.shader.SetFloat("u_metallic", 0.0f);
+  renderer.shader.SetFloat("u_uvScale", 1.0f);
+  renderer.shader.SetInt("u_albedoMap", 0);
+  renderer.shader.SetInt("u_normalMap", 1);
+  renderer.shader.SetInt("u_metallicRoughnessMap", 2);
+  renderer.shader.SetInt("u_emissiveMap", 3);
+  renderer.shader.SetInt("u_occlusionMap", 4);
+  renderer.shader.SetInt("u_hasNormalMap", 0);
+  renderer.shader.SetInt("u_hasMetallicRoughnessMap", 0);
+  renderer.shader.SetInt("u_hasEmissiveMap", 0);
+  renderer.shader.SetInt("u_hasOcclusionMap", 0);
+
+  Texture albedoTexture = LoadThumbnailAlbedoTexture(albedoPath);
+  const bool hasAlbedo = albedoTexture.IsValid();
+  if (hasAlbedo)
+    albedoTexture.Bind(0);
+  renderer.shader.SetInt("u_hasTexture", hasAlbedo ? 1 : 0);
   renderer.shader.SetInt("u_lightCount", 2);
 
   renderer.shader.SetInt("u_lights[0].type", 0);
@@ -376,9 +413,14 @@ RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef& asset) {
   if (!meshEntry)
     return {};
 
+  const std::filesystem::path meshPath =
+      ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+  const std::filesystem::path albedoPath =
+      ResolveOptionalAssetPath(asset.albedoMap);
   const std::string meshKey =
-      ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
-  return RenderMeshToThumbnail(*meshEntry, meshKey);
+      std::format("{}|albedo={}", meshPath.generic_string(),
+                  albedoPath.generic_string());
+  return RenderMeshToThumbnail(*meshEntry, meshKey, albedoPath);
 }
 
 /** @brief Retrieves (or loads and caches) a glTF albedo texture handle for preview fallback rendering. */

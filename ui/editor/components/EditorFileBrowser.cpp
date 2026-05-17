@@ -3,6 +3,7 @@
 #include "ui/editor/components/EditorFileBrowser.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <format>
 #include <string>
@@ -35,6 +36,70 @@ bool IsMeshExtension(std::string_view ext) {
 bool IsTextureExtension(std::string_view ext) {
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
            ext == ".bmp" || ext == ".tga" || ext == ".webp" || ext == ".hdr";
+}
+
+bool IsSceneExtension(std::string_view ext) {
+    return ext == ".json" || ext == ".scene" || ext == ".prefab";
+}
+
+bool IsScriptExtension(std::string_view ext) {
+    return ext == ".lua" || ext == ".py" || ext == ".cs";
+}
+
+bool IsShaderExtension(std::string_view ext) {
+    return ext == ".vert" || ext == ".frag" || ext == ".glsl" ||
+           ext == ".hlsl" || ext == ".shader" || ext == ".spv";
+}
+
+bool IsCodeExtension(std::string_view ext) {
+    return ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
+           ext == ".c" || ext == ".h" || ext == ".hpp" || ext == ".hh";
+}
+
+const char* FileTypeFilterLabel(FileBrowserTypeFilter filter) {
+    switch (filter) {
+        case FileBrowserTypeFilter::Folders:  return "Folders";
+        case FileBrowserTypeFilter::Meshes:   return "Meshes";
+        case FileBrowserTypeFilter::Textures: return "Textures";
+        case FileBrowserTypeFilter::Scenes:   return "Scenes";
+        case FileBrowserTypeFilter::Scripts:  return "Scripts";
+        case FileBrowserTypeFilter::Shaders:  return "Shaders";
+        case FileBrowserTypeFilter::Code:     return "Code";
+        case FileBrowserTypeFilter::Count:    break;
+    }
+    return "";
+}
+
+bool MatchesTypeFilter(const FileBrowserEntry& entry,
+                       const std::array<bool, kFileBrowserTypeFilterCount>& filters) {
+    const auto isSelected = [&filters](FileBrowserTypeFilter filter) {
+        return filters[static_cast<size_t>(filter)];
+    };
+
+    bool hasActiveFilter = false;
+    for (const bool selected : filters) {
+        if (selected) {
+            hasActiveFilter = true;
+            break;
+        }
+    }
+    if (!hasActiveFilter)
+        return true;
+    if (entry.isDirectory)
+        return isSelected(FileBrowserTypeFilter::Folders);
+
+    return (isSelected(FileBrowserTypeFilter::Meshes) &&
+            IsMeshExtension(entry.extension)) ||
+           (isSelected(FileBrowserTypeFilter::Textures) &&
+            IsTextureExtension(entry.extension)) ||
+           (isSelected(FileBrowserTypeFilter::Scenes) &&
+            IsSceneExtension(entry.extension)) ||
+           (isSelected(FileBrowserTypeFilter::Scripts) &&
+            IsScriptExtension(entry.extension)) ||
+           (isSelected(FileBrowserTypeFilter::Shaders) &&
+            IsShaderExtension(entry.extension)) ||
+           (isSelected(FileBrowserTypeFilter::Code) &&
+            IsCodeExtension(entry.extension));
 }
 
 /** @brief Tries to load a rendered mesh preview texture for the given file path. */
@@ -190,16 +255,17 @@ void EditorFileBrowser::RefreshEntries() {
 }
 
 void EditorFileBrowser::ApplySearchFilter() {
-    if (m_state.searchQuery.empty()) {
-        m_state.filteredEntries = m_state.entries;
-    } else {
-        std::string queryLower = Horo::ToLowerAscii(m_state.searchQuery);
-        m_state.filteredEntries.clear();
-        for (const auto& entry : m_state.entries) {
-            if (Horo::ToLowerAscii(entry.name).find(queryLower) != std::string::npos)
-                m_state.filteredEntries.push_back(entry);
-        }
+    const std::string queryLower = Horo::ToLowerAscii(m_state.searchQuery);
+    m_state.filteredEntries.clear();
+    for (const auto& entry : m_state.entries) {
+        if (!MatchesTypeFilter(entry, m_state.typeFilters))
+            continue;
+        if (!queryLower.empty() &&
+            Horo::ToLowerAscii(entry.name).find(queryLower) == std::string::npos)
+            continue;
+        m_state.filteredEntries.push_back(entry);
     }
+
     m_state.hasSelection = false;
     for (auto& entry : m_state.filteredEntries) {
         entry.isSelected = (entry.fullPath == m_state.selectedFilePath);
@@ -208,13 +274,17 @@ void EditorFileBrowser::ApplySearchFilter() {
 }
 
 void EditorFileBrowser::DrawNavBar() {
+    const auto& theme = Ui::GetEditorTheme();
+
     // Navigation buttons row
     const bool canGoUp = m_state.currentDir.has_parent_path() && !m_state.currentDir.parent_path().empty();
     if (!canGoUp) ImGui::BeginDisabled();
-    if (ImGui::SmallButton(ICON_FA_ARROW_LEFT)) NavigateUp();
+    if (Ui::Button(theme, Ui::ButtonStyleVariant::Secondary,
+                   ICON_FA_ARROW_LEFT)) NavigateUp();
     if (!canGoUp) ImGui::EndDisabled();
     ImGui::SameLine();
-    if (ImGui::SmallButton(ICON_FA_ROTATE)) Refresh();
+    if (Ui::Button(theme, Ui::ButtonStyleVariant::Secondary,
+                   ICON_FA_ROTATE)) Refresh();
     ImGui::SameLine();
 
     // Breadcrumb: clickable path segments showing full OS path
@@ -266,7 +336,8 @@ void EditorFileBrowser::DrawNavBar() {
 
         // Make clickable
         ImGui::PushID(static_cast<int>(i));
-        if (ImGui::SmallButton(displayName.c_str())) {
+        if (Ui::Button(theme, Ui::ButtonStyleVariant::Secondary,
+                       displayName.c_str())) {
             // Navigate to this segment's path
             std::string targetPath = seg;
             if (!targetPath.empty() && targetPath.back() == '/')
@@ -278,15 +349,46 @@ void EditorFileBrowser::DrawNavBar() {
 }
 
 void EditorFileBrowser::DrawSearchBar() {
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    const auto& theme = Ui::GetEditorTheme();
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float filterW = 156.0f;
+    const float availW = ImGui::GetContentRegionAvail().x;
+    const bool inlineFilter = availW > filterW + 160.0f;
+    const float searchW = inlineFilter ? availW - filterW - spacing : availW;
+
+    ImGui::SetNextItemWidth(searchW);
     char searchBuf[256]{};
     m_state.searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
-    const std::string searchHint = std::string(ICON_FA_MAGNIFYING_GLASS) + " Search files...";
-    if (ImGui::InputTextWithHint("##FileBrowserSearch", searchHint.c_str(),
-                                  searchBuf, sizeof(searchBuf))) {
+    if (Ui::InputTextWithLeadingIcon(theme, "##FileBrowserSearch",
+                                     ICON_FA_MAGNIFYING_GLASS,
+                                     "Search files...", searchBuf,
+                                     sizeof(searchBuf))) {
         m_state.searchQuery = searchBuf;
         ApplySearchFilter();
     }
+
+    if (inlineFilter)
+        ImGui::SameLine(0.0f, spacing);
+    ImGui::SetNextItemWidth(inlineFilter ? filterW : -FLT_MIN);
+    std::array<Ui::MultiSelectDropdownItem, kFileBrowserTypeFilterCount> filters = {{
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Folders),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Folders)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Meshes),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Meshes)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Textures),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Textures)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Scenes),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Scenes)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Scripts),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Scripts)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Shaders),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Shaders)]},
+        {FileTypeFilterLabel(FileBrowserTypeFilter::Code),
+         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Code)]},
+    }};
+    if (Ui::MultiSelectDropdown(theme, "##FileBrowserTypeFilter", filters,
+                                "All Files"))
+        ApplySearchFilter();
 }
 
 void EditorFileBrowser::DrawDropZone() {
@@ -315,11 +417,11 @@ void EditorFileBrowser::DrawDropZone() {
 void EditorFileBrowser::DrawThumbnailGrid() {
     const float availW = ImGui::GetContentRegionAvail().x;
     const float spacing = kTileSpacing;
-    const float minTileW = 140.0f; // Larger thumbnails for better readability
+    const float minTileW = 111.0f;
     const int columns = std::max(1, static_cast<int>((availW + spacing) / (minTileW + spacing)));
     const float tileW = (availW - spacing * static_cast<float>(columns - 1)) / static_cast<float>(columns);
     const float thumbSize = tileW - kThumbPad * 2.0f;
-    const float tileH = thumbSize + kThumbPad * 2.0f + 36.0f;
+    const float tileH = thumbSize + kThumbPad * 2.0f + 34.0f;
     const float rowHeight = tileH + ImGui::GetStyle().ItemSpacing.y;
 
     const int totalEntries = static_cast<int>(m_state.filteredEntries.size());
@@ -410,7 +512,7 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
         dl->AddImage(previewTex, thumbMin, thumbMax);
     } else {
         const ImVec2 thumbCenter = ImVec2((thumbMin.x + thumbMax.x) * 0.5f, (thumbMin.y + thumbMax.y) * 0.5f);
-        const float iconSize = Ui::GetIconSize(Ui::GetEditorTheme()) * 5.0f;
+        const float iconSize = Ui::GetIconSize(Ui::GetEditorTheme()) * 3.75f;
         if (s_largeIconFont) ImGui::PushFont(s_largeIconFont);
         if (entry.isDirectory) {
             const ImU32 folderCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.70f, 0.60f, 0.30f, 0.95f));
