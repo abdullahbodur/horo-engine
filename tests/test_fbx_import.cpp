@@ -1094,7 +1094,7 @@ TEST_CASE("E2E: Import Asset modal drives FBX import all the way to producedFile
   EditorImportAssetModal modal;
 
   // 1. User opens the modal seeded with an FBX path; importer is auto-selected.
-  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry);
+  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry, std::filesystem::path{});
   REQUIRE(modal.IsOpen());
   REQUIRE(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
   REQUIRE(modal.DraftForTest().assetId == "cube_5800_binary");

@@ -55,3 +55,5 @@ constexpr const char* ICON_FA_LIGHTBULB = "\xef\x83\xab";                 // Lig
 constexpr const char* ICON_FA_VIDEO = "\xef\x80\xbd";                     // Camera
 constexpr const char* ICON_FA_HAND_POINTER = "\xef\x89\x9b";              // Selection
 constexpr const char* ICON_FA_XMARK = "\xef\x80\x8d";                     // Clear/Close
+constexpr const char* ICON_FA_ARROW_LEFT = "\xef\x81\xa0";                // Back/Previous
+constexpr const char* ICON_FA_ANGLE_RIGHT = "\xef\x84\x85";               // Breadcrumb separator

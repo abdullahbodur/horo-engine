@@ -100,13 +100,6 @@ std::string PickFile([[maybe_unused]] const wchar_t *winFilter,
 }
 } // namespace
 
-/** @copydoc PickObjFilePath */
-std::string PickObjFilePath() {
-  return PickFile(
-      L"OBJ Files\0*.obj\0All Files\0*.*\0",
-      R"(/usr/bin/osascript -e 'try' -e 'POSIX path of (choose file with prompt "Select OBJ file")' -e 'on error' -e 'return ""' -e 'end try' 2>/dev/null)");
-}
-
 /** @copydoc PickMeshFilePath */
 std::string PickMeshFilePath() {
   return PickFile(

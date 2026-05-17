@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "core/Logger.h"
+#include "core/StringUtils.h"
+#include "renderer/FbxLoader.h"
 #include "renderer/GltfLoader.h"
 #include "renderer/IFramebuffer.h"
 #include "renderer/ITexture.h"
@@ -113,7 +115,11 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
 
   const std::filesystem::path path =
       ResolveProjectRelativeOrAbsolutePath(meshPath);
-  const std::string ext = ToLowerAscii(path.extension().string());
+  const std::string ext = Horo::ToLowerAscii(path.extension().string());
+  // Handle compound extensions: .fbx.bin → .fbx, .skinned.bin → .skinned
+  const std::string effectiveExt = (ext == ".bin")
+      ? Horo::ToLowerAscii(path.stem().extension().string())
+      : ext;
 
   auto& renderer = AssetThumbnailRenderer::Instance();
   const std::string cacheKey = path.generic_string();
@@ -128,17 +134,13 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
   AssetThumbnailRenderer::CachedMesh entry;
 
   try {
-    if (ext == ".obj") {
+    if (effectiveExt == ".obj") {
       entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
       entry.isSkinned = false;
-    } else if (cacheKey.ends_with(".mesh.bin")) {
-      // Engine-native binary produced by importers (FBX in HORO-94+;
-      // future format-specific importers feed the same .mesh.bin output).
-      const MeshBin::ReadResult result =
-          MeshBin::ReadStaticMesh(cacheKey);
+    } else if (effectiveExt == ".fbx") {
+      FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path.generic_string());
       if (!result.ok) {
-        LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})",
-                cacheKey, result.error);
+        LogWarn("[Thumbnail] FBX load failed for preview: {} ({})", cacheKey, result.error);
         renderer.noPreviewKeys.insert(cacheKey);
         return nullptr;
       }
@@ -146,13 +148,21 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
       mesh->SetData(result.vertices, result.indices);
       entry.mesh = std::move(mesh);
       entry.isSkinned = false;
-    } else if (cacheKey.ends_with(".skinned.bin")) {
-      // Engine-native skinned binary produced by FBX skeletal import (HORO-107).
-      const SkinnedMeshBin::ReadResult result =
-          SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
+    } else if (cacheKey.ends_with(".mesh.bin") || cacheKey.ends_with(".fbx.bin")) {
+      const MeshBin::ReadResult result = MeshBin::ReadStaticMesh(cacheKey);
       if (!result.ok) {
-        LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})",
-                cacheKey, result.error);
+        LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})", cacheKey, result.error);
+        renderer.noPreviewKeys.insert(cacheKey);
+        return nullptr;
+      }
+      auto mesh = std::make_shared<Mesh>();
+      mesh->SetData(result.vertices, result.indices);
+      entry.mesh = std::move(mesh);
+      entry.isSkinned = false;
+    } else if (effectiveExt == ".skinned" || cacheKey.ends_with(".skinned.bin")) {
+      const SkinnedMeshBin::ReadResult result = SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
+      if (!result.ok) {
+        LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})", cacheKey, result.error);
         renderer.noPreviewKeys.insert(cacheKey);
         return nullptr;
       }
@@ -164,7 +174,7 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
       entry.skinnedMesh = std::move(skinnedMesh);
       entry.skeleton = std::move(skeleton);
       entry.isSkinned = true;
-    } else if (ext == ".gltf" || ext == ".glb") {
+    } else if (effectiveExt == ".gltf" || effectiveExt == ".glb") {
       GltfLoadResult result = GltfLoader::Load(path.generic_string());
       if (result.mesh) {
         entry.skinnedMesh = result.mesh;
@@ -176,7 +186,7 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
         return nullptr;
       }
     } else {
-      LogWarn("[Thumbnail] Unsupported mesh format: {}", ext);
+      LogWarn("[Thumbnail] Unsupported mesh format: {}", effectiveExt);
       renderer.noPreviewKeys.insert(cacheKey);
       return nullptr;
     }
@@ -475,7 +485,7 @@ bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
   if (const std::filesystem::path meshPath =
           ResolveProjectRelativeOrAbsolutePath(asset.mesh);
       !meshPath.empty()) {
-    const std::string ext = ToLowerAscii(meshPath.extension().string());
+    const std::string ext = Horo::ToLowerAscii(meshPath.extension().string());
     RenderTargetHandle handle;
     if (ext == ".obj")
       handle = TryResolveObjMeshPreview(meshPath, &s_textureByPath);

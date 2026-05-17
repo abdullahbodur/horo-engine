@@ -471,52 +471,6 @@ void EditorLayer::ProcessDeferredFilePicks() { // NOSONAR
   switch (pick) {
   case DeferredFilePick::None:
     break;
-  case DeferredFilePick::ImportObjBulk: {
-    m_assetImportError.clear();
-    const std::string chosen = PickObjFilePath();
-    if (chosen.empty())
-      break;
-    if (m_assetDraftGuid.empty())
-      m_assetDraftGuid = GenerateAssetGuid();
-    if (m_assetDraftId.empty())
-      m_assetDraftId = AssetIdFromImportedPath(chosen);
-    if (m_assetDraftDisplayName.empty())
-      m_assetDraftDisplayName = m_assetDraftId;
-    if (AssetImportResult importResult =
-            m_assetImportService.ImportAssetFromSource(chosen, m_assetDraftId,
-                                                       m_assetDraftGuid,
-                                                       m_assetDraftDisplayName);
-        importResult.ok) {
-      m_assetDraftMesh = importResult.asset.mesh;
-      m_assetDraftAlbedoMap = importResult.asset.albedoMap;
-      m_assetDraftRenderScale = importResult.asset.renderScale;
-      m_assetImportError.clear();
-    } else if (!importResult.error.empty())
-      m_assetImportError = importResult.error;
-    break;
-  }
-  case DeferredFilePick::NewAssetAlbedo: {
-    if (m_assetDraftGuid.empty())
-      m_assetDraftGuid = GenerateAssetGuid();
-    if (m_assetDraftId.empty())
-      m_assetDraftId = "draft_asset";
-    if (m_assetDraftDisplayName.empty())
-      m_assetDraftDisplayName = m_assetDraftId;
-    AssetDef draftAsset;
-    draftAsset.guid = m_assetDraftGuid;
-    draftAsset.displayName = m_assetDraftDisplayName;
-    draftAsset.mesh = m_assetDraftMesh;
-    draftAsset.renderScale = m_assetDraftRenderScale.empty()
-                                 ? "1.0000,1.0000,1.0000"
-                                 : m_assetDraftRenderScale;
-    draftAsset.albedoMap = m_assetDraftAlbedoMap;
-    if (std::string err; m_assetImportService.ImportTextureForAsset(
-            PickTextureFilePath(), m_assetDraftId, &draftAsset, &err))
-      m_assetDraftAlbedoMap = draftAsset.albedoMap;
-    else if (!err.empty())
-      LogWarn("Texture browse: {}", err);
-    break;
-  }
   case DeferredFilePick::SelectedAssetAlbedo: {
     const std::string id = m_selectedAssetId;
     if (id.empty() || !m_document.assets.contains(id))

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <format>
 #include <functional>
 #include <stdexcept>

@@ -607,7 +607,7 @@ TEST_CASE("EditorImportAssetModal: Open seeds draft and infers importer from ext
   EditorImportAssetModal modal;
   REQUIRE_FALSE(modal.IsOpen());
 
-  modal.Open("/some/path/cube.fbx", &registry);
+  modal.Open("/some/path/cube.fbx", &registry, std::filesystem::path{});
   CHECK(modal.IsOpen());
   CHECK(modal.DraftForTest().sourcePath == "/some/path/cube.fbx");
   CHECK(modal.DraftForTest().assetId == "cube");
@@ -619,7 +619,7 @@ TEST_CASE("EditorImportAssetModal: Open with .obj routes to OBJ importer",
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/x/y/crate.obj", &registry);
+  modal.Open("/x/y/crate.obj", &registry, std::filesystem::path{});
   CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
 }
 
@@ -627,7 +627,7 @@ TEST_CASE("EditorImportAssetModal: Open with no path leaves importer empty",
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open({}, &registry);
+  modal.Open({}, &registry, std::filesystem::path{});
   CHECK(modal.IsOpen());
   CHECK(modal.DraftForTest().sourcePath.empty());
   CHECK(modal.DraftForTest().assetId.empty());
@@ -638,7 +638,7 @@ TEST_CASE("EditorImportAssetModal: RequestImportForTest signals HasPendingReques
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
   CHECK_FALSE(modal.HasPendingRequest());
 
   modal.RequestImportForTest();
@@ -654,7 +654,7 @@ TEST_CASE("EditorImportAssetModal: SetLastResult with ok+no diagnostics closes t
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
 
   ImportAssetOutcome outcome;
   outcome.ok = true;
@@ -666,7 +666,7 @@ TEST_CASE("EditorImportAssetModal: SetLastResult with warning diagnostics keeps 
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
 
   ImportAssetOutcome outcome;
   outcome.ok = true;
@@ -684,7 +684,7 @@ TEST_CASE("EditorImportAssetModal: Close clears pending state",
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
   modal.RequestImportForTest();
   modal.Close();
   CHECK_FALSE(modal.IsOpen());
@@ -696,7 +696,7 @@ TEST_CASE("EditorImportAssetModal: Draw is a no-op without an ImGui context",
           "[editor][import-asset-modal]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
   // No ImGui context attached; Draw must not crash and the modal stays open.
   modal.Draw();
   CHECK(modal.IsOpen());
@@ -732,7 +732,7 @@ TEST_CASE("EditorImportAssetModal: Draw renders without crash with ImGui frame a
   ImGuiFrameFixture frame;
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
   // Drives DrawPathSection / DrawImporterSection / DrawIdentitySection /
   // DrawActionsSection through the BeginPopupModal + EndPopup path.
   modal.Draw();
@@ -744,7 +744,7 @@ TEST_CASE("EditorImportAssetModal: Draw renders without crash with no path (impo
   ImGuiFrameFixture frame;
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open({}, &registry);
+  modal.Open({}, &registry, std::filesystem::path{});
   modal.Draw();
   CHECK(modal.IsOpen());
 }
@@ -754,7 +754,7 @@ TEST_CASE("EditorImportAssetModal: Draw with prior result renders the result pan
   ImGuiFrameFixture frame;
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
 
   ImportAssetOutcome outcome;
   outcome.ok = false;
@@ -3007,7 +3007,7 @@ TEST_CASE("EditorImportAssetModal: SetDraftForTest overrides auto-derived fields
           "[editor][import-asset-modal][coverage]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/p/cube.fbx", &registry);
+  modal.Open("/p/cube.fbx", &registry, std::filesystem::path{});
 
   // Override via test seam
   modal.SetDraftForTest("/other/path/ship.obj", "ship_id", "Ship Model", "builtin.obj_mesh");
@@ -3021,12 +3021,12 @@ TEST_CASE("EditorImportAssetModal: RefreshImporterFromExtension updates importer
           "[editor][import-asset-modal][coverage]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open({}, &registry);
+  modal.Open({}, &registry, std::filesystem::path{});
 
   // Manually set a path and refresh
   modal.SetDraftForTest("/x/model.obj", "model", "Model", "");
   // Re-open with the new path to trigger refresh
-  modal.Open("/x/model.obj", &registry);
+  modal.Open("/x/model.obj", &registry, std::filesystem::path{});
   CHECK(modal.DraftForTest().importerId == "builtin.obj_mesh");
 }
 
@@ -3034,7 +3034,7 @@ TEST_CASE("EditorImportAssetModal: RefreshIdentitiesFromPath derives assetId fro
           "[editor][import-asset-modal][coverage]") {
   AssetImporterRegistry registry;
   EditorImportAssetModal modal;
-  modal.Open("/some/dir/my_asset.fbx", &registry);
+  modal.Open("/some/dir/my_asset.fbx", &registry, std::filesystem::path{});
   CHECK(modal.DraftForTest().assetId == "my_asset");
   CHECK(modal.DraftForTest().displayName == "my_asset");
 }

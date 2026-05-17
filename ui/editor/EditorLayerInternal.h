@@ -23,6 +23,7 @@
 #include "ui/IconsFontAwesome6.h"
 #include "core/LogBuffer.h"
 #include "core/ProjectPath.h"
+#include "core/StringUtils.h"
 #include "renderer/Camera.h"
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorUiLogic.h"
@@ -378,12 +379,10 @@ inline bool IsTextureFilePath(std::string_view path) {
 }
 
 /** @brief Returns a copy of @p s with all ASCII characters converted to lower-case.
- *  @param s Source string (passed by value to avoid an extra copy on use-sites that already have a temporary). */
+ *  @param s Source string.
+ *  @note Delegates to Horo::ToLowerAscii; kept here for backward compatibility. */
 inline std::string ToLowerAscii(std::string s) {
-  std::ranges::transform(s, s.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  return s;
+  return Horo::ToLowerAscii(s);
 }
 
 /** @brief Resolves @p rawPath to an absolute filesystem path.

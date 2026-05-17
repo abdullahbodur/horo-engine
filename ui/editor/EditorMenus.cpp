@@ -67,7 +67,8 @@ void EditorLayer::OnMenuSettings() {
 
 /** @copydoc EditorLayer::OnMenuImportAsset */
 void EditorLayer::OnMenuImportAsset() {
-  m_importAssetModal.Open({}, &m_assetImportService.Registry());
+  m_importAssetModal.Open({}, &m_assetImportService.Registry(),
+                          m_projectBrowserRootValid ? m_projectBrowserRoot : std::filesystem::current_path());
 }
 
 /** @copydoc EditorLayer::OnMenuCloseEditor */

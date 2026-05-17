@@ -14,7 +14,6 @@
 #include "ui/launcher/ExternalProcessRunner.h"
 #include "ui/launcher/LauncherProject.h"
 #include "renderer/Camera.h"
-#include "renderer/Material.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"

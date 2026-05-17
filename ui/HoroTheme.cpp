@@ -99,6 +99,7 @@ constexpr HoroDensity kLauncherDensity{
     .buttonPadding = ImVec2(16.0f, 9.0f),
     .inputPadding = ImVec2(12.0f, 9.0f),
     .itemSpacing = 8.0f,
+    .iconSize = 16.0f,
 };
 
 /** @brief Corner radii preset used by dense editor widgets. */
@@ -117,6 +118,7 @@ constexpr HoroDensity kEditorDensity{
     .buttonPadding = ImVec2(9.0f, 5.0f),
     .inputPadding = ImVec2(8.0f, 5.0f),
     .itemSpacing = 5.0f,
+    .iconSize = 18.0f,
 };
 
 /**

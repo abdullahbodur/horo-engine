@@ -794,6 +794,27 @@ namespace Horo::Editor {
             return DiagnosticCodes::FbxParseFailed;
         }
 
+        /** @brief Applies texture overrides from request.settings to texturePaths.
+         *
+         *  Reads settings keys "texture.albedoMap", "texture.normalMap", etc.
+         *  and replaces auto-detected paths with override paths.
+         */
+        void ApplyTextureOverrides(const AssetImportRequest &request,
+                                   FbxTexturePaths &texturePaths) {
+            const auto &settings = request.settings;
+            const auto applyOverride = [&](const char *key, std::string &path) {
+                const auto it = settings.find(key);
+                if (it != settings.end() && !it->second.empty()) {
+                    path = it->second;
+                }
+            };
+            applyOverride("texture.albedoMap", texturePaths.albedoMap);
+            applyOverride("texture.normalMap", texturePaths.normalMap);
+            applyOverride("texture.metallicRoughnessMap", texturePaths.metallicRoughnessMap);
+            applyOverride("texture.emissiveMap", texturePaths.emissiveMap);
+            applyOverride("texture.occlusionMap", texturePaths.occlusionMap);
+        }
+
         /** @brief Built-in importer that extracts static-mesh geometry from an FBX file
          *         into the engine-native @c .mesh.bin format under managed asset storage.
          *
@@ -884,6 +905,9 @@ namespace Horo::Editor {
                                  {sourcePath, destDir, request, ImporterId()},
                                  result.diagnostics, producedFiles,
                                  externalSourcePaths, texturePaths);
+                
+                // Apply user overrides from modal
+                ApplyTextureOverrides(request, texturePaths);
 
                 AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   loaded.aabbMin.y, loaded.aabbMax.y);
@@ -948,6 +972,9 @@ namespace Horo::Editor {
                                  {sourcePath, destDir, request, ImporterId()},
                                  result.diagnostics, producedFiles,
                                  externalSourcePaths, texturePaths);
+                
+                // Apply user overrides from modal
+                ApplyTextureOverrides(request, texturePaths);
 
                 AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   skeletal.aabbMin.y, skeletal.aabbMax.y);

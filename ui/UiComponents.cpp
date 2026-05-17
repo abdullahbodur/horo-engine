@@ -243,6 +243,41 @@ void TextMuted(const EditorTheme &theme, const char *text) { ImGui::TextColored(
 /** @copydoc TextMuted(const LauncherTheme &, const char *) */
 void TextMuted(const LauncherTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
 
+/** @copydoc DrawIcon */
+void DrawIcon(ImDrawList *dl, const char *icon, ImVec2 pos,
+              ImU32 color, float size) {
+    ImFont *font = ImGui::GetFont();
+    const float baseFontSize = ImGui::GetFontSize();
+    const float targetSize = (size > 0.0f) ? size : baseFontSize;
+    const float oldScale = font->Scale;
+    font->Scale = targetSize / baseFontSize;
+    const ImVec2 iconSz = ImGui::CalcTextSize(icon);
+    dl->AddText(ImVec2(pos.x - iconSz.x * 0.5f, pos.y - iconSz.y * 0.5f), color, icon);
+    font->Scale = oldScale;
+}
+
+/** @copydoc GetIconSize(const char *, float) */
+ImVec2 GetIconSize(const char *icon, float size) {
+    ImFont *font = ImGui::GetFont();
+    const float baseFontSize = ImGui::GetFontSize();
+    const float targetSize = (size > 0.0f) ? size : baseFontSize;
+    const float oldScale = font->Scale;
+    font->Scale = targetSize / baseFontSize;
+    const ImVec2 sz = ImGui::CalcTextSize(icon);
+    font->Scale = oldScale;
+    return sz;
+}
+
+/** @copydoc GetIconSize(const EditorTheme &) */
+float GetIconSize(const EditorTheme &theme) {
+    return theme.density.iconSize > 0.0f ? theme.density.iconSize : ImGui::GetFontSize();
+}
+
+/** @copydoc GetIconSize(const LauncherTheme &) */
+float GetIconSize(const LauncherTheme &theme) {
+    return theme.density.iconSize > 0.0f ? theme.density.iconSize : ImGui::GetFontSize();
+}
+
 /** @copydoc SectionHeader(const EditorTheme &, const char *) */
 void SectionHeader(const EditorTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
@@ -722,8 +757,13 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
 bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
     if (openThisFrame && cfg.id)
         ImGui::OpenPopup(cfg.id);
-    if (cfg.width > 0.0f)
+    if (cfg.width > 0.0f) {
         ImGui::SetNextWindowSize(ImVec2(cfg.width, 0.0f), ImGuiCond_Appearing);
+        // Center horizontally; vertical position will adjust with auto-resize
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(ImVec2(center.x - cfg.width * 0.5f, center.y * 0.35f),
+                                ImGuiCond_Always);
+    }
     const ImGuiWindowFlags flags = cfg.autoResize
         ? ImGuiWindowFlags_AlwaysAutoResize
         : ImGuiWindowFlags_None;
@@ -733,6 +773,35 @@ bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
 /** @copydoc EndEditorModal */
 void EndEditorModal() {
     ImGui::EndPopup();
+}
+
+/** @copydoc RenderModalTitleBar */
+bool RenderModalTitleBar(const EditorTheme &theme, const char *title) {
+    constexpr float kCloseButtonSize = 22.0f;
+
+    // Title on the left
+    ImGui::TextUnformatted(title);
+
+    // Close button on the right
+    const float winRight = ImGui::GetWindowContentRegionMax().x;
+    const float btnX = winRight - kCloseButtonSize;
+    ImGui::SameLine(btnX);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.destructive);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+        ImVec4(theme.palette.destructive.x - 0.1f,
+               theme.palette.destructive.y,
+               theme.palette.destructive.z, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.textMuted);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+
+    const bool clicked = ImGui::Button(ICON_FA_XMARK, ImVec2(kCloseButtonSize, kCloseButtonSize));
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+
+    return clicked;
 }
 
 /** @copydoc RenderEditorModalFooter */

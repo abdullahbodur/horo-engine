@@ -49,6 +49,8 @@
 // functions (FindEnumOptionIndex, BuildImGuiComboItems,
 // SchemaAppliesToObjectType) that live inside anonymous namespaces and are
 // not reachable via EditorLayer's public surface.
+#include "core/ProjectPath.h"
+#include "core/StringUtils.h"
 #include "ui/editor/EditorLayerInternal.h"
 
 using namespace Horo;
@@ -9090,7 +9092,7 @@ TEST_CASE("EditorLayerInternal: placement and path helpers cover deterministic b
   CHECK(IsTextureFilePath("asset.hdr"));
   CHECK_FALSE(IsTextureFilePath("asset.txt"));
 
-  CHECK(ToLowerAscii("AbC123!") == "abc123!");
+  CHECK(Horo::ToLowerAscii("AbC123!") == "abc123!");
 
   const std::filesystem::path root = Horo::Tests::SecureTempBase() / "horo_editor_layer_internal_paths";
   std::error_code ec;

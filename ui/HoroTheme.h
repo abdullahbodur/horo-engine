@@ -73,7 +73,8 @@ struct HoroDensity {
   ImVec2 buttonPadding{};   /**< ImGuiStyleVar_FramePadding applied to buttons. */
   ImVec2 inputPadding{};    /**< ImGuiStyleVar_FramePadding applied to inputs and combos. */
   float  itemSpacing = 0.0f; /**< Vertical gap between consecutive widgets
-                              *   (ImGuiStyleVar_ItemSpacing.y). */
+                               *   (ImGuiStyleVar_ItemSpacing.y). */
+  float  iconSize    = 0.0f; /**< Target pixel size for FontAwesome icons; 0 = use current font size. */
 };
 
 /**

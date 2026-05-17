@@ -3,6 +3,7 @@
  */
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "ui/editor/AssetGuidRegistry.h"
@@ -26,6 +27,19 @@ namespace Horo::Editor {
         std::string error;                        /**< Top-level error message, if any. */
     };
 
+    /** @brief Optional texture slot overrides for asset import.
+     *
+     *  When provided, these paths override the auto-detected textures from the source file.
+     *  Empty strings mean "use auto-detected" or "no texture" if none was detected.
+     */
+    struct TextureOverrides {
+        std::string albedoMap;
+        std::string normalMap;
+        std::string metallicRoughnessMap;
+        std::string emissiveMap;
+        std::string occlusionMap;
+    };
+
     /** @brief High-level service that drives asset import and reimport through the registry. */
     class AssetImportService {
     public:
@@ -38,13 +52,15 @@ namespace Horo::Editor {
          *  @param assetGuid   Persistent GUID to assign to the asset.
          *  @param displayName Human-readable display name shown in the editor.
          *  @param settings    Optional key-value importer settings.
+         *  @param overrides   Optional texture slot overrides; when set, paths override auto-detected textures.
          *  @return Import result containing the produced AssetDef and any diagnostics.
          */
         AssetImportResult ImportAssetFromSource(
             const std::string &sourcePath, const std::string &assetId,
             const std::string &assetGuid, const std::string &displayName,
             const std::unordered_map<std::string, std::string, StringHash,
-                std::equal_to<> > &settings = {}) const;
+                std::equal_to<> > &settings = {},
+            const std::optional<TextureOverrides> &overrides = std::nullopt) const;
 
         /** @brief Imports or re-imports the texture file associated with an asset.
          *  @param sourcePath Absolute path to the texture source file.

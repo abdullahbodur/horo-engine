@@ -1,5 +1,5 @@
 /** @file EditorAssetsPanel.cpp
- *  @brief Implements asset-grid rendering, spotlight search, and create-asset modal flows. */
+ *  @brief Implements asset-grid rendering and spotlight search. */
 #include "ui/editor/components/EditorAssetsPanel.h"
 
 #include <algorithm>
@@ -11,10 +11,9 @@
 
 #include <imgui.h>
 
+#include "core/StringUtils.h"
 #include "ui/UiComponents.h"
-#include "core/Logger.h"
 #include "renderer/RenderTargetHandle.h"
-#include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetImportService.h"
 #include "ui/IconsFontAwesome6.h"
 #include "ui/editor/AssetMetadata.h"
@@ -41,15 +40,6 @@ namespace Horo::Editor
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoSavedSettings;
-
-        /** @brief Returns a lowercase copy of the input string using ASCII semantics. */
-        std::string ToLowerAscii(const std::string& str)
-        {
-            std::string result = str;
-            for (auto& c : result)
-                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            return result;
-        }
     }
 
     /** @copydoc EditorAssetsPanel::Draw */
@@ -73,13 +63,11 @@ namespace Horo::Editor
             ImGuiCond_Always);
         ImGui::Begin(kEditorAssetsWindow, nullptr, kMainPanelWindowFlags);
 
-        if (state.albedoDraftDrop)
-            state.albedoDraftDrop->Clear();
         if (state.albedoSelDrop)
             state.albedoSelDrop->Clear();
 
         if (ImGui::Button("+", ImVec2(28.0f, 0.0f)))
-            *state.openNewAssetHeader = true;
+            callbacks.openImportAssetModal();
         ImGui::SameLine();
         ImGui::SetCursorPosX(
             std::max(0.0f, ImGui::GetWindowContentRegionMax().x - 74.0f));
@@ -97,14 +85,7 @@ namespace Horo::Editor
         std::ranges::sort(assetIds);
 
         DrawAssetSpotlightPopup(state, assetIds);
-
-        bool openNewAssetModal = *state.openNewAssetHeader;
-        if (*state.openNewAssetHeader)
-            *state.openNewAssetHeader = false;
-
-        DrawAssetGrid(state, assetIds, openNewAssetModal, callbacks);
-
-        DrawCreateAssetModal(state, openNewAssetModal, callbacks);
+        DrawAssetGrid(state, assetIds, callbacks);
 
         ImGui::End();
     }
@@ -116,8 +97,6 @@ namespace Horo::Editor
         if (!state.document || !state.selectedAssetId || !state.assetSearchQuery)
             return;
 
-        if (state.albedoDraftDrop)
-            state.albedoDraftDrop->Clear();
         if (state.albedoSelDrop)
             state.albedoSelDrop->Clear();
 
@@ -128,13 +107,7 @@ namespace Horo::Editor
         std::ranges::sort(assetIds);
 
         DrawAssetSpotlightPopup(state, assetIds);
-
-        bool openNewAssetModal = *state.openNewAssetHeader;
-        if (*state.openNewAssetHeader)
-            *state.openNewAssetHeader = false;
-
-        DrawAssetGrid(state, assetIds, openNewAssetModal, callbacks);
-        DrawCreateAssetModal(state, openNewAssetModal, callbacks);
+        DrawAssetGrid(state, assetIds, callbacks);
     }
 
     /** @copydoc EditorAssetsPanel::DrawAssetSpotlightPopup */
@@ -212,7 +185,7 @@ namespace Horo::Editor
             const ImU32 meshCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
             const std::string ext = asset.mesh.empty()
                                         ? std::string("mesh")
-                                        : ToLowerAscii(std::filesystem::path(asset.mesh).extension().string());
+                                        : Horo::ToLowerAscii(std::filesystem::path(asset.mesh).extension().string());
             dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 10.0f), labelCol, "No preview texture");
             dl->AddText(ImVec2(thumbMin.x + 8.0f, thumbMin.y + 30.0f), meshCol, ext.c_str());
         }
@@ -306,8 +279,8 @@ namespace Horo::Editor
     }
 
     /** @copydoc EditorAssetsPanel::DrawAddAssetTile */
-    void EditorAssetsPanel::DrawAddAssetTile(bool& openNewAssetModal,
-                                             const AssetTileDimensions& dims) const
+    void EditorAssetsPanel::DrawAddAssetTile(const EditorAssetsPanelCallbacks& callbacks,
+                                              const AssetTileDimensions& dims) const
     {
         // Reserve enough height for the thumbnail area plus two label lines.
         const float lineH = ImGui::GetTextLineHeight();
@@ -324,7 +297,7 @@ namespace Horo::Editor
         ImGui::InvisibleButton("##add_asset_btn", ImVec2(dims.tileW - 2.0f, childH - 2.0f));
         const bool hovered = ImGui::IsItemHovered();
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            openNewAssetModal = true;
+            callbacks.openImportAssetModal();
 
         // Accept internal ASSET_ID drags (e.g. future project-tree drag sources)
         if (ImGui::BeginDragDropTarget())
@@ -402,7 +375,6 @@ namespace Horo::Editor
     /** @copydoc EditorAssetsPanel::DrawAssetGrid */
     void EditorAssetsPanel::DrawAssetGrid(const EditorAssetsPanelState& state,
                                           const std::vector<std::string>& assetIds,
-                                          bool& openNewAssetModal,
                                           const EditorAssetsPanelCallbacks& callbacks) const
     {
         ImGui::BeginChild("##asset_grid", ImVec2(0, 0), false);
@@ -455,173 +427,9 @@ namespace Horo::Editor
         {
             if (const int addTileCol = shownAssetCount % columns; addTileCol > 0)
                 ImGui::SameLine(0.0f, spacing);
-            DrawAddAssetTile(openNewAssetModal, dims);
+            DrawAddAssetTile(callbacks, dims);
         }
 
         ImGui::EndChild();
-    }
-
-    /** @copydoc EditorAssetsPanel::DrawCreateAssetModal */
-    void EditorAssetsPanel::DrawCreateAssetModal(
-        const EditorAssetsPanelState& state,
-        bool openModal,
-        const EditorAssetsPanelCallbacks& callbacks) const
-    {
-        if (Horo::Ui::BeginEditorModal({"Create Asset", 480.0f, true}, openModal))
-        {
-            DrawCreateAssetModalContent(state, callbacks);
-            Horo::Ui::EndEditorModal();
-        }
-    }
-
-    /** @copydoc EditorAssetsPanel::DrawCreateAssetModalContent */
-    void EditorAssetsPanel::DrawCreateAssetModalContent(
-        const EditorAssetsPanelState& state,
-        const EditorAssetsPanelCallbacks& callbacks) const
-    {
-        constexpr float blockW = 470.0f;
-        ImGui::PushItemWidth(blockW);
-
-        if (ImGui::Button("Import .obj...", ImVec2(blockW, 0.0f)))
-        {
-            state.assetImportError->clear();
-#if !defined(_WIN32) && !defined(__APPLE__)
-            *state.assetImportError = "Import dialog is not supported on this platform yet.";
-#else
-            callbacks.setDeferredFilePick(1); // DeferredFilePick::ImportObjBulk
-#endif
-        }
-        if (!state.assetImportError->empty())
-            Horo::Ui::RenderEditorStatusText(Horo::Ui::GetEditorTheme(),
-                                             Horo::Ui::EditorStatusLevel::Error,
-                                             state.assetImportError->c_str());
-
-        ImGui::Spacing();
-
-        std::string idBuf(128, '\0');
-        state.assetDraftId->copy(idBuf.data(), idBuf.size() - 1);
-        if (Horo::Ui::RenderEditorLabeledInput("Asset ID", "##draft_id",
-                                               idBuf.data(), idBuf.size()))
-        {
-            *state.assetDraftId = idBuf.data();
-            if (state.assetDraftDisplayName->empty())
-                *state.assetDraftDisplayName = *state.assetDraftId;
-        }
-
-        std::string displayNameBuf(128, '\0');
-        state.assetDraftDisplayName->copy(displayNameBuf.data(),
-                                          displayNameBuf.size() - 1);
-        if (Horo::Ui::RenderEditorLabeledInput("Display name", "##draft_display_name",
-                                               displayNameBuf.data(), displayNameBuf.size()))
-            *state.assetDraftDisplayName = displayNameBuf.data();
-
-        if (!state.assetDraftGuid->empty())
-        {
-            ImGui::TextDisabled("GUID");
-            ImGui::TextWrapped("%s", state.assetDraftGuid->c_str());
-        }
-
-        std::string meshBuf(256, '\0');
-        state.assetDraftMesh->copy(meshBuf.data(), meshBuf.size() - 1);
-        if (Horo::Ui::RenderEditorLabeledInput("Mesh", "##draft_mesh",
-                                               meshBuf.data(), meshBuf.size()))
-            *state.assetDraftMesh = meshBuf.data();
-
-        std::string scaleBuf(128, '\0');
-        state.assetDraftRenderScale->copy(scaleBuf.data(), scaleBuf.size() - 1);
-        if (Horo::Ui::RenderEditorLabeledInput("Render scale", "##draft_scale",
-                                               scaleBuf.data(), scaleBuf.size()))
-            *state.assetDraftRenderScale = scaleBuf.data();
-
-        std::string albDraftBuf(512, '\0');
-        state.assetDraftAlbedoMap->copy(albDraftBuf.data(), albDraftBuf.size() - 1);
-        const float albLabelTop = ImGui::GetCursorScreenPos().y;
-        if (Horo::Ui::RenderEditorLabeledInput("Albedo map (optional)", "##draft_albedo",
-                                               albDraftBuf.data(), albDraftBuf.size()))
-            *state.assetDraftAlbedoMap = albDraftBuf.data();
-        {
-            const ImVec2 fMin = ImGui::GetItemRectMin();
-            const ImVec2 fMax = ImGui::GetItemRectMax();
-            if (state.albedoDraftDrop)
-            {
-                state.albedoDraftDrop->valid = true;
-                state.albedoDraftDrop->minX = fMin.x;
-                state.albedoDraftDrop->minY = albLabelTop;
-                state.albedoDraftDrop->maxX = fMax.x;
-                state.albedoDraftDrop->maxY = fMax.y;
-            }
-        }
-
-#if defined(_WIN32) || defined(__APPLE__)
-        if (ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f)))
-            callbacks.setDeferredFilePick(2); // DeferredFilePick::NewAssetAlbedo
-#else
-        ImGui::BeginDisabled();
-        ImGui::Button("Browse texture...##alb_pick_draft", ImVec2(blockW, 0.0f));
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Texture file dialog is not available on this platform.");
-#endif
-
-        ImGui::Spacing();
-        ImGui::PopItemWidth();
-
-        const Horo::Ui::EditorTheme& theme = Horo::Ui::GetEditorTheme();
-        const bool canCreate = !state.assetDraftId->empty() && !state.assetDraftMesh->empty();
-        if (!canCreate)
-            ImGui::BeginDisabled();
-        const auto footerResult = Horo::Ui::RenderEditorModalFooter(
-            theme, "Create Asset", Horo::Ui::EditorModalFooterStyle::OkCancel,
-            nullptr, 150.0f);
-        if (!canCreate)
-            ImGui::EndDisabled();
-
-        if (footerResult.confirmed)
-            HandleAssetCreateConfirm(state, callbacks);
-        if (footerResult.cancelled)
-        {
-            state.assetImportError->clear();
-            state.assetDraftGuid->clear();
-            state.assetDraftDisplayName->clear();
-            // CloseCurrentPopup already called by RenderEditorModalFooter
-        }
-    }
-
-    /** @copydoc EditorAssetsPanel::HandleAssetCreateConfirm */
-    void EditorAssetsPanel::HandleAssetCreateConfirm(
-        const EditorAssetsPanelState& state,
-        const EditorAssetsPanelCallbacks& callbacks) const
-    {
-        AssetDef def;
-        def.mesh = *state.assetDraftMesh;
-        def.renderScale = state.assetDraftRenderScale->empty()
-                              ? "1.0000,1.0000,1.0000"
-                              : *state.assetDraftRenderScale;
-        def.albedoMap = *state.assetDraftAlbedoMap;
-        def.guid =
-            state.assetDraftGuid->empty() ? GenerateAssetGuid() : *state.assetDraftGuid;
-        def.displayName = state.assetDraftDisplayName->empty()
-                              ? *state.assetDraftId
-                              : *state.assetDraftDisplayName;
-        state.document->assets[*state.assetDraftId] = std::move(def);
-        if (std::string metadataError;
-            !state.assetImportService->SaveMetadataForAsset(
-                *state.assetDraftId,
-                state.document->assets[*state.assetDraftId],
-                &metadataError) &&
-            !metadataError.empty())
-        {
-            LogWarn("Create Asset metadata sync: {}", metadataError);
-        }
-        *state.selectedAssetId = *state.assetDraftId;
-        state.assetDraftId->clear();
-        state.assetDraftGuid->clear();
-        state.assetDraftDisplayName->clear();
-        state.assetDraftMesh->clear();
-        *state.assetDraftRenderScale = "1.0000,1.0000,1.0000";
-        state.assetDraftAlbedoMap->clear();
-        state.assetImportError->clear();
-        callbacks.markDirtyAndReload();
-        ImGui::CloseCurrentPopup();
     }
 }

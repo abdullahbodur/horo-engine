@@ -23,7 +23,6 @@
 #include "ui/launcher/LauncherEditorShell.h"
 #include "ui/launcher/UiAutomationConfig.h"
 #include "ui/launcher/UiTestHarness.h"
-#include "renderer/Renderer.h"
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
 #include <imgui.h>

@@ -13,10 +13,8 @@
 #include <imgui.h>
 
 #include <array>
-#include <cstdint>
 #include <fstream>
 #include <format>
-#include <ranges>
 
 #include "core/Logger.h"
 #include "renderer/DebugDraw.h"
@@ -72,7 +70,6 @@ namespace Horo::Editor
     ProcessDeferredFilePicks();
     if (!m_active)
     {
-      m_albedoDraftDrop.Clear();
       m_albedoSelDrop.Clear();
       m_viewGizmoPickRect.Clear();
       m_viewportPanelRect = {};
@@ -643,6 +640,11 @@ namespace Horo::Editor
     {
       m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
     };
+    callbacks.openImportAssetModal = [this]()
+    {
+      m_importAssetModal.Open({}, &m_assetImportService.Registry(),
+                              m_projectBrowserRootValid ? m_projectBrowserRoot : std::filesystem::current_path());
+    };
     return callbacks;
   }
 
@@ -652,15 +654,6 @@ namespace Horo::Editor
     EditorAssetsPanelState state;
     state.selectedAssetId = &m_selectedAssetId;
     state.selectedIndices = &m_selectedIndices;
-    state.assetDraftId = &m_assetDraftId;
-    state.assetDraftGuid = &m_assetDraftGuid;
-    state.assetDraftDisplayName = &m_assetDraftDisplayName;
-    state.assetDraftMesh = &m_assetDraftMesh;
-    state.assetDraftRenderScale = &m_assetDraftRenderScale;
-    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
-    state.assetImportError = &m_assetImportError;
-    state.openNewAssetHeader = &m_openNewAssetHeader;
-    state.albedoDraftDrop = &m_albedoDraftDrop;
     state.albedoSelDrop = &m_albedoSelDrop;
     state.assetSearchOpen = &m_assetSearchOpen;
     state.assetSearchQuery = &m_assetSearchQuery;

@@ -167,6 +167,45 @@ void TextMuted(const EditorTheme &theme, const char *text);
  */
 void TextMuted(const LauncherTheme &theme, const char *text);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Icon helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @brief Draws a FontAwesome icon at a consistent size on the given draw list.
+ *
+ * Temporarily adjusts the font scale so the icon renders at @p size pixels
+ * regardless of the current ImGui font size.  The icon is centered on @p pos.
+ *
+ * @param dl    Draw list to emit the icon into.
+ * @param icon  FontAwesome icon string (e.g. ICON_FA_FOLDER).
+ * @param pos   Center position in screen space.
+ * @param color Tint colour for the icon.
+ * @param size  Target icon size in pixels; 0 = use the active theme's iconSize.
+ */
+void DrawIcon(ImDrawList *dl, const char *icon, ImVec2 pos,
+              ImU32 color, float size = 0.0f);
+
+/**
+ * @brief Returns the rendered size of an icon at the target pixel size.
+ *
+ * Useful for layout calculations (centering, spacing) before drawing.
+ * @param icon  FontAwesome icon string.
+ * @param size  Target icon size in pixels; 0 = use the active theme's iconSize.
+ * @return Width and height the icon will occupy when drawn.
+ */
+ImVec2 GetIconSize(const char *icon, float size = 0.0f);
+
+/**
+ * @brief Returns the default icon size from the active editor theme.
+ * @param theme Active editor theme.
+ * @return Icon size in pixels.
+ */
+float GetIconSize(const EditorTheme &theme);
+
+/** @brief Launcher-theme variant of GetIconSize(). */
+float GetIconSize(const LauncherTheme &theme);
+
 /**
  * @brief Renders a section heading followed by a full-width separator.
  *
@@ -672,6 +711,20 @@ bool BeginEditorModal(const EditorModalConfig &cfg, bool openThisFrame);
  * Must be called after BeginEditorModal() returns true.
  */
 void EndEditorModal();
+
+/**
+ * @brief Renders a modal title bar with a close (X) button.
+ *
+ * Draws the modal title on the left and a themed close button on the right.
+ * The close button uses the theme's destructive colour on hover and is sized
+ * for comfortable clicking.  Call this immediately after BeginPopupModal
+ * returns true.
+ *
+ * @param theme  Active editor theme.
+ * @param title  Null-terminated title string.
+ * @return True when the close button was clicked this frame.
+ */
+bool RenderModalTitleBar(const EditorTheme &theme, const char *title);
 
 /**
  * @brief Visual style for the modal footer produced by RenderEditorModalFooter().

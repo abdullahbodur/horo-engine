@@ -272,8 +272,6 @@ namespace Horo {
             // mid-frame.
             enum class DeferredFilePick {
                 None,               /**< No file pick pending. */
-                ImportObjBulk,      /**< Bulk OBJ import dialog. */
-                NewAssetAlbedo,     /**< Albedo texture dialog for a new asset draft. */
                 SelectedAssetAlbedo,/**< Albedo texture dialog for the selected asset. */
             };
 
@@ -291,12 +289,6 @@ namespace Horo {
 
             /** @brief Applies pending texture drops to asset draft or selected asset targets. */
             void ProcessPendingTextureDrops();
-
-            /** @brief Attempts to assign a dropped texture to the new-asset draft albedo field.
-             *  @param path Absolute path of the dropped texture file.
-             *  @return True when the drop was accepted and applied.
-             */
-            bool TryApplyDraftAlbedoDrop(const std::string &path);
 
             /** @brief Attempts to assign a dropped texture to the selected asset's albedo field.
              *  @param path Absolute path of the dropped texture file.
@@ -839,15 +831,7 @@ namespace Horo {
             std::string m_objectSearchQuery;       /**< Current hierarchy/object-list search query text. */
 
             // Assets panel state
-            std::string m_assetDraftId;            /**< Draft asset ID entered in the new-asset form. */
-            std::string m_assetDraftGuid;          /**< Draft stable GUID for new asset creation. */
-            std::string m_assetDraftDisplayName;   /**< Draft display name for new asset creation. */
-            std::string m_assetDraftMesh;          /**< Draft mesh tag/path for new asset creation. */
-            std::string m_assetDraftRenderScale = "1.0000,1.0000,1.0000"; /**< Draft render scale text for new asset creation. */
-            std::string m_assetDraftAlbedoMap;     /**< Draft albedo map path for new asset creation. */
-            std::string m_assetImportError;        /**< Last asset import error shown in assets UI. */
-            bool m_openNewAssetHeader = false;     /**< True when the new-asset accordion should be expanded. */
-            ScreenRectDropZone m_albedoDraftDrop;  /**< Drop zone for assigning draft asset albedo texture. */
+            std::string m_assetImportError;        /**< Last asset import error shown in assets and properties UI. */
             ScreenRectDropZone m_albedoSelDrop;    /**< Drop zone for assigning selected asset albedo texture. */
             std::string m_selectedAssetId;         /**< Currently selected asset ID in the assets panel. */
             bool m_assetSearchOpen = false;        /**< True while asset-search popup UI is open. */
