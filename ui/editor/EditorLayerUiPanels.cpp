@@ -584,20 +584,19 @@ namespace Horo::Editor
         ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
         constexpr const char* kNoFavoritesText = "No favorites yet.";
         const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
-        const float minX = ImGui::GetWindowContentRegionMin().x;
-        const float maxX = ImGui::GetWindowContentRegionMax().x;
-        const float centeredX = minX + (maxX - minX - textSize.x) * 0.5f;
         constexpr float kPlaceholderBlockHeight = 24.0f;
         const float blockStartY = ImGui::GetCursorPosY();
         const float centeredY =
           blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
         ImGui::SetCursorPosY(centeredY);
-        ImGui::SetCursorPosX(centeredX);
         ImGui::TextUnformatted(kNoFavoritesText);
         ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
         ImGui::PopStyleColor();
         ImGui::TreePop();
       }
+
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
       std::string rootName = m_projectBrowserRoot.filename().string();
       if (rootName.empty())

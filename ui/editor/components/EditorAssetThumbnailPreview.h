@@ -10,6 +10,10 @@
 #include "renderer/RenderTargetHandle.h"
 #include "ui/editor/SceneDocument.h"
 
+namespace Horo {
+class SkinnedMesh;
+}
+
 namespace Horo::Editor {
 
 /** @brief Attempts to retrieve the render-target handle for an asset's thumbnail.
@@ -29,6 +33,11 @@ ImTextureID ToImTextureId(const RenderTargetHandle& handle);
  *  @param meshPath Relative or absolute path to the mesh asset.
  *  @return Non-owning pointer to the cached Mesh, or nullptr if the mesh could not be loaded. */
 const Mesh* TryGetAssetPreviewStaticMesh(std::string_view meshPath);
+
+/** @brief Returns a pointer to the skinned mesh used for previewing a skeletal asset at the given path.
+ *  @param meshPath Relative or absolute path to the skinned mesh asset (e.g. .skinned.bin or .gltf/.glb).
+ *  @return Non-owning pointer to the cached SkinnedMesh, or nullptr if the mesh could not be loaded. */
+const SkinnedMesh* TryGetAssetPreviewSkinnedMesh(std::string_view meshPath);
 
 /** @brief Clears all cached mesh objects used for asset thumbnail rendering. */
 void ClearAssetThumbnailMeshCaches();

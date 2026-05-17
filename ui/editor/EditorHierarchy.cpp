@@ -207,7 +207,9 @@ void EditorLayer::DrawSceneHeader(SceneDocument &doc, bool isPrimary,
 
   // Eye suffix drawn as text so drag/drop and context menu still target the
   // tree node (last ImGui item after DrawEditorTreeItem with no suffixIcon).
-  ImGui::SameLine(ImGui::GetContentRegionAvail().x - 6.0f);
+  const float eyeIconWidth = ImGui::CalcTextSize(ICON_FA_EYE).x;
+  const float eyeX = ImGui::GetWindowContentRegionMax().x - eyeIconWidth - 16.0f;
+  ImGui::SameLine(eyeX);
   ImGui::TextDisabled("%s", ICON_FA_EYE);
 
   DrawSceneHeaderContextMenu(doc, isPrimary, additionalIndex);

@@ -477,7 +477,7 @@ EditorTreeItemResult DrawEditorTreeItem(const EditorTheme &theme,
   if (item.prefixIcon != nullptr && item.prefixIcon[0] != '\0') {
     displayLabel = item.prefixIcon;
     if (item.label != nullptr && item.label[0] != '\0') {
-      displayLabel += "  ";
+      displayLabel += " ";
       displayLabel += item.label;
     }
   }
