@@ -47,11 +47,12 @@ void EditorLayer::OnMenuRedo() {
 
 /** @copydoc EditorLayer::OnMenuFlyMode */
 void EditorLayer::OnMenuFlyMode() {
-  m_flyMode = !m_flyMode;
-  m_flyCamInitialized = false;
+  m_viewportNavActive = false;
+  m_viewportNavCameraInitialized = false;
   m_prevCursorInit = false;
-  glfwSetInputMode(m_window, GLFW_CURSOR,
-                   m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+  m_prevViewportNavRmbDown = false;
+  if (m_window)
+    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 }
 
 /** @copydoc EditorLayer::OnMenuResetLayout */

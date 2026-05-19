@@ -25,6 +25,7 @@
 #include "core/ProjectPath.h"
 #include "core/StringUtils.h"
 #include "renderer/Camera.h"
+#include "ui/UiComponents.h"
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneDocument.h"
@@ -33,7 +34,7 @@ namespace Horo::Editor {
 namespace Internal {
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
 constexpr float kEditorToolbarH = 36.0f;           /**< Height of the editor toolbar in pixels. */
-constexpr float kEditorStatusH = 24.0f;            /**< Height of the editor status bar in pixels. */
+constexpr float kEditorStatusH = Ui::kEditorStatusBarHeight; /**< Height of the editor status bar in pixels. */
 constexpr char kEditorHierarchyWindow[] = "Hierarchy";   /**< ImGui window title for the hierarchy panel. */
 constexpr char kEditorPropertiesWindow[] = "Properties"; /**< ImGui window title for the properties panel. */
 constexpr char kEditorAssetsWindow[] = "Assets";         /**< ImGui window title for the assets panel. */

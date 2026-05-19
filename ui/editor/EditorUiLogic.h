@@ -57,20 +57,25 @@ namespace Horo::Editor {
     /** @brief Returns true when the quick-open popup should open this frame.
      *  @param currToggle    Current-frame key state.
      *  @param prevToggle    Previous-frame key state.
-     *  @param flyMode       True when the camera is in fly mode (shortcut suppressed in fly mode).
+     *  @param navActive     True when viewport navigation is active (shortcut suppressed).
      *  @param wantsTextInput True when ImGui captures keyboard input.
      *  @param anyItemActive  True when any ImGui item is active. */
-    bool ShouldOpenQuickOpen(bool currToggle, bool prevToggle, bool flyMode,
+    bool ShouldOpenQuickOpen(bool currToggle, bool prevToggle, bool navActive,
                              bool wantsTextInput, bool anyItemActive);
 
     /** @brief Returns true when the command palette should open this frame.
      *  @param currToggle    Current-frame key state.
      *  @param prevToggle    Previous-frame key state.
-     *  @param flyMode       True when the camera is in fly mode.
+     *  @param navActive     True when viewport navigation is active.
      *  @param wantsTextInput True when ImGui captures keyboard input.
      *  @param anyItemActive  True when any ImGui item is active. */
-    bool ShouldOpenCommandPalette(bool currToggle, bool prevToggle, bool flyMode,
+    bool ShouldOpenCommandPalette(bool currToggle, bool prevToggle, bool navActive,
                                   bool wantsTextInput, bool anyItemActive);
+
+    /** @brief Returns true when RMB should start viewport navigation this frame. */
+    bool ShouldStartViewportNav(bool rmbDown, bool alreadyActive,
+                                float mouseX, float mouseY,
+                                const EditorViewportRect &viewportRect);
 
     /** @brief Returns true when the "copy selection ref" shortcut fires this frame.
      *  @param currCopyRef        Current-frame key state.
@@ -113,7 +118,7 @@ namespace Horo::Editor {
     struct EditorStatusSnapshot {
         int selectionCount = 0;   /**< Number of currently selected scene objects. */
         bool dirty = false;       /**< True when the scene has unsaved changes. */
-        bool flyMode = false;     /**< True when the camera is in fly mode. */
+        bool navActive = false;   /**< True when viewport navigation is active. */
         bool reloadPending = false;/**< True when a scene reload is queued. */
     };
 
@@ -121,7 +126,7 @@ namespace Horo::Editor {
     struct EditorStatusText {
         int selectionCount = 0;          /**< Number of selected objects (pass-through). */
         const char *dirtyText = "no";    /**< "yes" or "no" for the unsaved-changes indicator. */
-        const char *flyText = "off";     /**< "on" or "off" for the fly-camera indicator. */
+        const char *navText = "idle";    /**< "active" or "idle" for the viewport-nav indicator. */
         const char *reloadText = "idle"; /**< "pending" or "idle" for the reload indicator. */
     };
 

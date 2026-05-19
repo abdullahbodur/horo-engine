@@ -86,7 +86,7 @@ bool MatchesTypeFilter(const FileBrowserEntry& entry,
     if (!hasActiveFilter)
         return true;
     if (entry.isDirectory)
-        return isSelected(FileBrowserTypeFilter::Folders);
+        return true;
 
     return (isSelected(FileBrowserTypeFilter::Meshes) &&
             IsMeshExtension(entry.extension)) ||

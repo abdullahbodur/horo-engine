@@ -76,10 +76,22 @@ namespace Horo::Editor {
          *  @param outDeltaPos   Receives the position delta for this frame.
          *  @param outDeltaRot   Receives the rotation delta for this frame.
          *  @param outDeltaScale Receives the scale delta for this frame.
+         *  @param viewportX     Viewport content left edge in window coordinates.
+         *  @param viewportY     Viewport content top edge in window coordinates.
+         *  @param viewportW     Viewport content width in window coordinates.
+         *  @param viewportH     Viewport content height in window coordinates.
+         *  @param translateSnapStep Optional cumulative translate snap step; <= 0 disables.
+         *  @param rotateSnapRadians Optional cumulative rotate snap step in radians; <= 0 disables.
+         *  @param scaleSnapStep Optional cumulative scale snap step; <= 0 disables.
          *  @return True when the gizmo consumed the mouse event (caller should skip scene picking).
          */
         bool Update(GLFWwindow *window, const Camera &cam, int screenW, int screenH,
-                    Vec3 &outDeltaPos, Quaternion &outDeltaRot, Vec3 &outDeltaScale);
+                    Vec3 &outDeltaPos, Quaternion &outDeltaRot, Vec3 &outDeltaScale,
+                    float viewportX = 0.0f, float viewportY = 0.0f,
+                    float viewportW = 0.0f, float viewportH = 0.0f,
+                    float translateSnapStep = 0.0f,
+                    float rotateSnapRadians = 0.0f,
+                    float scaleSnapStep = 0.0f);
 
         // Queue DebugDraw lines; call before DebugDraw::Flush.
         /** @brief Queues debug-draw lines for the gizmo handles; must be called before DebugDraw::Flush.
@@ -98,22 +110,22 @@ namespace Horo::Editor {
          */
         float HandleSize(const Camera &cam) const;
 
-        // World-space direction for each axis (world-aligned, not local).
+        // World-space direction for each target-local gizmo axis.
         /** @brief Returns the world-space unit direction for the given axis.
          *  @param axis The axis whose direction is requested.
-         *  @return Normalised world-space direction vector.
+         *  @return Normalised target-local axis transformed into world space.
          */
         Vec3 AxisDir(GizmoAxis axis) const;
 
-        // Screen-space axis hit test. Returns nearest axis whose 2D segment is within
-        // 12 px, or GizmoAxis::None.
+        // Screen-space handle hit test. Returns nearest handle under the cursor,
+        // or GizmoAxis::None.
         /** @brief Performs a screen-space hit test against all gizmo axes.
          *  @param mx      Mouse X in screen pixels (top-left origin).
          *  @param my      Mouse Y in screen pixels (top-left origin).
          *  @param cam     Current viewport camera.
          *  @param screenW Viewport width in pixels.
          *  @param screenH Viewport height in pixels.
-         *  @return Nearest axis within 12 px of the cursor, or GizmoAxis::None.
+         *  @return Nearest visible handle under the cursor, or GizmoAxis::None.
          */
         GizmoAxis PickAxis(float mx, float my, const Camera &cam, int screenW,
                            int screenH) const;
@@ -165,9 +177,13 @@ namespace Horo::Editor {
         // Drag bookkeeping
         bool m_prevMouseL = false;               /**< Previous-frame left mouse button state. */
         Vec3 m_dragAnchorPos;                    /**< Gizmo position captured at drag start. */
+        Vec3 m_dragAnchorScale = Vec3::One();    /**< Target scale captured at drag start. */
         Vec3 m_dragPlaneNormal;                  /**< Drag plane normal used for per-frame ray hits. */
+        float m_dragStartOffset = 0.0f;          /**< Initial axis projection captured at drag start. */
         float m_dragPrevOffset = 0.0f;           /**< Previous axis projection used for incremental translate/scale deltas. */
+        float m_dragPrevSnappedOffset = 0.0f;    /**< Previous cumulative snapped translate/scale offset. */
         float m_dragPrevAngle = 0.0f;            /**< Previous cumulative angle used for incremental rotate deltas. */
+        float m_dragPrevSnappedAngle = 0.0f;     /**< Previous cumulative snapped rotate angle. */
         Vec3 m_dragStartDir;                     /**< Initial tangent direction captured at drag start for rotation. */
 
         /** @brief Draws translate-mode gizmo handles. */
@@ -185,7 +201,10 @@ namespace Horo::Editor {
 
         /** @brief Applies one frame of active drag input and outputs incremental transform deltas. */
         bool ApplyActiveDrag(const Ray &ray, const Camera &cam, Vec3 &outDeltaPos,
-                             Quaternion &outDeltaRot, Vec3 &outDeltaScale);
+                             Quaternion &outDeltaRot, Vec3 &outDeltaScale,
+                             float translateSnapStep = 0.0f,
+                             float rotateSnapRadians = 0.0f,
+                             float scaleSnapStep = 0.0f);
 
         // Test seam: grants test code access to private drag state and methods.
         friend struct ::TransformGizmoTestAccessor;

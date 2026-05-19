@@ -249,8 +249,6 @@ void EditorImportAssetModal::Draw() {
     const ImVec2 windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
     SetModalRect(windowMin.x, windowMin.y, windowMax.x, windowMax.y);
 
-    ImGui::TextUnformatted("Import 3D models, materials and textures into your project.");
-    ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 

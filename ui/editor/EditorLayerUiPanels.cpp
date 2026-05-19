@@ -15,6 +15,7 @@
 #include <array>
 #include <fstream>
 #include <format>
+#include <limits>
 
 #include "core/Logger.h"
 #include "renderer/DebugDraw.h"
@@ -86,6 +87,15 @@ namespace Horo::Editor
     const size_t undoHistorySizeBeforeRender = m_undoHistory.size();
     const size_t redoHistorySizeBeforeRender = m_redoHistory.size();
 
+    if (m_active && m_viewportNavActive)
+    {
+      ImGuiIO& io = ImGui::GetIO();
+      const float hiddenMouse = -std::numeric_limits<float>::max();
+      io.MousePos = ImVec2(hiddenMouse, hiddenMouse);
+      for (bool& mouseDown : io.MouseDown)
+        mouseDown = false;
+    }
+
     if (m_active)
     {
       DrawToolbar();
@@ -137,6 +147,9 @@ namespace Horo::Editor
       DrawWireframeOverlay(cam);
 
     DebugDraw::Flush(cam, 2.0f);
+
+    if (m_beforeImGuiRenderCallback)
+      m_beforeImGuiRenderCallback();
 
     ImGui::Render();
     if (m_imguiBackendInitialized)
@@ -207,17 +220,6 @@ namespace Horo::Editor
       m_commandPaletteOpen = true;
       m_commandPaletteQuery.clear();
     };
-    callbacks.setFlyMode = [this](bool flyMode)
-    {
-      if (m_flyMode != flyMode)
-      {
-        m_flyMode = flyMode;
-        m_flyCamInitialized = false;
-        m_prevCursorInit = false;
-        glfwSetInputMode(m_window, GLFW_CURSOR,
-                         m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-      }
-    };
     callbacks.setResetDockLayout = [this](bool reset)
     {
       m_resetDockLayoutRequested = reset;
@@ -236,8 +238,8 @@ namespace Horo::Editor
     // State pointers
     state.playMode = &m_playMode;
     state.playModeEscPresses = &m_playModeEscPresses;
-    state.flyMode = &m_flyMode;
-    state.flyCamInitialized = &m_flyCamInitialized;
+    state.viewportNavActive = &m_viewportNavActive;
+    state.viewportNavCameraInitialized = &m_viewportNavCameraInitialized;
     state.prevCursorInit = &m_prevCursorInit;
     state.quickOpenOpen = &m_quickOpenOpen;
     state.commandPaletteOpen = &m_commandPaletteOpen;

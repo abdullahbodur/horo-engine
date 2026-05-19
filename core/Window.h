@@ -129,7 +129,7 @@ public:
 
   /** @brief View menu callback group. */
   struct ViewMenuCallbacks {
-    MenuCallback viewFlyMode;         /**< View -> Fly Mode. */
+    MenuCallback viewFlyMode;         /**< View -> Viewport Nav. */
     MenuCallback viewHelp;            /**< View -> Help. */
     MenuCallback viewQuickOpen;       /**< View -> Quick Open. */
     MenuCallback viewCommandPalette;  /**< View -> Command Palette. */

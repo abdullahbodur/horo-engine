@@ -3,6 +3,7 @@
 #pragma once
 
 #include "renderer/Camera.h"
+#include "ui/UiComponents.h"
 #include "ui/editor/ViewSnap.h"
 #include <functional>
 #include <string>
@@ -28,6 +29,7 @@ public:
         std::function<void()> onConfirmExit;                                  /**< Called when the user confirms the exit action. */
         std::function<bool(int, const std::string&)> onApplyRenameObject;    /**< Called to apply a rename; returns true on success. */
         std::function<std::string()> getStatusBarText;                        /**< Returns the string to display in the status bar. */
+        std::function<std::vector<Ui::EditorStatusBarItem>()> getStatusBarItems; /**< Returns modular status-bar sections. */
     };
 
     /** @brief Constructs widget state for editor overlays and modal helpers. */

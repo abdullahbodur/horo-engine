@@ -6,8 +6,11 @@
 
 #include <imgui.h>
 
+#include <filesystem>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace Horo::Ui {
 
@@ -115,6 +118,23 @@ enum class EditorThemePreset {
   HighContrast, /**< Maximum contrast: near-black panels, vivid cyan accent, pure white text. */
 };
 
+/** @brief Display-ready editor theme preset descriptor. */
+struct EditorThemePresetDescriptor {
+  std::string id;          /**< Stable persisted id. */
+  std::string label;       /**< Human-facing name. */
+  std::string description; /**< Short explanatory text. */
+  HoroPalette palette{};   /**< Preview palette for the preset. */
+  bool builtin = false;    /**< True for compiled-in presets. */
+};
+
+/** @brief Result of loading user-defined theme presets from config JSON. */
+struct EditorThemeConfigLoadResult {
+  bool ok = true;           /**< False when the file existed but could not be parsed. */
+  bool loadedFromDisk = false; /**< True when a config file was found. */
+  size_t customThemeCount = 0; /**< Number of custom themes registered. */
+  std::string error;       /**< Error description when ok is false. */
+};
+
 /**
  * @brief Returns the stable string identifier for a preset.
  *
@@ -152,6 +172,37 @@ EditorThemePreset ParseEditorThemePreset(std::string_view id, bool *ok = nullptr
  */
 std::span<const EditorThemePreset> EditorThemePresets();
 
+/** @brief Returns all built-in and user-defined editor theme preset descriptors. */
+std::vector<EditorThemePresetDescriptor> EditorThemePresetOptions();
+
+/** @brief Returns true when @p id resolves to a built-in or user-defined preset. */
+bool IsEditorThemePresetIdKnown(std::string_view id);
+
+/** @brief Loads user-defined editor themes from a config JSON file.
+ *
+ * Expected shape:
+ * @code{.json}
+ * {
+ *   "editorThemes": [
+ *     {
+ *       "id": "midnight",
+ *       "name": "Midnight",
+ *       "description": "Cool dark theme",
+ *       "palette": {
+ *         "panel": "#10131a",
+ *         "accent": [0.2, 0.55, 1.0, 1.0]
+ *       }
+ *     }
+ *   ]
+ * }
+ * @endcode
+ *
+ * Missing palette keys inherit from Dark Blue. Colours may be #RRGGBB,
+ * #RRGGBBAA, or [r,g,b,a] arrays in 0..1.
+ */
+EditorThemeConfigLoadResult
+LoadEditorThemeConfig(const std::filesystem::path &configPath);
+
 /**
  * @brief Stores @p preset as the active editor theme preset.
  *
@@ -162,11 +213,17 @@ std::span<const EditorThemePreset> EditorThemePresets();
  */
 void SetEditorThemePreset(EditorThemePreset preset);
 
+/** @brief Stores the active editor theme by persisted id. Unknown ids fall back to darkBlue. */
+void SetEditorThemePresetId(std::string_view id);
+
 /**
  * @brief Returns the preset currently selected as the editor theme.
  * @return Active preset; defaults to `DarkBlue` until changed.
  */
 EditorThemePreset GetEditorThemePreset();
+
+/** @brief Returns the currently active editor theme id. */
+std::string_view GetEditorThemePresetId();
 
 /**
  * @brief Returns the application-wide launcher theme singleton.

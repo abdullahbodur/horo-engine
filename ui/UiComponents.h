@@ -656,14 +656,14 @@ struct EditorPanelDropdownItem {
 };
 
 /**
- * @brief One action button entry in the panel top-bar action area.
+ * @brief One action button entry in a panel header action area.
  *
- * Action buttons sit in the top-right corner of a panel header.  Each button
- * either fires a callback via its dropdown or reports a click through
- * EditorPanelTopBarResult::clickedActionIndex.
+ * Action buttons sit in the top-right corner of a panel/header bar.  Each
+ * button may be icon-only, text-only, or icon+text.  Each button either fires a
+ * callback via its dropdown or reports a click through the result object.
  */
 struct EditorPanelActionItem {
-  const char                              *icon;           /**< Required Font Awesome icon displayed on the button. */
+  const char                              *icon    = nullptr; /**< Optional Font Awesome icon displayed on the button. */
   const char                              *text    = nullptr; /**< Optional text rendered after the icon. */
   std::span<const EditorPanelDropdownItem>  dropdown = {};  /**< Non-empty → clicking opens a recursive popup menu.
                                                               *   Empty    → clickedActionIndex is set on click. */
@@ -677,6 +677,13 @@ struct EditorPanelTopBarResult {
   int clickedTabIndex    = -1; /**< Index into the @p tabs span of the tab clicked this frame, or -1. */
   int clickedActionIndex = -1; /**< Index into the @p actions span of the button clicked this frame
                                 *   (only set when EditorPanelActionItem::dropdown is empty), or -1. */
+};
+
+/**
+ * @brief Return value from RenderEditorSectionBar().
+ */
+struct EditorSectionBarResult {
+  int clickedActionIndex = -1; /**< Index into the @p actions span clicked this frame, or -1. */
 };
 
 /**
@@ -704,6 +711,22 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
     const EditorTheme &theme, const char *id,
     std::span<const EditorPanelTabItem> tabs,
     std::span<const EditorPanelActionItem> actions);
+
+/**
+ * @brief Renders a full-width editor section bar with optional right actions.
+ *
+ * This is the common primitive for panel bars such as "Viewport",
+ * "Workspace", and "Properties" when the bar needs suffix controls.  Actions
+ * use the same icon/text/dropdown model as RenderEditorPanelTopBar().
+ * @param theme   Active editor theme.
+ * @param id      Unique ImGui id string for the bar and action popups.
+ * @param title   Section title rendered on the left.
+ * @param actions Optional suffix action buttons rendered on the right.
+ * @return Result indicating which direct action was clicked, if any.
+ */
+EditorSectionBarResult RenderEditorSectionBar(
+    const EditorTheme &theme, const char *id, const char *title,
+    std::span<const EditorPanelActionItem> actions = {});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Group A — Modal and picker shell
@@ -1072,6 +1095,25 @@ enum class EditorStatusLevel {
   Success, /**< Positive outcome — soft green fixed colour. */
 };
 
+/** @brief Shared editor status-bar height used by layout and rendering. */
+inline constexpr float kEditorStatusBarHeight = 28.0f;
+
+/** @brief Horizontal side for a modular editor status-bar item. */
+enum class EditorStatusBarSide {
+  Left, /**< Item is packed from the left edge. */
+  Right /**< Item is packed from the right edge. */
+};
+
+/** @brief One modular section in the editor status bar. */
+struct EditorStatusBarItem {
+  std::string id;    /**< Stable identifier for future click/action wiring. */
+  std::string icon;  /**< Optional icon glyph rendered before the label. */
+  std::string label; /**< Short section label, e.g. "Sel". */
+  std::string value; /**< Current value, e.g. "1" or "idle". */
+  EditorStatusLevel level = EditorStatusLevel::Info; /**< Value tint. */
+  EditorStatusBarSide side = EditorStatusBarSide::Left; /**< Packing side. */
+};
+
 /**
  * @brief Renders a coloured status message derived from the active theme palette.
  *
@@ -1086,6 +1128,17 @@ enum class EditorStatusLevel {
 void RenderEditorStatusText(const EditorTheme &theme,
                             EditorStatusLevel  level,
                             const char        *text);
+
+/** @brief Renders a VS Code-like modular editor status bar body.
+ *  @param theme Active editor theme.
+ *  @param items Status sections to render, packed by their side field.
+ *  @param width Available bar width in pixels.
+ *  @param height Bar height in pixels.
+ */
+void RenderEditorStatusBar(const EditorTheme &theme,
+                           std::span<const EditorStatusBarItem> items,
+                           float width,
+                           float height = kEditorStatusBarHeight);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Group D — Settings modal primitives

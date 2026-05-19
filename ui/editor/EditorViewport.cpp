@@ -26,8 +26,9 @@
 #include "scene/components/MeshComponent.h"
 #include "scene/components/TransformComponent.h"
 #include "ui/IconsFontAwesome6.h"
-#include "ui/editor/Raycaster.h"
 #include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
+#include "ui/editor/Raycaster.h"
 #include "math/Mat4.h"
 #include "math/MathUtils.h"
 #include "math/Quaternion.h"
@@ -35,6 +36,8 @@
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
 
 namespace Horo::Editor {
+
+constexpr float kEditorViewportSupersampleScale = 2.0f;
 
 namespace Internal {
 bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
@@ -70,7 +73,7 @@ bool TryPropWorldAabb(Registry &reg, const SceneObject &obj, Vec3 &outCenter,
 /** @copydoc EditorLayer::RefreshViewportPanelRect */
 void EditorLayer::RefreshViewportPanelRect() {
   const ImVec2 winPos = ImGui::GetWindowPos();
-  const ImVec2 innerMin = ImGui::GetWindowContentRegionMin();
+  const ImVec2 innerMin = ImGui::GetCursorPos();
   const ImVec2 innerMax = ImGui::GetWindowContentRegionMax();
   m_viewportPanelRect.minX = winPos.x + innerMin.x;
   m_viewportPanelRect.minY = winPos.y + innerMin.y;
@@ -86,15 +89,24 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
 
   std::string viewportError;
   RenderTargetHandle viewportHandle;
-  const auto viewportWidth =
-      static_cast<uint32_t>(std::max(1.0f, std::floor(targetW)));
+  const ImGuiIO &io = ImGui::GetIO();
+  const float framebufferScaleX = std::max(1.0f, io.DisplayFramebufferScale.x);
+  const float framebufferScaleY = std::max(1.0f, io.DisplayFramebufferScale.y);
+  const auto viewportWidth = static_cast<uint32_t>(
+      std::max(1.0f, std::floor(targetW * framebufferScaleX *
+                                kEditorViewportSupersampleScale)));
   if (const auto viewportHeight =
-          static_cast<uint32_t>(std::max(1.0f, std::floor(targetH)));
-      !Renderer::EnsureEditorViewportRenderTarget(viewportWidth, viewportHeight,
-                                                  &viewportError) ||
-      !Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, false,
-                                                        &viewportError))
-    return false;
+          static_cast<uint32_t>(
+              std::max(1.0f, std::floor(targetH * framebufferScaleY *
+                                        kEditorViewportSupersampleScale)));
+      !Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, true,
+                                                        &viewportError)) {
+    if (!Renderer::EnsureEditorViewportRenderTarget(viewportWidth, viewportHeight,
+                                                    &viewportError) ||
+        !Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, true,
+                                                          &viewportError))
+      return false;
+  }
 
   const ImTextureID textureId = ToImTextureId(viewportHandle);
   if (textureId == (ImTextureID)0) {
@@ -106,7 +118,11 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
     }
     return false;
   }
-  ImGui::Image(textureId, ImVec2(targetW, targetH));
+  const ImVec2 uv0 =
+      viewportHandle.needsYFlip ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+  const ImVec2 uv1 =
+      viewportHandle.needsYFlip ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+  ImGui::Image(textureId, ImVec2(targetW, targetH), uv0, uv1);
   s_lastViewportRenderError.clear();
   return true;
 }
@@ -181,7 +197,18 @@ void EditorLayer::DrawViewportPanel(const Camera &cam, int screenW,
   m_viewportPanelRect = {};
   if (ImGui::Begin(kEditorViewportWindow, nullptr,
                    kMainPanelWindowFlags | ImGuiWindowFlags_NoScrollbar |
-                       ImGuiWindowFlags_NoScrollWithMouse)) {
+                       ImGuiWindowFlags_NoScrollWithMouse |
+                       ImGuiWindowFlags_NoTitleBar)) {
+    m_viewportToolbar.Draw(
+        Ui::GetEditorTheme(),
+        EditorViewportToolbarState{m_preciseTransformEnabled,
+                                   m_preciseTranslateStepMeters},
+        EditorViewportToolbarCallbacks{
+            [this](bool enabled) { m_preciseTransformEnabled = enabled; },
+            [this](float stepMeters) {
+              m_preciseTranslateStepMeters = stepMeters;
+            },
+        });
     RefreshViewportPanelRect();
     const auto viewportImageStart = ImGui::GetCursorPos();
     const auto dropTargetSize = ImGui::GetContentRegionAvail();
@@ -541,7 +568,7 @@ void EditorLayer::ApplyPendingViewSnap(Camera &cam) {
   const float distance = std::max(2.0f, extent * 3.0f + 1.0f);
   SnapCameraToAxis(cam, m_uiWidgets.GetPendingViewSnap(), pivot, distance);
 
-  m_flyCamInitialized = false;
+  m_viewportNavCameraInitialized = false;
   m_uiWidgets.ClearPendingViewSnap();
 }
 

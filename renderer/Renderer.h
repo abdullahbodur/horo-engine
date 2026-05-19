@@ -87,6 +87,11 @@ namespace Horo {
                                                bool needsYFlip = false,
                                                std::string *outError = nullptr);
 
+        static bool BeginEditorViewportRenderTarget(uint32_t width, uint32_t height,
+                                                    std::string *outError = nullptr);
+
+        static void EndEditorViewportRenderTarget();
+
         // ── Resource Factory ────────────────────────────────────────────────────
         static std::shared_ptr<IShader>       CreateShader(const std::string& vert, const std::string& frag);
         static std::shared_ptr<IShader>       CreateShaderFromFile(const std::string& vertPath, const std::string& fragPath);

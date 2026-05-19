@@ -120,21 +120,73 @@ namespace Horo {
     }
 
     bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(
-        uint32_t, uint32_t, std::string *outError) {
-        if (outError)
-            *outError = "Editor viewport render-target provisioning is unavailable on "
-                    "OpenGL backend.";
-        return false;
+        uint32_t width, uint32_t height, std::string *outError) {
+        if (width == 0 || height == 0) {
+            if (outError)
+                *outError = "Editor viewport render-target dimensions must be non-zero.";
+            return false;
+        }
+
+        FramebufferSpec spec;
+        spec.width = width;
+        spec.height = height;
+        spec.attachmentSpec = {{{FramebufferTextureFormat::RGBA8},
+                                {FramebufferTextureFormat::DEPTH24STENCIL8}}};
+
+        if (!m_editorViewportFramebuffer) {
+            m_editorViewportFramebuffer =
+                std::make_shared<OpenGLFramebuffer>(spec);
+            ++m_editorViewportFramebufferGeneration;
+            return m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+        }
+
+        const FramebufferSpec &current = m_editorViewportFramebuffer->GetSpec();
+        if (current.width != width || current.height != height) {
+            m_editorViewportFramebuffer->Resize(width, height);
+            ++m_editorViewportFramebufferGeneration;
+        }
+        return m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
     }
 
     bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(
-        RenderTargetHandle *outHandle, bool, std::string *outError) {
+        RenderTargetHandle *outHandle, bool needsYFlip, std::string *outError) {
         if (outHandle)
             *outHandle = {};
-        if (outError)
-            *outError = "Editor viewport render-target handle is unavailable on OpenGL "
-                    "backend.";
-        return false;
+        if (!m_editorViewportFramebuffer) {
+            if (outError)
+                *outError = "Editor viewport render target has not been created.";
+            return false;
+        }
+
+        const uint32_t textureId =
+            m_editorViewportFramebuffer->GetColorAttachmentId();
+        if (textureId == 0) {
+            if (outError)
+                *outError = "Editor viewport render target has no color attachment.";
+            return false;
+        }
+
+        const FramebufferSpec &spec = m_editorViewportFramebuffer->GetSpec();
+        if (outHandle) {
+            *outHandle =
+                RenderTargetHandle::OpenGLTexture(textureId, needsYFlip, spec.width,
+                                                  spec.height,
+                                                  m_editorViewportFramebufferGeneration);
+        }
+        return true;
+    }
+
+    bool OpenGLRenderBackend::BeginEditorViewportRenderTarget(
+        uint32_t width, uint32_t height, std::string *outError) {
+        if (!EnsureEditorViewportRenderTarget(width, height, outError))
+            return false;
+        m_editorViewportFramebuffer->Bind();
+        return true;
+    }
+
+    void OpenGLRenderBackend::EndEditorViewportRenderTarget() {
+        if (m_editorViewportFramebuffer)
+            m_editorViewportFramebuffer->Unbind();
     }
 
     void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig &frame) {

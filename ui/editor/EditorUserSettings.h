@@ -23,6 +23,8 @@ namespace Horo::Editor {
 struct EditorUserSettings {
     /** @brief Currently selected editor theme preset; defaults to Dark Blue. */
     Horo::Ui::EditorThemePreset themePreset = Horo::Ui::EditorThemePreset::DarkBlue;
+    /** @brief Persisted editor theme id; may reference built-in or custom config themes. */
+    std::string themePresetId = Horo::Ui::EditorThemePresetId(Horo::Ui::EditorThemePreset::DarkBlue);
 };
 
 /**

@@ -37,6 +37,7 @@
 #include "ui/editor/SceneRuntimeCoordinatorBridge.h"
 #include "ui/editor/SceneSerializer.h"
 #include "ui/editor/TransformGizmo.h"
+#include "ui/editor/components/EditorViewportToolbar.h"
 #include "math/MathUtils.h"
 #include "math/Vec3.h"
 #include "renderer/Camera.h"
@@ -1287,6 +1288,35 @@ TEST_CASE("EditorUserSettings: save then load round-trips a Graphite preset", "[
   CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::Graphite);
 }
 
+TEST_CASE("EditorUserSettings: custom theme id from config round-trips", "[editor][user-settings]") {
+  const std::filesystem::path fakeHome =
+      Horo::Tests::SecureTempBase() / "horo_us_custom_theme";
+  std::error_code ec;
+  std::filesystem::remove_all(fakeHome, ec);
+  std::filesystem::create_directories(fakeHome, ec);
+  HomeDirGuard homeGuard(fakeHome);
+
+  const std::filesystem::path configPath = fakeHome / ".horo" / "config.json";
+  WriteFile(configPath,
+            R"({"editorThemes":[{"id":"midnight","name":"Midnight","palette":{"panel":"#10131aff","accent":[0.1,0.4,0.9,1.0]}}]})");
+  const auto loadResult = Horo::Ui::LoadEditorThemeConfig(configPath);
+  REQUIRE(loadResult.ok);
+  REQUIRE(loadResult.customThemeCount == 1);
+
+  EditorUserSettingsDocument doc;
+  doc.settings.themePresetId = "midnight";
+  std::string err;
+  REQUIRE(SaveEditorUserSettingsDocument(&doc, &err));
+  CHECK(err.empty());
+
+  EditorUserSettingsDocument loaded = LoadEditorUserSettingsDocument();
+  CHECK(loaded.loadedFromDisk);
+  CHECK_FALSE(loaded.parseError);
+  CHECK(loaded.error.empty());
+  CHECK(loaded.settings.themePresetId == "midnight");
+  CHECK(loaded.settings.themePreset == Horo::Ui::EditorThemePreset::DarkBlue);
+}
+
 TEST_CASE("EditorUserSettings: unknown preset id falls back to DarkBlue without crash", "[editor][user-settings]") {
   const std::filesystem::path fakeHome =
       Horo::Tests::SecureTempBase() / "horo_us_unknown";
@@ -1437,6 +1467,32 @@ TEST_CASE("TransformGizmo: PickAxis returns None for empty screen point", "[gizm
   // Mouse far off screen — should not pick anything
   const GizmoAxis axis = g.PickAxis(9999.0f, 9999.0f, cam, 800, 800);
   CHECK(axis == GizmoAxis::None);
+}
+
+TEST_CASE("EditorViewportToolbar: precision labels resolve nearest supported step", "[editor][viewport-toolbar]") {
+  CHECK(std::string_view(ViewportTranslatePrecisionLabel(0.01f)) == "1 cm");
+  CHECK(std::string_view(ViewportTranslatePrecisionLabel(0.49f)) == "50 cm");
+  CHECK(std::string_view(ViewportTranslatePrecisionLabel(2.0f)) == "1 m");
+}
+
+TEST_CASE("EditorViewportToolbar: translate snap step falls back when disabled or invalid", "[editor][viewport-toolbar]") {
+  CHECK(ResolveViewportTranslateSnapStep(false, 0.1f, 0.5f) ==
+        Approx(0.5f));
+  CHECK(ResolveViewportTranslateSnapStep(true, 0.0f, 0.5f) ==
+        Approx(0.5f));
+  CHECK(ResolveViewportTranslateSnapStep(true, 0.1f, 0.5f) ==
+        Approx(0.1f));
+}
+
+TEST_CASE("EditorViewportToolbar: precision drives rotate and scale step helpers", "[editor][viewport-toolbar]") {
+  CHECK(ResolveViewportRotateSnapStepDegrees(false, 0.1f, 15.0f) ==
+        Approx(15.0f));
+  CHECK(ResolveViewportRotateSnapStepDegrees(true, 0.01f, 15.0f) ==
+        Approx(1.0f));
+  CHECK(ResolveViewportRotateSnapStepDegrees(true, 1.0f, 15.0f) ==
+        Approx(90.0f));
+  CHECK(ResolveViewportScaleSnapStep(false, 0.1f, 0.25f) == Approx(0.25f));
+  CHECK(ResolveViewportScaleSnapStep(true, 0.05f, 0.25f) == Approx(0.05f));
 }
 
 // ===========================================================================

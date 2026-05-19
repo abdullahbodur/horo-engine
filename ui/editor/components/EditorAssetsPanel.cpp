@@ -161,14 +161,26 @@ namespace Horo::Editor
     namespace
     {
         /** @brief Renders the asset thumbnail image (or a fallback label) inside a tile. */
-        void DrawAssetThumbnail(ImDrawList* dl, const std::string& assetId, const AssetDef& asset,
+        ImVec4 WithAlpha(ImVec4 color, float alpha)
+        {
+            color.w = alpha;
+            return color;
+        }
+
+        /** @brief Converts a theme token into a packed ImGui draw colour. */
+        ImU32 ThemeColor(ImVec4 color, float alpha)
+        {
+            return ImGui::ColorConvertFloat4ToU32(WithAlpha(color, alpha));
+        }
+
+        /** @brief Renders the asset thumbnail image (or a fallback label) inside a tile. */
+        void DrawAssetThumbnail(ImDrawList* dl, const Horo::Ui::EditorTheme& theme,
+                                const std::string& assetId, const AssetDef& asset,
                                 const ImVec2& thumbMin, const ImVec2& thumbMax)
         {
-            dl->AddRectFilled(
-                thumbMin, thumbMax,
-                ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f)), 6.0f);
-            dl->AddRect(thumbMin, thumbMax,
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(0.26f, 0.34f, 0.46f, 1.0f)),
+            dl->AddRectFilled(thumbMin, thumbMax,
+                              ThemeColor(theme.palette.input, 0.95f), 6.0f);
+            dl->AddRect(thumbMin, thumbMax, ThemeColor(theme.palette.border, 0.85f),
                         6.0f);
 
             if (RenderTargetHandle previewHandle;
@@ -181,8 +193,8 @@ namespace Horo::Editor
                 return;
             }
 
-            const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.67f, 0.74f, 0.84f, 0.95f));
-            const ImU32 meshCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.64f, 0.75f, 0.95f));
+            const ImU32 labelCol = ThemeColor(theme.palette.textMuted, 0.95f);
+            const ImU32 meshCol = ThemeColor(theme.palette.textMuted, 0.80f);
             const std::string ext = asset.mesh.empty()
                                         ? std::string("mesh")
                                         : Horo::ToLowerAscii(std::filesystem::path(asset.mesh).extension().string());
@@ -249,7 +261,7 @@ namespace Horo::Editor
         const ImVec2 thumbMin(tileMin.x + dims.thumbPad, tileMin.y + dims.thumbPad);
         const ImVec2 thumbMax(thumbMin.x + dims.thumbSize, thumbMin.y + dims.thumbSize);
 
-        DrawAssetThumbnail(dl, assetId, asset, thumbMin, thumbMax);
+        DrawAssetThumbnail(dl, theme, assetId, asset, thumbMin, thumbMax);
 
         AssetMetadata tileMetadata;
         const bool hasTileMetadata =
@@ -288,6 +300,7 @@ namespace Horo::Editor
         const float lineH = ImGui::GetTextLineHeight();
         const float labelH = 6.0f + lineH + 4.0f;
         const float addTileH = dims.thumbPad * 2.0f + dims.thumbSize + labelH;
+        const auto& theme = Horo::Ui::GetEditorTheme();
         // Use at least tileH so the tile is never shorter than regular tiles
         const float childH = std::max(dims.tileH, addTileH);
 
@@ -311,32 +324,30 @@ namespace Horo::Editor
         const ImVec2 tileMin = ImGui::GetWindowPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        // Background
         const ImVec4 bgColor = hovered
-                                   ? ImVec4(0.14f, 0.20f, 0.30f, 0.95f)
-                                   : ImVec4(0.09f, 0.12f, 0.18f, 0.85f);
+                                   ? WithAlpha(theme.palette.cardHover, 0.95f)
+                                   : WithAlpha(theme.palette.card, 0.85f);
         const ImVec2 bgMin = tileMin;
         const ImVec2 bgMax(tileMin.x + dims.tileW, tileMin.y + childH);
-        dl->AddRectFilled(bgMin, bgMax,
-                          ImGui::ColorConvertFloat4ToU32(bgColor), 6.0f);
+        dl->AddRectFilled(bgMin, bgMax, ImGui::ColorConvertFloat4ToU32(bgColor),
+                          6.0f);
 
-        // Border — slightly brighter on hover
         const ImVec4 borderColor = hovered
-                                       ? ImVec4(0.45f, 0.62f, 0.90f, 0.90f)
-                                       : ImVec4(0.35f, 0.50f, 0.70f, 0.70f);
-        dl->AddRect(bgMin, bgMax,
-                    ImGui::ColorConvertFloat4ToU32(borderColor), 6.0f, 0, 1.5f);
+                                       ? WithAlpha(theme.palette.accentHover, 0.90f)
+                                       : WithAlpha(theme.palette.border, 0.70f);
+        dl->AddRect(bgMin, bgMax, ImGui::ColorConvertFloat4ToU32(borderColor),
+                    6.0f, 0, 1.5f);
 
         // Thumbnail area bounds
         const ImVec2 thumbMin(tileMin.x + dims.thumbPad, tileMin.y + dims.thumbPad);
         const ImVec2 thumbMax(thumbMin.x + dims.thumbSize, thumbMin.y + dims.thumbSize);
 
-        // Inner thumb background
         dl->AddRectFilled(thumbMin, thumbMax,
-                          ImGui::ColorConvertFloat4ToU32(ImVec4(0.12f, 0.16f, 0.22f, 0.90f)),
+                          ThemeColor(hovered ? theme.palette.inputHover
+                                             : theme.palette.input,
+                                     0.90f),
                           6.0f);
-        dl->AddRect(thumbMin, thumbMax,
-                    ImGui::ColorConvertFloat4ToU32(ImVec4(0.35f, 0.50f, 0.70f, 0.50f)),
+        dl->AddRect(thumbMin, thumbMax, ThemeColor(theme.palette.border, 0.50f),
                     6.0f, 0, 1.0f);
 
         // Centered "+" icon — 1.4× font size, large enough to be prominent but not overwhelming
@@ -348,8 +359,8 @@ namespace Horo::Editor
             thumbMin.x + (dims.thumbSize - iconSz.x) * 0.5f,
             thumbMin.y + (dims.thumbSize - iconSz.y) * 0.5f);
         const ImU32 iconColor = hovered
-                                    ? ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.75f, 1.00f, 1.0f))
-                                    : ImGui::ColorConvertFloat4ToU32(ImVec4(0.40f, 0.58f, 0.85f, 0.90f));
+                                    ? ThemeColor(theme.palette.accentHover, 1.0f)
+                                    : ThemeColor(theme.palette.accent, 0.90f);
 
         dl->AddText(font, iconFontSize, iconPos, iconColor, ICON_FA_PLUS);
 

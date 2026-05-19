@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <ranges>
 #include <string>
@@ -20,6 +21,7 @@
 #include "scene/Registry.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetMetadata.h"
+#include "ui/editor/components/EditorViewportToolbar.h"
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 #include "ui/editor/EditorPropertyRules.h"
 #include "ui/editor/EditorSceneGraph.h"
@@ -27,6 +29,23 @@
 #include "ui/editor/SceneSerializer.h"
 
 namespace Horo::Editor {
+namespace {
+/** @brief Rounds @p value to the nearest positive snap step. */
+float SnapValueToStep(float value, float step) {
+  if (step <= 0.0f)
+    return value;
+  return std::round(value / step) * step;
+}
+
+/** @brief Snaps scale without collapsing a non-zero component to zero. */
+float SnapScaleToStep(float value, float step) {
+  const float snapped = SnapValueToStep(value, step);
+  if (std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
+    return snapped;
+  return value > 0.0f ? step : -step;
+}
+} // namespace
+
 /**
  * @brief Resolves conservative world-space bounds for ray-vs-surface placement (panels/props).
  *
@@ -111,6 +130,16 @@ void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
     applyObj.scale.x *= dScale.x;
     applyObj.scale.y *= dScale.y;
     applyObj.scale.z *= dScale.z;
+    if (m_preciseTransformEnabled) {
+      const float scaleStep = ResolveViewportScaleSnapStep(
+          true, m_preciseTranslateStepMeters, 0.1f);
+      if (std::abs(dScale.x - 1.0f) > 1e-6f)
+        applyObj.scale.x = SnapScaleToStep(applyObj.scale.x, scaleStep);
+      if (std::abs(dScale.y - 1.0f) > 1e-6f)
+        applyObj.scale.y = SnapScaleToStep(applyObj.scale.y, scaleStep);
+      if (std::abs(dScale.z - 1.0f) > 1e-6f)
+        applyObj.scale.z = SnapScaleToStep(applyObj.scale.z, scaleStep);
+    }
 
     Quaternion nextRot = oldObjRot;
     if (dRotXYZSq > 1e-8f) {
@@ -119,6 +148,17 @@ void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
       applyObj.pitch = ToDegrees(euler.x);
       applyObj.yaw = ToDegrees(euler.y);
       applyObj.roll = ToDegrees(euler.z);
+      if (m_preciseTransformEnabled) {
+        const float rotateStepDegrees = ResolveViewportRotateSnapStepDegrees(
+            true, m_preciseTranslateStepMeters, 15.0f);
+        applyObj.pitch = SnapValueToStep(applyObj.pitch, rotateStepDegrees);
+        applyObj.yaw = SnapValueToStep(applyObj.yaw, rotateStepDegrees);
+        applyObj.roll = SnapValueToStep(applyObj.roll, rotateStepDegrees);
+        nextRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                        ToRadians(applyObj.yaw),
+                                        ToRadians(applyObj.roll))
+                      .Normalized();
+      }
     }
 
     m_document.dirty = true;

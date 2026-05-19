@@ -84,21 +84,43 @@ void EditorUIWidgets::DrawHotReloadOverlay() const {
 void EditorUIWidgets::DrawStatusBar() const {
     const ImGuiIO& io = ImGui::GetIO();
 
-    constexpr float kEditorStatusH = 22.0f;
+    constexpr float kEditorStatusH = Horo::Ui::kEditorStatusBarHeight;
     ImGui::SetNextWindowPos(ImVec2(0.0f, io.DisplaySize.y - kEditorStatusH));
     ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, kEditorStatusH));
-    ImGui::SetNextWindowBgAlpha(0.82f);
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("##editor_statusbar", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                      ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    if (m_callbacks.getStatusBarText)
-        ImGui::TextDisabled("%s", m_callbacks.getStatusBarText().c_str());
-    else
-        ImGui::TextDisabled("Ready");
+    if (m_callbacks.getStatusBarItems) {
+        const std::vector<Horo::Ui::EditorStatusBarItem> items =
+            m_callbacks.getStatusBarItems();
+        Horo::Ui::RenderEditorStatusBar(Horo::Ui::GetEditorTheme(), items,
+                                        io.DisplaySize.x, kEditorStatusH);
+    } else if (m_callbacks.getStatusBarText) {
+        const Horo::Ui::EditorStatusBarItem item{
+            .id = "status",
+            .label = m_callbacks.getStatusBarText(),
+        };
+        Horo::Ui::RenderEditorStatusBar(Horo::Ui::GetEditorTheme(),
+                                        std::span<const Horo::Ui::EditorStatusBarItem>(
+                                            &item, 1),
+                                        io.DisplaySize.x, kEditorStatusH);
+    } else {
+        const Horo::Ui::EditorStatusBarItem item{
+            .id = "ready",
+            .label = "Ready",
+        };
+        Horo::Ui::RenderEditorStatusBar(Horo::Ui::GetEditorTheme(),
+                                        std::span<const Horo::Ui::EditorStatusBarItem>(
+                                            &item, 1),
+                                        io.DisplaySize.x, kEditorStatusH);
+    }
 
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 /** @copydoc EditorUIWidgets::DrawViewGimbal */

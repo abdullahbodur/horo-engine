@@ -1701,12 +1701,22 @@ TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[
   REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
 }
 
-TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]") {
+TEST_CASE("Editor UI logic: quick open is blocked in viewport nav and text input", "[editor]") {
   REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor UI logic: viewport nav starts only from viewport rect", "[editor]") {
+  const EditorViewportRect viewport{100.0f, 50.0f, 400.0f, 250.0f};
+  REQUIRE(ShouldStartViewportNav(true, false, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(false, false, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, true, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 90.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 150.0f, 260.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 0.0f, 0.0f, {}));
 }
 
 TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]") {
@@ -1771,13 +1781,13 @@ TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[edito
       BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
   REQUIRE(status.selectionCount == 0);
   REQUIRE(std::string(status.dirtyText) == "yes");
-  REQUIRE(std::string(status.flyText) == "off");
+  REQUIRE(std::string(status.navText) == "idle");
   REQUIRE(std::string(status.reloadText) == "pending");
 
   status = BuildEditorStatusText(EditorStatusSnapshot{3, false, true, false});
   REQUIRE(status.selectionCount == 3);
   REQUIRE(std::string(status.dirtyText) == "no");
-  REQUIRE(std::string(status.flyText) == "on");
+  REQUIRE(std::string(status.navText) == "active");
   REQUIRE(std::string(status.reloadText) == "idle");
 }
 

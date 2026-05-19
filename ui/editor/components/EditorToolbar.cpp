@@ -77,10 +77,10 @@ void OnPlayClicked(const EditorToolbarState& state) {
         *state.playMode = true;
     if (state.playModeEscPresses)
         *state.playModeEscPresses = 0;
-    if (state.flyMode && *state.flyMode && state.window) {
-        *state.flyMode = false;
-        if (state.flyCamInitialized)
-            *state.flyCamInitialized = false;
+    if (state.viewportNavActive && *state.viewportNavActive && state.window) {
+        *state.viewportNavActive = false;
+        if (state.viewportNavCameraInitialized)
+            *state.viewportNavCameraInitialized = false;
         if (state.prevCursorInit)
             *state.prevCursorInit = false;
         glfwSetInputMode(state.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -362,13 +362,8 @@ void EditorToolbar::DrawViewMenu(const EditorToolbarCallbacks& callbacks,
     if (!ImGui::BeginMenu("View"))
         return;
 
-    const bool flyBefore = state.flyMode && *state.flyMode;
-
-    if (ImGui::MenuItem("Fly Mode", "Tab", flyBefore) && callbacks.setFlyMode)
-        callbacks.setFlyMode(!flyBefore);
-
-    if (flyBefore || (state.flyMode && *state.flyMode))
-        ImGui::TextDisabled("WASD + mouse");
+    ImGui::MenuItem("Viewport Nav", "RMB", false, false);
+    ImGui::TextDisabled("Hold RMB in the viewport, then use WASD + mouse");
 
     if (ImGui::MenuItem("Help", "? / F1") && callbacks.openHelpPopup)
         callbacks.openHelpPopup();

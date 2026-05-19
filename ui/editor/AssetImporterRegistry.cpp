@@ -14,6 +14,7 @@
 #include <fstream>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "core/ProjectPath.h"
@@ -815,6 +816,31 @@ namespace Horo::Editor {
                                    FbxTexturePaths &texturePaths) {
             namespace fs = std::filesystem;
             const auto &settings = request.settings;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>>
+                usedBasenames;
+            for (const std::string &produced : producedFiles)
+                usedBasenames.insert(fs::path(produced).filename().string());
+
+            std::unordered_map<std::string, std::string, Horo::StringHash,
+                               std::equal_to<>>
+                copiedBySource;
+
+            const auto pickUniqueBasename = [&](const std::string &base) {
+                if (!usedBasenames.contains(base))
+                    return base;
+
+                const fs::path baseAsPath(base);
+                const std::string stem = baseAsPath.stem().string();
+                const std::string ext = baseAsPath.extension().string();
+                for (int suffix = 1; suffix < 1024; ++suffix) {
+                    const std::string candidate =
+                        std::format("{}_{}{}", stem, suffix, ext);
+                    if (!usedBasenames.contains(candidate))
+                        return candidate;
+                }
+                return base;
+            };
+
             const auto applyOverride = [&](const char *key, std::string &path) {
                 const auto it = settings.find(key);
                 if (it == settings.end() || it->second.empty())
@@ -832,12 +858,27 @@ namespace Horo::Editor {
                     return;
                 }
 
+                fs::path canonicalSource = fs::weakly_canonical(sourcePath, ec);
+                if (ec) {
+                    ec.clear();
+                    canonicalSource = fs::absolute(sourcePath, ec);
+                }
+                const std::string sourceKey =
+                    ec ? sourcePath.string() : canonicalSource.string();
+                ec.clear();
+                if (const auto copied = copiedBySource.find(sourceKey);
+                    copied != copiedBySource.end()) {
+                    path = copied->second;
+                    return;
+                }
+
                 const std::string basename =
                         SanitiseTextureBasename(sourcePath.filename().string());
                 if (!IsSafeBasename(basename))
                     return;
 
-                const fs::path destPath = destDir / basename;
+                const std::string uniqueBasename = pickUniqueBasename(basename);
+                const fs::path destPath = destDir / uniqueBasename;
                 if (!CopyFileReplacing(sourcePath, destPath, ec) || ec) {
                     diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
@@ -851,6 +892,8 @@ namespace Horo::Editor {
                 const std::string projectRelative =
                         fs::relative(destPath, ProjectPath::Root()).generic_string();
                 path = projectRelative;
+                usedBasenames.insert(uniqueBasename);
+                copiedBySource.emplace(sourceKey, projectRelative);
                 if (std::ranges::find(producedFiles, projectRelative) ==
                     producedFiles.end())
                     producedFiles.push_back(projectRelative);

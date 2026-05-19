@@ -24,6 +24,7 @@
 #include "ui/editor/components/EditorSettingsModal.h"
 #include "ui/editor/components/EditorImportAssetModal.h"
 #include "ui/editor/components/EditorToolbar.h"
+#include "ui/editor/components/EditorViewportToolbar.h"
 #include "ui/editor/components/EditorUIWidgets.h"
 #include "ui/UiComponents.h"
 #include "mcp/McpController.h"
@@ -95,7 +96,7 @@ namespace Horo {
             void OnMenuDuplicate();
             /** @brief Menu handler: delete the selected object(s) after confirmation. */
             void OnMenuDelete();
-            /** @brief Menu handler: toggle fly-camera mode. */
+            /** @brief Menu handler: show viewport navigation guidance. */
             void OnMenuFlyMode();
             /** @brief Menu handler: toggle the help/shortcuts popup. */
             void OnMenuHelp();
@@ -115,9 +116,9 @@ namespace Horo {
 
             /** @brief Processes input and per-frame picking for the editor.
              *
-             *  In fly mode the camera position and target are updated directly.
+             *  In viewport navigation mode the camera position and target are updated directly.
              *  @param dt      Frame delta time in seconds.
-             *  @param cam     Live camera; modified in-place when in fly mode.
+             *  @param cam     Live camera; modified in-place when viewport navigation is active.
              *  @param screenW Framebuffer width in pixels.
              *  @param screenH Framebuffer height in pixels.
              *  @return True when ImGui is consuming mouse or keyboard input; the caller
@@ -131,6 +132,11 @@ namespace Horo {
              *  @param screenW Framebuffer width in pixels.
              *  @param screenH Framebuffer height in pixels. */
             void Render(const Camera &cam, int screenW, int screenH);
+
+            /** @brief Returns the last rendered viewport content bounds in screen coordinates. */
+            const EditorViewportRect &GetViewportRenderRect() const {
+                return m_viewportPanelRect;
+            }
 
             /** @brief Replaces the current document with a live-scene snapshot.
              *
@@ -198,6 +204,12 @@ namespace Horo {
              *  @param cb Render callback invoked at the end of each Render() call. */
             void SetOverlayRenderCallback(std::function<void()> cb) {
                 m_overlayRenderCallback = std::move(cb);
+            }
+
+            /** @brief Registers a callback invoked after 3D viewport overlays and before ImGui draw data is rendered.
+             *  @param cb Render callback invoked once near the end of each Render() call. */
+            void SetBeforeImGuiRenderCallback(std::function<void()> cb) {
+                m_beforeImGuiRenderCallback = std::move(cb);
             }
 
             /** @brief Immediately serialises the workspace state to disk regardless of dirty flag. */
@@ -318,33 +330,31 @@ namespace Horo {
             bool m_prevGizmoR = false;                /**< Previous-frame gizmo-rotate (R) key state. */
             bool m_closeRequested = false;            /**< True when a confirmed editor-close is pending. */
 
-            // Fly camera
-            bool m_flyMode = false;           /**< True when fly-camera mode is active. */
-            bool m_flyCamInitialized =
-                    false; /**< True after fly yaw/pitch has been initialized from the live camera. */
-            float m_flyYaw = 0.0f;            /**< Fly-camera yaw angle in radians. */
-            float m_flyPitch = 0.0f;          /**< Fly-camera pitch angle in radians. */
-            double m_prevCursorX = 0.0;       /**< Cursor X position from the previous frame (fly-mode mouse delta). */
+            // Viewport navigation camera
+            bool m_viewportNavActive = false; /**< True while RMB viewport navigation is active. */
+            bool m_prevViewportNavRmbDown = false; /**< Previous-frame RMB state for nav activation edge detection. */
+            bool m_viewportNavCameraInitialized =
+                    false; /**< True after nav yaw/pitch has been initialized from the live camera. */
+            float m_viewportNavYaw = 0.0f;    /**< Viewport-nav camera yaw angle in degrees. */
+            float m_viewportNavPitch = 0.0f;  /**< Viewport-nav camera pitch angle in degrees. */
+            double m_prevCursorX = 0.0;       /**< Cursor X position from the previous frame (nav mouse delta). */
             double m_prevCursorY = 0.0;       /**< Cursor Y position from the previous frame. */
-            bool m_prevCursorInit = false;    /**< True after the fly-mode cursor baseline has been captured. */
-            bool m_prevTab = false;           /**< Previous-frame Tab key state (fly-mode toggle). */
+            bool m_prevCursorInit = false;    /**< True after the nav cursor baseline has been captured. */
 
-            /** @brief Toggles fly-camera mode and synchronizes fly state from the provided camera.
-             *  @param cam Camera used to seed fly yaw/pitch when entering fly mode.
-             */
-            void ToggleFlyMode(const Camera &cam);
+            /** @brief Updates RMB-held viewport navigation activation state. */
+            void UpdateViewportNavActivation();
 
-            /** @brief Updates fly-camera movement and orientation from input.
+            /** @brief Updates viewport navigation movement and orientation from input.
              *  @param dt  Frame delta time in seconds.
              *  @param cam Camera updated in place.
              */
-            void UpdateFlyCamera(float dt, Camera &cam);
+            void UpdateViewportNavCamera(float dt, Camera &cam);
 
             /** @brief Handles global keyboard shortcuts that are active while the editor is open. */
             void HandleEditorKeyboardShortcuts(const Camera &cam);
 
-            /** @brief Updates fly-camera input and keeps gizmo target state synchronized with selection. */
-            void UpdateFlyCameraWithGizmoSync(float dt, Camera &cam);
+            /** @brief Updates viewport navigation input and keeps gizmo target state synchronized with selection. */
+            void UpdateViewportNavCameraWithGizmoSync(float dt, Camera &cam);
 
             /** @brief Handles non-fly camera editor input such as picking and viewport interactions. */
             void UpdateNonFlyModeInput(const Camera &cam, int screenW, int screenH);
@@ -853,6 +863,7 @@ void DrawProjectFavoritesTree(const Ui::EditorTheme& theme);
             EditorUserSettingsDocument m_userSettingsDocument{};
                                                        /**< Persisted user-wide editor preferences (theme preset). */
             [[no_unique_address]] EditorToolbar m_toolbar;                   /**< Toolbar component state and actions. */
+            [[no_unique_address]] EditorViewportToolbar m_viewportToolbar;    /**< Viewport title-bar tool controls. */
             [[no_unique_address]] EditorAssetsPanel m_assetsPanel;           /**< Assets panel component state and renderer. */
             EditorUIWidgets m_uiWidgets;               /**< Shared editor widget helpers. */
             int m_mcpSelectedActivityIndex = 0;        /**< Selected row index in MCP activity UI. */
@@ -883,6 +894,7 @@ void DrawProjectFavoritesTree(const Ui::EditorTheme& theme);
             bool m_workspaceStateDirty = false;             /**< True when workspace state has unsaved changes. */
             std::function<void()> m_fileMenuRenderCallback; /**< Optional host callback for extra File menu items. */
             std::function<void()> m_overlayRenderCallback;  /**< Optional host callback for end-of-frame overlays. */
+            std::function<void()> m_beforeImGuiRenderCallback; /**< Optional hook before ImGui draw data submission. */
             std::string m_imguiIniPath;                     /**< Resolved path to persisted ImGui .ini layout file. */
             bool m_hasPersistedDockLayout = false;          /**< True after a dock layout has been loaded or saved this run. */
             bool m_resetDockLayoutRequested = false;        /**< One-frame request to restore default dock layout. */
@@ -892,6 +904,8 @@ void DrawProjectFavoritesTree(const Ui::EditorTheme& theme);
             bool m_historyTransactionOpen = false;          /**< True while batching changes into one history entry. */
             EditorHistorySnapshot m_historyTransactionBefore;/**< Snapshot captured at history transaction start. */
             bool m_gizmoHistoryPending = false;             /**< True when gizmo drag has uncommitted history changes. */
+            bool m_preciseTransformEnabled = false;          /**< True when viewport precision snapping is active. */
+            float m_preciseTranslateStepMeters = 0.1f;       /**< Precision translate snap size in engine units/metres. */
 
             // Wireframe overlay
             bool m_wireframeMode = false;                   /**< True when viewport wireframe overlay rendering is enabled. */

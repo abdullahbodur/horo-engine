@@ -49,8 +49,9 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
 
   const bool currQuickOpenToggle =
       accelHeld && !shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
-  if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle, m_flyMode,
-                          io.WantTextInput, ImGui::IsAnyItemActive())) {
+  if (ShouldOpenQuickOpen(currQuickOpenToggle, m_prevQuickOpenToggle,
+                          m_viewportNavActive, io.WantTextInput,
+                          ImGui::IsAnyItemActive())) {
     m_quickOpenOpen = true;
     m_quickOpenQuery.clear();
   }
@@ -59,7 +60,7 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   const bool currCommandPaletteToggle =
       accelHeld && shiftHeld && glfwGetKey(m_window, GLFW_KEY_P) == GLFW_PRESS;
   if (ShouldOpenCommandPalette(currCommandPaletteToggle,
-                               m_prevCommandPaletteToggle, m_flyMode,
+                               m_prevCommandPaletteToggle, m_viewportNavActive,
                                io.WantTextInput, ImGui::IsAnyItemActive())) {
     m_commandPaletteOpen = true;
     m_commandPaletteQuery.clear();
@@ -77,7 +78,7 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
       accelHeld &&
       ((shiftHeld && glfwGetKey(m_window, GLFW_KEY_Z) == GLFW_PRESS) ||
        glfwGetKey(m_window, GLFW_KEY_Y) == GLFW_PRESS);
-  if (!m_flyMode && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
+  if (!m_viewportNavActive && !io.WantTextInput && !ImGui::IsAnyItemActive() &&
       !hasBlockingPopup) {
     if (currUndo && !m_prevUndo)
       UndoHistory();
@@ -98,16 +99,12 @@ void EditorLayer::HandleEditorKeyboardShortcuts( // NOSONAR
   }
   m_prevEsc = currEsc;
 
-  // Tab toggles fly mode
-  bool currTab = glfwGetKey(m_window, GLFW_KEY_TAB) == GLFW_PRESS;
-  if (currTab && !m_prevTab && !io.WantTextInput && !ImGui::IsAnyItemActive())
-    ToggleFlyMode(cam);
-  m_prevTab = currTab;
+  (void)cam;
 }
 
-/** @copydoc EditorLayer::UpdateFlyCameraWithGizmoSync */
-void EditorLayer::UpdateFlyCameraWithGizmoSync(float dt, Camera &cam) {
-  UpdateFlyCamera(dt, cam);
+/** @copydoc EditorLayer::UpdateViewportNavCameraWithGizmoSync */
+void EditorLayer::UpdateViewportNavCameraWithGizmoSync(float dt, Camera &cam) {
+  UpdateViewportNavCamera(dt, cam);
   // Keep gizmo anchored to object even while flying
   if (m_gizmo.IsActive()) {
     const int syncIdx = PrimaryIdx();
@@ -265,14 +262,17 @@ void EditorLayer::ApplyGizmoTranslateSnapping( // NOSONAR: cpp:S3776 complex
     }
   }
 
-  if (shiftHeld && dPos.LengthSq() > 1e-12f && primIdx >= 0 &&
+  if ((shiftHeld || m_preciseTransformEnabled) && dPos.LengthSq() > 1e-12f && primIdx >= 0 &&
       primIdx < static_cast<int>(m_document.objects.size())) {
-    constexpr float kGridSize = 0.5f;
+    constexpr float kFallbackGridSize = 0.5f;
+    const float gridSize = ResolveViewportTranslateSnapStep(
+        m_preciseTransformEnabled, m_preciseTranslateStepMeters,
+        kFallbackGridSize);
     const auto &selfObj = m_document.objects[primIdx];
     Vec3 rawPos = selfObj.position + dPos;
-    rawPos.x = std::round(rawPos.x / kGridSize) * kGridSize;
-    rawPos.y = std::round(rawPos.y / kGridSize) * kGridSize;
-    rawPos.z = std::round(rawPos.z / kGridSize) * kGridSize;
+    rawPos.x = std::round(rawPos.x / gridSize) * gridSize;
+    rawPos.y = std::round(rawPos.y / gridSize) * gridSize;
+    rawPos.z = std::round(rawPos.z / gridSize) * gridSize;
     dPos = rawPos - selfObj.position;
   }
 }
@@ -318,8 +318,24 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
   bool gizmoConsumed = false;
   if (m_gizmo.IsActive()) {
     using enum GizmoMode;
-    gizmoConsumed =
-        m_gizmo.Update(m_window, cam, screenW, screenH, dPos, dRot, dScale);
+    const float viewportW =
+        std::max(0.0f, m_viewportPanelRect.maxX - m_viewportPanelRect.minX);
+    const float viewportH =
+        std::max(0.0f, m_viewportPanelRect.maxY - m_viewportPanelRect.minY);
+    const float preciseTranslateSnapStep = m_preciseTransformEnabled
+        ? ResolveViewportTranslateSnapStep(true, m_preciseTranslateStepMeters, 0.5f)
+        : 0.0f;
+    const float preciseRotateSnapRadians = m_preciseTransformEnabled
+        ? ToRadians(ResolveViewportRotateSnapStepDegrees(
+              true, m_preciseTranslateStepMeters, 15.0f))
+        : 0.0f;
+    const float preciseScaleSnapStep = m_preciseTransformEnabled
+        ? ResolveViewportScaleSnapStep(true, m_preciseTranslateStepMeters, 0.1f)
+        : 0.0f;
+    gizmoConsumed = m_gizmo.Update(
+        m_window, cam, screenW, screenH, dPos, dRot, dScale,
+        m_viewportPanelRect.minX, m_viewportPanelRect.minY, viewportW, viewportH,
+        preciseTranslateSnapStep, preciseRotateSnapRadians, preciseScaleSnapStep);
 
     // --- Surface snap (Ctrl) and Grid snap (Shift) ---
     if (m_gizmo.GetMode() == Translate) {
@@ -365,7 +381,7 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
 
   if (!m_active) {
     const ImGuiIO &io = ImGui::GetIO();
-    return m_active && !m_flyMode &&
+    return m_active && !m_viewportNavActive &&
            (io.WantCaptureMouse || io.WantCaptureKeyboard);
   }
 
@@ -380,7 +396,14 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
     const bool currEsc = glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
     if (currEsc && !m_prevEsc) {
       ++m_playModeEscPresses;
-      if (m_playModeEscPresses >= 2) { m_playMode = false; m_playModeEscPresses = 0; }
+      if (m_playModeEscPresses >= 2) {
+        m_playMode = false;
+        m_playModeEscPresses = 0;
+        m_viewportNavActive = false;
+        m_viewportNavCameraInitialized = false;
+        m_prevCursorInit = false;
+        m_prevViewportNavRmbDown = false;
+      }
       glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     }
     m_prevEsc = currEsc;
@@ -388,14 +411,16 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
     return false;
   }
 
-  EditorTrace("OnUpdate frame=%u fly=%d",
+  UpdateViewportNavActivation();
+
+  EditorTrace("OnUpdate frame=%u nav=%d",
               static_cast<unsigned>(ImGui::GetFrameCount()),
-              m_flyMode ? 1 : 0);
+              m_viewportNavActive ? 1 : 0);
 
   HandleEditorKeyboardShortcuts(cam);
 
-  if (m_flyMode)
-    UpdateFlyCameraWithGizmoSync(dt, cam);
+  if (m_viewportNavActive)
+    UpdateViewportNavCameraWithGizmoSync(dt, cam);
   else
     UpdateNonFlyModeInput(cam, screenW, screenH);
 
@@ -403,27 +428,56 @@ bool EditorLayer::OnUpdate(float dt, Camera &cam, int screenW, int screenH) {
   PublishMcpSnapshot();
 
   const ImGuiIO &io = ImGui::GetIO();
-  return m_active && !m_flyMode &&
+  return m_active && !m_viewportNavActive &&
          (io.WantCaptureMouse || io.WantCaptureKeyboard);
 }
 
-/** @copydoc EditorLayer::ToggleFlyMode */
-void EditorLayer::ToggleFlyMode(const Camera &cam) {
-  m_flyMode = !m_flyMode;
-  m_flyCamInitialized = false;
+/** @copydoc EditorLayer::UpdateViewportNavActivation */
+void EditorLayer::UpdateViewportNavActivation() {
+  if (!m_window) {
+    m_viewportNavActive = false;
+    return;
+  }
+
+  const bool rmbDown =
+      glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+  if (!rmbDown) {
+    if (m_viewportNavActive)
+      glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    m_viewportNavActive = false;
+    m_viewportNavCameraInitialized = false;
+    m_prevCursorInit = false;
+    m_prevViewportNavRmbDown = false;
+    return;
+  }
+
+  const bool rmbPressedThisFrame = rmbDown && !m_prevViewportNavRmbDown;
+  m_prevViewportNavRmbDown = rmbDown;
+  if (m_viewportNavActive)
+    return;
+
+  double cursorX = 0.0;
+  double cursorY = 0.0;
+  glfwGetCursorPos(m_window, &cursorX, &cursorY);
+  if (!ShouldStartViewportNav(rmbPressedThisFrame, m_viewportNavActive,
+                              static_cast<float>(cursorX),
+                              static_cast<float>(cursorY),
+                              m_viewportPanelRect))
+    return;
+
+  m_viewportNavActive = true;
+  m_viewportNavCameraInitialized = false;
   m_prevCursorInit = false;
-  glfwSetInputMode(m_window, GLFW_CURSOR,
-                   m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-  (void)cam; // camera sync happens lazily in UpdateFlyCamera
+  glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
-/** @copydoc EditorLayer::UpdateFlyCamera */
-void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
-  // Fly mode always uses world-up to avoid inverted controls after view snaps.
+/** @copydoc EditorLayer::UpdateViewportNavCamera */
+void EditorLayer::UpdateViewportNavCamera(float dt, Camera &cam) {
+  // Viewport navigation always uses world-up to avoid inverted controls after view snaps.
   cam.up = Vec3::Up();
 
   // --- Sync yaw/pitch from live camera on first frame ---
-  if (!m_flyCamInitialized) {
+  if (!m_viewportNavCameraInitialized) {
     Vec3 dir = cam.target - cam.position;
     if (const float len =
             std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
@@ -432,19 +486,18 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
       dir.y /= len;
       dir.z /= len;
     }
-    m_flyPitch =
+    m_viewportNavPitch =
         std::asin(std::max(-1.0f, std::min(1.0f, dir.y))) * (180.0f / PI);
 
     // If the camera is nearly vertical (Top/Bottom snap), yaw is ill-defined.
-    // Reset to a deterministic heading so entering fly mode matches the snapped
-    // view instead of reusing stale yaw from a prior fly session.
+    // Reset to a deterministic heading so entering nav matches the snapped
+    // view instead of reusing stale yaw from a prior nav session.
+    m_viewportNavYaw = 0.0f;
     if (const float horizLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
         horizLen > 0.0001f)
-      m_flyYaw = -std::atan2(dir.x, -dir.z) * (180.0f / PI);
-    else
-      m_flyYaw = 0.0f;
+      m_viewportNavYaw = -std::atan2(dir.x, -dir.z) * (180.0f / PI);
 
-    m_flyCamInitialized = true;
+    m_viewportNavCameraInitialized = true;
   }
 
   // --- Mouse look ---
@@ -457,15 +510,15 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
     m_prevCursorInit = true;
   }
   const float MOUSE_SENS = 0.15f;
-  m_flyYaw -= static_cast<float>(cx - m_prevCursorX) * MOUSE_SENS;
-  m_flyPitch -= static_cast<float>(cy - m_prevCursorY) * MOUSE_SENS;
-  m_flyPitch = std::max(-89.0f, std::min(89.0f, m_flyPitch));
+  m_viewportNavYaw -= static_cast<float>(cx - m_prevCursorX) * MOUSE_SENS;
+  m_viewportNavPitch -= static_cast<float>(cy - m_prevCursorY) * MOUSE_SENS;
+  m_viewportNavPitch = std::max(-89.0f, std::min(89.0f, m_viewportNavPitch));
   m_prevCursorX = cx;
   m_prevCursorY = cy;
 
   // --- Compute forward/right from yaw/pitch ---
-  const float yawRad = m_flyYaw * (PI / 180.0f);
-  const float pitchRad = m_flyPitch * (PI / 180.0f);
+  const float yawRad = m_viewportNavYaw * (PI / 180.0f);
+  const float pitchRad = m_viewportNavPitch * (PI / 180.0f);
   Vec3 forward = {-std::sin(yawRad) * std::cos(pitchRad), std::sin(pitchRad),
                   -std::cos(yawRad) * std::cos(pitchRad)};
   Vec3 right = Vec3::Cross(forward, {0.0f, 1.0f, 0.0f});
@@ -478,7 +531,7 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
   }
 
   // --- WASD movement ---
-  const float FLY_SPEED = 8.0f;
+  const float navSpeed = 8.0f;
   Vec3 move = {0.0f, 0.0f, 0.0f};
   if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS)
     move = {move.x + forward.x, move.y + forward.y, move.z + forward.z};
@@ -492,9 +545,9 @@ void EditorLayer::UpdateFlyCamera(float dt, Camera &cam) {
   if (const float mLen =
           std::sqrt(move.x * move.x + move.y * move.y + move.z * move.z);
       mLen > 0.001f) {
-    cam.position.x += (move.x / mLen) * FLY_SPEED * dt;
-    cam.position.y += (move.y / mLen) * FLY_SPEED * dt;
-    cam.position.z += (move.z / mLen) * FLY_SPEED * dt;
+    cam.position.x += (move.x / mLen) * navSpeed * dt;
+    cam.position.y += (move.y / mLen) * navSpeed * dt;
+    cam.position.z += (move.z / mLen) * navSpeed * dt;
   }
   cam.target = {cam.position.x + forward.x, cam.position.y + forward.y,
                 cam.position.z + forward.z};

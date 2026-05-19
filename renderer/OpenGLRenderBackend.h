@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "renderer/IRenderBackend.h"
@@ -44,6 +45,11 @@ namespace Horo {
                                                     bool needsYFlip,
                                                     std::string *outError) override;
 
+        bool BeginEditorViewportRenderTarget(uint32_t width, uint32_t height,
+                                             std::string *outError) override;
+
+        void EndEditorViewportRenderTarget() override;
+
         // ── Resource Factory (implemented in renderer/opengl/) ──────────────
         std::shared_ptr<IShader>       CreateShader(const std::string& vertSrc,
                                                     const std::string& fragSrc) override;
@@ -74,6 +80,8 @@ namespace Horo {
         RenderView m_activeView;
         RenderPassId m_activePassId = RenderPassId::OpaqueScene;
         std::vector<Light> m_lights;
+        std::shared_ptr<IFramebuffer> m_editorViewportFramebuffer;
+        uint64_t m_editorViewportFramebufferGeneration = 0;
         int m_drawCalls = 0;
         unsigned int m_lastLightProgram = 0;
         bool m_frameActive = false;

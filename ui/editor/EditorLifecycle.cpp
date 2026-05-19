@@ -28,6 +28,7 @@
 #include <array>
 
 #include "core/Logger.h"
+#include "mcp/McpSettings.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/EditorAssetImport.h"
 #include "ui/editor/components/EditorAssetThumbnailPreview.h"
@@ -51,6 +52,22 @@
 
 namespace Horo::Editor {
 namespace {
+
+/** @brief Human-readable renderer backend name for the editor status bar. */
+const char *RendererBackendStatusLabel() {
+  using enum RenderBackendId;
+  switch (Renderer::GetBackendId()) {
+  case OpenGL:
+    return "OpenGL";
+  case Vulkan:
+    return "Vulkan";
+  case Null:
+    return "Null";
+  case Auto:
+  default:
+    return "Auto";
+  }
+}
 
 /** @brief Load the editor UI font and merge FontAwesome icon glyphs. */
 void LoadEditorFonts(ImGuiIO &io) {
@@ -103,6 +120,12 @@ void EditorLayer::Init(GLFWwindow *window) {
     LogWarn("[MCP] Settings load fallback: {}",
             m_mcpController.SettingsDocument().error);
 
+  const Ui::EditorThemeConfigLoadResult themeConfig =
+      Ui::LoadEditorThemeConfig(Mcp::ResolveMcpSettingsDirectory() / "config.json");
+  if (!themeConfig.ok) {
+    LogWarn("[Editor] Theme config load fallback: {}", themeConfig.error);
+  }
+
   // Load persisted editor user preferences (theme preset, ...) and apply.
   m_userSettingsDocument = LoadEditorUserSettingsDocument();
   if (m_userSettingsDocument.parseError ||
@@ -110,12 +133,12 @@ void EditorLayer::Init(GLFWwindow *window) {
     LogWarn("[Editor] User settings load fallback: {}",
             m_userSettingsDocument.error);
   }
-  Ui::SetEditorThemePreset(m_userSettingsDocument.settings.themePreset);
+  Ui::SetEditorThemePresetId(m_userSettingsDocument.settings.themePresetId);
 
   m_settingsModal.SetUserSettingsDocument(&m_userSettingsDocument);
   m_settingsModal.SetApplyThemePresetCallback(
-      [](Ui::EditorThemePreset preset) {
-        Ui::SetEditorThemePreset(preset);
+      [](std::string_view presetId) {
+        Ui::SetEditorThemePresetId(presetId);
         Ui::ApplyEditorTheme(ImGui::GetStyle());
       });
 
@@ -185,10 +208,46 @@ void EditorLayer::InitUiWidgetCallbacks() {
   callbacks.getStatusBarText = [this]() {
     const EditorStatusText status = BuildEditorStatusText(
         EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
-                             m_document.dirty, m_flyMode, m_wantsReload});
-    return std::format("Sel: {} | Dirty: {} | Fly: {} | Reload: {}",
-                       status.selectionCount, status.dirtyText, status.flyText,
+                             m_document.dirty, m_viewportNavActive, m_wantsReload});
+    return std::format("Sel: {} | Dirty: {} | Nav: {} | Reload: {}",
+                       status.selectionCount, status.dirtyText, status.navText,
                        status.reloadText);
+  };
+  callbacks.getStatusBarItems = [this]() {
+    const EditorStatusText status = BuildEditorStatusText(
+        EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
+                             m_document.dirty, m_viewportNavActive, m_wantsReload});
+
+    std::vector<Ui::EditorStatusBarItem> items;
+    items.reserve(6);
+    items.push_back({.id = "selection",
+                     .icon = ICON_FA_MOUSE_POINTER,
+                     .label = "Sel",
+                     .value = std::to_string(status.selectionCount)});
+    items.push_back({.id = "dirty",
+                     .icon = ICON_FA_SAVE,
+                     .label = "Dirty",
+                     .value = status.dirtyText,
+                     .level = m_document.dirty ? Ui::EditorStatusLevel::Warning
+                                               : Ui::EditorStatusLevel::Success});
+    items.push_back({.id = "nav",
+                     .icon = ICON_FA_HAND_POINTER,
+                     .label = "Nav",
+                     .value = status.navText,
+                     .level = m_viewportNavActive ? Ui::EditorStatusLevel::Success
+                                                  : Ui::EditorStatusLevel::Info});
+    items.push_back({.id = "reload",
+                     .icon = ICON_FA_REDO,
+                     .label = "Reload",
+                     .value = status.reloadText,
+                     .level = m_wantsReload ? Ui::EditorStatusLevel::Warning
+                                            : Ui::EditorStatusLevel::Info});
+    items.push_back({.id = "renderer",
+                     .icon = ICON_FA_CUBE,
+                     .label = "Renderer",
+                     .value = RendererBackendStatusLabel(),
+                     .side = Ui::EditorStatusBarSide::Right});
+    return items;
   };
 
   m_uiWidgets.SetCallbacks(std::move(callbacks));
@@ -259,10 +318,13 @@ void EditorLayer::Toggle() {
   m_active = !m_active;
   if (!m_active)
     m_playMode = false;
-  if (m_flyMode) {
-    m_flyMode = false;
-    m_flyCamInitialized = false;
+  if (m_viewportNavActive) {
+    m_viewportNavActive = false;
+    m_viewportNavCameraInitialized = false;
+    m_prevCursorInit = false;
+    m_prevViewportNavRmbDown = false;
   }
+  m_prevViewportNavRmbDown = false;
   m_closeRequested = false;
   if (m_window)
     glfwSetInputMode(m_window, GLFW_CURSOR,
