@@ -75,6 +75,9 @@ OpenGLFramebuffer& OpenGLFramebuffer::operator=(OpenGLFramebuffer&& o) noexcept 
 }
 
 void OpenGLFramebuffer::Create() {
+    if (!glGenFramebuffers)
+        return;
+
     glGenFramebuffers(1, &m_framebufferId);
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferId);
 

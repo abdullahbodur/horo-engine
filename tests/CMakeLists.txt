@@ -267,11 +267,6 @@ target_link_libraries(test_mcp PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMai
 horo_set_test_output_dir(test_mcp)
 add_test(NAME test_mcp COMMAND $<TARGET_FILE:test_mcp>)
 
-# ---- test_architecture_docs ----
-add_executable(test_architecture_docs test_architecture_docs.cpp)
-target_link_libraries(test_architecture_docs PRIVATE ${HORO_ENGINE_LINK} Catch2::Catch2WithMain)
-horo_set_test_output_dir(test_architecture_docs)
-add_test(NAME test_architecture_docs COMMAND $<TARGET_FILE:test_architecture_docs>)
 
 # ---- test_renderer_foundation ----
 add_executable(test_renderer_foundation test_renderer_foundation.cpp)

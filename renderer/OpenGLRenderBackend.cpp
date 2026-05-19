@@ -137,7 +137,10 @@ namespace Horo {
             m_editorViewportFramebuffer =
                 std::make_shared<OpenGLFramebuffer>(spec);
             ++m_editorViewportFramebufferGeneration;
-            return m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+            const bool success = m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+            if (!success && outError)
+                *outError = "Editor viewport render target is unavailable (no OpenGL context).";
+            return success;
         }
 
         const FramebufferSpec &current = m_editorViewportFramebuffer->GetSpec();
@@ -145,7 +148,10 @@ namespace Horo {
             m_editorViewportFramebuffer->Resize(width, height);
             ++m_editorViewportFramebufferGeneration;
         }
-        return m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+        const bool success = m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+        if (!success && outError)
+            *outError = "Editor viewport render target is unavailable (no OpenGL context).";
+        return success;
     }
 
     bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(
@@ -162,7 +168,7 @@ namespace Horo {
             m_editorViewportFramebuffer->GetColorAttachmentId();
         if (textureId == 0) {
             if (outError)
-                *outError = "Editor viewport render target has no color attachment.";
+                *outError = "Editor viewport render target is unavailable.";
             return false;
         }
 

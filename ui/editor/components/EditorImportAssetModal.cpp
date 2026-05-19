@@ -952,10 +952,10 @@ void EditorImportAssetModal::SetLastResult(const ImportAssetOutcome &outcome) {
     m_lastResult = outcome;
     m_hasResult = true;
     if (outcome.ok) {
-        const bool hasErrors = std::ranges::any_of(outcome.diagnostics, [](const auto& d) {
-            return d.severity == AssetDiagnosticSeverity::Error;
+        const bool hasErrorsOrWarnings = std::ranges::any_of(outcome.diagnostics, [](const auto& d) {
+            return d.severity == AssetDiagnosticSeverity::Error || d.severity == AssetDiagnosticSeverity::Warning;
         });
-        if (!hasErrors)
+        if (!hasErrorsOrWarnings)
             m_open = false;
     }
 }
