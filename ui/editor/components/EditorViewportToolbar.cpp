@@ -153,12 +153,14 @@ namespace Horo::Editor {
     float ResolveViewportRotateSnapStepDegrees(bool preciseEnabled,
                                                float preciseStepMeters,
                                                float fallbackStepDegrees) {
-        if (!preciseEnabled)
+        if (!preciseEnabled || preciseStepMeters <= 0.0f)
             return fallbackStepDegrees;
-        return kTranslatePrecisionOptions[static_cast<size_t>(
-                                                  TranslatePrecisionIndex(
-                                                          preciseStepMeters))]
-                .rotationDegrees;
+        
+        const size_t index = static_cast<size_t>(TranslatePrecisionIndex(preciseStepMeters));
+        if (std::abs(kTranslatePrecisionOptions[index].meters - preciseStepMeters) > 1e-5f)
+            return fallbackStepDegrees;
+            
+        return kTranslatePrecisionOptions[index].rotationDegrees;
     }
 
     /** @copydoc ResolveViewportScaleSnapStep */

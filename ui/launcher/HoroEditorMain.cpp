@@ -365,14 +365,14 @@ private:
     m_shell.Update();
     const Editor::EditorViewportRect viewportRect =
         m_editor.GetViewportRenderRect();
-    const int inputWidth = viewportRect.maxX > viewportRect.minX
+    const int inputWidth = std::max(1, viewportRect.maxX > viewportRect.minX
                                ? static_cast<int>(viewportRect.maxX -
                                                   viewportRect.minX)
-                               : GetWindow().GetWidth();
-    const int inputHeight = viewportRect.maxY > viewportRect.minY
+                               : GetWindow().GetWidth());
+    const int inputHeight = std::max(1, viewportRect.maxY > viewportRect.minY
                                 ? static_cast<int>(viewportRect.maxY -
                                                    viewportRect.minY)
-                                : GetWindow().GetHeight();
+                                : GetWindow().GetHeight());
     m_editor.OnUpdate(dt, m_camera, inputWidth, inputHeight);
   }
 

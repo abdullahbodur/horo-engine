@@ -216,7 +216,7 @@ private:
     void DrawRightPanel();
 
     /** @brief Renders the selected file info section. */
-    void DrawSelectedFileInfo();
+    void DrawSelectedFileInfo() const;
 
     /** @brief Renders the import settings section. */
     void DrawImportSettings();

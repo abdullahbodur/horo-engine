@@ -801,6 +801,96 @@ namespace Horo::Editor {
             return DiagnosticCodes::FbxParseFailed;
         }
 
+        struct ApplyTextureOverrideContext {
+            const AssetImportRequest &request;
+            const std::filesystem::path &destDir;
+            const char *importerId;
+            std::vector<AssetImportDiagnostic> &diagnostics;
+            std::vector<std::string> &producedFiles;
+            std::vector<std::string> &externalSourcePaths;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> &usedBasenames;
+            std::unordered_map<std::string, std::string, Horo::StringHash, std::equal_to<>> &copiedBySource;
+        };
+
+        std::string PickUniqueBasename(const std::string &base,
+                                       const std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> &usedBasenames) {
+            if (!usedBasenames.contains(base))
+                return base;
+
+            const std::filesystem::path baseAsPath(base);
+            const std::string stem = baseAsPath.stem().string();
+            const std::string ext = baseAsPath.extension().string();
+            for (int suffix = 1; suffix < 1024; ++suffix) {
+                const std::string candidate =
+                    std::format("{}_{}{}", stem, suffix, ext);
+                if (!usedBasenames.contains(candidate))
+                    return candidate;
+            }
+            return base;
+        }
+
+        void ApplySingleTextureOverride(ApplyTextureOverrideContext &ctx,
+                                        const char *key, std::string &path) {
+            namespace fs = std::filesystem;
+            const auto &settings = ctx.request.settings;
+            const auto it = settings.find(key);
+            if (it == settings.end() || it->second.empty())
+                return;
+
+            const fs::path sourcePath(it->second);
+            std::error_code ec;
+            if (!fs::is_regular_file(sourcePath, ec) || ec) {
+                ctx.diagnostics.push_back(MakeDiagnostic(
+                    AssetDiagnosticSeverity::Warning,
+                    DiagnosticCodes::FbxExternalTextureMissing,
+                    std::format("Texture override '{}' is not a file.",
+                                sourcePath.string()),
+                    ctx.request, ctx.importerId));
+                return;
+            }
+
+            fs::path canonicalSource = fs::weakly_canonical(sourcePath, ec);
+            if (ec) {
+                ec.clear();
+                canonicalSource = fs::absolute(sourcePath, ec);
+            }
+            const std::string sourceKey =
+                ec ? sourcePath.string() : canonicalSource.string();
+            ec.clear();
+            if (const auto copied = ctx.copiedBySource.find(sourceKey);
+                copied != ctx.copiedBySource.end()) {
+                path = copied->second;
+                return;
+            }
+
+            const std::string basename =
+                    SanitiseTextureBasename(sourcePath.filename().string());
+            if (!IsSafeBasename(basename))
+                return;
+
+            const std::string uniqueBasename = PickUniqueBasename(basename, ctx.usedBasenames);
+            const fs::path destPath = ctx.destDir / uniqueBasename;
+            if (!CopyFileReplacing(sourcePath, destPath, ec) || ec) {
+                ctx.diagnostics.push_back(MakeDiagnostic(
+                    AssetDiagnosticSeverity::Warning,
+                    DiagnosticCodes::FbxExternalTextureCopyFailed,
+                    std::format("Failed to copy texture override '{}' ({}).",
+                                sourcePath.string(), ec.message()),
+                    ctx.request, ctx.importerId));
+                return;
+            }
+
+            const std::string projectRelative =
+                    fs::relative(destPath, ProjectPath::Root()).generic_string();
+            path = projectRelative;
+            ctx.usedBasenames.insert(uniqueBasename);
+            ctx.copiedBySource.try_emplace(sourceKey, projectRelative);
+            if (std::ranges::find(ctx.producedFiles, projectRelative) ==
+                ctx.producedFiles.end())
+                ctx.producedFiles.push_back(projectRelative);
+            ctx.externalSourcePaths.push_back(sourcePath.string());
+        }
+
         /** @brief Applies texture overrides from request.settings to texturePaths.
          *
          *  Reads settings keys "texture.albedoMap", "texture.normalMap", etc.
@@ -815,7 +905,6 @@ namespace Horo::Editor {
                                    std::vector<std::string> &externalSourcePaths,
                                    FbxTexturePaths &texturePaths) {
             namespace fs = std::filesystem;
-            const auto &settings = request.settings;
             std::unordered_set<std::string, Horo::StringHash, std::equal_to<>>
                 usedBasenames;
             for (const std::string &produced : producedFiles)
@@ -825,85 +914,15 @@ namespace Horo::Editor {
                                std::equal_to<>>
                 copiedBySource;
 
-            const auto pickUniqueBasename = [&](const std::string &base) {
-                if (!usedBasenames.contains(base))
-                    return base;
+            ApplyTextureOverrideContext ctx{
+                request, destDir, importerId, diagnostics, producedFiles,
+                externalSourcePaths, usedBasenames, copiedBySource};
 
-                const fs::path baseAsPath(base);
-                const std::string stem = baseAsPath.stem().string();
-                const std::string ext = baseAsPath.extension().string();
-                for (int suffix = 1; suffix < 1024; ++suffix) {
-                    const std::string candidate =
-                        std::format("{}_{}{}", stem, suffix, ext);
-                    if (!usedBasenames.contains(candidate))
-                        return candidate;
-                }
-                return base;
-            };
-
-            const auto applyOverride = [&](const char *key, std::string &path) {
-                const auto it = settings.find(key);
-                if (it == settings.end() || it->second.empty())
-                    return;
-
-                const fs::path sourcePath(it->second);
-                std::error_code ec;
-                if (!fs::is_regular_file(sourcePath, ec) || ec) {
-                    diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Warning,
-                        DiagnosticCodes::FbxExternalTextureMissing,
-                        std::format("Texture override '{}' is not a file.",
-                                    sourcePath.string()),
-                        request, importerId));
-                    return;
-                }
-
-                fs::path canonicalSource = fs::weakly_canonical(sourcePath, ec);
-                if (ec) {
-                    ec.clear();
-                    canonicalSource = fs::absolute(sourcePath, ec);
-                }
-                const std::string sourceKey =
-                    ec ? sourcePath.string() : canonicalSource.string();
-                ec.clear();
-                if (const auto copied = copiedBySource.find(sourceKey);
-                    copied != copiedBySource.end()) {
-                    path = copied->second;
-                    return;
-                }
-
-                const std::string basename =
-                        SanitiseTextureBasename(sourcePath.filename().string());
-                if (!IsSafeBasename(basename))
-                    return;
-
-                const std::string uniqueBasename = pickUniqueBasename(basename);
-                const fs::path destPath = destDir / uniqueBasename;
-                if (!CopyFileReplacing(sourcePath, destPath, ec) || ec) {
-                    diagnostics.push_back(MakeDiagnostic(
-                        AssetDiagnosticSeverity::Warning,
-                        DiagnosticCodes::FbxExternalTextureCopyFailed,
-                        std::format("Failed to copy texture override '{}' ({}).",
-                                    sourcePath.string(), ec.message()),
-                        request, importerId));
-                    return;
-                }
-
-                const std::string projectRelative =
-                        fs::relative(destPath, ProjectPath::Root()).generic_string();
-                path = projectRelative;
-                usedBasenames.insert(uniqueBasename);
-                copiedBySource.emplace(sourceKey, projectRelative);
-                if (std::ranges::find(producedFiles, projectRelative) ==
-                    producedFiles.end())
-                    producedFiles.push_back(projectRelative);
-                externalSourcePaths.push_back(sourcePath.string());
-            };
-            applyOverride("texture.albedoMap", texturePaths.albedoMap);
-            applyOverride("texture.normalMap", texturePaths.normalMap);
-            applyOverride("texture.metallicRoughnessMap", texturePaths.metallicRoughnessMap);
-            applyOverride("texture.emissiveMap", texturePaths.emissiveMap);
-            applyOverride("texture.occlusionMap", texturePaths.occlusionMap);
+            ApplySingleTextureOverride(ctx, "texture.albedoMap", texturePaths.albedoMap);
+            ApplySingleTextureOverride(ctx, "texture.normalMap", texturePaths.normalMap);
+            ApplySingleTextureOverride(ctx, "texture.metallicRoughnessMap", texturePaths.metallicRoughnessMap);
+            ApplySingleTextureOverride(ctx, "texture.emissiveMap", texturePaths.emissiveMap);
+            ApplySingleTextureOverride(ctx, "texture.occlusionMap", texturePaths.occlusionMap);
         }
 
         /** @brief Built-in importer that extracts static-mesh geometry from an FBX file

@@ -108,18 +108,81 @@ struct AssetThumbnailRenderer {
   ~AssetThumbnailRenderer() { Cleanup(); }
 };
 
+std::optional<AssetThumbnailRenderer::CachedMesh> LoadAssetMeshImpl(const std::string& effectiveExt, const std::string& cacheKey, const std::filesystem::path& path) {
+    AssetThumbnailRenderer::CachedMesh entry;
+    if (effectiveExt == ".obj") {
+        entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (effectiveExt == ".fbx") {
+        FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path.generic_string());
+        if (!result.ok) {
+            LogWarn("[Thumbnail] FBX load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto mesh = std::make_shared<Mesh>();
+        mesh->SetData(result.vertices, result.indices);
+        entry.mesh = std::move(mesh);
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (cacheKey.ends_with(".mesh.bin") || cacheKey.ends_with(".fbx.bin")) {
+        const MeshBin::ReadResult result = MeshBin::ReadStaticMesh(cacheKey);
+        if (!result.ok) {
+            LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto mesh = std::make_shared<Mesh>();
+        mesh->SetData(result.vertices, result.indices);
+        entry.mesh = std::move(mesh);
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (effectiveExt == ".skinned" || cacheKey.ends_with(".skinned.bin")) {
+        const SkinnedMeshBin::ReadResult result = SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
+        if (!result.ok) {
+            LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto skinnedMesh = std::make_shared<SkinnedMesh>();
+        skinnedMesh->SetData(result.vertices, result.indices);
+        auto skeleton = std::make_shared<Skeleton>();
+        for (const auto& bone : result.bones)
+            skeleton->AddBone(bone);
+        entry.skinnedMesh = std::move(skinnedMesh);
+        entry.skeleton = std::move(skeleton);
+        entry.isSkinned = true;
+        return entry;
+    }
+    
+    if (effectiveExt == ".gltf" || effectiveExt == ".glb") {
+        GltfLoadResult result = GltfLoader::Load(path.generic_string());
+        if (result.mesh) {
+            entry.skinnedMesh = result.mesh;
+            entry.skeleton = result.skeleton;
+            entry.isSkinned = true;
+            return entry;
+        }
+        LogWarn("[Thumbnail] GLTF load failed (no mesh): {}", cacheKey);
+        return std::nullopt;
+    }
+
+    LogWarn("[Thumbnail] Unsupported mesh format: {}", effectiveExt);
+    return std::nullopt;
+}
+
 /** @brief Loads and caches a mesh for preview rendering, returning nullptr on unsupported/failed assets. */
 AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) {
   if (meshPath.empty())
     return nullptr;
 
-  const std::filesystem::path path =
-      ResolveProjectRelativeOrAbsolutePath(meshPath);
+  const std::filesystem::path path = ResolveProjectRelativeOrAbsolutePath(meshPath);
   const std::string ext = Horo::ToLowerAscii(path.extension().string());
-  // Handle compound extensions: .fbx.bin → .fbx, .skinned.bin → .skinned
-  const std::string effectiveExt = (ext == ".bin")
-      ? Horo::ToLowerAscii(path.stem().extension().string())
-      : ext;
+  const std::string effectiveExt = (ext == ".bin") ? Horo::ToLowerAscii(path.stem().extension().string()) : ext;
 
   auto& renderer = AssetThumbnailRenderer::Instance();
   const std::string cacheKey = path.generic_string();
@@ -127,88 +190,26 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
   if (renderer.noPreviewKeys.contains(cacheKey))
     return nullptr;
 
-  auto it = renderer.meshCache.find(cacheKey);
-  if (it != renderer.meshCache.end())
+  if (auto it = renderer.meshCache.find(cacheKey); it != renderer.meshCache.end())
     return &it->second;
 
-  AssetThumbnailRenderer::CachedMesh entry;
-
   try {
-    if (effectiveExt == ".obj") {
-      entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
-      entry.isSkinned = false;
-    } else if (effectiveExt == ".fbx") {
-      FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path.generic_string());
-      if (!result.ok) {
-        LogWarn("[Thumbnail] FBX load failed for preview: {} ({})", cacheKey, result.error);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-      auto mesh = std::make_shared<Mesh>();
-      mesh->SetData(result.vertices, result.indices);
-      entry.mesh = std::move(mesh);
-      entry.isSkinned = false;
-    } else if (cacheKey.ends_with(".mesh.bin") || cacheKey.ends_with(".fbx.bin")) {
-      const MeshBin::ReadResult result = MeshBin::ReadStaticMesh(cacheKey);
-      if (!result.ok) {
-        LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})", cacheKey, result.error);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-      auto mesh = std::make_shared<Mesh>();
-      mesh->SetData(result.vertices, result.indices);
-      entry.mesh = std::move(mesh);
-      entry.isSkinned = false;
-    } else if (effectiveExt == ".skinned" || cacheKey.ends_with(".skinned.bin")) {
-      const SkinnedMeshBin::ReadResult result = SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
-      if (!result.ok) {
-        LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})", cacheKey, result.error);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-      auto skinnedMesh = std::make_shared<SkinnedMesh>();
-      skinnedMesh->SetData(result.vertices, result.indices);
-      auto skeleton = std::make_shared<Skeleton>();
-      for (const auto& bone : result.bones)
-        skeleton->AddBone(bone);
-      entry.skinnedMesh = std::move(skinnedMesh);
-      entry.skeleton = std::move(skeleton);
-      entry.isSkinned = true;
-    } else if (effectiveExt == ".gltf" || effectiveExt == ".glb") {
-      GltfLoadResult result = GltfLoader::Load(path.generic_string());
-      if (result.mesh) {
-        entry.skinnedMesh = result.mesh;
-        entry.skeleton = result.skeleton;
-        entry.isSkinned = true;
-      } else {
-        LogWarn("[Thumbnail] GLTF load failed (no mesh): {}", cacheKey);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-    } else {
-      LogWarn("[Thumbnail] Unsupported mesh format: {}", effectiveExt);
+    std::optional<AssetThumbnailRenderer::CachedMesh> loaded = LoadAssetMeshImpl(effectiveExt, cacheKey, path);
+    if (!loaded) {
       renderer.noPreviewKeys.insert(cacheKey);
       return nullptr;
     }
+    auto it = renderer.meshCache.try_emplace(cacheKey, std::move(*loaded)).first;
+    return &it->second;
   } catch (const ObjLoader::ObjLoaderException& e) {
-    LogWarn("[Thumbnail] Failed to load OBJ for preview: {} (error: {})",
-            cacheKey, e.what());
+    LogWarn("[Thumbnail] Failed to load OBJ for preview: {} (error: {})", cacheKey, e.what());
     renderer.noPreviewKeys.insert(cacheKey);
     return nullptr;
-  } catch (const std::exception& e) {
-    LogWarn("[Thumbnail] Failed to load mesh for preview: {} (error: {})",
-            cacheKey, e.what());
-    renderer.noPreviewKeys.insert(cacheKey);
-    return nullptr;
-  } catch (...) {
-    LogWarn("[Thumbnail] Failed to load mesh for preview: {} (unknown error)",
-            cacheKey);
+  } catch (const std::runtime_error& e) {
+    LogWarn("[Thumbnail] Runtime error loading mesh for preview: {} (error: {})", cacheKey, e.what());
     renderer.noPreviewKeys.insert(cacheKey);
     return nullptr;
   }
-
-  it = renderer.meshCache.try_emplace(cacheKey, std::move(entry)).first;
-  return &it->second;
 }
 
 /** @brief Builds view/projection matrices that frame the supplied mesh for thumbnail rendering. */

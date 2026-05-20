@@ -172,9 +172,14 @@ private:
     static ImFont* s_largeIconFont;   /**< Standalone FA font for thumbnail icons (not merged). */
 
     // Drag-and-drop hit testing
-    float m_modalMinX = 0, m_modalMinY = 0, m_modalMaxX = 0, m_modalMaxY = 0;
-    float m_dropZoneMinY = 0, m_dropZoneMaxY = 0;
-    float m_gridMinY = 0, m_gridMaxY = 0;
+    float m_modalMinX = 0;
+    float m_modalMinY = 0;
+    float m_modalMaxX = 0;
+    float m_modalMaxY = 0;
+    float m_dropZoneMinY = 0;
+    float m_dropZoneMaxY = 0;
+    float m_gridMinY = 0;
+    float m_gridMaxY = 0;
 
     // Thumbnail grid layout
     static constexpr int kColumns = 4;
@@ -188,8 +193,16 @@ private:
         bool loaded = false;
         bool failed = false;
     };
-    std::unordered_map<std::string, PreviewCacheEntry> m_previewCache;
-    std::unordered_map<std::string, PreviewCacheEntry> m_texturePreviewCache; /**< Cached texture image previews (PNG, JPG, etc.). */
+    
+    struct StringHash {
+        using is_transparent = void;
+        size_t operator()(std::string_view txt) const {
+            return std::hash<std::string_view>{}(txt);
+        }
+    };
+    
+    std::unordered_map<std::string, PreviewCacheEntry, StringHash, std::equal_to<>> m_previewCache;
+    std::unordered_map<std::string, PreviewCacheEntry, StringHash, std::equal_to<>> m_texturePreviewCache; /**< Cached texture image previews (PNG, JPG, etc.). */
 
     std::optional<std::filesystem::path> m_pendingNavigate; /**< Deferred directory navigation to avoid invalidating grid iteration. */
 };

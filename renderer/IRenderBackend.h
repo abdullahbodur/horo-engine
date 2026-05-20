@@ -68,7 +68,9 @@ namespace Horo {
             return false;
         }
 
-        virtual void EndEditorViewportRenderTarget() {}
+        virtual void EndEditorViewportRenderTarget() {
+            // Default implementation does nothing if the backend does not support it
+        }
 
         // ── Viewport ────────────────────────────────────────────────────────────
         virtual void SetViewport(int, int, int, int) { /* default no-op */ }

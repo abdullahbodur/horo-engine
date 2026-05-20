@@ -11,6 +11,7 @@
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -211,7 +212,7 @@ const EditorThemePresetDescriptor *FindCustomPreset(std::string_view id) {
       customPresets, [id](const EditorThemePresetDescriptor &preset) {
         return preset.id == id;
       });
-  return it == customPresets.end() ? nullptr : &*it;
+  return it == customPresets.end() ? nullptr : std::to_address(it);
 }
 
 /** @brief Returns true when @p c is an ASCII hex digit. */
@@ -225,9 +226,7 @@ bool ParseHexByte(std::string_view text, float *out) {
   if (!out || text.size() != 2 || !IsHexDigit(text[0]) || !IsHexDigit(text[1]))
     return false;
   unsigned value = 0;
-  const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), value, 16);
-  if (result.ec != std::errc{})
+  if (const auto result = std::from_chars(text.data(), text.data() + text.size(), value, 16); result.ec != std::errc{})
     return false;
   *out = static_cast<float>(value) / 255.0f;
   return true;
@@ -258,7 +257,11 @@ bool ParseThemeColor(const json &value, ImVec4 *out) {
   for (size_t i = 0; i < value.size(); ++i) {
     if (!value[i].is_number())
       return false;
-    (&color.x)[i] = std::clamp(value[i].get<float>(), 0.0f, 1.0f);
+    const float c = std::clamp(value[i].get<float>(), 0.0f, 1.0f);
+    if (i == 0) color.x = c;
+    else if (i == 1) color.y = c;
+    else if (i == 2) color.z = c;
+    else if (i == 3) color.w = c;
   }
   *out = color;
   return true;
@@ -468,13 +471,15 @@ std::string_view GetEditorThemePresetId() {
 /** @copydoc GetEditorTheme */
 const EditorTheme &GetEditorTheme() {
   if (const auto *custom = FindCustomPreset(GetEditorThemePresetId())) {
-    static EditorTheme customTheme;
-    customTheme = EditorTheme{
-        .palette = custom->palette,
-        .rounding = kEditorRounding,
-        .density = kEditorDensity,
-    };
-    return customTheme;
+    static std::unordered_map<std::string, std::unique_ptr<EditorTheme>> customThemes;
+    auto& ptr = customThemes[custom->id];
+    if (!ptr) {
+      ptr = std::make_unique<EditorTheme>();
+    }
+    ptr->palette = custom->palette;
+    ptr->rounding = kEditorRounding;
+    ptr->density = kEditorDensity;
+    return *ptr;
   }
 
   switch (GetEditorThemePreset()) {

@@ -19,9 +19,10 @@ std::string ToLowerAscii(std::string_view str) {
 /** @copydoc FormatFileSize */
 std::string FormatFileSize(uint64_t bytes) {
     if (bytes < 1024) return std::format("{} B", bytes);
-    if (bytes < 1024 * 1024) return std::format("{:.1f} KB", bytes / 1024.0);
-    if (bytes < 1024 * 1024 * 1024) return std::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
-    return std::format("{:.1f} GB", bytes / (1024.0 * 1024.0 * 1024.0));
+    const auto dBytes = static_cast<double>(bytes);
+    if (bytes < 1024 * 1024) return std::format("{:.1f} KB", dBytes / 1024.0);
+    if (bytes < 1024 * 1024 * 1024) return std::format("{:.1f} MB", dBytes / (1024.0 * 1024.0));
+    return std::format("{:.1f} GB", dBytes / (1024.0 * 1024.0 * 1024.0));
 }
 
 } // namespace Horo

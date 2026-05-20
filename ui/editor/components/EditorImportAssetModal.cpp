@@ -43,8 +43,7 @@ std::vector<std::string> LoadRecentImportsJson() {
     const std::filesystem::path homeDir = std::getenv("HOME") ? std::getenv("HOME") : ".";
 #endif
     const std::filesystem::path settingsPath = homeDir / ".horo" / "settings.json";
-    std::error_code ec;
-    if (!std::filesystem::exists(settingsPath, ec))
+    if (std::error_code ec; !std::filesystem::exists(settingsPath, ec))
         return result;
 
     try {
@@ -65,14 +64,13 @@ std::vector<std::string> LoadRecentImportsJson() {
             return result;
         std::string arrayStr = content.substr(start + 1, end - start - 1);
         size_t pos = 0;
-        while ((pos = arrayStr.find('"', pos)) != std::string::npos) {
+        while (result.size() < 6 && (pos = arrayStr.find('"', pos)) != std::string::npos) {
             auto endQuote = arrayStr.find('"', pos + 1);
             if (endQuote == std::string::npos) break;
             result.push_back(arrayStr.substr(pos + 1, endQuote - pos - 1));
             pos = endQuote + 1;
-            if (result.size() >= 6) break;
         }
-    } catch (...) {
+    } catch (const std::exception&) {
         // Ignore parse errors
     }
     return result;
@@ -99,8 +97,8 @@ void SaveRecentImport(std::string_view path) {
     auto recent = LoadRecentImportsJson();
 
     // Remove if already present, add to front
-    recent.erase(std::remove(recent.begin(), recent.end(), std::string(path)), recent.end());
-    recent.insert(recent.begin(), std::string(path));
+    std::erase(recent, std::string(path));
+    recent.emplace(recent.begin(), path);
     if (recent.size() > 6)
         recent.resize(6);
 
@@ -115,7 +113,7 @@ void SaveRecentImport(std::string_view path) {
             file << "\n";
         }
         file << "  ]\n}\n";
-    } catch (...) {
+    } catch (const std::exception&) {
         // Ignore write errors
     }
 }
@@ -124,12 +122,13 @@ void SaveRecentImport(std::string_view path) {
 
 /** @copydoc GetTextureSlotLabel */
 const char *GetTextureSlotLabel(TextureSlotKind slot) {
+    using enum TextureSlotKind;
     switch (slot) {
-    case TextureSlotKind::Albedo: return "Albedo";
-    case TextureSlotKind::Normal: return "Normal";
-    case TextureSlotKind::MetallicRoughness: return "Metallic+Roughness";
-    case TextureSlotKind::Emissive: return "Emissive";
-    case TextureSlotKind::Occlusion: return "Occlusion";
+    case Albedo: return "Albedo";
+    case Normal: return "Normal";
+    case MetallicRoughness: return "Metallic+Roughness";
+    case Emissive: return "Emissive";
+    case Occlusion: return "Occlusion";
     default: return "Unknown";
     }
 }
@@ -238,15 +237,14 @@ void EditorImportAssetModal::Draw() {
     }
 
     // Custom title bar with themed close button
-    const auto &theme = Ui::GetEditorTheme();
-    if (Ui::RenderModalTitleBar(theme, "Import Asset")) {
+    if (const auto &theme = Ui::GetEditorTheme(); Ui::RenderModalTitleBar(theme, "Import Asset")) {
         Close();
     }
 
     // Capture modal rect for drag-and-drop hit testing
     const ImVec2 windowMin = ImGui::GetWindowPos();
     const ImVec2 windowSize = ImGui::GetWindowSize();
-    const ImVec2 windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
+    const auto windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
     SetModalRect(windowMin.x, windowMin.y, windowMax.x, windowMax.y);
 
     ImGui::Separator();
@@ -305,7 +303,7 @@ void EditorImportAssetModal::DrawLeftPanel() {
 
         const std::string labelText = "Drag and drop a file here";
         const ImVec2 labelSz = ImGui::CalcTextSize(labelText.c_str());
-        const ImVec2 labelPos = ImVec2(
+        const auto labelPos = ImVec2(
             tileMin.x + (availW - labelSz.x) * 0.5f,
             tileMin.y + (dropZoneH - labelSz.y) * 0.5f);
         const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f));
@@ -315,13 +313,11 @@ void EditorImportAssetModal::DrawLeftPanel() {
     ImGui::Spacing();
 
     // File browser: nav/search fixed, grid scrolls internally
-    if (m_fileBrowser.Draw(gridH)) {
-        if (m_fileBrowser.HasSelection()) {
-            m_draft.sourcePath = m_fileBrowser.GetSelectedFilePath();
-            RefreshImporterFromExtension();
-            RefreshIdentitiesFromPath();
-            RefreshTextureSlotsFromFbxPreview();
-        }
+    if (m_fileBrowser.Draw(gridH) && m_fileBrowser.HasSelection()) {
+        m_draft.sourcePath = m_fileBrowser.GetSelectedFilePath();
+        RefreshImporterFromExtension();
+        RefreshIdentitiesFromPath();
+        RefreshTextureSlotsFromFbxPreview();
     }
 
     // Status bar at the bottom
@@ -337,7 +333,7 @@ void EditorImportAssetModal::DrawRightPanel() {
 }
 
 /** @copydoc EditorImportAssetModal::DrawSelectedFileInfo */
-void EditorImportAssetModal::DrawSelectedFileInfo() {
+void EditorImportAssetModal::DrawSelectedFileInfo() const {
     ImGui::TextUnformatted("Selected File");
     ImGui::Spacing();
 
@@ -351,8 +347,7 @@ void EditorImportAssetModal::DrawSelectedFileInfo() {
     std::string fileName = filePath.filename().string();
     std::string fileDir = filePath.parent_path().generic_string();
     uint64_t fileSize = 0;
-    std::error_code ec;
-    if (std::filesystem::is_regular_file(filePath, ec))
+    if (std::error_code ec; std::filesystem::is_regular_file(filePath, ec))
         fileSize = std::filesystem::file_size(filePath, ec);
 
     // File icon + name
@@ -482,25 +477,25 @@ void EditorImportAssetModal::DrawImportSettings() {
 
         // Checkboxes — each on its own row
         const auto& theme = Ui::GetEditorTheme();
-        FormRow("Auto Generate Collision", [&]() {
+        FormRow("Auto Generate Collision", [&theme, this]() {
             Ui::RenderEditorCheckbox(theme, "##AutoCollision",
                                      m_draft.settings.autoGenerateCollision);
         });
-        FormRow("Import Materials", [&]() {
+        FormRow("Import Materials", [&theme, this]() {
             Ui::RenderEditorCheckbox(theme, "##ImportMaterials",
                                      m_draft.settings.importMaterials);
         });
-        FormRow("Import Textures", [&]() {
+        FormRow("Import Textures", [&theme, this]() {
             Ui::RenderEditorCheckbox(theme, "##ImportTextures",
                                      m_draft.settings.importTextures);
         });
-        FormRow("Combine Meshes", [&]() {
+        FormRow("Combine Meshes", [&theme, this]() {
             ImGui::BeginDisabled();
             Ui::RenderEditorCheckbox(theme, "##CombineMeshes",
                                      m_draft.settings.combineMeshes);
             ImGui::EndDisabled();
         });
-        FormRow("Transform Vertex to Absolute", [&]() {
+        FormRow("Transform Vertex to Absolute", [&theme, this]() {
             Ui::RenderEditorCheckbox(theme, "##TransformVertex",
                                      m_draft.settings.transformVertexToAbsolute);
         });
@@ -1007,14 +1002,13 @@ void EditorImportAssetModal::ClearRecentImports() {
     const std::filesystem::path homeDir = std::getenv("HOME") ? std::getenv("HOME") : ".";
 #endif
     const std::filesystem::path settingsPath = homeDir / ".horo" / "settings.json";
-    std::error_code ec;
-    if (std::filesystem::exists(settingsPath, ec)) {
+    if (std::error_code ec; std::filesystem::exists(settingsPath, ec)) {
         // Rewrite with empty array
         try {
             std::ofstream file(settingsPath);
             if (file.is_open())
                 file << "{\n  \"recent_imports\": []\n}\n";
-        } catch (...) {}
+        } catch (const std::exception&) {}
     }
 }
 

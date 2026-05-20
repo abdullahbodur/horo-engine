@@ -66,20 +66,20 @@ namespace Horo::Editor {
         // First check if modal is open and accepts the drop
         if (m_importAssetModal.IsOpen()) {
             for (const std::string &path: m_pendingPathDropPaths) {
-                if (IsTextureFilePath(path) || IsObjFilePath(path) || IsFbxFilePath(path)) {
-                    if (m_importAssetModal.HandleFileDrop(px, py, path)) {
-                        m_pendingPathDropPaths.clear();
-                        return;
-                    }
+                if ((IsTextureFilePath(path) || IsObjFilePath(path) || IsFbxFilePath(path)) &&
+                    m_importAssetModal.HandleFileDrop(px, py, path)) {
+                    m_pendingPathDropPaths.clear();
+                    return;
                 }
             }
         }
 
-        for (const std::string &path: m_pendingPathDropPaths) {
-            if (!IsTextureFilePath(path))
-                continue;
+        auto it = std::ranges::find_if(m_pendingPathDropPaths, [](const std::string& p) {
+            return IsTextureFilePath(p);
+        });
+        if (it != m_pendingPathDropPaths.end()) {
             if (m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) &&
-                TryApplySelectedAssetAlbedoDrop(path)) {
+                TryApplySelectedAssetAlbedoDrop(*it)) {
                 m_pendingPathDropPaths.clear();
                 return;
             }
@@ -91,52 +91,50 @@ namespace Horo::Editor {
         // Modal takes priority for mesh drops
         if (m_importAssetModal.IsOpen()) {
             for (const std::string &path: m_pendingPathDropPaths) {
-                if (IsObjFilePath(path) || IsFbxFilePath(path)) {
-                    if (m_importAssetModal.HandleFileDrop(m_pendingPathDropX, m_pendingPathDropY, path)) {
-                        m_pendingPathDropPaths.clear();
-                        return;
-                    }
+                if ((IsObjFilePath(path) || IsFbxFilePath(path)) &&
+                    m_importAssetModal.HandleFileDrop(m_pendingPathDropX, m_pendingPathDropY, path)) {
+                    m_pendingPathDropPaths.clear();
+                    return;
                 }
             }
         }
 
-        for (const std::string &path: m_pendingPathDropPaths) {
-            const bool isObj = IsObjFilePath(path);
-            const bool isFbx = IsFbxFilePath(path);
-            if (!isObj && !isFbx)
-                continue;
+        auto it = std::ranges::find_if(m_pendingPathDropPaths, [](const std::string& path) {
+            return IsObjFilePath(path) || IsFbxFilePath(path);
+        });
+        if (it == m_pendingPathDropPaths.end())
+            return;
 
-            const std::string assetGuid = GenerateAssetGuid();
-            const std::string assetId = AssetIdFromImportedPath(path);
-            const std::string displayName = assetId;
+        const std::string &path = *it;
+        const bool isFbx = IsFbxFilePath(path);
+        const std::string assetGuid = GenerateAssetGuid();
+        const std::string assetId = AssetIdFromImportedPath(path);
 
-            AssetImportResult importResult = m_assetImportService.ImportAssetFromSource(
-                path, assetId, assetGuid, displayName);
-            if (!importResult.ok) {
-                const std::string &err = importResult.error;
-                if (!err.empty())
-                    LogWarn("Drop import: {}", err);
-                m_uiWidgets.OnClipboardAction(
-                    err.empty() ? "Drop import failed." : "Drop import failed — see log", 4.0f);
-                m_pendingPathDropPaths.clear();
-                return;
-            }
-
-            // Auto-commit on successful drop import
-            m_document.assets[assetId] = importResult.asset;
-            m_document.dirty = true;
-            m_selectedAssetId = assetId;
-            if (std::string metadataError;
-                !m_assetImportService.SaveMetadataForAsset(
-                    assetId, importResult.asset, &metadataError) &&
-                !metadataError.empty()) {
-                LogWarn("Drop metadata sync: {}", metadataError);
-            }
+        AssetImportResult importResult = m_assetImportService.ImportAssetFromSource(
+            path, assetId, assetGuid, assetId);
+        if (!importResult.ok) {
+            const std::string &err = importResult.error;
+            if (!err.empty())
+                LogWarn("Drop import: {}", err);
             m_uiWidgets.OnClipboardAction(
-                isFbx ? "FBX imported" : "OBJ imported", 2.0f);
+                err.empty() ? "Drop import failed." : "Drop import failed — see log", 4.0f);
             m_pendingPathDropPaths.clear();
             return;
         }
+
+        // Auto-commit on successful drop import
+        m_document.assets[assetId] = importResult.asset;
+        m_document.dirty = true;
+        m_selectedAssetId = assetId;
+        if (std::string metadataError;
+            !m_assetImportService.SaveMetadataForAsset(
+                assetId, importResult.asset, &metadataError) &&
+            !metadataError.empty()) {
+            LogWarn("Drop metadata sync: {}", metadataError);
+        }
+        m_uiWidgets.OnClipboardAction(
+            isFbx ? "FBX imported" : "OBJ imported", 2.0f);
+        m_pendingPathDropPaths.clear();
     }
 
     /** @copydoc EditorLayer::ProcessPendingPathDrops */

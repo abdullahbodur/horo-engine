@@ -322,20 +322,31 @@ void EditorLayer::UpdateNonFlyModeInput(const Camera &cam, int screenW,
         std::max(0.0f, m_viewportPanelRect.maxX - m_viewportPanelRect.minX);
     const float viewportH =
         std::max(0.0f, m_viewportPanelRect.maxY - m_viewportPanelRect.minY);
-    const float preciseTranslateSnapStep = m_preciseTransformEnabled
+    TransformGizmoUpdateParams params;
+    params.window = m_window;
+    params.cam = &cam;
+    params.screenW = screenW;
+    params.screenH = screenH;
+    params.viewportX = m_viewportPanelRect.minX;
+    params.viewportY = m_viewportPanelRect.minY;
+    params.viewportW = viewportW;
+    params.viewportH = viewportH;
+    params.translateSnapStep = m_preciseTransformEnabled
         ? ResolveViewportTranslateSnapStep(true, m_preciseTranslateStepMeters, 0.5f)
         : 0.0f;
-    const float preciseRotateSnapRadians = m_preciseTransformEnabled
+    params.rotateSnapRadians = m_preciseTransformEnabled
         ? ToRadians(ResolveViewportRotateSnapStepDegrees(
               true, m_preciseTranslateStepMeters, 15.0f))
         : 0.0f;
-    const float preciseScaleSnapStep = m_preciseTransformEnabled
+    params.scaleSnapStep = m_preciseTransformEnabled
         ? ResolveViewportScaleSnapStep(true, m_preciseTranslateStepMeters, 0.1f)
         : 0.0f;
-    gizmoConsumed = m_gizmo.Update(
-        m_window, cam, screenW, screenH, dPos, dRot, dScale,
-        m_viewportPanelRect.minX, m_viewportPanelRect.minY, viewportW, viewportH,
-        preciseTranslateSnapStep, preciseRotateSnapRadians, preciseScaleSnapStep);
+
+    TransformGizmoResult result = m_gizmo.Update(params);
+    gizmoConsumed = result.consumedMouse;
+    dPos = result.deltaPos;
+    dRot = result.deltaRot;
+    dScale = result.deltaScale;
 
     // --- Surface snap (Ctrl) and Grid snap (Shift) ---
     if (m_gizmo.GetMode() == Translate) {

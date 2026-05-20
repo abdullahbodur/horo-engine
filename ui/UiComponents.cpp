@@ -455,6 +455,46 @@ bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
   return ImGui::Combo(label, currentItem, items, itemCount);
 }
 
+namespace {
+std::string BuildMultiSelectPreview(int selectedCount, const char *singleSelectedLabel, const char *allLabel) {
+  if (selectedCount == 0) return allLabel ? allLabel : "All";
+  if (selectedCount == 1) return singleSelectedLabel ? singleSelectedLabel : "1 selected";
+  return std::format("{} selected", selectedCount);
+}
+
+bool HandleMultiSelectAllOption(std::span<MultiSelectDropdownItem> items, const char* allLabel, bool allSelected) {
+  bool changed = false;
+  if (ImGui::Selectable(allLabel ? allLabel : "All", allSelected)) {
+    for (const MultiSelectDropdownItem &item : items) {
+      if (item.selected && *item.selected) {
+        *item.selected = false;
+        changed = true;
+      }
+    }
+  }
+  if (allSelected)
+    ImGui::SetItemDefaultFocus();
+  return changed;
+}
+
+bool HandleMultiSelectItems(std::span<MultiSelectDropdownItem> items) {
+  bool changed = false;
+  ImGui::Separator();
+  for (const MultiSelectDropdownItem &item : items) {
+    if (!item.selected)
+      continue;
+    if (const bool selected = *item.selected;
+        ImGui::Selectable(item.label, selected, ImGuiSelectableFlags_DontClosePopups)) {
+      *item.selected = !selected;
+      changed = true;
+    }
+    if (*item.selected)
+      ImGui::SetItemDefaultFocus();
+  }
+  return changed;
+}
+} // namespace
+
 /** @copydoc MultiSelectDropdown */
 bool MultiSelectDropdown(const EditorTheme &theme, const char *id,
                          std::span<MultiSelectDropdownItem> items,
@@ -468,42 +508,13 @@ bool MultiSelectDropdown(const EditorTheme &theme, const char *id,
     }
   }
 
-  std::string preview;
-  if (selectedCount == 0)
-    preview = allLabel ? allLabel : "All";
-  else if (selectedCount == 1)
-    preview = singleSelectedLabel ? singleSelectedLabel : "1 selected";
-  else
-    preview = std::format("{} selected", selectedCount);
-
+  const std::string preview = BuildMultiSelectPreview(selectedCount, singleSelectedLabel, allLabel);
   bool changed = false;
   ScopedComboStyle style(theme);
+  
   if (ImGui::BeginCombo(id, preview.c_str())) {
-    const bool allSelected = selectedCount == 0;
-    if (ImGui::Selectable(allLabel ? allLabel : "All", allSelected)) {
-      for (const MultiSelectDropdownItem &item : items) {
-        if (item.selected && *item.selected) {
-          *item.selected = false;
-          changed = true;
-        }
-      }
-    }
-    if (allSelected)
-      ImGui::SetItemDefaultFocus();
-
-    ImGui::Separator();
-    for (const MultiSelectDropdownItem &item : items) {
-      if (!item.selected)
-        continue;
-      bool selected = *item.selected;
-      if (ImGui::Selectable(item.label, selected,
-                            ImGuiSelectableFlags_DontClosePopups)) {
-        *item.selected = !selected;
-        changed = true;
-      }
-      if (*item.selected)
-        ImGui::SetItemDefaultFocus();
-    }
+    changed |= HandleMultiSelectAllOption(items, allLabel, selectedCount == 0);
+    changed |= HandleMultiSelectItems(items);
     ImGui::EndCombo();
   }
   return changed;
@@ -1121,9 +1132,12 @@ bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const ImVec2 min = ImGui::GetItemRectMin();
     const ImVec2 max = ImGui::GetItemRectMax();
-    const ImU32 bg = ImGui::GetColorU32(
-        value ? theme.palette.inputActive
-              : (hovered ? theme.palette.inputHover : theme.palette.input));
+    ImVec4 bgColor = theme.palette.input;
+    if (value)
+        bgColor = theme.palette.inputActive;
+    else if (hovered)
+        bgColor = theme.palette.inputHover;
+    const ImU32 bg = ImGui::GetColorU32(bgColor);
     const ImU32 border = ImGui::GetColorU32(theme.palette.border);
     drawList->AddRectFilled(min, max, bg, theme.rounding.input);
     drawList->AddRect(min, max, border, theme.rounding.input, 0, 1.0f);

@@ -139,6 +139,68 @@ ImTextureID TryLoadTexturePreview(const std::string& filePath) {
     const RenderTargetHandle handle = tex->GetRenderTargetHandle(true);
     return ToImTextureId(handle);
 }
+
+std::vector<std::string> SplitPathIntoBreadcrumbSegments(const std::string& pathStr) {
+    std::vector<std::string> segments;
+    std::string accumulated;
+    std::string current;
+    for (size_t i = 0; i < pathStr.size(); ++i) {
+        char c = pathStr[i];
+        if (c == '/' || c == '\\') {
+            if (!current.empty()) {
+                accumulated += current + "/";
+                segments.push_back(accumulated);
+            } else if (accumulated.empty()) {
+                accumulated = "/";
+                segments.push_back(accumulated);
+            }
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        accumulated += current;
+        segments.push_back(accumulated);
+    }
+    return segments;
+}
+
+std::optional<std::string> DrawBreadcrumbs(const Ui::EditorTheme& theme, const std::string& pathStr) {
+    std::vector<std::string> segments = SplitPathIntoBreadcrumbSegments(pathStr);
+    std::optional<std::string> navigateTarget;
+    
+    for (size_t i = 0; i < segments.size(); ++i) {
+        if (i > 0) {
+            ImGui::SameLine(0, 4.0f);
+            const ImVec2 sepSz = Ui::GetIconSize(ICON_FA_ANGLE_RIGHT, Ui::GetIconSize(theme));
+            const ImVec2 sepPos = ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y + (ImGui::GetTextLineHeight() - sepSz.y) * 0.5f);
+            Ui::DrawIcon(ImGui::GetWindowDrawList(), ICON_FA_ANGLE_RIGHT, ImVec2(sepPos.x + sepSz.x * 0.5f, sepPos.y + sepSz.y * 0.5f), ImGui::ColorConvertFloat4ToU32(ImVec4(0.4f, 0.4f, 0.4f, 0.6f)), Ui::GetIconSize(theme));
+            ImGui::SameLine(0, 4.0f);
+        }
+        
+        const std::string& seg = segments[i];
+        std::string displayName = seg;
+        if (!displayName.empty() && displayName.back() == '/')
+            displayName.pop_back();
+            
+        size_t lastSlash = displayName.find_last_of('/');
+        if (lastSlash != std::string::npos)
+            displayName = displayName.substr(lastSlash + 1);
+        if (displayName.empty())
+            displayName = "/";
+
+        ImGui::PushID(static_cast<int>(i));
+        if (Ui::Button(theme, Ui::ButtonStyleVariant::Secondary, displayName.c_str())) {
+            std::string targetPath = seg;
+            if (!targetPath.empty() && targetPath.back() == '/')
+                targetPath.pop_back();
+            navigateTarget = targetPath;
+        }
+        ImGui::PopID();
+    }
+    return navigateTarget;
+}
 } // namespace
 
 void EditorFileBrowser::SetRootPath(const std::filesystem::path& root) {
@@ -287,64 +349,8 @@ void EditorFileBrowser::DrawNavBar() {
                    ICON_FA_ROTATE)) Refresh();
     ImGui::SameLine();
 
-    // Breadcrumb: clickable path segments showing full OS path
-    const std::string pathStr = m_state.currentDir.generic_string();
-    // Split path into segments
-    std::vector<std::string> segments;
-    std::string accumulated;
-    std::string current;
-    for (size_t i = 0; i < pathStr.size(); ++i) {
-        char c = pathStr[i];
-        if (c == '/' || c == '\\') {
-            if (!current.empty()) {
-                accumulated += current + "/";
-                segments.push_back(accumulated);
-            } else if (accumulated.empty()) {
-                // Leading slash
-                accumulated = "/";
-                segments.push_back(accumulated);
-            }
-            current.clear();
-        } else {
-            current += c;
-        }
-    }
-    if (!current.empty()) {
-        accumulated += current;
-        segments.push_back(accumulated);
-    }
-
-    // Draw breadcrumb segments with angle-right separators
-    for (size_t i = 0; i < segments.size(); ++i) {
-        if (i > 0) {
-            ImGui::SameLine(0, 4.0f);
-            const ImVec2 sepSz = Ui::GetIconSize(ICON_FA_ANGLE_RIGHT, Ui::GetIconSize(Ui::GetEditorTheme()));
-            const ImVec2 sepPos = ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y + (ImGui::GetTextLineHeight() - sepSz.y) * 0.5f);
-            Ui::DrawIcon(ImGui::GetWindowDrawList(), ICON_FA_ANGLE_RIGHT, ImVec2(sepPos.x + sepSz.x * 0.5f, sepPos.y + sepSz.y * 0.5f), ImGui::ColorConvertFloat4ToU32(ImVec4(0.4f, 0.4f, 0.4f, 0.6f)), Ui::GetIconSize(Ui::GetEditorTheme()));
-            ImGui::SameLine(0, 4.0f);
-        }
-        const std::string& seg = segments[i];
-        // Extract just the folder name for display
-        std::string displayName = seg;
-        if (!displayName.empty() && displayName.back() == '/')
-            displayName.pop_back();
-        size_t lastSlash = displayName.find_last_of('/');
-        if (lastSlash != std::string::npos)
-            displayName = displayName.substr(lastSlash + 1);
-        if (displayName.empty())
-            displayName = "/";
-
-        // Make clickable
-        ImGui::PushID(static_cast<int>(i));
-        if (Ui::Button(theme, Ui::ButtonStyleVariant::Secondary,
-                       displayName.c_str())) {
-            // Navigate to this segment's path
-            std::string targetPath = seg;
-            if (!targetPath.empty() && targetPath.back() == '/')
-                targetPath.pop_back();
-            NavigateTo(std::filesystem::path(targetPath));
-        }
-        ImGui::PopID();
+    if (auto target = DrawBreadcrumbs(theme, m_state.currentDir.generic_string())) {
+        NavigateTo(std::filesystem::path(*target));
     }
 }
 

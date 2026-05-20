@@ -27,6 +27,27 @@ namespace Horo::Editor {
         Z,    /**< Local/world Z axis handle. */
     };
 
+    struct TransformGizmoResult {
+        bool consumedMouse = false;
+        Vec3 deltaPos = Vec3::Zero();
+        Quaternion deltaRot = Quaternion::Identity();
+        Vec3 deltaScale = Vec3::One();
+    };
+
+    struct TransformGizmoUpdateParams {
+        GLFWwindow* window = nullptr;
+        const Camera* cam = nullptr;
+        int screenW = 0;
+        int screenH = 0;
+        float viewportX = 0.0f;
+        float viewportY = 0.0f;
+        float viewportW = 0.0f;
+        float viewportH = 0.0f;
+        float translateSnapStep = 0.0f;
+        float rotateSnapRadians = 0.0f;
+        float scaleSnapStep = 0.0f;
+    };
+
     /** @brief Renders and drives an interactive per-object transform gizmo in the viewport. */
     class TransformGizmo {
     public:
@@ -69,29 +90,10 @@ namespace Horo::Editor {
         // picking). outDeltaPos/Rot/Scale: incremental delta for this frame
         // (identity/zero if nothing dragged).
         /** @brief Processes mouse input and outputs the frame's transform delta.
-         *  @param window     GLFW window providing raw mouse state.
-         *  @param cam        Current viewport camera.
-         *  @param screenW    Viewport width in pixels.
-         *  @param screenH    Viewport height in pixels.
-         *  @param outDeltaPos   Receives the position delta for this frame.
-         *  @param outDeltaRot   Receives the rotation delta for this frame.
-         *  @param outDeltaScale Receives the scale delta for this frame.
-         *  @param viewportX     Viewport content left edge in window coordinates.
-         *  @param viewportY     Viewport content top edge in window coordinates.
-         *  @param viewportW     Viewport content width in window coordinates.
-         *  @param viewportH     Viewport content height in window coordinates.
-         *  @param translateSnapStep Optional cumulative translate snap step; <= 0 disables.
-         *  @param rotateSnapRadians Optional cumulative rotate snap step in radians; <= 0 disables.
-         *  @param scaleSnapStep Optional cumulative scale snap step; <= 0 disables.
-         *  @return True when the gizmo consumed the mouse event (caller should skip scene picking).
+         *  @param params     Update parameters including window, camera, and viewport dimensions.
+         *  @return Result struct containing whether the gizmo consumed the mouse event and the transform deltas.
          */
-        bool Update(GLFWwindow *window, const Camera &cam, int screenW, int screenH,
-                    Vec3 &outDeltaPos, Quaternion &outDeltaRot, Vec3 &outDeltaScale,
-                    float viewportX = 0.0f, float viewportY = 0.0f,
-                    float viewportW = 0.0f, float viewportH = 0.0f,
-                    float translateSnapStep = 0.0f,
-                    float rotateSnapRadians = 0.0f,
-                    float scaleSnapStep = 0.0f);
+        TransformGizmoResult Update(const TransformGizmoUpdateParams& params);
 
         // Queue DebugDraw lines; call before DebugDraw::Flush.
         /** @brief Queues debug-draw lines for the gizmo handles; must be called before DebugDraw::Flush.

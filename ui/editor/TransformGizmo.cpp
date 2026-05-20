@@ -433,67 +433,63 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
     }
 
     /** @copydoc TransformGizmo::Update */
-    bool TransformGizmo::Update(GLFWwindow *window, const Camera &cam, int screenW,
-                                int screenH, Vec3 &outDeltaPos,
-                                Quaternion &outDeltaRot, Vec3 &outDeltaScale,
-                                float viewportX, float viewportY, float viewportW,
-                                float viewportH, float translateSnapStep,
-                                float rotateSnapRadians, float scaleSnapStep) {
-        outDeltaPos = Vec3::Zero();
-        outDeltaRot = Quaternion::Identity();
-        outDeltaScale = Vec3::One();
+    TransformGizmoResult TransformGizmo::Update(const TransformGizmoUpdateParams& params) {
+        TransformGizmoResult result;
 
         if (m_mode == GizmoMode::None)
-            return false;
+            return result;
 
         double dmx;
         double dmy;
-        glfwGetCursorPos(window, &dmx, &dmy);
+        glfwGetCursorPos(params.window, &dmx, &dmy);
         int windowW = 0;
         int windowH = 0;
-        glfwGetWindowSize(window, &windowW, &windowH);
-        const float sourceX = (viewportW > 0.0f && viewportH > 0.0f)
-                                  ? viewportX
+        glfwGetWindowSize(params.window, &windowW, &windowH);
+        const float sourceX = (params.viewportW > 0.0f && params.viewportH > 0.0f)
+                                  ? params.viewportX
                                   : 0.0f;
-        const float sourceY = (viewportW > 0.0f && viewportH > 0.0f)
-                                  ? viewportY
+        const float sourceY = (params.viewportW > 0.0f && params.viewportH > 0.0f)
+                                  ? params.viewportY
                                   : 0.0f;
-        const int sourceW = (viewportW > 0.0f)
-                                ? static_cast<int>(std::round(viewportW))
+        const int sourceW = (params.viewportW > 0.0f)
+                                ? static_cast<int>(std::round(params.viewportW))
                                 : windowW;
-        const int sourceH = (viewportH > 0.0f)
-                                ? static_cast<int>(std::round(viewportH))
+        const int sourceH = (params.viewportH > 0.0f)
+                                ? static_cast<int>(std::round(params.viewportH))
                                 : windowH;
         const Vec2 mouse = ScaleScreenPointToRenderTarget(
             static_cast<float>(dmx) - sourceX, static_cast<float>(dmy) - sourceY,
-            sourceW, sourceH, screenW, screenH);
+            sourceW, sourceH, params.screenW, params.screenH);
         const float mx = mouse.x;
         const float my = mouse.y;
 
         bool currMouseL =
-                glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+                glfwGetMouseButton(params.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
         bool clicked = currMouseL && !m_prevMouseL;
         bool released = !currMouseL && m_prevMouseL;
         m_prevMouseL = currMouseL;
 
-        Ray ray = ScreenToRay(mx, my, screenW, screenH, cam);
+        Ray ray = ScreenToRay(mx, my, params.screenW, params.screenH, *params.cam);
 
         if (m_dragging == GizmoAxis::None) {
-            m_hovered = PickAxis(mx, my, cam, screenW, screenH);
+            m_hovered = PickAxis(mx, my, *params.cam, params.screenW, params.screenH);
             if (clicked && m_hovered != GizmoAxis::None)
-                BeginDrag(ray, cam);
+                BeginDrag(ray, *params.cam);
         } else {
             if (released) {
                 m_dragging = GizmoAxis::None;
             } else {
-                if (ApplyActiveDrag(ray, cam, outDeltaPos, outDeltaRot,
-                                    outDeltaScale, translateSnapStep,
-                                    rotateSnapRadians, scaleSnapStep))
-                    return true; // consumed, no delta
+                if (ApplyActiveDrag(ray, *params.cam, result.deltaPos, result.deltaRot,
+                                    result.deltaScale, params.translateSnapStep,
+                                    params.rotateSnapRadians, params.scaleSnapStep)) {
+                    result.consumedMouse = true;
+                    return result; // consumed, no delta
+                }
             }
         }
 
-        return m_dragging != GizmoAxis::None || m_hovered != GizmoAxis::None;
+        result.consumedMouse = (m_dragging != GizmoAxis::None || m_hovered != GizmoAxis::None);
+        return result;
     }
 
 

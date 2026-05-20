@@ -69,6 +69,42 @@ const char *RendererBackendStatusLabel() {
   }
 }
 
+std::vector<Ui::EditorStatusBarItem> BuildStatusBarItemsHelper(
+    const EditorStatusText& status,
+    bool isDirty, bool isNavActive, bool wantsReload,
+    const std::string& rendererLabel) {
+  std::vector<Ui::EditorStatusBarItem> items;
+  items.reserve(6);
+  items.push_back({.id = "selection",
+                   .icon = ICON_FA_MOUSE_POINTER,
+                   .label = "Sel",
+                   .value = std::to_string(status.selectionCount)});
+  items.push_back({.id = "dirty",
+                   .icon = ICON_FA_SAVE,
+                   .label = "Dirty",
+                   .value = status.dirtyText,
+                   .level = isDirty ? Ui::EditorStatusLevel::Warning
+                                    : Ui::EditorStatusLevel::Success});
+  items.push_back({.id = "nav",
+                   .icon = ICON_FA_HAND_POINTER,
+                   .label = "Nav",
+                   .value = status.navText,
+                   .level = isNavActive ? Ui::EditorStatusLevel::Success
+                                        : Ui::EditorStatusLevel::Info});
+  items.push_back({.id = "reload",
+                   .icon = ICON_FA_REDO,
+                   .label = "Reload",
+                   .value = status.reloadText,
+                   .level = wantsReload ? Ui::EditorStatusLevel::Warning
+                                        : Ui::EditorStatusLevel::Info});
+  items.push_back({.id = "renderer",
+                   .icon = ICON_FA_CUBE,
+                   .label = "Renderer",
+                   .value = rendererLabel,
+                   .side = Ui::EditorStatusBarSide::Right});
+  return items;
+}
+
 /** @brief Load the editor UI font and merge FontAwesome icon glyphs. */
 void LoadEditorFonts(ImGuiIO &io) {
   const Ui::FontFamilyConfig config{.relativePath = "assets/fonts/InterVariable.ttf",
@@ -213,41 +249,13 @@ void EditorLayer::InitUiWidgetCallbacks() {
                        status.selectionCount, status.dirtyText, status.navText,
                        status.reloadText);
   };
+
+
   callbacks.getStatusBarItems = [this]() {
     const EditorStatusText status = BuildEditorStatusText(
         EditorStatusSnapshot{static_cast<int>(m_selectedIndices.size()),
                              m_document.dirty, m_viewportNavActive, m_wantsReload});
-
-    std::vector<Ui::EditorStatusBarItem> items;
-    items.reserve(6);
-    items.push_back({.id = "selection",
-                     .icon = ICON_FA_MOUSE_POINTER,
-                     .label = "Sel",
-                     .value = std::to_string(status.selectionCount)});
-    items.push_back({.id = "dirty",
-                     .icon = ICON_FA_SAVE,
-                     .label = "Dirty",
-                     .value = status.dirtyText,
-                     .level = m_document.dirty ? Ui::EditorStatusLevel::Warning
-                                               : Ui::EditorStatusLevel::Success});
-    items.push_back({.id = "nav",
-                     .icon = ICON_FA_HAND_POINTER,
-                     .label = "Nav",
-                     .value = status.navText,
-                     .level = m_viewportNavActive ? Ui::EditorStatusLevel::Success
-                                                  : Ui::EditorStatusLevel::Info});
-    items.push_back({.id = "reload",
-                     .icon = ICON_FA_REDO,
-                     .label = "Reload",
-                     .value = status.reloadText,
-                     .level = m_wantsReload ? Ui::EditorStatusLevel::Warning
-                                            : Ui::EditorStatusLevel::Info});
-    items.push_back({.id = "renderer",
-                     .icon = ICON_FA_CUBE,
-                     .label = "Renderer",
-                     .value = RendererBackendStatusLabel(),
-                     .side = Ui::EditorStatusBarSide::Right});
-    return items;
+    return BuildStatusBarItemsHelper(status, m_document.dirty, m_viewportNavActive, m_wantsReload, RendererBackendStatusLabel());
   };
 
   m_uiWidgets.SetCallbacks(std::move(callbacks));

@@ -568,7 +568,7 @@ namespace Horo::Editor
   }
 
   /** @copydoc EditorLayer::DrawProjectTree */
-  void EditorLayer::DrawProjectTree(const Ui::EditorTheme& theme)
+  void EditorLayer::DrawProjectTree(const Ui::EditorTheme&)
   {
     ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
     DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
