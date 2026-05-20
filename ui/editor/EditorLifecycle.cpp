@@ -96,7 +96,7 @@ std::vector<Ui::EditorStatusBarItem> BuildStatusBarItemsHelper(
                    .value = status.reloadText,
                    .level = wantsReload ? Warning : Info});
   items.push_back({.id = "renderer",
-                   .icon = ICON_FA_DESKTOP,
+                   .icon = ICON_FA_EYE,
                    .label = "Render",
                    .value = rendererLabel,
                    .side = Ui::EditorStatusBarSide::Right});
