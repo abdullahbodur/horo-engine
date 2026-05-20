@@ -95,7 +95,7 @@ public:
 
     /** @brief Draws the status bar (file/directory count).
      *  Call this separately when you want to pin it to a fixed position. */
-    void DrawStatusBar();
+    void DrawStatusBar() const;
 
     /** @brief Returns the absolute path of the currently selected file.
      *  @return Empty string when no file is selected.
@@ -155,6 +155,8 @@ private:
      *  @param tileH Total tile height in pixels.
      */
     void DrawThumbnailTile(const FileBrowserEntry& entry, float thumbSize, float tileH);
+    void DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserEntry& entry, const ImVec2& thumbMin, const ImVec2& thumbMax);
+    void DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax);
 
     /** @brief Draws the drag-and-drop zone at the top of the browser. */
     void DrawDropZone();

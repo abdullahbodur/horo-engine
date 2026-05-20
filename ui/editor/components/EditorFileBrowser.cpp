@@ -457,9 +457,8 @@ void EditorFileBrowser::DrawThumbnailGrid() {
         ImGui::PopID();
     }
 
-    const int remainingRows = totalRows - lastVisibleRow;
-    if (remainingRows > 0)
-        ImGui::Dummy(ImVec2(0, remainingRows * rowHeight));
+    if (const int remainingRows = totalRows - lastVisibleRow; remainingRows > 0)
+        ImGui::Dummy(ImVec2(0, static_cast<float>(remainingRows) * rowHeight));
 
     if (m_pendingNavigate) {
         NavigateTo(*m_pendingNavigate);
@@ -476,19 +475,37 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
     ImGui::InvisibleButton("##tile_btn", ImVec2(thumbSize + kThumbPad * 2.0f - 2.0f, tileH - 2.0f));
     const bool hovered = ImGui::IsItemHovered();
     const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-    const ImVec4 bgColor = entry.isSelected ? ImVec4(0.14f, 0.20f, 0.30f, 0.95f)
-                             : (hovered ? ImVec4(0.12f, 0.16f, 0.22f, 0.90f) : ImVec4(0.09f, 0.12f, 0.18f, 0.85f));
-    const ImVec2 bgMin = tileMin;
-    const ImVec2 bgMax = ImVec2(tileMin.x + thumbSize + kThumbPad * 2.0f, tileMin.y + tileH);
+    ImVec4 bgColor;
+    if (entry.isSelected) bgColor = ImVec4(0.14f, 0.20f, 0.30f, 0.95f);
+    else if (hovered) bgColor = ImVec4(0.12f, 0.16f, 0.22f, 0.90f);
+    else bgColor = ImVec4(0.09f, 0.12f, 0.18f, 0.85f);
+    
+    const auto bgMin = tileMin;
+    const auto bgMax = ImVec2(tileMin.x + thumbSize + kThumbPad * 2.0f, tileMin.y + tileH);
     dl->AddRectFilled(bgMin, bgMax, ImGui::ColorConvertFloat4ToU32(bgColor), 6.0f);
-    const ImVec4 borderColor = entry.isSelected ? ImVec4(0.2f, 0.5f, 1.0f, 1.0f)
-                                 : (hovered ? ImVec4(0.45f, 0.62f, 0.90f, 0.90f) : ImVec4(0.35f, 0.50f, 0.70f, 0.50f));
+    
+    ImVec4 borderColor;
+    if (entry.isSelected) borderColor = ImVec4(0.2f, 0.5f, 1.0f, 1.0f);
+    else if (hovered) borderColor = ImVec4(0.45f, 0.62f, 0.90f, 0.90f);
+    else borderColor = ImVec4(0.35f, 0.50f, 0.70f, 0.50f);
+    
     dl->AddRect(bgMin, bgMax, ImGui::ColorConvertFloat4ToU32(borderColor), 6.0f, 0, entry.isSelected ? 2.0f : 1.0f);
     const ImVec2 thumbMin = ImVec2(tileMin.x + kThumbPad, tileMin.y + kThumbPad);
     const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
     const ImU32 bgThumbCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f));
     dl->AddRectFilled(thumbMin, thumbMax, bgThumbCol, 4.0f);
 
+    DrawThumbnailTileIcon(dl, entry, thumbMin, thumbMax);
+    DrawThumbnailTileLabel(dl, entry, thumbSize, tileMin, thumbMax);
+
+    if (clicked) {
+        if (entry.isDirectory) m_pendingNavigate = entry.fullPath;
+        else SelectEntry(entry);
+    }
+    ImGui::EndChild();
+}
+
+void EditorFileBrowser::DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserEntry& entry, const ImVec2& thumbMin, const ImVec2& thumbMax) {
     // Try to render mesh preview for supported formats
     const bool isMesh = IsMeshExtension(entry.extension);
     const bool isTexture = IsTextureExtension(entry.extension);
@@ -535,6 +552,9 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
         }
         if (s_largeIconFont) ImGui::PopFont();
     }
+}
+
+void EditorFileBrowser::DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax) {
     std::string displayName = entry.name;
     const float maxLabelW = thumbSize;
     if (ImGui::CalcTextSize(displayName.c_str()).x > maxLabelW) {
@@ -549,6 +569,7 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
                                 ? ImGui::ColorConvertFloat4ToU32(ImVec4(0.70f, 0.60f, 0.30f, 0.95f))
                                 : ImGui::GetColorU32(ImGuiCol_Text);
     dl->AddText(ImVec2(nameX, nameY), nameColor, displayName.c_str());
+    
     if (entry.isDirectory) {
         const std::string sizeLabel = entry.itemCount >= 0
             ? std::format("{} items", entry.itemCount)
@@ -566,15 +587,11 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
             nameY + ImGui::GetTextLineHeight() + 2.0f);
         dl->AddText(sizePos, ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)), sizeLabel.c_str());
     }
-    if (clicked) {
-        if (entry.isDirectory) m_pendingNavigate = entry.fullPath;
-        else SelectEntry(entry);
-    }
-    ImGui::EndChild();
 }
 
-void EditorFileBrowser::DrawStatusBar() {
-    int fileCount = 0, dirCount = 0;
+void EditorFileBrowser::DrawStatusBar() const {
+    int fileCount = 0;
+    int dirCount = 0;
     for (const auto& entry : m_state.filteredEntries) {
         if (entry.isDirectory) ++dirCount; else ++fileCount;
     }

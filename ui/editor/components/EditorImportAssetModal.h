@@ -230,6 +230,16 @@ private:
     /** @brief Renders the render scale fields. */
     void DrawRenderScaleSection();
 
+    // -- Sub-sections for DrawImportSettings --
+    void DrawSettingsImportAs();
+    void DrawSettingsContentLocation();
+    void DrawSettingsAssetName();
+    void DrawSettingsScale();
+    void DrawSettingsCheckboxes();
+    void DrawSettingsNormalMethod();
+    void DrawSettingsMaterialMethod();
+    void DrawSettingsAdvanced();
+
     /** @brief Renders all five texture slot rows. */
     void DrawTextureSlotsSection();
 

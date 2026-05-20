@@ -365,219 +365,251 @@ void EditorImportAssetModal::DrawImportSettings() {
     ImGui::Spacing();
 
     constexpr float kLabelColW = 200.0f;
-
-    // Helper: one form row — label on left, field on right
-    auto FormRow = [&](const char* label, auto&& drawField) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
-        ImGui::TableNextColumn();
-        drawField();
-    };
-
     if (ImGui::BeginTable("##ImportSettingsForm", 2,
             ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX,
             ImVec2(0, 0))) {
         ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, kLabelColW);
         ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch);
 
-        // Import As
-        FormRow("Import As", [&]() {
-            const char* importTypes[] = {"Static Mesh", "Skeletal Mesh", "Texture"};
-            const bool isSkeletal = m_draft.settings.importType == "skeletal_mesh";
-            const bool isTexture = m_draft.settings.importType == "texture";
-            int currentIdx = isSkeletal ? 1 : (isTexture ? 2 : 0);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::BeginCombo("##ImportType", importTypes[currentIdx])) {
-                for (int i = 0; i < 3; i++) {
-                    const bool isSelected = (i == currentIdx);
-                    if (i > 0) {
-                        ImGui::BeginDisabled();
-                        ImGui::Selectable(importTypes[i], false);
-                        ImGui::EndDisabled();
-                        if (isSelected) ImGui::SetItemDefaultFocus();
-                    } else {
-                        if (ImGui::Selectable(importTypes[i], isSelected)) {
-                            m_draft.settings.importType = "static_mesh";
-                        }
-                        if (isSelected) ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        });
-
-        // Content Location
-        FormRow("Content Location", [&]() {
-            char locBuf[512]{};
-            m_draft.settings.contentLocation.copy(locBuf, sizeof(locBuf) - 1);
-            ImGui::SetNextItemWidth(-140.0f);
-            if (ImGui::InputText("##ContentLocation", locBuf, sizeof(locBuf))) {
-                m_draft.settings.contentLocation = locBuf;
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Browse##ContentLocation")) {
-                // Could open folder picker here
-            }
-        });
-
-        // Asset Name
-        FormRow("Asset Name", [&]() {
-            char nameBuf[256]{};
-            m_draft.assetId.copy(nameBuf, sizeof(nameBuf) - 1);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::InputText("##AssetName", nameBuf, sizeof(nameBuf))) {
-                m_draft.assetId = nameBuf;
-                m_assetIdAutoDerived = false;
-            }
-        });
-
-        // Scale
-        FormRow("Scale", [&]() {
-            float scaleX = 1.0f, scaleY = 1.0f, scaleZ = 1.0f;
-#ifdef _WIN32
-            sscanf_s(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
-#else
-            sscanf(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
-#endif
-            ImGui::SetNextItemWidth(70);
-            char scaleXBuf[32];
-            snprintf(scaleXBuf, sizeof(scaleXBuf), "%.4f", scaleX);
-            if (ImGui::InputText("##ScaleX", scaleXBuf, sizeof(scaleXBuf))) {
-                scaleX = std::strtof(scaleXBuf, nullptr);
-                m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(70);
-            char scaleYBuf[32];
-            snprintf(scaleYBuf, sizeof(scaleYBuf), "%.4f", scaleY);
-            if (ImGui::InputText("##ScaleY", scaleYBuf, sizeof(scaleYBuf))) {
-                scaleY = std::strtof(scaleYBuf, nullptr);
-                m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(70);
-            char scaleZBuf[32];
-            snprintf(scaleZBuf, sizeof(scaleZBuf), "%.4f", scaleZ);
-            if (ImGui::InputText("##ScaleZ", scaleZBuf, sizeof(scaleZBuf))) {
-                scaleZ = std::strtof(scaleZBuf, nullptr);
-                m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
-            }
-            ImGui::SameLine();
-            if (m_renderScaleAutoDerived) {
-                ImGui::TextDisabled("(auto)");
-            } else {
-                if (ImGui::SmallButton("Reset##ResetScale")) {
-                    m_draft.renderScale = "1.0000,1.0000,1.0000";
-                    m_renderScaleAutoDerived = true;
-                }
-            }
-        });
-
-        // Checkboxes — each on its own row
-        const auto& theme = Ui::GetEditorTheme();
-        FormRow("Auto Generate Collision", [&theme, this]() {
-            Ui::RenderEditorCheckbox(theme, "##AutoCollision",
-                                     m_draft.settings.autoGenerateCollision);
-        });
-        FormRow("Import Materials", [&theme, this]() {
-            Ui::RenderEditorCheckbox(theme, "##ImportMaterials",
-                                     m_draft.settings.importMaterials);
-        });
-        FormRow("Import Textures", [&theme, this]() {
-            Ui::RenderEditorCheckbox(theme, "##ImportTextures",
-                                     m_draft.settings.importTextures);
-        });
-        FormRow("Combine Meshes", [&theme, this]() {
-            ImGui::BeginDisabled();
-            Ui::RenderEditorCheckbox(theme, "##CombineMeshes",
-                                     m_draft.settings.combineMeshes);
-            ImGui::EndDisabled();
-        });
-        FormRow("Transform Vertex to Absolute", [&theme, this]() {
-            Ui::RenderEditorCheckbox(theme, "##TransformVertex",
-                                     m_draft.settings.transformVertexToAbsolute);
-        });
-
-        // Normal Import Method
-        FormRow("Normal Import Method", [&]() {
-            const char* normalMethods[] = {"Import Normals", "Compute Normals", "None"};
-            const char* normalKeys[] = {"import_normals", "compute_normals", "none"};
-            int normalIdx = 0;
-            for (int i = 0; i < 3; i++) {
-                if (m_draft.settings.normalImportMethod == normalKeys[i]) {
-                    normalIdx = i;
-                    break;
-                }
-            }
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::BeginCombo("##NormalMethod", normalMethods[normalIdx])) {
-                for (int i = 0; i < 3; i++) {
-                    const bool isSelected = (i == normalIdx);
-                    if (ImGui::Selectable(normalMethods[i], isSelected)) {
-                        m_draft.settings.normalImportMethod = normalKeys[i];
-                    }
-                    if (isSelected) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-        });
-
-        // Material Import Method
-        FormRow("Material Import Method", [&]() {
-            const char* matMethods[] = {"Create New Materials", "Reuse Existing", "None"};
-            const char* matKeys[] = {"create_new", "reuse_existing", "none"};
-            int matIdx = 0;
-            for (int i = 0; i < 3; i++) {
-                if (m_draft.settings.materialImportMethod == matKeys[i]) {
-                    matIdx = i;
-                    break;
-                }
-            }
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::BeginCombo("##MatMethod", matMethods[matIdx])) {
-                for (int i = 0; i < 3; i++) {
-                    const bool isSelected = (i == matIdx);
-                    if (ImGui::Selectable(matMethods[i], isSelected)) {
-                        m_draft.settings.materialImportMethod = matKeys[i];
-                    }
-                    if (isSelected) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-        });
-
-        // Advanced Options (collapsible)
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TableSetColumnIndex(1);
-        if (ImGui::CollapsingHeader("Advanced Options")) {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("Remove Degenerates");
-            ImGui::TableNextColumn();
-            Ui::RenderEditorCheckbox(theme, "##RemoveDegenerates",
-                                     m_draft.settings.removeDegenerates);
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("Optimize Mesh");
-            ImGui::TableNextColumn();
-            Ui::RenderEditorCheckbox(theme, "##OptimizeMesh",
-                                     m_draft.settings.optimizeMesh);
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("Import Animations");
-            ImGui::TableNextColumn();
-            ImGui::BeginDisabled();
-            Ui::RenderEditorCheckbox(theme, "##ImportAnimations",
-                                     m_draft.settings.importAnimations);
-            ImGui::EndDisabled();
-        }
+        DrawSettingsImportAs();
+        DrawSettingsContentLocation();
+        DrawSettingsAssetName();
+        DrawSettingsScale();
+        DrawSettingsCheckboxes();
+        DrawSettingsNormalMethod();
+        DrawSettingsMaterialMethod();
+        DrawSettingsAdvanced();
 
         ImGui::EndTable();
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsImportAs() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Import As");
+    ImGui::TableNextColumn();
+
+    constexpr std::array<const char*, 3> importTypes = {"Static Mesh", "Skeletal Mesh", "Texture"};
+    const bool isSkeletal = m_draft.settings.importType == "skeletal_mesh";
+    const bool isTexture = m_draft.settings.importType == "texture";
+    int currentIdx = isSkeletal ? 1 : (isTexture ? 2 : 0);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##ImportType", importTypes[static_cast<size_t>(currentIdx)])) {
+        for (int i = 0; i < 3; i++) {
+            const bool isSelected = (i == currentIdx);
+            if (i > 0) {
+                ImGui::BeginDisabled();
+                ImGui::Selectable(importTypes[static_cast<size_t>(i)], false);
+                ImGui::EndDisabled();
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            } else {
+                if (ImGui::Selectable(importTypes[static_cast<size_t>(i)], isSelected)) {
+                    m_draft.settings.importType = "static_mesh";
+                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsContentLocation() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Content Location");
+    ImGui::TableNextColumn();
+
+    char locBuf[512]{};
+    m_draft.settings.contentLocation.copy(locBuf, sizeof(locBuf) - 1);
+    ImGui::SetNextItemWidth(-140.0f);
+    if (ImGui::InputText("##ContentLocation", locBuf, sizeof(locBuf))) {
+        m_draft.settings.contentLocation = locBuf;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Browse##ContentLocation")) {
+        // Could open folder picker here
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsAssetName() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Asset Name");
+    ImGui::TableNextColumn();
+
+    char nameBuf[256]{};
+    m_draft.assetId.copy(nameBuf, sizeof(nameBuf) - 1);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputText("##AssetName", nameBuf, sizeof(nameBuf))) {
+        m_draft.assetId = nameBuf;
+        m_assetIdAutoDerived = false;
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsScale() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Scale");
+    ImGui::TableNextColumn();
+
+    float scaleX = 1.0f, scaleY = 1.0f, scaleZ = 1.0f;
+#ifdef _WIN32
+    sscanf_s(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
+#else
+    sscanf(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
+#endif
+    ImGui::SetNextItemWidth(70);
+    std::string scaleXStr = std::format("{:.4f}", scaleX);
+    char scaleXBuf[32];
+    scaleXStr.copy(scaleXBuf, sizeof(scaleXBuf) - 1);
+    scaleXBuf[std::min(scaleXStr.size(), sizeof(scaleXBuf) - 1)] = '\0';
+    if (ImGui::InputText("##ScaleX", scaleXBuf, sizeof(scaleXBuf))) {
+        scaleX = std::strtof(scaleXBuf, nullptr);
+        m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(70);
+    std::string scaleYStr = std::format("{:.4f}", scaleY);
+    char scaleYBuf[32];
+    scaleYStr.copy(scaleYBuf, sizeof(scaleYBuf) - 1);
+    scaleYBuf[std::min(scaleYStr.size(), sizeof(scaleYBuf) - 1)] = '\0';
+    if (ImGui::InputText("##ScaleY", scaleYBuf, sizeof(scaleYBuf))) {
+        scaleY = std::strtof(scaleYBuf, nullptr);
+        m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(70);
+    std::string scaleZStr = std::format("{:.4f}", scaleZ);
+    char scaleZBuf[32];
+    scaleZStr.copy(scaleZBuf, sizeof(scaleZBuf) - 1);
+    scaleZBuf[std::min(scaleZStr.size(), sizeof(scaleZBuf) - 1)] = '\0';
+    if (ImGui::InputText("##ScaleZ", scaleZBuf, sizeof(scaleZBuf))) {
+        scaleZ = std::strtof(scaleZBuf, nullptr);
+        m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
+    }
+    ImGui::SameLine();
+    if (m_renderScaleAutoDerived) {
+        ImGui::TextDisabled("(auto)");
+    } else {
+        if (ImGui::SmallButton("Reset##ResetScale")) {
+            m_draft.renderScale = "1.0000,1.0000,1.0000";
+            m_renderScaleAutoDerived = true;
+        }
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsCheckboxes() {
+    const auto& theme = Ui::GetEditorTheme();
+
+    auto row = [&](const char* label, const char* id, bool& val, bool disabled = false) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::TableNextColumn();
+        if (disabled) ImGui::BeginDisabled();
+        Ui::RenderEditorCheckbox(theme, id, val);
+        if (disabled) ImGui::EndDisabled();
+    };
+
+    row("Auto Generate Collision", "##AutoCollision", m_draft.settings.autoGenerateCollision);
+    row("Import Materials", "##ImportMaterials", m_draft.settings.importMaterials);
+    row("Import Textures", "##ImportTextures", m_draft.settings.importTextures);
+    row("Combine Meshes", "##CombineMeshes", m_draft.settings.combineMeshes, true);
+    row("Transform Vertex to Absolute", "##TransformVertex", m_draft.settings.transformVertexToAbsolute);
+}
+
+void EditorImportAssetModal::DrawSettingsNormalMethod() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Normal Import Method");
+    ImGui::TableNextColumn();
+
+    constexpr std::array<const char*, 3> normalMethods = {"Import Normals", "Compute Normals", "None"};
+    constexpr std::array<const char*, 3> normalKeys = {"import_normals", "compute_normals", "none"};
+    int normalIdx = 0;
+    for (int i = 0; i < 3; i++) {
+        if (m_draft.settings.normalImportMethod == normalKeys[static_cast<size_t>(i)]) {
+            normalIdx = i;
+            break;
+        }
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##NormalMethod", normalMethods[static_cast<size_t>(normalIdx)])) {
+        for (int i = 0; i < 3; i++) {
+            const bool isSelected = (i == normalIdx);
+            if (ImGui::Selectable(normalMethods[static_cast<size_t>(i)], isSelected)) {
+                m_draft.settings.normalImportMethod = normalKeys[static_cast<size_t>(i)];
+            }
+            if (isSelected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsMaterialMethod() {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Material Import Method");
+    ImGui::TableNextColumn();
+
+    constexpr std::array<const char*, 3> matMethods = {"Create New Materials", "Reuse Existing", "None"};
+    constexpr std::array<const char*, 3> matKeys = {"create_new", "reuse_existing", "none"};
+    int matIdx = 0;
+    for (int i = 0; i < 3; i++) {
+        if (m_draft.settings.materialImportMethod == matKeys[static_cast<size_t>(i)]) {
+            matIdx = i;
+            break;
+        }
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##MatMethod", matMethods[static_cast<size_t>(matIdx)])) {
+        for (int i = 0; i < 3; i++) {
+            const bool isSelected = (i == matIdx);
+            if (ImGui::Selectable(matMethods[static_cast<size_t>(i)], isSelected)) {
+                m_draft.settings.materialImportMethod = matKeys[static_cast<size_t>(i)];
+            }
+            if (isSelected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+}
+
+void EditorImportAssetModal::DrawSettingsAdvanced() {
+    const auto& theme = Ui::GetEditorTheme();
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TableSetColumnIndex(1);
+    if (ImGui::CollapsingHeader("Advanced Options")) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Remove Degenerates");
+        ImGui::TableNextColumn();
+        Ui::RenderEditorCheckbox(theme, "##RemoveDegenerates",
+                                 m_draft.settings.removeDegenerates);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Optimize Mesh");
+        ImGui::TableNextColumn();
+        Ui::RenderEditorCheckbox(theme, "##OptimizeMesh",
+                                 m_draft.settings.optimizeMesh);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Import Animations");
+        ImGui::TableNextColumn();
+        ImGui::BeginDisabled();
+        Ui::RenderEditorCheckbox(theme, "##ImportAnimations",
+                                 m_draft.settings.importAnimations);
+        ImGui::EndDisabled();
     }
 }
 
