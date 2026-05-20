@@ -6,6 +6,7 @@
 #include <array>
 #include <filesystem>
 #include <format>
+#include <ranges>
 #include <string>
 
 #include <imgui.h>
@@ -144,8 +145,7 @@ std::vector<std::string> SplitPathIntoBreadcrumbSegments(const std::string& path
     std::vector<std::string> segments;
     std::string accumulated;
     std::string current;
-    for (size_t i = 0; i < pathStr.size(); ++i) {
-        const char c = pathStr[i];
+    for (const char c : pathStr) {
         if (c == '/' || c == '\\') {
             if (!current.empty()) {
                 accumulated += current + "/";
@@ -257,8 +257,8 @@ bool EditorFileBrowser::Draw(float gridHeight) {
 }
 
 bool EditorFileBrowser::HandleFileDrop(float x, float y, const std::string& path) {
-    constexpr float kPadding = 10.0f;
-    if (x < m_modalMinX - kPadding || x > m_modalMaxX + kPadding ||
+    if (constexpr float kPadding = 10.0f;
+        x < m_modalMinX - kPadding || x > m_modalMaxX + kPadding ||
         y < m_modalMinY - kPadding || y > m_modalMaxY + kPadding)
         return false;
     std::error_code ec;
@@ -266,12 +266,19 @@ bool EditorFileBrowser::HandleFileDrop(float x, float y, const std::string& path
     if (ec || !std::filesystem::exists(filePath, ec)) return false;
     if (std::filesystem::is_directory(filePath, ec)) { NavigateTo(filePath); return true; }
     NavigateTo(filePath.parent_path());
-    for (const auto& entry : m_state.entries) {
-        if (entry.fullPath == filePath.string()) { SelectEntry(entry); return true; }
+    const std::string filePathString = filePath.string();
+    if (const auto found = std::ranges::find(m_state.entries, filePathString,
+                                             &FileBrowserEntry::fullPath);
+        found != m_state.entries.end()) {
+        SelectEntry(*found);
+        return true;
     }
     RefreshEntries();
-    for (const auto& entry : m_state.entries) {
-        if (entry.fullPath == filePath.string()) { SelectEntry(entry); return true; }
+    if (const auto found = std::ranges::find(m_state.entries, filePathString,
+                                             &FileBrowserEntry::fullPath);
+        found != m_state.entries.end()) {
+        SelectEntry(*found);
+        return true;
     }
     return false;
 }
@@ -363,13 +370,13 @@ void EditorFileBrowser::DrawSearchBar() {
     const float searchW = inlineFilter ? availW - filterW - spacing : availW;
 
     ImGui::SetNextItemWidth(searchW);
-    char searchBuf[256]{};
-    m_state.searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+    std::array<char, 256> searchBuf{};
+    m_state.searchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
     if (Ui::InputTextWithLeadingIcon(theme, "##FileBrowserSearch",
                                      ICON_FA_MAGNIFYING_GLASS,
-                                     "Search files...", searchBuf,
-                                     sizeof(searchBuf))) {
-        m_state.searchQuery = searchBuf;
+                                     "Search files...", searchBuf.data(),
+                                     searchBuf.size())) {
+        m_state.searchQuery = searchBuf.data();
         ApplySearchFilter();
     }
 
@@ -377,7 +384,7 @@ void EditorFileBrowser::DrawSearchBar() {
         ImGui::SameLine(0.0f, spacing);
     ImGui::SetNextItemWidth(inlineFilter ? filterW : -FLT_MIN);
     using enum FileBrowserTypeFilter;
-    std::array<Ui::MultiSelectDropdownItem, kFileBrowserTypeFilterCount> filters = {{
+    auto filters = std::array<Ui::MultiSelectDropdownItem, kFileBrowserTypeFilterCount>{{
         {FileTypeFilterLabel(Folders),
          &m_state.typeFilters[static_cast<size_t>(Folders)]},
         {FileTypeFilterLabel(Meshes),
@@ -451,8 +458,8 @@ void EditorFileBrowser::DrawThumbnailGrid() {
     const int lastVisibleIndex = std::min(totalEntries, lastVisibleRow * columns);
     for (int i = firstVisibleIndex; i < lastVisibleIndex; ++i) {
         const auto& entry = m_state.filteredEntries[static_cast<size_t>(i)];
-        const int col = (i - firstVisibleIndex) % columns;
-        if (col > 0) ImGui::SameLine(0.0f, spacing);
+        if (const int col = (i - firstVisibleIndex) % columns; col > 0)
+            ImGui::SameLine(0.0f, spacing);
         ImGui::PushID(entry.fullPath.c_str());
         DrawThumbnailTile(entry, thumbSize, tileH);
         ImGui::PopID();
@@ -557,9 +564,10 @@ void EditorFileBrowser::DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserE
 
 void EditorFileBrowser::DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax) const {
     std::string displayName = entry.name;
-    const float maxLabelW = thumbSize;
-    if (ImGui::CalcTextSize(displayName.c_str()).x > maxLabelW) {
-        while (!displayName.empty() && ImGui::CalcTextSize((displayName + "...").c_str()).x > maxLabelW)
+    if (const float maxLabelW = thumbSize;
+        ImGui::CalcTextSize(displayName.c_str()).x > maxLabelW) {
+        while (!displayName.empty() &&
+               ImGui::CalcTextSize((displayName + "...").c_str()).x > maxLabelW)
             displayName.pop_back();
         displayName += "...";
     }

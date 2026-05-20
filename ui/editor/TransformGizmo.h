@@ -202,8 +202,8 @@ namespace Horo::Editor {
         void BeginDrag(const Ray &ray, const Camera &cam);
 
         /** @brief Applies one frame of active drag input and outputs incremental transform deltas. */
-        bool ApplyActiveDrag(const Ray &ray, const Camera &cam, Vec3 &outDeltaPos,
-                             Quaternion &outDeltaRot, Vec3 &outDeltaScale,
+        bool ApplyActiveDrag(const Ray &ray, const Camera &cam,
+                             TransformGizmoResult &outResult,
                              float translateSnapStep = 0.0f,
                              float rotateSnapRadians = 0.0f,
                              float scaleSnapStep = 0.0f);

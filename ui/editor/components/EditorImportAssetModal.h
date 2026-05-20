@@ -176,14 +176,6 @@ public:
      */
     bool HandleFileDrop(float x, float y, const std::string &path);
 
-    /** @brief Returns the current modal content rect for hit testing. */
-    void SetModalRect(float minX, float minY, float maxX, float maxY) {
-        m_modalMinX = minX;
-        m_modalMinY = minY;
-        m_modalMaxX = maxX;
-        m_modalMaxY = maxY;
-    }
-
 private:
     /** @brief Modal tab selection. */
     enum class Tab {
@@ -232,9 +224,6 @@ private:
 
     // -- Sub-sections for DrawImportSettings --
     void DrawSettingsImportAs();
-    void DrawSettingsContentLocation();
-    void DrawSettingsAssetName();
-    void DrawSettingsScale();
     void DrawSettingsCheckboxes();
     void DrawSettingsNormalMethod();
     void DrawSettingsMaterialMethod();
@@ -244,19 +233,10 @@ private:
     void DrawTextureSlotsSection();
 
     /** @brief Renders a single texture slot row. */
-    void DrawTextureSlotRow(TextureSlotDraft &slot);
+    void DrawTextureSlotRow(TextureSlotDraft &slot) const;
 
     /** @brief Renders the Import / Cancel buttons; sets @c m_hasPendingRequest on click. */
     void DrawActionsSection();
-
-    /** @brief Loads recent imports from ~/.horo/settings.json. */
-    void LoadRecentImports();
-
-    /** @brief Saves a recent import to ~/.horo/settings.json. */
-    void SaveRecentImport(std::string_view path);
-
-    /** @brief Clears the recent imports list. */
-    void ClearRecentImports();
 
     /** @brief Builds the settings map from current ImportSettings. */
     std::unordered_map<std::string, std::string, StringHash, std::equal_to<>> BuildSettingsMap() const;

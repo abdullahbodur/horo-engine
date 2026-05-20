@@ -596,8 +596,8 @@ namespace Horo {
         else
             dir.clear();
 
-        auto texture = std::make_shared<Texture>(Texture::FromFile(dir + img.uri));
-        if (texture->IsValid())
+        if (auto texture = std::make_shared<Texture>(Texture::FromFile(dir + img.uri));
+            texture->IsValid())
             return texture;
         return nullptr;
     }

@@ -382,7 +382,7 @@ inline bool IsTextureFilePath(std::string_view path) {
 /** @brief Returns a copy of @p s with all ASCII characters converted to lower-case.
  *  @param s Source string.
  *  @note Delegates to Horo::ToLowerAscii; kept here for backward compatibility. */
-inline std::string ToLowerAscii(std::string s) {
+inline std::string ToLowerAscii(const std::string &s) {
   return Horo::ToLowerAscii(s);
 }
 

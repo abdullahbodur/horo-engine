@@ -205,10 +205,19 @@ namespace Horo::Editor {
 
 
 namespace {
+/** @brief Inputs required to test a rotation ring under the cursor. */
+struct RotateRingPickParams {
+    float mx = 0.0f;
+    float my = 0.0f;
+    Vec3 pos;
+    Vec3 xAxis;
+    Vec3 yAxis;
+    Vec3 zAxis;
+    float radius = 0.0f;
+};
+
 /** @brief Picks the closest rotation ring axis to the given screen point. */
-GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
-                             const Vec3& xAxis, const Vec3& yAxis,
-                             const Vec3& zAxis, float radius,
+GizmoAxis PickRotateRingAxis(const RotateRingPickParams &params,
                              const Camera& cam, int screenW, int screenH) {
     constexpr float kRotateHitRadiusSq = 9.0f * 9.0f;
     constexpr int kSegments = 48;
@@ -219,7 +228,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
 
     for (int i = 0; i < 3; ++i) {
         const auto ringAxis = static_cast<GizmoAxis>(i + 1);
-        const RingBasis basis = MakeRingBasis(xAxis, yAxis, zAxis, ringAxis);
+        const RingBasis basis =
+            MakeRingBasis(params.xAxis, params.yAxis, params.zAxis, ringAxis);
         const Vec3 uVec = basis.u;
         const Vec3 vVec = basis.v;
 
@@ -230,8 +240,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
         for (int j = 0; j <= kSegments; ++j) {
             const float t = kRingTwoPi * static_cast<float>(j) /
                             static_cast<float>(kSegments);
-            const Vec3 p = pos + uVec * (std::cos(t) * radius) +
-                           vVec * (std::sin(t) * radius);
+            const Vec3 p = params.pos + uVec * (std::cos(t) * params.radius) +
+                           vVec * (std::sin(t) * params.radius);
             float sx;
             float sy;
             if (!TransformGizmo::WorldToScreen(p, cam, screenW, screenH, sx, sy)) {
@@ -244,8 +254,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
                 prevValid = true;
                 continue;
             }
-            if (const float distSq = ScreenSegmentDistanceSq(mx, my, prevX, prevY,
-                                                             sx, sy, 0.0f);
+            if (const float distSq = ScreenSegmentDistanceSq(
+                    params.mx, params.my, prevX, prevY, sx, sy, 0.0f);
                 distSq < bestRingDist) {
                 bestRingDist = distSq;
                 bestRingAxis = ringAxis;
@@ -264,9 +274,16 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
         const Vec3 xAxis = AxisDir(GizmoAxis::X);
         const Vec3 yAxis = AxisDir(GizmoAxis::Y);
         const Vec3 zAxis = AxisDir(GizmoAxis::Z);
-        if (m_mode == GizmoMode::Rotate)
-            return PickRotateRingAxis(mx, my, m_pos, xAxis, yAxis, zAxis,
-                                      HandleSize(cam), cam, screenW, screenH);
+        if (m_mode == GizmoMode::Rotate) {
+            const RotateRingPickParams params{.mx = mx,
+                                              .my = my,
+                                              .pos = m_pos,
+                                              .xAxis = xAxis,
+                                              .yAxis = yAxis,
+                                              .zAxis = zAxis,
+                                              .radius = HandleSize(cam)};
+            return PickRotateRingAxis(params, cam, screenW, screenH);
+        }
 
         const float handleLen = HandleSize(cam);
         constexpr float kShaftHitRadiusSq = 7.0f * 7.0f;
@@ -291,8 +308,11 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
             if (!WorldToScreen(tip, cam, screenW, screenH, tx, ty))
                 continue;
 
-            if (const float handleScreenDx = tx - ox, handleScreenDy = ty - oy;
-                handleScreenDx * handleScreenDx + handleScreenDy * handleScreenDy < 16.0f)
+            const float handleScreenDx = tx - ox;
+            if (const float handleScreenDy = ty - oy;
+                handleScreenDx * handleScreenDx +
+                        handleScreenDy * handleScreenDy <
+                    16.0f)
                 continue;
 
             const float distSq = ScreenSegmentDistanceSq(
@@ -354,8 +374,7 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
 
     /** @copydoc TransformGizmo::ApplyActiveDrag */
     bool TransformGizmo::ApplyActiveDrag(const Ray &ray, const Camera &cam,
-                                         Vec3 &outDeltaPos, Quaternion &outDeltaRot,
-                                         Vec3 &outDeltaScale,
+                                         TransformGizmoResult &outResult,
                                          float translateSnapStep,
                                          float rotateSnapRadians,
                                          float scaleSnapStep) {
@@ -376,8 +395,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
                 delta = curOffset - m_dragPrevOffset;
                 m_dragPrevOffset = curOffset;
             }
-            outDeltaPos = axisDir * delta;
-            m_pos = m_pos + outDeltaPos; // keep gizmo visual in sync
+            outResult.deltaPos = axisDir * delta;
+            m_pos = m_pos + outResult.deltaPos; // keep gizmo visual in sync
         } else if (m_mode == GizmoMode::Rotate) {
             Vec3 axisNormal = AxisDir(m_dragging);
             Vec3 diff = hitPt - m_dragAnchorPos;
@@ -396,7 +415,7 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
                 deltaAngle = curAngle - m_dragPrevAngle;
                 m_dragPrevAngle = curAngle;
             }
-            outDeltaRot = Quaternion::FromAxisAngle(axisNormal, deltaAngle);
+            outResult.deltaRot = Quaternion::FromAxisAngle(axisNormal, deltaAngle);
         } else if (m_mode == GizmoMode::Scale) {
             float handleLen = HandleSize(cam);
             Vec3 axisDir = AxisDir(m_dragging);
@@ -418,14 +437,14 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
                 factor = 1.0f + delta / divisor;
             }
             if (m_dragging == GizmoAxis::X)
-                outDeltaScale = {factor, 1.0f, 1.0f};
+                outResult.deltaScale = {factor, 1.0f, 1.0f};
             else if (m_dragging == GizmoAxis::Y)
-                outDeltaScale = {1.0f, factor, 1.0f};
+                outResult.deltaScale = {1.0f, factor, 1.0f};
             else
-                outDeltaScale = {1.0f, 1.0f, factor};
-            m_scale.x *= outDeltaScale.x;
-            m_scale.y *= outDeltaScale.y;
-            m_scale.z *= outDeltaScale.z;
+                outResult.deltaScale = {1.0f, 1.0f, factor};
+            m_scale.x *= outResult.deltaScale.x;
+            m_scale.y *= outResult.deltaScale.y;
+            m_scale.z *= outResult.deltaScale.z;
         }
         return false;
     }
@@ -477,8 +496,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
             if (released) {
                 m_dragging = GizmoAxis::None;
             } else {
-                if (ApplyActiveDrag(ray, *params.cam, result.deltaPos, result.deltaRot,
-                                    result.deltaScale, params.translateSnapStep,
+                if (ApplyActiveDrag(ray, *params.cam, result,
+                                    params.translateSnapStep,
                                     params.rotateSnapRadians, params.scaleSnapStep)) {
                     result.consumedMouse = true;
                     return result; // consumed, no delta

@@ -212,26 +212,27 @@ namespace Horo::FbxLoader {
 
         /** @brief Maps ufbx material property names to engine material texture slots. */
         FbxTextureSlot SlotFromMaterialProp(std::string_view prop) {
+            using enum Horo::FbxLoader::FbxTextureSlot;
             const std::string normalized = ToLowerAscii(std::string{prop});
             if (normalized == "diffusecolor" || normalized == "diffuse" ||
                 normalized == "diffuse_color" || normalized == "basecolor" ||
                 normalized == "base_color" || normalized == "pbr|basecolor")
-                return FbxTextureSlot::Albedo;
+                return Albedo;
             if (normalized == "normalmap" || normalized == "normal" ||
                 normalized == "bump" || normalized == "bumpmap")
-                return FbxTextureSlot::Normal;
+                return Normal;
             if (normalized == "metallicroughness" ||
                 normalized == "metallicroughnessmap" ||
                 normalized == "metalness" || normalized == "metallic" ||
                 normalized == "roughness")
-                return FbxTextureSlot::MetallicRoughness;
+                return MetallicRoughness;
             if (normalized == "emissivecolor" || normalized == "emissive" ||
                 normalized == "emissioncolor" || normalized == "emission")
-                return FbxTextureSlot::Emissive;
+                return Emissive;
             if (normalized == "ambientcolor" || normalized == "ambient" ||
                 normalized == "ambientocclusion" || normalized == "occlusion")
-                return FbxTextureSlot::Occlusion;
-            return FbxTextureSlot::Unknown;
+                return Occlusion;
+            return Unknown;
         }
 
         /** @brief Filename / element-name fallback heuristic for material-slot identification. */

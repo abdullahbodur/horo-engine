@@ -160,8 +160,8 @@ std::optional<AssetThumbnailRenderer::CachedMesh> LoadAssetMeshImpl(const std::s
     }
     
     if (effectiveExt == ".gltf" || effectiveExt == ".glb") {
-        GltfLoadResult result = GltfLoader::Load(path.generic_string());
-        if (result.mesh) {
+        if (GltfLoadResult result = GltfLoader::Load(path.generic_string());
+            result.mesh) {
             entry.skinnedMesh = result.mesh;
             entry.skeleton = result.skeleton;
             entry.isSkinned = true;

@@ -60,7 +60,7 @@ namespace Horo {
             shader->SetInt("u_occlusionMap", 4);
 
             const auto bindOptional = [](const std::shared_ptr<Texture> &tex,
-                                          int slot) -> int {
+                                          int slot) {
                 if (tex && tex->IsValid()) {
                     tex->Bind(slot);
                     return 1;
@@ -143,8 +143,8 @@ namespace Horo {
             return success;
         }
 
-        const FramebufferSpec &current = m_editorViewportFramebuffer->GetSpec();
-        if (current.width != width || current.height != height) {
+        if (const FramebufferSpec &current = m_editorViewportFramebuffer->GetSpec();
+            current.width != width || current.height != height) {
             m_editorViewportFramebuffer->Resize(width, height);
             ++m_editorViewportFramebufferGeneration;
         }

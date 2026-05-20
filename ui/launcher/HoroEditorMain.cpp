@@ -108,7 +108,7 @@ FramebufferViewportRect BuildFramebufferViewportRect(
 
   FramebufferViewportRect rect;
   rect.x = std::max(0, static_cast<int>(std::round(viewportRect.minX * scaleX)));
-  const int top = static_cast<int>(std::round(viewportRect.maxY * scaleY));
+  const auto top = static_cast<int>(std::round(viewportRect.maxY * scaleY));
   rect.y = std::max(0, fbHeight - top);
   rect.width = std::max(
       1, static_cast<int>(std::round((viewportRect.maxX - viewportRect.minX) *

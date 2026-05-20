@@ -95,10 +95,10 @@ bool EditorLayer::DrawViewportImage(float targetW, float targetH) const {
   const auto viewportWidth = static_cast<uint32_t>(
       std::max(1.0f, std::floor(targetW * framebufferScaleX *
                                 kEditorViewportSupersampleScale)));
-  const auto viewportHeight = static_cast<uint32_t>(
-      std::max(1.0f, std::floor(targetH * framebufferScaleY *
-                                kEditorViewportSupersampleScale)));
-  if (!Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, true,
+  if (const auto viewportHeight = static_cast<uint32_t>(
+          std::max(1.0f, std::floor(targetH * framebufferScaleY *
+                                    kEditorViewportSupersampleScale)));
+      !Renderer::TryGetEditorViewportRenderTargetHandle(&viewportHandle, true,
                                                         &viewportError) &&
       (!Renderer::EnsureEditorViewportRenderTarget(viewportWidth, viewportHeight,
                                                    &viewportError) ||
