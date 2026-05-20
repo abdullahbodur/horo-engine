@@ -257,21 +257,7 @@ namespace Horo::FbxLoader {
             return FbxTextureSlot::Unknown;
         }
 
-        /** @brief Walks @p scene and captures every texture image source.
-         *
-         *  Walks @c scene->videos because that is the canonical FBX image-source
-         *  container and is populated by every exporter, including FBX 5800-era
-         *  files that do not expose @c scene->textures at all. For each video we
-         *  record the filename trio (for external resolution) and the embedded
-         *  byte blob if present.
-         *
-         *  Diffuse classification uses @c material->textures bindings when
-         *  available (every modern FBX exposes them) and falls back to a
-         *  filename-substring heuristic. If no record is flagged as diffuse, the
-         *  first record is promoted so single-texture assets always resolve an
-         *  @c albedoMap.
-         */
-        void ExtractAllTextures(const ufbx_scene *scene, FbxLoadResult &result) {
+        std::unordered_map<std::uint32_t, FbxTextureSlot> GatherVideoSlotsFromMaterials(const ufbx_scene *scene) {
             std::unordered_map<std::uint32_t, FbxTextureSlot> videoSlots;
             for (std::size_t mi = 0; mi < scene->materials.count; ++mi) {
                 const ufbx_material *material = scene->materials.data[mi];
@@ -288,6 +274,25 @@ namespace Horo::FbxLoader {
                     videoSlots.try_emplace(mtex.texture->video->element_id, slot);
                 }
             }
+            return videoSlots;
+        }
+
+        /** @brief Walks @p scene and captures every texture image source.
+         *
+         *  Walks @c scene->videos because that is the canonical FBX image-source
+         *  container and is populated by every exporter, including FBX 5800-era
+         *  files that do not expose @c scene->textures at all. For each video we
+         *  record the filename trio (for external resolution) and the embedded
+         *  byte blob if present.
+         *
+         *  Diffuse classification uses @c material->textures bindings when
+         *  available (every modern FBX exposes them) and falls back to a
+         *  filename-substring heuristic. If no record is flagged as diffuse, the
+         *  first record is promoted so single-texture assets always resolve an
+         *  @c albedoMap.
+         */
+        void ExtractAllTextures(const ufbx_scene *scene, FbxLoadResult &result) {
+            std::unordered_map<std::uint32_t, FbxTextureSlot> videoSlots = GatherVideoSlotsFromMaterials(scene);
 
             for (std::size_t vi = 0; vi < scene->videos.count; ++vi) {
                 const ufbx_video *video = scene->videos.data[vi];
