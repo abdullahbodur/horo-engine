@@ -57,6 +57,21 @@ namespace Horo {
                                                bool needsYFlip,
                                                std::string *outError) = 0;
 
+        virtual bool BeginEditorViewportRenderTarget(uint32_t width,
+                                                     uint32_t height,
+                                                     std::string *outError) {
+            (void)width;
+            (void)height;
+            if (outError)
+                *outError =
+                    "Editor viewport render-target binding is unsupported by this backend.";
+            return false;
+        }
+
+        virtual void EndEditorViewportRenderTarget() {
+            // Default implementation does nothing if the backend does not support it
+        }
+
         // ── Viewport ────────────────────────────────────────────────────────────
         virtual void SetViewport(int, int, int, int) { /* default no-op */ }
         virtual std::array<int, 4> GetViewport() const { return {0, 0, 0, 0}; }

@@ -270,6 +270,82 @@ TEST_CASE("TransformGizmo: PickAxis ignores clicks near gizmo origin", "[gizmo]"
   CHECK(picked == GizmoAxis::None);
 }
 
+TEST_CASE("TransformGizmo: AxisDir follows target rotation", "[gizmo]") {
+  TransformGizmo g;
+  const Quaternion rotZ90 =
+      Quaternion::FromAxisAngle({0.0f, 0.0f, 1.0f}, ToRadians(90.0f));
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), rotZ90, Vec3::One());
+
+  const Vec3 x = g.AxisDir(GizmoAxis::X);
+  const Vec3 y = g.AxisDir(GizmoAxis::Y);
+
+  CHECK(x.x == Approx(0.0f).margin(1e-4f));
+  CHECK(x.y == Approx(1.0f).margin(1e-4f));
+  CHECK(x.z == Approx(0.0f).margin(1e-4f));
+  CHECK(y.x == Approx(-1.0f).margin(1e-4f));
+  CHECK(y.y == Approx(0.0f).margin(1e-4f));
+  CHECK(y.z == Approx(0.0f).margin(1e-4f));
+}
+
+TEST_CASE("TransformGizmo: PickAxis uses rotated local axis projection", "[gizmo]") {
+  TransformGizmo g;
+  const Quaternion rotZ90 =
+      Quaternion::FromAxisAngle({0.0f, 0.0f, 1.0f}, ToRadians(90.0f));
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), rotZ90, Vec3::One());
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+  const Vec3 localXMid = g.AxisDir(GizmoAxis::X) * (g.HandleSize(cam) * 0.5f);
+  float sx = 0.0f;
+  float sy = 0.0f;
+  REQUIRE(TransformGizmo::WorldToScreen(localXMid, cam, 800, 800, sx, sy));
+
+  CHECK(g.PickAxis(sx, sy, cam, 800, 800) == GizmoAxis::X);
+}
+
+TEST_CASE("TransformGizmo: PickAxis accepts clicks on translate arrow head", "[gizmo]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+             Vec3::One());
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+  const Vec3 tip = g.AxisDir(GizmoAxis::X) * g.HandleSize(cam);
+  float sx = 0.0f;
+  float sy = 0.0f;
+  REQUIRE(TransformGizmo::WorldToScreen(tip, cam, 800, 800, sx, sy));
+
+  CHECK(g.PickAxis(sx, sy + 8.0f, cam, 800, 800) == GizmoAxis::X);
+}
+
+TEST_CASE("TransformGizmo: PickAxis accepts clicks on scale box handle", "[gizmo]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(),
+             Vec3::One());
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+  const Vec3 tip = g.AxisDir(GizmoAxis::Y) * g.HandleSize(cam);
+  float sx = 0.0f;
+  float sy = 0.0f;
+  REQUIRE(TransformGizmo::WorldToScreen(tip, cam, 800, 800, sx, sy));
+
+  CHECK(g.PickAxis(sx + 8.0f, sy, cam, 800, 800) == GizmoAxis::Y);
+}
+
+TEST_CASE("TransformGizmo: rotate ring picker follows target rotation", "[gizmo]") {
+  TransformGizmo g;
+  const Quaternion rotZ90 =
+      Quaternion::FromAxisAngle({0.0f, 0.0f, 1.0f}, ToRadians(90.0f));
+  g.Activate(GizmoMode::Rotate, Vec3::Zero(), rotZ90, Vec3::One());
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero(), 60.0f, 1.0f);
+  const Vec3 pointOnLocalXRing = g.AxisDir(GizmoAxis::Y) * g.HandleSize(cam);
+  float sx = 0.0f;
+  float sy = 0.0f;
+  REQUIRE(TransformGizmo::WorldToScreen(pointOnLocalXRing, cam, 800, 800, sx,
+                                        sy));
+
+  CHECK(g.PickAxis(sx, sy, cam, 800, 800) == GizmoAxis::X);
+}
+
 // ============================================================================
 // Test 7 — RayHitPlane + axis projection: translate delta math
 // ============================================================================
@@ -450,11 +526,23 @@ struct TransformGizmoTestAccessor {
   static void SetDragPrevOffset(TransformGizmo &g, float f) {
     g.m_dragPrevOffset = f;
   }
+  static void SetDragStartOffset(TransformGizmo &g, float f) {
+    g.m_dragStartOffset = f;
+  }
+  static void SetDragPrevSnappedOffset(TransformGizmo &g, float f) {
+    g.m_dragPrevSnappedOffset = f;
+  }
   static void SetDragPrevAngle(TransformGizmo &g, float f) {
     g.m_dragPrevAngle = f;
   }
+  static void SetDragPrevSnappedAngle(TransformGizmo &g, float f) {
+    g.m_dragPrevSnappedAngle = f;
+  }
   static void SetDragStartDir(TransformGizmo &g, Vec3 d) {
     g.m_dragStartDir = d;
+  }
+  static void SetDragAnchorScale(TransformGizmo &g, Vec3 scale) {
+    g.m_dragAnchorScale = scale;
   }
 
   static void BeginDrag(TransformGizmo &g, const Ray &ray, const Camera &cam) {
@@ -462,8 +550,13 @@ struct TransformGizmoTestAccessor {
   }
   static bool ApplyActiveDrag(TransformGizmo &g, const Ray &ray,
                               const Camera &cam, Vec3 &outDeltaPos,
-                              Quaternion &outDeltaRot, Vec3 &outDeltaScale) {
-    return g.ApplyActiveDrag(ray, cam, outDeltaPos, outDeltaRot, outDeltaScale);
+                              Quaternion &outDeltaRot, Vec3 &outDeltaScale,
+                              float translateSnapStep = 0.0f,
+                              float rotateSnapRadians = 0.0f,
+                              float scaleSnapStep = 0.0f) {
+    return g.ApplyActiveDrag(ray, cam, outDeltaPos, outDeltaRot, outDeltaScale,
+                             translateSnapStep, rotateSnapRadians,
+                             scaleSnapStep);
   }
   static Vec3 GetPos(const TransformGizmo &g) { return g.m_pos; }
 };
@@ -691,6 +784,34 @@ TEST_CASE("ApplyActiveDrag: Translate produces axis-aligned delta", "[gizmo][dra
   CHECK(pos.x == Approx(2.0f).margin(1e-4f));
 }
 
+TEST_CASE("ApplyActiveDrag: snapped translate accumulates sub-step movement", "[gizmo][drag]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Translate, Vec3::Zero(), Quaternion::Identity(),
+             Vec3::One());
+  TA::SetDragging(g, GizmoAxis::X);
+  TA::SetDragPlaneNormal(g, {0.0f, 0.0f, -1.0f});
+  TA::SetDragAnchorPos(g, Vec3::Zero());
+  TA::SetDragStartOffset(g, 0.0f);
+  TA::SetDragPrevSnappedOffset(g, 0.0f);
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+  Vec3 deltaPos;
+  Quaternion deltaRot;
+  Vec3 deltaScale;
+
+  Ray ray;
+  ray.origin = {0.4f, 0.0f, 5.0f};
+  ray.direction = {0.0f, 0.0f, -1.0f};
+  CHECK_FALSE(TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale,
+                                  1.0f));
+  CHECK(deltaPos.x == Approx(0.0f).margin(1e-4f));
+
+  ray.origin = {1.2f, 0.0f, 5.0f};
+  CHECK_FALSE(TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale,
+                                  1.0f));
+  CHECK(deltaPos.x == Approx(1.0f).margin(1e-4f));
+}
+
 TEST_CASE("ApplyActiveDrag: Rotate produces non-identity delta quaternion", "[gizmo][drag]") {
   TransformGizmo g;
   g.Activate(GizmoMode::Rotate, Vec3::Zero(), Quaternion::Identity(),
@@ -722,6 +843,34 @@ TEST_CASE("ApplyActiveDrag: Rotate produces non-identity delta quaternion", "[gi
                     (std::abs(deltaRot.y - identity.y) < 1e-4f) &&
                     (std::abs(deltaRot.z - identity.z) < 1e-4f);
   CHECK(!isIdentity);
+}
+
+TEST_CASE("ApplyActiveDrag: snapped scale accumulates sub-step movement", "[gizmo][drag]") {
+  TransformGizmo g;
+  g.Activate(GizmoMode::Scale, Vec3::Zero(), Quaternion::Identity(),
+             Vec3::One());
+  TA::SetDragging(g, GizmoAxis::X);
+  TA::SetDragPlaneNormal(g, {0.0f, 0.0f, -1.0f});
+  TA::SetDragAnchorPos(g, Vec3::Zero());
+  TA::SetDragAnchorScale(g, Vec3::One());
+  TA::SetDragStartOffset(g, 0.0f);
+
+  Camera cam = MakeCamera({0.0f, 0.0f, 10.0f}, Vec3::Zero());
+  Vec3 deltaPos;
+  Quaternion deltaRot;
+  Vec3 deltaScale;
+
+  Ray ray;
+  ray.origin = {0.4f, 0.0f, 5.0f};
+  ray.direction = {0.0f, 0.0f, -1.0f};
+  CHECK_FALSE(TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale,
+                                  0.0f, 0.0f, 1.0f));
+  CHECK(deltaScale.x == Approx(1.0f).margin(1e-4f));
+
+  ray.origin = {0.6f, 0.0f, 5.0f};
+  CHECK_FALSE(TA::ApplyActiveDrag(g, ray, cam, deltaPos, deltaRot, deltaScale,
+                                  0.0f, 0.0f, 1.0f));
+  CHECK(deltaScale.x == Approx(2.0f).margin(1e-4f));
 }
 
 TEST_CASE("ApplyActiveDrag: Scale X axis scales X component", "[gizmo][drag]") {

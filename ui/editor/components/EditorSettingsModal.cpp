@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <vector>
 
 #include <imgui.h>
 
@@ -41,32 +42,15 @@ void DrawSwatch(ImDrawList *dl, ImVec2 topLeft, float size, const ImVec4 &color,
                       ImGui::ColorConvertFloat4ToU32(color), rounding);
 }
 
-/** @brief Returns the visible description string used on Appearance preset cards. */
-const char *ThemePresetDescription(Horo::Ui::EditorThemePreset preset) {
-    using enum Horo::Ui::EditorThemePreset;
-    switch (preset) {
-    case DarkBlue:
-        return "Current Horo editor palette";
-    case Graphite:
-        return "Neutral dark workspace";
-    case HighContrast:
-        return "Maximum contrast for readability";
-    }
-    return "";
-}
-
 /** @brief Returns the stable automation marker id for a preset card. */
-const char *ThemePresetMarker(Horo::Ui::EditorThemePreset preset) {
-    using enum Horo::Ui::EditorThemePreset;
-    switch (preset) {
-    case DarkBlue:
+std::string ThemePresetMarker(std::string_view presetId) {
+    if (presetId == "darkBlue")
         return "##settings_test/theme_dark_blue";
-    case Graphite:
+    if (presetId == "graphite")
         return "##settings_test/theme_graphite";
-    case HighContrast:
+    if (presetId == "highContrast")
         return "##settings_test/theme_high_contrast";
-    }
-    return "##settings_test/theme_unknown";
+    return std::format("##settings_test/theme_custom_{}", presetId);
 }
 
 } // namespace
@@ -96,7 +80,7 @@ bool EditorSettingsModal::IsDirty() const {
         return true;
     if (m_mcpDraft.transport != m_mcpOriginal.transport)
         return true;
-    if (m_userDraft.themePreset != m_userOriginal.themePreset)
+    if (m_userDraft.themePresetId != m_userOriginal.themePresetId)
         return true;
     return false;
 }
@@ -116,9 +100,7 @@ bool EditorSettingsModal::SaveAll() {
     m_mcpDraft.port = std::clamp(m_mcpDraft.port, 1, 65535);
     m_mcpDraft.host = Mcp::kDefaultMcpHost;
 
-    // Validate appearance preset by ensuring it matches a known enumerant.
-    if (const auto &presets = Horo::Ui::EditorThemePresets();
-        std::ranges::find(presets, m_userDraft.themePreset) == presets.end()) {
+    if (!Horo::Ui::IsEditorThemePresetIdKnown(m_userDraft.themePresetId)) {
         m_error = "Invalid theme preset selection.";
         return false;
     }
@@ -139,6 +121,8 @@ bool EditorSettingsModal::SaveAll() {
         return false;
     }
     m_userSettingsDocument->settings = m_userDraft;
+    m_userSettingsDocument->settings.themePreset =
+        Horo::Ui::ParseEditorThemePreset(m_userDraft.themePresetId, nullptr);
     if (std::string userError; !SaveEditorUserSettingsDocument(m_userSettingsDocument, &userError)) {
         m_error = userError.empty() ? "Failed to save editor user settings."
                                     : userError;
@@ -153,7 +137,7 @@ bool EditorSettingsModal::SaveAll() {
 
     // Apply theme preset into the live editor style.
     if (m_applyThemePreset)
-        m_applyThemePreset(m_userDraft.themePreset);
+        m_applyThemePreset(m_userDraft.themePresetId);
 
     return true;
 }
@@ -339,14 +323,13 @@ void EditorSettingsModal::DrawAppearanceTab(const Horo::Ui::EditorTheme& theme) 
         return;
     }
 
-    for (const Horo::Ui::EditorThemePreset preset :
-         Horo::Ui::EditorThemePresets()) {
-        const bool selected = m_userDraft.themePreset == preset;
-        const char *label = Horo::Ui::EditorThemePresetLabel(preset);
-        const char *description = ThemePresetDescription(preset);
-        const char *marker = ThemePresetMarker(preset);
+    const std::vector<Horo::Ui::EditorThemePresetDescriptor> presets =
+        Horo::Ui::EditorThemePresetOptions();
+    for (const Horo::Ui::EditorThemePresetDescriptor &preset : presets) {
+        const bool selected = m_userDraft.themePresetId == preset.id;
+        const std::string marker = ThemePresetMarker(preset.id);
 
-        ImGui::PushID(marker);
+        ImGui::PushID(marker.c_str());
         const ImVec2 rowStart = ImGui::GetCursorScreenPos();
         const float rowHeight = 62.0f;
         const float rowWidth = ImGui::GetContentRegionAvail().x;
@@ -354,7 +337,7 @@ void EditorSettingsModal::DrawAppearanceTab(const Horo::Ui::EditorTheme& theme) 
         if (const std::string hitId = std::string("##preset_hit") + marker;
             ImGui::InvisibleButton(hitId.c_str(),
                                    ImVec2(rowWidth, rowHeight)))
-            m_userDraft.themePreset = preset;
+            m_userDraft.themePresetId = preset.id;
         const bool hovered = ImGui::IsItemHovered();
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
@@ -392,11 +375,12 @@ void EditorSettingsModal::DrawAppearanceTab(const Horo::Ui::EditorTheme& theme) 
         const float textX = rowStart.x + 40.0f;
         dl->AddText(
             ImVec2(textX, rowStart.y + 12.0f),
-            ImGui::ColorConvertFloat4ToU32(theme.palette.text), label);
+            ImGui::ColorConvertFloat4ToU32(theme.palette.text),
+            preset.label.c_str());
         dl->AddText(
             ImVec2(textX, rowStart.y + 12.0f + ImGui::GetFontSize() + 2.0f),
             ImGui::ColorConvertFloat4ToU32(theme.palette.textMuted),
-            description);
+            preset.description.c_str());
 
         if (selected) {
             constexpr float kSwatchSize = 14.0f;
@@ -404,16 +388,16 @@ void EditorSettingsModal::DrawAppearanceTab(const Horo::Ui::EditorTheme& theme) 
             const float swatchY = rowStart.y + (rowHeight - kSwatchSize) * 0.5f;
             float swatchX = rowStart.x + rowWidth - (kSwatchSize * 4.0f + kSwatchGap * 3.0f + 16.0f);
             DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                       theme.palette.panel, theme.rounding.input);
+                       preset.palette.panel, theme.rounding.input);
             swatchX += kSwatchSize + kSwatchGap;
             DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                       theme.palette.card, theme.rounding.input);
+                       preset.palette.card, theme.rounding.input);
             swatchX += kSwatchSize + kSwatchGap;
             DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                       theme.palette.accent, theme.rounding.input);
+                       preset.palette.accent, theme.rounding.input);
             swatchX += kSwatchSize + kSwatchGap;
             DrawSwatch(dl, ImVec2(swatchX, swatchY), kSwatchSize,
-                       theme.palette.textMuted, theme.rounding.input);
+                       preset.palette.textMuted, theme.rounding.input);
         }
 
         ImGui::PopID();

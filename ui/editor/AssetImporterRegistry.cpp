@@ -14,6 +14,7 @@
 #include <fstream>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "core/ProjectPath.h"
@@ -418,6 +419,12 @@ namespace Horo::Editor {
                 const fs::path normalisedFilename(normalise(record.filename));
                 candidates.emplace_back(sourceDir / normalisedFilename);
                 candidates.emplace_back(sourceDir / "textures" / normalisedFilename);
+                // Also search parent directories for shared texture folders
+                if (sourceDir.has_parent_path()) {
+                    candidates.emplace_back(sourceDir.parent_path() / "textures" / normalisedFilename);
+                    if (sourceDir.parent_path().has_parent_path())
+                        candidates.emplace_back(sourceDir.parent_path().parent_path() / "textures" / normalisedFilename);
+                }
             }
 
             for (const fs::path &candidate: candidates) {
@@ -476,14 +483,45 @@ namespace Horo::Editor {
             const char *importerId;                  /**< Importer id stamped on diagnostics. */
         };
 
+        /** @brief Project-relative texture paths bucketed by engine material slot. */
+        struct FbxTexturePaths {
+            std::string albedoMap;
+            std::string normalMap;
+            std::string metallicRoughnessMap;
+            std::string emissiveMap;
+            std::string occlusionMap;
+        };
+
         /** @brief Per-record state shared between the embedded / external write paths. */
         struct ApplyFbxTextureState {
             const ApplyFbxTexturesContext &ctx;
             std::vector<AssetImportDiagnostic> &diagnostics;
             std::vector<std::string> &producedFiles;
             std::vector<std::string> &outExternalSourcePaths;
-            std::string &outAlbedoMap;
+            FbxTexturePaths &outTexturePaths;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>>
+                warnedMissingTextures;
         };
+
+        std::string *SelectFbxTexturePath(FbxTexturePaths &paths,
+                                          FbxLoader::FbxTextureSlot slot) {
+            switch (slot) {
+                using enum FbxLoader::FbxTextureSlot;
+                case Albedo:
+                    return &paths.albedoMap;
+                case Normal:
+                    return &paths.normalMap;
+                case MetallicRoughness:
+                    return &paths.metallicRoughnessMap;
+                case Emissive:
+                    return &paths.emissiveMap;
+                case Occlusion:
+                    return &paths.occlusionMap;
+                case Unknown:
+                default:
+                    return nullptr;
+            }
+        }
 
         /** @brief Records a successfully-produced texture file under @p dest into the state lists. */
         void RecordProducedTexture(ApplyFbxTextureState &st,
@@ -498,8 +536,10 @@ namespace Horo::Editor {
                 fs::relative(dest, ProjectPath::Root()).generic_string();
             st.producedFiles.push_back(projectRelative);
             usedBasenames.insert(std::move(basename));
-            if (rec.isDiffuseAlbedo && st.outAlbedoMap.empty())
-                st.outAlbedoMap = projectRelative;
+            if (std::string *slotPath =
+                        SelectFbxTexturePath(st.outTexturePaths, rec.slot);
+                slotPath != nullptr && slotPath->empty())
+                *slotPath = projectRelative;
         }
 
         /** @brief Writes an embedded-texture record to managed storage, emitting a warning on failure. */
@@ -542,11 +582,13 @@ namespace Horo::Editor {
             namespace fs = std::filesystem;
             const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
             if (resolved.empty()) {
-                st.diagnostics.push_back(MakeDiagnostic(
-                    AssetDiagnosticSeverity::Warning,
-                    DiagnosticCodes::FbxExternalTextureMissing,
-                    std::format("External texture '{}' not found near source FBX.", filename.string()),
-                    st.ctx.request, st.ctx.importerId));
+                if (st.warnedMissingTextures.insert(filename.generic_string()).second) {
+                    st.diagnostics.push_back(MakeDiagnostic(
+                        AssetDiagnosticSeverity::Warning,
+                        DiagnosticCodes::FbxExternalTextureMissing,
+                        std::format("External texture '{}' not found near source FBX.", filename.string()),
+                        st.ctx.request, st.ctx.importerId));
+                }
                 return;
             }
             const fs::path dest = st.ctx.destDir / filename;
@@ -573,9 +615,9 @@ namespace Horo::Editor {
          *  - On-disk filenames are deduplicated against the running
          *    @p producedFiles list so two textures sharing a basename do not
          *    overwrite each other.
-         *  - On the first successful diffuse texture, @p outAlbedoMap is set to the
-         *    project-relative produced-file path so the importer can wire it into
-         *    @c AssetDef::albedoMap.
+         *  - On the first successful texture for each material slot, @p outTexturePaths
+         *    receives the project-relative produced-file path so the importer can wire
+         *    it into @ref AssetDef.
          *  - Per-texture failures are appended as @c Warning diagnostics keyed on
          *    @c FbxExternalTextureMissing / @c FbxExternalTextureCopyFailed /
          *    @c FbxEmbeddedTextureExtractFailed; they never fail the overall import.
@@ -585,10 +627,11 @@ namespace Horo::Editor {
                               std::vector<AssetImportDiagnostic> &diagnostics,
                               std::vector<std::string> &producedFiles,
                               std::vector<std::string> &outExternalSourcePaths,
-                              std::string &outAlbedoMap) {
+                              FbxTexturePaths &outTexturePaths) {
             namespace fs = std::filesystem;
             const fs::path sourceDir = ctx.sourcePath.parent_path();
-            ApplyFbxTextureState st{ctx, diagnostics, producedFiles, outExternalSourcePaths, outAlbedoMap};
+            ApplyFbxTextureState st{ctx, diagnostics, producedFiles,
+                                    outExternalSourcePaths, outTexturePaths};
 
             std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> usedBasenames;
             for (const std::string &produced: producedFiles)
@@ -637,15 +680,18 @@ namespace Horo::Editor {
         /** @brief Builds an @ref AssetDef from import inputs plus the produced primary mesh path. */
         AssetDef BuildFbxAssetDef(const AssetImportRequest &request,
                                    std::string_view meshProjectRelative,
-                                   std::string_view albedoMapPath,
+                                   const FbxTexturePaths &texturePaths,
                                    float aabbMinY, float aabbMaxY) {
             AssetDef asset;
             asset.guid = request.assetGuid;
             asset.displayName =
                 request.displayName.empty() ? request.assetId : request.displayName;
             asset.mesh = meshProjectRelative;
-            if (!albedoMapPath.empty())
-                asset.albedoMap = albedoMapPath;
+            asset.albedoMap = texturePaths.albedoMap;
+            asset.normalMap = texturePaths.normalMap;
+            asset.metallicRoughnessMap = texturePaths.metallicRoughnessMap;
+            asset.emissiveMap = texturePaths.emissiveMap;
+            asset.occlusionMap = texturePaths.occlusionMap;
             asset.renderScale = FitHeightRenderScale(aabbMinY, aabbMaxY);
             return asset;
         }
@@ -754,6 +800,130 @@ namespace Horo::Editor {
             return DiagnosticCodes::FbxParseFailed;
         }
 
+        struct ApplyTextureOverrideContext {
+            const AssetImportRequest &request;
+            const std::filesystem::path &destDir;
+            const char *importerId;
+            std::vector<AssetImportDiagnostic> &diagnostics;
+            std::vector<std::string> &producedFiles;
+            std::vector<std::string> &externalSourcePaths;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> &usedBasenames;
+            std::unordered_map<std::string, std::string, Horo::StringHash, std::equal_to<>> &copiedBySource;
+        };
+
+        std::string PickUniqueBasename(const std::string &base,
+                                       const std::unordered_set<std::string, Horo::StringHash, std::equal_to<>> &usedBasenames) {
+            if (!usedBasenames.contains(base))
+                return base;
+
+            const std::filesystem::path baseAsPath(base);
+            const std::string stem = baseAsPath.stem().string();
+            const std::string ext = baseAsPath.extension().string();
+            for (int suffix = 1; suffix < 1024; ++suffix) {
+                const std::string candidate =
+                    std::format("{}_{}{}", stem, suffix, ext);
+                if (!usedBasenames.contains(candidate))
+                    return candidate;
+            }
+            return base;
+        }
+
+        void ApplySingleTextureOverride(ApplyTextureOverrideContext &ctx,
+                                        const char *key, std::string &path) {
+            namespace fs = std::filesystem;
+            const auto &settings = ctx.request.settings;
+            const auto it = settings.find(key);
+            if (it == settings.end() || it->second.empty())
+                return;
+
+            const fs::path sourcePath(it->second);
+            std::error_code ec;
+            if (!fs::is_regular_file(sourcePath, ec) || ec) {
+                ctx.diagnostics.push_back(MakeDiagnostic(
+                    AssetDiagnosticSeverity::Warning,
+                    DiagnosticCodes::FbxExternalTextureMissing,
+                    std::format("Texture override '{}' is not a file.",
+                                sourcePath.string()),
+                    ctx.request, ctx.importerId));
+                return;
+            }
+
+            fs::path canonicalSource = fs::weakly_canonical(sourcePath, ec);
+            if (ec) {
+                ec.clear();
+                canonicalSource = fs::absolute(sourcePath, ec);
+            }
+            const std::string sourceKey =
+                ec ? sourcePath.string() : canonicalSource.string();
+            ec.clear();
+            if (const auto copied = ctx.copiedBySource.find(sourceKey);
+                copied != ctx.copiedBySource.end()) {
+                path = copied->second;
+                return;
+            }
+
+            const std::string basename =
+                    SanitiseTextureBasename(sourcePath.filename().string());
+            if (!IsSafeBasename(basename))
+                return;
+
+            const std::string uniqueBasename = PickUniqueBasename(basename, ctx.usedBasenames);
+            const fs::path destPath = ctx.destDir / uniqueBasename;
+            if (!CopyFileReplacing(sourcePath, destPath, ec) || ec) {
+                ctx.diagnostics.push_back(MakeDiagnostic(
+                    AssetDiagnosticSeverity::Warning,
+                    DiagnosticCodes::FbxExternalTextureCopyFailed,
+                    std::format("Failed to copy texture override '{}' ({}).",
+                                sourcePath.string(), ec.message()),
+                    ctx.request, ctx.importerId));
+                return;
+            }
+
+            const std::string projectRelative =
+                    fs::relative(destPath, ProjectPath::Root()).generic_string();
+            path = projectRelative;
+            ctx.usedBasenames.insert(uniqueBasename);
+            ctx.copiedBySource.try_emplace(sourceKey, projectRelative);
+            if (std::ranges::find(ctx.producedFiles, projectRelative) ==
+                ctx.producedFiles.end())
+                ctx.producedFiles.push_back(projectRelative);
+            ctx.externalSourcePaths.push_back(sourcePath.string());
+        }
+
+        /** @brief Applies texture overrides from request.settings to texturePaths.
+         *
+         *  Reads settings keys "texture.albedoMap", "texture.normalMap", etc.
+         *  Copies override textures into the managed asset directory and replaces
+         *  auto-detected paths with the managed project-relative paths.
+         */
+        void ApplyTextureOverrides(const AssetImportRequest &request,
+                                   const std::filesystem::path &destDir,
+                                   const char *importerId,
+                                   std::vector<AssetImportDiagnostic> &diagnostics,
+                                   std::vector<std::string> &producedFiles,
+                                   std::vector<std::string> &externalSourcePaths,
+                                   FbxTexturePaths &texturePaths) {
+            namespace fs = std::filesystem;
+            std::unordered_set<std::string, Horo::StringHash, std::equal_to<>>
+                usedBasenames;
+            for (const std::string &produced : producedFiles)
+                usedBasenames.insert(fs::path(produced).filename().string());
+
+            std::unordered_map<std::string, std::string, Horo::StringHash,
+                               std::equal_to<>>
+                copiedBySource;
+
+            ApplyTextureOverrideContext ctx{
+                request, destDir, importerId, diagnostics, producedFiles,
+                externalSourcePaths, usedBasenames, copiedBySource};
+
+            ApplySingleTextureOverride(ctx, "texture.albedoMap", texturePaths.albedoMap);
+            ApplySingleTextureOverride(ctx, "texture.normalMap", texturePaths.normalMap);
+            ApplySingleTextureOverride(ctx, "texture.metallicRoughnessMap", texturePaths.metallicRoughnessMap);
+            ApplySingleTextureOverride(ctx, "texture.emissiveMap", texturePaths.emissiveMap);
+            ApplySingleTextureOverride(ctx, "texture.occlusionMap", texturePaths.occlusionMap);
+        }
+
         /** @brief Built-in importer that extracts static-mesh geometry from an FBX file
          *         into the engine-native @c .mesh.bin format under managed asset storage.
          *
@@ -838,14 +1008,19 @@ namespace Horo::Editor {
                     fs::relative(destMeshBin, ProjectPath::Root()).generic_string();
                 producedFiles.push_back(meshProjectRelative);
 
-                std::string albedoMapPath;
+                FbxTexturePaths texturePaths;
                 std::vector<std::string> externalSourcePaths;
                 ApplyFbxTextures(loaded.textures,
                                  {sourcePath, destDir, request, ImporterId()},
                                  result.diagnostics, producedFiles,
-                                 externalSourcePaths, albedoMapPath);
+                                 externalSourcePaths, texturePaths);
+                
+                // Apply user overrides from modal
+                ApplyTextureOverrides(request, destDir, ImporterId(),
+                                      result.diagnostics, producedFiles,
+                                      externalSourcePaths, texturePaths);
 
-                AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, albedoMapPath,
+                AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   loaded.aabbMin.y, loaded.aabbMax.y);
                 result.ok = true;
                 result.asset = asset;
@@ -902,14 +1077,19 @@ namespace Horo::Editor {
                 EmitFbxAnimations(sourcePath, destDir, CollectBoneNames(skeletal.bones),
                                    request, ImporterId(), producedFiles, result.diagnostics);
 
-                std::string albedoMapPath;
+                FbxTexturePaths texturePaths;
                 std::vector<std::string> externalSourcePaths;
                 ApplyFbxTextures(loaded.textures,
                                  {sourcePath, destDir, request, ImporterId()},
                                  result.diagnostics, producedFiles,
-                                 externalSourcePaths, albedoMapPath);
+                                 externalSourcePaths, texturePaths);
+                
+                // Apply user overrides from modal
+                ApplyTextureOverrides(request, destDir, ImporterId(),
+                                      result.diagnostics, producedFiles,
+                                      externalSourcePaths, texturePaths);
 
-                AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, albedoMapPath,
+                AssetDef asset = BuildFbxAssetDef(request, meshProjectRelative, texturePaths,
                                                   skeletal.aabbMin.y, skeletal.aabbMax.y);
                 result.ok = true;
                 result.asset = asset;

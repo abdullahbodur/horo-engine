@@ -5,10 +5,20 @@
  */
 #include "ui/HoroTheme.h"
 
+#include <algorithm>
 #include <array>
+#include <charconv>
+#include <fstream>
+#include <string>
+#include <system_error>
+#include <unordered_map>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace Horo::Ui {
 namespace {
+using json = nlohmann::json;
 
 /**
  * @brief Base colour palette shared with the launcher — also the Dark Blue
@@ -99,6 +109,7 @@ constexpr HoroDensity kLauncherDensity{
     .buttonPadding = ImVec2(16.0f, 9.0f),
     .inputPadding = ImVec2(12.0f, 9.0f),
     .itemSpacing = 8.0f,
+    .iconSize = 16.0f,
 };
 
 /** @brief Corner radii preset used by dense editor widgets. */
@@ -114,9 +125,10 @@ constexpr HoroRounding kEditorRounding{
 constexpr HoroDensity kEditorDensity{
     .panelPadding = ImVec2(10.0f, 8.0f),
     .cardPadding = ImVec2(10.0f, 8.0f),
-    .buttonPadding = ImVec2(9.0f, 5.0f),
-    .inputPadding = ImVec2(8.0f, 5.0f),
+    .buttonPadding = ImVec2(10.0f, 7.0f),
+    .inputPadding = ImVec2(12.0f, 8.0f),
     .itemSpacing = 5.0f,
+    .iconSize = 18.0f,
 };
 
 /**
@@ -132,24 +144,179 @@ constexpr std::array<EditorThemePreset, 3> kPresetList = {
 };
 
 /**
- * @brief Derive the editor palette from a preset base by tweaking the
- *        semi-transparent panel fill.
+ * @brief Derive the editor palette from a preset base by making UI surfaces
+ *        opaque.
  *
- * DarkBlue historically used panel.w = 0.88 instead of the launcher 0.94.
- * The two alternative presets inherit the same editor-specific translucency
- * so the editor aesthetic is consistent.
+ * Viewport overlays can sit directly behind sidebars, popups, and input fields.
+ * Keeping these structural surfaces fully opaque prevents scene geometry and
+ * gizmo lines from bleeding through editor chrome.
  * @param base Source palette to copy and adjust.
- * @return Palette with editor-specific panel alpha.
+ * @return Palette with opaque editor panel, card, popup, and input surfaces.
  */
 constexpr HoroPalette MakeEditorPalette(HoroPalette base) {
-  base.panel.w = 0.88f;
+  base.panel.w = 1.0f;
+  base.panelSoft.w = 1.0f;
+  base.card.w = 1.0f;
+  base.cardHover.w = 1.0f;
+  base.input.w = 1.0f;
+  base.inputHover.w = 1.0f;
+  base.inputActive.w = 1.0f;
+  base.modal.w = 1.0f;
   return base;
 }
 
-/** @brief Mutable preset selector. Single-threaded editor owns the value. */
-EditorThemePreset &MutableCurrentPreset() {
-  static EditorThemePreset current = EditorThemePreset::DarkBlue;
+/** @brief Mutable active preset id. Single-threaded editor owns the value. */
+std::string &MutableCurrentPresetId() {
+  static std::string current = EditorThemePresetId(EditorThemePreset::DarkBlue);
   return current;
+}
+
+/** @brief Mutable custom preset registry loaded from user config. */
+std::vector<EditorThemePresetDescriptor> &MutableCustomPresets() {
+  static std::vector<EditorThemePresetDescriptor> presets;
+  return presets;
+}
+
+/** @brief Returns the built-in palette for @p preset. */
+constexpr HoroPalette BuiltinPalette(EditorThemePreset preset) {
+  using enum EditorThemePreset;
+  switch (preset) {
+  case DarkBlue:
+    return MakeEditorPalette(kPalette);
+  case Graphite:
+    return MakeEditorPalette(kGraphitePalette);
+  case HighContrast:
+    return MakeEditorPalette(kHighContrastPalette);
+  }
+  return MakeEditorPalette(kPalette);
+}
+
+/** @brief Returns the visible description string used on Appearance preset cards. */
+const char *BuiltinThemePresetDescription(EditorThemePreset preset) {
+  using enum EditorThemePreset;
+  switch (preset) {
+  case DarkBlue:
+    return "Current Horo editor palette";
+  case Graphite:
+    return "Neutral dark workspace";
+  case HighContrast:
+    return "Maximum contrast for readability";
+  }
+  return "";
+}
+
+/** @brief Finds a custom preset by id, returning null when absent. */
+const EditorThemePresetDescriptor *FindCustomPreset(std::string_view id) {
+  const auto &customPresets = MutableCustomPresets();
+  const auto it = std::ranges::find_if(
+      customPresets, [id](const EditorThemePresetDescriptor &preset) {
+        return preset.id == id;
+      });
+  return it == customPresets.end() ? nullptr : std::to_address(it);
+}
+
+/** @brief Returns true when @p c is an ASCII hex digit. */
+bool IsHexDigit(char c) {
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+         (c >= 'A' && c <= 'F');
+}
+
+/** @brief Decodes a two-character hex byte. */
+bool ParseHexByte(std::string_view text, float *out) {
+  if (!out || text.size() != 2 || !IsHexDigit(text[0]) || !IsHexDigit(text[1]))
+    return false;
+  unsigned value = 0;
+  if (const auto result = std::from_chars(text.data(), text.data() + text.size(), value, 16); result.ec != std::errc{})
+    return false;
+  *out = static_cast<float>(value) / 255.0f;
+  return true;
+}
+
+/** @brief Parses a theme colour from hex string or numeric JSON array. */
+bool ParseThemeColor(const json &value, ImVec4 *out) {
+  if (!out)
+    return false;
+  if (value.is_string()) {
+    const std::string text = value.get<std::string>();
+    if ((text.size() != 7 && text.size() != 9) || text[0] != '#')
+      return false;
+    ImVec4 color{0, 0, 0, 1};
+    if (!ParseHexByte(std::string_view(text).substr(1, 2), &color.x) ||
+        !ParseHexByte(std::string_view(text).substr(3, 2), &color.y) ||
+        !ParseHexByte(std::string_view(text).substr(5, 2), &color.z))
+      return false;
+    if (text.size() == 9 &&
+        !ParseHexByte(std::string_view(text).substr(7, 2), &color.w))
+      return false;
+    *out = color;
+    return true;
+  }
+  if (!value.is_array() || value.size() < 3 || value.size() > 4)
+    return false;
+  ImVec4 color{0, 0, 0, 1};
+  for (size_t i = 0; i < value.size(); ++i) {
+    if (!value[i].is_number())
+      return false;
+    const float c = std::clamp(value[i].get<float>(), 0.0f, 1.0f);
+    if (i == 0) color.x = c;
+    else if (i == 1) color.y = c;
+    else if (i == 2) color.z = c;
+    else if (i == 3) color.w = c;
+  }
+  *out = color;
+  return true;
+}
+
+/** @brief Applies one optional palette JSON key. */
+void ApplyPaletteToken(const json &paletteJson, const char *key, ImVec4 *target) {
+  if (!paletteJson.is_object() || !target || !paletteJson.contains(key))
+    return;
+  ImVec4 parsed;
+  if (ParseThemeColor(paletteJson.at(key), &parsed))
+    *target = parsed;
+}
+
+/** @brief Parses a user-defined theme descriptor, returning false on invalid shape. */
+bool ParseCustomThemeDescriptor(const json &themeJson,
+                                EditorThemePresetDescriptor *out) {
+  if (!themeJson.is_object() || !out)
+    return false;
+  const std::string id = themeJson.value("id", std::string());
+  const std::string name = themeJson.value("name", id);
+  if (id.empty() || name.empty() || IsEditorThemePresetIdKnown(id))
+    return false;
+
+  HoroPalette palette = BuiltinPalette(EditorThemePreset::DarkBlue);
+  const json paletteJson = themeJson.value("palette", json::object());
+  ApplyPaletteToken(paletteJson, "backgroundTop", &palette.backgroundTop);
+  ApplyPaletteToken(paletteJson, "backgroundBottom", &palette.backgroundBottom);
+  ApplyPaletteToken(paletteJson, "panel", &palette.panel);
+  ApplyPaletteToken(paletteJson, "panelSoft", &palette.panelSoft);
+  ApplyPaletteToken(paletteJson, "card", &palette.card);
+  ApplyPaletteToken(paletteJson, "cardHover", &palette.cardHover);
+  ApplyPaletteToken(paletteJson, "border", &palette.border);
+  ApplyPaletteToken(paletteJson, "text", &palette.text);
+  ApplyPaletteToken(paletteJson, "textMuted", &palette.textMuted);
+  ApplyPaletteToken(paletteJson, "accent", &palette.accent);
+  ApplyPaletteToken(paletteJson, "accentHover", &palette.accentHover);
+  ApplyPaletteToken(paletteJson, "accentActive", &palette.accentActive);
+  ApplyPaletteToken(paletteJson, "selection", &palette.selection);
+  ApplyPaletteToken(paletteJson, "selectionHover", &palette.selectionHover);
+  ApplyPaletteToken(paletteJson, "input", &palette.input);
+  ApplyPaletteToken(paletteJson, "inputHover", &palette.inputHover);
+  ApplyPaletteToken(paletteJson, "inputActive", &palette.inputActive);
+  ApplyPaletteToken(paletteJson, "modal", &palette.modal);
+  ApplyPaletteToken(paletteJson, "destructive", &palette.destructive);
+  palette = MakeEditorPalette(palette);
+
+  *out = EditorThemePresetDescriptor{
+      .id = id,
+      .label = name,
+      .description = themeJson.value("description", std::string("Custom theme")),
+      .palette = palette,
+      .builtin = false,
+  };
+  return true;
 }
 
 } // namespace
@@ -211,18 +378,116 @@ std::span<const EditorThemePreset> EditorThemePresets() {
   return std::span<const EditorThemePreset>(kPresetList.data(), kPresetList.size());
 }
 
+/** @copydoc EditorThemePresetOptions */
+std::vector<EditorThemePresetDescriptor> EditorThemePresetOptions() {
+  std::vector<EditorThemePresetDescriptor> out;
+  out.reserve(kPresetList.size() + MutableCustomPresets().size());
+  for (const EditorThemePreset preset : kPresetList) {
+    out.push_back(EditorThemePresetDescriptor{
+        .id = EditorThemePresetId(preset),
+        .label = EditorThemePresetLabel(preset),
+        .description = BuiltinThemePresetDescription(preset),
+        .palette = BuiltinPalette(preset),
+        .builtin = true,
+    });
+  }
+  const auto &customPresets = MutableCustomPresets();
+  out.insert(out.end(), customPresets.begin(), customPresets.end());
+  return out;
+}
+
+/** @copydoc IsEditorThemePresetIdKnown */
+bool IsEditorThemePresetIdKnown(std::string_view id) {
+  bool ok = false;
+  (void)ParseEditorThemePreset(id, &ok);
+  return ok || FindCustomPreset(id) != nullptr;
+}
+
+/** @copydoc LoadEditorThemeConfig */
+EditorThemeConfigLoadResult
+LoadEditorThemeConfig(const std::filesystem::path &configPath) {
+  EditorThemeConfigLoadResult result;
+  MutableCustomPresets().clear();
+
+  std::ifstream in(configPath);
+  if (!in.is_open())
+    return result;
+  result.loadedFromDisk = true;
+
+  json root;
+  try {
+    in >> root;
+  } catch (const json::exception &e) {
+    result.ok = false;
+    result.error = e.what();
+    return result;
+  }
+  if (!root.is_object()) {
+    result.ok = false;
+    result.error = "Editor theme config root must be an object.";
+    return result;
+  }
+
+  const json themesJson = root.value("editorThemes", json::array());
+  if (!themesJson.is_array()) {
+    result.ok = false;
+    result.error = "editorThemes must be an array.";
+    return result;
+  }
+
+  for (const json &themeJson : themesJson) {
+    EditorThemePresetDescriptor descriptor;
+    if (!ParseCustomThemeDescriptor(themeJson, &descriptor))
+      continue;
+    MutableCustomPresets().push_back(std::move(descriptor));
+  }
+  result.customThemeCount = MutableCustomPresets().size();
+  return result;
+}
+
 /** @copydoc SetEditorThemePreset */
 void SetEditorThemePreset(EditorThemePreset preset) {
-  MutableCurrentPreset() = preset;
+  MutableCurrentPresetId() = EditorThemePresetId(preset);
+}
+
+/** @copydoc SetEditorThemePresetId */
+void SetEditorThemePresetId(std::string_view id) {
+  MutableCurrentPresetId() = IsEditorThemePresetIdKnown(id)
+                                 ? std::string(id)
+                                 : std::string(EditorThemePresetId(
+                                       EditorThemePreset::DarkBlue));
 }
 
 /** @copydoc GetEditorThemePreset */
 EditorThemePreset GetEditorThemePreset() {
-  return MutableCurrentPreset();
+  return ParseEditorThemePreset(MutableCurrentPresetId(), nullptr);
+}
+
+/** @copydoc GetEditorThemePresetId */
+std::string_view GetEditorThemePresetId() {
+  return MutableCurrentPresetId();
 }
 
 /** @copydoc GetEditorTheme */
 const EditorTheme &GetEditorTheme() {
+  if (const auto *custom = FindCustomPreset(GetEditorThemePresetId())) {
+    struct StringHash {
+      using is_transparent = void;
+      size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+      }
+    };
+    static std::unordered_map<std::string, std::unique_ptr<EditorTheme>, StringHash, std::equal_to<>> customThemes;
+    auto& ptr = customThemes[custom->id];
+    if (!ptr) {
+      ptr = std::make_unique<EditorTheme>();
+    }
+    ptr->palette = custom->palette;
+    ptr->rounding = kEditorRounding;
+    ptr->density = kEditorDensity;
+    return *ptr;
+  }
+
   switch (GetEditorThemePreset()) {
   case EditorThemePreset::DarkBlue: {
     static const EditorTheme theme{

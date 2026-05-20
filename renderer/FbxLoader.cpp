@@ -13,10 +13,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
-#include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -204,22 +203,79 @@ namespace Horo::FbxLoader {
             return baseName + ".png";
         }
 
-        /** @brief True when @p prop names a diffuse / albedo channel across legacy FBX and PBR. */
-        bool IsDiffuseChannelProp(std::string_view prop) {
-            return prop == "DiffuseColor" || prop == "Diffuse" ||
-                   prop == "diffuse_color" || prop == "BaseColor" ||
-                   prop == "base_color";
+        std::string ToLowerAscii(std::string value) {
+            std::ranges::transform(value, value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return value;
         }
 
-        /** @brief Filename / element-name fallback heuristic for diffuse identification. */
-        bool NameHintsDiffuse(std::string_view name) {
+        /** @brief Maps ufbx material property names to engine material texture slots. */
+        FbxTextureSlot SlotFromMaterialProp(std::string_view prop) {
+            using enum Horo::FbxLoader::FbxTextureSlot;
+            const std::string normalized = ToLowerAscii(std::string{prop});
+            if (normalized == "diffusecolor" || normalized == "diffuse" ||
+                normalized == "diffuse_color" || normalized == "basecolor" ||
+                normalized == "base_color" || normalized == "pbr|basecolor")
+                return Albedo;
+            if (normalized == "normalmap" || normalized == "normal" ||
+                normalized == "bump" || normalized == "bumpmap")
+                return Normal;
+            if (normalized == "metallicroughness" ||
+                normalized == "metallicroughnessmap" ||
+                normalized == "metalness" || normalized == "metallic" ||
+                normalized == "roughness")
+                return MetallicRoughness;
+            if (normalized == "emissivecolor" || normalized == "emissive" ||
+                normalized == "emissioncolor" || normalized == "emission")
+                return Emissive;
+            if (normalized == "ambientcolor" || normalized == "ambient" ||
+                normalized == "ambientocclusion" || normalized == "occlusion")
+                return Occlusion;
+            return Unknown;
+        }
+
+        /** @brief Filename / element-name fallback heuristic for material-slot identification. */
+        FbxTextureSlot SlotFromTextureName(std::string_view name) {
+            const std::string normalized = ToLowerAscii(std::string{name});
             const auto contains = [&](std::string_view needle) {
-                return name.find(needle) != std::string_view::npos;
+                return normalized.find(needle) != std::string::npos;
             };
-            return contains("diffuse") || contains("Diffuse") ||
-                   contains("albedo") || contains("Albedo") ||
-                   contains("base_color") || contains("BaseColor") ||
-                   contains("basecolor");
+            if (contains("normal") || contains("_nrm") || contains("-nrm"))
+                return FbxTextureSlot::Normal;
+            if (contains("metallicroughness") || contains("metal_rough") ||
+                contains("metalrough") || contains("orm") || contains("_mr") ||
+                contains("-mr") || contains("metallic") || contains("roughness"))
+                return FbxTextureSlot::MetallicRoughness;
+            if (contains("emissive") || contains("emission"))
+                return FbxTextureSlot::Emissive;
+            if (contains("occlusion") || contains("ambientocclusion") ||
+                contains("_ao") || contains("-ao"))
+                return FbxTextureSlot::Occlusion;
+            if (contains("diffuse") || contains("albedo") ||
+                contains("base_color") || contains("basecolor"))
+                return FbxTextureSlot::Albedo;
+            return FbxTextureSlot::Unknown;
+        }
+
+        std::unordered_map<std::uint32_t, FbxTextureSlot> GatherVideoSlotsFromMaterials(const ufbx_scene *scene) {
+            std::unordered_map<std::uint32_t, FbxTextureSlot> videoSlots;
+            for (std::size_t mi = 0; mi < scene->materials.count; ++mi) {
+                const ufbx_material *material = scene->materials.data[mi];
+                if (material == nullptr)
+                    continue;
+                for (std::size_t ti = 0; ti < material->textures.count; ++ti) {
+                    const ufbx_material_texture &mtex = material->textures.data[ti];
+                    if (mtex.texture == nullptr || mtex.texture->video == nullptr)
+                        continue;
+                    const FbxTextureSlot slot =
+                            SlotFromMaterialProp(MakeString(mtex.material_prop));
+                    if (slot == FbxTextureSlot::Unknown)
+                        continue;
+                    videoSlots.try_emplace(mtex.texture->video->element_id, slot);
+                }
+            }
+            return videoSlots;
         }
 
         /** @brief Walks @p scene and captures every texture image source.
@@ -237,20 +293,7 @@ namespace Horo::FbxLoader {
          *  @c albedoMap.
          */
         void ExtractAllTextures(const ufbx_scene *scene, FbxLoadResult &result) {
-            std::unordered_set<std::uint32_t> diffuseVideoIds;
-            for (std::size_t mi = 0; mi < scene->materials.count; ++mi) {
-                const ufbx_material *material = scene->materials.data[mi];
-                if (material == nullptr)
-                    continue;
-                for (std::size_t ti = 0; ti < material->textures.count; ++ti) {
-                    const ufbx_material_texture &mtex = material->textures.data[ti];
-                    if (mtex.texture == nullptr || mtex.texture->video == nullptr)
-                        continue;
-                    if (!IsDiffuseChannelProp(MakeString(mtex.material_prop)))
-                        continue;
-                    diffuseVideoIds.insert(mtex.texture->video->element_id);
-                }
-            }
+            std::unordered_map<std::uint32_t, FbxTextureSlot> videoSlots = GatherVideoSlotsFromMaterials(scene);
 
             for (std::size_t vi = 0; vi < scene->videos.count; ++vi) {
                 const ufbx_video *video = scene->videos.data[vi];
@@ -265,20 +308,24 @@ namespace Horo::FbxLoader {
                             static_cast<const unsigned char *>(video->content.data);
                     record.embeddedBytes.assign(src, src + video->content.size);
                 }
-                if (diffuseVideoIds.contains(video->element_id))
-                    record.isDiffuseAlbedo = true;
-                else if (NameHintsDiffuse(MakeString(video->name)) ||
-                         NameHintsDiffuse(MakeString(video->filename)))
-                    record.isDiffuseAlbedo = true;
+                if (const auto slotIt = videoSlots.find(video->element_id);
+                    slotIt != videoSlots.end())
+                    record.slot = slotIt->second;
+                if (record.slot == FbxTextureSlot::Unknown)
+                    record.slot = SlotFromTextureName(MakeString(video->name));
+                if (record.slot == FbxTextureSlot::Unknown)
+                    record.slot = SlotFromTextureName(MakeString(video->filename));
                 result.textures.push_back(std::move(record));
             }
 
             if (!result.textures.empty()) {
-                const bool anyDiffuse = std::ranges::any_of(
+                const bool anyAlbedo = std::ranges::any_of(
                     result.textures,
-                    [](const FbxTextureRecord &r) { return r.isDiffuseAlbedo; });
-                if (!anyDiffuse)
-                    result.textures.front().isDiffuseAlbedo = true;
+                    [](const FbxTextureRecord &r) {
+                        return r.slot == FbxTextureSlot::Albedo;
+                    });
+                if (!anyAlbedo)
+                    result.textures.front().slot = FbxTextureSlot::Albedo;
             }
         }
     } // namespace

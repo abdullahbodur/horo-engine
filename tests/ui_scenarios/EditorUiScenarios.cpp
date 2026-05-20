@@ -995,12 +995,12 @@ namespace Horo {
                 return;
 
             const ImGuiID viewPopupId =
-                    OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Fly Mode");
+                    OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Viewport Nav");
             IM_CHECK(viewPopupId != ImGuiID(0));
             if (!viewPopupId)
                 return;
 
-            IM_CHECK(ctx->ItemExists("Fly Mode"));
+            IM_CHECK(ctx->ItemExists("Viewport Nav"));
             IM_CHECK(ctx->ItemExists("Help"));
             IM_CHECK(ctx->ItemExists("Quick Open"));
             IM_CHECK(ctx->ItemExists("Command Palette"));
@@ -2876,7 +2876,7 @@ namespace Horo {
             return test;
         }
 
-        // 5. view_fly_mode_activate — lines 2153–2161 (View > Fly Mode toggle)
+        // 5. view_fly_mode_activate — View > Viewport Nav guidance.
         void RunViewFlyModeActivate(ImGuiTestContext *ctx) {
             UiAutomationRunState *state =
                     GetTestState(ctx, "editor_ui/view_fly_mode_activate");
@@ -2889,23 +2889,13 @@ namespace Horo {
                 return;
 
             const ImGuiID viewPopupIdFly =
-                    OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Fly Mode");
+                    OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Viewport Nav");
             IM_CHECK(viewPopupIdFly != ImGuiID(0));
             if (!viewPopupIdFly)
                 return;
 
-            LogDebug("UI scenario action: click Fly Mode to activate");
-            ctx->ItemClick("Fly Mode");
-            ctx->Yield(2);
-
-            // Re-open View menu to toggle Fly Mode off
-            const ImGuiID viewPopupIdFly2 =
-                    OpenToolbarPopup(ctx, "View", "##toolbar_view_popup", "Fly Mode");
-            if (viewPopupIdFly2) {
-                LogDebug("UI scenario action: click Fly Mode to deactivate");
-                ctx->ItemClick("Fly Mode");
-                ctx->Yield(2);
-            }
+            IM_CHECK(ctx->ItemExists("Viewport Nav"));
+            IM_CHECK(ctx->ItemExists("Hold RMB in the viewport, then use WASD + mouse"));
 
             CaptureIfEnabled(ctx, state, "editor_ui__view_fly_mode_activate.png");
             LogInfo("UI scenario done: editor_ui/view_fly_mode_activate");

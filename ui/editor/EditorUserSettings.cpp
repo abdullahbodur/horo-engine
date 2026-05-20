@@ -53,7 +53,12 @@ EditorUserSettingsDocument LoadEditorUserSettingsDocument() {
     bool ok = false;
     const Ui::EditorThemePreset preset = Ui::ParseEditorThemePreset(presetId, &ok);
     out.settings.themePreset = preset;
-    if (!ok)
+    out.settings.themePresetId = Ui::IsEditorThemePresetIdKnown(presetId)
+                                     ? presetId
+                                     : std::string(Ui::EditorThemePresetId(
+                                           Ui::EditorThemePreset::DarkBlue));
+    if (!ok && out.settings.themePresetId ==
+                   Ui::EditorThemePresetId(Ui::EditorThemePreset::DarkBlue))
         out.error = "Unknown editor theme preset; using darkBlue.";
     return out;
 }
@@ -74,7 +79,14 @@ bool SaveEditorUserSettingsDocument(EditorUserSettingsDocument *doc,
     if (!editorJson.is_object())
         editorJson = json::object();
 
-    editorJson["themePreset"] = Ui::EditorThemePresetId(doc->settings.themePreset);
+    std::string presetId = doc->settings.themePresetId;
+    if (const Ui::EditorThemePreset idAsBuiltin =
+            Ui::ParseEditorThemePreset(presetId, nullptr);
+        doc->settings.themePreset != idAsBuiltin)
+        presetId = Ui::EditorThemePresetId(doc->settings.themePreset);
+    if (!Ui::IsEditorThemePresetIdKnown(presetId))
+        presetId = Ui::EditorThemePresetId(doc->settings.themePreset);
+    editorJson["themePreset"] = presetId;
     root["editor"] = std::move(editorJson);
 
     const fs::path dir = Mcp::ResolveMcpSettingsDirectory();
@@ -101,6 +113,8 @@ bool SaveEditorUserSettingsDocument(EditorUserSettingsDocument *doc,
         return false;
     }
 
+    doc->settings.themePresetId = presetId;
+    doc->settings.themePreset = Ui::ParseEditorThemePreset(presetId, nullptr);
     doc->rootJson = std::move(root);
     doc->loadedFromDisk = true;
     doc->parseError = false;

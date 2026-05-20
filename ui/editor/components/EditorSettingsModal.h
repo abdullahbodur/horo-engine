@@ -37,7 +37,7 @@ public:
     };
 
     /** @brief Callback type used to apply a theme preset into the live editor. */
-    using ApplyThemePresetCallback = std::function<void(Horo::Ui::EditorThemePreset)>;
+    using ApplyThemePresetCallback = std::function<void(std::string_view)>;
 
     /** @brief Draws the modal for one frame; must be called every frame while it may be open. */
     void Draw();

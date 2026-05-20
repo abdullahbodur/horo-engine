@@ -112,6 +112,10 @@ namespace Horo::Mcp {
                 {"mesh", asset.mesh},
                 {"renderScale", asset.renderScale},
                 {"albedoMap", asset.albedoMap},
+                {"normalMap", asset.normalMap},
+                {"metallicRoughnessMap", asset.metallicRoughnessMap},
+                {"emissiveMap", asset.emissiveMap},
+                {"occlusionMap", asset.occlusionMap},
             };
             if (objectReferenceCount > 0)
                 out["objectReferenceCount"] = objectReferenceCount;
@@ -235,7 +239,11 @@ namespace Horo::Mcp {
             return ContainsCaseInsensitive(asset.id, query) ||
                    ContainsCaseInsensitive(asset.mesh, query) ||
                    ContainsCaseInsensitive(asset.renderScale, query) ||
-                   ContainsCaseInsensitive(asset.albedoMap, query);
+                   ContainsCaseInsensitive(asset.albedoMap, query) ||
+                   ContainsCaseInsensitive(asset.normalMap, query) ||
+                   ContainsCaseInsensitive(asset.metallicRoughnessMap, query) ||
+                   ContainsCaseInsensitive(asset.emissiveMap, query) ||
+                   ContainsCaseInsensitive(asset.occlusionMap, query);
         }
 
         bool ConsoleMatchesQuery(const McpConsoleEntry &entry,
@@ -730,6 +738,10 @@ namespace Horo::Mcp {
             {"mesh", asset.mesh},
             {"renderScale", asset.renderScale},
             {"albedoMap", asset.albedoMap},
+            {"normalMap", asset.normalMap},
+            {"metallicRoughnessMap", asset.metallicRoughnessMap},
+            {"emissiveMap", asset.emissiveMap},
+            {"occlusionMap", asset.occlusionMap},
         };
     }
 

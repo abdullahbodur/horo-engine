@@ -65,6 +65,11 @@ namespace Horo {
                 } else {
                     prop.meshTag = assetIt->second->mesh;
                     prop.albedoMap = assetIt->second->albedoMap;
+                    prop.normalMap = assetIt->second->normalMap;
+                    prop.metallicRoughnessMap =
+                            assetIt->second->metallicRoughnessMap;
+                    prop.emissiveMap = assetIt->second->emissiveMap;
+                    prop.occlusionMap = assetIt->second->occlusionMap;
                     prop.scale = MultiplyComponents(node.scale, assetIt->second->renderScale);
                 }
             } else {
@@ -76,9 +81,16 @@ namespace Horo {
                     prop.scale = MultiplyComponents(
                         node.scale, ParseVec3Csv(renderScaleIt->second, Vec3::One()));
                 }
-                const auto albedoIt = node.extraProps.find("albedoMap");
-                if (albedoIt != node.extraProps.end())
+                if (const auto albedoIt = node.extraProps.find("albedoMap"); albedoIt != node.extraProps.end())
                     prop.albedoMap = albedoIt->second;
+                if (const auto normalIt = node.extraProps.find("normalMap"); normalIt != node.extraProps.end())
+                    prop.normalMap = normalIt->second;
+                if (const auto metallicRoughnessIt = node.extraProps.find("metallicRoughnessMap"); metallicRoughnessIt != node.extraProps.end())
+                    prop.metallicRoughnessMap = metallicRoughnessIt->second;
+                if (const auto emissiveIt = node.extraProps.find("emissiveMap"); emissiveIt != node.extraProps.end())
+                    prop.emissiveMap = emissiveIt->second;
+                if (const auto occlusionIt = node.extraProps.find("occlusionMap"); occlusionIt != node.extraProps.end())
+                    prop.occlusionMap = occlusionIt->second;
             }
 
             prop.isLight = node.light.has_value();

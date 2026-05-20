@@ -55,8 +55,12 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   doc.settings["spawnPoint"] = "1.0,2.0,3.0";
   doc.settings["ambient"] = "dusk";
 
-  doc.assets["stone"] =
-      AssetDef{"stone.obj", "2.0000,1.5000,0.5000", "stone.png"};
+  AssetDef stoneAsset{"stone.obj", "2.0000,1.5000,0.5000", "stone.png"};
+  stoneAsset.normalMap = "stone_normal.png";
+  stoneAsset.metallicRoughnessMap = "stone_mr.png";
+  stoneAsset.emissiveMap = "stone_emissive.png";
+  stoneAsset.occlusionMap = "stone_occlusion.png";
+  doc.assets["stone"] = stoneAsset;
 
   SceneObject root;
   root.id = "root_000";
@@ -126,6 +130,11 @@ TEST_CASE("SceneProjectBridge: builds typed scene/project model from authoring d
   REQUIRE(stone->renderScale.x == Approx(2.0f));
   REQUIRE(stone->renderScale.y == Approx(1.5f));
   REQUIRE(stone->renderScale.z == Approx(0.5f));
+  REQUIRE(stone->albedoMap == "stone.png");
+  REQUIRE(stone->normalMap == "stone_normal.png");
+  REQUIRE(stone->metallicRoughnessMap == "stone_mr.png");
+  REQUIRE(stone->emissiveMap == "stone_emissive.png");
+  REQUIRE(stone->occlusionMap == "stone_occlusion.png");
   REQUIRE_FALSE(stone->guid.empty());
   REQUIRE(stone->displayName == "stone");
 
@@ -174,8 +183,12 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   doc.filePath = "assets/scenes/test_scene.json";
   doc.settings["spawnPoint"] = "10.0,0.5,-4.0";
   doc.settings["fog"] = "light";
-  doc.assets["crate_asset"] =
-      AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  AssetDef crateAsset{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  crateAsset.normalMap = "crate_normal.png";
+  crateAsset.metallicRoughnessMap = "crate_mr.png";
+  crateAsset.emissiveMap = "crate_emissive.png";
+  crateAsset.occlusionMap = "crate_occlusion.png";
+  doc.assets["crate_asset"] = crateAsset;
 
   SceneObject prop;
   prop.id = "crate_000";
@@ -204,6 +217,14 @@ TEST_CASE("SceneProjectBridge: minimal authoring data round-trips through typed 
   REQUIRE(roundTrip.assets.at("crate_asset").mesh == "crate.obj");
   REQUIRE(roundTrip.assets.at("crate_asset").renderScale ==
           "1.0000,2.0000,3.0000");
+  REQUIRE(roundTrip.assets.at("crate_asset").albedoMap == "crate.png");
+  REQUIRE(roundTrip.assets.at("crate_asset").normalMap == "crate_normal.png");
+  REQUIRE(roundTrip.assets.at("crate_asset").metallicRoughnessMap ==
+          "crate_mr.png");
+  REQUIRE(roundTrip.assets.at("crate_asset").emissiveMap ==
+          "crate_emissive.png");
+  REQUIRE(roundTrip.assets.at("crate_asset").occlusionMap ==
+          "crate_occlusion.png");
   REQUIRE_FALSE(roundTrip.assets.at("crate_asset").guid.empty());
   REQUIRE(roundTrip.assets.at("crate_asset").displayName == "crate_asset");
   REQUIRE(roundTrip.objects.size() == 2);

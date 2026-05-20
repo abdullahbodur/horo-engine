@@ -38,6 +38,10 @@ namespace Horo::Mcp {
         std::string mesh;
         std::string renderScale;
         std::string albedoMap;
+        std::string normalMap;
+        std::string metallicRoughnessMap;
+        std::string emissiveMap;
+        std::string occlusionMap;
     };
 
     struct McpConsoleEntry {

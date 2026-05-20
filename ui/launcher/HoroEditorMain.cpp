@@ -1,6 +1,8 @@
 /** @file HoroEditorMain.cpp
  *  @brief Entry point and application wiring for the launcher-integrated Horo editor executable. */
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -10,6 +12,7 @@
 #include <string_view>
 
 #include <GLFW/glfw3.h>
+#include <imgui.h>
 
 #include "core/Application.h"
 #include "core/EngineLaunchArgs.h"
@@ -76,6 +79,48 @@ bool IsRenderHeartbeatEnabled() {
   return ParseUiAutomationBoolValue(value, false);
 }
 #endif
+
+constexpr float kEditorViewportSupersampleScale = 2.0f;
+
+/** @brief Framebuffer-space viewport rectangle derived from editor UI coordinates. */
+struct FramebufferViewportRect {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+};
+
+/** @brief Converts ImGui display-space viewport bounds to renderer framebuffer pixels. */
+FramebufferViewportRect BuildFramebufferViewportRect(
+    const Editor::EditorViewportRect &viewportRect, const int fbWidth,
+    const int fbHeight, const ImVec2 displaySize) {
+  if (fbWidth <= 0 || fbHeight <= 0 || viewportRect.maxX <= viewportRect.minX ||
+      viewportRect.maxY <= viewportRect.minY) {
+    return {};
+  }
+
+  const float displayW =
+      displaySize.x > 0.0f ? displaySize.x : static_cast<float>(fbWidth);
+  const float displayH =
+      displaySize.y > 0.0f ? displaySize.y : static_cast<float>(fbHeight);
+  const float scaleX = static_cast<float>(fbWidth) / displayW;
+  const float scaleY = static_cast<float>(fbHeight) / displayH;
+
+  FramebufferViewportRect rect;
+  rect.x = std::max(0, static_cast<int>(std::round(viewportRect.minX * scaleX)));
+  const auto top = static_cast<int>(std::round(viewportRect.maxY * scaleY));
+  rect.y = std::max(0, fbHeight - top);
+  rect.width = std::max(
+      1, static_cast<int>(std::round((viewportRect.maxX - viewportRect.minX) *
+                                     scaleX * kEditorViewportSupersampleScale)));
+  rect.height = std::max(
+      1, static_cast<int>(std::round((viewportRect.maxY - viewportRect.minY) *
+                                     scaleY * kEditorViewportSupersampleScale)));
+
+  if (rect.x >= fbWidth || rect.y >= fbHeight)
+    return {};
+  return rect;
+}
 
 /** @brief Exception raised when renderer backend initialization fails during app startup. */
 class RendererBackendInitException final : public std::runtime_error {
@@ -166,7 +211,7 @@ void MenuDelete() {
   if (auto *editor = editorInstance)
     editor->OnMenuDelete();
 }
-/** @brief Native menu callback that forwards fly mode toggle to the current editor instance. */
+/** @brief Native menu callback that forwards viewport navigation guidance to the current editor instance. */
 void MenuFlyMode() {
   if (auto *editor = editorInstance)
     editor->OnMenuFlyMode();
@@ -318,8 +363,17 @@ private:
 
   void OnUpdate(float dt) override {
     m_shell.Update();
-    m_editor.OnUpdate(dt, m_camera, GetWindow().GetWidth(),
-                      GetWindow().GetHeight());
+    const Editor::EditorViewportRect viewportRect =
+        m_editor.GetViewportRenderRect();
+    const int inputWidth = std::max(1, viewportRect.maxX > viewportRect.minX
+                               ? static_cast<int>(viewportRect.maxX -
+                                                  viewportRect.minX)
+                               : GetWindow().GetWidth());
+    const int inputHeight = std::max(1, viewportRect.maxY > viewportRect.minY
+                                ? static_cast<int>(viewportRect.maxY -
+                                                   viewportRect.minY)
+                                : GetWindow().GetHeight());
+    m_editor.OnUpdate(dt, m_camera, inputWidth, inputHeight);
   }
 
   void OnFixedUpdate(float dt) override {
@@ -335,23 +389,54 @@ private:
     if (m_shell.HasActiveProject())
       frameConfig.lights = m_runtime->GetLights();
 
-    // Sync the camera aspect to the current framebuffer. Without this, the
-    // projection stays at its constructor default (16:9) and resizing the
-    // window stretches geometry horizontally instead of revealing more scene.
     const int fbWidth = GetWindow().GetWidth();
     const int fbHeight = GetWindow().GetHeight();
-    if (fbWidth > 0 && fbHeight > 0)
-      m_camera.aspect =
-          static_cast<float>(fbWidth) / static_cast<float>(fbHeight);
+    const Editor::EditorViewportRect viewportRect =
+        m_editor.GetViewportRenderRect();
+    const FramebufferViewportRect viewport =
+        BuildFramebufferViewportRect(viewportRect, fbWidth, fbHeight,
+                                     ImGui::GetIO().DisplaySize);
+
+    if (viewport.width > 0 && viewport.height > 0)
+      m_camera.aspect = static_cast<float>(viewport.width) /
+                        static_cast<float>(viewport.height);
+
+    bool viewportTargetActive = false;
+    m_editor.SetBeforeImGuiRenderCallback({});
+    if (m_shell.HasActiveProject() && viewport.width > 0 && viewport.height > 0) {
+      std::string viewportError;
+      viewportTargetActive = Renderer::BeginEditorViewportRenderTarget(
+          static_cast<uint32_t>(viewport.width),
+          static_cast<uint32_t>(viewport.height), &viewportError);
+    }
 
     Renderer::BeginFrame(frameConfig);
-    if (m_shell.HasActiveProject()) {
+    if (m_shell.HasActiveProject() && viewportTargetActive) {
       Renderer::BeginPass({RenderPassId::OpaqueScene, BuildRenderView(m_camera),
                            "horo-editor-scene"});
       m_scene.RenderSystems(alpha);
       Renderer::EndPass();
     }
+
+    m_editor.SetBeforeImGuiRenderCallback([&viewportTargetActive, fbWidth,
+                                           fbHeight, frameConfig]() {
+      if (!viewportTargetActive)
+        return;
+      Renderer::EndEditorViewportRenderTarget();
+      Renderer::SetViewport(0, 0, fbWidth, fbHeight);
+      Renderer::ClearColorAndDepth(frameConfig.clearColor.x,
+                                   frameConfig.clearColor.y,
+                                   frameConfig.clearColor.z,
+                                   frameConfig.clearColor.w);
+      viewportTargetActive = false;
+    });
     m_editor.Render(m_camera, fbWidth, fbHeight);
+    m_editor.SetBeforeImGuiRenderCallback({});
+
+    if (viewportTargetActive) {
+      Renderer::EndEditorViewportRenderTarget();
+      Renderer::SetViewport(0, 0, fbWidth, fbHeight);
+    }
 
 #ifdef HORO_STANDALONE_UI_AUTOMATION
     if (m_runUiAutomation && m_uiAutomation)

@@ -1,7 +1,6 @@
 #include "mcp/McpSettings.h"
 
 #include <cctype>
-#include <cstdlib>
 #include <fstream>
 #include <system_error>
 #include <vector>

@@ -5,12 +5,9 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iomanip>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -900,6 +897,10 @@ namespace Horo::Mcp {
                 (*inputSchema)["properties"]["mesh"] = {{"type", "string"}};
                 (*inputSchema)["properties"]["renderScale"] = {{"type", "string"}};
                 (*inputSchema)["properties"]["albedoMap"] = {{"type", "string"}};
+                (*inputSchema)["properties"]["normalMap"] = {{"type", "string"}};
+                (*inputSchema)["properties"]["metallicRoughnessMap"] = {{"type", "string"}};
+                (*inputSchema)["properties"]["emissiveMap"] = {{"type", "string"}};
+                (*inputSchema)["properties"]["occlusionMap"] = {{"type", "string"}};
                 (*inputSchema)["properties"]["displayName"] = {{"type", "string"}};
             }
             return true;
@@ -1212,7 +1213,9 @@ namespace Horo::Mcp {
             if (!AssetExists(snapshot, assetId))
                 return FailNormalization(error, "Asset not found.");
             auto normalized = json{{"id", assetId}};
-            for (const char *key: {"mesh", "renderScale", "albedoMap", "displayName"}) {
+            for (const char *key: {"mesh", "renderScale", "albedoMap", "normalMap",
+                                    "metallicRoughnessMap", "emissiveMap",
+                                    "occlusionMap", "displayName"}) {
                 if (!arguments.contains(key))
                     continue;
                 if (!arguments[key].is_string() && !arguments[key].is_null())
@@ -1696,7 +1699,9 @@ namespace Horo::Mcp {
                 preview["before"] = BuildAssetJson(*asset);
             json after = preview.value("before", json::object());
             after["id"] = assetId;
-            for (const char *key: {"mesh", "renderScale", "albedoMap", "displayName"}) {
+            for (const char *key: {"mesh", "renderScale", "albedoMap", "normalMap",
+                                    "metallicRoughnessMap", "emissiveMap",
+                                    "occlusionMap", "displayName"}) {
                 if (arguments.contains(key))
                     after[key] = arguments[key];
             }

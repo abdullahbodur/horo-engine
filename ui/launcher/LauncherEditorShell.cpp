@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <format>
 #include <functional>
 #include <stdexcept>
@@ -15,7 +14,9 @@
 
 #include "core/Logger.h"
 #include "core/ProjectPath.h"
+#include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneSerializer.h"
+#include "ui/launcher/LauncherEditorShellInternal.h"
 #include "ui/launcher/LauncherProjectTemplate.h"
 #include "ui/launcher/NativeFolderDialog.h"
 #include "math/MathUtils.h"
@@ -129,6 +130,22 @@ bool IsBuildTreeEnginePrefix(const fs::path &candidate) {
   return hasConfig && hasTargets;
 }
 
+} // namespace
+
+/** @copydoc ResolveRuntimeScaleFromEditorObject */
+Vec3 ResolveRuntimeScaleFromEditorObject(const Editor::SceneObject &object) {
+  Vec3 assetRenderScale = Vec3::One();
+  if (const auto it = object.props.find("_assetRenderScale");
+      it != object.props.end())
+    Editor::TryParseVec3Csv(it->second, &assetRenderScale);
+
+  return {object.scale.x * assetRenderScale.x,
+          object.scale.y * assetRenderScale.y,
+          object.scale.z * assetRenderScale.z};
+}
+
+namespace {
+
 /** @brief Canonicalizes a path for use as a cache lookup key. */
 fs::path NormalizePathForLookup(const fs::path &rawPath) {
   if (rawPath.empty())
@@ -158,8 +175,8 @@ void ApplyTransformUpdateFromObject(Scene *scene,
         auto &transform = scene->GetRegistry().Get<TransformComponent>(entity);
         transform.current.position = object.position;
         transform.previous.position = object.position;
-        transform.current.scale = object.scale;
-        transform.previous.scale = object.scale;
+        transform.current.scale = ResolveRuntimeScaleFromEditorObject(object);
+        transform.previous.scale = transform.current.scale;
         transform.current.rotation = Quaternion::FromEuler(
             ToRadians(object.pitch), ToRadians(object.yaw),
             ToRadians(object.roll));
@@ -750,6 +767,11 @@ void LauncherEditorShell::ConfigureRuntimeCallbacks() {
         component.material = std::make_shared<Material>();
         component.material->shader = EnsureSceneShader();
         component.material->albedoMap = LoadTexture(prop.albedoMap);
+        component.material->normalMap = LoadTexture(prop.normalMap);
+        component.material->metallicRoughnessMap =
+            LoadTexture(prop.metallicRoughnessMap);
+        component.material->emissiveMap = LoadTexture(prop.emissiveMap);
+        component.material->occlusionMap = LoadTexture(prop.occlusionMap);
         sceneRef.GetRegistry().Add<MeshComponent>(entity, std::move(component));
       });
   m_editor->SetTransformCallback([this](const Editor::SceneObject &object) {
@@ -1500,32 +1522,60 @@ std::shared_ptr<Shader> LauncherEditorShell::EnsureSceneShader() {
 /** @copydoc LauncherEditorShell::LoadMeshForTag */
 std::shared_ptr<Mesh>
 LauncherEditorShell::LoadMeshForTag(const std::string &meshTag) {
-  if (meshTag.empty())
-    return {};
-
-  if (const auto it = m_meshCache.find(meshTag); it != m_meshCache.end())
-    return it->second;
-
-  auto mesh = std::make_shared<Mesh>();
-  try {
-    if (meshTag == "box")
-      *mesh = Mesh::CreateBox();
-    else if (meshTag == "sphere")
-      *mesh = Mesh::CreateSphere();
-    else if (meshTag == "cylinder")
-      *mesh = Mesh::CreateCylinder();
-    else if (meshTag == "pyramid")
-      *mesh = Mesh::CreatePyramid();
-    else if (meshTag == "plane")
-      *mesh = Mesh::CreatePlane();
-    else
-      *mesh = ObjLoader::Load(ResolveAssetPath(meshTag).string());
-  } catch (const ObjLoader::ObjLoaderException &e) {
-    LogWarn("[Launcher] Failed to load mesh '{}': {}", meshTag, e.what());
+  if (meshTag.empty()) {
+    LogWarn("[Launcher] LoadMeshForTag: empty meshTag");
     return {};
   }
 
-  m_meshCache[meshTag] = mesh;
+  LogInfo("[Launcher] LoadMeshForTag: loading '{}'", meshTag);
+
+  if (const auto it = m_tagMeshCache.find(meshTag); it != m_tagMeshCache.end()) {
+    LogInfo("[Launcher] LoadMeshForTag: '{}' found in tag cache", meshTag);
+    return it->second;
+  }
+
+  auto mesh = std::make_shared<Mesh>();
+  if (meshTag == "box") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'box'");
+    *mesh = Mesh::CreateBox();
+  } else if (meshTag == "sphere") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'sphere'");
+    *mesh = Mesh::CreateSphere();
+  } else if (meshTag == "cylinder") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'cylinder'");
+    *mesh = Mesh::CreateCylinder();
+  } else if (meshTag == "pyramid") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'pyramid'");
+    *mesh = Mesh::CreatePyramid();
+  } else if (meshTag == "plane") {
+    LogInfo("[Launcher] LoadMeshForTag: creating primitive 'plane'");
+    *mesh = Mesh::CreatePlane();
+  } else {
+    const std::filesystem::path resolvedPath = ResolveAssetPath(meshTag);
+    LogInfo("[Launcher] LoadMeshForTag: loading mesh from path '{}'", resolvedPath.string());
+
+    if (!std::filesystem::exists(resolvedPath)) {
+      LogWarn("[Launcher] LoadMeshForTag: mesh file does not exist: {}", resolvedPath.string());
+      return {};
+    }
+
+    mesh = m_meshCache.Get(resolvedPath.string());
+    if (!mesh) {
+      LogWarn("[Launcher] LoadMeshForTag: MeshCache returned null for '{}'", resolvedPath.string());
+      return {};
+    }
+
+    if (!mesh->IsValid()) {
+      LogWarn("[Launcher] LoadMeshForTag: mesh '{}' is not valid (empty or failed to load)", meshTag);
+      return {};
+    }
+
+    LogInfo("[Launcher] LoadMeshForTag: successfully loaded '{}' with {} vertices",
+            meshTag, mesh->GetVertices().size());
+  }
+
+  m_tagMeshCache[meshTag] = mesh;
+  LogInfo("[Launcher] LoadMeshForTag: '{}' cached and returned", meshTag);
   return mesh;
 }
 

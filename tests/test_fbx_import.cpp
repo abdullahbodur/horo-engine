@@ -10,6 +10,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <system_error>
 
@@ -403,7 +404,7 @@ TEST_CASE("FbxLoader: cube_texture fixture exposes a diffuse texture record", "[
   REQUIRE(result.ok);
   REQUIRE_FALSE(result.textures.empty());
   CHECK(std::ranges::any_of(result.textures, [](const auto &t) {
-    return t.isDiffuseAlbedo;
+    return t.slot == FbxLoader::FbxTextureSlot::Albedo;
   }));
 }
 
@@ -418,7 +419,8 @@ TEST_CASE("FbxLoader: external-only fixture exposes paths but no embedded bytes"
   const auto &record = result.textures.front();
   CHECK(record.embeddedBytes.empty());
   CHECK_FALSE(record.filename.empty());
-  CHECK(record.isDiffuseAlbedo);
+  CHECK(record.slot == FbxLoader::FbxTextureSlot::Albedo);
+  CHECK(record.slot == FbxLoader::FbxTextureSlot::Albedo);
 }
 
 TEST_CASE("FbxAssetImporter: copies sibling external texture into managed storage and sets albedoMap",
@@ -488,6 +490,88 @@ TEST_CASE("FbxAssetImporter: copies sibling external texture into managed storag
                             [&](const std::string &p) {
                               return p == result.asset.albedoMap;
                             }));
+}
+
+TEST_CASE("FbxAssetImporter: texture override is copied and wired as albedoMap",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_texture_override";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path overrideTexture = root / "override_albedo.png";
+  WriteFile(overrideTexture, "png bytes are not decoded by the importer");
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      FixturePath("cube_5800_binary.fbx"), "cube_override",
+      "guid_cube_override", "Cube Override", {},
+      TextureOverrides{.albedoMap = overrideTexture.string()});
+
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.asset.albedoMap.empty());
+  CHECK(result.asset.albedoMap ==
+        "assets/models/guid_cube_override/override_albedo.png");
+  CHECK(std::filesystem::is_regular_file(root / result.asset.albedoMap));
+  CHECK(std::ranges::find(result.metadata.producedFiles,
+                          result.asset.albedoMap) !=
+        result.metadata.producedFiles.end());
+}
+
+TEST_CASE("FbxAssetImporter: texture overrides with matching basenames do not collide",
+          "[editor][asset-import][fbx][textures]") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_fbx_texture_override_collision";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root / "assets" / "models", ec);
+  WriteFile(root / "CMakePresets.json", "{}");
+  ProjectPathGuard guard(root);
+
+  const std::filesystem::path albedoDir = root / "source_a";
+  const std::filesystem::path normalDir = root / "source_b";
+  std::filesystem::create_directories(albedoDir, ec);
+  std::filesystem::create_directories(normalDir, ec);
+  const std::filesystem::path albedoOverride = albedoDir / "shared.png";
+  const std::filesystem::path normalOverride = normalDir / "shared.png";
+  WriteFile(albedoOverride, "albedo override bytes");
+  WriteFile(normalOverride, "normal override bytes");
+
+  const AssetImportService service;
+  const AssetImportResult result = service.ImportAssetFromSource(
+      FixturePath("cube_5800_binary.fbx"), "cube_override_collision",
+      "guid_cube_override_collision", "Cube Override Collision", {},
+      TextureOverrides{.albedoMap = albedoOverride.string(),
+                       .normalMap = normalOverride.string()});
+
+  REQUIRE(result.ok);
+  REQUIRE_FALSE(result.asset.albedoMap.empty());
+  REQUIRE_FALSE(result.asset.normalMap.empty());
+  CHECK(result.asset.albedoMap != result.asset.normalMap);
+  CHECK(result.asset.albedoMap ==
+        "assets/models/guid_cube_override_collision/shared.png");
+  CHECK(result.asset.normalMap ==
+        "assets/models/guid_cube_override_collision/shared_1.png");
+  CHECK(std::filesystem::is_regular_file(root / result.asset.albedoMap));
+  CHECK(std::filesystem::is_regular_file(root / result.asset.normalMap));
+
+  std::ifstream albedo(root / result.asset.albedoMap, std::ios::binary);
+  std::ifstream normal(root / result.asset.normalMap, std::ios::binary);
+  const std::string albedoContents((std::istreambuf_iterator<char>(albedo)),
+                                   std::istreambuf_iterator<char>());
+  const std::string normalContents((std::istreambuf_iterator<char>(normal)),
+                                   std::istreambuf_iterator<char>());
+  CHECK(albedoContents == "albedo override bytes");
+  CHECK(normalContents == "normal override bytes");
+  CHECK(std::ranges::find(result.metadata.producedFiles,
+                          result.asset.albedoMap) !=
+        result.metadata.producedFiles.end());
+  CHECK(std::ranges::find(result.metadata.producedFiles,
+                          result.asset.normalMap) !=
+        result.metadata.producedFiles.end());
 }
 
 TEST_CASE("FbxAssetImporter: missing external texture emits FbxExternalTextureMissing warning",
@@ -1093,7 +1177,7 @@ TEST_CASE("E2E: Import Asset modal drives FBX import all the way to producedFile
   EditorImportAssetModal modal;
 
   // 1. User opens the modal seeded with an FBX path; importer is auto-selected.
-  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry);
+  modal.Open(FixturePath("cube_5800_binary.fbx"), &registry, std::filesystem::path{});
   REQUIRE(modal.IsOpen());
   REQUIRE(modal.DraftForTest().importerId == "builtin.fbx_static_mesh");
   REQUIRE(modal.DraftForTest().assetId == "cube_5800_binary");

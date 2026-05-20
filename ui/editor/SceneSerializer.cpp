@@ -206,6 +206,10 @@ namespace Horo::Editor {
                 ad.mesh = def.value("mesh", "");
                 ad.renderScale = def.value("renderScale", "1.0000,1.0000,1.0000");
                 ad.albedoMap = def.value("albedoMap", "");
+                ad.normalMap = def.value("normalMap", "");
+                ad.metallicRoughnessMap = def.value("metallicRoughnessMap", "");
+                ad.emissiveMap = def.value("emissiveMap", "");
+                ad.occlusionMap = def.value("occlusionMap", "");
                 ad.guid = def.value("guid", "");
                 ad.displayName = def.value("displayName", "");
                 EnsureAssetIdentity(id, &ad);
@@ -223,29 +227,7 @@ namespace Horo::Editor {
         return doc;
     }
 
-    /** @copydoc SceneSerializer::SaveToFile */
-    void SceneSerializer::SaveToFile(const SceneDocument &doc,
-                                     const std::string &path) {
-        SceneDocument docToSave = doc;
-        EnsureAssetIdentity(&docToSave);
-
-        json j;
-        j["version"] = docToSave.version;
-        j["sceneId"] = docToSave.sceneId.empty() ? "scene" : docToSave.sceneId;
-        j["sceneName"] = docToSave.sceneName.empty() ? "Scene" : docToSave.sceneName;
-
-        json settings = json::object();
-        {
-            std::vector<std::string> keys;
-            keys.reserve(docToSave.settings.size());
-            for (const auto &[key, val]: docToSave.settings)
-                keys.push_back(key);
-            std::ranges::sort(keys);
-            for (const auto &k: keys)
-                settings[k] = docToSave.settings.at(k);
-        }
-        j["settings"] = settings;
-
+    static json SerializeAssets(const SceneDocument &docToSave) {
         json assets = json::object();
         std::vector<std::string> assetIds;
         assetIds.reserve(docToSave.assets.size());
@@ -262,12 +244,22 @@ namespace Horo::Editor {
             d["renderScale"] = def.renderScale;
             if (!def.albedoMap.empty())
                 d["albedoMap"] = def.albedoMap;
+            if (!def.normalMap.empty())
+                d["normalMap"] = def.normalMap;
+            if (!def.metallicRoughnessMap.empty())
+                d["metallicRoughnessMap"] = def.metallicRoughnessMap;
+            if (!def.emissiveMap.empty())
+                d["emissiveMap"] = def.emissiveMap;
+            if (!def.occlusionMap.empty())
+                d["occlusionMap"] = def.occlusionMap;
             assets[id] = d;
         }
-        j["assets"] = assets;
+        return assets;
+    }
 
-        j["objects"] = json::array();
-        for (auto &so: docToSave.objects) {
+    static json SerializeObjects(const SceneDocument &docToSave) {
+        json objects = json::array();
+        for (const auto &so: docToSave.objects) {
             json obj;
             obj["id"] = so.id;
             obj["type"] = TypeToString(so.type);
@@ -296,8 +288,35 @@ namespace Horo::Editor {
             if (!so.components.empty())
                 obj["components"] = BuildObjectComponentsJson(so);
 
-            j["objects"].push_back(obj);
+            objects.push_back(std::move(obj));
         }
+        return objects;
+    }
+
+    /** @copydoc SceneSerializer::SaveToFile */
+    void SceneSerializer::SaveToFile(const SceneDocument &doc,
+                                     const std::string &path) {
+        SceneDocument docToSave = doc;
+        EnsureAssetIdentity(&docToSave);
+
+        json j;
+        j["version"] = docToSave.version;
+        j["sceneId"] = docToSave.sceneId.empty() ? "scene" : docToSave.sceneId;
+        j["sceneName"] = docToSave.sceneName.empty() ? "Scene" : docToSave.sceneName;
+
+        json settings = json::object();
+        {
+            std::vector<std::string> keys;
+            keys.reserve(docToSave.settings.size());
+            for (const auto &[key, val]: docToSave.settings)
+                keys.push_back(key);
+            std::ranges::sort(keys);
+            for (const auto &k: keys)
+                settings[k] = docToSave.settings.at(k);
+        }
+        j["settings"] = settings;
+        j["assets"] = SerializeAssets(docToSave);
+        j["objects"] = SerializeObjects(docToSave);
 
         namespace fs = std::filesystem;
         std::error_code ec;

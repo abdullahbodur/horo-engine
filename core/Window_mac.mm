@@ -187,7 +187,7 @@ extern "C" void SetupNativeMenuBarMac() {
   [editMenu release];
 
   NSMenu *viewMenu = [[NSMenu alloc] initWithTitle:@"View"];
-  item = [[NSMenuItem alloc] initWithTitle:@"Fly Mode" action:@selector(viewFlyMode:) keyEquivalent:@"t"];
+  item = [[NSMenuItem alloc] initWithTitle:@"Viewport Nav" action:@selector(viewFlyMode:) keyEquivalent:@""];
   [viewMenu addItem:item];
   [item release];
   [viewMenu addItem:[NSMenuItem separatorItem]];

@@ -34,6 +34,10 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   stoneAsset.mesh = "stone.obj";
   stoneAsset.renderScale = {2.0f, 1.5f, 0.5f};
   stoneAsset.albedoMap = "stone.png";
+  stoneAsset.normalMap = "stone_normal.png";
+  stoneAsset.metallicRoughnessMap = "stone_mr.png";
+  stoneAsset.emissiveMap = "stone_emissive.png";
+  stoneAsset.occlusionMap = "stone_occlusion.png";
   stoneAsset.guid = "guid_stone";
   stoneAsset.displayName = "Stone";
   model.scene.assets.push_back(std::move(stoneAsset));
@@ -97,6 +101,10 @@ TEST_CASE("SceneRuntimeConversion: typed model converts to runtime scene definit
   REQUIRE(assetProp.id == "prop_000");
   REQUIRE(assetProp.meshTag == "stone.obj");
   REQUIRE(assetProp.albedoMap == "stone.png");
+  REQUIRE(assetProp.normalMap == "stone_normal.png");
+  REQUIRE(assetProp.metallicRoughnessMap == "stone_mr.png");
+  REQUIRE(assetProp.emissiveMap == "stone_emissive.png");
+  REQUIRE(assetProp.occlusionMap == "stone_occlusion.png");
   REQUIRE(assetProp.scale.x == Approx(2.0f));
   REQUIRE(assetProp.scale.y == Approx(3.0f));
   REQUIRE(assetProp.scale.z == Approx(1.5f));
@@ -125,8 +133,12 @@ TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipe
   doc.sceneName = "Bridge Scene";
   doc.filePath = "assets/scenes/bridge_scene.json";
   doc.settings["spawnPoint"] = "10.0,0.5,-4.0";
-  doc.assets["crate_asset"] =
-      AssetDef{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  AssetDef crateAsset{"crate.obj", "1.0000,2.0000,3.0000", "crate.png"};
+  crateAsset.normalMap = "crate_normal.png";
+  crateAsset.metallicRoughnessMap = "crate_mr.png";
+  crateAsset.emissiveMap = "crate_emissive.png";
+  crateAsset.occlusionMap = "crate_occlusion.png";
+  doc.assets["crate_asset"] = crateAsset;
 
   SceneObject panel;
   panel.id = "panel_000";
@@ -153,6 +165,13 @@ TEST_CASE("SceneRuntimeBridge: authoring document follows canonical runtime pipe
   REQUIRE(build.definition.rooms[0].props.size() == 1);
   REQUIRE(build.definition.rooms[0].props[0].meshTag == "crate.obj");
   REQUIRE(build.definition.rooms[0].props[0].albedoMap == "crate.png");
+  REQUIRE(build.definition.rooms[0].props[0].normalMap == "crate_normal.png");
+  REQUIRE(build.definition.rooms[0].props[0].metallicRoughnessMap ==
+          "crate_mr.png");
+  REQUIRE(build.definition.rooms[0].props[0].emissiveMap ==
+          "crate_emissive.png");
+  REQUIRE(build.definition.rooms[0].props[0].occlusionMap ==
+          "crate_occlusion.png");
   REQUIRE(build.definition.rooms[0].props[0].scale.x == Approx(1.5f));
   REQUIRE(build.definition.rooms[0].props[0].scale.y == Approx(3.0f));
   REQUIRE(build.definition.rooms[0].props[0].scale.z == Approx(4.5f));

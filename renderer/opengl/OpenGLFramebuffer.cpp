@@ -75,6 +75,9 @@ OpenGLFramebuffer& OpenGLFramebuffer::operator=(OpenGLFramebuffer&& o) noexcept 
 }
 
 void OpenGLFramebuffer::Create() {
+    if (!glGenFramebuffers)
+        return;
+
     glGenFramebuffers(1, &m_framebufferId);
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferId);
 
@@ -156,6 +159,8 @@ void OpenGLFramebuffer::Bind() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferId);
     glViewport(0, 0, static_cast<GLsizei>(m_spec.width),
                static_cast<GLsizei>(m_spec.height));
+    if (!m_colorAttachments.empty())
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
 }
 
 void OpenGLFramebuffer::Unbind() {

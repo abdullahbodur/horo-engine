@@ -37,7 +37,6 @@ namespace Horo::Editor {
         std::function<void()> openHelpPopup;                       /**< Open the keyboard-shortcuts help popup. */
         std::function<void()> openQuickOpen;                       /**< Open the quick-open file picker. */
         std::function<void()> openCommandPalette;                  /**< Open the command palette. */
-        std::function<void(bool)> setFlyMode;                      /**< Enable or disable fly-cam mode. */
         std::function<void(bool)> setResetDockLayout;              /**< Request a dock-layout reset on the next frame. */
 
         // Settings & modals
@@ -53,9 +52,9 @@ namespace Horo::Editor {
         bool* playMode = nullptr;             /**< Pointer to the current play-mode flag. */
         int* playModeEscPresses = nullptr;    /**< Pointer to the escape-press counter used to exit play mode. */
 
-        // Fly mode
-        bool* flyMode = nullptr;              /**< Pointer to the fly-cam enabled flag. */
-        bool* flyCamInitialized = nullptr;    /**< Pointer to the fly-cam initialization flag. */
+        // Viewport navigation
+        bool* viewportNavActive = nullptr;    /**< Pointer to the RMB-held viewport-nav active flag. */
+        bool* viewportNavCameraInitialized = nullptr; /**< Pointer to the viewport-nav initialization flag. */
         bool* prevCursorInit = nullptr;       /**< Pointer to the previous-cursor-position initialization flag. */
 
         // View

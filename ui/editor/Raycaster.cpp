@@ -39,6 +39,17 @@ namespace Horo::Editor {
         return r;
     }
 
+    /** @copydoc ScaleScreenPointToRenderTarget */
+    Vec2 ScaleScreenPointToRenderTarget(float x, float y, int sourceW,
+                                        int sourceH, int renderW,
+                                        int renderH) {
+        if (sourceW <= 0 || sourceH <= 0 || renderW <= 0 || renderH <= 0)
+            return {x, y};
+
+        return {x * static_cast<float>(renderW) / static_cast<float>(sourceW),
+                y * static_cast<float>(renderH) / static_cast<float>(sourceH)};
+    }
+
     /** @copydoc RayVsAABBHit */
     bool RayVsAABBHit(const Ray &ray, const Vec3 &center, const Vec3 &half,
                       RayAabbHit *outHit) {
@@ -131,6 +142,28 @@ namespace Horo::Editor {
             ray.origin.x + ray.direction.x * t, 0.0f,
             ray.origin.z + ray.direction.z * t
         };
+        return true;
+    }
+
+    /** @copydoc TryIntersectCameraFocusPlane */
+    bool TryIntersectCameraFocusPlane(const Ray &ray, const Camera &cam,
+                                      Vec3 *outHitPoint) {
+        if (!outHitPoint)
+            return false;
+
+        const Vec3 planeNormal = cam.GetForward();
+        if (planeNormal.LengthSq() <= 1e-10f)
+            return false;
+
+        const float denom = Vec3::Dot(planeNormal, ray.direction);
+        if (std::abs(denom) <= 1e-5f)
+            return false;
+
+        const float t = Vec3::Dot(planeNormal, cam.target - ray.origin) / denom;
+        if (t <= 0.0f)
+            return false;
+
+        *outHitPoint = ray.origin + ray.direction * t;
         return true;
     }
 } // namespace Horo::Editor

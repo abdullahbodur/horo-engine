@@ -4,8 +4,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
-
 #include "mcp/McpProtocol.h"
 
 namespace Horo::Mcp {

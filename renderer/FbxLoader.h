@@ -14,7 +14,7 @@
  *    skeletal pipeline for likely follow-ups).
  *  - Synthesises normals via ufbx's @c generate_missing_normals option when the
  *    FBX has no normal attribute. UVs default to (0, 0) when absent.
- *  - Collects diffuse-channel texture references from every material reachable
+ *  - Collects material texture references from every material reachable
  *    from the rendered meshes, capturing both embedded byte blobs (HORO-96) and
  *    the candidate external paths to try (HORO-95). Bytes/strings are copied
  *    out before the underlying @c ufbx_scene is freed.
@@ -35,6 +35,16 @@
 #include "renderer/SkinnedVertex.h"
 
 namespace Horo::FbxLoader {
+    /** @brief Material texture slot identified while scanning FBX material bindings. */
+    enum class FbxTextureSlot {
+        Unknown,
+        Albedo,
+        Normal,
+        MetallicRoughness,
+        Emissive,
+        Occlusion
+    };
+
     /** @brief Single texture reference captured during FBX scene extraction.
      *
      *  When @c embeddedBytes is non-empty the texture is embedded inside the FBX
@@ -49,7 +59,7 @@ namespace Horo::FbxLoader {
         std::string absolutePath; /**< Absolute path captured by ufbx (may be empty). */
         std::string relativePath; /**< Path relative to the FBX file, captured by ufbx (may be empty). */
         std::vector<unsigned char> embeddedBytes; /**< Embedded byte blob; empty when the texture is external. */
-        bool isDiffuseAlbedo = false; /**< True when this record represents the diffuse / base-colour map. */
+        FbxTextureSlot slot = FbxTextureSlot::Unknown; /**< Material slot this texture feeds, if known. */
     };
 
     /** @brief Result of a single static-mesh load operation. */

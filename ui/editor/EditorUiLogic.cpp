@@ -20,17 +20,27 @@ bool ShouldToggleHelpPopup(bool currToggle, bool prevToggle,
 }
 
 /** @copydoc ShouldOpenQuickOpen */
-bool ShouldOpenQuickOpen(bool currToggle, bool prevToggle, bool flyMode,
+bool ShouldOpenQuickOpen(bool currToggle, bool prevToggle, bool navActive,
                          bool wantsTextInput, bool anyItemActive) {
-  return currToggle && !prevToggle && !flyMode && !wantsTextInput &&
+  return currToggle && !prevToggle && !navActive && !wantsTextInput &&
          !anyItemActive;
 }
 
 /** @copydoc ShouldOpenCommandPalette */
-bool ShouldOpenCommandPalette(bool currToggle, bool prevToggle, bool flyMode,
+bool ShouldOpenCommandPalette(bool currToggle, bool prevToggle, bool navActive,
                               bool wantsTextInput, bool anyItemActive) {
-  return currToggle && !prevToggle && !flyMode && !wantsTextInput &&
+  return currToggle && !prevToggle && !navActive && !wantsTextInput &&
          !anyItemActive;
+}
+
+/** @copydoc ShouldStartViewportNav */
+bool ShouldStartViewportNav(bool rmbDown, bool alreadyActive,
+                            float mouseX, float mouseY,
+                            const EditorViewportRect &viewportRect) {
+  return rmbDown && !alreadyActive &&
+         viewportRect.maxX > viewportRect.minX &&
+         viewportRect.maxY > viewportRect.minY &&
+         viewportRect.Contains(mouseX, mouseY);
 }
 
 /** @copydoc ShouldCopySelectionRef */
@@ -78,7 +88,7 @@ EditorStatusText BuildEditorStatusText(const EditorStatusSnapshot &snapshot) {
   EditorStatusText out;
   out.selectionCount = std::max(0, snapshot.selectionCount);
   out.dirtyText = snapshot.dirty ? "yes" : "no";
-  out.flyText = snapshot.flyMode ? "on" : "off";
+  out.navText = snapshot.navActive ? "active" : "idle";
   out.reloadText = snapshot.reloadPending ? "pending" : "idle";
   return out;
 }

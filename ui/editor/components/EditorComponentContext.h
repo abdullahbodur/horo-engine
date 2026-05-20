@@ -52,6 +52,6 @@ namespace Horo::Editor {
         // Flags
         bool* active = nullptr;   /**< Pointer to the editor-active flag; false while the engine is shutting down. */
         bool* playMode = nullptr; /**< Pointer to the play-mode flag; true while the scene is simulating. */
-        bool* flyMode = nullptr;  /**< Pointer to the fly-cam mode flag. */
+        bool* viewportNavActive = nullptr; /**< Pointer to the viewport-navigation active flag. */
     };
 }

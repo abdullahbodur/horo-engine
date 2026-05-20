@@ -200,6 +200,16 @@ namespace Horo {
             outHandle, needsYFlip, outError);
     }
 
+    bool Renderer::BeginEditorViewportRenderTarget(uint32_t width, uint32_t height,
+                                                   std::string *outError) {
+        return ActiveBackend()->BeginEditorViewportRenderTarget(width, height,
+                                                               outError);
+    }
+
+    void Renderer::EndEditorViewportRenderTarget() {
+        ActiveBackend()->EndEditorViewportRenderTarget();
+    }
+
     std::shared_ptr<IShader> Renderer::CreateShader(const std::string &vert,
                                                      const std::string &frag) {
         return ActiveBackend()->CreateShader(vert, frag);

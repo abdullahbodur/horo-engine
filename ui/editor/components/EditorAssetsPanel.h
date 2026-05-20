@@ -52,7 +52,8 @@ namespace Horo::Editor {
         std::function<void(int)> setDeferredFilePick; /**< Request a deferred file-picker with the given DeferredFilePick enum value. */
 
         // Deferred state callbacks
-        std::function<void()> openSettingsModal; /**< Open the editor settings modal. */
+        std::function<void()> openSettingsModal;   /**< Open the editor settings modal. */
+        std::function<void()> openImportAssetModal; /**< Open the Import Asset modal to import an asset from a source file. */
     };
 
     /** @brief Mutable editor state accessed by the assets panel during rendering. */
@@ -61,20 +62,7 @@ namespace Horo::Editor {
         std::string* selectedAssetId = nullptr;        /**< Pointer to the currently selected asset identifier. */
         std::vector<int>* selectedIndices = nullptr;   /**< Pointer to the list of selected scene-object indices. */
 
-        // Asset draft state
-        std::string* assetDraftId = nullptr;           /**< Pointer to the identifier being assigned to the new asset draft. */
-        std::string* assetDraftGuid = nullptr;         /**< Pointer to the GUID string for the new asset draft. */
-        std::string* assetDraftDisplayName = nullptr;  /**< Pointer to the display name for the new asset draft. */
-        std::string* assetDraftMesh = nullptr;         /**< Pointer to the mesh path for the new asset draft. */
-        std::string* assetDraftRenderScale = nullptr;  /**< Pointer to the render-scale string for the new asset draft. */
-        std::string* assetDraftAlbedoMap = nullptr;    /**< Pointer to the albedo map path for the new asset draft. */
-        std::string* assetImportError = nullptr;       /**< Pointer to the last asset-import error message. */
-
-        // Modal state
-        bool* openNewAssetHeader = nullptr; /**< Pointer to the flag that expands the new-asset header section. */
-
         // Drop zones
-        ScreenRectDropZone* albedoDraftDrop = nullptr; /**< Drop zone for the albedo map on the new-asset draft form. */
         ScreenRectDropZone* albedoSelDrop = nullptr;   /**< Drop zone for the albedo map on the selected-asset inspector. */
 
         // Search state
@@ -124,13 +112,11 @@ namespace Horo::Editor {
                                      const std::vector<std::string>& assetIds) const;
 
         /** @brief Draws the main asset grid with one tile per asset.
-         *  @param state            Current panel state.
-         *  @param assetIds         Ordered list of asset identifiers to display.
-         *  @param openNewAssetModal Output flag set to true when the user clicks the add-asset tile.
-         *  @param callbacks        Callable table for asset operations. */
+         *  @param state     Current panel state.
+         *  @param assetIds  Ordered list of asset identifiers to display.
+         *  @param callbacks Callable table for asset operations. */
         void DrawAssetGrid(const EditorAssetsPanelState& state,
                            const std::vector<std::string>& assetIds,
-                           bool& openNewAssetModal,
                            const EditorAssetsPanelCallbacks& callbacks) const;
 
         /** @brief Draws a single asset tile inside the grid.
@@ -145,31 +131,10 @@ namespace Horo::Editor {
                           const AssetTileDimensions& dims,
                           const EditorAssetsPanelCallbacks& callbacks) const;
 
-        /** @brief Draws the create-asset modal, opening it when openModal is true.
-         *  @param state     Current panel state.
-         *  @param openModal True signals that the modal should be opened this frame.
-         *  @param callbacks Callable table for asset operations. */
-        void DrawCreateAssetModal(const EditorAssetsPanelState& state,
-                                  bool openModal,
-                                  const EditorAssetsPanelCallbacks& callbacks) const;
-
-        /** @brief Draws the form fields inside the create-asset modal.
-         *  @param state     Current panel state.
-         *  @param callbacks Callable table for asset operations. */
-        void DrawCreateAssetModalContent(const EditorAssetsPanelState& state,
-                                        const EditorAssetsPanelCallbacks& callbacks) const;
-
-        /** @brief Finalises the "Create Asset" confirm action: writes the AssetDef,
-         *  persists metadata, resets drafts, and closes the modal.
-         *  @param state     Current panel state.
-         *  @param callbacks Callable table for asset operations. */
-        void HandleAssetCreateConfirm(const EditorAssetsPanelState& state,
-                                      const EditorAssetsPanelCallbacks& callbacks) const;
-
         /** @brief Draws the special "Add asset" placeholder tile at the end of the grid.
-         *  @param openNewAssetModal Output flag set to true when the tile is clicked.
-         *  @param dims              Tile pixel dimensions. */
-        void DrawAddAssetTile(bool& openNewAssetModal,
+         *  @param callbacks Callable table for asset operations.
+         *  @param dims      Tile pixel dimensions. */
+        void DrawAddAssetTile(const EditorAssetsPanelCallbacks& callbacks,
                               const AssetTileDimensions& dims) const;
     };
 }

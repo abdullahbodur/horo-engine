@@ -23,7 +23,9 @@
 #include "ui/IconsFontAwesome6.h"
 #include "core/LogBuffer.h"
 #include "core/ProjectPath.h"
+#include "core/StringUtils.h"
 #include "renderer/Camera.h"
+#include "ui/UiComponents.h"
 #include "ui/editor/EditorLayer.h"
 #include "ui/editor/EditorUiLogic.h"
 #include "ui/editor/SceneDocument.h"
@@ -32,7 +34,7 @@ namespace Horo::Editor {
 namespace Internal {
 // Must match DrawToolbar / DrawStatusBar so panels do not overlap.
 constexpr float kEditorToolbarH = 36.0f;           /**< Height of the editor toolbar in pixels. */
-constexpr float kEditorStatusH = 24.0f;            /**< Height of the editor status bar in pixels. */
+constexpr float kEditorStatusH = Ui::kEditorStatusBarHeight; /**< Height of the editor status bar in pixels. */
 constexpr char kEditorHierarchyWindow[] = "Hierarchy";   /**< ImGui window title for the hierarchy panel. */
 constexpr char kEditorPropertiesWindow[] = "Properties"; /**< ImGui window title for the properties panel. */
 constexpr char kEditorAssetsWindow[] = "Assets";         /**< ImGui window title for the assets panel. */
@@ -378,12 +380,10 @@ inline bool IsTextureFilePath(std::string_view path) {
 }
 
 /** @brief Returns a copy of @p s with all ASCII characters converted to lower-case.
- *  @param s Source string (passed by value to avoid an extra copy on use-sites that already have a temporary). */
-inline std::string ToLowerAscii(std::string s) {
-  std::ranges::transform(s, s.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  return s;
+ *  @param s Source string.
+ *  @note Delegates to Horo::ToLowerAscii; kept here for backward compatibility. */
+inline std::string ToLowerAscii(const std::string &s) {
+  return Horo::ToLowerAscii(s);
 }
 
 /** @brief Resolves @p rawPath to an absolute filesystem path.

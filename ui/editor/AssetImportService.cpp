@@ -247,7 +247,8 @@ namespace Horo::Editor {
         const std::string &sourcePath, const std::string &assetId,
         const std::string &assetGuid, const std::string &displayName,
         const std::unordered_map<std::string, std::string, StringHash,
-            std::equal_to<> > &settings) const {
+            std::equal_to<> > &settings,
+        const std::optional<TextureOverrides> &overrides) const {
         AssetImportResult result;
         const AssetImporter *importer = m_registry.FindByExtension(sourcePath);
         if (!importer) {
@@ -259,9 +260,20 @@ namespace Horo::Editor {
             return result;
         }
 
+        // Merge texture overrides into settings if provided
+        std::unordered_map<std::string, std::string, StringHash, std::equal_to<>> mergedSettings = settings;
+        if (overrides.has_value()) {
+            const auto &ov = overrides.value();
+            if (!ov.albedoMap.empty()) mergedSettings["texture.albedoMap"] = ov.albedoMap;
+            if (!ov.normalMap.empty()) mergedSettings["texture.normalMap"] = ov.normalMap;
+            if (!ov.metallicRoughnessMap.empty()) mergedSettings["texture.metallicRoughnessMap"] = ov.metallicRoughnessMap;
+            if (!ov.emissiveMap.empty()) mergedSettings["texture.emissiveMap"] = ov.emissiveMap;
+            if (!ov.occlusionMap.empty()) mergedSettings["texture.occlusionMap"] = ov.occlusionMap;
+        }
+
         const AssetImportRequest request{
             assetId, assetGuid, displayName, sourcePath,
-            settings
+            mergedSettings
         };
         result = RunImporter(*importer, request);
         if (!result.ok)

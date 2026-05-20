@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <ranges>
 #include <string>
@@ -20,6 +21,7 @@
 #include "scene/Registry.h"
 #include "ui/editor/AssetIdentity.h"
 #include "ui/editor/AssetMetadata.h"
+#include "ui/editor/components/EditorViewportToolbar.h"
 #include "ui/editor/EditorImportedAssetPathUtils.h"
 #include "ui/editor/EditorPropertyRules.h"
 #include "ui/editor/EditorSceneGraph.h"
@@ -27,6 +29,23 @@
 #include "ui/editor/SceneSerializer.h"
 
 namespace Horo::Editor {
+namespace {
+/** @brief Rounds @p value to the nearest positive snap step. */
+float SnapValueToStep(float value, float step) {
+  if (step <= 0.0f)
+    return value;
+  return std::round(value / step) * step;
+}
+
+/** @brief Snaps scale without collapsing a non-zero component to zero. */
+float SnapScaleToStep(float value, float step) {
+  if (const float snapped = SnapValueToStep(value, step);
+      std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
+    return snapped;
+  return value > 0.0f ? step : -step;
+}
+} // namespace
+
 /**
  * @brief Resolves conservative world-space bounds for ray-vs-surface placement (panels/props).
  *
@@ -111,6 +130,16 @@ void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
     applyObj.scale.x *= dScale.x;
     applyObj.scale.y *= dScale.y;
     applyObj.scale.z *= dScale.z;
+    if (m_preciseTransformEnabled) {
+      const float scaleStep = ResolveViewportScaleSnapStep(
+          true, m_preciseTranslateStepMeters, 0.1f);
+      if (std::abs(dScale.x - 1.0f) > 1e-6f)
+        applyObj.scale.x = SnapScaleToStep(applyObj.scale.x, scaleStep);
+      if (std::abs(dScale.y - 1.0f) > 1e-6f)
+        applyObj.scale.y = SnapScaleToStep(applyObj.scale.y, scaleStep);
+      if (std::abs(dScale.z - 1.0f) > 1e-6f)
+        applyObj.scale.z = SnapScaleToStep(applyObj.scale.z, scaleStep);
+    }
 
     Quaternion nextRot = oldObjRot;
     if (dRotXYZSq > 1e-8f) {
@@ -119,6 +148,17 @@ void EditorLayer::ApplyGizmoDeltaToSelection(const Vec3 &dPos,
       applyObj.pitch = ToDegrees(euler.x);
       applyObj.yaw = ToDegrees(euler.y);
       applyObj.roll = ToDegrees(euler.z);
+      if (m_preciseTransformEnabled) {
+        const float rotateStepDegrees = ResolveViewportRotateSnapStepDegrees(
+            true, m_preciseTranslateStepMeters, 15.0f);
+        applyObj.pitch = SnapValueToStep(applyObj.pitch, rotateStepDegrees);
+        applyObj.yaw = SnapValueToStep(applyObj.yaw, rotateStepDegrees);
+        applyObj.roll = SnapValueToStep(applyObj.roll, rotateStepDegrees);
+        nextRot = Quaternion::FromEuler(ToRadians(applyObj.pitch),
+                                        ToRadians(applyObj.yaw),
+                                        ToRadians(applyObj.roll))
+                      .Normalized();
+      }
     }
 
     m_document.dirty = true;
@@ -500,21 +540,33 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
   double mx = 0.0;
   double my = 0.0;
   glfwGetCursorPos(m_window, &mx, &my);
-  const Ray ray = ScreenToRay(static_cast<float>(mx), static_cast<float>(my),
-                              screenW, screenH, cam);
+  int windowW = 0;
+  int windowH = 0;
+  glfwGetWindowSize(m_window, &windowW, &windowH);
+  const Vec2 mouse = ScaleScreenPointToRenderTarget(
+      static_cast<float>(mx), static_cast<float>(my), windowW, windowH,
+      screenW, screenH);
+  const Ray ray = ScreenToRay(mouse.x, mouse.y, screenW, screenH, cam);
+  LogInfo("[Editor] Drop ray: origin=({}, {}, {}), dir=({}, {}, {})",
+          ray.origin.x, ray.origin.y, ray.origin.z,
+          ray.direction.x, ray.direction.y, ray.direction.z);
 
   const SceneObject droppedObject =
       MakeObjectFromAsset(m_document, assetId, m_schema);
   const Vec3 droppedHalf = ResolveObjectPlacementHalfExtents(droppedObject);
+  LogInfo("[Editor] Dropped object half-extents: ({}, {}, {})",
+          droppedHalf.x, droppedHalf.y, droppedHalf.z);
 
   RayAabbHit bestHit;
   bool hasSurfaceHit = false;
+  int surfaceCandidates = 0;
   for (const SceneObject &object : m_document.objects) {
     Vec3 center = Vec3::Zero();
     Vec3 half = Vec3::Zero();
     if (!TryGetPlacementSurfaceBounds(m_liveRegistry, object, &center, &half))
       continue;
-
+    ++surfaceCandidates;
+    
     RayAabbHit hit;
     if (!RayVsAABBHit(ray, center, half, &hit))
       continue;
@@ -523,20 +575,36 @@ bool EditorLayer::TryBuildViewportDropPosition(const Camera &cam, int screenW,
       hasSurfaceHit = true;
     }
   }
+  LogInfo("[Editor] Checked {} surface candidates, hasSurfaceHit={}",
+          surfaceCandidates, hasSurfaceHit);
 
   if (hasSurfaceHit) {
     *outPosition = bestHit.point +
                    bestHit.normal *
                        ProjectHalfExtentOntoNormal(droppedHalf, bestHit.normal);
+    LogInfo("[Editor] Surface hit at distance {}, point=({}, {}, {})",
+            bestHit.distance, bestHit.point.x, bestHit.point.y, bestHit.point.z);
     return true;
   }
 
   Vec3 groundHit = Vec3::Zero();
-  if (!TryIntersectGroundPlane(ray, &groundHit))
-    return false;
+  if (!TryIntersectGroundPlane(ray, &groundHit)) {
+    LogInfo("[Editor] Ground plane intersection failed: ray.direction.y={}",
+            ray.direction.y);
+    Vec3 focusHit = Vec3::Zero();
+    if (!TryIntersectCameraFocusPlane(ray, cam, &focusHit))
+      return false;
+
+    *outPosition = focusHit;
+    LogInfo("[Editor] Camera focus plane fallback hit at ({}, {}, {})",
+            focusHit.x, focusHit.y, focusHit.z);
+    return true;
+  }
 
   *outPosition = groundHit + Vec3::Up() * ProjectHalfExtentOntoNormal(
                                               droppedHalf, Vec3::Up());
+  LogInfo("[Editor] Ground plane hit at ({}, {}, {})",
+          groundHit.x, groundHit.y, groundHit.z);
   return true;
 }
 

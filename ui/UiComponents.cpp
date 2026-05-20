@@ -4,14 +4,48 @@
  */
 #include "ui/UiComponents.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <format>
 #include <string>
+#include <string_view>
 
 #include "ui/IconsFontAwesome6.h"
 
 namespace Horo::Ui {
 namespace {
+
+/** @brief Builds the visible label for a header action button. */
+std::string BuildPanelActionLabel(const EditorPanelActionItem &action) {
+  std::string label;
+  if (action.icon && action.icon[0] != '\0')
+    label = action.icon;
+  if (action.text && action.text[0] != '\0') {
+    if (!label.empty())
+      label += "  ";
+    label += action.text;
+  }
+  return label;
+}
+
+/** @brief Returns the themed width for a header action button. */
+float MeasurePanelActionWidth(const EditorPanelActionItem &action,
+                              float minButtonSize) {
+  const std::string label = BuildPanelActionLabel(action);
+  if (label.empty())
+    return minButtonSize;
+  return std::max(minButtonSize, ImGui::CalcTextSize(label.c_str()).x + 14.0f);
+}
+
+/** @brief Returns the visible part of an ImGui label before any hidden ID suffix. */
+std::string_view VisibleImGuiLabel(const char *label) {
+  if (!label || label[0] == '\0')
+    return {};
+  const std::string_view view(label);
+  const size_t hiddenIdPos = view.find("##");
+  return hiddenIdPos == std::string_view::npos ? view : view.substr(0, hiddenIdPos);
+}
 
 /** @brief Push panel window colours and track pushed colour count. */
 void PushPanelColors(const HoroPalette &palette, int *colorCount) {
@@ -243,6 +277,36 @@ void TextMuted(const EditorTheme &theme, const char *text) { ImGui::TextColored(
 /** @copydoc TextMuted(const LauncherTheme &, const char *) */
 void TextMuted(const LauncherTheme &theme, const char *text) { ImGui::TextColored(theme.palette.textMuted, "%s", text); }
 
+/** @copydoc DrawIcon */
+void DrawIcon(ImDrawList *dl, const char *icon, ImVec2 pos,
+              ImU32 color, float size) {
+    ImFont *font = ImGui::GetFont();
+    const float baseFontSize = ImGui::GetFontSize();
+    const float targetSize = (size > 0.0f) ? size : baseFontSize;
+    const ImVec2 iconSz = font->CalcTextSizeA(targetSize, FLT_MAX, 0.0f, icon);
+    dl->AddText(font, targetSize,
+                ImVec2(pos.x - iconSz.x * 0.5f, pos.y - iconSz.y * 0.5f),
+                color, icon);
+}
+
+/** @copydoc GetIconSize(const char *, float) */
+ImVec2 GetIconSize(const char *icon, float size) {
+    ImFont *font = ImGui::GetFont();
+    const float baseFontSize = ImGui::GetFontSize();
+    const float targetSize = (size > 0.0f) ? size : baseFontSize;
+    return font->CalcTextSizeA(targetSize, FLT_MAX, 0.0f, icon);
+}
+
+/** @copydoc GetIconSize(const EditorTheme &) */
+float GetIconSize(const EditorTheme &theme) {
+    return theme.density.iconSize > 0.0f ? theme.density.iconSize : ImGui::GetFontSize();
+}
+
+/** @copydoc GetIconSize(const LauncherTheme &) */
+float GetIconSize(const LauncherTheme &theme) {
+    return theme.density.iconSize > 0.0f ? theme.density.iconSize : ImGui::GetFontSize();
+}
+
 /** @copydoc SectionHeader(const EditorTheme &, const char *) */
 void SectionHeader(const EditorTheme &theme, const char *title) {
   ImGui::TextColored(theme.palette.text, "%s", title);
@@ -349,6 +413,34 @@ bool InputTextWithHint(const LauncherTheme &theme, const char *id,
   return ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
 }
 
+/** @copydoc InputTextWithLeadingIcon */
+bool InputTextWithLeadingIcon(const EditorTheme &theme, const char *id,
+                              const char *icon, const char *hint,
+                              char *buffer, size_t bufferSize,
+                              ImGuiInputTextFlags flags) {
+  ScopedInputStyle style(theme);
+  const float iconSize = GetIconSize(theme);
+  const float iconGap = std::max(6.0f, theme.density.itemSpacing);
+  const ImVec2 basePadding = theme.density.inputPadding;
+  ImGui::PushStyleVar(
+      ImGuiStyleVar_FramePadding,
+      ImVec2(basePadding.x + iconSize + iconGap, basePadding.y));
+  const bool changed =
+      ImGui::InputTextWithHint(id, hint, buffer, bufferSize, flags);
+  ImGui::PopStyleVar();
+
+  if (icon && icon[0] != '\0') {
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    const ImVec2 iconCenter(min.x + basePadding.x + iconSize * 0.5f,
+                            (min.y + max.y) * 0.5f);
+    DrawIcon(ImGui::GetWindowDrawList(), icon, iconCenter,
+             ImGui::GetColorU32(theme.palette.textMuted), iconSize);
+  }
+
+  return changed;
+}
+
 /** @copydoc Combo(const EditorTheme &, const char *, int *, const char *const[], int) */
 bool Combo(const EditorTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
@@ -361,6 +453,71 @@ bool Combo(const LauncherTheme &theme, const char *label, int *currentItem,
            const char *const items[], int itemCount) {
   ScopedComboStyle style(theme);
   return ImGui::Combo(label, currentItem, items, itemCount);
+}
+
+namespace {
+std::string BuildMultiSelectPreview(int selectedCount, const char *singleSelectedLabel, const char *allLabel) {
+  if (selectedCount == 0) return allLabel ? allLabel : "All";
+  if (selectedCount == 1) return singleSelectedLabel ? singleSelectedLabel : "1 selected";
+  return std::format("{} selected", selectedCount);
+}
+
+bool HandleMultiSelectAllOption(std::span<MultiSelectDropdownItem> items, const char* allLabel, bool allSelected) {
+  bool changed = false;
+  if (ImGui::Selectable(allLabel ? allLabel : "All", allSelected)) {
+    for (const MultiSelectDropdownItem &item : items) {
+      if (item.selected && *item.selected) {
+        *item.selected = false;
+        changed = true;
+      }
+    }
+  }
+  if (allSelected)
+    ImGui::SetItemDefaultFocus();
+  return changed;
+}
+
+bool HandleMultiSelectItems(std::span<MultiSelectDropdownItem> items) {
+  bool changed = false;
+  ImGui::Separator();
+  for (const MultiSelectDropdownItem &item : items) {
+    if (!item.selected)
+      continue;
+    if (const bool selected = *item.selected;
+        ImGui::Selectable(item.label, selected, ImGuiSelectableFlags_DontClosePopups)) {
+      *item.selected = !selected;
+      changed = true;
+    }
+    if (*item.selected)
+      ImGui::SetItemDefaultFocus();
+  }
+  return changed;
+}
+} // namespace
+
+/** @copydoc MultiSelectDropdown */
+bool MultiSelectDropdown(const EditorTheme &theme, const char *id,
+                         std::span<MultiSelectDropdownItem> items,
+                         const char *allLabel) {
+  int selectedCount = 0;
+  const char *singleSelectedLabel = nullptr;
+  for (const MultiSelectDropdownItem &item : items) {
+    if (item.selected && *item.selected) {
+      ++selectedCount;
+      singleSelectedLabel = item.label;
+    }
+  }
+
+  const std::string preview = BuildMultiSelectPreview(selectedCount, singleSelectedLabel, allLabel);
+  bool changed = false;
+  ScopedComboStyle style(theme);
+  
+  if (ImGui::BeginCombo(id, preview.c_str())) {
+    changed |= HandleMultiSelectAllOption(items, allLabel, selectedCount == 0);
+    changed |= HandleMultiSelectItems(items);
+    ImGui::EndCombo();
+  }
+  return changed;
 }
 
 /** @copydoc GetEditorTreeRowMetrics */
@@ -443,9 +600,14 @@ bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
   if (config.width > 0.0f)
     ImGui::SetNextItemWidth(config.width);
   ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
-  bool changed = InputTextWithHint(theme, config.id, config.placeholder,
-                                   config.buffer, config.bufferSize,
-                                   config.flags);
+  bool changed = config.showFilterIcon
+                     ? InputTextWithLeadingIcon(
+                           theme, config.id, ICON_FA_MAGNIFYING_GLASS,
+                           config.placeholder, config.buffer,
+                           config.bufferSize, config.flags)
+                     : InputTextWithHint(theme, config.id, config.placeholder,
+                                         config.buffer, config.bufferSize,
+                                         config.flags);
   ImGui::PopItemFlag();
 
   if (config.showFilterIcon && config.buffer != nullptr) {
@@ -458,8 +620,6 @@ bool RenderEditorTreeSearchSlot(const EditorTheme &theme,
         changed = true;
       }
       ImGui::PopStyleColor();
-    } else {
-      ImGui::TextDisabled("%s", ICON_FA_FILTER);
     }
   }
 
@@ -548,6 +708,8 @@ const char *EditorPanelTabLabel(EditorPanelTab tab) {
     return "Scene";
   case Project:
     return "Project";
+  case Favorites:
+    return "Favorites";
   case Viewport:
     return "Viewport";
   case Assets:
@@ -627,16 +789,13 @@ int RenderPanelActions(const EditorTheme& theme,
     ++renderedCount;
 
     ImGui::PushID(i);
-    std::string btnLabel;
-    if (action.icon)
-      btnLabel = action.icon;
-    if (action.text && action.text[0] != '\0') {
-      btnLabel += "  ";
-      btnLabel += action.text;
-    }
+    std::string btnLabel = BuildPanelActionLabel(action);
+    if (btnLabel.empty())
+      btnLabel = "##action";
+    const float buttonWidth = MeasurePanelActionWidth(action, actionButtonSize);
 
     if (const bool clicked =
-            EditorHeaderIconButton(theme, btnLabel.c_str(), ImVec2(actionButtonSize, 0.0f));
+            EditorHeaderIconButton(theme, btnLabel.c_str(), ImVec2(buttonWidth, 0.0f));
         clicked && !action.dropdown.empty()) {
       ImGui::OpenPopup(std::format("##action_popup_{}", i).c_str());
     } else if (clicked) {
@@ -673,14 +832,15 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
   const float actionButtonSize = ImGui::GetTextLineHeight() + 4.0f;
 
   int enabledActionCount = 0;
-  for (const auto &a : actions)
-    if (a.enabled) ++enabledActionCount;
-
-  const float actionsWidth = enabledActionCount == 0
-                                 ? 0.0f
-                                 : actionButtonSize * static_cast<float>(enabledActionCount) +
-                                       kActionSpacing *
-                                           static_cast<float>(enabledActionCount - 1);
+  float actionsWidth = 0.0f;
+  for (const auto &a : actions) {
+    if (!a.enabled)
+      continue;
+    if (enabledActionCount > 0)
+      actionsWidth += kActionSpacing;
+    actionsWidth += MeasurePanelActionWidth(a, actionButtonSize);
+    ++enabledActionCount;
+  }
   const float rightEdge = ImGui::GetWindowContentRegionMax().x;
   const float maxTabRight = enabledActionCount == 0
                                 ? rightEdge
@@ -718,12 +878,75 @@ EditorPanelTopBarResult RenderEditorPanelTopBar(
   return result;
 }
 
+/** @copydoc RenderEditorSectionBar */
+EditorSectionBarResult RenderEditorSectionBar(
+    const EditorTheme &theme, const char *id, const char *title,
+    std::span<const EditorPanelActionItem> actions) {
+  constexpr float kHorizontalPadding = 14.0f;
+  constexpr float kVerticalPadding = 8.0f;
+  constexpr float kActionSpacing = 6.0f;
+
+  EditorSectionBarResult result;
+  const ImVec2 cursor = ImGui::GetCursorScreenPos();
+  const float contentMinX =
+      ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x;
+  const float contentMaxX =
+      ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+  const float width = std::max(0.0f, contentMaxX - contentMinX);
+  const float height = ImGui::GetTextLineHeight() + kVerticalPadding * 2.0f;
+
+  ImDrawList *drawList = ImGui::GetWindowDrawList();
+  drawList->AddRectFilled(ImVec2(contentMinX, cursor.y),
+                          ImVec2(contentMaxX, cursor.y + height),
+                          ImGui::GetColorU32(theme.palette.panel));
+  drawList->AddRectFilled(ImVec2(contentMinX, cursor.y + height - 1.0f),
+                          ImVec2(contentMaxX, cursor.y + height),
+                          ImGui::GetColorU32(theme.palette.border));
+
+  ImGui::PushID(id);
+  ImGui::SetCursorScreenPos(
+      ImVec2(contentMinX + kHorizontalPadding, cursor.y + kVerticalPadding));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.text);
+  ImGui::TextUnformatted(title ? title : "");
+  ImGui::PopStyleColor();
+
+  int enabledActionCount = 0;
+  float actionsWidth = 0.0f;
+  const float actionButtonSize = ImGui::GetTextLineHeight() + 4.0f;
+  for (const auto &action : actions) {
+    if (!action.enabled)
+      continue;
+    if (enabledActionCount > 0)
+      actionsWidth += kActionSpacing;
+    actionsWidth += MeasurePanelActionWidth(action, actionButtonSize);
+    ++enabledActionCount;
+  }
+
+  if (enabledActionCount > 0) {
+    const float actionY = cursor.y + (height - ImGui::GetFrameHeight()) * 0.5f;
+    ImGui::SetCursorScreenPos(
+        ImVec2(contentMaxX - actionsWidth - kHorizontalPadding, actionY));
+    result.clickedActionIndex =
+        RenderPanelActions(theme, actions, actionButtonSize, kActionSpacing);
+  }
+
+  ImGui::PopID();
+  ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y + height));
+  ImGui::Dummy(ImVec2(width, 0.0f));
+  return result;
+}
+
 /** @copydoc BeginEditorModal */
 bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
     if (openThisFrame && cfg.id)
         ImGui::OpenPopup(cfg.id);
-    if (cfg.width > 0.0f)
+    if (cfg.width > 0.0f) {
         ImGui::SetNextWindowSize(ImVec2(cfg.width, 0.0f), ImGuiCond_Appearing);
+        // Center horizontally; vertical position will adjust with auto-resize
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(ImVec2(center.x - cfg.width * 0.5f, center.y * 0.35f),
+                                ImGuiCond_Always);
+    }
     const ImGuiWindowFlags flags = cfg.autoResize
         ? ImGuiWindowFlags_AlwaysAutoResize
         : ImGuiWindowFlags_None;
@@ -733,6 +956,35 @@ bool BeginEditorModal(const EditorModalConfig& cfg, bool openThisFrame) {
 /** @copydoc EndEditorModal */
 void EndEditorModal() {
     ImGui::EndPopup();
+}
+
+/** @copydoc RenderModalTitleBar */
+bool RenderModalTitleBar(const EditorTheme &theme, const char *title) {
+    constexpr float kCloseButtonSize = 22.0f;
+
+    // Title on the left
+    ImGui::TextUnformatted(title);
+
+    // Close button on the right
+    const float winRight = ImGui::GetWindowContentRegionMax().x;
+    const float btnX = winRight - kCloseButtonSize;
+    ImGui::SameLine(btnX);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.palette.destructive);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+        ImVec4(theme.palette.destructive.x - 0.1f,
+               theme.palette.destructive.y,
+               theme.palette.destructive.z, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.palette.textMuted);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+
+    const bool clicked = ImGui::Button(ICON_FA_XMARK, ImVec2(kCloseButtonSize, kCloseButtonSize));
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+
+    return clicked;
 }
 
 /** @copydoc RenderEditorModalFooter */
@@ -819,7 +1071,9 @@ bool BeginEditorPickerModal(const EditorPickerConfig& cfg,
         ImGui::TextDisabled("%s", cfg.prompt);
     ImGui::SetNextItemWidth(cfg.width - 32.0f);
     const char* hint = cfg.fieldHint ? cfg.fieldHint : "Search...";
-    ImGui::InputTextWithHint("##picker_query", hint, queryBuf, queryBufSize);
+    InputTextWithLeadingIcon(GetEditorTheme(), "##picker_query",
+                             ICON_FA_MAGNIFYING_GLASS, hint, queryBuf,
+                             queryBufSize);
     ImGui::Separator();
     ImGui::BeginChild("##picker_scroll", ImVec2(0.0f, 240.0f), false);
     return true;
@@ -862,12 +1116,53 @@ bool RenderEditorLabeledInput(const char* label, const char* id,
 /** @copydoc RenderEditorCheckbox */
 bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
                           bool& value, const char* tooltip) {
-    ImGui::PushStyleColor(ImGuiCol_CheckMark, theme.palette.accent);
-    const bool changed = ImGui::Checkbox(label, &value);
-    ImGui::PopStyleColor();
-    if (tooltip && ImGui::IsItemHovered())
+    const char* safeLabel = label ? label : "##checkbox";
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float frameHeight = ImGui::GetFrameHeight();
+    const float boxSize = std::round(frameHeight * 0.74f);
+    const float yOffset = std::max(0.0f, (frameHeight - boxSize) * 0.5f);
+
+    ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y + yOffset));
+    ImGui::InvisibleButton(safeLabel, ImVec2(boxSize, boxSize));
+    const bool hovered = ImGui::IsItemHovered();
+    const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+    if (clicked)
+        value = !value;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    ImVec4 bgColor = theme.palette.input;
+    if (value)
+        bgColor = theme.palette.inputActive;
+    else if (hovered)
+        bgColor = theme.palette.inputHover;
+    const ImU32 bg = ImGui::GetColorU32(bgColor);
+    const ImU32 border = ImGui::GetColorU32(theme.palette.border);
+    drawList->AddRectFilled(min, max, bg, theme.rounding.input);
+    drawList->AddRect(min, max, border, theme.rounding.input, 0, 1.0f);
+
+    if (value) {
+        const ImU32 check = ImGui::GetColorU32(theme.palette.accent);
+        const float thickness = std::max(2.0f, boxSize * 0.12f);
+        const ImVec2 p0(min.x + boxSize * 0.24f, min.y + boxSize * 0.54f);
+        const ImVec2 p1(min.x + boxSize * 0.43f, min.y + boxSize * 0.72f);
+        const ImVec2 p2(min.x + boxSize * 0.78f, min.y + boxSize * 0.28f);
+        drawList->AddLine(p0, p1, check, thickness);
+        drawList->AddLine(p1, p2, check, thickness);
+    }
+
+    if (const auto visibleLabel = VisibleImGuiLabel(label); !visibleLabel.empty()) {
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(visibleLabel.data(),
+                               visibleLabel.data() + visibleLabel.size());
+    }
+
+    if (tooltip && hovered)
         ImGui::SetTooltip("%s", tooltip);
-    return changed;
+    return clicked;
 }
 
 /** @copydoc RenderEditorToggle */
@@ -995,6 +1290,108 @@ void RenderEditorStatusText(const EditorTheme& theme,
         case Success: color = ImVec4(0.35f, 0.85f, 0.50f, 1.0f);  break;
     }
     ImGui::TextColored(color, "%s", text);
+}
+
+namespace {
+/** @brief Returns the display colour for a status level. */
+ImVec4 StatusLevelColor(const EditorTheme& theme, EditorStatusLevel level) {
+    using enum EditorStatusLevel;
+    switch (level) {
+        case Info:    return theme.palette.textMuted;
+        case Warning: return ImVec4(1.0f, 0.80f, 0.30f, 1.0f);
+        case Error:   return theme.palette.destructive;
+        case Success: return ImVec4(0.35f, 0.85f, 0.50f, 1.0f);
+    }
+    return theme.palette.textMuted;
+}
+
+/** @brief Builds visible text for one status-bar section. */
+std::string BuildStatusBarText(const EditorStatusBarItem& item) {
+    std::string out;
+    if (!item.icon.empty()) {
+        out += item.icon;
+        out += ' ';
+    }
+    out += item.label;
+    if (!item.value.empty()) {
+        if (!out.empty())
+            out += ": ";
+        out += item.value;
+    }
+    return out;
+}
+
+/** @brief Returns the rendered width for one status item. */
+float MeasureStatusBarItem(const EditorStatusBarItem& item) {
+    const std::string text = BuildStatusBarText(item);
+    return ImGui::CalcTextSize(text.c_str()).x + 18.0f;
+}
+
+/** @brief Renders one status item at the current cursor position. */
+void RenderStatusBarItem(const EditorTheme& theme,
+                         const EditorStatusBarItem& item,
+                         float width,
+                         float height) {
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 separator =
+        ImGui::ColorConvertFloat4ToU32(ImVec4(theme.palette.border.x,
+                                              theme.palette.border.y,
+                                              theme.palette.border.z, 0.65f));
+    dl->AddLine(ImVec2(pos.x + width, pos.y + 5.0f),
+                ImVec2(pos.x + width, pos.y + height - 5.0f), separator, 1.0f);
+
+    const std::string text = BuildStatusBarText(item);
+    ImGui::SetCursorScreenPos(
+        ImVec2(pos.x + 8.0f,
+               pos.y + std::max(0.0f, (height - ImGui::GetTextLineHeight()) * 0.5f)));
+    ImGui::PushStyleColor(ImGuiCol_Text, StatusLevelColor(theme, item.level));
+    ImGui::TextUnformatted(text.c_str());
+    ImGui::PopStyleColor();
+
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::Dummy(ImVec2(width, height));
+}
+} // namespace
+
+/** @copydoc RenderEditorStatusBar */
+void RenderEditorStatusBar(const EditorTheme& theme,
+                           std::span<const EditorStatusBarItem> items,
+                           float width,
+                           float height) {
+    const ImVec2 start = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(start, ImVec2(start.x + width, start.y + height),
+                      ImGui::ColorConvertFloat4ToU32(theme.palette.panel), 0.0f);
+    dl->AddLine(start, ImVec2(start.x + width, start.y),
+                ImGui::ColorConvertFloat4ToU32(theme.palette.border), 1.0f);
+
+    float leftX = start.x;
+    for (const EditorStatusBarItem& item : items) {
+        if (item.side != EditorStatusBarSide::Left)
+            continue;
+        const float itemW = MeasureStatusBarItem(item);
+        if (leftX + itemW > start.x + width)
+            break;
+        ImGui::SetCursorScreenPos(ImVec2(leftX, start.y));
+        RenderStatusBarItem(theme, item, itemW, height);
+        leftX += itemW;
+    }
+
+    float rightX = start.x + width;
+    for (auto it = items.rbegin(); it != items.rend(); ++it) {
+        if (it->side != EditorStatusBarSide::Right)
+            continue;
+        const float itemW = MeasureStatusBarItem(*it);
+        if (rightX - itemW < leftX)
+            break;
+        rightX -= itemW;
+        ImGui::SetCursorScreenPos(ImVec2(rightX, start.y));
+        RenderStatusBarItem(theme, *it, itemW, height);
+    }
+
+    ImGui::SetCursorScreenPos(start);
+    ImGui::Dummy(ImVec2(width, height));
 }
 
 // ─── Group D: Settings modal primitives ──────────────────────────────────────

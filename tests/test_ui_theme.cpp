@@ -1,13 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <array>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 
 #include "ui/HoroTheme.h"
+#include "ui/IconsFontAwesome6.h"
 #include "ui/UiComponents.h"
 #include "ui/UiFonts.h"
+#include "tests/TestTempPaths.h"
 
 using Horo::Ui::EditorTheme;
 using Horo::Ui::FontFamilyConfig;
@@ -42,7 +47,10 @@ TEST_CASE("shared Horo theme exposes launcher and editor density variants") {
   CheckVec4Near(launcher.palette.accent, ImVec4(0.23f, 0.54f, 0.93f, 1.0f));
   CheckVec4Near(launcher.palette.accentHover, ImVec4(0.28f, 0.60f, 0.99f, 1.0f));
   CheckVec4Near(launcher.palette.accentActive, ImVec4(0.18f, 0.46f, 0.82f, 1.0f));
-  CHECK(editor.palette.panel.w == 0.88f);
+  CHECK(editor.palette.panel.w == 1.0f);
+  CHECK(editor.palette.panelSoft.w == 1.0f);
+  CHECK(editor.palette.input.w == 1.0f);
+  CHECK(editor.palette.modal.w == 1.0f);
   CHECK(editor.density.panelPadding.x < launcher.density.panelPadding.x);
   CHECK(editor.rounding.panel < launcher.rounding.window);
   CHECK(launcher.rounding.window == 16.0f);
@@ -308,6 +316,24 @@ TEST_CASE("shared widget wrappers restore ImGui style stacks") {
   Horo::Ui::InputTextWithHint(Horo::Ui::GetEditorTheme(),
                               "##wrapper_test_hint", "Search", buffer,
                               sizeof(buffer));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  Horo::Ui::InputTextWithLeadingIcon(Horo::Ui::GetEditorTheme(),
+                                     "##wrapper_test_icon_hint",
+                                     ICON_FA_MAGNIFYING_GLASS, "Search",
+                                     buffer, sizeof(buffer));
+  CHECK(context->ColorStack.Size == colorStackBefore);
+  CHECK(context->StyleVarStack.Size == styleStackBefore);
+
+  const Horo::Ui::EditorPanelActionItem sectionActions[] = {
+      Horo::Ui::EditorPanelActionItem{ICON_FA_GEAR},
+      Horo::Ui::EditorPanelActionItem{nullptr, "Text"},
+      Horo::Ui::EditorPanelActionItem{ICON_FA_PLUS, "Add"},
+  };
+  Horo::Ui::RenderEditorSectionBar(Horo::Ui::GetEditorTheme(),
+                                   "##wrapper_test_section_bar", "Viewport",
+                                   sectionActions);
   CHECK(context->ColorStack.Size == colorStackBefore);
   CHECK(context->StyleVarStack.Size == styleStackBefore);
 
@@ -894,6 +920,36 @@ TEST_CASE("RenderEditorStatusText renders each level without crash") {
   ImGui::DestroyContext(context);
 }
 
+TEST_CASE("RenderEditorStatusBar renders modular sections without crash") {
+  ImGuiContext *context = ImGui::CreateContext();
+  REQUIRE(context != nullptr);
+  ImGuiIO &io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(640.0f, 480.0f);
+  io.Fonts->Build();
+  ImGui::NewFrame();
+  ImGui::Begin("status-bar-test");
+
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  const std::array<Horo::Ui::EditorStatusBarItem, 3> items = {
+      Horo::Ui::EditorStatusBarItem{.id = "sel",
+                                    .label = "Sel",
+                                    .value = "1"},
+      Horo::Ui::EditorStatusBarItem{.id = "dirty",
+                                    .label = "Dirty",
+                                    .value = "yes",
+                                    .level = Horo::Ui::EditorStatusLevel::Warning},
+      Horo::Ui::EditorStatusBarItem{.id = "renderer",
+                                    .label = "Renderer",
+                                    .value = "OpenGL",
+                                    .side = Horo::Ui::EditorStatusBarSide::Right},
+  };
+  REQUIRE_NOTHROW(Horo::Ui::RenderEditorStatusBar(theme, items, 640.0f));
+
+  ImGui::End();
+  ImGui::EndFrame();
+  ImGui::DestroyContext(context);
+}
+
 
 // ─── Editor theme presets ─────────────────────────────────────────────────────
 
@@ -954,6 +1010,44 @@ TEST_CASE("EditorThemePresets() enumerates all three presets in display order") 
   CHECK(presets[2] == EditorThemePreset::HighContrast);
 }
 
+TEST_CASE("LoadEditorThemeConfig registers custom theme presets") {
+  const std::filesystem::path root =
+      Horo::Tests::SecureTempBase() / "horo_theme_config";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  const std::filesystem::path configPath = root / "config.json";
+  {
+    std::ofstream out(configPath);
+    out << R"({
+      "editorThemes": [
+        {
+          "id": "ember",
+          "name": "Ember",
+          "description": "Warm custom theme",
+          "palette": {
+            "panel": "#17110fff",
+            "accent": [0.9, 0.28, 0.12, 1.0],
+            "textMuted": "#d9b9aaff"
+          }
+        }
+      ]
+    })";
+  }
+
+  const auto result = Horo::Ui::LoadEditorThemeConfig(configPath);
+  REQUIRE(result.ok);
+  CHECK(result.loadedFromDisk);
+  CHECK(result.customThemeCount == 1);
+  CHECK(Horo::Ui::IsEditorThemePresetIdKnown("ember"));
+
+  const auto previousId = std::string(Horo::Ui::GetEditorThemePresetId());
+  Horo::Ui::SetEditorThemePresetId("ember");
+  const auto &theme = Horo::Ui::GetEditorTheme();
+  CheckVec4Near(theme.palette.accent, ImVec4(0.9f, 0.28f, 0.12f, 1.0f));
+  Horo::Ui::SetEditorThemePresetId(previousId);
+}
+
 TEST_CASE("SetEditorThemePreset/GetEditorThemePreset round-trip") {
   using Horo::Ui::EditorThemePreset;
   // Snapshot and restore to avoid leaking state to later tests.
@@ -975,7 +1069,10 @@ TEST_CASE("DarkBlue preset preserves the canonical editor palette") {
   CheckVec4Near(theme.palette.accent, ImVec4(0.23f, 0.54f, 0.93f, 1.0f));
   CheckVec4Near(theme.palette.textMuted, ImVec4(0.68f, 0.74f, 0.84f, 1.0f));
   CheckVec4Near(theme.palette.border, ImVec4(0.16f, 0.27f, 0.42f, 0.68f));
-  CHECK(theme.palette.panel.w == 0.88f);
+  CHECK(theme.palette.panel.w == 1.0f);
+  CHECK(theme.palette.panelSoft.w == 1.0f);
+  CHECK(theme.palette.input.w == 1.0f);
+  CHECK(theme.palette.modal.w == 1.0f);
   Horo::Ui::SetEditorThemePreset(previous);
 }
 

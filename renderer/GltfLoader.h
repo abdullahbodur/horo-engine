@@ -18,6 +18,10 @@ namespace Horo {
         std::shared_ptr<Skeleton> skeleton;
         std::vector<std::shared_ptr<AnimationClip> > clips;
         std::shared_ptr<Texture> albedoTexture; // may be null
+        std::shared_ptr<Texture> normalTexture; // may be null
+        std::shared_ptr<Texture> metallicRoughnessTexture; // may be null
+        std::shared_ptr<Texture> emissiveTexture; // may be null
+        std::shared_ptr<Texture> occlusionTexture; // may be null
     };
 
     namespace GltfLoader {

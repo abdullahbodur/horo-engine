@@ -49,6 +49,8 @@
 // functions (FindEnumOptionIndex, BuildImGuiComboItems,
 // SchemaAppliesToObjectType) that live inside anonymous namespaces and are
 // not reachable via EditorLayer's public surface.
+#include "core/ProjectPath.h"
+#include "core/StringUtils.h"
 #include "ui/editor/EditorLayerInternal.h"
 
 using namespace Horo;
@@ -952,6 +954,10 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
   asset.mesh = "prop.obj";
   asset.renderScale = "1.0000,1.0000,1.0000";
   asset.albedoMap = "assets/models/custom_Albedo.png";
+  asset.normalMap = "assets/models/custom_Normal.png";
+  asset.metallicRoughnessMap = "assets/models/custom_MetallicRoughness.png";
+  asset.emissiveMap = "assets/models/custom_Emissive.png";
+  asset.occlusionMap = "assets/models/custom_Occlusion.png";
   doc.assets["tex_asset"] = asset;
 
   SceneObject obj;
@@ -966,6 +972,14 @@ TEST_CASE("SceneSerializer: asset albedoMap round-trip", "[editor][serializer]")
 
   REQUIRE(loaded.assets.at("tex_asset").albedoMap ==
           "assets/models/custom_Albedo.png");
+  REQUIRE(loaded.assets.at("tex_asset").normalMap ==
+          "assets/models/custom_Normal.png");
+  REQUIRE(loaded.assets.at("tex_asset").metallicRoughnessMap ==
+          "assets/models/custom_MetallicRoughness.png");
+  REQUIRE(loaded.assets.at("tex_asset").emissiveMap ==
+          "assets/models/custom_Emissive.png");
+  REQUIRE(loaded.assets.at("tex_asset").occlusionMap ==
+          "assets/models/custom_Occlusion.png");
 }
 
 TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][serializer]") {
@@ -982,6 +996,36 @@ TEST_CASE("SceneSerializer: empty albedoMap not written to JSON", "[editor][seri
   std::string saved((std::istreambuf_iterator<char>(in)),
                     std::istreambuf_iterator<char>());
   REQUIRE(saved.find("albedoMap") == std::string::npos);
+  REQUIRE(saved.find("normalMap") == std::string::npos);
+  REQUIRE(saved.find("metallicRoughnessMap") == std::string::npos);
+  REQUIRE(saved.find("emissiveMap") == std::string::npos);
+  REQUIRE(saved.find("occlusionMap") == std::string::npos);
+}
+
+TEST_CASE("SceneSerializer: legacy asset entries remain compatible with albedo-only JSON", "[editor][serializer]") {
+  const std::string path = TmpPath("legacy_albedo_only_asset_scene.json");
+  const std::string json = R"({
+      "version": 1,
+      "sceneId": "legacy",
+      "assets": {
+        "crate": {
+          "mesh": "assets/models/crate/crate.obj",
+          "renderScale": "1.0000,1.0000,1.0000",
+          "albedoMap": "assets/models/crate/crate.png"
+        }
+      },
+      "objects": []
+    })";
+  WriteFile(path, json);
+
+  SceneDocument loaded = SceneSerializer::LoadFromFile(path);
+  REQUIRE(loaded.assets.count("crate") == 1);
+  REQUIRE(loaded.assets.at("crate").albedoMap ==
+          "assets/models/crate/crate.png");
+  REQUIRE(loaded.assets.at("crate").normalMap.empty());
+  REQUIRE(loaded.assets.at("crate").metallicRoughnessMap.empty());
+  REQUIRE(loaded.assets.at("crate").emissiveMap.empty());
+  REQUIRE(loaded.assets.at("crate").occlusionMap.empty());
 }
 
 TEST_CASE("SceneSerializer: asset-backed objects omit inline props block", "[editor][serializer]") {
@@ -1657,12 +1701,22 @@ TEST_CASE("Editor UI logic: hotkey popup triggers only on valid rising edge", "[
   REQUIRE_FALSE(ShouldToggleHelpPopup(true, false, false, true));
 }
 
-TEST_CASE("Editor UI logic: quick open is blocked in fly mode and text input", "[editor]") {
+TEST_CASE("Editor UI logic: quick open is blocked in viewport nav and text input", "[editor]") {
   REQUIRE(ShouldOpenQuickOpen(true, false, false, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, true, false, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, true, false));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, false, false, false, true));
   REQUIRE_FALSE(ShouldOpenQuickOpen(true, true, false, false, false));
+}
+
+TEST_CASE("Editor UI logic: viewport nav starts only from viewport rect", "[editor]") {
+  const EditorViewportRect viewport{100.0f, 50.0f, 400.0f, 250.0f};
+  REQUIRE(ShouldStartViewportNav(true, false, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(false, false, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, true, 150.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 90.0f, 100.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 150.0f, 260.0f, viewport));
+  REQUIRE_FALSE(ShouldStartViewportNav(true, false, 0.0f, 0.0f, {}));
 }
 
 TEST_CASE("Editor helpers: command palette table includes scene actions", "[editor]") {
@@ -1727,13 +1781,13 @@ TEST_CASE("Editor UI logic: status text is stable and clamps selection", "[edito
       BuildEditorStatusText(EditorStatusSnapshot{-2, true, false, true});
   REQUIRE(status.selectionCount == 0);
   REQUIRE(std::string(status.dirtyText) == "yes");
-  REQUIRE(std::string(status.flyText) == "off");
+  REQUIRE(std::string(status.navText) == "idle");
   REQUIRE(std::string(status.reloadText) == "pending");
 
   status = BuildEditorStatusText(EditorStatusSnapshot{3, false, true, false});
   REQUIRE(status.selectionCount == 3);
   REQUIRE(std::string(status.dirtyText) == "no");
-  REQUIRE(std::string(status.flyText) == "on");
+  REQUIRE(std::string(status.navText) == "active");
   REQUIRE(std::string(status.reloadText) == "idle");
 }
 
@@ -1993,6 +2047,22 @@ TEST_CASE("ScreenToRay: center of screen produces ray through view center", "[ed
   REQUIRE(ray.direction.z < 0.0f); // pointing toward -Z (into the scene)
 }
 
+TEST_CASE("ScaleScreenPointToRenderTarget: scales window coordinates to render pixels", "[editor][raycaster]") {
+  const Vec2 scaled =
+      ScaleScreenPointToRenderTarget(360.0f, 230.0f, 1440, 920, 2880, 1840);
+
+  CHECK(scaled.x == Approx(720.0f));
+  CHECK(scaled.y == Approx(460.0f));
+}
+
+TEST_CASE("ScaleScreenPointToRenderTarget: invalid dimensions leave point unchanged", "[editor][raycaster]") {
+  const Vec2 scaled =
+      ScaleScreenPointToRenderTarget(360.0f, 230.0f, 0, 920, 2880, 1840);
+
+  CHECK(scaled.x == Approx(360.0f));
+  CHECK(scaled.y == Approx(230.0f));
+}
+
 TEST_CASE("ScreenToRay: direction is normalized", "[editor][raycaster]") {
   Camera cam;
   cam.position = {0.0f, 0.0f, 5.0f};
@@ -2168,6 +2238,24 @@ TEST_CASE("Drop ray parallel to ground plane is rejected", "[editor][dragdrop]")
 
   Vec3 hit = Vec3::Zero();
   REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
+}
+
+TEST_CASE("Drop ray can fall back to camera focus plane", "[editor][dragdrop]") {
+  Camera cam;
+  cam.position = {0.0f, 1.0f, 5.0f};
+  cam.target = {0.0f, 1.0f, 0.0f};
+  cam.up = Vec3::Up();
+
+  Ray r;
+  r.origin = cam.position;
+  r.direction = cam.GetForward();
+
+  Vec3 hit = Vec3::Zero();
+  REQUIRE_FALSE(TryIntersectGroundPlane(r, &hit));
+  REQUIRE(TryIntersectCameraFocusPlane(r, cam, &hit));
+  REQUIRE(hit.x == Approx(cam.target.x).margin(1e-4f));
+  REQUIRE(hit.y == Approx(cam.target.y).margin(1e-4f));
+  REQUIRE(hit.z == Approx(cam.target.z).margin(1e-4f));
 }
 
 TEST_CASE("RayVsAABBHit reports top-face hit point and normal", "[editor][dragdrop]") {
@@ -2606,7 +2694,14 @@ TEST_CASE("SceneProjectBridge: object parentId propagates to node parentId", "[e
 
 TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly", "[editor][bridge]") {
   SceneDocument doc;
-  doc.assets["crate"] = AssetDef{"models/crate.obj", "2.0,3.0,4.0", ""};
+  AssetDef crate;
+  crate.mesh = "models/crate.obj";
+  crate.renderScale = "2.0,3.0,4.0";
+  crate.normalMap = "models/crate_n.png";
+  crate.metallicRoughnessMap = "models/crate_mr.png";
+  crate.emissiveMap = "models/crate_e.png";
+  crate.occlusionMap = "models/crate_ao.png";
+  doc.assets["crate"] = crate;
 
   const SceneProjectModel model = BuildSceneProjectModel(doc);
   REQUIRE(model.scene.assets.size() == 1);
@@ -2614,6 +2709,10 @@ TEST_CASE("SceneProjectBridge: assets with renderScale are parsed correctly", "[
   REQUIRE(model.scene.assets[0].renderScale.x == Approx(2.0f));
   REQUIRE(model.scene.assets[0].renderScale.y == Approx(3.0f));
   REQUIRE(model.scene.assets[0].renderScale.z == Approx(4.0f));
+  REQUIRE(model.scene.assets[0].normalMap == "models/crate_n.png");
+  REQUIRE(model.scene.assets[0].metallicRoughnessMap == "models/crate_mr.png");
+  REQUIRE(model.scene.assets[0].emissiveMap == "models/crate_e.png");
+  REQUIRE(model.scene.assets[0].occlusionMap == "models/crate_ao.png");
 }
 
 TEST_CASE("SceneProjectBridge: BuildSceneDocument round-trips Camera node", "[editor][bridge]") {
@@ -9037,7 +9136,7 @@ TEST_CASE("EditorLayerInternal: placement and path helpers cover deterministic b
   CHECK(IsTextureFilePath("asset.hdr"));
   CHECK_FALSE(IsTextureFilePath("asset.txt"));
 
-  CHECK(ToLowerAscii("AbC123!") == "abc123!");
+  CHECK(Horo::ToLowerAscii("AbC123!") == "abc123!");
 
   const std::filesystem::path root = Horo::Tests::SecureTempBase() / "horo_editor_layer_internal_paths";
   std::error_code ec;

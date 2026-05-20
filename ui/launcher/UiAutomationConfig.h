@@ -34,7 +34,7 @@ bool ShouldWarnUiAutomationLargeFrameDelta(double frameDeltaSec);
 bool ShouldLogEditorRenderHeartbeat(bool enabled, int frameCount);
 
 /** @brief Returns the registered names of all available UI automation test suites.
- *  @return View list of suite name string views. */
+ *  @return View the list of suite name string views. */
 std::vector<std::string_view> UiAutomationTestSuiteNames();
 
 /** @brief Selects the scenario filter to apply when running a named test suite.

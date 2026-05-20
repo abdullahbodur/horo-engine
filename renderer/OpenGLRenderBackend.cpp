@@ -44,13 +44,43 @@ namespace Horo {
             shader->SetVec4("u_color", material.color);
             shader->SetFloat("u_roughness", material.roughness);
             shader->SetFloat("u_metallic", material.metallic);
-            shader->SetInt("u_albedoMap", 0);
             shader->SetFloat("u_uvScale", material.uvScale);
 
-            const bool hasTexture = material.albedoMap && material.albedoMap->IsValid();
-            if (hasTexture)
-                material.albedoMap->Bind(0);
-            shader->SetInt("u_hasTexture", hasTexture ? 1 : 0);
+            // glTF-aligned PBR texture slots (HORO-67). Slot order is fixed and
+            // mirrored by the fragment shaders' sampler declarations.
+            //   slot 0 = albedoMap        / u_hasTexture
+            //   slot 1 = normalMap        / u_hasNormalMap
+            //   slot 2 = metallicRoughnessMap / u_hasMetallicRoughnessMap
+            //   slot 3 = emissiveMap      / u_hasEmissiveMap
+            //   slot 4 = occlusionMap     / u_hasOcclusionMap
+            shader->SetInt("u_albedoMap", 0);
+            shader->SetInt("u_normalMap", 1);
+            shader->SetInt("u_metallicRoughnessMap", 2);
+            shader->SetInt("u_emissiveMap", 3);
+            shader->SetInt("u_occlusionMap", 4);
+
+            const auto bindOptional = [](const std::shared_ptr<Texture> &tex,
+                                          int slot) {
+                if (tex && tex->IsValid()) {
+                    tex->Bind(slot);
+                    return 1;
+                }
+                static const OpenGLTexture s_defaultTex = OpenGLTexture::CreateWhite1x1();
+                s_defaultTex.Bind(slot);
+                return 0;
+            };
+
+            const int hasAlbedo  = bindOptional(material.albedoMap, 0);
+            const int hasNormal  = bindOptional(material.normalMap, 1);
+            const int hasMR      = bindOptional(material.metallicRoughnessMap, 2);
+            const int hasEmiss   = bindOptional(material.emissiveMap, 3);
+            const int hasOccl    = bindOptional(material.occlusionMap, 4);
+
+            shader->SetInt("u_hasTexture", hasAlbedo);
+            shader->SetInt("u_hasNormalMap", hasNormal);
+            shader->SetInt("u_hasMetallicRoughnessMap", hasMR);
+            shader->SetInt("u_hasEmissiveMap", hasEmiss);
+            shader->SetInt("u_hasOcclusionMap", hasOccl);
         }
     } // namespace
 
@@ -90,27 +120,93 @@ namespace Horo {
     }
 
     bool OpenGLRenderBackend::EnsureEditorViewportRenderTarget(
-        uint32_t, uint32_t, std::string *outError) {
-        if (outError)
-            *outError = "Editor viewport render-target provisioning is unavailable on "
-                    "OpenGL backend.";
-        return false;
+        uint32_t width, uint32_t height, std::string *outError) {
+        if (width == 0 || height == 0) {
+            if (outError)
+                *outError = "Editor viewport render-target dimensions must be non-zero.";
+            return false;
+        }
+
+        FramebufferSpec spec;
+        spec.width = width;
+        spec.height = height;
+        spec.attachmentSpec = {{{FramebufferTextureFormat::RGBA8},
+                                {FramebufferTextureFormat::DEPTH24STENCIL8}}};
+
+        if (!m_editorViewportFramebuffer) {
+            m_editorViewportFramebuffer =
+                std::make_shared<OpenGLFramebuffer>(spec);
+            ++m_editorViewportFramebufferGeneration;
+            const bool success = m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+            if (!success && outError)
+                *outError = "Editor viewport render target is unavailable (no OpenGL context).";
+            return success;
+        }
+
+        if (const FramebufferSpec &current = m_editorViewportFramebuffer->GetSpec();
+            current.width != width || current.height != height) {
+            m_editorViewportFramebuffer->Resize(width, height);
+            ++m_editorViewportFramebufferGeneration;
+        }
+        const bool success = m_editorViewportFramebuffer->GetColorAttachmentId() != 0;
+        if (!success && outError)
+            *outError = "Editor viewport render target is unavailable (no OpenGL context).";
+        return success;
     }
 
     bool OpenGLRenderBackend::TryGetEditorViewportRenderTargetHandle(
-        RenderTargetHandle *outHandle, bool, std::string *outError) {
+        RenderTargetHandle *outHandle, bool needsYFlip, std::string *outError) {
         if (outHandle)
             *outHandle = {};
-        if (outError)
-            *outError = "Editor viewport render-target handle is unavailable on OpenGL "
-                    "backend.";
-        return false;
+        if (!m_editorViewportFramebuffer) {
+            if (outError)
+                *outError = "Editor viewport render target has not been created.";
+            return false;
+        }
+
+        const uint32_t textureId =
+            m_editorViewportFramebuffer->GetColorAttachmentId();
+        if (textureId == 0) {
+            if (outError)
+                *outError = "Editor viewport render target is unavailable.";
+            return false;
+        }
+
+        const FramebufferSpec &spec = m_editorViewportFramebuffer->GetSpec();
+        if (outHandle) {
+            *outHandle =
+                RenderTargetHandle::OpenGLTexture(textureId, needsYFlip, spec.width,
+                                                  spec.height,
+                                                  m_editorViewportFramebufferGeneration);
+        }
+        return true;
+    }
+
+    bool OpenGLRenderBackend::BeginEditorViewportRenderTarget(
+        uint32_t width, uint32_t height, std::string *outError) {
+        if (!EnsureEditorViewportRenderTarget(width, height, outError))
+            return false;
+        m_editorViewportFramebuffer->Bind();
+        return true;
+    }
+
+    void OpenGLRenderBackend::EndEditorViewportRenderTarget() {
+        if (m_editorViewportFramebuffer)
+            m_editorViewportFramebuffer->Unbind();
     }
 
     void OpenGLRenderBackend::BeginFrame(const RenderFrameConfig &frame) {
         HORO_ASSERT(
             !m_frameActive,
             "OpenGLRenderBackend::BeginFrame called while a frame is active");
+
+        // Bind default textures to all shader sampler slots so the GPU
+        // always has a loadable texture, preventing "GLD_TEXTURE_INDEX_2D
+        // is unloadable" warnings on Apple's Metal OpenGL driver.
+        static const OpenGLTexture s_defaultTex = OpenGLTexture::CreateWhite1x1();
+        for (int slot = 0; slot < 5; ++slot)
+            s_defaultTex.Bind(slot);
+
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
         glEnable(GL_CULL_FACE);
@@ -319,12 +415,17 @@ namespace Horo {
     }
 
     bool OpenGLRenderBackend::ReadbackRegionRgba8(int x, int y, int w, int h,
-                                                   uint32_t *pixels,
-                                                   std::string *outError) {
+                                                    uint32_t *pixels,
+                                                    std::string *outError) {
         if (!pixels || w <= 0 || h <= 0) {
             if (outError)
                 *outError = "ReadbackRegionRgba8: invalid parameters.";
             return false;
+        }
+        static constexpr GLenum kPackAlignment = 0x0D05;
+        glPixelStorei(kPackAlignment, 1);
+        while (glGetError() != GL_NO_ERROR) {
+            // Drain prior errors so glReadPixels result is accurate
         }
         glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         if (const GLenum err = glGetError(); err != GL_NO_ERROR) {

@@ -13,10 +13,9 @@
 #include <imgui.h>
 
 #include <array>
-#include <cstdint>
 #include <fstream>
 #include <format>
-#include <ranges>
+#include <limits>
 
 #include "core/Logger.h"
 #include "renderer/DebugDraw.h"
@@ -72,7 +71,6 @@ namespace Horo::Editor
     ProcessDeferredFilePicks();
     if (!m_active)
     {
-      m_albedoDraftDrop.Clear();
       m_albedoSelDrop.Clear();
       m_viewGizmoPickRect.Clear();
       m_viewportPanelRect = {};
@@ -88,6 +86,15 @@ namespace Horo::Editor
       m_active ? CaptureHistorySnapshot() : EditorHistorySnapshot{};
     const size_t undoHistorySizeBeforeRender = m_undoHistory.size();
     const size_t redoHistorySizeBeforeRender = m_redoHistory.size();
+
+    if (m_active && m_viewportNavActive)
+    {
+      ImGuiIO& io = ImGui::GetIO();
+      const float hiddenMouse = -std::numeric_limits<float>::max();
+      io.MousePos = ImVec2(hiddenMouse, hiddenMouse);
+      for (bool& mouseDown : io.MouseDown)
+        mouseDown = false;
+    }
 
     if (m_active)
     {
@@ -140,6 +147,9 @@ namespace Horo::Editor
       DrawWireframeOverlay(cam);
 
     DebugDraw::Flush(cam, 2.0f);
+
+    if (m_beforeImGuiRenderCallback)
+      m_beforeImGuiRenderCallback();
 
     ImGui::Render();
     if (m_imguiBackendInitialized)
@@ -210,17 +220,6 @@ namespace Horo::Editor
       m_commandPaletteOpen = true;
       m_commandPaletteQuery.clear();
     };
-    callbacks.setFlyMode = [this](bool flyMode)
-    {
-      if (m_flyMode != flyMode)
-      {
-        m_flyMode = flyMode;
-        m_flyCamInitialized = false;
-        m_prevCursorInit = false;
-        glfwSetInputMode(m_window, GLFW_CURSOR,
-                         m_flyMode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-      }
-    };
     callbacks.setResetDockLayout = [this](bool reset)
     {
       m_resetDockLayoutRequested = reset;
@@ -239,8 +238,8 @@ namespace Horo::Editor
     // State pointers
     state.playMode = &m_playMode;
     state.playModeEscPresses = &m_playModeEscPresses;
-    state.flyMode = &m_flyMode;
-    state.flyCamInitialized = &m_flyCamInitialized;
+    state.viewportNavActive = &m_viewportNavActive;
+    state.viewportNavCameraInitialized = &m_viewportNavCameraInitialized;
     state.prevCursorInit = &m_prevCursorInit;
     state.quickOpenOpen = &m_quickOpenOpen;
     state.commandPaletteOpen = &m_commandPaletteOpen;
@@ -391,7 +390,8 @@ namespace Horo::Editor
     const Ui::EditorTheme& theme = Ui::GetEditorTheme();
 
     const std::array projectTabs = {
-      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Project, true},
+      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Project,   m_projectPanelTab == Ui::EditorPanelTab::Project},
+      Ui::EditorPanelTabItem{Ui::EditorPanelTab::Favorites, m_projectPanelTab == Ui::EditorPanelTab::Favorites},
     };
     const std::array projectActions = {
       Ui::EditorPanelActionItem{ICON_FA_PLUS},
@@ -404,6 +404,13 @@ namespace Horo::Editor
       ImGui::OpenPopup("##project_add_menu");
     if (topBar.clickedActionIndex == 1)
       ImGui::OpenPopup("##project_panel_menu");
+    if (topBar.clickedTabIndex >= 0)
+    {
+      if (topBar.clickedTabIndex == 0)
+        m_projectPanelTab = Ui::EditorPanelTab::Project;
+      else if (topBar.clickedTabIndex == 1)
+        m_projectPanelTab = Ui::EditorPanelTab::Favorites;
+    }
 
     DrawProjectAddPopup();
     DrawProjectMorePopup();
@@ -426,6 +433,10 @@ namespace Horo::Editor
       !std::filesystem::is_directory(m_projectBrowserRoot))
     {
       ImGui::TextDisabled("Set project root to browse files.");
+    }
+    else if (m_projectPanelTab == Ui::EditorPanelTab::Favorites)
+    {
+      DrawProjectFavoritesTree(theme);
     }
     else
     {
@@ -557,68 +568,28 @@ namespace Horo::Editor
   }
 
   /** @copydoc EditorLayer::DrawProjectTree */
-  void EditorLayer::DrawProjectTree(const Ui::EditorTheme& theme)
+  void EditorLayer::DrawProjectTree(const Ui::EditorTheme&)
+  {
+    ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
+    DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
+    ImGui::EndChild();
+  }
+
+  /** @brief Draws the favorites tree with placeholder content. */
+  void EditorLayer::DrawProjectFavoritesTree(const Ui::EditorTheme& theme) const
   {
     const auto& palette = theme.palette;
-    ImGui::BeginChild("##project_tree", ImVec2(0, 0), false);
+    ImGui::BeginChild("##project_favorites_tree", ImVec2(0, 0), false);
 
-    {
-      const ImGuiTreeNodeFlags topFlags =
-        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-      const Ui::ScopedEditorTreeRowStyle treeRowStyle(theme);
-
-      if (m_projectPanelCollapseAllRequested)
-        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-      else
-        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-
-      Ui::EditorTreeItemSpec favSpec;
-      favSpec.id = "##project_favorites_node";
-      favSpec.label = "Favorites";
-      favSpec.prefixIcon = ICON_FA_FOLDER_OPEN;
-      favSpec.kind = Ui::EditorTreeItemKind::Node;
-      favSpec.treeFlags = topFlags;
-      favSpec.normalTextColor = &theme.palette.text;
-      if (const auto favRes = Ui::DrawEditorTreeItem(theme, favSpec); favRes.open)
-      {
-        ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
-        constexpr const char* kNoFavoritesText = "No favorites yet.";
-        const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
-        constexpr float kPlaceholderBlockHeight = 24.0f;
-        const float blockStartY = ImGui::GetCursorPosY();
-        const float centeredY =
-          blockStartY + (kPlaceholderBlockHeight - textSize.y) * 0.5f;
-        ImGui::SetCursorPosY(centeredY);
-        ImGui::TextUnformatted(kNoFavoritesText);
-        ImGui::SetCursorPosY(blockStartY + kPlaceholderBlockHeight);
-        ImGui::PopStyleColor();
-        ImGui::TreePop();
-      }
-
-      ImGui::Separator();
-      ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-      std::string rootName = m_projectBrowserRoot.filename().string();
-      if (rootName.empty())
-        rootName = m_projectBrowserRoot.generic_string();
-      if (m_projectPanelCollapseAllRequested)
-        ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-      else
-        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-
-      Ui::EditorTreeItemSpec rootSpec;
-      rootSpec.id = "##project_root_node";
-      rootSpec.label = rootName.c_str();
-      rootSpec.prefixIcon = ICON_FA_FOLDER;
-      rootSpec.kind = Ui::EditorTreeItemKind::Node;
-      rootSpec.treeFlags = topFlags;
-      rootSpec.normalTextColor = &theme.palette.text;
-      if (const auto rootRes = Ui::DrawEditorTreeItem(theme, rootSpec); rootRes.open)
-      {
-        DrawProjectTreeRecursive(m_projectBrowserRoot, m_projectBrowserRoot);
-        ImGui::TreePop();
-      }
-    }
+    ImGui::PushStyleColor(ImGuiCol_Text, palette.textMuted);
+    constexpr const char* kNoFavoritesText = "No favorites yet.";
+    const ImVec2 textSize = ImGui::CalcTextSize(kNoFavoritesText);
+    const float contentW = ImGui::GetContentRegionAvail().x;
+    const float contentH = ImGui::GetContentRegionAvail().y;
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + contentH * 0.4f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (contentW - textSize.x) * 0.5f);
+    ImGui::TextUnformatted(kNoFavoritesText);
+    ImGui::PopStyleColor();
 
     ImGui::EndChild();
   }
@@ -643,6 +614,11 @@ namespace Horo::Editor
     {
       m_deferredFilePick = static_cast<DeferredFilePick>(deferredType);
     };
+    callbacks.openImportAssetModal = [this]()
+    {
+      m_importAssetModal.Open({}, &m_assetImportService.Registry(),
+                              m_projectBrowserRootValid ? m_projectBrowserRoot : std::filesystem::current_path());
+    };
     return callbacks;
   }
 
@@ -652,15 +628,6 @@ namespace Horo::Editor
     EditorAssetsPanelState state;
     state.selectedAssetId = &m_selectedAssetId;
     state.selectedIndices = &m_selectedIndices;
-    state.assetDraftId = &m_assetDraftId;
-    state.assetDraftGuid = &m_assetDraftGuid;
-    state.assetDraftDisplayName = &m_assetDraftDisplayName;
-    state.assetDraftMesh = &m_assetDraftMesh;
-    state.assetDraftRenderScale = &m_assetDraftRenderScale;
-    state.assetDraftAlbedoMap = &m_assetDraftAlbedoMap;
-    state.assetImportError = &m_assetImportError;
-    state.openNewAssetHeader = &m_openNewAssetHeader;
-    state.albedoDraftDrop = &m_albedoDraftDrop;
     state.albedoSelDrop = &m_albedoSelDrop;
     state.assetSearchOpen = &m_assetSearchOpen;
     state.assetSearchQuery = &m_assetSearchQuery;
@@ -903,4 +870,3 @@ namespace Horo::Editor
       ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
   }
 } // namespace Horo::Editor
-

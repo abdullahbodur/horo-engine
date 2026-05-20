@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "core/Logger.h"
+#include "core/StringUtils.h"
+#include "renderer/FbxLoader.h"
 #include "renderer/GltfLoader.h"
 #include "renderer/IFramebuffer.h"
 #include "renderer/ITexture.h"
@@ -106,14 +108,81 @@ struct AssetThumbnailRenderer {
   ~AssetThumbnailRenderer() { Cleanup(); }
 };
 
+std::optional<AssetThumbnailRenderer::CachedMesh> LoadAssetMeshImpl(const std::string& effectiveExt, const std::string& cacheKey, const std::filesystem::path& path) {
+    AssetThumbnailRenderer::CachedMesh entry;
+    if (effectiveExt == ".obj") {
+        entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (effectiveExt == ".fbx") {
+        FbxLoader::FbxLoadResult result = FbxLoader::LoadStaticMesh(path.generic_string());
+        if (!result.ok) {
+            LogWarn("[Thumbnail] FBX load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto mesh = std::make_shared<Mesh>();
+        mesh->SetData(result.vertices, result.indices);
+        entry.mesh = std::move(mesh);
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (cacheKey.ends_with(".mesh.bin") || cacheKey.ends_with(".fbx.bin")) {
+        const MeshBin::ReadResult result = MeshBin::ReadStaticMesh(cacheKey);
+        if (!result.ok) {
+            LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto mesh = std::make_shared<Mesh>();
+        mesh->SetData(result.vertices, result.indices);
+        entry.mesh = std::move(mesh);
+        entry.isSkinned = false;
+        return entry;
+    }
+    
+    if (effectiveExt == ".skinned" || cacheKey.ends_with(".skinned.bin")) {
+        const SkinnedMeshBin::ReadResult result = SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
+        if (!result.ok) {
+            LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})", cacheKey, result.error);
+            return std::nullopt;
+        }
+        auto skinnedMesh = std::make_shared<SkinnedMesh>();
+        skinnedMesh->SetData(result.vertices, result.indices);
+        auto skeleton = std::make_shared<Skeleton>();
+        for (const auto& bone : result.bones)
+            skeleton->AddBone(bone);
+        entry.skinnedMesh = std::move(skinnedMesh);
+        entry.skeleton = std::move(skeleton);
+        entry.isSkinned = true;
+        return entry;
+    }
+    
+    if (effectiveExt == ".gltf" || effectiveExt == ".glb") {
+        if (GltfLoadResult result = GltfLoader::Load(path.generic_string());
+            result.mesh) {
+            entry.skinnedMesh = result.mesh;
+            entry.skeleton = result.skeleton;
+            entry.isSkinned = true;
+            return entry;
+        }
+        LogWarn("[Thumbnail] GLTF load failed (no mesh): {}", cacheKey);
+        return std::nullopt;
+    }
+
+    LogWarn("[Thumbnail] Unsupported mesh format: {}", effectiveExt);
+    return std::nullopt;
+}
+
 /** @brief Loads and caches a mesh for preview rendering, returning nullptr on unsupported/failed assets. */
 AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) {
   if (meshPath.empty())
     return nullptr;
 
-  const std::filesystem::path path =
-      ResolveProjectRelativeOrAbsolutePath(meshPath);
-  const std::string ext = ToLowerAscii(path.extension().string());
+  const std::filesystem::path path = ResolveProjectRelativeOrAbsolutePath(meshPath);
+  const std::string ext = Horo::ToLowerAscii(path.extension().string());
+  const std::string effectiveExt = (ext == ".bin") ? Horo::ToLowerAscii(path.stem().extension().string()) : ext;
 
   auto& renderer = AssetThumbnailRenderer::Instance();
   const std::string cacheKey = path.generic_string();
@@ -121,74 +190,22 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
   if (renderer.noPreviewKeys.contains(cacheKey))
     return nullptr;
 
-  auto it = renderer.meshCache.find(cacheKey);
-  if (it != renderer.meshCache.end())
+  if (auto it = renderer.meshCache.find(cacheKey); it != renderer.meshCache.end())
     return &it->second;
 
-  AssetThumbnailRenderer::CachedMesh entry;
-
   try {
-    if (ext == ".obj") {
-      entry.mesh = std::make_shared<Mesh>(ObjLoader::Load(path.generic_string()));
-      entry.isSkinned = false;
-    } else if (cacheKey.ends_with(".mesh.bin")) {
-      // Engine-native binary produced by importers (FBX in HORO-94+;
-      // future format-specific importers feed the same .mesh.bin output).
-      const MeshBin::ReadResult result =
-          MeshBin::ReadStaticMesh(cacheKey);
-      if (!result.ok) {
-        LogWarn("[Thumbnail] MeshBin load failed for preview: {} ({})",
-                cacheKey, result.error);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-      auto mesh = std::make_shared<Mesh>();
-      mesh->SetData(result.vertices, result.indices);
-      entry.mesh = std::move(mesh);
-      entry.isSkinned = false;
-    } else if (cacheKey.ends_with(".skinned.bin")) {
-      // Engine-native skinned binary produced by FBX skeletal import (HORO-107).
-      const SkinnedMeshBin::ReadResult result =
-          SkinnedMeshBin::ReadSkinnedMesh(cacheKey);
-      if (!result.ok) {
-        LogWarn("[Thumbnail] SkinnedMeshBin load failed for preview: {} ({})",
-                cacheKey, result.error);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-      auto skinnedMesh = std::make_shared<SkinnedMesh>();
-      skinnedMesh->SetData(result.vertices, result.indices);
-      auto skeleton = std::make_shared<Skeleton>();
-      for (const auto& bone : result.bones)
-        skeleton->AddBone(bone);
-      entry.skinnedMesh = std::move(skinnedMesh);
-      entry.skeleton = std::move(skeleton);
-      entry.isSkinned = true;
-    } else if (ext == ".gltf" || ext == ".glb") {
-      GltfLoadResult result = GltfLoader::Load(path.generic_string());
-      if (result.mesh) {
-        entry.skinnedMesh = result.mesh;
-        entry.skeleton = result.skeleton;
-        entry.isSkinned = true;
-      } else {
-        LogWarn("[Thumbnail] GLTF load failed (no mesh): {}", cacheKey);
-        renderer.noPreviewKeys.insert(cacheKey);
-        return nullptr;
-      }
-    } else {
-      LogWarn("[Thumbnail] Unsupported mesh format: {}", ext);
+    std::optional<AssetThumbnailRenderer::CachedMesh> loaded = LoadAssetMeshImpl(effectiveExt, cacheKey, path);
+    if (!loaded) {
       renderer.noPreviewKeys.insert(cacheKey);
       return nullptr;
     }
+    auto it = renderer.meshCache.try_emplace(cacheKey, std::move(*loaded)).first;
+    return &it->second;
   } catch (const ObjLoader::ObjLoaderException& e) {
-    LogWarn("[Thumbnail] Failed to load mesh for preview: {} (error: {})",
-            cacheKey, e.what());
+    LogWarn("[Thumbnail] Failed to load OBJ for preview: {} (error: {})", cacheKey, e.what());
     renderer.noPreviewKeys.insert(cacheKey);
     return nullptr;
   }
-
-  it = renderer.meshCache.try_emplace(cacheKey, std::move(entry)).first;
-  return &it->second;
 }
 
 /** @brief Builds view/projection matrices that frame the supplied mesh for thumbnail rendering. */
@@ -209,7 +226,7 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
     return;
   }
 
-  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z});
+  const float maxHalf = std::max({aabbHalf.x, aabbHalf.y, aabbHalf.z, 0.1f});
   const float fov = 45.0f * std::numbers::pi_v<float> / 180.0f;
   const float distance = maxHalf * 1.3f / std::tan(fov * 0.5f);
 
@@ -219,9 +236,28 @@ void FitCameraToMesh(const AssetThumbnailRenderer::CachedMesh& mesh, Mat4& outVi
   outProj = Mat4::Perspective(45.0f, 1.0f, 0.01f, 1000.0f);
 }
 
+/** @brief Resolves an optional asset path without treating an empty value as the project root. */
+std::filesystem::path ResolveOptionalAssetPath(std::string_view path) {
+  if (path.empty())
+    return {};
+  return ResolveProjectRelativeOrAbsolutePath(path);
+}
+
+/** @brief Loads an optional albedo texture used by mesh thumbnail rendering. */
+Texture LoadThumbnailAlbedoTexture(const std::filesystem::path& path) {
+  if (path.empty())
+    return {};
+
+  if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
+    return {};
+
+  return Texture::FromFile(path.generic_string());
+}
+
 /** @brief Renders the cached mesh into an off-screen target and returns the resulting texture handle. */
 RenderTargetHandle RenderMeshToThumbnail(
-    const AssetThumbnailRenderer::CachedMesh& mesh, const std::string& meshKey) {
+    const AssetThumbnailRenderer::CachedMesh& mesh, const std::string& meshKey,
+    const std::filesystem::path& albedoPath) {
   if (const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
       !caps.supportsOffscreenTargets || !caps.supportsNativeTextureHandles)
     return {};
@@ -280,7 +316,24 @@ RenderTargetHandle RenderMeshToThumbnail(
   renderer.shader.SetMat4("u_projection", proj);
   renderer.shader.SetVec3("u_cameraPos", view.Inverse().GetTranslation());
   renderer.shader.SetVec4("u_color", Vec4(0.8f, 0.8f, 0.8f, 1.0f));
-  renderer.shader.SetInt("u_hasTexture", 0);
+  renderer.shader.SetFloat("u_roughness", 0.5f);
+  renderer.shader.SetFloat("u_metallic", 0.0f);
+  renderer.shader.SetFloat("u_uvScale", 1.0f);
+  renderer.shader.SetInt("u_albedoMap", 0);
+  renderer.shader.SetInt("u_normalMap", 1);
+  renderer.shader.SetInt("u_metallicRoughnessMap", 2);
+  renderer.shader.SetInt("u_emissiveMap", 3);
+  renderer.shader.SetInt("u_occlusionMap", 4);
+  renderer.shader.SetInt("u_hasNormalMap", 0);
+  renderer.shader.SetInt("u_hasMetallicRoughnessMap", 0);
+  renderer.shader.SetInt("u_hasEmissiveMap", 0);
+  renderer.shader.SetInt("u_hasOcclusionMap", 0);
+
+  Texture albedoTexture = LoadThumbnailAlbedoTexture(albedoPath);
+  const bool hasAlbedo = albedoTexture.IsValid();
+  if (hasAlbedo)
+    albedoTexture.Bind(0);
+  renderer.shader.SetInt("u_hasTexture", hasAlbedo ? 1 : 0);
   renderer.shader.SetInt("u_lightCount", 2);
 
   renderer.shader.SetInt("u_lights[0].type", 0);
@@ -356,9 +409,14 @@ RenderTargetHandle TryRenderAssetMeshPreview(const AssetDef& asset) {
   if (!meshEntry)
     return {};
 
+  const std::filesystem::path meshPath =
+      ResolveProjectRelativeOrAbsolutePath(asset.mesh);
+  const std::filesystem::path albedoPath =
+      ResolveOptionalAssetPath(asset.albedoMap);
   const std::string meshKey =
-      ResolveProjectRelativeOrAbsolutePath(asset.mesh).generic_string();
-  return RenderMeshToThumbnail(*meshEntry, meshKey);
+      std::format("{}|albedo={}", meshPath.generic_string(),
+                  albedoPath.generic_string());
+  return RenderMeshToThumbnail(*meshEntry, meshKey, albedoPath);
 }
 
 /** @brief Retrieves (or loads and caches) a glTF albedo texture handle for preview fallback rendering. */
@@ -475,7 +533,7 @@ bool TryGetAssetPreviewHandle(std::string_view assetId, const AssetDef& asset,
   if (const std::filesystem::path meshPath =
           ResolveProjectRelativeOrAbsolutePath(asset.mesh);
       !meshPath.empty()) {
-    const std::string ext = ToLowerAscii(meshPath.extension().string());
+    const std::string ext = Horo::ToLowerAscii(meshPath.extension().string());
     RenderTargetHandle handle;
     if (ext == ".obj")
       handle = TryResolveObjMeshPreview(meshPath, &s_textureByPath);

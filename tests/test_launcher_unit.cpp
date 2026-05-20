@@ -2,6 +2,7 @@
 // scenarios run only in HoroEditorUiTest + UiAutomationRunner.cpp.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include <cstdlib>
 #include <filesystem>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "ui/launcher/EditorHomeSettings.h"
+#include "ui/launcher/LauncherEditorShellInternal.h"
 #include "ui/launcher/LauncherProject.h"
 #include "ui/launcher/LauncherProjectTemplate.h"
 #include "tests/TestTempPaths.h"
@@ -94,6 +96,31 @@ TEST_CASE("SanitizeProjectId normalizes names for manifest ids", "[launcher][pro
   REQUIRE(SanitizeProjectId("Foo-Bar_Baz") == "foo_bar_baz");
   REQUIRE(SanitizeProjectId("!!!") == "project");
   REQUIRE(SanitizeProjectId("A  B") == "a_b");
+}
+
+TEST_CASE("ResolveRuntimeScaleFromEditorObject applies asset render scale metadata",
+          "[launcher][editor][transform]") {
+  Horo::Editor::SceneObject object;
+  object.scale = {2.0f, 3.0f, 4.0f};
+  object.props["_assetRenderScale"] = "0.5,0.25,2.0";
+
+  const Horo::Vec3 runtimeScale = ResolveRuntimeScaleFromEditorObject(object);
+
+  CHECK(runtimeScale.x == Catch::Approx(1.0f));
+  CHECK(runtimeScale.y == Catch::Approx(0.75f));
+  CHECK(runtimeScale.z == Catch::Approx(8.0f));
+}
+
+TEST_CASE("ResolveRuntimeScaleFromEditorObject keeps authoring scale without asset metadata",
+          "[launcher][editor][transform]") {
+  Horo::Editor::SceneObject object;
+  object.scale = {2.0f, 3.0f, 4.0f};
+
+  const Horo::Vec3 runtimeScale = ResolveRuntimeScaleFromEditorObject(object);
+
+  CHECK(runtimeScale.x == Catch::Approx(2.0f));
+  CHECK(runtimeScale.y == Catch::Approx(3.0f));
+  CHECK(runtimeScale.z == Catch::Approx(4.0f));
 }
 
 TEST_CASE("SanitizeProjectId strips unsafe path characters", "[launcher][project][coverage]") {
