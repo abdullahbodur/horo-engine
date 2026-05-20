@@ -1152,8 +1152,7 @@ bool RenderEditorCheckbox(const EditorTheme& theme, const char* label,
         drawList->AddLine(p1, p2, check, thickness);
     }
 
-    const std::string_view visibleLabel = VisibleImGuiLabel(label);
-    if (!visibleLabel.empty()) {
+    if (const auto visibleLabel = VisibleImGuiLabel(label); !visibleLabel.empty()) {
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
         ImGui::AlignTextToFramePadding();

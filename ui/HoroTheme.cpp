@@ -471,7 +471,13 @@ std::string_view GetEditorThemePresetId() {
 /** @copydoc GetEditorTheme */
 const EditorTheme &GetEditorTheme() {
   if (const auto *custom = FindCustomPreset(GetEditorThemePresetId())) {
-    static std::unordered_map<std::string, std::unique_ptr<EditorTheme>> customThemes;
+    struct StringHash {
+      using is_transparent = void;
+      size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+      }
+    };
+    static std::unordered_map<std::string, std::unique_ptr<EditorTheme>, StringHash, std::equal_to<>> customThemes;
     auto& ptr = customThemes[custom->id];
     if (!ptr) {
       ptr = std::make_unique<EditorTheme>();

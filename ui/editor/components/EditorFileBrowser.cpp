@@ -57,15 +57,16 @@ bool IsCodeExtension(std::string_view ext) {
 }
 
 const char* FileTypeFilterLabel(FileBrowserTypeFilter filter) {
+    using enum FileBrowserTypeFilter;
     switch (filter) {
-        case FileBrowserTypeFilter::Folders:  return "Folders";
-        case FileBrowserTypeFilter::Meshes:   return "Meshes";
-        case FileBrowserTypeFilter::Textures: return "Textures";
-        case FileBrowserTypeFilter::Scenes:   return "Scenes";
-        case FileBrowserTypeFilter::Scripts:  return "Scripts";
-        case FileBrowserTypeFilter::Shaders:  return "Shaders";
-        case FileBrowserTypeFilter::Code:     return "Code";
-        case FileBrowserTypeFilter::Count:    break;
+        case Folders:  return "Folders";
+        case Meshes:   return "Meshes";
+        case Textures: return "Textures";
+        case Scenes:   return "Scenes";
+        case Scripts:  return "Scripts";
+        case Shaders:  return "Shaders";
+        case Code:     return "Code";
+        case Count:    break;
     }
     return "";
 }
@@ -130,8 +131,7 @@ ImTextureID TryLoadMeshPreviewTexture(const std::string& filePath) {
 
 /** @brief Loads an image file as a thumbnail texture for supported formats (PNG, JPG, etc.). */
 ImTextureID TryLoadTexturePreview(const std::string& filePath) {
-    const RenderBackendCapabilities caps = Renderer::GetBackendCapabilities();
-    if (!caps.supportsNativeTextureHandles) return 0;
+    if (const auto caps = Renderer::GetBackendCapabilities(); !caps.supportsNativeTextureHandles) return 0;
 
     auto tex = Renderer::CreateTextureFromFile(filePath);
     if (!tex) return 0;
@@ -145,7 +145,7 @@ std::vector<std::string> SplitPathIntoBreadcrumbSegments(const std::string& path
     std::string accumulated;
     std::string current;
     for (size_t i = 0; i < pathStr.size(); ++i) {
-        char c = pathStr[i];
+        const char c = pathStr[i];
         if (c == '/' || c == '\\') {
             if (!current.empty()) {
                 accumulated += current + "/";
@@ -173,19 +173,19 @@ std::optional<std::string> DrawBreadcrumbs(const Ui::EditorTheme& theme, const s
     for (size_t i = 0; i < segments.size(); ++i) {
         if (i > 0) {
             ImGui::SameLine(0, 4.0f);
-            const ImVec2 sepSz = Ui::GetIconSize(ICON_FA_ANGLE_RIGHT, Ui::GetIconSize(theme));
-            const ImVec2 sepPos = ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y + (ImGui::GetTextLineHeight() - sepSz.y) * 0.5f);
+            const auto sepSz = Ui::GetIconSize(ICON_FA_ANGLE_RIGHT, Ui::GetIconSize(theme));
+            const auto sepPos = ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y + (ImGui::GetTextLineHeight() - sepSz.y) * 0.5f);
             Ui::DrawIcon(ImGui::GetWindowDrawList(), ICON_FA_ANGLE_RIGHT, ImVec2(sepPos.x + sepSz.x * 0.5f, sepPos.y + sepSz.y * 0.5f), ImGui::ColorConvertFloat4ToU32(ImVec4(0.4f, 0.4f, 0.4f, 0.6f)), Ui::GetIconSize(theme));
             ImGui::SameLine(0, 4.0f);
         }
         
-        const std::string& seg = segments[i];
-        std::string displayName = seg;
+        const auto& seg = segments[i];
+        auto displayName = seg;
         if (!displayName.empty() && displayName.back() == '/')
             displayName.pop_back();
             
-        size_t lastSlash = displayName.find_last_of('/');
-        if (lastSlash != std::string::npos)
+        if (const size_t lastSlash = displayName.find_last_of('/');
+            lastSlash != std::string::npos)
             displayName = displayName.substr(lastSlash + 1);
         if (displayName.empty())
             displayName = "/";
@@ -236,9 +236,9 @@ void EditorFileBrowser::Refresh() { RefreshEntries(); }
 
 bool EditorFileBrowser::Draw(float gridHeight) {
     const std::string previousSelection = m_state.selectedFilePath;
-    const ImVec2 windowMin = ImGui::GetWindowPos();
-    const ImVec2 windowSize = ImGui::GetWindowSize();
-    const ImVec2 windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
+    const auto windowMin = ImGui::GetWindowPos();
+    const auto windowSize = ImGui::GetWindowSize();
+    const auto windowMax = ImVec2(windowMin.x + windowSize.x, windowMin.y + windowSize.y);
     SetModalRect(windowMin.x, windowMin.y, windowMax.x, windowMax.y);
     DrawNavBar();
     ImGui::Spacing();
@@ -262,15 +262,15 @@ bool EditorFileBrowser::HandleFileDrop(float x, float y, const std::string& path
         y < m_modalMinY - kPadding || y > m_modalMaxY + kPadding)
         return false;
     std::error_code ec;
-    std::filesystem::path filePath = std::filesystem::weakly_canonical(path, ec);
+    const std::filesystem::path filePath = std::filesystem::weakly_canonical(path, ec);
     if (ec || !std::filesystem::exists(filePath, ec)) return false;
     if (std::filesystem::is_directory(filePath, ec)) { NavigateTo(filePath); return true; }
     NavigateTo(filePath.parent_path());
-    for (auto& entry : m_state.entries) {
+    for (const auto& entry : m_state.entries) {
         if (entry.fullPath == filePath.string()) { SelectEntry(entry); return true; }
     }
     RefreshEntries();
-    for (auto& entry : m_state.entries) {
+    for (const auto& entry : m_state.entries) {
         if (entry.fullPath == filePath.string()) { SelectEntry(entry); return true; }
     }
     return false;
@@ -376,21 +376,22 @@ void EditorFileBrowser::DrawSearchBar() {
     if (inlineFilter)
         ImGui::SameLine(0.0f, spacing);
     ImGui::SetNextItemWidth(inlineFilter ? filterW : -FLT_MIN);
+    using enum FileBrowserTypeFilter;
     std::array<Ui::MultiSelectDropdownItem, kFileBrowserTypeFilterCount> filters = {{
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Folders),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Folders)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Meshes),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Meshes)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Textures),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Textures)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Scenes),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Scenes)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Scripts),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Scripts)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Shaders),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Shaders)]},
-        {FileTypeFilterLabel(FileBrowserTypeFilter::Code),
-         &m_state.typeFilters[static_cast<size_t>(FileBrowserTypeFilter::Code)]},
+        {FileTypeFilterLabel(Folders),
+         &m_state.typeFilters[static_cast<size_t>(Folders)]},
+        {FileTypeFilterLabel(Meshes),
+         &m_state.typeFilters[static_cast<size_t>(Meshes)]},
+        {FileTypeFilterLabel(Textures),
+         &m_state.typeFilters[static_cast<size_t>(Textures)]},
+        {FileTypeFilterLabel(Scenes),
+         &m_state.typeFilters[static_cast<size_t>(Scenes)]},
+        {FileTypeFilterLabel(Scripts),
+         &m_state.typeFilters[static_cast<size_t>(Scripts)]},
+        {FileTypeFilterLabel(Shaders),
+         &m_state.typeFilters[static_cast<size_t>(Shaders)]},
+        {FileTypeFilterLabel(Code),
+         &m_state.typeFilters[static_cast<size_t>(Code)]},
     }};
     if (Ui::MultiSelectDropdown(theme, "##FileBrowserTypeFilter", filters,
                                 "All Files"))
@@ -402,8 +403,8 @@ void EditorFileBrowser::DrawDropZone() {
     const float dropZoneH = 50.0f;
     ImGui::BeginChild("##DropZone", ImVec2(availW, dropZoneH), false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    const ImVec2 tileMin = ImGui::GetWindowPos();
-    const ImVec2 tileMax = ImVec2(tileMin.x + availW, tileMin.y + dropZoneH);
+    const auto tileMin = ImGui::GetWindowPos();
+    const auto tileMax = ImVec2(tileMin.x + availW, tileMin.y + dropZoneH);
     m_dropZoneMinY = tileMin.y;
     m_dropZoneMaxY = tileMax.y;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -412,10 +413,10 @@ void EditorFileBrowser::DrawDropZone() {
     dl->AddRectFilled(tileMin, tileMax, ImGui::ColorConvertFloat4ToU32(bgColor), 4.0f);
     const ImVec4 borderColor = isHovered ? ImVec4(0.45f, 0.62f, 0.90f, 0.90f) : ImVec4(0.35f, 0.50f, 0.70f, 0.50f);
     dl->AddRect(tileMin, tileMax, ImGui::ColorConvertFloat4ToU32(borderColor), 4.0f, 0, 1.0f);
-        const std::string labelText = std::string(ICON_FA_PLUS) + " Drag & drop files here";
-        const ImVec2 labelSz = ImGui::CalcTextSize(labelText.c_str());
-        const ImVec2 labelPos = ImVec2(tileMin.x + (availW - labelSz.x) * 0.5f, tileMin.y + (dropZoneH - labelSz.y) * 0.5f);
-        const ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f));
+        const auto labelText = std::string(ICON_FA_PLUS) + " Drag & drop files here";
+        const auto labelSz = ImGui::CalcTextSize(labelText.c_str());
+        const auto labelPos = ImVec2(tileMin.x + (availW - labelSz.x) * 0.5f, tileMin.y + (dropZoneH - labelSz.y) * 0.5f);
+        const auto labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f));
         dl->AddText(labelPos, labelCol, labelText.c_str());
     ImGui::EndChild();
 }
@@ -444,7 +445,7 @@ void EditorFileBrowser::DrawThumbnailGrid() {
     const int lastVisibleRow = std::min(totalRows, firstVisibleRow + visibleRows);
 
     if (firstVisibleRow > 0)
-        ImGui::Dummy(ImVec2(0, firstVisibleRow * rowHeight));
+        ImGui::Dummy(ImVec2(0, static_cast<float>(firstVisibleRow) * rowHeight));
 
     const int firstVisibleIndex = firstVisibleRow * columns;
     const int lastVisibleIndex = std::min(totalEntries, lastVisibleRow * columns);
@@ -490,9 +491,9 @@ void EditorFileBrowser::DrawThumbnailTile(const FileBrowserEntry& entry, float t
     else borderColor = ImVec4(0.35f, 0.50f, 0.70f, 0.50f);
     
     dl->AddRect(bgMin, bgMax, ImGui::ColorConvertFloat4ToU32(borderColor), 6.0f, 0, entry.isSelected ? 2.0f : 1.0f);
-    const ImVec2 thumbMin = ImVec2(tileMin.x + kThumbPad, tileMin.y + kThumbPad);
-    const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
-    const ImU32 bgThumbCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f));
+    const auto thumbMin = ImVec2(tileMin.x + kThumbPad, tileMin.y + kThumbPad);
+    const auto thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
+    const auto bgThumbCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.13f, 0.18f, 0.95f));
     dl->AddRectFilled(thumbMin, thumbMax, bgThumbCol, 4.0f);
 
     DrawThumbnailTileIcon(dl, entry, thumbMin, thumbMax);
@@ -534,7 +535,7 @@ void EditorFileBrowser::DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserE
         // Render the 3D preview texture directly on the draw list
         dl->AddImage(previewTex, thumbMin, thumbMax);
     } else {
-        const ImVec2 thumbCenter = ImVec2((thumbMin.x + thumbMax.x) * 0.5f, (thumbMin.y + thumbMax.y) * 0.5f);
+        const auto thumbCenter = ImVec2((thumbMin.x + thumbMax.x) * 0.5f, (thumbMin.y + thumbMax.y) * 0.5f);
         const float iconSize = Ui::GetIconSize(Ui::GetEditorTheme()) * 3.75f;
         if (s_largeIconFont) ImGui::PushFont(s_largeIconFont);
         if (entry.isDirectory) {
@@ -554,7 +555,7 @@ void EditorFileBrowser::DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserE
     }
 }
 
-void EditorFileBrowser::DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax) {
+void EditorFileBrowser::DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax) const {
     std::string displayName = entry.name;
     const float maxLabelW = thumbSize;
     if (ImGui::CalcTextSize(displayName.c_str()).x > maxLabelW) {
@@ -571,18 +572,18 @@ void EditorFileBrowser::DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowser
     dl->AddText(ImVec2(nameX, nameY), nameColor, displayName.c_str());
     
     if (entry.isDirectory) {
-        const std::string sizeLabel = entry.itemCount >= 0
+        const auto sizeLabel = entry.itemCount >= 0
             ? std::format("{} items", entry.itemCount)
             : std::string("-- items");
-        const ImVec2 sizeSz = ImGui::CalcTextSize(sizeLabel.c_str());
-        const ImVec2 sizePos = ImVec2(
+        const auto sizeSz = ImGui::CalcTextSize(sizeLabel.c_str());
+        const auto sizePos = ImVec2(
             tileMin.x + std::max(4.0f, (thumbSize + kThumbPad * 2.0f - sizeSz.x) * 0.5f),
             nameY + ImGui::GetTextLineHeight() + 2.0f);
         dl->AddText(sizePos, ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)), sizeLabel.c_str());
     } else {
-        const std::string sizeLabel = Horo::FormatFileSize(entry.sizeBytes);
-        const ImVec2 sizeSz = ImGui::CalcTextSize(sizeLabel.c_str());
-        const ImVec2 sizePos = ImVec2(
+        const auto sizeLabel = Horo::FormatFileSize(entry.sizeBytes);
+        const auto sizeSz = ImGui::CalcTextSize(sizeLabel.c_str());
+        const auto sizePos = ImVec2(
             tileMin.x + std::max(4.0f, (thumbSize + kThumbPad * 2.0f - sizeSz.x) * 0.5f),
             nameY + ImGui::GetTextLineHeight() + 2.0f);
         dl->AddText(sizePos, ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.62f, 0.72f, 0.85f)), sizeLabel.c_str());

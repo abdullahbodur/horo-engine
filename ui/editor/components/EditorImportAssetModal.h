@@ -277,7 +277,10 @@ private:
     EditorFileBrowser m_fileBrowser;
 
     // Modal hit testing for drag-and-drop
-    float m_modalMinX = 0, m_modalMinY = 0, m_modalMaxX = 0, m_modalMaxY = 0;
+    float m_modalMinX = 0;
+    float m_modalMinY = 0;
+    float m_modalMaxX = 0;
+    float m_modalMaxY = 0;
 };
 
 } // namespace Horo::Editor

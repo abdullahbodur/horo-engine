@@ -582,8 +582,7 @@ namespace Horo::Editor {
             namespace fs = std::filesystem;
             const fs::path resolved = ResolveExternalTexturePath(record, sourceDir);
             if (resolved.empty()) {
-                const std::string warningKey = filename.generic_string();
-                if (st.warnedMissingTextures.insert(warningKey).second) {
+                if (st.warnedMissingTextures.insert(filename.generic_string()).second) {
                     st.diagnostics.push_back(MakeDiagnostic(
                         AssetDiagnosticSeverity::Warning,
                         DiagnosticCodes::FbxExternalTextureMissing,

@@ -73,6 +73,7 @@ std::vector<Ui::EditorStatusBarItem> BuildStatusBarItemsHelper(
     const EditorStatusText& status,
     bool isDirty, bool isNavActive, bool wantsReload,
     const std::string& rendererLabel) {
+  using enum Ui::EditorStatusLevel;
   std::vector<Ui::EditorStatusBarItem> items;
   items.reserve(6);
   items.push_back({.id = "selection",
@@ -83,23 +84,20 @@ std::vector<Ui::EditorStatusBarItem> BuildStatusBarItemsHelper(
                    .icon = ICON_FA_SAVE,
                    .label = "Dirty",
                    .value = status.dirtyText,
-                   .level = isDirty ? Ui::EditorStatusLevel::Warning
-                                    : Ui::EditorStatusLevel::Success});
+                   .level = isDirty ? Warning : Success});
   items.push_back({.id = "nav",
                    .icon = ICON_FA_HAND_POINTER,
                    .label = "Nav",
                    .value = status.navText,
-                   .level = isNavActive ? Ui::EditorStatusLevel::Success
-                                        : Ui::EditorStatusLevel::Info});
+                   .level = isNavActive ? Success : Info});
   items.push_back({.id = "reload",
                    .icon = ICON_FA_REDO,
                    .label = "Reload",
                    .value = status.reloadText,
-                   .level = wantsReload ? Ui::EditorStatusLevel::Warning
-                                        : Ui::EditorStatusLevel::Info});
+                   .level = wantsReload ? Warning : Info});
   items.push_back({.id = "renderer",
-                   .icon = ICON_FA_CUBE,
-                   .label = "Renderer",
+                   .icon = ICON_FA_DESKTOP,
+                   .label = "Render",
                    .value = rendererLabel,
                    .side = Ui::EditorStatusBarSide::Right});
   return items;
@@ -156,9 +154,9 @@ void EditorLayer::Init(GLFWwindow *window) {
     LogWarn("[MCP] Settings load fallback: {}",
             m_mcpController.SettingsDocument().error);
 
-  const Ui::EditorThemeConfigLoadResult themeConfig =
-      Ui::LoadEditorThemeConfig(Mcp::ResolveMcpSettingsDirectory() / "config.json");
-  if (!themeConfig.ok) {
+  if (const auto themeConfig = Ui::LoadEditorThemeConfig(
+          Mcp::ResolveMcpSettingsDirectory() / "config.json");
+      !themeConfig.ok) {
     LogWarn("[Editor] Theme config load fallback: {}", themeConfig.error);
   }
 

@@ -81,21 +81,15 @@ namespace Horo {
                     prop.scale = MultiplyComponents(
                         node.scale, ParseVec3Csv(renderScaleIt->second, Vec3::One()));
                 }
-                const auto albedoIt = node.extraProps.find("albedoMap");
-                if (albedoIt != node.extraProps.end())
+                if (const auto albedoIt = node.extraProps.find("albedoMap"); albedoIt != node.extraProps.end())
                     prop.albedoMap = albedoIt->second;
-                const auto normalIt = node.extraProps.find("normalMap");
-                if (normalIt != node.extraProps.end())
+                if (const auto normalIt = node.extraProps.find("normalMap"); normalIt != node.extraProps.end())
                     prop.normalMap = normalIt->second;
-                const auto metallicRoughnessIt =
-                        node.extraProps.find("metallicRoughnessMap");
-                if (metallicRoughnessIt != node.extraProps.end())
+                if (const auto metallicRoughnessIt = node.extraProps.find("metallicRoughnessMap"); metallicRoughnessIt != node.extraProps.end())
                     prop.metallicRoughnessMap = metallicRoughnessIt->second;
-                const auto emissiveIt = node.extraProps.find("emissiveMap");
-                if (emissiveIt != node.extraProps.end())
+                if (const auto emissiveIt = node.extraProps.find("emissiveMap"); emissiveIt != node.extraProps.end())
                     prop.emissiveMap = emissiveIt->second;
-                const auto occlusionIt = node.extraProps.find("occlusionMap");
-                if (occlusionIt != node.extraProps.end())
+                if (const auto occlusionIt = node.extraProps.find("occlusionMap"); occlusionIt != node.extraProps.end())
                     prop.occlusionMap = occlusionIt->second;
             }
 

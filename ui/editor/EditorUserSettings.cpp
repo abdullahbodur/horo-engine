@@ -80,9 +80,9 @@ bool SaveEditorUserSettingsDocument(EditorUserSettingsDocument *doc,
         editorJson = json::object();
 
     std::string presetId = doc->settings.themePresetId;
-    const Ui::EditorThemePreset idAsBuiltin =
+    if (const Ui::EditorThemePreset idAsBuiltin =
             Ui::ParseEditorThemePreset(presetId, nullptr);
-    if (doc->settings.themePreset != idAsBuiltin)
+        doc->settings.themePreset != idAsBuiltin)
         presetId = Ui::EditorThemePresetId(doc->settings.themePreset);
     if (!Ui::IsEditorThemePresetIdKnown(presetId))
         presetId = Ui::EditorThemePresetId(doc->settings.themePreset);

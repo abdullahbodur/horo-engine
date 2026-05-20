@@ -64,14 +64,15 @@ std::vector<std::string> LoadRecentImportsJson() {
             return result;
         std::string arrayStr = content.substr(start + 1, end - start - 1);
         size_t pos = 0;
-        while (result.size() < 6 && (pos = arrayStr.find('"', pos)) != std::string::npos) {
+        pos = arrayStr.find('"', pos);
+        while (result.size() < 6 && pos != std::string::npos) {
             auto endQuote = arrayStr.find('"', pos + 1);
             if (endQuote == std::string::npos) break;
             result.push_back(arrayStr.substr(pos + 1, endQuote - pos - 1));
-            pos = endQuote + 1;
+            pos = arrayStr.find('"', endQuote + 1);
         }
     } catch (const std::exception&) {
-        // Ignore parse errors
+        // Ignore parse/allocation errors in settings file reading
     }
     return result;
 }
@@ -394,7 +395,9 @@ void EditorImportAssetModal::DrawSettingsImportAs() {
     constexpr std::array<const char*, 3> importTypes = {"Static Mesh", "Skeletal Mesh", "Texture"};
     const bool isSkeletal = m_draft.settings.importType == "skeletal_mesh";
     const bool isTexture = m_draft.settings.importType == "texture";
-    int currentIdx = isSkeletal ? 1 : (isTexture ? 2 : 0);
+    int currentIdx = 0;
+    if (isSkeletal) currentIdx = 1;
+    else if (isTexture) currentIdx = 2;
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginCombo("##ImportType", importTypes[static_cast<size_t>(currentIdx)])) {
         for (int i = 0; i < 3; i++) {
@@ -457,37 +460,33 @@ void EditorImportAssetModal::DrawSettingsScale() {
     ImGui::TextUnformatted("Scale");
     ImGui::TableNextColumn();
 
-    float scaleX = 1.0f, scaleY = 1.0f, scaleZ = 1.0f;
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    float scaleZ = 1.0f;
 #ifdef _WIN32
     sscanf_s(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
 #else
     sscanf(m_draft.renderScale.c_str(), "%f,%f,%f", &scaleX, &scaleY, &scaleZ);
 #endif
     ImGui::SetNextItemWidth(70);
-    std::string scaleXStr = std::format("{:.4f}", scaleX);
     char scaleXBuf[32];
-    scaleXStr.copy(scaleXBuf, sizeof(scaleXBuf) - 1);
-    scaleXBuf[std::min(scaleXStr.size(), sizeof(scaleXBuf) - 1)] = '\0';
+    snprintf(scaleXBuf, sizeof(scaleXBuf), "%.4f", scaleX);
     if (ImGui::InputText("##ScaleX", scaleXBuf, sizeof(scaleXBuf))) {
         scaleX = std::strtof(scaleXBuf, nullptr);
         m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(70);
-    std::string scaleYStr = std::format("{:.4f}", scaleY);
     char scaleYBuf[32];
-    scaleYStr.copy(scaleYBuf, sizeof(scaleYBuf) - 1);
-    scaleYBuf[std::min(scaleYStr.size(), sizeof(scaleYBuf) - 1)] = '\0';
+    snprintf(scaleYBuf, sizeof(scaleYBuf), "%.4f", scaleY);
     if (ImGui::InputText("##ScaleY", scaleYBuf, sizeof(scaleYBuf))) {
         scaleY = std::strtof(scaleYBuf, nullptr);
         m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(70);
-    std::string scaleZStr = std::format("{:.4f}", scaleZ);
     char scaleZBuf[32];
-    scaleZStr.copy(scaleZBuf, sizeof(scaleZBuf) - 1);
-    scaleZBuf[std::min(scaleZStr.size(), sizeof(scaleZBuf) - 1)] = '\0';
+    snprintf(scaleZBuf, sizeof(scaleZBuf), "%.4f", scaleZ);
     if (ImGui::InputText("##ScaleZ", scaleZBuf, sizeof(scaleZBuf))) {
         scaleZ = std::strtof(scaleZBuf, nullptr);
         m_draft.renderScale = std::format("{:.4f},{:.4f},{:.4f}", scaleX, scaleY, scaleZ);
@@ -687,7 +686,9 @@ void EditorImportAssetModal::DrawRenderScaleSection() {
     ImGui::SameLine();
     ImGui::TextDisabled("(X, Y, Z)");
 
-    float scaleX = 1.0f, scaleY = 1.0f, scaleZ = 1.0f;
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    float scaleZ = 1.0f;
     if (m_renderScaleAutoDerived && !m_draft.sourcePath.empty()) {
         m_draft.renderScale = "1.0000,1.0000,1.0000";
     }
@@ -855,24 +856,25 @@ void EditorImportAssetModal::DrawResultPanel() const {
     }
 
     for (const auto &diag: m_lastResult.diagnostics) {
+        using enum AssetDiagnosticSeverity;
         ImVec4 color;
         switch (diag.severity) {
-        case AssetDiagnosticSeverity::Info:
+        case Info:
             color = ImVec4(0.5f, 0.7f, 1.0f, 1.0f);
             break;
-        case AssetDiagnosticSeverity::Warning:
+        case Warning:
             color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
             break;
-        case AssetDiagnosticSeverity::Error:
+        case Error:
             color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
             break;
         default:
             color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
         }
-        ImGui::TextColored(color, "[%s] %s",
-                           diag.severity == AssetDiagnosticSeverity::Info ? "INFO" :
-                           diag.severity == AssetDiagnosticSeverity::Warning ? "WARN" : "ERR",
-                           diag.message.c_str());
+        const char* severityTag = "ERR";
+        if (diag.severity == Info) severityTag = "INFO";
+        else if (diag.severity == Warning) severityTag = "WARN";
+        ImGui::TextColored(color, "[%s] %s", severityTag, diag.message.c_str());
     }
 }
 
@@ -930,9 +932,12 @@ void EditorImportAssetModal::RefreshTextureSlotsFromFbxPreview() {
 
             auto &slot = m_draft.textureSlots[static_cast<int>(slotKind)];
             // Prefer absolute path, fall back to relative, then filename
-            slot.autoDetectedPath = !tex.absolutePath.empty() ? tex.absolutePath
-                                    : !tex.relativePath.empty() ? tex.relativePath
-                                    : tex.filename;
+            if (!tex.absolutePath.empty())
+                slot.autoDetectedPath = tex.absolutePath;
+            else if (!tex.relativePath.empty())
+                slot.autoDetectedPath = tex.relativePath;
+            else
+                slot.autoDetectedPath = tex.filename;
             slot.hasAutoDetected = true;
             slot.enabled = true;
         }
@@ -958,12 +963,13 @@ ImportAssetRequest EditorImportAssetModal::ConsumePendingRequest() {
     for (const auto &slot: m_draft.textureSlots) {
         if (!slot.path.empty()) {
             hasAnyOverride = true;
+            using enum TextureSlotKind;
             switch (slot.slot) {
-            case TextureSlotKind::Albedo: overrides.albedoMap = slot.path; break;
-            case TextureSlotKind::Normal: overrides.normalMap = slot.path; break;
-            case TextureSlotKind::MetallicRoughness: overrides.metallicRoughnessMap = slot.path; break;
-            case TextureSlotKind::Emissive: overrides.emissiveMap = slot.path; break;
-            case TextureSlotKind::Occlusion: overrides.occlusionMap = slot.path; break;
+            case Albedo: overrides.albedoMap = slot.path; break;
+            case Normal: overrides.normalMap = slot.path; break;
+            case MetallicRoughness: overrides.metallicRoughnessMap = slot.path; break;
+            case Emissive: overrides.emissiveMap = slot.path; break;
+            case Occlusion: overrides.occlusionMap = slot.path; break;
             }
         }
     }
@@ -1040,7 +1046,9 @@ void EditorImportAssetModal::ClearRecentImports() {
             std::ofstream file(settingsPath);
             if (file.is_open())
                 file << "{\n  \"recent_imports\": []\n}\n";
-        } catch (const std::exception&) {}
+        } catch (const std::exception&) {
+            // Ignore write errors for settings file
+        }
     }
 }
 

@@ -39,8 +39,8 @@ float SnapValueToStep(float value, float step) {
 
 /** @brief Snaps scale without collapsing a non-zero component to zero. */
 float SnapScaleToStep(float value, float step) {
-  const float snapped = SnapValueToStep(value, step);
-  if (std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
+  if (const float snapped = SnapValueToStep(value, step);
+      std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
     return snapped;
   return value > 0.0f ? step : -step;
 }

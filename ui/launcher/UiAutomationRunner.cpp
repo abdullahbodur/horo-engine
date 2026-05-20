@@ -131,15 +131,8 @@ bool ParseBoolEnvDefaultTrue(const char *name) {
   return ParseUiAutomationBoolValue(value, true);
 }
 
-/** @brief Reads a non-negative integer from the named environment variable. */
-int ParseNonNegativeIntEnv(const char *name, int fallback = 0) {
-  if (!name || !*name)
-    return fallback;
-  const std::string value = HomeDirGuard::ReadEnv(name);
-  return ParseUiAutomationNonNegativeIntValue(value, fallback);
-}
 
-/** @brief Reads a string value from the named environment variable. */
+
 std::string ReadEnvString(const char *name) {
   if (!name || !*name)
     return {};
@@ -196,10 +189,6 @@ struct TransparentStringHash {
 
   size_t operator()(const std::string &value) const noexcept {
     return (*this)(std::string_view(value));
-  }
-
-  size_t operator()(const char *value) const noexcept {
-    return (*this)(std::string_view(value ? value : ""));
   }
 };
 

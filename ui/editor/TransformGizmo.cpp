@@ -81,8 +81,8 @@ namespace Horo::Editor {
 
         /** @brief Snaps scale while avoiding accidental zero scale collapse. */
         float SnapScaleToStep(float value, float step) {
-            const float snapped = SnapValueToStep(value, step);
-            if (std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
+            if (const float snapped = SnapValueToStep(value, step);
+                std::abs(snapped) > 1e-6f || std::abs(value) <= 1e-6f)
                 return snapped;
             return value > 0.0f ? step : -step;
         }
@@ -291,10 +291,8 @@ GizmoAxis PickRotateRingAxis(float mx, float my, const Vec3& pos,
             if (!WorldToScreen(tip, cam, screenW, screenH, tx, ty))
                 continue;
 
-            const float handleScreenDx = tx - ox;
-            const float handleScreenDy = ty - oy;
-            if (handleScreenDx * handleScreenDx + handleScreenDy * handleScreenDy <
-                16.0f)
+            if (const float handleScreenDx = tx - ox, handleScreenDy = ty - oy;
+                handleScreenDx * handleScreenDx + handleScreenDy * handleScreenDy < 16.0f)
                 continue;
 
             const float distSq = ScreenSegmentDistanceSq(

@@ -156,7 +156,7 @@ private:
      */
     void DrawThumbnailTile(const FileBrowserEntry& entry, float thumbSize, float tileH);
     void DrawThumbnailTileIcon(ImDrawList* dl, const FileBrowserEntry& entry, const ImVec2& thumbMin, const ImVec2& thumbMax);
-    void DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax);
+    void DrawThumbnailTileLabel(ImDrawList* dl, const FileBrowserEntry& entry, float thumbSize, const ImVec2& tileMin, const ImVec2& thumbMax) const;
 
     /** @brief Draws the drag-and-drop zone at the top of the browser. */
     void DrawDropZone();
