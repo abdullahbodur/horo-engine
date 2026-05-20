@@ -205,10 +205,6 @@ AssetThumbnailRenderer::CachedMesh* TryLoadAssetMesh(std::string_view meshPath) 
     LogWarn("[Thumbnail] Failed to load OBJ for preview: {} (error: {})", cacheKey, e.what());
     renderer.noPreviewKeys.insert(cacheKey);
     return nullptr;
-  } catch (const std::runtime_error& e) {
-    LogWarn("[Thumbnail] Runtime error loading mesh for preview: {} (error: {})", cacheKey, e.what());
-    renderer.noPreviewKeys.insert(cacheKey);
-    return nullptr;
   }
 }
 
@@ -252,8 +248,7 @@ Texture LoadThumbnailAlbedoTexture(const std::filesystem::path& path) {
   if (path.empty())
     return {};
 
-  std::error_code ec;
-  if (!std::filesystem::is_regular_file(path, ec) || ec)
+  if (std::error_code ec; !std::filesystem::is_regular_file(path, ec) || ec)
     return {};
 
   return Texture::FromFile(path.generic_string());

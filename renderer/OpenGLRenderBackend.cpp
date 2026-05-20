@@ -424,7 +424,9 @@ namespace Horo {
         }
         static constexpr GLenum kPackAlignment = 0x0D05;
         glPixelStorei(kPackAlignment, 1);
-        while (glGetError() != GL_NO_ERROR) {} // Drain prior errors so glReadPixels result is accurate
+        while (glGetError() != GL_NO_ERROR) {
+            // Drain prior errors so glReadPixels result is accurate
+        }
         glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         if (const GLenum err = glGetError(); err != GL_NO_ERROR) {
             if (outError)

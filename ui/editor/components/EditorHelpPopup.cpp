@@ -31,8 +31,7 @@ void EditorHelpPopup::Draw() {
     ImGui::TextDisabled("Search by category, command, or key");
     std::string searchBuf(256, '\0');
     m_searchQuery.copy(searchBuf.data(), searchBuf.size() - 1);
-    const auto& theme = Ui::GetEditorTheme();
-    if (Ui::InputTextWithLeadingIcon(theme, "##shortcut_search",
+    if (const auto& theme = Ui::GetEditorTheme(); Ui::InputTextWithLeadingIcon(theme, "##shortcut_search",
                                      ICON_FA_MAGNIFYING_GLASS,
                                      "Find shortcut...", searchBuf.data(),
                                      searchBuf.size()))

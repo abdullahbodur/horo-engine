@@ -576,7 +576,7 @@ namespace Horo::Editor
   }
 
   /** @brief Draws the favorites tree with placeholder content. */
-  void EditorLayer::DrawProjectFavoritesTree(const Ui::EditorTheme& theme)
+  void EditorLayer::DrawProjectFavoritesTree(const Ui::EditorTheme& theme) const
   {
     const auto& palette = theme.palette;
     ImGui::BeginChild("##project_favorites_tree", ImVec2(0, 0), false);

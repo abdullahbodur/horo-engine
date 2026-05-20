@@ -459,7 +459,7 @@ namespace Horo {
 
             /** @brief Draws the Favorites tree view with placeholder content.
  *  @param theme Editor theme for styling. */
-void DrawProjectFavoritesTree(const Ui::EditorTheme& theme);
+void DrawProjectFavoritesTree(const Ui::EditorTheme& theme) const;
 
 /** @brief Draws the Favorites and root nodes of the project tree.
              *  @param theme Active editor theme. */

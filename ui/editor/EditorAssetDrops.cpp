@@ -65,24 +65,22 @@ namespace Horo::Editor {
 
         // First check if modal is open and accepts the drop
         if (m_importAssetModal.IsOpen()) {
-            for (const std::string &path: m_pendingPathDropPaths) {
-                if ((IsTextureFilePath(path) || IsObjFilePath(path) || IsFbxFilePath(path)) &&
-                    m_importAssetModal.HandleFileDrop(px, py, path)) {
-                    m_pendingPathDropPaths.clear();
-                    return;
-                }
+            auto handledIt = std::ranges::find_if(m_pendingPathDropPaths, [&](const std::string &path) {
+                return (IsTextureFilePath(path) || IsObjFilePath(path) || IsFbxFilePath(path)) &&
+                       m_importAssetModal.HandleFileDrop(px, py, path);
+            });
+            if (handledIt != m_pendingPathDropPaths.end()) {
+                m_pendingPathDropPaths.clear();
+                return;
             }
         }
 
         auto it = std::ranges::find_if(m_pendingPathDropPaths, [](const std::string& p) {
             return IsTextureFilePath(p);
         });
-        if (it != m_pendingPathDropPaths.end()) {
-            if (m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) &&
-                TryApplySelectedAssetAlbedoDrop(*it)) {
-                m_pendingPathDropPaths.clear();
-                return;
-            }
+        if (it != m_pendingPathDropPaths.end() && m_albedoSelDrop.Contains(px, py, kTextureDropHitSlopPx) &&
+            TryApplySelectedAssetAlbedoDrop(*it)) {
+            m_pendingPathDropPaths.clear();
         }
     }
 
@@ -90,12 +88,13 @@ namespace Horo::Editor {
     void EditorLayer::ProcessPendingMeshDrops() {
         // Modal takes priority for mesh drops
         if (m_importAssetModal.IsOpen()) {
-            for (const std::string &path: m_pendingPathDropPaths) {
-                if ((IsObjFilePath(path) || IsFbxFilePath(path)) &&
-                    m_importAssetModal.HandleFileDrop(m_pendingPathDropX, m_pendingPathDropY, path)) {
-                    m_pendingPathDropPaths.clear();
-                    return;
-                }
+            auto handledIt = std::ranges::find_if(m_pendingPathDropPaths, [&](const std::string &path) {
+                return (IsObjFilePath(path) || IsFbxFilePath(path)) &&
+                       m_importAssetModal.HandleFileDrop(m_pendingPathDropX, m_pendingPathDropY, path);
+            });
+            if (handledIt != m_pendingPathDropPaths.end()) {
+                m_pendingPathDropPaths.clear();
+                return;
             }
         }
 

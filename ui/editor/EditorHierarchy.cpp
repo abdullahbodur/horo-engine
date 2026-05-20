@@ -390,9 +390,7 @@ void EditorLayer::DrawObjectsTreeSearchMode( // NOSONAR: cpp:S3776 search-mode
 
     const std::string selectableId = std::format("##obj_{}", i);
 
-    const float lineH = ImGui::GetTextLineHeight();
-
-    if (ImGui::Selectable(selectableId.c_str(), IsSelected(i), 0,
+    if (const float lineH = ImGui::GetTextLineHeight(); ImGui::Selectable(selectableId.c_str(), IsSelected(i), 0,
                           ImVec2(0, lineH)))
       applySearchSelection(i);
     ImGui::SameLine();
