@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "last_updated": "2026-05-25",
+  "entries": [
+    {
+      "name": "glad",
+      "version": "4.1-core-generated-2024-01",
+      "license": "MIT",
+      "origin": "https://glad.dav1d.de/",
+      "notes": "OpenGL 4.1 Core profile loader. Pre-generated. Regenerate via https://glad.dav1d.de/ with profile=core, api=gl=4.1.",
+      "dep_type": "committed"
+    },
+    {
+      "name": "glm",
+      "version": "0.9.9.8",
+      "license": "MIT",
+      "origin": "https://github.com/g-truc/glm",
+      "notes": "Header-only math library. Snapshot from vendor/glm/. No embedded version identifier; version reflects closest upstream release tag at time of snapshot.",
+      "dep_type": "committed"
+    },
+    {
+      "name": "stb",
+      "version": "2.30-stb_image",
+      "license": "MIT",
+      "origin": "https://github.com/nothings/stb",
+      "notes": "Header-only image libraries. stb_image.h v2.30, stb_dxt.h included. No version identifiers beyond inline comments.",
+      "dep_type": "committed"
+    },
+    {
+      "name": "ufbx",
+      "version": "0.21.3",
+      "license": "MIT",
+      "origin": "https://github.com/ufbx/ufbx",
+      "pinned_commit": "83bc7cf",
+      "notes": "FBX parser amalgamation. Dual-licensed MIT / public domain — see vendor/ufbx/LICENSE.",
+      "dep_type": "committed"
+    },
+    {
+      "name": "bc7enc",
+      "version": "r1.0.5",
+      "license": "MIT",
+      "origin": "https://github.com/richgel999/bc7enc",
+      "notes": "BC7 texture block encoder by Richard Geldreich Jr. MIT license or public domain.",
+      "dep_type": "committed"
+    }
+  ]
+}

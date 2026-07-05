@@ -1,0 +1,52 @@
+# Build outputs
+/build*/
+/cmake-build-*/
+/out/
+/dist/
+tests/fixtures/**/build/
+tests/fixtures/submodule-test/build-find-package/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# Local CMake / dependency cache
+.cmake/
+
+# Generated release and analysis artifacts
+sbom.spdx.json
+.scannerwork/
+
+# Generated test and editor artifacts
+ui_test_output/
+bw-output/
+imgui.ini
+assets/prefabs/pf_source_prefab*.horo
+assets/scenes/scene.json
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Logs and local caches
+*.log
+.cache/
+
+# IDE and editor state
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Local agent/tool state
+.opencode
+.hermes/
+.sisyphus/
+.worktrees/
+
+# OS metadata
+.DS_Store
+Thumbs.db

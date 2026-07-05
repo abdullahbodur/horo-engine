@@ -1,0 +1,337 @@
+# Distribution And Update Architecture
+
+## Purpose
+
+This document defines installation artifacts, update channels, signed update
+metadata, download, staging, activation, rollback, compatibility, and user
+control for HoroEditor and Horo Engine command-line tools.
+
+Game distribution may reuse the packaging and verification primitives, but each
+game owns its product-specific update policy.
+
+## Core Decisions
+
+- Installed artifacts are immutable for one product version.
+- Updates are described by signed manifests and content hashes.
+- Download and staging never modify the running installation.
+- Activation is performed by a small trusted updater after the main process
+  exits.
+- Failed activation rolls back to the last verified installation.
+- Update checks respect explicit channels and user policy.
+- Project formats are not upgraded merely because an update was downloaded.
+- Plugins and toolchains have independent compatibility checks.
+
+## Distribution Products
+
+Supported products include:
+
+- HoroEditor desktop package
+- `horo-engine` CLI package
+- `horopak` package tool
+- public SDK/development package
+- symbols and diagnostic artifacts kept outside ordinary installation
+
+Each artifact has stable product, version, platform, architecture, build
+identity, and checksum metadata.
+
+## Platform Package Formats
+
+Distribution profiles select one or more platform package formats:
+
+| Platform | Editor / CLI formats | Game formats |
+|---|---|---|
+| Windows | `.msi`, `.exe`, `.zip` | installer, portable zip, store package |
+| macOS | `.dmg`, `.pkg`, `.zip` | `.app` bundle, `.dmg`, store package |
+| Linux | `.AppImage`, `.tar.gz`, `.deb`, `.rpm` | portable archive, AppImage, distro package |
+
+A package format defines:
+
+- install layout
+- executable identity
+- signing requirement
+- update eligibility
+- uninstall behavior
+- file association behavior
+- desktop/menu integration
+- rollback support
+- user-data and cache locations
+
+Package format is not inferred from operating system alone. It is selected by
+the release or distribution profile.
+
+## Game Content, Patch, And DLC Releases
+
+Game releases may contain multiple content units:
+
+- base game package
+- required startup chunks
+- optional chunks
+- DLC chunks
+- language packs
+- platform-specific shader or texture packages
+- dedicated-server content subsets
+
+The release manifest records for each content unit:
+
+- chunk ID
+- semantic content version
+- asset archive identity
+- required engine/runtime version
+- dependencies on other chunks
+- install size and download size
+- integrity hash and signature
+- encryption/protection policy
+- mount priority and runtime availability policy
+
+Patch releases compare a previous verified release manifest with the candidate
+manifest and may produce delta packages. Delta packages are optimization only:
+the updater must be able to fall back to the full package when delta validation
+or application fails.
+
+A DLC or optional content package must never replace base-game files implicitly.
+It is mounted through the runtime asset-provider contract and validated against
+the same manifest, signature, compatibility, and chunk dependency rules as the
+base package.
+
+## Update Channels
+
+Canonical channels:
+
+- `stable`
+- `preview`
+- `nightly`
+- enterprise or offline channel defined by deployment policy
+
+Moving to a less stable channel requires explicit user action. Returning to an
+older version is treated as a deliberate rollback with project compatibility
+warnings.
+
+## Update Manifest
+
+```json
+{
+  "schemaVersion": 1,
+  "product": "horo-editor",
+  "channel": "stable",
+  "version": "0.8.2",
+  "buildId": "build_...",
+  "publishedAt": "2026-06-14T12:00:00Z",
+  "minimumUpdaterVersion": "1",
+  "packages": [
+    {
+      "platform": "macos",
+      "arch": "arm64",
+      "url": "https://...",
+      "size": 12345678,
+      "sha256": "...",
+      "signature": "..."
+    }
+  ]
+}
+```
+
+The manifest and package identity are verified according to
+[Release Security](./release-security.md). Transport security does not replace
+artifact signature and hash verification.
+
+## Update Trust Root And Metadata Freshness
+
+The updater verifies update metadata against a configured trust root. The trust
+root is installed with the product or provided by an enterprise/offline policy.
+
+Update metadata includes:
+
+- manifest schema version
+- product identity
+- channel identity
+- published timestamp
+- metadata expiry timestamp
+- minimum supported updater version
+- minimum allowed product version when anti-rollback is enabled
+- signing key identity
+
+Expired metadata is rejected unless an offline policy explicitly permits it.
+Returning to an older version is allowed only through explicit rollback policy
+and user or administrator action. Automatic update checks must not downgrade a
+product because an attacker served an older valid manifest.
+
+Signing key rotation and revocation are handled through a versioned trust-root
+update policy. A compromised update key invalidates affected manifests and
+requires a fail-closed updater response unless an administrator recovery policy
+is active.
+
+## Update State Machine
+
+```text
+Idle
+  -> Checking
+  -> Available
+  -> Downloading
+  -> Verifying
+  -> Staged
+  -> AwaitingRestart
+  -> Activating
+  -> Active
+
+Downloading / Verifying / Activating -> Failed
+Activating -> RolledBack
+```
+
+State is persisted so interrupted downloads and activation can recover safely.
+
+## Download
+
+Downloads use:
+
+- bounded disk-space preflight
+- temporary staging directories
+- resumable ranges only when server identity and content validators match
+- strict redirect and destination policy
+- progress through the common job model
+- cancellation without damaging an installed version
+
+Downloaded bytes are untrusted until all expected hashes and signatures pass.
+
+## Staging
+
+Staging:
+
+1. creates a version-specific directory
+2. extracts with path and resource limits
+3. verifies every declared file
+4. validates executable identity and package structure
+5. writes a staged-install manifest
+6. marks the version ready atomically
+
+The running process never loads libraries or plugins from an incomplete staged
+version.
+
+## Activation
+
+Activation occurs after editor and CLI processes using the installation exit.
+The updater:
+
+1. acquires the installation lock
+2. verifies staged and current manifests
+3. records rollback information
+4. atomically switches the active installation pointer or directory
+5. starts a bounded health check
+6. commits success or restores the previous version
+
+Platform installers may implement the switch differently, but partial mixed
+versions are forbidden.
+
+## Rollback
+
+At least one last-known-good version is retained within a disk budget. Rollback
+is offered after:
+
+- activation failure
+- startup health-check failure
+- explicit user selection
+
+User projects, settings, caches, and credentials are not stored inside the
+versioned installation and are not deleted by rollback.
+
+## User State, Cache, And Settings Migration
+
+Product updates may require migration of user-level state:
+
+- editor preferences
+- recent-project records
+- local toolchain profiles
+- workspace cache
+- asset and shader caches
+- plugin resolution cache
+- update state records
+
+User projects are not migrated during product update activation. User-state
+migration runs only after the new product version starts and validates the
+state schema.
+
+Migrations are:
+
+- versioned
+- deterministic
+- logged
+- recoverable where practical
+- separated from installation activation
+- never allowed to block rollback of the executable installation
+
+Caches may be discarded and rebuilt instead of migrated. Credentials are never
+migrated by copying raw secret values; only credential references may be
+validated or re-authorized.
+
+## Compatibility
+
+Before activation, the editor reports:
+
+- project format support
+- plugin compatibility
+- installed SDK/toolchain compatibility
+- operating system minimum version
+- renderer/backend capability changes
+
+An engine update does not rewrite projects in the background. Project format
+changes follow explicit project-open validation and user-visible operations.
+
+## User Experience
+
+Update checks run at a low frequency and never block editor startup. The UI
+supports:
+
+- check now
+- channel selection
+- download automatically policy
+- install on exit or restart now
+- release notes
+- download and verification diagnostics
+
+Mandatory security updates require an explicit product policy and still retain
+diagnostic and recovery paths.
+
+## Offline Distribution
+
+Offline packages use the same signed manifest and verification. Administrators
+may provide a local update source or install packages manually without disabling
+integrity checks.
+
+## Observability And Privacy
+
+Update records include product, channel, version, phase, duration, byte counts,
+and safe error codes. They do not include credentials, full proxy configuration,
+or unrelated project data.
+
+Update checking telemetry is opt-in or governed by product privacy policy.
+
+## Testing
+
+Required tests cover:
+
+- manifest signature and hash rejection
+- platform/architecture package selection
+- platform package format selection
+- interrupted and resumed download
+- staging path traversal and disk limits
+- activation lock contention
+- startup health-check rollback
+- preservation of user data
+- plugin and SDK compatibility presentation
+- offline package verification
+- update state recovery after process interruption
+- update metadata expiry rejection
+- anti-rollback rejection for stale manifests
+- signing key rotation and revoked-key rejection
+- delta patch validation and fallback to full package
+- DLC chunk dependency validation
+- user settings/cache migration after product update
+
+## Related Documents
+
+- [Release Architecture](./release.md)
+- [Release Security](./release-security.md)
+- [Horo Package System](../packages/package-system.md): package updates and dependency resolution
+- [Application Security](../security/application-security.md)
+- [Platform Abstraction](../foundation/platform-abstraction.md)
+- [Configuration System](../foundation/configuration-system.md)
+

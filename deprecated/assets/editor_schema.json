@@ -1,0 +1,144 @@
+{
+  "types": {
+    "Panel": {
+      "fields": [
+        {
+          "key": "material",
+          "label": "Material",
+          "type": "enum",
+          "options": ["stone", "metal", "wood"],
+          "default": "stone"
+        }
+      ]
+    },
+    "Prop": {
+      "fields": [
+        {
+          "key": "mesh",
+          "label": "Mesh",
+          "type": "enum",
+          "options": ["box", "sphere", "cylinder", "pyramid", "plane", "quad"],
+          "default": "box"
+        }
+      ]
+    },
+    "Light": {
+      "label": "Light",
+      "fields": [
+        {
+          "key": "lightType",
+          "label": "Type",
+          "type": "enum",
+          "options": ["point", "directional", "spot", "rect", "sky"],
+          "default": "point"
+        },
+        {
+          "key": "radius",
+          "label": "Radius",
+          "type": "float",
+          "min": 0.5,
+          "max": 50.0,
+          "default": "10.0"
+        },
+        {
+          "key": "intensity",
+          "label": "Intensity",
+          "type": "float",
+          "min": 0.1,
+          "max": 20.0,
+          "default": "1.0"
+        },
+        {
+          "key": "color",
+          "label": "Color RGB",
+          "type": "color3",
+          "default": "1.0000,1.0000,1.0000"
+        }
+      ]
+    }
+  },
+  "components": {
+    "light": {
+      "label": "Light",
+      "appliesTo": ["Panel", "Prop"],
+      "fields": [
+        {
+          "key": "lightType",
+          "label": "Type",
+          "description": "Controls whether the attached light behaves as a point or directional light.",
+          "type": "enum",
+          "options": ["point", "directional", "spot", "rect", "sky"],
+          "default": "point"
+        },
+        {
+          "key": "radius",
+          "label": "Radius",
+          "description": "Fallback radius for point lights.",
+          "type": "float",
+          "min": 0.5,
+          "max": 50.0,
+          "default": "5.0"
+        },
+        {
+          "key": "intensity",
+          "label": "Intensity",
+          "description": "Brightness multiplier applied at runtime.",
+          "type": "float",
+          "min": 0.1,
+          "max": 20.0,
+          "default": "1.0"
+        },
+        {
+          "key": "color",
+          "label": "Color RGB",
+          "description": "Comma-separated linear RGB triple.",
+          "type": "color3",
+          "default": "1.0000,1.0000,1.0000"
+        }
+      ]
+    },
+    "rigidbody": {
+      "label": "RigidBody",
+      "appliesTo": ["Prop"],
+      "fields": [
+        {
+          "key": "mass",
+          "label": "Mass",
+          "description": "Zero creates a static rigid body.",
+          "type": "float",
+          "min": 0.0,
+          "max": 500.0,
+          "default": "1.0"
+        },
+        {
+          "key": "isKinematic",
+          "label": "Kinematic",
+          "description": "Disables physics simulation and uses authored transforms.",
+          "type": "bool",
+          "default": "false"
+        },
+        {
+          "key": "useGravity",
+          "label": "Use Gravity",
+          "description": "Applies world gravity during simulation.",
+          "type": "bool",
+          "default": "true"
+        }
+      ]
+    },
+    "script": {
+      "label": "Script",
+      "appliesTo": ["Panel", "Prop", "Light", "Camera"],
+      "fields": [
+        {
+          "key": "behaviorTag",
+          "label": "Behavior",
+          "description": "Runtime behavior id resolved by the game.",
+          "type": "string",
+          "default": "",
+          "allowEmpty": true
+        }
+      ]
+    }
+  }
+}

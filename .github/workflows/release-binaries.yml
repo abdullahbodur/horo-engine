@@ -1,0 +1,252 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and upload binaries to (e.g. v0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build · Linux / GCC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+          fetch-tags: true
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: release-linux
+
+      - name: Install system dependencies
+        run: |
+          if ! sudo apt-get update; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            patchelf \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxext-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-release-linux-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-release-linux-
+
+      - name: Configure
+        run: >
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ~/.cmake/fetchcontent
+
+      - name: Build
+        run: cmake --build --preset release --target HoroEditor horopak --parallel
+
+      - name: Generate SBOM
+        run: |
+          python3 scripts/generate-sbom.py \
+            --output build/release/sbom.spdx.json \
+            --with-vulkan \
+            --with-shader-cooker \
+            --validate
+
+      - name: Package
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          # Strip leading 'v' so the version in .desktop / install.sh is
+          # a bare SemVer (e.g. "0.3.0") rather than the git tag ref.
+          VERSION="${RELEASE_TAG#v}"
+          scripts/package-linux.sh \
+            --build-dir build/release \
+            --output-name HoroEngine-linux-x86_64 \
+            ${VERSION:+--version "$VERSION"} \
+            --install-script \
+            --desktop-file
+
+      - name: Verify package
+        run: |
+          DIST="HoroEngine-linux-x86_64"
+          echo "=== Extracting $DIST.tar.gz ==="
+          tar -xzf "${DIST}.tar.gz"
+          echo ""
+          echo "=== Package layout ==="
+          find "$DIST" -maxdepth 3 -not -path '*/\.*' | sort
+          echo ""
+          echo "=== Shared library diagnostics ==="
+          for BIN in "$DIST/bin/HoroEditor" "$DIST/bin/horopak"; do
+            if [[ -f "$BIN" ]]; then
+              echo "-- ldd $(basename "$BIN") --"
+              ldd "$BIN" || true
+              echo ""
+              MISSING=$(ldd "$BIN" 2>/dev/null | grep -c 'not found' || true)
+              if [[ "$MISSING" -gt 0 ]]; then
+                echo "ERROR: $MISSING unresolved libraries in $(basename "$BIN")"
+                ldd "$BIN" | grep 'not found'
+                exit 1
+              fi
+            fi
+          done
+          echo "All shared libraries resolved."
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" HoroEngine-linux-x86_64.tar.gz --clobber
+          gh release upload "$RELEASE_TAG" build/release/sbom.spdx.json --clobber
+
+  build-macos:
+    name: Build · macOS / Clang
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+          fetch-tags: true
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: release-macos
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cmake/fetchcontent
+          key: fetchcontent-release-macos-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-release-macos-
+
+      - name: Configure
+        run: >
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ~/.cmake/fetchcontent
+
+      - name: Build HoroEditor
+        run: cmake --build --preset release --target HoroEditor --parallel
+
+      - name: Generate SBOM
+        run: |
+          python3 scripts/generate-sbom.py \
+            --output build/release/sbom.spdx.json \
+            --with-vulkan \
+            --with-shader-cooker \
+            --validate
+
+      - name: Package
+        run: |
+          DIST=HoroEngine-macos-arm64
+          mkdir -p "$DIST"
+          cp build/release/bin/HoroEditor "$DIST/"
+          cp -r build/release/sdk "$DIST/" 2>/dev/null || true
+          cp build/release/sbom.spdx.json "$DIST/" 2>/dev/null || true
+          tar -czf "${DIST}.tar.gz" "$DIST"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" HoroEngine-macos-arm64.tar.gz --clobber
+
+  build-windows:
+    name: Build · Windows / MSVC
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+          fetch-tags: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-release-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: sccache-release-windows-
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-release-windows-${{ hashFiles('**/CMakeLists.txt', '**/CMakePresets.json') }}
+          restore-keys: fetchcontent-release-windows-
+
+      - name: Configure
+        run: >
+          cmake --preset release-msvc
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build HoroEditor
+        run: cmake --build build/release-msvc --config Release --target HoroEditor --parallel
+
+      - name: Generate SBOM
+        shell: pwsh
+        run: |
+          python3 scripts/generate-sbom.py `
+            --output build/release-msvc/sbom.spdx.json `
+            --with-vulkan `
+            --with-shader-cooker `
+            --validate
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dist = "HoroEngine-windows-x64"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Copy-Item "build\release-msvc\bin\Release\HoroEditor.exe" $dist
+          if (Test-Path "build\release-msvc\sdk") {
+            Copy-Item -Recurse "build\release-msvc\sdk" "$dist\sdk"
+          }
+          if (Test-Path "build\release-msvc\sbom.spdx.json") {
+            Copy-Item "build\release-msvc\sbom.spdx.json" $dist
+          }
+          Compress-Archive -Path "$dist\*" -DestinationPath "${dist}.zip"
+
+      - name: Upload to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload $env:RELEASE_TAG HoroEngine-windows-x64.zip --clobber
+
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats

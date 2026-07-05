@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: horo-engine-layout-configure
+        name: horo-engine layout configure
+        entry: cmake -S . -B build/skeleton -DBUILD_TESTING=ON
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

@@ -1,0 +1,437 @@
+/** @file EditorBottomDock.cpp
+ *  @brief Implements the bottom workspace dock and its Assets/Console/MCP tab content. */
+#include "ui/editor/components/EditorBottomDock.h"
+
+#include <algorithm>
+#include <array>
+#include <filesystem>
+#include <format>
+
+// Windows headers must come before GLFW
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+// clang-format off
+#include <windows.h>
+// clang-format on
+#endif
+
+// clang-format off
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+// clang-format on
+
+#include <imgui.h>
+
+#include "core/LogBuffer.h"
+#include "mcp/McpController.h"
+#include "ui/editor/EditorLayerInternal.h"
+#include "ui/editor/ProjectEntryFilter.h"
+#include "ui/HoroTheme.h"
+#include "ui/UiComponents.h"
+
+using namespace Horo::Editor::Internal;
+
+namespace Horo::Editor {
+
+namespace {
+/** @brief Number of frames a project-directory listing remains valid before refresh. */
+constexpr uint32_t kProjectListingCacheFrames = 48;
+}
+
+/** @copydoc EditorBottomDock::Draw */
+void EditorBottomDock::Draw(Horo::Mcp::McpController* mcpController, GLFWwindow* window,
+                            float leftDockWidth, float bottomDockHeight) {
+    DrawBottomDock(mcpController, window, leftDockWidth, bottomDockHeight);
+}
+
+/** @copydoc EditorBottomDock::DrawBottomDock */
+void EditorBottomDock::DrawBottomDock(Horo::Mcp::McpController* mcpController,
+                                      GLFWwindow* window,
+                                      float leftDockWidth, float bottomDockHeight) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const float dockTop = io.DisplaySize.y - kEditorStatusH - bottomDockHeight;
+    ImGui::SetNextWindowPos(ImVec2(leftDockWidth, dockTop), ImGuiCond_Always);
+    const float dockW = std::max(0.0f, io.DisplaySize.x - leftDockWidth);
+    ImGui::SetNextWindowSize(ImVec2(dockW, bottomDockHeight), ImGuiCond_Always);
+    ImGui::Begin(kEditorWorkspaceWindow, nullptr, kMainPanelWindowFlags);
+
+    const Ui::EditorTheme &theme = Ui::GetEditorTheme();
+
+    const std::array tabs = {
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::Assets,  m_selectedTab == Tab::Assets},
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::Console, m_selectedTab == Tab::Console},
+        Ui::EditorPanelTabItem{Ui::EditorPanelTab::MCP,     m_selectedTab == Tab::MCP},
+    };
+    const auto topBar = Ui::RenderEditorPanelTopBar(theme, "workspace_topbar", tabs, {});
+    if (topBar.clickedTabIndex == 0) m_selectedTab = Tab::Assets;
+    if (topBar.clickedTabIndex == 1) m_selectedTab = Tab::Console;
+    if (topBar.clickedTabIndex == 2) m_selectedTab = Tab::MCP;
+
+    switch (m_selectedTab) {
+        case Tab::Assets:  DrawAssetsTab();                   break;
+        case Tab::Console: DrawConsoleTab();                  break;
+        case Tab::MCP:     DrawMcpTab(mcpController, window); break;
+    }
+
+    ImGui::End();
+}
+
+/** @copydoc EditorBottomDock::DrawAssetsTab */
+void EditorBottomDock::DrawAssetsTab() const {
+    if (m_assetsTabCallback) {
+        m_assetsTabCallback();
+    }
+}
+
+/** @copydoc EditorBottomDock::DrawSelectedTabContent */
+void EditorBottomDock::DrawSelectedTabContent(Horo::Mcp::McpController* mcpController,
+                                               GLFWwindow* window) {
+    using enum Tab;
+    switch (m_selectedTab) {
+        case Assets:
+            DrawAssetsTab();
+            break;
+        case Console:
+            DrawConsoleTab();
+            break;
+        case MCP:
+            DrawMcpTab(mcpController, window);
+            break;
+    }
+}
+
+/** @copydoc EditorBottomDock::DrawConsoleTab */
+void EditorBottomDock::DrawConsoleTab() {
+    using enum LogLevel;
+    const Ui::EditorTheme& theme = Ui::GetEditorTheme();
+    int nInfo = 0;
+    int nWarn = 0;
+    int nErr = 0;
+    LogBuffer::Instance().GetCounts(&nInfo, &nWarn, &nErr);
+    if (ImGui::SmallButton("Clear"))
+        LogBuffer::Instance().Clear();
+    ImGui::SameLine();
+    Ui::RenderEditorCheckbox(theme, "Info", m_consoleShowInfo);
+    ImGui::SameLine();
+    Ui::RenderEditorCheckbox(theme, "Warn", m_consoleShowWarn);
+    ImGui::SameLine();
+    Ui::RenderEditorCheckbox(theme, "Error", m_consoleShowError);
+    ImGui::SameLine();
+    ImGui::TextDisabled("I:%d W:%d E:%d", nInfo, nWarn, nErr);
+
+    ImGui::Separator();
+    ImGui::BeginChild("##console_scroll", ImVec2(0, 0), true,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+    const LogBuffer& logBuf = LogBuffer::Instance();
+    if (const uint64_t rev = logBuf.Revision(); rev != m_consoleLogRevision) {
+        logBuf.CopyLinesTo(&m_consoleLinesCache);
+        m_consoleLogRevision = rev;
+    }
+
+    m_consoleVisibleScratch.clear();
+    for (int i = 0; i < static_cast<int>(m_consoleLinesCache.size()); ++i) {
+        const LogLine& entry = m_consoleLinesCache[static_cast<size_t>(i)];
+        if (entry.level == Info && !m_consoleShowInfo)
+            continue;
+        if (entry.level == Warn && !m_consoleShowWarn)
+            continue;
+        if (entry.level == Error && !m_consoleShowError)
+            continue;
+        m_consoleVisibleScratch.push_back(i);
+    }
+
+    for (int row = 0; row < static_cast<int>(m_consoleVisibleScratch.size()); ++row) {
+        const LogLine& entry = m_consoleLinesCache[static_cast<size_t>(
+            m_consoleVisibleScratch[static_cast<size_t>(row)])];
+        std::string timeBuf(32, '\0');
+        FormatLogTime(entry, timeBuf.data(), timeBuf.size());
+        const char* levelStr = "ERR";
+        if (entry.level == Info)
+            levelStr = "INFO";
+        else if (entry.level == Warn)
+            levelStr = "WARN";
+        ImVec4 color(0.85f, 0.9f, 1.0f, 1.0f);
+        if (entry.level == Warn)
+            color = ImVec4(1.0f, 0.85f, 0.4f, 1.0f);
+        else if (entry.level == Error)
+            color = ImVec4(1.0f, 0.45f, 0.4f, 1.0f);
+
+        const std::string lineLine = std::format("[{}] {} ({}:{}) {}", timeBuf.c_str(),
+                                                  levelStr, entry.file, entry.line, entry.message);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        ImGui::TextUnformatted(lineLine.c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::EndChild();
+}
+
+/** @copydoc EditorBottomDock::DrawMcpTab */
+void EditorBottomDock::DrawMcpTab(Horo::Mcp::McpController* mcpController,
+                                  GLFWwindow* window) {
+    if (!mcpController)
+        return;
+
+    const Mcp::McpStatusSnapshot status = mcpController->GetStatusSnapshot();
+
+    if (m_mcpSelectedActivityIndex >= static_cast<int>(status.recentActivity.size()))
+        m_mcpSelectedActivityIndex = status.recentActivity.empty()
+                                         ? 0
+                                         : static_cast<int>(status.recentActivity.size()) - 1;
+
+    ImGui::Text("Status: %s", status.running ? "Running" : "Stopped");
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Enabled: %s", status.enabled ? "Yes" : "No");
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Endpoint: %s", status.endpointUrl.c_str());
+
+    ImGui::Text("Requests: %llu", static_cast<unsigned long long>(status.totalRequests));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Success: %llu", static_cast<unsigned long long>(status.successCount));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Failed: %llu", static_cast<unsigned long long>(status.failureCount));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Active: %d", status.activeRequests);
+
+    ImGui::Text("Tools: %d", static_cast<int>(status.toolCount));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Resources: %d", static_cast<int>(status.resourceCount));
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Last Request: %s", status.lastRequestTime.empty() ? "-" : status.lastRequestTime.c_str());
+
+    if (!status.topTool.empty() || !status.topResource.empty()) {
+        ImGui::Text("Top Tool: %s", status.topTool.empty() ? "-" : status.topTool.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+        ImGui::Text("Top Resource: %s",
+                    status.topResource.empty() ? "-" : status.topResource.c_str());
+    }
+
+    if (!status.lastError.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.4f, 1.0f));
+        ImGui::TextWrapped("%s", status.lastError.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    Horo::Ui::RenderEditorSectionDivider("Quick Actions");
+    if (ImGui::Button("Open Settings")) {
+        // Settings modal would be accessed through context
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy Endpoint")) {
+        glfwSetClipboardString(window, status.endpointUrl.c_str());
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear Request Log"))
+        mcpController->ClearActivityLog();
+    if (ImGui::IsItemClicked())
+        m_mcpUiClearToggle = !m_mcpUiClearToggle;
+
+    Horo::Ui::RenderEditorSectionDivider("Clients");
+    if (ImGui::BeginTable("##mcp_clients", 3, ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+        DrawMcpClientCard(
+            {"Codex", "Config path", "~/.codex/config.toml or .codex/config.toml",
+             "Use the built-in MCP server entry so /mcp can discover Horo Engine "
+             "automatically."},
+            mcpController->BuildCodexConfigSnippet(), "Codex MCP config copied",
+            mcpController, window);
+        DrawMcpClientCard(
+            {"Claude", "Config path", "~/.claude.json or .mcp.json",
+             "Claude Code can connect over HTTP MCP using the endpoint shown above."},
+            mcpController->BuildClaudeConfigSnippet(), "Claude MCP config copied",
+            mcpController, window);
+        DrawMcpClientCard(
+            {"VS Code", "Config path", ".vscode/mcp.json or user mcp.json",
+             "VS Code MCP can be set per workspace or globally from the Command Palette."},
+            mcpController->BuildVsCodeConfigSnippet(), "VS Code MCP config copied",
+            mcpController, window);
+        ImGui::EndTable();
+    }
+
+    Horo::Ui::RenderEditorSectionDivider("Live Requests");
+    DrawMcpTabLiveRequests(status);
+
+    Horo::Ui::RenderEditorSectionDivider("Catalog");
+    DrawMcpTabCatalog(status);
+}
+
+/** @copydoc EditorBottomDock::DrawMcpClientCard */
+void EditorBottomDock::DrawMcpClientCard(const McpClientCardInfo& info,
+                                         std::string_view snippet,
+                                         const char* /*toastLabel*/,
+                                         Horo::Mcp::McpController* /*mcpController*/,
+                                         GLFWwindow* window) const {
+    ImGui::TableNextColumn();
+    ImGui::BeginChild(info.title, ImVec2(0, 132.0f), true);
+    ImGui::TextUnformatted(info.title);
+    ImGui::Separator();
+    ImGui::TextWrapped("%s", info.hint);
+    ImGui::TextDisabled("%s", info.pathLabel);
+    ImGui::TextWrapped("%s", info.pathValue);
+    if (ImGui::Button((std::string("Copy Config##") + info.title).c_str())) {
+        glfwSetClipboardString(window, std::string(snippet).c_str());
+        // Toast would be shown through context
+    }
+    ImGui::EndChild();
+}
+
+/** @copydoc EditorBottomDock::DrawMcpTabLiveRequests */
+void EditorBottomDock::DrawMcpTabLiveRequests(const Mcp::McpStatusSnapshot& status) {
+    const Ui::EditorTheme& theme = Ui::GetEditorTheme();
+    if (!ImGui::BeginTable("##mcp_requests", 6,
+                           ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
+                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                           ImVec2(0.0f, 200.0f)))
+        return;
+    ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+    ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthStretch, 1.6f);
+    ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 64.0f);
+    ImGui::TableSetupColumn("Ms", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+    ImGui::TableSetupColumn("Request", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+    ImGui::TableSetupColumn("Response", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+    ImGui::TableHeadersRow();
+    for (int i = 0; i < static_cast<int>(status.recentActivity.size()); ++i) {
+        const Mcp::McpActivityEntry& entry = status.recentActivity[static_cast<size_t>(i)];
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        const bool selected = i == m_mcpSelectedActivityIndex;
+        if (const std::string selectableLabel = std::format("{}##mcp_req_{}", entry.timeText, i);
+            ImGui::Selectable(selectableLabel.c_str(), selected,
+                              ImGuiSelectableFlags_SpanAllColumns))
+            m_mcpSelectedActivityIndex = i;
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted(entry.target.c_str());
+        ImGui::TableSetColumnIndex(2);
+        Ui::RenderEditorStatusText(theme,
+                                   entry.ok ? Ui::EditorStatusLevel::Success
+                                            : Ui::EditorStatusLevel::Error,
+                                   entry.ok ? "OK" : "FAIL");
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%.1f", entry.durationMs);
+        ImGui::TableSetColumnIndex(4);
+        ImGui::TextWrapped("%s", entry.requestPreview.empty() ? "-" : entry.requestPreview.c_str());
+        ImGui::TableSetColumnIndex(5);
+        ImGui::TextWrapped("%s", entry.responsePreview.empty() ? "-" : entry.responsePreview.c_str());
+    }
+    ImGui::EndTable();
+
+    if (status.recentActivity.empty()) {
+        return;
+    }
+    const Mcp::McpActivityEntry& selected = status.recentActivity[static_cast<size_t>(m_mcpSelectedActivityIndex)];
+    Horo::Ui::RenderEditorSectionDivider("Request Detail");
+    ImGui::Text("Timestamp: %s", selected.timestampText.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Method: %s", selected.mcpMethod.empty() ? "-" : selected.mcpMethod.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("HTTP: %d", selected.httpStatus);
+    ImGui::Text("Operation: %s", selected.operation.empty() ? "-" : selected.operation.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::Text("Request ID: %s", selected.requestId.empty() ? "-" : selected.requestId.c_str());
+    if (!selected.error.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.5f, 1.0f));
+        ImGui::TextWrapped("Error: %s", selected.error.c_str());
+        ImGui::PopStyleColor();
+    }
+}
+
+/** @copydoc EditorBottomDock::DrawMcpTabCatalog */
+void EditorBottomDock::DrawMcpTabCatalog(const Mcp::McpStatusSnapshot& status) const {
+    if (!ImGui::BeginTable("##mcp_catalog", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
+        return;
+    ImGui::TableSetupColumn("Tools", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Resources", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableHeadersRow();
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::BeginChild("##mcp_tools_catalog", ImVec2(0, 132.0f), false);
+    for (const Mcp::McpCatalogEntry& entry : status.toolCatalog) {
+        ImGui::TextUnformatted(entry.name.c_str());
+        ImGui::TextDisabled("%s", entry.description.c_str());
+    }
+    ImGui::EndChild();
+    ImGui::TableSetColumnIndex(1);
+    ImGui::BeginChild("##mcp_resources_catalog", ImVec2(0, 132.0f), false);
+    for (const Mcp::McpCatalogEntry& entry : status.resourceCatalog) {
+        ImGui::Text("%s", entry.name.c_str());
+        ImGui::TextDisabled("%s", entry.description.c_str());
+    }
+    ImGui::EndChild();
+    ImGui::EndTable();
+}
+
+/** @copydoc EditorBottomDock::GetProjectDirListing */
+const std::vector<std::pair<std::filesystem::path, bool>>*
+EditorBottomDock::GetProjectDirListing(const std::filesystem::path& absPath) {
+    namespace fs = std::filesystem;
+    if (std::error_code existsEc; !fs::is_directory(absPath, existsEc) || existsEc)
+        return nullptr;
+
+    const std::string key = absPath.generic_string();
+    const auto frame = static_cast<uint32_t>(ImGui::GetFrameCount());
+    if (auto it = m_projectDirCache.find(key); it != m_projectDirCache.end()) {
+        const uint32_t age = frame - it->second.cachedAtFrame;
+        if (age < kProjectListingCacheFrames)
+            return &it->second.entries;
+    }
+
+    std::vector<std::pair<fs::path, bool>> sorted;
+    std::error_code ec;
+    for (fs::directory_iterator dit(absPath, fs::directory_options::skip_permission_denied, ec), end;
+         !ec && dit != end; dit.increment(ec)) {
+        const fs::directory_entry ent = *dit;
+        const std::string name = ent.path().filename().string();
+        if (Editor::IsHiddenDotEntry(name))
+            continue;
+        std::error_code typEc;
+        const bool isDir = ent.is_directory(typEc);
+        if (isDir && !typEc && Editor::IsBlockedProjectDirName(name, &m_projectExtraBlocklist))
+            continue;
+        sorted.emplace_back(ent.path(), isDir && !typEc);
+    }
+    std::ranges::sort(sorted, [](const auto& a, const auto& b) {
+        if (a.second != b.second)
+            return a.second && !b.second;
+        return a.first.filename() < b.first.filename();
+    });
+
+    ProjectDirCache slot;
+    slot.cachedAtFrame = frame;
+    slot.entries = std::move(sorted);
+    m_projectDirCache[key] = std::move(slot);
+    return &m_projectDirCache.at(key).entries;
+}
+
+/** @copydoc EditorBottomDock::InvalidateProjectBrowserCache */
+void EditorBottomDock::InvalidateProjectBrowserCache() {
+    m_projectDirCache.clear();
+}
+
+} // namespace Horo::Editor
