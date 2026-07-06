@@ -61,6 +61,12 @@
     .full-field label{display:block;font:11px var(--mono);color:var(--mut);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
     .full-field input,.full-field select{width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r);color:var(--txt);padding:7px 10px;font:12px var(--mono)}
     .full-field input:focus,.full-field select:focus{outline:none;border-color:var(--a);box-shadow:0 0 0 2px var(--ag)}
+    .modal-close{width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;padding:0;border:1px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--mut);cursor:pointer;transition:background .14s ease,color .14s ease,border-color .14s ease,transform .14s ease}
+    .modal-close svg{width:12px;height:12px;display:block;overflow:visible}
+    .modal-close svg line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;transition:stroke .14s ease}
+    .modal-close:hover{background:rgba(212,82,74,.14);border-color:rgba(212,82,74,.4);color:var(--err)}
+    .modal-close:active{transform:scale(.92);background:rgba(212,82,74,.22)}
+    .modal-close:focus-visible{outline:none;border-color:var(--err);box-shadow:0 0 0 3px rgba(212,82,74,.22)}
 
     html.embedded body{background:var(--bg-dark,#12151a)!important;min-height:auto;height:100%;display:flex;flex-direction:column;padding:0;overflow:auto}
     html.embedded .modal{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;border:none!important;box-shadow:none!important;margin:0!important;display:flex;flex-direction:column;overflow:hidden}
@@ -303,7 +309,9 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
         <div class="title"><span class="mark"><img src="../../../assets/launcher/logo.png" alt="" height="20"></span>New Project</div>
         <div class="subtitle">Create portable .horo metadata and starter content</div>
       </div>
-      <button onclick="if(window!==window.parent)parent.closeModal()">×</button>
+      <button class="modal-close" aria-label="Close" onclick="if(window!==window.parent)parent.closeModal()">
+        <svg viewBox="0 0 12 12"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg>
+      </button>
     </div>
     <div class="body">
       <aside class="steps horo-drawer" id="horo-drawer-new-project-wizard-1" data-drawer-side="left">

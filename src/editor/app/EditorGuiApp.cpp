@@ -326,29 +326,6 @@ namespace Horo::Editor
             }
         }
 
-        // Subtle body background gradients from welcome-screen.html:
-        // radial-gradient(... rgba(4,165,252,.08) ...), radial-gradient(... rgba(4,165,252,.04) ...)
-        void DrawWelcomeBackground(ImDrawList *dl, ImVec2 min, ImVec2 size)
-        {
-            using namespace Theme;
-            dl->AddRectFilled(min, {min.x + size.x, min.y + size.y}, U32(Bg0()));
-
-            auto drawGlow = [&](ImVec2 center, float radius, float maxAlpha)
-            {
-                constexpr int rings = 18;
-                for (int i = rings; i >= 1; --i)
-                {
-                    const float t = static_cast<float>(i) / static_cast<float>(rings);
-                    const float alpha = maxAlpha * (1.0F - t) * 0.22F;
-                    const ImVec4 col{Accent().x, Accent().y, Accent().z, alpha};
-                    dl->AddCircleFilled(center, radius * t, U32(col), 96);
-                }
-            };
-
-            drawGlow({min.x + size.x * 0.70F, min.y + size.y * 0.20F}, 360.0F, 0.08F);
-            drawGlow({min.x + size.x * 0.20F, min.y + size.y * 0.80F}, 280.0F, 0.04F);
-        }
-
         // ── welcome screen ───────────────────────────────────────────────────────
         // bkz. welcome-screen.html
 
@@ -363,29 +340,16 @@ namespace Horo::Editor
                                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, Bg1());
             ImGui::Begin("Welcome", nullptr, flags);
 
-            const ImVec2 winPos = ImGui::GetWindowPos();
-            const ImVec2 winSize = ImGui::GetWindowSize();
-            DrawWelcomeBackground(ImGui::GetWindowDrawList(), winPos, winSize);
-
-            // .welcome { padding:40px; display:flex; align-items:center; justify-content:center }
-            // HTML kartının yüksekliği içerikten geliyor; C++ tarafında aynı görsel oranı
-            // yakalamak için footer'sız, sabit içerik yüksekliği kullanıyoruz.
-            constexpr float kWelcomeCardContentH = 500.0F;
+            // WelcomeCard fills the entire welcome window — it IS the window content.
             const ImVec2 avail = ImGui::GetContentRegionAvail();
-            const float maxCardW = std::max(0.0F, avail.x - Layout::WelcomeOuterPad * 2.0F);
-            const float maxCardH = std::max(0.0F, avail.y - Layout::WelcomeOuterPad * 2.0F);
-            const float cardW = std::min(Layout::WelcomeCardW, maxCardW);
-            const float cardH = std::min(kWelcomeCardContentH, maxCardH);
-            const float offX = std::max(0.0F, (avail.x - cardW) * 0.5F);
-            const float offY = std::max(0.0F, (avail.y - cardH) * 0.5F);
-            ImGui::SetCursorPos({ImGui::GetCursorPosX() + offX, ImGui::GetCursorPosY() + offY});
 
             ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Layout::RadiusModal);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg1());
-            ImGui::BeginChild("WelcomeCard", {cardW, cardH}, true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImGui::BeginChild("WelcomeCard", avail, true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             ImGui::PopStyleVar(2);
 
             auto *cardDrawList = ImGui::GetWindowDrawList();
@@ -427,7 +391,7 @@ namespace Horo::Editor
             ImGui::PopStyleVar();
 
             cardDrawList->AddLine({cardMin.x + Layout::WelcomeSideW, cardMin.y},
-                                  {cardMin.x + Layout::WelcomeSideW, cardMin.y + cardH},
+                                  {cardMin.x + Layout::WelcomeSideW, cardMin.y + avail.y},
                                   U32(Border()), 1.0F);
 
             ImGui::SameLine(0, 0);
@@ -476,6 +440,7 @@ namespace Horo::Editor
             ImGui::EndChild();
             ImGui::PopStyleColor();
             ImGui::End();
+            ImGui::PopStyleColor();
         }
 
         // ── new project wizard ───────────────────────────────────────────────────
@@ -595,6 +560,35 @@ namespace Horo::Editor
             }
         }
 
+        // SVG-style X close button — two diagonal lines, no text.
+        [[nodiscard]] bool DrawCloseButton(const ImVec2 size)
+        {
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+            ImGui::InvisibleButton("##close", size);
+            const bool clicked = ImGui::IsItemClicked();
+            const bool hovered = ImGui::IsItemHovered();
+
+            auto *dl = ImGui::GetWindowDrawList();
+            const ImVec2 center{pos.x + size.x * 0.5F, pos.y + size.y * 0.5F};
+            const float arm = std::min(size.x, size.y) * 0.28F;
+
+            if (hovered)
+            {
+                dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y},
+                                  Theme::U32(WizardCss::Bg3()), WizardLayout::Radius);
+                dl->AddRect(pos, {pos.x + size.x, pos.y + size.y},
+                            Theme::U32(WizardCss::Border2()), WizardLayout::Radius, 0, 1.0F);
+            }
+
+            const ImU32 color = Theme::U32(hovered ? WizardCss::Text() : WizardCss::Dim());
+            constexpr float kThickness = 1.5F;
+            dl->AddLine({center.x - arm, center.y - arm}, {center.x + arm, center.y + arm}, color, kThickness);
+            dl->AddLine({center.x + arm, center.y - arm}, {center.x - arm, center.y + arm}, color, kThickness);
+
+            return clicked;
+        }
+
         [[nodiscard]] bool DrawWizardButton(const char *label,
                                             const ImVec2 size,
                                             const bool primary,
@@ -686,29 +680,144 @@ namespace Horo::Editor
                                     const int itemCount,
                                     const Fonts &f)
         {
-            // select has the same visual contract as input in the HTML mockup.
+            using namespace WizardLayout;
+
+            ImGui::PushID(id);
+
+            // ── kapalı alan: input/select ile aynı CSS sözleşmesi ──
+            // select { padding:7px 10px; border:1px solid var(--bd); border-radius:4px;
+            //          background:var(--bg3); font:12px var(--mono) }
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, WizardCss::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border());
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Text());
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, WizardCss::Bg2());
-            ImGui::PushStyleColor(ImGuiCol_Header, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, WizardCss::AccentSoft());
+            const float fieldW = ImGui::CalcItemWidth();
+            const float fieldH = ImGui::GetFrameHeight();
+            ImGui::PopStyleVar();
+
+            const ImVec2 fieldPos = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##field", ImVec2{fieldW, fieldH});
+            const bool fieldHovered = ImGui::IsItemHovered();
+            const bool fieldClicked = ImGui::IsItemClicked();
+
+            const std::string popupId = std::string("##popup_") + id;
+            const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
+
+            auto *dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
+                              Theme::U32(fieldHovered ? WizardCss::Hover() : WizardCss::Bg3()), Radius);
+            dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
+                        Theme::U32(popupOpen ? WizardCss::Accent() : WizardCss::Border()),
+                        Radius, 0, popupOpen ? 1.5F : 1.0F);
+
+            // seçili değerin etiketi
+            {
+                ImFont *font = f.mono ? f.mono : ImGui::GetFont();
+                const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
+                dl->AddText(font, 12.0F,
+                            {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 12.0F) * 0.5F},
+                            Theme::U32(WizardCss::Text()), label);
+            }
+
+            // sağdaki ok — küçük dolgulu üçgen (glyph fallback riskine karşı)
+            {
+                const float cx = fieldPos.x + fieldW - 18.0F;
+                const float cy = fieldPos.y + fieldH * 0.5F;
+                const ImU32 arrowCol = Theme::U32(fieldHovered ? WizardCss::Text() : WizardCss::Muted());
+                dl->AddTriangleFilled({cx - 4.0F, cy - 2.0F}, {cx + 4.0F, cy - 2.0F}, {cx, cy + 3.0F}, arrowCol);
+            }
+
+            if (fieldClicked)
+                ImGui::OpenPopup(popupId.c_str());
 
             bool changed = false;
-            {
-                ScopedTextStyle ts(f.mono, 12.0F, Theme::FontPx::Mono);
-                changed = ImGui::Combo(id, value, items, itemCount);
-            }
-            DrawCssFocusRingForLastItem(false);
 
-            ImGui::PopStyleColor(9);
-            ImGui::PopStyleVar(3);
+            // ── popup: .dropdown { padding:5px 0; border:1px solid var(--bd2);
+            //           border-radius:6px; background:var(--bg2); box-shadow } ──
+            ImGui::SetNextWindowPos({fieldPos.x, fieldPos.y + fieldH + 4.0F});
+            ImGui::SetNextWindowSize({fieldW, 0.0F});
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 5.0F});
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{0.0F, 0.0F});
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, WizardCss::Bg2());
+            ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border2());
+
+            if (ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove))
+            {
+                const ImVec2 pMin = ImGui::GetWindowPos();
+                const ImVec2 pMax = {pMin.x + ImGui::GetWindowWidth(), pMin.y + ImGui::GetWindowHeight()};
+
+                // Yumuşak gölge: modal backdrop ile aynı yöntem — katmanlı, yarı saydam
+                // dikdörtgenler, GetBackgroundDrawList() üzerinde (popup'ın ARKASINDA
+                // çizilir). Önceki sürümde tek kalın AddRect + foreground draw list
+                // kullanılmıştı; bu popup'ın üstüne binen kalın siyah bir çerçeve gibi
+                // görünüyor ve altta ayrı bir liste varmış hissi veriyordu.
+                auto *bgdl = ImGui::GetBackgroundDrawList();
+                constexpr int shadowLayers = 12;
+                for (int i = shadowLayers; i >= 1; --i)
+                {
+                    const float t = static_cast<float>(i) / static_cast<float>(shadowLayers);
+                    const float spread = 16.0F * t;
+                    const float alpha = 0.45F * (1.0F - t) * 0.11F;
+                    bgdl->AddRectFilled({pMin.x - spread, pMin.y + 3.0F - spread * 0.25F},
+                                        {pMax.x + spread, pMax.y + 3.0F + spread},
+                                        Theme::U32(ImVec4{0.0F, 0.0F, 0.0F, alpha}),
+                                        6.0F + spread);
+                }
+
+                for (int i = 0; i < itemCount; ++i)
+                {
+                    ImGui::PushID(i);
+                    const bool isSelected = (*value == i);
+                    const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+                    const float rowW = ImGui::GetContentRegionAvail().x;
+                    constexpr float rowH = 28.0F;
+
+                    ImGui::InvisibleButton("##row", {rowW, rowH});
+                    const bool rowHovered = ImGui::IsItemHovered();
+                    if (ImGui::IsItemClicked())
+                    {
+                        *value = i;
+                        changed = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    auto *pdl = ImGui::GetWindowDrawList();
+                    if (rowHovered || isSelected)
+                    {
+                        pdl->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH},
+                                           Theme::U32(isSelected ? WizardCss::AccentSoft() : WizardCss::Hover()));
+                    }
+                    if (isSelected)
+                    {
+                        pdl->AddRectFilled({rowMin.x, rowMin.y + 4.0F},
+                                           {rowMin.x + 2.5F, rowMin.y + rowH - 4.0F},
+                                           Theme::U32(WizardCss::Accent()));
+                    }
+
+                    ImFont *font = f.mono ? f.mono : ImGui::GetFont();
+                    pdl->AddText(font, 12.0F,
+                                 {rowMin.x + 14.0F, rowMin.y + (rowH - 12.0F) * 0.5F},
+                                 Theme::U32(isSelected ? WizardCss::Text() : WizardCss::Muted()),
+                                 items[i]);
+
+                    if (isSelected)
+                    {
+                        const char *check = "\xE2\x9C\x93";
+                        const ImVec2 cs = font->CalcTextSizeA(12.0F, FLT_MAX, 0.0F, check);
+                        pdl->AddText(font, 12.0F,
+                                     {rowMin.x + rowW - cs.x - 14.0F, rowMin.y + (rowH - 12.0F) * 0.5F},
+                                     Theme::U32(WizardCss::Accent()), check);
+                    }
+
+                    ImGui::PopID();
+                }
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(4);
+
+            ImGui::PopID();
             return changed;
         }
 
@@ -885,10 +994,10 @@ namespace Horo::Editor
                 ImGui::PopStyleColor();
             }
 
-            // close button: HTML default button style, dark bg, rounded 4px
+            // close button: SVG-style X, dark bg on hover
             const ImVec2 closeSize{38.0F, 36.0F};
             ImGui::SetCursorPos({headerW - HeaderPadX - closeSize.x, 11.0F});
-            if (DrawWizardButton("\xC3\x97##close-new-project", closeSize, false, true, f))
+            if (DrawCloseButton(closeSize))
             {
                 st.open = false;
                 closeRequested = true;
