@@ -644,7 +644,7 @@ build/profile/bin/MyGame
 # Keep a longer low-rate history for an intermittent editor issue.
 HORO_METRICS_SAMPLE_MS=1000 \
 HORO_METRICS_HISTORY_SECONDS=3600 \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 
 # Run a Python helper with timing metrics in the same session directory.
 HORO_METRICS=on \

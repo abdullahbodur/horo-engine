@@ -12,6 +12,10 @@ include(GNUInstallDirs)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+option(HORO_BUILD_EDITOR_GUI "Build the graphical HoroEditor bootstrap" ON)
+
+include(Dependencies)
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
     add_subdirectory(src)
 endif()

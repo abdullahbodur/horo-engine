@@ -184,7 +184,7 @@ Key design decisions:
 
 ### Layer 2: FetchContent Cache
 
-Vendor dependencies (glfw, glm, stb, nlohmann_json, tinygltf, ufbx,
+Vendor dependencies (SDL2, glm, stb, nlohmann_json, tinygltf, ufbx,
 xxhash, lz4, bc7enc, optional glslang/Vulkan headers) are fetched at
 configure time via CMake FetchContent. Every Git-based FetchContent dependency
 is pinned to an immutable commit SHA. Moving tags and branches are not valid CI

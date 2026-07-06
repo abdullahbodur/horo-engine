@@ -709,17 +709,17 @@ validation errors, running progress, and disabled background interaction.
 ## File Mapping
 
 ```text
-gui/screens/editor/
+src/editor/app/
     EditorLayer.h/cpp
+src/editor/modals/
     EditorModalHost.h/cpp
     EditorModal.h
     EditorModalContext.h
-    modals/
-        SettingsModal.h/cpp
-        BuildReleaseModal.h/cpp
-        ImportAssetModal.h/cpp
-        DiagnosticBundleModal.h/cpp
-        ConfirmationModal.h/cpp
+    SettingsModal.h/cpp
+    BuildReleaseModal.h/cpp
+    ImportAssetModal.h/cpp
+    DiagnosticBundleModal.h/cpp
+    ConfirmationModal.h/cpp
 ```
 
 ## Related Documents

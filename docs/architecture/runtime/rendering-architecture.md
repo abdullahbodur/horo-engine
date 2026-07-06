@@ -20,6 +20,9 @@ device failure, and headless rendering behavior.
 - The null renderer is a supported backend for tests and headless workflows.
 - Backend loss or unavailability returns typed errors rather than leaking API
   failures through engine interfaces.
+- The active renderer backend is selected by configuration or command-line
+  override at host startup. Runtime scene, editor, asset, gameplay, and MCP code
+  do not branch on concrete backend types.
 
 ## Layer Model
 
@@ -44,6 +47,106 @@ OpenGL / Vulkan / Null Backend
 The frontend owns engine rendering policy. Backends own API translation,
 device/context state, synchronization primitives, and concrete GPU objects.
 
+## Backend Selection
+
+Renderer backend selection is host-owned startup policy. The application
+composition root selects one backend implementation, constructs it, initializes
+it with a backend-neutral `RenderBackendConfig`, and gives the resulting
+capability to the render frontend.
+
+Selection inputs, in priority order:
+
+1. explicit command-line override
+2. project or user configuration
+3. host default for the current platform and build profile
+
+Canonical backend identifiers:
+
+| Identifier | Backend | Status |
+|---|---|---|
+| `null` | `HoroEngine::RenderNull` | Required for tests and headless tools |
+| `opengl` | `HoroEngine::RenderOpenGL` | Initial interactive desktop backend |
+| `vulkan` | `HoroEngine::RenderVulkan` | Planned explicit-API desktop backend |
+| `metal` | `HoroEngine::RenderMetal` | Planned Apple backend |
+| `d3d12` | `HoroEngine::RenderD3D12` | Planned Windows backend |
+
+Configuration and CLI spelling use the same identifiers:
+
+```text
+render.backend = "opengl"
+horo-engine run --renderer opengl
+HoroEditor --renderer opengl
+```
+
+The default backend is a host policy, not a property of scene data or gameplay
+code. Early desktop development may default to `opengl`; headless tools and CI
+default to `null`. A platform-specific default may change only through an
+architecture update and release note because it affects startup behavior,
+driver requirements, and artifact validation.
+
+Fallback is explicit. If a requested backend is unavailable, unsupported, or
+fails initialization, the host returns a typed startup error unless the user or
+profile opted into a fallback list:
+
+```text
+render.backend = "vulkan"
+render.fallbacks = ["opengl", "null"]
+```
+
+Automatic silent fallback is forbidden. Diagnostics must include the requested
+backend, attempted fallback backend if any, failure category, and relevant
+capability or platform reason. A fallback to `null` is allowed only for tools,
+tests, and explicitly headless workflows; interactive editor/game hosts must not
+silently switch to `null`.
+
+## Backend Capabilities
+
+Each backend exposes a value-type capability snapshot after initialization:
+
+```cpp
+struct RenderBackendCapabilities {
+    RenderBackendId backend;
+    bool presentsToWindow;
+    bool supportsOffscreenTargets;
+    bool supportsTimestampQueries;
+    bool supportsCompute;
+    bool supportsBindlessResources;
+    bool supportsRayTracing;
+    BackendLimits limits;
+    std::vector<RenderFeature> enabledFeatures;
+};
+```
+
+The frontend and feature systems query capabilities through render API values,
+not by downcasting or including backend headers. Unsupported optional features
+produce typed validation errors or disable declared optional passes before frame
+execution. Required project features fail during project/runtime validation, not
+mid-draw.
+
+Backend capability snapshots are immutable for one initialized backend
+instance. Device recreation may produce a new snapshot; users of capabilities
+observe that through the frontend's typed recreation result.
+
+## Backend Implementation Boundary
+
+Each concrete backend owns its API dependencies, context/device objects,
+surface/swapchain objects, synchronization primitives, shader module objects,
+pipeline caches, and backend-native diagnostics.
+
+Rules:
+
+- Backend source targets may include native API headers.
+- Public render API headers may not include OpenGL, Vulkan, Metal, D3D12, GLAD,
+  Volk, SDL2, Win32, Cocoa, X11, Wayland, or other native surface types.
+- Backends implement `IRenderBackend` and backend-neutral resource contracts;
+  they do not depend on `RenderFrontend`.
+- The frontend compiles render plans and owns render policy. Backends translate
+  already-validated plans into API calls.
+- A backend cannot mutate scene, editor, asset, gameplay, MCP, or application
+  service state.
+- External or plugin-provided renderer backends are a future extension point and
+  are not part of the initial stable ABI.
+
 ## Backend Interface
 
 ```cpp
@@ -59,7 +162,7 @@ public:
 ```
 
 Backend interfaces use Horo value types. OpenGL names, Vulkan handles, GLAD,
-Volk, GLFW, and native surface types do not appear in public render API headers.
+Volk, SDL2, and native surface types do not appear in public render API headers.
 
 ## Render Snapshot
 

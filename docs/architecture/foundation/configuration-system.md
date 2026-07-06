@@ -76,6 +76,7 @@ Keys use stable dotted names:
 ```text
 runtime.fixed_step_hz
 render.backend
+render.fallbacks
 editor.theme.active
 editor.autosave.interval_seconds
 observability.log.default_level
@@ -124,6 +125,7 @@ owning descriptor:
 
 ```text
 HORO_RENDER_BACKEND=opengl
+HORO_RENDER_FALLBACKS=opengl,null
 HORO_LOG_LEVEL=debug
 HORO_THEME_FILE=/path/to/theme.json
 HORO_RUNTIME_FIXED_STEP_HZ=120

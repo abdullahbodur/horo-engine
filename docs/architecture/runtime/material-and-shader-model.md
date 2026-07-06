@@ -50,6 +50,34 @@ Not covered:
 - No gameplay code queries raw shader handles. Gameplay sees only material names,
   parameter overrides, and feature flags.
 
+## Shader Graph Editor Surface
+
+Shader and material graph authoring uses the shared editor graph surface defined
+in [Editor Panel and Tab Architecture](../editor/editor-panel-host.md). The first
+production graph surface is built on `imgui-node-editor` behind a private Horo
+adapter; `imnodes` is reserved for prototype or simple internal graph tools.
+
+The node editor widget is not the shader compiler and not the material schema.
+It renders graph snapshots and emits user-intent commands. The material/shader
+subsystem owns:
+
+- graph asset schema and stable node, pin, and link identity;
+- type checking between pins;
+- cycle and dependency validation;
+- texture, sampler, material parameter, and feature-tier validation;
+- shader-code generation or graph IR emission;
+- diagnostics and source/graph location mapping;
+- cook-time variant generation and runtime fallback policy.
+
+Node positions, collapsed state, selection, and zoom are editor presentation
+state. Shader graph semantics are serialized through stable graph asset data,
+not through third-party widget IDs or layout state.
+
+AI-assisted shader editing may propose nodes, links, generated shader source, or
+parameter changes, but it must go through graph edit commands and material
+validation before any asset is modified. The assistant cannot inject raw shader
+source into a material asset without diagnostics, preview, and undo integration.
+
 ## Material Model
 
 ### Standard PBR Parameters

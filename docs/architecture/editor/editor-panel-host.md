@@ -477,10 +477,131 @@ sections:
   - Opens files through: typed editor/application commands
   - Subscribes to: `ProjectOpenedEvent`
 
-### Viewport Panel
+## Embedded Source Editor
 
-The central 3D view is a panel, not a docked tab. It is the single content area
-in the center and does not participate in tab stacking.
+The editor workspace includes source-editing surfaces for project scripts,
+native behavior templates, generated-code previews, shader source, package
+manifests, and diagnostics-linked text files. These surfaces are editor panels or
+modal-owned editors; they are not separate top-level screens and they are not a
+replacement for an external IDE.
+
+Initial source editor integration uses **Zep** as the preferred embedded editor
+widget, wrapped behind Horo-owned source-editor interfaces. Zep was selected over
+`goossens/ImGuiColorTextEdit` for the first code-oriented editor surface because
+it is more aligned with engine IDE workflows: embeddable core, ImGui renderer,
+tabs and splits, modal/modeless editing modes, key mapping, search, markers,
+REPL/live-coding orientation, and broader adoption. The research snapshot used
+for this decision was collected on `2026-07-05T11:45:01Z`:
+
+| Candidate | Stars | License | Recent activity | Fit |
+|---|---:|---|---|---|
+| `Rezonality/zep` | 1030 | MIT | pushed 2026-05-23 | Preferred code editor foundation |
+| `goossens/ImGuiColorTextEdit` | 218 | MIT | pushed 2026-06-29 | Good lightweight text/diff widget, fallback or specialized read-only/editor-lite use |
+
+GitHub stars are a weak popularity signal, not an architecture requirement. The
+selection is based on embedding model, feature surface, license, maintenance,
+and expected extension path. If Zep integration proves too invasive, the fallback
+is `goossens/ImGuiColorTextEdit` for a narrower text editor while Horo-owned IDE
+services remain unchanged.
+
+Zep and any future text editor library remain private to the editor source-editor
+adapter target. Public Horo headers expose Horo value types only:
+
+```cpp
+struct SourceEditorDocumentId;
+struct SourceEditorCursor;
+struct SourceEditorSelection;
+struct SourceDiagnosticMarker;
+
+class ISourceEditorSurface {
+public:
+    virtual void SetText(std::string_view text) = 0;
+    virtual SourceEditSnapshot CaptureSnapshot() const = 0;
+    virtual void ApplyDiagnostics(std::span<const SourceDiagnosticMarker>) = 0;
+};
+```
+
+AI-assisted editing, code completion, IntelliSense, refactoring, and agent mode
+are not implemented inside Zep. The source editor widget is the presentation and
+text interaction surface only. Intelligence is provided by Horo-owned services:
+
+- `SourceDocumentService` owns document identity, snapshots, dirty state,
+  encoding, and save/reload coordination.
+- `LanguageServiceClient` owns LSP-style completion, hover, go-to-definition,
+  rename, diagnostics, semantic tokens, and formatting integration.
+- `AiCodeAssistService` owns prompt construction, context selection, tool
+  approvals, patch preview, and agent-mode sessions.
+- `SourceEditorController` coordinates editor commands, selections, diagnostics,
+  and inline assistant results without exposing third-party editor internals.
+
+Completion and AI results are applied as explicit editor commands with previews,
+undo entries, and diagnostics. Agent mode may propose multi-file changes, but it
+does not mutate source files directly from the widget callback. All writes go
+through project document/application services and the same approval policy used
+by MCP or other automation surfaces.
+
+Required source editor constraints:
+
+- no third-party editor type in public Horo APIs;
+- no direct filesystem writes from the widget;
+- diagnostics use typed source ranges, not parsed console strings;
+- completion/AI providers are cancellable and tied to document revision;
+- stale completion or agent results are rejected when the source snapshot changes;
+- large files use bounded memory and may open in read-only or external-editor
+  mode until a streaming editor contract exists;
+- editor shortcuts participate in the workspace shortcut conflict policy.
+
+## Embedded Node Editors
+
+Node-based authoring surfaces appear inside workspace panels or dedicated editor
+tabs. They are used for shader/material graphs, behavior graphs, state machines,
+and future audio/procedural graphs. The node widget is presentation only; graph
+asset schemas, validation, compilation, and runtime execution are owned by the
+relevant subsystem.
+
+Initial node editor integration uses **imgui-node-editor** for production graph
+surfaces and keeps **imnodes** as the lightweight fallback/prototype option. The
+research snapshot used for this decision was collected on `2026-07-05T11:45:01Z`:
+
+| Candidate | Stars | License | Recent activity | Fit |
+|---|---:|---|---|---|
+| `thedmd/imgui-node-editor` | 4447 | MIT | pushed 2026-03-29 | Preferred production graph editor foundation |
+| `Nelarius/imnodes` | 2462 | MIT | pushed 2026-05-13 | Lightweight fallback/prototype/simple graph surfaces |
+
+`imgui-node-editor` has the stronger adoption signal and is designed as a richer
+node editor layer on Dear ImGui. `imnodes` is smaller and explicitly immediate
+mode, which is useful for prototypes or simple internal tools, but Horo's graph
+surfaces need stable persisted node/link IDs, navigation, selection, context
+menus, graph validation overlays, and complex interaction policies.
+
+Graph editor library types remain private to Horo adapter targets. Public graph
+surfaces exchange Horo graph documents:
+
+```cpp
+struct GraphDocumentId;
+struct GraphNodeId;
+struct GraphPinId;
+struct GraphLinkId;
+struct GraphDiagnostic;
+
+class INodeGraphSurface {
+public:
+    virtual void SetGraphSnapshot(const GraphViewSnapshot&) = 0;
+    virtual std::vector<GraphEditCommand> DrainUserCommands() = 0;
+    virtual void ApplyDiagnostics(std::span<const GraphDiagnostic>) = 0;
+};
+```
+
+The widget may produce user-intent commands such as create node, connect pins,
+move selection, rename node, or open context menu. It does not validate gameplay,
+shader, material, audio, or procedural semantics itself. Subsystem validators own
+type checking, cycle rules, asset references, feature requirements, code/shader
+generation, and runtime compatibility.
+
+## Viewport Panel
+
+The viewport panel owns rendering of the active scene camera or game camera in
+the center and does not participate in tab stacking.
 
 - Owner: `ViewportPanel`
 - Responsibilities:
@@ -734,14 +855,14 @@ The editor workspace is a higher-level concern composed on top of
 Proposed layout:
 
 ```text
-gui/screens/editor/
+src/editor/app/
     EditorLayer.h/cpp
+src/editor/document/
     EditorWorkspaceController.h/cpp
+src/editor/data_bus/
     EditorDataBus.h/cpp
+src/editor/panels/
     EditorPanelHost.h/cpp
-    EditorModalHost.h/cpp
-    EditorModal.h
-    EditorModalContext.h
     EditorTab.h
     EditorTabContext.h
     EditorSelectionModel.h/cpp
@@ -759,13 +880,16 @@ gui/screens/editor/
         PerformanceTab.h/cpp
     panels/
         ViewportPanel.h/cpp
-    modals/
-        SettingsModal.h/cpp
-        BuildReleaseModal.h/cpp
-        ImportAssetModal.h/cpp
-        ConfirmationModal.h/cpp
-    components/
-        ...
+src/editor/modals/
+    EditorModalHost.h/cpp
+    EditorModal.h
+    EditorModalContext.h
+    SettingsModal.h/cpp
+    BuildReleaseModal.h/cpp
+    ImportAssetModal.h/cpp
+    ConfirmationModal.h/cpp
+src/editor/design_system/components/
+    ...
 ```
 
 ## See Also

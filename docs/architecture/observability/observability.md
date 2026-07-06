@@ -318,7 +318,7 @@ The exact directory tree structures, file rotations, and retention configuration
 # Focused editor logs.
 HORO_LOG_LEVEL=info \
 HORO_LOG_LEVELS=asset.import=trace \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 
 # Twenty-second CPU/GPU/jobs capture.
 HoroEditor \
@@ -328,7 +328,7 @@ HoroEditor \
 # One hour of low-rate CPU/memory history.
 HORO_METRICS_SAMPLE_MS=1000 \
 HORO_METRICS_HISTORY_SECONDS=3600 \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 ```
 
 All supported options and environment variables are detailed in:
