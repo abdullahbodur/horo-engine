@@ -114,7 +114,9 @@ jobs:
 
       - name: Test
         id: native_tests
-        run: ctest --test-dir "${{ matrix.build_dir }}" --output-on-failure --output-junit "${{ matrix.build_dir }}/test-results/ctest.xml"
+        run: |
+          cmake -E make_directory "${{ matrix.build_dir }}/test-results"
+          ctest --test-dir "${{ matrix.build_dir }}" --output-on-failure --output-junit "${{ matrix.build_dir }}/test-results/ctest.xml"
         env:
           HORO_LOG_LEVEL: debug
 
