@@ -195,7 +195,9 @@ jobs:
         run: |
           curl -sSLo /tmp/build-wrapper.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
           unzip -qo /tmp/build-wrapper.zip -d /tmp/build-wrapper
-          echo "/tmp/build-wrapper" >> $GITHUB_PATH
+          BUILD_WRAPPER=$(ls /tmp/build-wrapper/build-wrapper* 2>/dev/null | head -1)
+          chmod +x "$BUILD_WRAPPER"
+          echo "BUILD_WRAPPER=$BUILD_WRAPPER" >> $GITHUB_ENV
 
       - name: Configure
         run: |
@@ -211,7 +213,7 @@ jobs:
 
       - name: Build (wrapped)
         run: |
-          build-wrapper-linux-x86-64 \
+          "$BUILD_WRAPPER" \
             --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
             cmake --build build/sonar --parallel
 
