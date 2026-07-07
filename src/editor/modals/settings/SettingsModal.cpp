@@ -494,7 +494,7 @@ namespace Horo::Editor
 
         void ShortcutDisplay(const char *a, const char *b, const char *c, const Fonts &f)
         {
-            const char *keys[] = {a, b, c};
+            const std::array<const char *, 3> keys = {a, b, c};
             for (int i = 0; i < 3; ++i)
             {
                 if (!keys[i] || keys[i][0] == '\0')
@@ -523,7 +523,7 @@ namespace Horo::Editor
 
         void PluginRow(const char *name, const char *version, const char *description, bool *enabled, const Fonts &f)
         {
-            SettingRow(name, nullptr, f, [&]() {
+            SettingRow(name, nullptr, f, [&f, version, description, enabled]() {
                 ImGui::BeginGroup();
                 {
                     ScopedTextStyle ts(f.mono, 10.5F, Theme::FontPx::Mono);
@@ -666,34 +666,34 @@ namespace Horo::Editor
 
         void DrawGeneral(SettingsState &st, const Fonts &f)
         {
-            static constexpr const char *kStartup[] = {"Welcome screen", "Last project", "Project browser"};
+            static constexpr std::array<const char *, 3> kStartup = {"Welcome screen", "Last project", "Project browser"};
             SectionTitle("General", f);
             SettingGroup("STARTUP & PROJECT", f, true);
             SettingRow("Startup Behavior", "What to show when the editor launches.", f,
-                       [&]() { ComboControl("##startup", &st.startupAction, kStartup, 3, f); });
+                       [&st, &f]() { ComboControl("##startup", &st.startupAction, kStartup.data(), static_cast<int>(kStartup.size()), f); });
             SettingRow("Auto-save Interval", "Minutes between automatic scene saves. Zero disables auto-save.", f,
-                       [&]() { SliderIntControl("##autosave", &st.autoSaveInterval, 0, 30, "%d min", f); });
+                       [&st, &f]() { SliderIntControl("##autosave", &st.autoSaveInterval, 0, 30, "%d min", f); });
             SettingRow("Confirm Exit With Unsaved Changes", nullptr, f,
-                       [&]() { (void)ToggleControl("confirm-exit", &st.confirmExit, f); });
+                       [&st, &f]() { (void)ToggleControl("confirm-exit", &st.confirmExit, f); });
             SettingGroup("EDITOR SESSION", f);
             SettingRow("Restore Workspace Layout", "Reopen tabs and panel layout from last session.", f,
-                       [&]() { (void)ToggleControl("restore-workspace", &st.restoreWorkspace, f); });
+                       [&st, &f]() { (void)ToggleControl("restore-workspace", &st.restoreWorkspace, f); });
             SettingRow("Default Scene On Project Open", nullptr, f,
-                       [&]() { InputTextControl("##default-scene", st.defaultScene, sizeof(st.defaultScene), f); });
+                       [&st, &f]() { InputTextControl("##default-scene", st.defaultScene, sizeof(st.defaultScene), f); });
         }
 
         void DrawAppearance(SettingsState &st, const Fonts &f)
         {
             SectionTitle("Appearance", f);
             SettingGroup("THEME", f, true);
-            SettingRow("Color Theme", "Base editor chrome palette.", f, [&]() {
+            SettingRow("Color Theme", "Base editor chrome palette.", f, [&st, &f]() {
                 ThemeChip("  Horo Dark", Theme::Bg1(), true, f);
                 ImGui::SameLine(0.0F, 6.0F);
                 ThemeChip("  Midnight", ImVec4{0.063F, 0.090F, 0.133F, 1.0F}, false, f);
                 ImGui::SameLine(0.0F, 6.0F);
                 ThemeChip("  Light", ImVec4{0.941F, 0.925F, 0.890F, 1.0F}, false, f);
             });
-            SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&]() {
+            SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
                 const ImVec2 p = ImGui::GetCursorScreenPos();
                 ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + 34.0F, p.y + 34.0F}, Theme::U32(Theme::Accent()), Layout::Radius);
                 ImGui::Dummy({42.0F, 34.0F});
@@ -704,9 +704,9 @@ namespace Horo::Editor
             });
             SettingGroup("TYPOGRAPHY & SCALE", f);
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
-                       [&]() { SliderIntControl("##ui-scale", &st.uiScale, 75, 200, "%d%%", f, 25); });
+                       [&st, &f]() { SliderIntControl("##ui-scale", &st.uiScale, 75, 200, "%d%%", f, 25); });
             SettingRow("Code Font Size", nullptr, f,
-                       [&]() { InputTextControl("##font-size", st.editorFontSize, sizeof(st.editorFontSize), f); });
+                       [&st, &f]() { InputTextControl("##font-size", st.editorFontSize, sizeof(st.editorFontSize), f); });
         }
 
         void DrawInput(SettingsState &st, const Fonts &f)
@@ -714,43 +714,43 @@ namespace Horo::Editor
             SectionTitle("Input", f);
             SettingGroup("NAVIGATION", f, true);
             SettingRow("Orbit Sensitivity", nullptr, f,
-                       [&]() { SliderIntControl("##orbit", &st.orbitSensitivity, 10, 300, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##orbit", &st.orbitSensitivity, 10, 300, "%d", f); });
             SettingRow("Pan Sensitivity", nullptr, f,
-                       [&]() { SliderIntControl("##pan", &st.panSensitivity, 10, 300, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##pan", &st.panSensitivity, 10, 300, "%d", f); });
             SettingRow("Invert Orbit Y", nullptr, f,
-                       [&]() { (void)ToggleControl("invert-y", &st.invertOrbitY, f); });
+                       [&st, &f]() { (void)ToggleControl("invert-y", &st.invertOrbitY, f); });
             SettingGroup("SHORTCUTS", f);
-            SettingRow("Save Scene", nullptr, f, [&]() { ShortcutDisplay("Ctrl", "S", nullptr, f); });
-            SettingRow("Undo", nullptr, f, [&]() { ShortcutDisplay("Ctrl", "Z", nullptr, f); });
-            SettingRow("Build & Release", nullptr, f, [&]() { ShortcutDisplay("Ctrl", "Shift", "B", f); });
+            SettingRow("Save Scene", nullptr, f, [&f]() { ShortcutDisplay("Ctrl", "S", nullptr, f); });
+            SettingRow("Undo", nullptr, f, [&f]() { ShortcutDisplay("Ctrl", "Z", nullptr, f); });
+            SettingRow("Build & Release", nullptr, f, [&f]() { ShortcutDisplay("Ctrl", "Shift", "B", f); });
         }
 
         void DrawRendering(SettingsState &st, const Fonts &f)
         {
-            static constexpr const char *kViewport[] = {"Shaded", "Wireframe", "Lit", "Unlit"};
-            static constexpr const char *kTier[] = {"High End", "DX12 / Vulkan", "DX11", "ES3"};
+            static constexpr std::array<const char *, 4> kViewport = {"Shaded", "Wireframe", "Lit", "Unlit"};
+            static constexpr std::array<const char *, 4> kTier = {"High End", "DX12 / Vulkan", "DX11", "ES3"};
             SectionTitle("Rendering", f);
             SettingGroup("VIEWPORT", f, true);
-            SettingRow("Default Viewport Mode", nullptr, f, [&]() { ComboControl("##viewport", &st.viewportMode, kViewport, 4, f); });
-            SettingRow("Grid Overlay", nullptr, f, [&]() { (void)ToggleControl("grid", &st.gridOverlay, f); });
+            SettingRow("Default Viewport Mode", nullptr, f, [&st, &f]() { ComboControl("##viewport", &st.viewportMode, kViewport.data(), static_cast<int>(kViewport.size()), f); });
+            SettingRow("Grid Overlay", nullptr, f, [&st, &f]() { (void)ToggleControl("grid", &st.gridOverlay, f); });
             SettingGroup("QUALITY", f);
             SettingRow("Editor Rendering Tier", "Maximum feature tier used in the editor viewport.", f,
-                       [&]() { ComboControl("##tier", &st.renderingTier, kTier, 4, f); });
+                       [&st, &f]() { ComboControl("##tier", &st.renderingTier, kTier.data(), static_cast<int>(kTier.size()), f); });
             SettingRow("Texture Streaming Budget", nullptr, f,
-                       [&]() { InputTextControl("##texture-budget", st.textureBudget, sizeof(st.textureBudget), f); });
+                       [&st, &f]() { InputTextControl("##texture-budget", st.textureBudget, sizeof(st.textureBudget), f); });
         }
 
         void DrawAudio(SettingsState &st, const Fonts &f)
         {
-            static constexpr const char *kDevices[] = {"System Default", "Headphones", "Speakers"};
+            static constexpr std::array<const char *, 3> kDevices = {"System Default", "Headphones", "Speakers"};
             SectionTitle("Audio", f);
             SettingGroup("OUTPUT", f, true);
             SettingRow("Master Volume", nullptr, f,
-                       [&]() { SliderIntControl("##volume", &st.masterVolume, 0, 100, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##volume", &st.masterVolume, 0, 100, "%d", f); });
             SettingRow("Audio Output Device", nullptr, f,
-                       [&]() { ComboControl("##audio-device", &st.audioOutputDevice, kDevices, 3, f); });
+                       [&st, &f]() { ComboControl("##audio-device", &st.audioOutputDevice, kDevices.data(), static_cast<int>(kDevices.size()), f); });
             SettingRow("Enable Audio In Editor", nullptr, f,
-                       [&]() { (void)ToggleControl("audio-enabled", &st.audioEnabled, f); });
+                       [&st, &f]() { (void)ToggleControl("audio-enabled", &st.audioEnabled, f); });
         }
 
         void DrawNetwork(SettingsState &st, const Fonts &f)
@@ -758,27 +758,27 @@ namespace Horo::Editor
             SectionTitle("Network", f);
             SettingGroup("MULTIPLAYER PREVIEW", f, true);
             SettingRow("Max Preview Clients", nullptr, f,
-                       [&]() { InputIntControl("##max-clients", &st.maxPreviewClients, f); });
+                       [&st, &f]() { InputIntControl("##max-clients", &st.maxPreviewClients, f); });
             SettingRow("Simulate Latency", "Artificial one-way delay injected on loopback (ms).", f,
-                       [&]() { SliderIntControl("##latency", &st.simulatedLatencyMs, 0, 500, "%d ms", f); });
+                       [&st, &f]() { SliderIntControl("##latency", &st.simulatedLatencyMs, 0, 500, "%d ms", f); });
             SettingRow("Package Download Threads", nullptr, f,
-                       [&]() { InputIntControl("##download-threads", &st.packageDownloadThreads, f); });
+                       [&st, &f]() { InputIntControl("##download-threads", &st.packageDownloadThreads, f); });
         }
 
         void DrawDiagnostics(SettingsState &st, const Fonts &f)
         {
-            static constexpr const char *kLogLevels[] = {"Debug", "Info", "Warning", "Error"};
+            static constexpr std::array<const char *, 4> kLogLevels = {"Debug", "Info", "Warning", "Error"};
             SectionTitle("Diagnostics", f);
             SettingGroup("LOGGING", f, true);
             SettingRow("Console Log Level", nullptr, f,
-                       [&]() { ComboControl("##log-level", &st.consoleLogLevel, kLogLevels, 4, f); });
+                       [&st, &f]() { ComboControl("##log-level", &st.consoleLogLevel, kLogLevels.data(), static_cast<int>(kLogLevels.size()), f); });
             SettingRow("Write Log To File", nullptr, f,
-                       [&]() { (void)ToggleControl("write-log", &st.writeLogToFile, f); });
+                       [&st, &f]() { (void)ToggleControl("write-log", &st.writeLogToFile, f); });
             SettingGroup("PROFILER", f);
             SettingRow("Auto-capture On Stutter", nullptr, f,
-                       [&]() { (void)ToggleControl("capture-stutter", &st.autoCaptureStutter, f); });
+                       [&st, &f]() { (void)ToggleControl("capture-stutter", &st.autoCaptureStutter, f); });
             SettingRow("Stutter Threshold (ms)", nullptr, f,
-                       [&]() { InputFloatControl("##stutter", &st.stutterThresholdMs, f); });
+                       [&st, &f]() { InputFloatControl("##stutter", &st.stutterThresholdMs, f); });
         }
 
         void DrawPlugins(SettingsState &st, const Fonts &f)
@@ -790,7 +790,7 @@ namespace Horo::Editor
             PluginRow("Steamworks SDK", "v1.59", "Steam achievements, overlay, and networking features.", &st.steamworksSdk, f);
             SettingGroup("DISCOVERY", f);
             SettingRow("Plugin Discovery Path", nullptr, f,
-                       [&]() { InputTextControl("##plugin-path", st.pluginPath, sizeof(st.pluginPath), f); });
+                       [&st, &f]() { InputTextControl("##plugin-path", st.pluginPath, sizeof(st.pluginPath), f); });
         }
 
         void DrawContent(SettingsState &st, const Fonts &f, const float bodyH)
