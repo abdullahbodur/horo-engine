@@ -218,6 +218,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.organization=abdullahbodur
+            -Dsonar.organization=docktail
             -Dsonar.projectKey=abdullahbodur_horo-engine
             -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
