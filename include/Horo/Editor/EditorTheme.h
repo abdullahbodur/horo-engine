@@ -53,8 +53,8 @@ namespace FontPx {
 // using the required SetWindowFontScale() multiplier.
 [[nodiscard]] constexpr float Scale(float targetPx, float basePx) { return targetPx / basePx; }
 
-inline void PushFont(::ImFont* f) { if (f) ImGui::PushFont(f); }
-inline void PopFont(::ImFont* f)  { if (f) ImGui::PopFont(); }
+inline void PushFont(const ::ImFont* f) { if (f) ImGui::PushFont(const_cast<::ImFont*>(f)); }
+inline void PopFont(const ::ImFont* f)  { if (f) ImGui::PopFont(); }
 
 // RAII: pushes a font when non-null and guarantees the matching pop.
 struct ScopedFont {
@@ -75,7 +75,7 @@ struct ScopedFontScale {
 
 // Shortcut: pushes `font` and scales it to the target HTML pixel size,
 // then automatically restores both at scope exit.
-//   Example: ScopedTextStyle ts(f.mono, /*targetPx=*/11.0f, Theme::FontPx::Mono);
+//   Example: ScopedTextStyle ts(f.mono, 11.0f, Theme::FontPx::Mono);
 struct ScopedTextStyle {
     ScopedFont font;
     ScopedFontScale scale;

@@ -125,7 +125,7 @@ namespace Horo::Editor
 
         [[nodiscard]] std::optional<std::string> FindStringValue(const std::string &json, const char *key)
         {
-            const std::regex re(std::string{"\""} + key + R"("\s*:\s*"((?:\\.|[^"])*")");
+            const std::regex re(std::string{"\""} + key + "\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"");
             std::smatch match;
             if (!std::regex_search(json, match, re) || match.size() < 2)
             {

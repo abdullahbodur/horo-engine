@@ -249,10 +249,9 @@ namespace Horo::Editor
             ImGui_ImplSDL2_NewFrame();
             ImGui::NewFrame();
 
-            const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
-                vm, fonts, WelcomeScreenGuiAssets{textures.logo});
-
-            if (command == WelcomeScreenGuiCommand::NewProject)
+            if (const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
+                    vm, fonts, WelcomeScreenGuiAssets{textures.logo});
+                command == WelcomeScreenGuiCommand::NewProject)
             {
                 np.open = true;
                 ImGui::OpenPopup("New Project");

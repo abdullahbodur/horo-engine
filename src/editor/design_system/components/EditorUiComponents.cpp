@@ -130,7 +130,7 @@ namespace Horo::Editor::Ui
         {
             return;
         }
-        const int steps = static_cast<int>(std::ceil(width / step));
+        const auto steps = static_cast<int>(std::ceil(width / step));
         for (int i = 0; i < steps; ++i)
         {
             const float x = static_cast<float>(i) * step;

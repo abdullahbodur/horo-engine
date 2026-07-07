@@ -99,7 +99,7 @@ namespace Horo::Editor
     {
         using namespace Theme;
 
-        auto *viewport = ImGui::GetMainViewport();
+        const auto *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
         constexpr auto flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration |
