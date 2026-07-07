@@ -191,8 +191,11 @@ jobs:
           key: fetchcontent-sonar-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
           restore-keys: fetchcontent-sonar-
 
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
+      - name: Install Build Wrapper (server version)
+        run: |
+          curl -sSLo /tmp/build-wrapper.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
+          unzip -qo /tmp/build-wrapper.zip -d /tmp/build-wrapper
+          echo "/tmp/build-wrapper" >> $GITHUB_PATH
 
       - name: Configure
         run: |
