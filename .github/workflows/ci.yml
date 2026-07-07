@@ -230,9 +230,9 @@ jobs:
           python3 -m gcovr build/sonar \
             --root "${{ github.workspace }}" \
             --sonarqube build/sonar/sonar-coverage.xml \
-            --exclude '_deps' \
-            --exclude 'tests' \
-            --exclude 'deprecated' \
+            --exclude-directories '.*/_deps($|/.*)' \
+            --exclude-directories '.*/tests($|/.*)' \
+            --exclude-directories '.*/deprecated($|/.*)' \
             --merge-mode-functions=merge-use-line-min \
             --gcov-ignore-parse-errors=negative_hits.warn_once_per_file
 
