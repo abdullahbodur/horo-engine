@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cfloat>
 #include <string>
@@ -25,8 +26,7 @@ namespace Horo::Editor
         //   .modal 900x680, header 58, body 220px + 1fr, footer 52
         //   .main padding 24px 28px, .steps padding 18px 14px
 
-        constexpr const char *kTemplateNames[] = {
-            "Empty", "3D Starter", "First Person", "Package Based", "Tech Demo", "Custom"};
+        constexpr std::array<const char *, 6> kTemplateNames = {"Empty", "3D Starter", "First Person", "Package Based", "Tech Demo", "Custom"};
 
         namespace WizardLayout
         {
@@ -102,9 +102,8 @@ namespace Horo::Editor
         // Coarse placeholder for std::filesystem::exists / is_empty.
         [[nodiscard]] bool PathLooksOccupied(const char *path)
         {
-            // TODO: replace with a real filesystem check. The HTML mockup always
-            // presents the default "DesertRun" path as an occupied/existing folder;
-            // this mirrors that behavior for now.
+            // Placeholder filesystem check — mirrors the HTML mockup behavior
+            // where the default "DesertRun" path always shows as occupied.
             return std::string_view{path}.find("DesertRun") != std::string_view::npos;
         }
 
@@ -379,7 +378,7 @@ namespace Horo::Editor
 
         void WizardFieldLabel(const char *upperCaseLabel, const Fonts &f)
         {
-            // .field label { font:11px var(--mono); color:var(--mut); margin-bottom:4px; letter-spacing:.5px }
+            // Field label in HTML style
             ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
             ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
             ImGui::TextUnformatted(upperCaseLabel);
@@ -389,7 +388,7 @@ namespace Horo::Editor
 
         void WizardHint(const char *text, const Fonts &f)
         {
-            // .hint { color:var(--dim); font:10.5px var(--mono); margin-top:3px }
+            // Hint text in HTML style
             ScopedTextStyle ts(f.mono, 13.5F, Theme::FontPx::Mono);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (ImGui::GetStyle().ItemSpacing.y - WizardLayout::HintGap));
             ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Dim());
@@ -457,7 +456,7 @@ namespace Horo::Editor
 
         void CheckboxCss(const char *label, bool *value, const Fonts &f)
         {
-            // .check { display:flex; align-items:center; gap:8px; font:12px var(--sans); color:var(--mut) }
+            // Checkbox in HTML style
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{0.0F, 0.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
@@ -532,7 +531,7 @@ namespace Horo::Editor
                 ImGui::PopStyleColor();
             }
 
-            // .subtitle { font:11px mono; color:var(--dim); margin-top:3px }
+            // Subtitle in HTML style
             ImGui::SetCursorPos({HeaderPadX, 36.0F});
             {
                 ScopedTextStyle ts(f.mono, 12.0F, FontPx::Mono);
@@ -563,7 +562,7 @@ namespace Horo::Editor
             return closeRequested;
         }
 
-        // .steps { width:220px; background:var(--bg2); border-right:1px solid var(--bd); padding:18px 14px }
+        // Steps sidebar in HTML style
         void DrawWizardSidebar(NewProjectState &st, const Fonts &f, const float bodyH)
         {
             using namespace Theme;
@@ -580,8 +579,8 @@ namespace Horo::Editor
             const float sideH = ImGui::GetWindowHeight();
             auto *dl = ImGui::GetWindowDrawList();
 
-            static constexpr const char *kStepLabels[] = {"Template", "Identity", "Settings", "Review"};
-            static constexpr const char *kStepDescs[] = {"Choose starter", "Name & location", "Runtime defaults", "Validate & create"};
+            static constexpr std::array<const char *, 4> kStepLabels = {"Template", "Identity", "Settings", "Review"};
+            static constexpr std::array<const char *, 4> kStepDescs = {"Choose starter", "Name & location", "Runtime defaults", "Validate & create"};
 
             for (int s = 1; s <= 4; ++s)
             {
@@ -611,9 +610,8 @@ namespace Horo::Editor
                 dl->AddCircleFilled(circleCenter, 11.0F, Theme::U32(active ? WizardCss::Accent() : WizardCss::Bg3()), 24);
                 dl->AddCircle(circleCenter, 11.0F, Theme::U32(active ? WizardCss::Accent() : WizardCss::Border()), 24, 1.0F);
 
-                const char *number = (s == 1) ? "1" : (s == 2) ? "2"
-                                                  : (s == 3)   ? "3"
-                                                               : "4";
+                static constexpr std::array<const char *, 5> kStepNumbers = {"", "1", "2", "3", "4"};
+                const char *number = kStepNumbers[s];
                 ImFont *numberFont = f.mono ? f.mono : ImGui::GetFont();
                 const float numberFontSize = 13.0F;
                 const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, number);
@@ -660,8 +658,7 @@ namespace Horo::Editor
             using namespace Theme;
             using namespace WizardLayout;
 
-            static constexpr const char *kDescs[] = {
-                "No starter scene. Minimal asset tree and project.json.",
+            static constexpr std::array<const char *, 15> kDescs = {"No starter scene. Minimal asset tree and project.json.",
                 "Scene, camera, directional light, floor, material defaults.",
                 "Character controller, input map, capsule, and test level.",
                 "Create from a verified template package and lockfile.",
@@ -735,7 +732,7 @@ namespace Horo::Editor
                 ImGui::Dummy({0.0F, 4.0F});
 
                 {
-                    // HTML: .template-desc { font:11px var(--mono); color:var(--mut) }
+                    // Template description in HTML style
                     ImFont *descFont = f.mono ? f.mono : ImGui::GetFont();
                     const ImVec2 descPos = ImGui::GetCursorScreenPos();
                     const float wrapW = cardW - TemplatePad * 2.0F;
@@ -836,14 +833,14 @@ namespace Horo::Editor
         void DrawStepSettings(NewProjectState &st, const Fonts &f)
         {
             using namespace WizardLayout;
-            static constexpr const char *kRenderBackend[] = {"opengl", "vulkan", "auto detect"};
-            static constexpr const char *kPhysics[] = {"Enabled", "Disabled"};
-            static constexpr const char *kBuildProfile[] = {"desktop-debug", "desktop-profile", "desktop-release"};
-            static constexpr const char *kAssetCompression[] = {"lz4", "none", "zstd"};
-            static constexpr const char *kTextureCompression[] = {"bc7", "bc5", "astc", "none"};
-            static constexpr const char *kPlatform[] = {"host", "windows", "linux", "macos"};
-            static constexpr const char *kCompiler[] = {"default", "clang", "gcc", "msvc"};
-            static constexpr const char *kCppStd[] = {"C++20", "C++17"};
+            static constexpr std::array<const char *, 3> kRenderBackend = {"opengl", "vulkan", "auto detect"};
+            static constexpr std::array<const char *, 2> kPhysics = {"Enabled", "Disabled"};
+            static constexpr std::array<const char *, 3> kBuildProfile = {"desktop-debug", "desktop-profile", "desktop-release"};
+            static constexpr std::array<const char *, 3> kAssetCompression = {"lz4", "none", "zstd"};
+            static constexpr std::array<const char *, 4> kTextureCompression = {"bc7", "bc5", "astc", "none"};
+            static constexpr std::array<const char *, 4> kPlatform = {"host", "windows", "linux", "macos"};
+            static constexpr std::array<const char *, 4> kCompiler = {"default", "clang", "gcc", "msvc"};
+            static constexpr std::array<const char *, 2> kCppStd = {"C++20", "C++17"};
 
             {
                 ScopedCard card("RtCard", {0.0F, 262.0F}, CardPad, CardPad, WizardCss::Bg2());
@@ -852,22 +849,22 @@ namespace Horo::Editor
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
 
-                DrawComboField("RENDER BACKEND", &st.renderBackend, kRenderBackend, 3, colW, f,
+                DrawComboField("RENDER BACKEND", &st.renderBackend, kRenderBackend.data(), static_cast<int>(kRenderBackend.size()), colW, f,
                                "Default: opengl. Override per host profile.");
                 ImGui::SameLine(0.0F, GridGap);
                 DrawInputField("TARGET FRAME RATE", st.targetFps, sizeof(st.targetFps), colW, f);
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("PHYSICS", &st.physics, kPhysics, 2, colW, f);
+                DrawComboField("PHYSICS", &st.physics, kPhysics.data(), static_cast<int>(kPhysics.size()), colW, f);
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("BUILD PROFILE", &st.buildProfile, kBuildProfile, 3, colW, f);
+                DrawComboField("BUILD PROFILE", &st.buildProfile, kBuildProfile.data(), static_cast<int>(kBuildProfile.size()), colW, f);
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("ASSET COMPRESSION", &st.assetCompression, kAssetCompression, 3, colW, f);
+                DrawComboField("ASSET COMPRESSION", &st.assetCompression, kAssetCompression.data(), static_cast<int>(kAssetCompression.size()), colW, f);
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("TEXTURE COMPRESSION", &st.textureCompression, kTextureCompression, 4, colW, f);
+                DrawComboField("TEXTURE COMPRESSION", &st.textureCompression, kTextureCompression.data(), static_cast<int>(kTextureCompression.size()), colW, f);
             }
 
             ImGui::Dummy({0.0F, CardGap});
@@ -879,13 +876,13 @@ namespace Horo::Editor
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
 
-                DrawComboField("TARGET PLATFORM", &st.targetPlatform, kPlatform, 4, colW, f);
+                DrawComboField("TARGET PLATFORM", &st.targetPlatform, kPlatform.data(), static_cast<int>(kPlatform.size()), colW, f);
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("COMPILER FAMILY", &st.compilerFamily, kCompiler, 4, colW, f);
+                DrawComboField("COMPILER FAMILY", &st.compilerFamily, kCompiler.data(), static_cast<int>(kCompiler.size()), colW, f);
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("MINIMUM C++ STANDARD", &st.cppStandard, kCppStd, 2, colW, f);
+                DrawComboField("MINIMUM C++ STANDARD", &st.cppStandard, kCppStd.data(), static_cast<int>(kCppStd.size()), colW, f);
 
                 ImGui::Dummy({0.0F, 12.0F});
                 WizardHint("Portable project settings describe build intent. Machine-specific paths and SDK "
@@ -949,7 +946,7 @@ namespace Horo::Editor
             if (!last)
             {
                 auto *dl = ImGui::GetWindowDrawList();
-                const ImU32 col = Theme::U32(WizardCss::Border());
+                const auto col = Theme::U32(WizardCss::Border());
                 constexpr float kDashStep = 7.0F;
                 constexpr float kDashLen = 4.0F;
                 const int steps = static_cast<int>(std::ceil(rowW / kDashStep));
@@ -968,9 +965,9 @@ namespace Horo::Editor
         void DrawStepReview(const NewProjectState &st, const Fonts &f, const bool pathOccupied)
         {
             using namespace WizardLayout;
-            static constexpr const char *kBuildProfile[] = {"desktop-debug", "desktop-profile", "desktop-release"};
-            static constexpr const char *kRenderBackend[] = {"opengl", "vulkan", "auto detect"};
-            static constexpr const char *kPhysics[] = {"Enabled", "Disabled"};
+            static constexpr std::array<const char *, 3> kBuildProfile = {"desktop-debug", "desktop-profile", "desktop-release"};
+            static constexpr std::array<const char *, 3> kRenderBackend = {"opengl", "vulkan", "auto detect"};
+            static constexpr std::array<const char *, 2> kPhysics = {"Enabled", "Disabled"};
 
             WizardSectionTitle("REVIEW & CREATE", f);
             ImGui::Dummy({0.0F, 14.0F});
@@ -1106,8 +1103,8 @@ namespace Horo::Editor
             ImGui::PushStyleColor(ImGuiCol_WindowBg, WizardCss::Bg1());
             ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border());
 
-            const bool isOpen = ImGui::BeginPopupModal(
-                "New Project",
+            if (const bool isOpen = ImGui::BeginPopupModal(
+                    "New Project",
                 &st.open,
                 ImGuiWindowFlags_NoTitleBar |
                     ImGuiWindowFlags_NoResize |
@@ -1115,8 +1112,7 @@ namespace Horo::Editor
                     ImGuiWindowFlags_NoSavedSettings |
                     ImGuiWindowFlags_NoScrollbar |
                     ImGuiWindowFlags_NoScrollWithMouse);
-
-            if (!isOpen)
+                !isOpen)
             {
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar(4);
