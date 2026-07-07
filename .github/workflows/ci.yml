@@ -114,9 +114,15 @@ jobs:
 
       - name: Test
         id: native_tests
+        shell: bash
         run: |
-          cmake -E make_directory "${{ matrix.build_dir }}/test-results"
-          ctest --test-dir "${{ matrix.build_dir }}" --output-on-failure --output-junit "${{ matrix.build_dir }}/test-results/ctest.xml"
+          RESULTS_DIR="${{ github.workspace }}/${{ matrix.build_dir }}/test-results"
+          cmake -E make_directory "$RESULTS_DIR"
+          ctest --test-dir "${{ matrix.build_dir }}" \
+            --output-on-failure \
+            --output-junit "$RESULTS_DIR/ctest.xml"
+          echo "=== test-results directory ==="
+          ls -la "$RESULTS_DIR" || true
         env:
           HORO_LOG_LEVEL: debug
 
@@ -124,7 +130,7 @@ jobs:
         if: always() && (steps.native_tests.outcome == 'success' || steps.native_tests.outcome == 'failure')
         uses: mikepenz/action-junit-report@v6
         with:
-          report_paths: ${{ matrix.build_dir }}/test-results/ctest.xml
+          report_paths: ${{ github.workspace }}/${{ matrix.build_dir }}/test-results/ctest.xml
           check_name: Test Results · ${{ matrix.name }}
           fail_on_failure: false
           require_tests: false
