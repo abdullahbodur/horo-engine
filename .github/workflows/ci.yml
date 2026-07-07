@@ -144,3 +144,80 @@ jobs:
           name: test-results-${{ runner.os }}
           path: ${{ github.workspace }}/${{ matrix.build_dir }}/test-results/
           retention-days: 14
+
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: test
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      BUILD_WRAPPER_OUT_DIR: bw-output
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Linux system dependencies
+        run: |
+          if ! sudo apt-get update; then
+            sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+            sudo apt-get update
+          fi
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      - name: Restore compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2.22
+        with:
+          key: sonar-${{ runner.os }}
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/.cmake/fetchcontent
+          key: fetchcontent-sonar-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+          restore-keys: fetchcontent-sonar-
+
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
+
+      - name: Configure
+        run: |
+          cmake -S . -B build/sonar -G Ninja \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+
+      - name: Build (wrapped)
+        run: |
+          build-wrapper-linux-x86-64 \
+            --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
+            cmake --build build/sonar --parallel
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v7.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=abdullahbodur
+            -Dsonar.projectKey=abdullahbodur_horo-engine
+            -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
