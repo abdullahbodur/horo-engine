@@ -191,13 +191,8 @@ jobs:
           key: fetchcontent-sonar-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
           restore-keys: fetchcontent-sonar-
 
-      - name: Install Build Wrapper (server version)
-        run: |
-          curl -sSLo /tmp/build-wrapper.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
-          unzip -qo /tmp/build-wrapper.zip -d /tmp/build-wrapper
-          BUILD_WRAPPER=$(ls /tmp/build-wrapper/build-wrapper* 2>/dev/null | head -1)
-          chmod +x "$BUILD_WRAPPER"
-          echo "BUILD_WRAPPER=$BUILD_WRAPPER" >> $GITHUB_ENV
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
 
       - name: Configure
         run: |
@@ -213,7 +208,7 @@ jobs:
 
       - name: Build (wrapped)
         run: |
-          "$BUILD_WRAPPER" \
+          build-wrapper-linux-x86-64 \
             --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
             cmake --build build/sonar --parallel
 
