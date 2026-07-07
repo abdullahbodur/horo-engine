@@ -136,5 +136,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ runner.os }}
-          path: ${{ matrix.build_dir }}/test-results/
+          path: ${{ github.workspace }}/${{ matrix.build_dir }}/test-results/
           retention-days: 14
