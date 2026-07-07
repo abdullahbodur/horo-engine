@@ -49,10 +49,11 @@ void RendersDeterministicPreviewText() {
     using namespace Horo::Editor;
 
     WelcomeScreenController controller{{RecentProjectEntry{"Project", "/tmp/project", "today", "project"}}};
-    const std::string text = RenderWelcomeScreenText(controller.BuildViewModel());
+    const WelcomeViewModel viewModel = controller.BuildViewModel();
+    const std::string text = RenderWelcomeScreenText(viewModel);
 
     assert(text.find("Horo Editor") != std::string::npos);
-    assert(text.find("Under active development") != std::string::npos);
+    assert(text.find(viewModel.statusLabel) != std::string::npos);
     assert(text.find("Project") != std::string::npos);
     assert(text.find("/tmp/project") != std::string::npos);
 }
