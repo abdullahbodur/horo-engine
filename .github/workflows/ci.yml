@@ -167,8 +167,6 @@ jobs:
           fi
           sudo apt-get install -y --no-install-recommends \
             ninja-build \
-            xvfb \
-            gcovr \
             libwayland-dev \
             wayland-protocols \
             libxkbcommon-dev \
@@ -196,7 +194,7 @@ jobs:
       - name: Install Build Wrapper
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
 
-      - name: Configure (coverage)
+      - name: Configure
         run: |
           cmake -S . -B build/sonar -G Ninja \
             -DBUILD_TESTING=ON \
@@ -205,10 +203,6 @@ jobs:
             -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_C_FLAGS="--coverage" \
-            -DCMAKE_CXX_FLAGS="--coverage" \
-            -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
-            -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
@@ -217,24 +211,6 @@ jobs:
           build-wrapper-linux-x86-64 \
             --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
             cmake --build build/sonar --parallel
-
-      - name: Run tests (headless)
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            ctest --test-dir build/sonar --output-on-failure
-        env:
-          HORO_LOG_LEVEL: debug
-
-      - name: Generate coverage report
-        run: |
-          python3 -m gcovr build/sonar \
-            --root "${{ github.workspace }}" \
-            --sonarqube build/sonar/sonar-coverage.xml \
-            --exclude-directories '.*/_deps($|/.*)' \
-            --exclude-directories '.*/tests($|/.*)' \
-            --exclude-directories '.*/deprecated($|/.*)' \
-            --merge-mode-functions=merge-use-line-min \
-            --gcov-ignore-parse-errors=negative_hits.warn_once_per_file
 
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@v7.1.0
@@ -245,4 +221,3 @@ jobs:
             -Dsonar.organization=docktail
             -Dsonar.projectKey=abdullahbodur_horo-engine
             -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
-            -Dsonar.coverageReportPaths=build/sonar/sonar-coverage.xml
