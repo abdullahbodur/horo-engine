@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cfloat>
 #include <string>
 #include <string_view>
@@ -949,10 +950,14 @@ namespace Horo::Editor
             {
                 auto *dl = ImGui::GetWindowDrawList();
                 const ImU32 col = Theme::U32(WizardCss::Border());
-                for (float x = 0.0F; x < rowW; x += 7.0F)
+                constexpr float kDashStep = 7.0F;
+                constexpr float kDashLen = 4.0F;
+                const int steps = static_cast<int>(std::ceil(rowW / kDashStep));
+                for (int i = 0; i < steps; ++i)
                 {
+                    const float x = static_cast<float>(i) * kDashStep;
                     dl->AddLine({rowStart.x + x, rowStart.y + rowH - 1.0F},
-                                {rowStart.x + std::min(x + 4.0F, rowW), rowStart.y + rowH - 1.0F},
+                                {rowStart.x + std::min(x + kDashLen, rowW), rowStart.y + rowH - 1.0F},
                                 col,
                                 1.0F);
                 }

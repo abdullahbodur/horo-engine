@@ -1,6 +1,7 @@
 #include "editor/design_system/components/EditorUiComponents.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace Horo::Editor::Ui
 {
@@ -124,8 +125,15 @@ namespace Horo::Editor::Ui
         const float width = ImGui::GetContentRegionAvail().x;
         auto *dl = ImGui::GetWindowDrawList();
         const ImU32 color = Theme::U32(Theme::Border());
-        for (float x = 0.0F; x < width; x += dash + gap)
+        const float step = dash + gap;
+        if (step <= 0.0F)
         {
+            return;
+        }
+        const int steps = static_cast<int>(std::ceil(width / step));
+        for (int i = 0; i < steps; ++i)
+        {
+            const float x = static_cast<float>(i) * step;
             const float xEnd = std::min(x + dash, width);
             dl->AddLine({p0.x + x, p0.y}, {p0.x + xEnd, p0.y}, color, 1.0F);
         }
