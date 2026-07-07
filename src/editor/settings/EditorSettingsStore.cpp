@@ -64,10 +64,10 @@ namespace Horo::Editor
                 switch (c)
                 {
                 case '\\':
-                    out += "\\\\";
+                    out += R"(\\)";
                     break;
                 case '"':
-                    out += "\\\"";
+                    out += R"(\")";
                     break;
                 case '\n':
                     out += "\\n";
@@ -125,7 +125,7 @@ namespace Horo::Editor
 
         [[nodiscard]] std::optional<std::string> FindStringValue(const std::string &json, const char *key)
         {
-            const std::regex re(std::string{"\""} + key + "\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"");
+            const std::regex re(std::string{"\""} + key + R"("\s*:\s*"((?:\\.|[^"])*")");
             std::smatch match;
             if (!std::regex_search(json, match, re) || match.size() < 2)
             {
@@ -156,8 +156,8 @@ namespace Horo::Editor
             int value = 0;
             const std::string text = match[1].str();
             const auto *begin = text.data();
-            const auto *end = begin + text.size();
-            if (std::from_chars(begin, end, value).ec != std::errc{})
+            if (const auto *end = begin + text.size();
+                std::from_chars(begin, end, value).ec != std::errc{})
             {
                 return std::nullopt;
             }
@@ -176,7 +176,11 @@ namespace Horo::Editor
             {
                 return std::stof(match[1].str());
             }
-            catch (...)
+            catch (const std::invalid_argument &)
+            {
+                return std::nullopt;
+            }
+            catch (const std::out_of_range &)
             {
                 return std::nullopt;
             }
@@ -193,24 +197,26 @@ namespace Horo::Editor
             });
         }
 
-        [[nodiscard]] EditorStartupBehavior ParseStartup(const std::string &value)
+        [[nodiscard]] EditorStartupBehavior ParseStartup(const std::string_view value)
         {
+            using enum EditorStartupBehavior;
             if (value == "last_project")
-                return EditorStartupBehavior::LastProject;
+                return LastProject;
             if (value == "project_browser")
-                return EditorStartupBehavior::ProjectBrowser;
-            return EditorStartupBehavior::WelcomeScreen;
+                return ProjectBrowser;
+            return WelcomeScreen;
         }
 
         [[nodiscard]] const char *ToString(const EditorStartupBehavior value)
         {
+            using enum EditorStartupBehavior;
             switch (value)
             {
-            case EditorStartupBehavior::LastProject:
+            case LastProject:
                 return "last_project";
-            case EditorStartupBehavior::ProjectBrowser:
+            case ProjectBrowser:
                 return "project_browser";
-            case EditorStartupBehavior::WelcomeScreen:
+            case WelcomeScreen:
             default:
                 return "welcome_screen";
             }
