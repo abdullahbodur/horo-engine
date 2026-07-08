@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/WelcomeScreen.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include "editor/screens/welcome/WelcomeScreenGui.h"
 #include "editor/modals/new_project/NewProjectModal.h"
@@ -178,6 +179,10 @@ namespace Horo::Editor
     /** @copydoc RunEditorGuiApp */
     int RunEditorGuiApp(const int argc, char **argv)
     {
+        // ── Bootstrap logging before any subsystem ───────────────────────
+        Log::Logger::Init("~/.horo/logs", "horo-editor");
+        Log::Logger::DumpStartupInfo();
+
         auto opts = ParseOptions(argc, argv);
         WelcomeScreenController ctrl{BuildBootstrapRecentProjects()};
         auto vm = ctrl.BuildViewModel();
@@ -190,7 +195,10 @@ namespace Horo::Editor
 
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER))
         {
-            std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+            const char *err = SDL_GetError();
+            HORO_LOG_CRITICAL("platform.sdl", "SDL_Init failed: %s", err);
+            std::fprintf(stderr, "SDL_Init: %s\n", err);
+            Log::Logger::Shutdown();
             return 1;
         }
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -227,6 +235,7 @@ namespace Horo::Editor
         auto fonts = LoadEditorFonts(io, QueryRasterizerDensity(w));
         auto textures = LoadEditorTextures();
         Theme::Apply(ImGui::GetStyle());
+        HORO_LOG_INFO("editor.startup", "Editor initialised — entering main loop");
 
         constexpr auto *glsl = "#version 150";
         ImGui_ImplSDL2_InitForOpenGL(w, gl);
@@ -291,6 +300,8 @@ namespace Horo::Editor
         SDL_GL_DeleteContext(gl);
         SDL_DestroyWindow(w);
         SDL_Quit();
+
+        Log::Logger::Shutdown();
         return 0;
     }
 

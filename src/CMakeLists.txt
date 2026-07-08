@@ -1,3 +1,15 @@
+add_library(HoroFoundation STATIC
+    foundation/logging/Logger.cpp
+)
+
+add_library(HoroEngine::Foundation ALIAS HoroFoundation)
+
+target_compile_features(HoroFoundation PUBLIC cxx_std_20)
+target_include_directories(HoroFoundation
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+)
+
 add_library(HoroEditorScreens STATIC
     editor/screens/WelcomeScreen.cpp
     editor/settings/EditorSettingsStore.cpp
@@ -39,6 +51,7 @@ if(HORO_BUILD_EDITOR_GUI)
     target_link_libraries(HoroEditorGuiBackend
         PUBLIC
             HoroEngine::EditorScreens
+            HoroEngine::Foundation
         PRIVATE
             HoroThirdParty::ImGui
     )

@@ -1,0 +1,291 @@
+/** @copydoc Logger.h */
+
+#include "Horo/Foundation/Logging/Logger.h"
+
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <mutex>
+#include <string>
+#include <thread>
+
+#if defined(__APPLE__) || defined(__linux__)
+#include <unistd.h>
+#endif
+
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/utsname.h>
+#elif defined(__linux__)
+#include <sys/sysinfo.h>
+#include <sys/utsname.h>
+#elif defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
+namespace Horo::Log
+{
+
+    namespace
+    {
+        std::mutex g_mutex;
+
+        std::string ResolvePlatform()
+        {
+#if defined(__APPLE__)
+            return "macOS";
+#elif defined(__linux__)
+            return "Linux";
+#elif defined(_WIN32)
+            return "Windows";
+#else
+            return "Unknown";
+#endif
+        }
+
+        std::string ResolveArch()
+        {
+#if defined(__x86_64__) || defined(_M_X64)
+            return "x86_64";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+            return "arm64";
+#else
+            return "unknown";
+#endif
+        }
+
+        int ResolveCpuCount()
+        {
+#if defined(__APPLE__) || defined(__linux__)
+            return static_cast<int>(std::thread::hardware_concurrency());
+#elif defined(_WIN32)
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            return static_cast<int>(si.dwNumberOfProcessors);
+#else
+            return 0;
+#endif
+        }
+
+        /** @brief Returns the log directory, creating it if needed. Expands ~ to $HOME. */
+        std::string ResolveLogDir(std::string_view dir)
+        {
+            std::string resolved{dir};
+            if (!resolved.empty() && resolved[0] == '~')
+            {
+                const char *home = std::getenv("HOME");
+                if (home == nullptr)
+                    home = std::getenv("USERPROFILE");
+                if (home != nullptr)
+                    resolved = std::string{home} + resolved.substr(1);
+            }
+            std::error_code ec;
+            std::filesystem::create_directories(resolved, ec);
+            return resolved;
+        }
+
+        /** @brief Formats a UTC timestamp as ISO-8601 with milliseconds. */
+        std::string NowUtc()
+        {
+            const auto now = std::chrono::system_clock::now();
+            const auto timeT = std::chrono::system_clock::to_time_t(now);
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                now.time_since_epoch()) %
+                            1000;
+
+            std::tm tm{};
+#if defined(_WIN32)
+            gmtime_s(&tm, &timeT);
+#else
+            gmtime_r(&timeT, &tm);
+#endif
+
+            char buf[32]{};
+            std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03lldZ",
+                          tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                          tm.tm_hour, tm.tm_min, tm.tm_sec,
+                          static_cast<long long>(ms.count()));
+            return {buf};
+        }
+
+        /** @brief JSON-escapes a string value. */
+        std::string JsonEscape(std::string_view s)
+        {
+            std::string out;
+            out.reserve(s.size() + 4);
+            for (const char c : s)
+            {
+                switch (c)
+                {
+                case '"':  out += "\\\""; break;
+                case '\\': out += "\\\\"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:   out += c; break;
+                }
+            }
+            return out;
+        }
+
+    } // namespace
+
+    Logger &Logger::Instance()
+    {
+        static Logger logger;
+        return logger;
+    }
+
+    void Logger::Init(std::string_view logDir, std::string_view baseName)
+    {
+        auto &self = Instance();
+        std::lock_guard lock(g_mutex);
+
+        if (self.m_file != nullptr)
+            return; // already initialised
+
+        const auto dir = ResolveLogDir(logDir);
+        const auto path = dir + "/" + std::string{baseName} + ".jsonl";
+
+        self.m_file = std::fopen(path.c_str(), "a");
+        self.m_startTime = std::chrono::steady_clock::now();
+        self.m_sequence = 0;
+
+        // Respect HORO_LOG_LEVEL env var
+        if (const char *env = std::getenv("HORO_LOG_LEVEL"))
+        {
+            const std::string_view sv{env};
+            if (sv == "trace") self.m_level = Level::Trace;
+            else if (sv == "debug") self.m_level = Level::Debug;
+            else if (sv == "info") self.m_level = Level::Info;
+            else if (sv == "warn") self.m_level = Level::Warn;
+            else if (sv == "error") self.m_level = Level::Error;
+            else if (sv == "critical") self.m_level = Level::Critical;
+            else if (sv == "off") self.m_level = Level::Off;
+        }
+
+        // Bootstrap log — goes to stderr if file not yet open
+        if (self.m_file != nullptr)
+        {
+            std::fprintf(self.m_file,
+                         R"({"schemaVersion":1,"level":"info","category":"observability.startup","message":"Logger initialised","path":"%s"})"
+                         "\n",
+                         JsonEscape(path).c_str());
+            std::fflush(self.m_file);
+        }
+    }
+
+    void Logger::Shutdown()
+    {
+        auto &self = Instance();
+        std::lock_guard lock(g_mutex);
+
+        if (self.m_file != nullptr)
+        {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - self.m_startTime)
+                                     .count();
+
+            std::fprintf(self.m_file,
+                         R"({"schemaVersion":1,"level":"info","category":"observability.shutdown","message":"Logger shut down cleanly","elapsedMs":%lld,"sequence":%llu})"
+                         "\n",
+                         static_cast<long long>(elapsed),
+                         static_cast<unsigned long long>(self.m_sequence));
+            std::fflush(self.m_file);
+            std::fclose(self.m_file);
+            self.m_file = nullptr;
+        }
+    }
+
+    Level Logger::GetLevel() noexcept
+    {
+        return Instance().m_level;
+    }
+
+    void Logger::SetLevel(const Level level) noexcept
+    {
+        Instance().m_level = level;
+    }
+
+    void Logger::Write(std::string_view category, const Level level, std::string_view message)
+    {
+        auto &self = Instance();
+        std::lock_guard lock(g_mutex);
+
+        const auto seq = ++self.m_sequence;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now() - self.m_startTime)
+                                 .count();
+
+        const auto pid =
+#if defined(_WIN32)
+            static_cast<int64_t>(GetCurrentProcessId());
+#else
+            static_cast<int64_t>(getpid());
+#endif
+
+        // Write JSONL record
+        if (self.m_file != nullptr)
+        {
+            std::fprintf(self.m_file,
+                         R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld})"
+                         "\n",
+                         NowUtc().c_str(),
+                         static_cast<long long>(elapsed),
+                         static_cast<unsigned long long>(seq),
+                         ToString(level),
+                         JsonEscape(category).c_str(),
+                         JsonEscape(message).c_str(),
+                         static_cast<long long>(pid));
+            std::fflush(self.m_file);
+        }
+
+        // Also echo to stderr in debug/dev builds
+#ifndef NDEBUG
+        std::fprintf(stderr, "[%s] %s: %s\n", ToString(level), category.data(), message.data());
+#endif
+    }
+
+    void Logger::DumpStartupInfo()
+    {
+        HORO_LOG_INFO("observability.startup", "Process started");
+
+        // Platform
+        HORO_LOG_INFO("observability.startup", "Platform: %s %s", ResolvePlatform().c_str(), ResolveArch().c_str());
+
+        // CPU
+        HORO_LOG_INFO("observability.startup", "Logical cores: %d", ResolveCpuCount());
+
+        // Process ID
+#if defined(_WIN32)
+        HORO_LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(GetCurrentProcessId()));
+#else
+        HORO_LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(getpid()));
+#endif
+
+        // Compiler
+#if defined(__clang__)
+        HORO_LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d",
+                      __clang_major__, __clang_minor__, __clang_patchlevel__);
+#elif defined(__GNUC__)
+        HORO_LOG_INFO("observability.startup", "Compiler: GCC %d.%d",
+                      __GNUC__, __GNUC_MINOR__);
+#elif defined(_MSC_VER)
+        HORO_LOG_INFO("observability.startup", "Compiler: MSVC %d", _MSC_VER);
+#endif
+
+        // Build config
+#ifdef NDEBUG
+        HORO_LOG_INFO("observability.startup", "Build: Release");
+#else
+        HORO_LOG_INFO("observability.startup", "Build: Debug");
+#endif
+
+        // Log level
+        HORO_LOG_INFO("observability.startup", "Log level: %s", ToString(Logger::GetLevel()));
+    }
+
+} // namespace Horo::Log
