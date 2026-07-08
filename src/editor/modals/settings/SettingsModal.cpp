@@ -678,12 +678,12 @@ namespace Horo::Editor
                        [&st, &f]() { ComboControl("##startup", &st.startupAction, kStartup.data(), static_cast<int>(kStartup.size()), f); });
             SettingRow("Auto-save Interval", "Minutes between automatic scene saves. Zero disables auto-save.", f,
                        [&st, &f]() { SliderIntControl("##autosave", &st.autoSaveInterval, 0, 30, "%d min", f); });
-            SettingRow("Confirm Exit With Unsaved Changes", nullptr, f,
+            SettingRow("Confirm Exit With Unsaved Changes", "Prompt before closing when unsaved changes exist.", f,
                        [&st, &f]() { (void)ToggleControl("confirm-exit", &st.confirmExit, f); });
             SettingGroup("EDITOR SESSION", f);
             SettingRow("Restore Workspace Layout", "Reopen tabs and panel layout from last session.", f,
                        [&st, &f]() { (void)ToggleControl("restore-workspace", &st.restoreWorkspace, f); });
-            SettingRow("Default Scene On Project Open", nullptr, f,
+            SettingRow("Default Scene On Project Open", "Scene file loaded automatically when opening a project.", f,
                        [&st, &f]() { InputTextControl("##default-scene", st.defaultScene, sizeof(st.defaultScene), f); });
         }
 
@@ -710,7 +710,7 @@ namespace Horo::Editor
             SettingGroup("TYPOGRAPHY & SCALE", f);
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
                        [&st, &f]() { SliderIntControl("##ui-scale", &st.uiScale, 75, 200, "%d%%", f, 25); });
-            SettingRow("Code Font Size", nullptr, f,
+            SettingRow("Code Font Size", "Point size for the script editor and console output.", f,
                        [&st, &f]() { InputTextControl("##font-size", st.editorFontSize, sizeof(st.editorFontSize), f); });
         }
 
@@ -718,11 +718,11 @@ namespace Horo::Editor
         {
             SectionTitle("Input", f);
             SettingGroup("NAVIGATION", f, true);
-            SettingRow("Orbit Sensitivity", nullptr, f,
+            SettingRow("Orbit Sensitivity", "Mouse drag multiplier for orbiting the viewport camera.", f,
                        [&st, &f]() { SliderIntControl("##orbit", &st.orbitSensitivity, 10, 300, "%d", f); });
-            SettingRow("Pan Sensitivity", nullptr, f,
+            SettingRow("Pan Sensitivity", "Mouse drag multiplier for panning the viewport camera.", f,
                        [&st, &f]() { SliderIntControl("##pan", &st.panSensitivity, 10, 300, "%d", f); });
-            SettingRow("Invert Orbit Y", nullptr, f,
+            SettingRow("Invert Orbit Y", "Reverse the vertical orbit direction (push up to look down).", f,
                        [&st, &f]() { (void)ToggleControl("invert-y", &st.invertOrbitY, f); });
             SettingGroup("SHORTCUTS", f);
             SettingRow("Save Scene", nullptr, f, [&f]() { ShortcutDisplay("Ctrl", "S", nullptr, f); });
@@ -736,12 +736,12 @@ namespace Horo::Editor
             static constexpr std::array<const char *, 4> kTier = {"High End", "DX12 / Vulkan", "DX11", "ES3"};
             SectionTitle("Rendering", f);
             SettingGroup("VIEWPORT", f, true);
-            SettingRow("Default Viewport Mode", nullptr, f, [&st, &f]() { ComboControl("##viewport", &st.viewportMode, kViewport.data(), static_cast<int>(kViewport.size()), f); });
-            SettingRow("Grid Overlay", nullptr, f, [&st, &f]() { (void)ToggleControl("grid", &st.gridOverlay, f); });
+            SettingRow("Default Viewport Mode", "Shading mode used for new viewport panels.", f, [&st, &f]() { ComboControl("##viewport", &st.viewportMode, kViewport.data(), static_cast<int>(kViewport.size()), f); });
+            SettingRow("Grid Overlay", "Show the reference grid in the editor viewport.", f, [&st, &f]() { (void)ToggleControl("grid", &st.gridOverlay, f); });
             SettingGroup("QUALITY", f);
             SettingRow("Editor Rendering Tier", "Maximum feature tier used in the editor viewport.", f,
                        [&st, &f]() { ComboControl("##tier", &st.renderingTier, kTier.data(), static_cast<int>(kTier.size()), f); });
-            SettingRow("Texture Streaming Budget", nullptr, f,
+            SettingRow("Texture Streaming Budget", "Maximum texture memory pool used by the streaming system.", f,
                        [&st, &f]() { InputTextControl("##texture-budget", st.textureBudget, sizeof(st.textureBudget), f); });
         }
 
@@ -750,11 +750,11 @@ namespace Horo::Editor
             static constexpr std::array<const char *, 3> kDevices = {"System Default", "Headphones", "Speakers"};
             SectionTitle("Audio", f);
             SettingGroup("OUTPUT", f, true);
-            SettingRow("Master Volume", nullptr, f,
+            SettingRow("Master Volume", "Global audio output level for the editor (0–100).", f,
                        [&st, &f]() { SliderIntControl("##volume", &st.masterVolume, 0, 100, "%d", f); });
-            SettingRow("Audio Output Device", nullptr, f,
+            SettingRow("Audio Output Device", "Preferred playback device for editor audio.", f,
                        [&st, &f]() { ComboControl("##audio-device", &st.audioOutputDevice, kDevices.data(), static_cast<int>(kDevices.size()), f); });
-            SettingRow("Enable Audio In Editor", nullptr, f,
+            SettingRow("Enable Audio In Editor", "Play in-editor sounds and preview audio assets.", f,
                        [&st, &f]() { (void)ToggleControl("audio-enabled", &st.audioEnabled, f); });
         }
 
@@ -762,11 +762,11 @@ namespace Horo::Editor
         {
             SectionTitle("Network", f);
             SettingGroup("MULTIPLAYER PREVIEW", f, true);
-            SettingRow("Max Preview Clients", nullptr, f,
+            SettingRow("Max Preview Clients", "Maximum concurrent PIE (Play In Editor) client connections.", f,
                        [&st, &f]() { InputIntControl("##max-clients", &st.maxPreviewClients, f); });
             SettingRow("Simulate Latency", "Artificial one-way delay injected on loopback (ms).", f,
                        [&st, &f]() { SliderIntControl("##latency", &st.simulatedLatencyMs, 0, 500, "%d ms", f); });
-            SettingRow("Package Download Threads", nullptr, f,
+            SettingRow("Package Download Threads", "Parallel download workers for template and asset packages.", f,
                        [&st, &f]() { InputIntControl("##download-threads", &st.packageDownloadThreads, f); });
         }
 
@@ -775,14 +775,14 @@ namespace Horo::Editor
             static constexpr std::array<const char *, 4> kLogLevels = {"Debug", "Info", "Warning", "Error"};
             SectionTitle("Diagnostics", f);
             SettingGroup("LOGGING", f, true);
-            SettingRow("Console Log Level", nullptr, f,
+            SettingRow("Console Log Level", "Minimum severity shown in the editor console output.", f,
                        [&st, &f]() { ComboControl("##log-level", &st.consoleLogLevel, kLogLevels.data(), static_cast<int>(kLogLevels.size()), f); });
-            SettingRow("Write Log To File", nullptr, f,
+            SettingRow("Write Log To File", "Persist the console log to a timestamped file on disk.", f,
                        [&st, &f]() { (void)ToggleControl("write-log", &st.writeLogToFile, f); });
             SettingGroup("PROFILER", f);
-            SettingRow("Auto-capture On Stutter", nullptr, f,
+            SettingRow("Auto-capture On Stutter", "Automatically start a profiler capture when a frame spike is detected.", f,
                        [&st, &f]() { (void)ToggleControl("capture-stutter", &st.autoCaptureStutter, f); });
-            SettingRow("Stutter Threshold (ms)", nullptr, f,
+            SettingRow("Stutter Threshold (ms)", "Frame time above this value triggers an auto-capture.", f,
                        [&st, &f]() { InputFloatControl("##stutter", &st.stutterThresholdMs, f); });
         }
 
@@ -794,7 +794,7 @@ namespace Horo::Editor
             PluginRow("Vendor FMOD Integration", "v2.02.20", "Full FMOD Studio authoring and runtime integration.", &st.fmodIntegration, f);
             PluginRow("Steamworks SDK", "v1.59", "Steam achievements, overlay, and networking features.", &st.steamworksSdk, f);
             SettingGroup("DISCOVERY", f);
-            SettingRow("Plugin Discovery Path", nullptr, f,
+            SettingRow("Plugin Discovery Path", "Directory scanned for additional editor plugins on startup.", f,
                        [&st, &f]() { InputTextControl("##plugin-path", st.pluginPath, sizeof(st.pluginPath), f); });
         }
 
