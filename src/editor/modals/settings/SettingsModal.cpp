@@ -26,7 +26,7 @@ namespace Horo::Editor
             constexpr float ModalH = 680.0F;
             constexpr float ViewportPad = 48.0F;
             constexpr float HeaderH = 57.0F;
-            constexpr float FooterH = 65.0F;
+            constexpr float FooterH = 72.0F;
             constexpr float NavW = 200.0F;
             constexpr float Radius = 4.0F;
             constexpr float ModalRadius = 8.0F;
