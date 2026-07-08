@@ -353,7 +353,15 @@ namespace Horo::Editor
             SettingGroup("THEME", f, true);
             SettingRow("Color Theme", "Built-in themes or custom JSON theme file.", f, [&st, &f]() {
                 static constexpr std::array<const char *, 3> kThemes = {"Horo Dark", "Midnight", "Light"};
+                const int prev = st.themeIndex;
                 ComboControl("##theme", &st.themeIndex, kThemes.data(), static_cast<int>(kThemes.size()), f);
+                if (st.themeIndex != prev)
+                {
+                    constexpr Theme::Preset kPresets[] = {Theme::Preset::HoroDark, Theme::Preset::Midnight, Theme::Preset::Light};
+                    Theme::SetThemePreset(kPresets[st.themeIndex]);
+                    Theme::ApplyCurrentTheme();
+                    st.dirty = true;
+                }
             });
             SettingRow("Custom Theme", "Path to a JSON theme file. Leave empty to use built-in.", f, [&st, &f]() {
                 InputTextControl("##custom-theme", st.customThemePath, sizeof(st.customThemePath), f);
@@ -496,7 +504,7 @@ namespace Horo::Editor
                                   ImGuiWindowFlags_AlwaysUseWindowPadding);
                 SettingRow("Bank Output Path", "Where compiled banks are written.", f,
                            [&st, &f]() { InputTextControl("##fmod-banks", st.fmodBankPath, sizeof(st.fmodBankPath), f); });
-                SettingRow("Live Update", "Reload banks without restarting editor.", f,
+                SettingRow("Live Update", "Reload bapluginFmodExpandednks without restarting editor.", f,
                            [&st, &f]() { (void)ToggleControl("##fmod-live", &st.fmodLiveUpdate, f); });
                 ImGui::EndChild();
                 ImGui::PopStyleColor();

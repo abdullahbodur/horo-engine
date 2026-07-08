@@ -121,6 +121,21 @@ namespace Layout {
 // All visual defaults such as colors, rounding, and padding come from here;
 // widget code must not depend on this function's implementation details.
 // ─────────────────────────────────────────────────────────────────────────
-void Apply(ImGuiStyle& style);
+void Apply(ImGuiStyle &style);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Runtime theme preset switching. Call SetThemePreset to change the active
+// palette, then ApplyCurrentTheme to refresh the global ImGui style.
+// ─────────────────────────────────────────────────────────────────────────
+enum class Preset
+{
+    HoroDark,
+    Midnight,
+    Light,
+};
+
+void SetThemePreset(Preset preset);
+[[nodiscard]] Preset GetThemePreset();
+void ApplyCurrentTheme();
 
 } // namespace Horo::Editor::Theme
