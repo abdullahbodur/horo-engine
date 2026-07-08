@@ -642,21 +642,22 @@ namespace Horo::Editor
 
         void DrawNavigation(SettingsState &st, const Fonts &f, const float bodyH)
         {
+            using enum SettingsTab;
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 10.0F});
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
             ImGui::BeginChild("SettingsNav", {Layout::NavW, bodyH}, false, ImGuiWindowFlags_AlwaysUseWindowPadding);
 
             DrawNavGroup("Editor", f);
-            DrawNavItem(st, {"General", "G", SettingsTab::General}, f);
-            DrawNavItem(st, {"Appearance", "A", SettingsTab::Appearance}, f);
-            DrawNavItem(st, {"Input", "I", SettingsTab::Input}, f);
+            DrawNavItem(st, {"General", "G", General}, f);
+            DrawNavItem(st, {"Appearance", "A", Appearance}, f);
+            DrawNavItem(st, {"Input", "I", Input}, f);
             DrawNavGroup("Engine", f);
-            DrawNavItem(st, {"Rendering", "R", SettingsTab::Rendering}, f);
-            DrawNavItem(st, {"Audio", "S", SettingsTab::Audio}, f);
-            DrawNavItem(st, {"Network", "N", SettingsTab::Network}, f);
+            DrawNavItem(st, {"Rendering", "R", Rendering}, f);
+            DrawNavItem(st, {"Audio", "S", Audio}, f);
+            DrawNavItem(st, {"Network", "N", Network}, f);
             DrawNavGroup("Tools", f);
-            DrawNavItem(st, {"Diagnostics", "D", SettingsTab::Diagnostics}, f);
-            DrawNavItem(st, {"Plugins", "P", SettingsTab::Plugins}, f);
+            DrawNavItem(st, {"Diagnostics", "D", Diagnostics}, f);
+            DrawNavItem(st, {"Plugins", "P", Plugins}, f);
 
             const ImVec2 p = ImGui::GetWindowPos();
             ImGui::GetWindowDrawList()->AddLine({p.x + Layout::NavW - 1.0F, p.y},
@@ -805,28 +806,29 @@ namespace Horo::Editor
 
             switch (static_cast<SettingsTab>(st.activeTab))
             {
-            case SettingsTab::General:
+                using enum SettingsTab;
+            case General:
                 DrawGeneral(st, f);
                 break;
-            case SettingsTab::Appearance:
+            case Appearance:
                 DrawAppearance(st, f);
                 break;
-            case SettingsTab::Input:
+            case Input:
                 DrawInput(st, f);
                 break;
-            case SettingsTab::Rendering:
+            case Rendering:
                 DrawRendering(st, f);
                 break;
-            case SettingsTab::Audio:
+            case Audio:
                 DrawAudio(st, f);
                 break;
-            case SettingsTab::Network:
+            case Network:
                 DrawNetwork(st, f);
                 break;
-            case SettingsTab::Diagnostics:
+            case Diagnostics:
                 DrawDiagnostics(st, f);
                 break;
-            case SettingsTab::Plugins:
+            case Plugins:
                 DrawPlugins(st, f);
                 break;
             }

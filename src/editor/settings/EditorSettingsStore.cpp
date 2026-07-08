@@ -511,8 +511,7 @@ namespace Horo::Editor
         out.path = ResolveEditorSettingsPath();
         out.settings = DefaultEditorSettings();
 
-        std::error_code ec;
-        if (!std::filesystem::exists(out.path, ec))
+        if (std::error_code ec; !std::filesystem::exists(out.path, ec))
         {
             return out;
         }
@@ -535,8 +534,7 @@ namespace Horo::Editor
         }
 
         ApplyJsonValues(json, out.settings);
-        std::string validationError;
-        if (!ValidateEditorSettings(out.settings, &validationError))
+        if (std::string validationError; !ValidateEditorSettings(out.settings, &validationError))
         {
             out.error = validationError;
         }
@@ -560,8 +558,7 @@ namespace Horo::Editor
         }
 
         doc->path = ResolveEditorSettingsPath();
-        std::string validationError;
-        if (!ValidateEditorSettings(doc->settings, &validationError))
+        if (std::string validationError; !ValidateEditorSettings(doc->settings, &validationError))
         {
             if (outError)
             {
