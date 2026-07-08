@@ -528,21 +528,24 @@ namespace Horo::Editor
         void PluginRow(const char *name, const char *version, const char *description, bool *enabled, const Fonts &f)
         {
             SettingRow(name, nullptr, f, [&f, version, description, enabled]() {
-                ImGui::BeginGroup();
+                const float cursorY = ImGui::GetCursorPosY();
+                ImGui::SetCursorPosY(cursorY + 4.0F);
                 {
                     ScopedTextStyle ts(f.mono, 10.5F, Theme::FontPx::Mono);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                     ImGui::TextUnformatted(version);
                     ImGui::PopStyleColor();
                 }
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0F);
                 {
                     ScopedTextStyle ts(f.sans, 12.0F, Theme::FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Layout::ControlW - 52.0F);
                     ImGui::TextWrapped("%s", description);
+                    ImGui::PopTextWrapPos();
                     ImGui::PopStyleColor();
                 }
-                ImGui::EndGroup();
-                ImGui::SameLine(Layout::ControlW - 42.0F);
+                ImGui::SetCursorPos({Layout::ControlW - 42.0F, cursorY + 6.0F});
                 (void)ToggleControl("plugin-toggle", enabled, f, false);
             });
         }
