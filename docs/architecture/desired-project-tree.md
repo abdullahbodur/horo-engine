@@ -409,6 +409,8 @@ horo-engine/
 │   │   ├── data_bus/
 │   │   ├── panels/
 │   │   ├── modals/
+│   │   ├── source_editor/
+│   │   ├── graph_editor/
 │   │   ├── project_model/
 │   │   └── mcp_bridge/
 │   ├── interfaces/

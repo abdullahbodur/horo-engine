@@ -19,6 +19,9 @@ popups.
   state already owned by application services.
 - Editor Settings and Build & Release are editor modals, not top-level screens.
 - Navigation with dirty or running work must pass an explicit leave decision.
+- The startup project-selection experience is the `WelcomeScreen` route inside
+  `GuiScreenHost`; it is not a separate launcher executable, module, lifecycle,
+  or component set.
 
 ## Surface Taxonomy
 
@@ -48,6 +51,26 @@ HoroEditorApp
 
 `GuiScreenHost` owns the active screen object and navigation state.
 `EditorWorkspaceScreen` composes `EditorLayer`, which owns panel and modal hosts.
+
+## Startup Flow
+
+`WelcomeScreen` is the first active route of `HoroEditor`. It is not
+special-cased outside the route system.
+
+Startup order:
+
+1. `HoroEditor` creates the SDL2-backed editor platform/media adapter.
+2. The platform adapter creates one main window.
+3. The GUI backend creates the Dear ImGui context and renderer resources.
+4. `GuiScreenHost` starts on `GuiRouteKind::Welcome`.
+5. `WelcomeScreen` requests recent projects from project-model services.
+6. Create/open actions return typed navigation requests.
+7. `GuiScreenHost` validates route payloads and leave guards before changing
+   screens.
+
+The welcome screen reads recent projects through project-model services. It does
+not parse `<user-state>/horo/recent_projects.json` directly and does not persist
+arbitrary thumbnail paths.
 
 ## Route Model
 
@@ -444,8 +467,8 @@ Required tests cover:
 
 ## Related Documents
 
-- [System Design](../foundation/system-design.md)
-- [Editor Panel Host](./editor-panel-host.md)
+- [Editor Panel Host](./editor-panel-host.md): persistent editor workspace layout
+  and tab lifecycle.
 - [Editor Modal Host](./editor-modal-host.md)
 - [Editor Document Model](./editor-document-model.md)
 - [Input Architecture](../runtime/input-architecture.md)

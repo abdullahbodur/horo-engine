@@ -672,6 +672,22 @@ behavior: compatible graph rewrites may keep declared state, while schema,
 dependency, or scheduling changes require a scene/play-session restart or an
 explicit migration.
 
+The visual graph editor uses the shared editor graph surface described in
+[Editor Panel and Tab Architecture](../editor/editor-panel-host.md). The first
+production graph surface is built on `imgui-node-editor` through a private Horo
+adapter. Graph widget IDs are presentation IDs; persisted graph identity remains
+`BehaviorTypeId`, stable node IDs, stable pin IDs, property IDs, and schema
+versions owned by the behavior graph asset. The widget may emit create/connect/
+move/rename/delete commands, but the behavior subsystem owns validation,
+descriptor generation, scheduling metadata, diagnostics, migration, and runtime
+activation.
+
+AI-assisted graph editing follows the same rule as source editing: an assistant
+may propose graph edits, generated behavior code, or node rewrites, but changes
+are applied only through explicit graph edit commands with preview, undo, and
+validation. Agent mode cannot bypass behavior access declarations or write graph
+assets directly from a UI callback.
+
 ## Play-In-Editor And Live Preview
 
 Play-in-editor creates a full runtime scene clone from the authoring document

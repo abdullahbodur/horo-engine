@@ -1,0 +1,125 @@
+#pragma once
+
+#include "Horo/Editor/DesignSystem/DesignTokens.h"
+
+#include <imgui.h>
+
+namespace Horo::Editor::Theme {
+
+// ─────────────────────────────────────────────────────────────────────────
+// Palette — exact match for the CSS custom properties in the HTML mockups:
+//   --bg0 #0a0c0f   --bg1 #12151a   --bg2 #181c21   --bg3 #1f242b
+//   --hover #232830 --bd #2a2f37    --bd2 #3a4049
+//   --txt #e8e4d9   --mut #9a958a   --dim #5e5b54
+//   --a #04A5FC     --ok #5fb88a    --warn #e8a33d  --err #d4524a
+// ─────────────────────────────────────────────────────────────────────────
+[[nodiscard]] constexpr ::ImVec4 Bg0()          { return DesignSystem::DefaultDesignTokens().colors.surfaceRoot; }
+[[nodiscard]] constexpr ::ImVec4 Bg1()          { return DesignSystem::DefaultDesignTokens().colors.surfaceWindow; }
+[[nodiscard]] constexpr ::ImVec4 Bg2()          { return DesignSystem::DefaultDesignTokens().colors.surfacePanel; }
+[[nodiscard]] constexpr ::ImVec4 Bg3()          { return DesignSystem::DefaultDesignTokens().colors.surfaceRaised; }
+[[nodiscard]] constexpr ::ImVec4 Hover()        { return DesignSystem::DefaultDesignTokens().colors.surfaceHover; }
+[[nodiscard]] constexpr ::ImVec4 Border()       { return DesignSystem::DefaultDesignTokens().colors.border; }
+[[nodiscard]] constexpr ::ImVec4 BorderStrong() { return DesignSystem::DefaultDesignTokens().colors.borderStrong; }
+[[nodiscard]] constexpr ::ImVec4 Text()         { return DesignSystem::DefaultDesignTokens().colors.textPrimary; }
+[[nodiscard]] constexpr ::ImVec4 Muted()        { return DesignSystem::DefaultDesignTokens().colors.textMuted; }
+[[nodiscard]] constexpr ::ImVec4 Dim()          { return DesignSystem::DefaultDesignTokens().colors.textDim; }
+[[nodiscard]] constexpr ::ImVec4 Accent()       { return DesignSystem::DefaultDesignTokens().colors.actionPrimary; }
+[[nodiscard]] constexpr ::ImVec4 AccentHover()  { return DesignSystem::DefaultDesignTokens().colors.actionPrimaryHover; }
+[[nodiscard]] constexpr ::ImVec4 AccentActive() { return DesignSystem::DefaultDesignTokens().colors.actionPrimaryActive; }
+[[nodiscard]] constexpr ::ImVec4 AccentSoft()   { return DesignSystem::DefaultDesignTokens().colors.actionPrimarySoft; }
+[[nodiscard]] constexpr ::ImVec4 Ok()           { return DesignSystem::DefaultDesignTokens().colors.statusOk; }
+[[nodiscard]] constexpr ::ImVec4 Warn()         { return DesignSystem::DefaultDesignTokens().colors.statusWarn; }
+[[nodiscard]] constexpr ::ImVec4 Err()          { return DesignSystem::DefaultDesignTokens().colors.statusError; }
+[[nodiscard]] constexpr ::ImVec4 DarkText()     { return DesignSystem::DefaultDesignTokens().colors.textOnActionPrimary; }
+
+[[nodiscard]] inline ::ImU32 U32(const ::ImVec4& c) { return ImGui::GetColorU32(c); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fonts — the three font atlas entries loaded by the application
+// ─────────────────────────────────────────────────────────────────────────
+struct Fonts {
+    ::ImFont* sans         = nullptr; // Inter,        loaded size: 15px (--font-sans)
+    ::ImFont* mono         = nullptr; // IBM Plex Mono loaded size: 13px (--font-mono, regular)
+    ::ImFont* monoSemiBold = nullptr; // IBM Plex Mono loaded size: 15px (--font-mono, 600/700)
+};
+
+namespace FontPx {
+    constexpr float Sans         = DesignSystem::DefaultDesignTokens().typography.sansBase;
+    constexpr float Mono         = DesignSystem::DefaultDesignTokens().typography.monoBase;
+    constexpr float MonoSemiBold = DesignSystem::DefaultDesignTokens().typography.monoSemiBoldBase;
+}
+
+// Converts arbitrary HTML/CSS font sizes to the fixed atlas sizes we have
+// using the required SetWindowFontScale() multiplier.
+[[nodiscard]] constexpr float Scale(float targetPx, float basePx) { return targetPx / basePx; }
+
+inline void PushFont(::ImFont* f) { if (f) ImGui::PushFont(f); }
+inline void PopFont(::ImFont* f)  { if (f) ImGui::PopFont(); }
+
+// RAII: pushes a font when non-null and guarantees the matching pop.
+struct ScopedFont {
+    ::ImFont* font;
+    explicit ScopedFont(::ImFont* f) : font(f) { PushFont(font); }
+    ~ScopedFont() { PopFont(font); }
+    ScopedFont(const ScopedFont&) = delete;
+    ScopedFont& operator=(const ScopedFont&) = delete;
+};
+
+// RAII: applies a window-local font scale and always restores 1.0 at scope exit.
+struct ScopedFontScale {
+    explicit ScopedFontScale(float scale) { ImGui::SetWindowFontScale(scale); }
+    ~ScopedFontScale() { ImGui::SetWindowFontScale(1.0F); }
+    ScopedFontScale(const ScopedFontScale&) = delete;
+    ScopedFontScale& operator=(const ScopedFontScale&) = delete;
+};
+
+// Shortcut: pushes `font` and scales it to the target HTML pixel size,
+// then automatically restores both at scope exit.
+//   Example: ScopedTextStyle ts(f.mono, 11.0f, Theme::FontPx::Mono);
+struct ScopedTextStyle {
+    [[no_unique_address]] ScopedFont font;
+    [[no_unique_address]] ScopedFontScale scale;
+    ScopedTextStyle(::ImFont* f, float targetPx, float basePx)
+        : font(f), scale(Scale(targetPx, basePx)) {}
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Layout metrics — pixel values matching the HTML mockups
+// ─────────────────────────────────────────────────────────────────────────
+namespace Layout {
+    constexpr float Radius      = DesignSystem::DefaultDesignTokens().radii.control;
+    constexpr float RadiusCard  = DesignSystem::DefaultDesignTokens().radii.card;
+    constexpr float RadiusModal = DesignSystem::DefaultDesignTokens().radii.modal;
+
+    // Welcome screen (welcome-screen.html)
+    constexpr float WelcomeOuterPad = 40.0F; // .welcome { padding: 40px }
+    constexpr float WelcomeCardW    = 900.0F; // .welcome-card { width: min(900px, 100%) }
+    constexpr float WelcomeSideW    = DesignSystem::DefaultDesignTokens().sizes.welcomeSideWidth;
+    constexpr float WelcomePad      = DesignSystem::DefaultDesignTokens().sizes.welcomePadding;
+
+    // New Project wizard (new-project-wizard.html)
+    constexpr float ModalW      = DesignSystem::DefaultDesignTokens().sizes.modalWidth;
+    constexpr float ModalH      = DesignSystem::DefaultDesignTokens().sizes.modalHeight;
+    constexpr float HeaderH     = DesignSystem::DefaultDesignTokens().sizes.modalHeaderHeight;
+    constexpr float FooterH     = DesignSystem::DefaultDesignTokens().sizes.modalFooterHeight;
+    constexpr float SidebarW    = DesignSystem::DefaultDesignTokens().sizes.modalSidebarWidth;
+    constexpr float SidebarPadX = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingX;
+    constexpr float SidebarPadY = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingY;
+    constexpr float BodyPadX    = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingX;
+    constexpr float BodyPadY    = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingY;
+    constexpr float CardPad     = DesignSystem::DefaultDesignTokens().spacing.cardPadding;
+    constexpr float GridGap     = DesignSystem::DefaultDesignTokens().spacing.gridGap;
+
+    // Settings modal
+    constexpr float SettingsW = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
+    constexpr float SettingsH = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Applies the global ImGui style. Call once after ImGui::CreateContext().
+// All visual defaults such as colors, rounding, and padding come from here;
+// widget code must not depend on this function's implementation details.
+// ─────────────────────────────────────────────────────────────────────────
+void Apply(ImGuiStyle& style);
+
+} // namespace Horo::Editor::Theme

@@ -35,23 +35,23 @@ layout, and the adapter
 Required module layout:
 
 ```text
-gui/
-  design/
+src/editor/
+  design_system/
     Theme.h
     ThemeRegistry.h
     ThemeLoader.h
     DesignTokens.h
-  components/
-    primitives/
-    layout/
-    composite/
-    feedback/
-    navigation/
+    components/
+      primitives/
+      layout/
+      composite/
+      feedback/
+      navigation/
   screens/
     welcome/
     projects/
-    editor/
-      modals/
+    workspace/
+  modals/
   panels/
   state/
   testing/
@@ -69,6 +69,63 @@ of a reviewed design-system primitive or host integration point. Any new direct
 ImGui wrapper must define its typed props/result contract, token usage,
 accessibility behavior, and component-gallery coverage before feature code
 depends on it.
+
+## Initial Backend And Renderer
+
+The first graphical editor bootstrap uses SDL2 for platform windowing and
+multimedia integration, and Dear ImGui's OpenGL backend for GUI rendering. Both
+are implementation details hidden behind Horo-owned editor adapters.
+
+Reasons:
+
+- SDL2 gives Horo one stable platform surface for windowing, input,
+  controllers, clipboard, timers, and future multimedia-oriented host work.
+- Dear ImGui has a maintained SDL2 backend.
+- OpenGL is sufficient to validate editor chrome, input, DPI, modal policy, and
+  screen routing before the production render frontend is ready.
+- The adapter boundary lets the editor replace the bootstrap renderer with a
+  Vulkan, Metal, or DirectX-backed implementation later without changing screen,
+  modal, project-model, CLI, MCP, or runtime code.
+
+Constraints:
+
+- No public Horo header, screen, panel, modal, project-model, CLI, MCP, or
+  runtime subsystem includes SDL2, OpenGL, or raw Dear ImGui backend headers.
+- Screens and panels depend on design-system interfaces, not backend objects.
+- The OpenGL GUI backend is not the engine renderer and must not become an RHI
+  shortcut.
+- A null GUI backend exists for deterministic non-window tests.
+
+Rejected for the first bootstrap: GLFW, SDL3, native platform APIs first,
+Vulkan first, Metal first, software rendering first, and web/Electron shells.
+GLFW is too narrow for Horo's multimedia targets. SDL3 is not selected yet
+because SDL2 has the more mature integration surface for the initial engine and
+editor bootstrap. These may be revisited only with an architecture update.
+
+## DPI, Docking, And Viewports
+
+Initial DPI policy:
+
+- Use per-monitor content scale from the SDL2-backed window adapter where
+  available.
+- Store current scale in editor GUI state.
+- Rebuild font resources when the scale bucket changes.
+- Express component sizes in design tokens, not raw pixels.
+- Screens consume scaled design tokens; they do not query SDL2 or native monitor
+  state directly.
+
+Docking policy:
+
+- Welcome, project browser, and project creation are full-route screens and do
+  not expose dock nodes.
+- Docking is enabled only for the editor workspace after the workspace host
+  exists.
+- Docking state belongs to editor workspace persistence, not global startup
+  state.
+
+Multi-viewport is disabled for the initial bootstrap because it multiplies
+platform-window, DPI, focus, and renderer-lifetime cases. Enabling it requires a
+future architecture update.
 
 ## UI Text
 

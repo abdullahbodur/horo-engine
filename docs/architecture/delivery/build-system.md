@@ -125,9 +125,6 @@ apps/
     horo-engine
     horopak
 
-gui/
-    HoroEngine::Gui
-
 mcp/
     HoroEngine::Mcp
 
@@ -138,6 +135,11 @@ extension/
 editor/
     HoroEngine::EditorModel
     HoroEngine::EditorServices
+    HoroEngine::EditorPlatform
+    HoroEngine::EditorGuiBackend
+    HoroEngine::EditorDesignSystem
+    HoroEngine::EditorScreens
+    HoroEngine::Gui
 
 application/
     HoroEngine::Application
@@ -150,6 +152,9 @@ render/
     HoroEngine::RenderFrontend
     HoroEngine::RenderOpenGL
     HoroEngine::RenderNull
+    HoroEngine::RenderVulkan
+    HoroEngine::RenderMetal
+    HoroEngine::RenderD3D12
 
 scene/
     HoroEngine::SceneModel
@@ -217,6 +222,48 @@ Namespaced aliases are the stable link API used by other targets. Commands that
 create, modify, install, or export a target use its real name (`Application`),
 not its alias (`HoroEngine::Application`).
 
+### Initial Editor Bootstrap Targets
+
+The first graphical editor bootstrap is split across narrow targets rather than
+one monolithic GUI library:
+
+```text
+HoroEngine::EditorPlatform      window/events/clipboard/cursor adapter
+HoroEngine::EditorGuiBackend    Dear ImGui context and renderer backend adapter
+HoroEngine::EditorDesignSystem  UI tokens and reusable primitives
+HoroEngine::EditorScreens       Welcome, project browser, workspace route screens
+HoroEngine::EditorSourceEditor  embedded source editor adapter, LSP/AI presentation hooks
+HoroEngine::EditorGraphEditor   embedded node graph editor adapter
+HoroEditor                      executable composition root
+```
+
+`apps/HoroEditor/main.cpp` owns process entry only and delegates to
+`src/editor/app`. It must not accumulate editor architecture.
+
+The initial backend dependencies are SDL2, Dear ImGui, and an OpenGL loader only
+if the selected platform/toolchain path requires one. These dependencies are
+private to the smallest Horo-owned adapter target. No SDL2, OpenGL, or raw Dear
+ImGui backend type may appear in public Horo headers.
+
+The current temporary `HoroEngine::EditorScreens` target may exist while the
+bootstrap is sliced. When backend code is introduced, split platform, GUI
+backend, design-system, and screen code into the targets above instead of
+expanding one library indefinitely.
+
+Embedded editor-widget dependencies are private to their adapter targets:
+
+- `HoroEngine::EditorSourceEditor` may depend privately on Zep. Public Horo
+  headers expose source-editor value types and controller interfaces, not Zep
+  types. `goossens/ImGuiColorTextEdit` remains the fallback for narrow text/diff
+  surfaces if Zep proves too invasive.
+- `HoroEngine::EditorGraphEditor` may depend privately on `imgui-node-editor`.
+  `imnodes` remains an allowed fallback for prototype or simple internal graph
+  tools.
+
+These adapters do not own source-file persistence, language intelligence,
+behavior validation, shader graph validation, or graph compilation. They render
+and translate user interaction into Horo-owned commands.
+
 ## Dependency Direction
 
 The build system enforces the dependency direction declared in
@@ -242,7 +289,8 @@ Rules:
 - `PUBLIC` dependencies must be reflected in the target's public headers.
 - `PRIVATE` dependencies must not appear in public headers.
 - ImGui is private to `HoroEngine::Gui`.
-- OpenGL, Vulkan, and Metal headers are private to their renderer backends.
+- OpenGL, Vulkan, Metal, DirectX/D3D12, and native window-system headers are
+  private to their renderer backends and platform adapter targets.
 - Native audio, socket, TLS, and dynamic-library headers remain private to
   concrete backends and plugin host targets.
 - Third-party dependencies are private unless present in a public contract.
@@ -265,15 +313,15 @@ across developer machines and CI.
 ```cmake
 # Wrong — mutable tag
 FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.4
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-2.30.10
 )
 
 # Correct — immutable SHA
 FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
     GIT_TAG a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9
 )
 ```
@@ -286,8 +334,8 @@ archive with `URL` and `URL_HASH SHA256` instead of weakening the pin:
 
 ```cmake
 FetchContent_Declare(
-    glfw
-    URL https://github.com/glfw/glfw/archive/a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9.tar.gz
+    SDL2
+    URL https://github.com/libsdl-org/SDL/archive/a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9.tar.gz
     URL_HASH SHA256=<reviewed-archive-sha256>
 )
 ```
@@ -318,7 +366,7 @@ available:
 ```cmake
 include(FetchContent)
 
-set(HORO_GLFW_REVISION
+set(HORO_SDL2_REVISION
     "a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9"
 )
 set(HORO_NLOHMANN_JSON_REVISION
@@ -326,9 +374,9 @@ set(HORO_NLOHMANN_JSON_REVISION
 )
 
 FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG "${HORO_GLFW_REVISION}"
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG "${HORO_SDL2_REVISION}"
 )
 
 FetchContent_Declare(
@@ -337,12 +385,12 @@ FetchContent_Declare(
     GIT_TAG "${HORO_NLOHMANN_JSON_REVISION}"
 )
 
-FetchContent_MakeAvailable(glfw)
+FetchContent_MakeAvailable(SDL2)
 horo_register_resolved_dependency(
-    NAME glfw
+    NAME SDL2
     KIND GIT
-    EXPECTED_IDENTITY "${HORO_GLFW_REVISION}"
-    SOURCE_DIR "${glfw_SOURCE_DIR}"
+    EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
+    SOURCE_DIR "${sdl2_SOURCE_DIR}"
 )
 
 FetchContent_MakeAvailable(nlohmann_json)
@@ -396,7 +444,7 @@ Targets link against the imported target directly:
 ```cmake
 target_link_libraries(HoroEngine::Gui
     PRIVATE
-        glfw
+        SDL2::SDL2
         nlohmann_json::nlohmann_json
 )
 
@@ -815,31 +863,31 @@ primary development workflow.
 When implemented, each dependency declaration will follow this pattern:
 
 ```cmake
-find_package(glfw3 3.4 CONFIG QUIET)
+find_package(SDL2 2.30 CONFIG QUIET)
 
-if(glfw3_FOUND AND NOT TARGET glfw)
-    message(FATAL_ERROR "glfw3 package was found but did not provide target 'glfw'")
+if(SDL2_FOUND AND NOT TARGET SDL2::SDL2)
+    message(FATAL_ERROR "SDL2 package was found but did not provide target 'SDL2::SDL2'")
 endif()
 
-if(DEFINED glfw3_VERSION AND NOT glfw3_VERSION VERSION_LESS 4.0)
-    message(FATAL_ERROR "Unsupported glfw3 major version: ${glfw3_VERSION}")
+if(DEFINED SDL2_VERSION AND NOT SDL2_VERSION VERSION_LESS 3.0)
+    message(FATAL_ERROR "Unsupported SDL major version for SDL2 dependency: ${SDL2_VERSION}")
 endif()
 
-if(NOT TARGET glfw)
+if(NOT TARGET SDL2::SDL2)
     message(STATUS
-        "glfw3 config package not found or incompatible; using pinned FetchContent source"
+        "SDL2 config package not found or incompatible; using pinned FetchContent source"
     )
     FetchContent_Declare(
-        glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG "${HORO_GLFW_REVISION}"
+        SDL2
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG "${HORO_SDL2_REVISION}"
     )
-    FetchContent_MakeAvailable(glfw)
+    FetchContent_MakeAvailable(SDL2)
     horo_register_resolved_dependency(
-        NAME glfw
+        NAME SDL2
         KIND GIT
-        EXPECTED_IDENTITY "${HORO_GLFW_REVISION}"
-        SOURCE_DIR "${glfw_SOURCE_DIR}"
+        EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
+        SOURCE_DIR "${sdl2_SOURCE_DIR}"
     )
 endif()
 ```
@@ -896,7 +944,7 @@ Each toolchain preset declares target capabilities as CMake cache variables.
 Dependencies are selected from capabilities rather than scattered checks for
 `ANDROID`, `EMSCRIPTEN`, or a preset name. The initial capability set includes:
 
-- `HORO_TARGET_HAS_DESKTOP_WINDOWING`
+- `HORO_TARGET_HAS_PLATFORM_MEDIA`
 - `HORO_TARGET_HAS_NATIVE_AUDIO`
 - `HORO_TARGET_HAS_DYNAMIC_LOADING`
 - `HORO_TARGET_HAS_THREADS`
@@ -906,18 +954,18 @@ Dependencies are selected from capabilities rather than scattered checks for
 capabilities:
 
 ```cmake
-if(HORO_TARGET_HAS_DESKTOP_WINDOWING)
+if(HORO_TARGET_HAS_PLATFORM_MEDIA)
     FetchContent_Declare(
-        glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG "${HORO_GLFW_REVISION}"
+        SDL2
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG "${HORO_SDL2_REVISION}"
     )
-    FetchContent_MakeAvailable(glfw)
+    FetchContent_MakeAvailable(SDL2)
     horo_register_resolved_dependency(
-        NAME glfw
+        NAME SDL2
         KIND GIT
-        EXPECTED_IDENTITY "${HORO_GLFW_REVISION}"
-        SOURCE_DIR "${glfw_SOURCE_DIR}"
+        EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
+        SOURCE_DIR "${sdl2_SOURCE_DIR}"
     )
 endif()
 ```

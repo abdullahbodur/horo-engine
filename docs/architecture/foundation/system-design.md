@@ -253,13 +253,16 @@ src/
   pipeline/             build, package, toolchain, release
   application/          use cases, diagnostics, profiler and support services
   editor/
-    model/              editor document and commands
-    services/           serialization, import, editor orchestration
-  gui/
-    design/             theme, tokens, fonts, icons
-    components/         reusable ImGui primitives and composites
-    screens/            welcome, projects, editor workspaces
-      editor/modals/    settings, build/release, import, confirmations
+    app/                HoroEditor composition and frame integration
+    screens/            welcome, projects, editor workspace routes
+    design_system/      theme, tokens, fonts, icons, and reusable ImGui components
+    localization/       UI message resources, locale resolution, and fallback
+    document/           editor document and commands
+    data_bus/           editor-session notifications
+    panels/             persistent editor workspace panes and tabs
+    modals/             settings, build/release, import, and confirmation workflows
+    project_model/      project settings, workspace persistence, and asset index
+    mcp_bridge/         editor-facing MCP adapter over application use cases
     state/              GUI navigation and presentation state
   transport/
     mcp/
@@ -267,8 +270,8 @@ src/
     gameplay/           public game module registration contracts
     extension-system/   versioned external extension package ABI and host registry
   apps/
-    editor/              HoroEditor composition root
-    cli/                 horo-engine composition root
+    HoroEditor/          HoroEditor composition root
+    horo-engine/         terminal/headless composition root
     horopak/             packaging tool composition root
 ```
 
@@ -293,6 +296,8 @@ HoroEngine::RenderFrontend
 HoroEngine::RenderOpenGL
 HoroEngine::RenderNull
 HoroEngine::RenderVulkan
+HoroEngine::RenderMetal
+HoroEngine::RenderD3D12
 HoroEngine::Pipeline
 HoroEngine::Application
 HoroEngine::EditorModel
@@ -527,7 +532,7 @@ credential storage, and graphics-context bootstrapping are platform-owned
 responsibilities.
 
 Foundation, assets, pipeline, and headless application use cases remain usable
-without GLFW, OpenGL, or ImGui unless their explicit operation contract requires
+without SDL2, OpenGL, or ImGui unless their explicit operation contract requires
 one of those capabilities.
 
 Filesystem, process, window, event, clock, dialog, credential, and crash-service

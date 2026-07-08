@@ -389,7 +389,7 @@ can be enabled without turning every subsystem to its most verbose level:
 ```bash
 HORO_LOG_LEVEL=info \
 HORO_LOG_LEVELS=asset.import=trace,pipeline.build=debug \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 ```
 
 Tests accept a default level through the wrapper:
@@ -423,7 +423,7 @@ Run a focused profiler capture only when timeline detail is needed:
 
 ```bash
 # Record a 20-second CPU/GPU/jobs capture.
-python3 scripts/dev.py run launcher -- \
+python3 scripts/dev.py run editor -- \
   --profile-capture 20 \
   --profile-channels cpu,gpu,jobs,counters
 
@@ -431,12 +431,12 @@ python3 scripts/dev.py run launcher -- \
 HORO_PROFILE=on \
 HORO_PROFILE_CHANNELS=cpu,memory \
 HORO_PROFILE_MEMORY=callstacks \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 
 # Keep one hour of low-rate CPU/memory history.
 HORO_METRICS_SAMPLE_MS=1000 \
 HORO_METRICS_HISTORY_SECONDS=3600 \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 ```
 
 Normal metrics remain bounded and low-cost. Memory allocation callstacks and

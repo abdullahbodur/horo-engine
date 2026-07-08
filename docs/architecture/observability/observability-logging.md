@@ -172,7 +172,7 @@ src/
     diagnostics/
       DiagnosticBundleService.h
       StructuredLogEventAdapter.h
-  gui/
+  editor/
     state/
       ConsolePresentationState.h
 scripts/
@@ -753,7 +753,7 @@ Examples:
 # Run the editor with focused asset diagnostics.
 HORO_LOG_LEVEL=info \
 HORO_LOG_LEVELS=asset.import=trace,asset.cook=debug \
-python3 scripts/dev.py run launcher
+python3 scripts/dev.py run editor
 
 # Diagnose renderer startup in a packaged editor.
 HoroEditor --log-level info --log-level renderer=debug
