@@ -334,10 +334,12 @@ namespace Horo::Editor
         {
             PushControlStyle();
             ImGui::PushItemWidth(-1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 4.0F});
             {
                 ScopedTextStyle ts(f.mono, 15.0F, Theme::FontPx::Mono);
                 ImGui::Combo(id, value, items, itemCount);
             }
+            ImGui::PopStyleVar();
             ImGui::PopItemWidth();
             PopControlStyle();
         }
