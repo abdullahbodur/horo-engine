@@ -188,7 +188,7 @@ namespace Horo::Editor::Ui
     /** @brief Draws a keyboard shortcut display (keycap chips). */
     void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::Fonts &fonts);
 
-    /** @brief Draws a colour-theme chip (swatch dot + label). */
-    void ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);
+    /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */
+    [[nodiscard]] bool ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);
 
 } // namespace Horo::Editor::Ui

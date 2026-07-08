@@ -22,6 +22,7 @@ namespace Horo::Editor
         std::string statusMessage;
         bool statusIsError = false;
         int activeTab = 0;
+        int themeIndex = 0; // 0 = Horo Dark, 1 = Midnight, 2 = Light
         int startupAction = 0;
         int renderBackend = 0;
         int viewportMode = 0;

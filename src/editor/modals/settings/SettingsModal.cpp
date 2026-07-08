@@ -351,12 +351,15 @@ namespace Horo::Editor
         {
             SectionTitle("Appearance", f);
             SettingGroup("THEME", f, true);
-            SettingRow("Color Theme", "Base editor chrome palette.", f, [&f]() {
-                ThemeChip("  Horo Dark", Theme::Bg1(), true, f);
+            SettingRow("Color Theme", "Base editor chrome palette.", f, [&st, &f]() {
+                if (ThemeChip("  Horo Dark", Theme::Bg1(), st.themeIndex == 0, f))
+                    st.themeIndex = 0;
                 ImGui::SameLine(0.0F, 6.0F);
-                ThemeChip("  Midnight", ImVec4{0.063F, 0.090F, 0.133F, 1.0F}, false, f);
+                if (ThemeChip("  Midnight", ImVec4{0.063F, 0.090F, 0.133F, 1.0F}, st.themeIndex == 1, f))
+                    st.themeIndex = 1;
                 ImGui::SameLine(0.0F, 6.0F);
-                ThemeChip("  Light", ImVec4{0.941F, 0.925F, 0.890F, 1.0F}, false, f);
+                if (ThemeChip("  Light", ImVec4{0.941F, 0.925F, 0.890F, 1.0F}, st.themeIndex == 2, f))
+                    st.themeIndex = 2;
             });
             SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
                 const ImVec2 p = ImGui::GetCursorScreenPos();

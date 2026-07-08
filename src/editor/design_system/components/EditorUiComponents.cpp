@@ -411,7 +411,7 @@ namespace Horo::Editor::Ui
 
     // ── ThemeChip ────────────────────────────────────────────────────────
 
-    void ThemeChip(const char *label, const ImVec4 swatch, const bool active, const Theme::Fonts &fonts)
+    [[nodiscard]] bool ThemeChip(const char *label, const ImVec4 swatch, const bool active, const Theme::Fonts &fonts)
     {
         ImGui::PushID(label);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 7.0F});
@@ -424,15 +424,18 @@ namespace Horo::Editor::Ui
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Hover());
         ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
         ImGui::PushStyleColor(ImGuiCol_Border, active ? Theme::Accent() : Theme::Border());
+
+        bool clicked = false;
         {
             Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
-            ImGui::Button(label, ImVec2{82.0F, 32.0F});
+            clicked = ImGui::Button(label, ImVec2{82.0F, 32.0F});
         }
         const ImVec2 min = ImGui::GetItemRectMin();
         ImGui::GetWindowDrawList()->AddCircleFilled({min.x + 12.0F, min.y + 16.0F}, 5.0F, Theme::U32(swatch), 16);
         ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(3);
         ImGui::PopID();
+        return clicked;
     }
 
 } // namespace Horo::Editor::Ui
