@@ -29,7 +29,7 @@ namespace Horo::Editor
 
                 ImGui::BeginGroup();
                 {
-                    ScopedTextStyle textStyle(fonts.sans, 15.0F, FontPx::Sans);
+                    ScopedTextStyle textStyle(fonts.sans, 14.0F, FontPx::Sans);
                     ImGui::TextUnformatted(project.name.c_str());
                 }
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0F);
