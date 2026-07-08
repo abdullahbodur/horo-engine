@@ -141,10 +141,19 @@ namespace Horo::Editor
             ImFont *titleFont = fonts.monoSemiBold ? fonts.monoSemiBold : ImGui::GetFont();
             const ImVec2 titlePos = ImGui::GetCursorScreenPos();
             constexpr float titlePx = 24.0F;
+            constexpr float titleSpacing = 2.0F;
             const char *title = "HORO";
-            ImGui::GetWindowDrawList()->AddText(titleFont, titlePx, titlePos, U32(Text()), title);
+            auto *dl = ImGui::GetWindowDrawList();
+            float cursorX = titlePos.x;
+            for (const char *c = title; *c != '\0'; ++c)
+            {
+                const char glyph[2] = {*c, '\0'};
+                dl->AddText(titleFont, titlePx, {cursorX, titlePos.y}, U32(Text()), glyph);
+                cursorX += titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, glyph).x + titleSpacing;
+            }
             const ImVec2 titleSize = titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, title);
-            ImGui::Dummy({titleSize.x, titleSize.y});
+            const float titleWidth = titleSize.x + titleSpacing * 3.0F; // 3 gaps for 4 chars
+            ImGui::Dummy({titleWidth, titleSize.y});
         }
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6.0F);
         {
