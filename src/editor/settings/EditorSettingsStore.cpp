@@ -55,7 +55,7 @@ namespace Horo::Editor
             return ss.str();
         }
 
-        [[nodiscard]] std::string EscapeJsonString(const std::string &value)
+        [[nodiscard]] std::string EscapeJsonString(std::string_view value)
         {
             std::string out;
             out.reserve(value.size() + 8);
@@ -86,7 +86,7 @@ namespace Horo::Editor
             return out;
         }
 
-        [[nodiscard]] std::string UnescapeJsonString(const std::string &value)
+        [[nodiscard]] std::string UnescapeJsonString(std::string_view value)
         {
             std::string out;
             out.reserve(value.size());
@@ -186,7 +186,7 @@ namespace Horo::Editor
             }
         }
 
-        [[nodiscard]] bool IsHexColor(const std::string &value)
+        [[nodiscard]] bool IsHexColor(std::string_view value)
         {
             if (value.size() != 7 || value[0] != '#')
             {
@@ -222,128 +222,138 @@ namespace Horo::Editor
             }
         }
 
-        [[nodiscard]] EditorThemePreset ParseThemePreset(const std::string &value)
+        [[nodiscard]] EditorThemePreset ParseThemePreset(std::string_view value)
         {
+            using enum EditorThemePreset;
             if (value == "midnight")
-                return EditorThemePreset::Midnight;
+                return Midnight;
             if (value == "light")
-                return EditorThemePreset::Light;
-            return EditorThemePreset::HoroDark;
+                return Light;
+            return HoroDark;
         }
 
         [[nodiscard]] const char *ToString(const EditorThemePreset value)
         {
+            using enum EditorThemePreset;
             switch (value)
             {
-            case EditorThemePreset::Midnight:
+            case Midnight:
                 return "midnight";
-            case EditorThemePreset::Light:
+            case Light:
                 return "light";
-            case EditorThemePreset::HoroDark:
+            case HoroDark:
             default:
                 return "horo_dark";
             }
         }
 
-        [[nodiscard]] EditorViewportMode ParseViewportMode(const std::string &value)
+        [[nodiscard]] EditorViewportMode ParseViewportMode(std::string_view value)
         {
+            using enum EditorViewportMode;
             if (value == "wireframe")
-                return EditorViewportMode::Wireframe;
+                return Wireframe;
             if (value == "lit")
-                return EditorViewportMode::Lit;
+                return Lit;
             if (value == "unlit")
-                return EditorViewportMode::Unlit;
-            return EditorViewportMode::Shaded;
+                return Unlit;
+            return Shaded;
         }
 
         [[nodiscard]] const char *ToString(const EditorViewportMode value)
         {
+            using enum EditorViewportMode;
             switch (value)
             {
-            case EditorViewportMode::Wireframe:
+            case Wireframe:
                 return "wireframe";
-            case EditorViewportMode::Lit:
+            case Lit:
                 return "lit";
-            case EditorViewportMode::Unlit:
+            case Unlit:
                 return "unlit";
-            case EditorViewportMode::Shaded:
+            case Shaded:
             default:
                 return "shaded";
             }
         }
 
-        [[nodiscard]] EditorRenderingTier ParseRenderingTier(const std::string &value)
+        [[nodiscard]] EditorRenderingTier ParseRenderingTier(std::string_view value)
         {
+            using enum EditorRenderingTier;
             if (value == "dx12_vulkan")
-                return EditorRenderingTier::Dx12Vulkan;
+                return Dx12Vulkan;
             if (value == "dx11")
-                return EditorRenderingTier::Dx11;
+                return Dx11;
             if (value == "es3")
-                return EditorRenderingTier::Es3;
-            return EditorRenderingTier::HighEnd;
+                return Es3;
+            return HighEnd;
         }
 
         [[nodiscard]] const char *ToString(const EditorRenderingTier value)
         {
+            using enum EditorRenderingTier;
             switch (value)
             {
-            case EditorRenderingTier::Dx12Vulkan:
+            case Dx12Vulkan:
                 return "dx12_vulkan";
-            case EditorRenderingTier::Dx11:
+            case Dx11:
                 return "dx11";
-            case EditorRenderingTier::Es3:
+            case Es3:
                 return "es3";
-            case EditorRenderingTier::HighEnd:
+            case HighEnd:
             default:
                 return "high_end";
             }
         }
 
-        [[nodiscard]] EditorAudioOutputDevice ParseAudioDevice(const std::string &value)
+        [[nodiscard]] EditorAudioOutputDevice ParseAudioDevice(std::string_view value)
         {
+            using enum EditorAudioOutputDevice;
             if (value == "headphones")
-                return EditorAudioOutputDevice::Headphones;
+                return Headphones;
             if (value == "speakers")
-                return EditorAudioOutputDevice::Speakers;
-            return EditorAudioOutputDevice::SystemDefault;
+                return Speakers;
+            return SystemDefault;
         }
 
         [[nodiscard]] const char *ToString(const EditorAudioOutputDevice value)
         {
+            using enum EditorAudioOutputDevice;
             switch (value)
             {
-            case EditorAudioOutputDevice::Headphones:
+            case Headphones:
                 return "headphones";
-            case EditorAudioOutputDevice::Speakers:
+            case Speakers:
                 return "speakers";
-            case EditorAudioOutputDevice::SystemDefault:
+            case SystemDefault:
             default:
                 return "system_default";
             }
         }
 
-        [[nodiscard]] EditorConsoleLogLevel ParseLogLevel(const std::string &value)
+        [[nodiscard]] EditorConsoleLogLevel ParseLogLevel(std::string_view value)
         {
+            using enum EditorConsoleLogLevel;
             if (value == "debug")
-                return EditorConsoleLogLevel::Debug;
+                return Debug;
             if (value == "info")
-                return EditorConsoleLogLevel::Info;
+                return Info;
             if (value == "error")
-                return EditorConsoleLogLevel::Error;
-            return EditorConsoleLogLevel::Warning;
+                return Error;
+            return Warning;
         }
 
         [[nodiscard]] const char *ToString(const EditorConsoleLogLevel value)
         {
+            using enum EditorConsoleLogLevel;
             switch (value)
             {
-            case EditorConsoleLogLevel::Debug:
+            case Debug:
                 return "debug";
-            case EditorConsoleLogLevel::Info:
+            case Info:
                 return "info";
-            case EditorConsoleLogLevel::Error:
+            case Error:
                 return "error";
-            case EditorConsoleLogLevel::Warning:
+            case Warning:
             default:
                 return "warning";
             }
@@ -351,43 +361,43 @@ namespace Horo::Editor
 
         void ApplyJsonValues(const std::string &json, EditorSettings &s)
         {
-            if (auto v = FindStringValue(json, "startupBehavior")) s.startupBehavior = ParseStartup(*v);
-            if (auto v = FindIntValue(json, "autoSaveIntervalMinutes")) s.autoSaveIntervalMinutes = *v;
-            if (auto v = FindBoolValue(json, "confirmExitWithUnsavedChanges")) s.confirmExitWithUnsavedChanges = *v;
-            if (auto v = FindBoolValue(json, "restoreWorkspaceLayout")) s.restoreWorkspaceLayout = *v;
-            if (auto v = FindStringValue(json, "defaultSceneOnProjectOpen")) s.defaultSceneOnProjectOpen = *v;
+            if (auto v = FindStringValue(json, "startupBehavior"); v.has_value()) s.startupBehavior = ParseStartup(*v);
+            if (auto v = FindIntValue(json, "autoSaveIntervalMinutes"); v.has_value()) s.autoSaveIntervalMinutes = *v;
+            if (auto v = FindBoolValue(json, "confirmExitWithUnsavedChanges"); v.has_value()) s.confirmExitWithUnsavedChanges = *v;
+            if (auto v = FindBoolValue(json, "restoreWorkspaceLayout"); v.has_value()) s.restoreWorkspaceLayout = *v;
+            if (auto v = FindStringValue(json, "defaultSceneOnProjectOpen"); v.has_value()) s.defaultSceneOnProjectOpen = *v;
 
-            if (auto v = FindStringValue(json, "themePreset")) s.themePreset = ParseThemePreset(*v);
-            if (auto v = FindStringValue(json, "accentColorHex")) s.accentColorHex = *v;
-            if (auto v = FindIntValue(json, "uiScalePercent")) s.uiScalePercent = *v;
-            if (auto v = FindIntValue(json, "codeFontSizePx")) s.codeFontSizePx = *v;
+            if (auto v = FindStringValue(json, "themePreset"); v.has_value()) s.themePreset = ParseThemePreset(*v);
+            if (auto v = FindStringValue(json, "accentColorHex"); v.has_value()) s.accentColorHex = *v;
+            if (auto v = FindIntValue(json, "uiScalePercent"); v.has_value()) s.uiScalePercent = *v;
+            if (auto v = FindIntValue(json, "codeFontSizePx"); v.has_value()) s.codeFontSizePx = *v;
 
-            if (auto v = FindIntValue(json, "orbitSensitivity")) s.orbitSensitivity = *v;
-            if (auto v = FindIntValue(json, "panSensitivity")) s.panSensitivity = *v;
-            if (auto v = FindBoolValue(json, "invertOrbitY")) s.invertOrbitY = *v;
+            if (auto v = FindIntValue(json, "orbitSensitivity"); v.has_value()) s.orbitSensitivity = *v;
+            if (auto v = FindIntValue(json, "panSensitivity"); v.has_value()) s.panSensitivity = *v;
+            if (auto v = FindBoolValue(json, "invertOrbitY"); v.has_value()) s.invertOrbitY = *v;
 
-            if (auto v = FindStringValue(json, "viewportMode")) s.viewportMode = ParseViewportMode(*v);
-            if (auto v = FindBoolValue(json, "gridOverlay")) s.gridOverlay = *v;
-            if (auto v = FindStringValue(json, "renderingTier")) s.renderingTier = ParseRenderingTier(*v);
-            if (auto v = FindStringValue(json, "textureStreamingBudget")) s.textureStreamingBudget = *v;
+            if (auto v = FindStringValue(json, "viewportMode"); v.has_value()) s.viewportMode = ParseViewportMode(*v);
+            if (auto v = FindBoolValue(json, "gridOverlay"); v.has_value()) s.gridOverlay = *v;
+            if (auto v = FindStringValue(json, "renderingTier"); v.has_value()) s.renderingTier = ParseRenderingTier(*v);
+            if (auto v = FindStringValue(json, "textureStreamingBudget"); v.has_value()) s.textureStreamingBudget = *v;
 
-            if (auto v = FindIntValue(json, "masterVolume")) s.masterVolume = *v;
-            if (auto v = FindStringValue(json, "audioOutputDevice")) s.audioOutputDevice = ParseAudioDevice(*v);
-            if (auto v = FindBoolValue(json, "audioEnabled")) s.audioEnabled = *v;
+            if (auto v = FindIntValue(json, "masterVolume"); v.has_value()) s.masterVolume = *v;
+            if (auto v = FindStringValue(json, "audioOutputDevice"); v.has_value()) s.audioOutputDevice = ParseAudioDevice(*v);
+            if (auto v = FindBoolValue(json, "audioEnabled"); v.has_value()) s.audioEnabled = *v;
 
-            if (auto v = FindIntValue(json, "maxPreviewClients")) s.maxPreviewClients = *v;
-            if (auto v = FindIntValue(json, "simulatedLatencyMs")) s.simulatedLatencyMs = *v;
-            if (auto v = FindIntValue(json, "packageDownloadThreads")) s.packageDownloadThreads = *v;
+            if (auto v = FindIntValue(json, "maxPreviewClients"); v.has_value()) s.maxPreviewClients = *v;
+            if (auto v = FindIntValue(json, "simulatedLatencyMs"); v.has_value()) s.simulatedLatencyMs = *v;
+            if (auto v = FindIntValue(json, "packageDownloadThreads"); v.has_value()) s.packageDownloadThreads = *v;
 
-            if (auto v = FindStringValue(json, "consoleLogLevel")) s.consoleLogLevel = ParseLogLevel(*v);
-            if (auto v = FindBoolValue(json, "writeLogToFile")) s.writeLogToFile = *v;
-            if (auto v = FindBoolValue(json, "autoCaptureOnStutter")) s.autoCaptureOnStutter = *v;
-            if (auto v = FindFloatValue(json, "stutterThresholdMs")) s.stutterThresholdMs = *v;
+            if (auto v = FindStringValue(json, "consoleLogLevel"); v.has_value()) s.consoleLogLevel = ParseLogLevel(*v);
+            if (auto v = FindBoolValue(json, "writeLogToFile"); v.has_value()) s.writeLogToFile = *v;
+            if (auto v = FindBoolValue(json, "autoCaptureOnStutter"); v.has_value()) s.autoCaptureOnStutter = *v;
+            if (auto v = FindFloatValue(json, "stutterThresholdMs"); v.has_value()) s.stutterThresholdMs = *v;
 
-            if (auto v = FindBoolValue(json, "horoMcpBridgeEnabled")) s.horoMcpBridgeEnabled = *v;
-            if (auto v = FindBoolValue(json, "fmodIntegrationEnabled")) s.fmodIntegrationEnabled = *v;
-            if (auto v = FindBoolValue(json, "steamworksSdkEnabled")) s.steamworksSdkEnabled = *v;
-            if (auto v = FindStringValue(json, "pluginDiscoveryPath")) s.pluginDiscoveryPath = *v;
+            if (auto v = FindBoolValue(json, "horoMcpBridgeEnabled"); v.has_value()) s.horoMcpBridgeEnabled = *v;
+            if (auto v = FindBoolValue(json, "fmodIntegrationEnabled"); v.has_value()) s.fmodIntegrationEnabled = *v;
+            if (auto v = FindBoolValue(json, "steamworksSdkEnabled"); v.has_value()) s.steamworksSdkEnabled = *v;
+            if (auto v = FindStringValue(json, "pluginDiscoveryPath"); v.has_value()) s.pluginDiscoveryPath = *v;
         }
     } // namespace
 
