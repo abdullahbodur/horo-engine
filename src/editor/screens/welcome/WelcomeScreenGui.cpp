@@ -150,7 +150,7 @@ namespace Horo::Editor
         {
             ImFont *subtitleFont = fonts.sans ? fonts.sans : ImGui::GetFont();
             const ImVec2 subtitlePos = ImGui::GetCursorScreenPos();
-            constexpr float subtitlePx = 13.0F;
+            constexpr float subtitlePx = 12.0F;
             const char *subtitle = "Game Engine";
             ImGui::GetWindowDrawList()->AddText(subtitleFont, subtitlePx, subtitlePos, U32(Muted()), subtitle);
             const ImVec2 subtitleSize = subtitleFont->CalcTextSizeA(subtitlePx, FLT_MAX, 0.0F, subtitle);
