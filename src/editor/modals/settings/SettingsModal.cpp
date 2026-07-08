@@ -351,15 +351,12 @@ namespace Horo::Editor
         {
             SectionTitle("Appearance", f);
             SettingGroup("THEME", f, true);
-            SettingRow("Color Theme", "Base editor chrome palette.", f, [&st, &f]() {
-                if (ThemeChip("  Horo Dark", Theme::Bg1(), st.themeIndex == 0, f))
-                    st.themeIndex = 0;
-                ImGui::SameLine(0.0F, 6.0F);
-                if (ThemeChip("  Midnight", ImVec4{0.063F, 0.090F, 0.133F, 1.0F}, st.themeIndex == 1, f))
-                    st.themeIndex = 1;
-                ImGui::SameLine(0.0F, 6.0F);
-                if (ThemeChip("  Light", ImVec4{0.941F, 0.925F, 0.890F, 1.0F}, st.themeIndex == 2, f))
-                    st.themeIndex = 2;
+            SettingRow("Color Theme", "Built-in themes or custom JSON theme file.", f, [&st, &f]() {
+                static constexpr std::array<const char *, 3> kThemes = {"Horo Dark", "Midnight", "Light"};
+                ComboControl("##theme", &st.themeIndex, kThemes.data(), static_cast<int>(kThemes.size()), f);
+            });
+            SettingRow("Custom Theme", "Path to a JSON theme file. Leave empty to use built-in.", f, [&st, &f]() {
+                InputTextControl("##custom-theme", st.customThemePath, sizeof(st.customThemePath), f);
             });
             SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
                 const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -449,13 +446,81 @@ namespace Horo::Editor
                        [&st, &f]() { InputFloatControl("##stutter", &st.stutterThresholdMs, f); });
         }
 
+        void DrawPluginSettingsToggle(const char *id, bool *expanded, const Fonts &f)
+        {
+            ImGui::PushID(id);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 18.0F);
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Accent());
+            {
+                ScopedTextStyle ts(f.mono, 10.0F, Theme::FontPx::Mono);
+                if (ImGui::Selectable(*expanded ? "▼ Settings" : "▶ Settings", false, 0, {150.0F, 18.0F}))
+                {
+                    *expanded = !*expanded;
+                }
+            }
+            ImGui::PopStyleColor();
+            ImGui::PopID();
+        }
+
         void DrawPlugins(SettingsState &st, const Fonts &f)
         {
             SectionTitle("Plugins", f);
             SettingGroup("INSTALLED", f, true);
+
+            // --- Horo MCP Bridge ---
             PluginRow("Horo MCP Bridge", "v0.4.0", "Enables MCP tool access for scene and asset operations.", &st.horoMcpBridge, f);
+            DrawPluginSettingsToggle("mcp", &st.pluginMcpExpanded, f);
+            if (st.pluginMcpExpanded)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10.0F, 10.0F});
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg3());
+                ImGui::BeginChild("mcp-settings", {0.0F, 100.0F}, true,
+                                  ImGuiWindowFlags_AlwaysUseWindowPadding);
+                SettingRow("MCP Port", "HTTP port for MCP server.", f,
+                           [&st, &f]() { InputIntControl("##mcp-port", &st.mcpPort, f); });
+                SettingRow("Allow Remote Connections", nullptr, f,
+                           [&st, &f]() { (void)ToggleControl("##mcp-remote", &st.mcpAllowRemote, f); });
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleVar();
+            }
+
+            // --- Vendor FMOD Integration ---
             PluginRow("Vendor FMOD Integration", "v2.02.20", "Full FMOD Studio authoring and runtime integration.", &st.fmodIntegration, f);
+            DrawPluginSettingsToggle("fmod", &st.pluginFmodExpanded, f);
+            if (st.pluginFmodExpanded)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10.0F, 10.0F});
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg3());
+                ImGui::BeginChild("fmod-settings", {0.0F, 100.0F}, true,
+                                  ImGuiWindowFlags_AlwaysUseWindowPadding);
+                SettingRow("Bank Output Path", "Where compiled banks are written.", f,
+                           [&st, &f]() { InputTextControl("##fmod-banks", st.fmodBankPath, sizeof(st.fmodBankPath), f); });
+                SettingRow("Live Update", "Reload banks without restarting editor.", f,
+                           [&st, &f]() { (void)ToggleControl("##fmod-live", &st.fmodLiveUpdate, f); });
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleVar();
+            }
+
+            // --- Steamworks SDK ---
             PluginRow("Steamworks SDK", "v1.59", "Steam achievements, overlay, and networking features.", &st.steamworksSdk, f);
+            DrawPluginSettingsToggle("steam", &st.pluginSteamExpanded, f);
+            if (st.pluginSteamExpanded)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10.0F, 10.0F});
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg3());
+                ImGui::BeginChild("steam-settings", {0.0F, 100.0F}, true,
+                                  ImGuiWindowFlags_AlwaysUseWindowPadding);
+                SettingRow("App ID", "Steam application identifier.", f,
+                           [&st, &f]() { InputIntControl("##steam-appid", &st.steamAppId, f); });
+                SettingRow("Auto-initialize", "Start Steam API on editor launch.", f,
+                           [&st, &f]() { (void)ToggleControl("##steam-auto", &st.steamAutoInit, f); });
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleVar();
+            }
+
             SettingGroup("DISCOVERY", f);
             SettingRow("Plugin Discovery Path", "Directory scanned for additional editor plugins on startup.", f,
                        [&st, &f]() { InputTextControl("##plugin-path", st.pluginPath, sizeof(st.pluginPath), f); });

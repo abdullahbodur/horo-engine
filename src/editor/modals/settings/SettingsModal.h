@@ -23,6 +23,18 @@ namespace Horo::Editor
         bool statusIsError = false;
         int activeTab = 0;
         int themeIndex = 0; // 0 = Horo Dark, 1 = Midnight, 2 = Light
+        char customThemePath[128] = "~/.horo/themes/my-theme.json";
+
+        // Per-plugin settings
+        bool pluginMcpExpanded = false;
+        int mcpPort = 8080;
+        bool mcpAllowRemote = false;
+        bool pluginFmodExpanded = false;
+        char fmodBankPath[64] = "Assets/Audio/Banks";
+        bool fmodLiveUpdate = true;
+        bool pluginSteamExpanded = false;
+        int steamAppId = 480;
+        bool steamAutoInit = true;
         int startupAction = 0;
         int renderBackend = 0;
         int viewportMode = 0;
