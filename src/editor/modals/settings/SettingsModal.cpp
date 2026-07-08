@@ -58,7 +58,7 @@ namespace Horo::Editor
             {
                 return;
             }
-            std::format_to_n(dst, dstSize - 1, "{}", src);
+            std::snprintf(dst, dstSize, "%s", src.c_str());
         }
 
         [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &st)
