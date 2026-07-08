@@ -192,7 +192,11 @@ jobs:
           restore-keys: fetchcontent-sonar-
 
       - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v7.1.0
+        run: |
+          curl -sSLo /tmp/bw.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
+          unzip -qo /tmp/bw.zip -d /tmp/bw
+          chmod +x /tmp/bw/build-wrapper-linux-x86/build-wrapper-linux-x86-64
+          echo "/tmp/bw/build-wrapper-linux-x86" >> $GITHUB_PATH
 
       - name: Configure
         run: |
