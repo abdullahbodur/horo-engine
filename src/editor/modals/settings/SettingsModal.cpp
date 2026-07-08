@@ -210,7 +210,7 @@ namespace Horo::Editor
 
         void PushControlStyle()
         {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 8.0F});
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 5.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
             ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
