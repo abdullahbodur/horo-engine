@@ -231,7 +231,7 @@ namespace Horo::Editor::Theme
                 if (path.extension() != ".json") continue;
 
                 ThemeEntry te;
-                if (LoadThemeFromJson(path.c_str(), te))
+                if (LoadThemeFromJson(path.string().c_str(), te))
                     g_themeList.push_back(std::move(te));
             }
         }
