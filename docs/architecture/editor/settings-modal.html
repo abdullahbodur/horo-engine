@@ -237,6 +237,38 @@
     }
     .kbd-plus { font-size: 11px; color: var(--text-muted); }
 
+    /* Theme selector */
+    .theme-select-row { display: flex; gap: 8px; align-items: center; }
+    .theme-select-row select { flex: 1; }
+    .browse-btn {
+      padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text-primary); cursor: pointer;
+      font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap;
+    }
+    .browse-btn:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+    .custom-theme-row { margin-top: 8px; }
+    .custom-theme-row input[type="text"] { width: 100%; }
+
+    /* Plugin settings (expandable) */
+    .plugin-settings-toggle {
+      font-family: var(--font-mono); font-size: 10px; color: var(--accent);
+      cursor: pointer; padding: 2px 0; display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 6px; user-select: none;
+    }
+    .plugin-settings-toggle:hover { color: #26b6fd; }
+    .plugin-settings-panel {
+      margin-top: 8px; padding: 10px 12px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: var(--radius); display: none;
+    }
+    .plugin-settings-panel.open { display: block; }
+    .plugin-settings-panel .setting-row {
+      grid-template-columns: 1fr 220px; padding: 6px 0; border-bottom: 1px solid var(--border);
+    }
+    .plugin-settings-panel .setting-row:last-child { border-bottom: none; }
+    .plugin-settings-panel .setting-info label { font-size: 12px; }
+    .plugin-settings-panel .setting-info p { font-size: 10.5px; }
+
     /* Plugin row */
     .plugin-row {
       display: flex; align-items: flex-start; justify-content: space-between;
@@ -726,22 +758,19 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
         <div class="setting-row">
           <div class="setting-info">
             <label>Color Theme</label>
-            <p>Base editor chrome palette.</p>
+            <p>Built-in themes or custom JSON theme file.</p>
           </div>
           <div class="setting-control">
-            <div class="chip-grid">
-              <div class="theme-chip active">
-                <span class="swatch-dot" style="background:#12151a;border-color:#3a4049;"></span>
-                Horo Dark
-              </div>
-              <div class="theme-chip">
-                <span class="swatch-dot" style="background:#101722;"></span>
-                Midnight
-              </div>
-              <div class="theme-chip">
-                <span class="swatch-dot" style="background:#f0ece3;border-color:#c8c2b8;"></span>
-                Light
-              </div>
+            <div class="theme-select-row">
+              <select id="theme-select">
+                <option value="horo-dark">Horo Dark</option>
+                <option value="midnight">Midnight</option>
+                <option value="light">Light</option>
+              </select>
+              <button class="browse-btn" id="theme-browse">Browse…</button>
+            </div>
+            <div class="custom-theme-row">
+              <input type="text" id="custom-theme-path" placeholder="path/to/custom-theme.json" value="~/.horo/themes/my-theme.json">
             </div>
           </div>
         </div>
@@ -1036,6 +1065,19 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
               <span class="version-badge">v0.4.0</span>
               <span class="plugin-desc">Enables MCP tool access for scene and asset operations.</span>
             </div>
+            <div class="plugin-settings-toggle" data-plugin="mcp">▶ Settings</div>
+            <div class="plugin-settings-panel" id="plugin-settings-mcp">
+              <div class="setting-row">
+                <div class="setting-info"><label>MCP Port</label><p>HTTP port for MCP server.</p></div>
+                <div class="setting-control"><input type="number" value="8080"></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Allow Remote Connections</label></div>
+                <div class="setting-control">
+                  <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="plugin-right">
             <label class="toggle">
@@ -1052,6 +1094,19 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
               <span class="version-badge">v2.02.20</span>
               <span class="plugin-desc">Full FMOD Studio authoring and runtime integration.</span>
             </div>
+            <div class="plugin-settings-toggle" data-plugin="fmod">▶ Settings</div>
+            <div class="plugin-settings-panel" id="plugin-settings-fmod">
+              <div class="setting-row">
+                <div class="setting-info"><label>Bank Output Path</label><p>Where compiled banks are written.</p></div>
+                <div class="setting-control"><input type="text" value="Assets/Audio/Banks"></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Live Update</label><p>Reload banks without restarting editor.</p></div>
+                <div class="setting-control">
+                  <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span></label>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="plugin-right">
             <label class="toggle">
@@ -1067,6 +1122,19 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
             <div class="plugin-meta">
               <span class="version-badge">v1.59</span>
               <span class="plugin-desc">Steam achievements, overlay, and networking features.</span>
+            </div>
+            <div class="plugin-settings-toggle" data-plugin="steam">▶ Settings</div>
+            <div class="plugin-settings-panel" id="plugin-settings-steam">
+              <div class="setting-row">
+                <div class="setting-info"><label>App ID</label><p>Steam application identifier.</p></div>
+                <div class="setting-control"><input type="number" value="480"></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Auto-initialize</label><p>Start Steam API on editor launch.</p></div>
+                <div class="setting-control">
+                  <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span></label>
+                </div>
+              </div>
             </div>
           </div>
           <div class="plugin-right">
@@ -1150,11 +1218,23 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
     });
   });
 
-  // Theme chips
-  document.querySelectorAll('.theme-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      chip.closest('.chip-grid').querySelectorAll('.theme-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
+  // Theme select
+  const themeSelect = document.getElementById('theme-select');
+  const themeBrowse = document.getElementById('theme-browse');
+  if (themeBrowse) {
+    themeBrowse.addEventListener('click', () => {
+      const path = prompt('Theme JSON file path:', '~/.horo/themes/my-theme.json');
+      if (path) document.getElementById('custom-theme-path').value = path;
+    });
+  }
+
+  // Plugin settings toggle
+  document.querySelectorAll('.plugin-settings-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const panel = document.getElementById('plugin-settings-' + toggle.dataset.plugin);
+      if (!panel) return;
+      const isOpen = panel.classList.toggle('open');
+      toggle.textContent = isOpen ? '▼ Settings' : '▶ Settings';
     });
   });
 </script>
