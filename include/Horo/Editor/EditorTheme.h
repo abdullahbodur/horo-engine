@@ -4,6 +4,10 @@
 
 #include <imgui.h>
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 namespace Horo::Editor::Theme {
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -38,9 +42,9 @@ namespace Horo::Editor::Theme {
 // Fonts — the three font atlas entries loaded by the application
 // ─────────────────────────────────────────────────────────────────────────
 struct Fonts {
-    ::ImFont* sans         = nullptr; // Inter,        loaded size: 15px (--font-sans)
-    ::ImFont* mono         = nullptr; // IBM Plex Mono loaded size: 13px (--font-mono, regular)
-    ::ImFont* monoSemiBold = nullptr; // IBM Plex Mono loaded size: 15px (--font-mono, 600/700)
+    ::ImFont* sans         = nullptr;
+    ::ImFont* mono         = nullptr;
+    ::ImFont* monoSemiBold = nullptr;
 };
 
 namespace FontPx {
@@ -49,14 +53,11 @@ namespace FontPx {
     constexpr float MonoSemiBold = DesignSystem::DefaultDesignTokens().typography.monoSemiBoldBase;
 }
 
-// Converts arbitrary HTML/CSS font sizes to the fixed atlas sizes we have
-// using the required SetWindowFontScale() multiplier.
 [[nodiscard]] constexpr float Scale(float targetPx, float basePx) { return targetPx / basePx; }
 
 inline void PushFont(::ImFont* f) { if (f) ImGui::PushFont(f); }
 inline void PopFont(::ImFont* f)  { if (f) ImGui::PopFont(); }
 
-// RAII: pushes a font when non-null and guarantees the matching pop.
 struct ScopedFont {
     ::ImFont* font;
     explicit ScopedFont(::ImFont* f) : font(f) { PushFont(font); }
@@ -65,7 +66,6 @@ struct ScopedFont {
     ScopedFont& operator=(const ScopedFont&) = delete;
 };
 
-// RAII: applies a window-local font scale and always restores 1.0 at scope exit.
 struct ScopedFontScale {
     explicit ScopedFontScale(float scale) { ImGui::SetWindowFontScale(scale); }
     ~ScopedFontScale() { ImGui::SetWindowFontScale(1.0F); }
@@ -73,9 +73,6 @@ struct ScopedFontScale {
     ScopedFontScale& operator=(const ScopedFontScale&) = delete;
 };
 
-// Shortcut: pushes `font` and scales it to the target HTML pixel size,
-// then automatically restores both at scope exit.
-//   Example: ScopedTextStyle ts(f.mono, 11.0f, Theme::FontPx::Mono);
 struct ScopedTextStyle {
     [[no_unique_address]] ScopedFont font;
     [[no_unique_address]] ScopedFontScale scale;
@@ -84,20 +81,16 @@ struct ScopedTextStyle {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
-// Layout metrics — pixel values matching the HTML mockups
+// Layout metrics
 // ─────────────────────────────────────────────────────────────────────────
 namespace Layout {
     constexpr float Radius      = DesignSystem::DefaultDesignTokens().radii.control;
     constexpr float RadiusCard  = DesignSystem::DefaultDesignTokens().radii.card;
     constexpr float RadiusModal = DesignSystem::DefaultDesignTokens().radii.modal;
-
-    // Welcome screen (welcome-screen.html)
-    constexpr float WelcomeOuterPad = 40.0F; // .welcome { padding: 40px }
-    constexpr float WelcomeCardW    = 900.0F; // .welcome-card { width: min(900px, 100%) }
+    constexpr float WelcomeOuterPad = 40.0F;
+    constexpr float WelcomeCardW    = 900.0F;
     constexpr float WelcomeSideW    = DesignSystem::DefaultDesignTokens().sizes.welcomeSideWidth;
     constexpr float WelcomePad      = DesignSystem::DefaultDesignTokens().sizes.welcomePadding;
-
-    // New Project wizard (new-project-wizard.html)
     constexpr float ModalW      = DesignSystem::DefaultDesignTokens().sizes.modalWidth;
     constexpr float ModalH      = DesignSystem::DefaultDesignTokens().sizes.modalHeight;
     constexpr float HeaderH     = DesignSystem::DefaultDesignTokens().sizes.modalHeaderHeight;
@@ -109,31 +102,49 @@ namespace Layout {
     constexpr float BodyPadY    = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingY;
     constexpr float CardPad     = DesignSystem::DefaultDesignTokens().spacing.cardPadding;
     constexpr float GridGap     = DesignSystem::DefaultDesignTokens().spacing.gridGap;
-
-    // Settings modal
-    constexpr float SettingsW = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
-    constexpr float SettingsH = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
-    constexpr float ControlW  = 260.0F; // form control column width in settings rows
+    constexpr float SettingsW   = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
+    constexpr float SettingsH   = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
+    constexpr float ControlW    = 260.0F;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Applies the global ImGui style. Call once after ImGui::CreateContext().
-// All visual defaults such as colors, rounding, and padding come from here;
-// widget code must not depend on this function's implementation details.
-// ─────────────────────────────────────────────────────────────────────────
-void Apply(ImGuiStyle &style);
-
-// ─────────────────────────────────────────────────────────────────────────
-// Runtime theme preset switching. Call SetThemePreset to change the active
-// palette, then ApplyCurrentTheme to refresh the global ImGui style.
+// Theme preset & runtime switching
 // ─────────────────────────────────────────────────────────────────────────
 enum class Preset
 {
-    HoroDark,
-    Midnight,
-    Light,
+    HoroDark = 0,
+    Midnight = 1,
+    Light    = 2,
+    // Custom themes start at index 3+
 };
 
+/**
+ * @brief A loaded theme entry — either built-in or from a JSON file.
+ */
+struct ThemeEntry
+{
+    std::string name;           // display name (e.g. "Monokai")
+    std::string sourcePath;     // empty for built-in, file path for custom
+    std::unordered_map<std::string, ::ImVec4> colors; // key → RGBA
+    bool isBuiltIn = true;
+};
+
+/** @brief Returns the list of all discovered themes (built-in + custom). */
+[[nodiscard]] const std::vector<ThemeEntry> &GetThemeList();
+
+/** @brief Scans `~/.horo/themes/` for JSON theme files. Call once at startup. */
+void RefreshThemeList(const char *additionalPath = nullptr);
+
+/** @brief Loads a single theme JSON from the given path. Returns true on success. */
+[[nodiscard]] bool LoadThemeFromJson(const char *path, ThemeEntry &outEntry);
+
+/** @brief Activates a theme by index into GetThemeList(). */
+void SelectThemeByIndex(int index);
+
+/** @brief Returns the currently active theme index. */
+[[nodiscard]] int GetActiveThemeIndex();
+
+void Apply(ImGuiStyle &style);
 void SetThemePreset(Preset preset);
 [[nodiscard]] Preset GetThemePreset();
 void ApplyCurrentTheme();

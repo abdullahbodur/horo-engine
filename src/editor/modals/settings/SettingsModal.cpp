@@ -352,14 +352,21 @@ namespace Horo::Editor
             SectionTitle("Appearance", f);
             SettingGroup("THEME", f, true);
             SettingRow("Color Theme", "Built-in themes or custom JSON theme file.", f, [&st, &f]() {
-                static constexpr std::array<const char *, 3> kThemes = {"Horo Dark", "Midnight", "Light"};
+                const auto &themeList = Theme::GetThemeList();
+                static std::vector<const char *> s_names;
+                s_names.clear();
+                for (const auto &t : themeList)
+                    s_names.push_back(t.name.c_str());
+
+                const int count = static_cast<int>(s_names.size());
+                if (st.themeIndex >= count)
+                    st.themeIndex = 0;
+
                 const int prev = st.themeIndex;
-                ComboControl("##theme", &st.themeIndex, kThemes.data(), static_cast<int>(kThemes.size()), f);
+                ComboControl("##theme", &st.themeIndex, s_names.data(), count, f);
                 if (st.themeIndex != prev)
                 {
-                    constexpr Theme::Preset kPresets[] = {Theme::Preset::HoroDark, Theme::Preset::Midnight, Theme::Preset::Light};
-                    Theme::SetThemePreset(kPresets[st.themeIndex]);
-                    Theme::ApplyCurrentTheme();
+                    Theme::SelectThemeByIndex(st.themeIndex);
                     st.dirty = true;
                 }
             });
