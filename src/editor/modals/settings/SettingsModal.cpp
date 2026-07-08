@@ -58,7 +58,7 @@ namespace Horo::Editor
             {
                 return;
             }
-            std::snprintf(dst, dstSize, "%s", src.c_str());
+            std::format_to_n(dst, dstSize - 1, "{}", src);
         }
 
         [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &st)
@@ -452,7 +452,11 @@ namespace Horo::Editor
 
             const bool hovered = ImGui::IsItemHovered();
             auto *dl = ImGui::GetWindowDrawList();
-            const ImVec4 bg = *value ? Theme::Accent() : (hovered ? Theme::Hover() : Theme::Bg3());
+            ImVec4 bg = Theme::Bg3();
+            if (*value)
+                bg = Theme::Accent();
+            else if (hovered)
+                bg = Theme::Hover();
             dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(bg), 10.0F);
             dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()), 10.0F);
             const float knobX = *value ? pos.x + 21.0F : pos.x + 3.0F;
@@ -686,7 +690,7 @@ namespace Horo::Editor
         {
             SectionTitle("Appearance", f);
             SettingGroup("THEME", f, true);
-            SettingRow("Color Theme", "Base editor chrome palette.", f, [&st, &f]() {
+            SettingRow("Color Theme", "Base editor chrome palette.", f, [&f]() {
                 ThemeChip("  Horo Dark", Theme::Bg1(), true, f);
                 ImGui::SameLine(0.0F, 6.0F);
                 ThemeChip("  Midnight", ImVec4{0.063F, 0.090F, 0.133F, 1.0F}, false, f);
@@ -912,7 +916,7 @@ namespace Horo::Editor
             ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
             ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
 
-            const bool isOpen = ImGui::BeginPopupModal("Settings",
+            if (const bool isOpen = ImGui::BeginPopupModal("Settings",
                                                        &st.open,
                                                        ImGuiWindowFlags_NoResize |
                                                            ImGuiWindowFlags_NoTitleBar |
@@ -920,7 +924,7 @@ namespace Horo::Editor
                                                            ImGuiWindowFlags_NoSavedSettings |
                                                            ImGuiWindowFlags_NoScrollbar |
                                                            ImGuiWindowFlags_NoScrollWithMouse);
-            if (!isOpen)
+                !isOpen)
             {
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar(3);

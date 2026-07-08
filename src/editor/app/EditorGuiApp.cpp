@@ -127,7 +127,9 @@ namespace Horo::Editor
         {
             EditorTextures t;
             auto path = AssetPath("launcher/logo.png");
-            int w = 0, h = 0, c = 0;
+            int w = 0;
+            int h = 0;
+            int c = 0;
             auto *px = stbi_load(path.c_str(), &w, &h, &c, 4);
             if (!px)
             {
@@ -283,7 +285,7 @@ namespace Horo::Editor
         ImGui::DestroyContext();
         if (textures.logo)
         {
-            GLuint t = (GLuint)(intptr_t)textures.logo;
+            auto t = (GLuint)(intptr_t)textures.logo;
             glDeleteTextures(1, &t);
         }
         SDL_GL_DeleteContext(gl);

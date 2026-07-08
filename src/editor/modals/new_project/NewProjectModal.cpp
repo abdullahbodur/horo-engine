@@ -141,8 +141,7 @@ namespace Horo::Editor
                                             const bool enabled,
                                             const Fonts &f)
         {
-            // button { padding:8px 14px; border:1px solid var(--bd); border-radius:4px;
-            //          background:var(--bg3); color:var(--txt); font:500 12px var(--mono) }
+            // Wizard button — HTML-reference styling
             if (!enabled)
             {
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45F);
@@ -197,8 +196,7 @@ namespace Horo::Editor
                                         const Fonts &f,
                                         const bool error = false)
         {
-            // input { background:var(--bg3); border:1px solid var(--bd); border-radius:4px;
-            //         color:var(--txt); padding:7px 10px; font:12px var(--mono) }
+            // Wizard input field — HTML-reference styling
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);

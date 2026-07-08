@@ -53,8 +53,8 @@ namespace FontPx {
 // using the required SetWindowFontScale() multiplier.
 [[nodiscard]] constexpr float Scale(float targetPx, float basePx) { return targetPx / basePx; }
 
-inline void PushFont(const ::ImFont* f) { if (f) ImGui::PushFont(const_cast<::ImFont*>(f)); }
-inline void PopFont(const ::ImFont* f)  { if (f) ImGui::PopFont(); }
+inline void PushFont(::ImFont* f) { if (f) ImGui::PushFont(f); }
+inline void PopFont(::ImFont* f)  { if (f) ImGui::PopFont(); }
 
 // RAII: pushes a font when non-null and guarantees the matching pop.
 struct ScopedFont {
@@ -77,8 +77,8 @@ struct ScopedFontScale {
 // then automatically restores both at scope exit.
 //   Example: ScopedTextStyle ts(f.mono, 11.0f, Theme::FontPx::Mono);
 struct ScopedTextStyle {
-    ScopedFont font;
-    ScopedFontScale scale;
+    [[no_unique_address]] ScopedFont font;
+    [[no_unique_address]] ScopedFontScale scale;
     ScopedTextStyle(::ImFont* f, float targetPx, float basePx)
         : font(f), scale(Scale(targetPx, basePx)) {}
 };
