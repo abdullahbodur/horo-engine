@@ -335,7 +335,7 @@ namespace Horo::Editor
             PushControlStyle();
             ImGui::PushItemWidth(-1.0F);
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
                 ImGui::Combo(id, value, items, itemCount);
             }
             ImGui::PopItemWidth();
@@ -347,7 +347,7 @@ namespace Horo::Editor
             PushControlStyle();
             ImGui::PushItemWidth(-1.0F);
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
                 ImGui::InputText(id, buffer, bufferSize);
             }
             ImGui::PopItemWidth();
@@ -359,7 +359,7 @@ namespace Horo::Editor
             PushControlStyle();
             ImGui::PushItemWidth(-1.0F);
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
                 ImGui::InputInt(id, value, 1, 4);
             }
             ImGui::PopItemWidth();
@@ -371,7 +371,7 @@ namespace Horo::Editor
             PushControlStyle();
             ImGui::PushItemWidth(-1.0F);
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
                 ImGui::InputFloat(id, value, 0.1F, 1.0F, "%.1f");
             }
             ImGui::PopItemWidth();
@@ -428,7 +428,7 @@ namespace Horo::Editor
             char text[32]{};
             std::snprintf(text, sizeof(text), suffix, *value);
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
                 const ImVec2 textSize = ImGui::CalcTextSize(text);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (HitH - textSize.y) * 0.5F);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
