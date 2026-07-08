@@ -113,6 +113,7 @@ namespace Layout {
     // Settings modal
     constexpr float SettingsW = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
     constexpr float SettingsH = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
+    constexpr float ControlW  = 260.0F; // form control column width in settings rows
 }
 
 // ─────────────────────────────────────────────────────────────────────────

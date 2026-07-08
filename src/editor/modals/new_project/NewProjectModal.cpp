@@ -1,7 +1,7 @@
 #include "editor/modals/new_project/NewProjectModal.h"
 
 #include "Horo/Editor/EditorTheme.h"
-#include "editor/design_system/components/EditorUiComponents.h"
+#include "Horo/Editor/EditorUiComponents.h"
 
 #include <imgui.h>
 

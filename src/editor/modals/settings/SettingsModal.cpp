@@ -2,7 +2,7 @@
 
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Editor/EditorTheme.h"
-#include "editor/design_system/components/EditorUiComponents.h"
+#include "Horo/Editor/EditorUiComponents.h"
 
 #include <imgui.h>
 
@@ -18,6 +18,8 @@ namespace Horo::Editor
     namespace
     {
         using Theme::Fonts;
+        using namespace Theme;
+        using namespace Ui;
         using Theme::ScopedTextStyle;
 
         namespace Layout
@@ -203,354 +205,6 @@ namespace Horo::Editor
             ImGui::CloseCurrentPopup();
         }
 
-        [[nodiscard]] ImVec4 AccentGlow()
-        {
-            return ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.14F};
-        }
-
-        void PushControlStyle()
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 5.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-        }
-
-        void PopControlStyle()
-        {
-            ImGui::PopStyleColor(5);
-            ImGui::PopStyleVar(3);
-        }
-
-        [[nodiscard]] bool ButtonCss(const char *label, const ImVec2 size, const bool primary, const Fonts &f)
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{16.0F, 8.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            if (primary)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, Theme::Accent());
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::AccentHover());
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::AccentActive());
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::DarkText());
-                ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
-            }
-            else
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, Theme::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::Hover());
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Hover());
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-            }
-
-            bool clicked = false;
-            {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
-                clicked = ImGui::Button(label, size);
-            }
-
-            ImGui::PopStyleColor(5);
-            ImGui::PopStyleVar(3);
-            return clicked;
-        }
-
-        void SectionTitle(const char *label, const Fonts &f)
-        {
-            ScopedTextStyle ts(f.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-            ImGui::TextUnformatted(label);
-            ImGui::PopStyleColor();
-        }
-
-        void SettingGroup(const char *label, const Fonts &f, const bool first = false)
-        {
-            if (!first)
-            {
-                ImGui::Dummy({0.0F, 18.0F});
-            }
-
-            ScopedTextStyle ts(f.monoSemiBold, 13.0F, Theme::FontPx::MonoSemiBold);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-            ImGui::TextUnformatted(label);
-            ImGui::PopStyleColor();
-
-            const ImVec2 p = ImGui::GetCursorScreenPos();
-            const float w = ImGui::GetContentRegionAvail().x;
-            ImGui::GetWindowDrawList()->AddLine(p, {p.x + w, p.y}, Theme::U32(Theme::Border()), 1.0F);
-            ImGui::Dummy({0.0F, 8.0F});
-        }
-
-        template <typename ControlFn>
-        void SettingRow(const char *label, const char *description, const Fonts &f, ControlFn &&control)
-        {
-            ImGui::PushID(label);
-            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2{0.0F, 0.0F});
-            if (ImGui::BeginTable("row", 2, ImGuiTableFlags_SizingStretchProp))
-            {
-                ImGui::TableSetupColumn("info", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("control", ImGuiTableColumnFlags_WidthFixed, Layout::ControlW);
-                ImGui::TableNextRow();
-
-                ImGui::TableSetColumnIndex(0);
-                ImGui::BeginGroup();
-                {
-                    ScopedTextStyle ts(f.sans, 16.0F, Theme::FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                    ImGui::TextUnformatted(label);
-                    ImGui::PopStyleColor();
-                }
-                if (description && description[0] != '\0')
-                {
-                    ScopedTextStyle ts(f.sans, 14.0F, Theme::FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 16.0F);
-                    ImGui::TextWrapped("%s", description);
-                    ImGui::PopTextWrapPos();
-                    ImGui::PopStyleColor();
-                }
-                ImGui::EndGroup();
-
-                ImGui::TableSetColumnIndex(1);
-                control();
-
-                ImGui::EndTable();
-            }
-            ImGui::PopStyleVar();
-
-            ImGui::Dummy({0.0F, 10.0F});
-            const ImVec2 p = ImGui::GetCursorScreenPos();
-            const float w = ImGui::GetContentRegionAvail().x;
-            ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x + w, p.y}, Theme::U32(Theme::Border()), 1.0F);
-            ImGui::Dummy({0.0F, 10.0F});
-            ImGui::PopID();
-        }
-
-        void ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Fonts &f)
-        {
-            PushControlStyle();
-            ImGui::PushItemWidth(-1.0F);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 4.0F});
-            {
-                ScopedTextStyle ts(f.mono, 15.0F, Theme::FontPx::Mono);
-                ImGui::Combo(id, value, items, itemCount);
-            }
-            ImGui::PopStyleVar();
-            ImGui::PopItemWidth();
-            PopControlStyle();
-        }
-
-        void InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Fonts &f)
-        {
-            PushControlStyle();
-            ImGui::PushItemWidth(-1.0F);
-            {
-                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-                ImGui::InputText(id, buffer, bufferSize);
-            }
-            ImGui::PopItemWidth();
-            PopControlStyle();
-        }
-
-        void InputIntControl(const char *id, int *value, const Fonts &f)
-        {
-            PushControlStyle();
-            ImGui::PushItemWidth(-1.0F);
-            {
-                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-                ImGui::InputInt(id, value, 1, 4);
-            }
-            ImGui::PopItemWidth();
-            PopControlStyle();
-        }
-
-        void InputFloatControl(const char *id, float *value, const Fonts &f)
-        {
-            PushControlStyle();
-            ImGui::PushItemWidth(-1.0F);
-            {
-                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-                ImGui::InputFloat(id, value, 0.1F, 1.0F, "%.1f");
-            }
-            ImGui::PopItemWidth();
-            PopControlStyle();
-        }
-
-        void SliderIntControl(const char *id,
-                              int *value,
-                              const int minValue,
-                              const int maxValue,
-                              const char *suffix,
-                              const Fonts &f,
-                              const int step = 1)
-        {
-            ImGui::PushID(id);
-            constexpr float TrackW = Layout::ControlW - 54.0F;
-            constexpr float TrackH = 4.0F;
-            constexpr float HitH = 22.0F;
-            constexpr float KnobR = 7.0F;
-
-            const ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("slider", {TrackW, HitH});
-            const bool active = ImGui::IsItemActive();
-            const bool hovered = ImGui::IsItemHovered();
-
-            if (active && maxValue > minValue)
-            {
-                const float mouseT = (ImGui::GetIO().MousePos.x - pos.x) / TrackW;
-                const float clampedT = std::clamp(mouseT, 0.0F, 1.0F);
-                const float rawValue = static_cast<float>(minValue) +
-                                       clampedT * static_cast<float>(maxValue - minValue);
-                const int snapped = minValue +
-                                    static_cast<int>(std::round((rawValue - static_cast<float>(minValue)) /
-                                                                static_cast<float>(step))) *
-                                        step;
-                *value = std::clamp(snapped, minValue, maxValue);
-            }
-
-            const float t = maxValue > minValue
-                                ? (static_cast<float>(*value - minValue) / static_cast<float>(maxValue - minValue))
-                                : 0.0F;
-            const float trackY = pos.y + (HitH - TrackH) * 0.5F;
-            auto *dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW, trackY + TrackH}, Theme::U32(Theme::BorderStrong()), 2.0F);
-            dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW * t, trackY + TrackH}, Theme::U32(Theme::Accent()), 2.0F);
-
-            const ImVec2 knob{pos.x + TrackW * t, pos.y + HitH * 0.5F};
-            dl->AddCircleFilled(knob, KnobR + (hovered || active ? 1.0F : 0.0F), Theme::U32(Theme::AccentHover()), 20);
-            dl->AddCircleFilled(knob, KnobR, Theme::U32(Theme::Accent()), 20);
-            dl->AddCircle(knob, KnobR + 1.0F, Theme::U32(Theme::Bg1()), 20, 2.0F);
-
-            ImGui::SameLine(0.0F, 10.0F);
-
-            char text[32]{};
-            std::snprintf(text, sizeof(text), suffix, *value);
-            {
-                ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-                const ImVec2 textSize = ImGui::CalcTextSize(text);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (HitH - textSize.y) * 0.5F);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                ImGui::TextUnformatted(text);
-                ImGui::PopStyleColor();
-            }
-            ImGui::PopID();
-        }
-
-        [[nodiscard]] bool ToggleControl(const char *id, bool *value, const Fonts &f, const bool showLabel = true)
-        {
-            ImGui::PushID(id);
-            const ImVec2 pos = ImGui::GetCursorScreenPos();
-            const ImVec2 size{36.0F, 20.0F};
-            ImGui::InvisibleButton("toggle", size);
-            const bool clicked = ImGui::IsItemClicked();
-            if (clicked)
-            {
-                *value = !*value;
-            }
-
-            const bool hovered = ImGui::IsItemHovered();
-            auto *dl = ImGui::GetWindowDrawList();
-            ImVec4 bg = Theme::Bg3();
-            if (*value)
-                bg = Theme::Accent();
-            else if (hovered)
-                bg = Theme::Hover();
-            dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(bg), 10.0F);
-            dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()), 10.0F);
-            const float knobX = *value ? pos.x + 21.0F : pos.x + 3.0F;
-            dl->AddCircleFilled({knobX + 6.0F, pos.y + 10.0F}, 6.0F, Theme::U32(*value ? ImVec4{1, 1, 1, 1} : Theme::Dim()), 16);
-
-            if (showLabel)
-            {
-                ImGui::SameLine(0.0F, 10.0F);
-                ScopedTextStyle ts(f.sans, 13.0F, Theme::FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
-                ImGui::TextUnformatted(*value ? "Enabled" : "Disabled");
-                ImGui::PopStyleColor();
-            }
-            ImGui::PopID();
-            return clicked;
-        }
-
-        void ThemeChip(const char *label, const ImVec4 swatch, const bool active, const Fonts &f)
-        {
-            ImGui::PushID(label);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 7.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_Button, active ? AccentGlow() : Theme::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
-            ImGui::PushStyleColor(ImGuiCol_Border, active ? Theme::Accent() : Theme::Border());
-            {
-                ScopedTextStyle ts(f.mono, 12.0F, Theme::FontPx::Mono);
-                ImGui::Button(label, ImVec2{82.0F, 32.0F});
-            }
-            const ImVec2 min = ImGui::GetItemRectMin();
-            ImGui::GetWindowDrawList()->AddCircleFilled({min.x + 12.0F, min.y + 16.0F}, 5.0F, Theme::U32(swatch), 16);
-            ImGui::PopStyleColor(5);
-            ImGui::PopStyleVar(3);
-            ImGui::PopID();
-        }
-
-        void ShortcutDisplay(const char *a, const char *b, const char *c, const Fonts &f)
-        {
-            const std::array<const char *, 3> keys = {a, b, c};
-            for (int i = 0; i < 3; ++i)
-            {
-                if (!keys[i] || keys[i][0] == '\0')
-                    continue;
-                if (i > 0)
-                {
-                    ImGui::SameLine(0.0F, 4.0F);
-                    ScopedTextStyle plus(f.mono, 12.0F, Theme::FontPx::Mono);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                    ImGui::TextUnformatted("+");
-                    ImGui::PopStyleColor();
-                    ImGui::SameLine(0.0F, 4.0F);
-                }
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{7.0F, 3.0F});
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
-                ImGui::PushStyleColor(ImGuiCol_Button, Theme::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                ScopedTextStyle keyText(f.mono, 12.0F, Theme::FontPx::Mono);
-                ImGui::Button(keys[i], ImVec2{0.0F, 24.0F});
-                ImGui::PopStyleColor(4);
-                ImGui::PopStyleVar(2);
-            }
-        }
-
-        void PluginRow(const char *name, const char *version, const char *description, bool *enabled, const Fonts &f)
-        {
-            SettingRow(name, nullptr, f, [&f, version, description, enabled]() {
-                const float cursorY = ImGui::GetCursorPosY();
-                ImGui::SetCursorPosY(cursorY + 4.0F);
-                {
-                    ScopedTextStyle ts(f.mono, 10.5F, Theme::FontPx::Mono);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                    ImGui::TextUnformatted(version);
-                    ImGui::PopStyleColor();
-                }
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0F);
-                {
-                    ScopedTextStyle ts(f.sans, 12.0F, Theme::FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Layout::ControlW - 52.0F);
-                    ImGui::TextWrapped("%s", description);
-                    ImGui::PopTextWrapPos();
-                    ImGui::PopStyleColor();
-                }
-                ImGui::SetCursorPos({Layout::ControlW - 42.0F, cursorY + 6.0F});
-                (void)ToggleControl("plugin-toggle", enabled, f, false);
-            });
-        }
 
         void DrawNavGroup(const char *label, const Fonts &f)
         {
@@ -580,7 +234,8 @@ namespace Horo::Editor
             auto *dl = ImGui::GetWindowDrawList();
             if (active || hovered)
             {
-                dl->AddRectFilled(pos, {pos.x + rowW, pos.y + rowH}, Theme::U32(active ? AccentGlow() : Theme::Hover()), Layout::Radius);
+                const auto accentGlow = ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.14F};
+            dl->AddRectFilled(pos, {pos.x + rowW, pos.y + rowH}, Theme::U32(active ? accentGlow : Theme::Hover()), Layout::Radius);
             }
             if (active)
             {
@@ -874,19 +529,19 @@ namespace Horo::Editor
             constexpr float gap = 8.0F;
             const float actionsW = restoreW + cancelW + applyW + gap * 2.0F;
             ImGui::SetCursorPos({ImGui::GetWindowWidth() - 22.0F - actionsW, 15.0F});
-            if (ButtonCss("Restore Defaults", {restoreW, 34.0F}, false, f))
+            if (Button({.label = "Restore Defaults", .size = {restoreW, 34.0F}, .variant = Ui::ButtonVariant::Secondary, .fontSize = 13.0F, .font = f.mono, .baseFontSize = Theme::FontPx::Mono}))
             {
                 ApplySettingsToDraft(st, DefaultEditorSettings());
                 st.statusMessage = "Defaults loaded into draft. Apply to persist.";
                 st.statusIsError = false;
             }
             ImGui::SameLine(0.0F, gap);
-            if (ButtonCss("Cancel", {cancelW, 34.0F}, false, f))
+            if (Button({.label = "Cancel", .size = {cancelW, 34.0F}, .variant = Ui::ButtonVariant::Secondary, .fontSize = 13.0F, .font = f.mono, .baseFontSize = Theme::FontPx::Mono}))
             {
                 DiscardSettingsAndClose(st);
             }
             ImGui::SameLine(0.0F, gap);
-            if (ButtonCss("Apply", {applyW, 34.0F}, true, f))
+            if (Button({.label = "Apply", .size = {applyW, 34.0F}, .variant = Ui::ButtonVariant::Primary, .fontSize = 13.0F, .font = f.mono, .baseFontSize = Theme::FontPx::Mono}))
             {
                 (void)ApplySettings(st);
             }

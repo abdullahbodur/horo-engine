@@ -126,6 +126,7 @@ namespace Horo::Editor::Theme
         // Settings modal
         constexpr float SettingsW = 620.0F;
         constexpr float SettingsH = 440.0F;
+        constexpr float ControlW = 260.0F; // form control column width
     }
 
     // ─────────────────────────────────────────────────────────────────────────

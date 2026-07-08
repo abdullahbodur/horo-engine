@@ -1,6 +1,6 @@
 #include "editor/screens/welcome/WelcomeScreenGui.h"
 
-#include "editor/design_system/components/EditorUiComponents.h"
+#include "Horo/Editor/EditorUiComponents.h"
 
 #include <cfloat>
 #include <cstddef>
