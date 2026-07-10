@@ -126,7 +126,7 @@ namespace Horo::Editor
 
         [[nodiscard]] std::optional<std::string> FindStringValue(const std::string &json, const char *key)
         {
-            const std::regex re(std::string{"\""} + key + "\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"");
+            const std::regex re(std::string{R"(")"} + key + R"re("\s*:\s*"((?:\\.|[^"])*)")re");
             std::smatch match;
             if (!std::regex_search(json, match, re) || match.size() < 2)
             {
@@ -605,54 +605,55 @@ namespace Horo::Editor
             return false;
         }
 
+        const auto &s = doc->settings;
         out << "{\n";
         out << "  \"editor\": {\n";
-        out << "    \"startupBehavior\": \"" << ToString(doc->settings.startupBehavior) << "\",\n";
-        out << "    \"autoSaveIntervalMinutes\": " << doc->settings.autoSaveIntervalMinutes << ",\n";
-        out << "    \"confirmExitWithUnsavedChanges\": " << (doc->settings.confirmExitWithUnsavedChanges ? "true" : "false") << ",\n";
-        out << "    \"restoreWorkspaceLayout\": " << (doc->settings.restoreWorkspaceLayout ? "true" : "false") << ",\n";
-        out << "    \"defaultSceneOnProjectOpen\": \"" << EscapeJsonString(doc->settings.defaultSceneOnProjectOpen) << "\"\n";
+        out << "    \"startupBehavior\": \"" << ToString(s.startupBehavior) << "\",\n";
+        out << "    \"autoSaveIntervalMinutes\": " << s.autoSaveIntervalMinutes << ",\n";
+        out << "    \"confirmExitWithUnsavedChanges\": " << (s.confirmExitWithUnsavedChanges ? "true" : "false") << ",\n";
+        out << "    \"restoreWorkspaceLayout\": " << (s.restoreWorkspaceLayout ? "true" : "false") << ",\n";
+        out << "    \"defaultSceneOnProjectOpen\": \"" << EscapeJsonString(s.defaultSceneOnProjectOpen) << "\"\n";
         out << "  },\n";
         out << "  \"appearance\": {\n";
-        out << "    \"themePreset\": \"" << ToString(doc->settings.themePreset) << "\",\n";
-        out << "    \"accentColorHex\": \"" << EscapeJsonString(doc->settings.accentColorHex) << "\",\n";
-        out << "    \"uiScalePercent\": " << doc->settings.uiScalePercent << ",\n";
-        out << "    \"codeFontSizePx\": " << doc->settings.codeFontSizePx << ",\n";
-        out << "    \"uiFontFamily\": \"" << EscapeJsonString(doc->settings.uiFontFamily) << "\",\n";
-        out << "    \"codeFontFamily\": \"" << EscapeJsonString(doc->settings.codeFontFamily) << "\"\n";
+        out << R"("themePreset": ")" << ToString(s.themePreset) << R"(",)" "\n";
+        out << R"("accentColorHex": ")" << EscapeJsonString(s.accentColorHex) << R"(",)" "\n";
+        out << R"("uiScalePercent": )" << s.uiScalePercent << ",\n";
+        out << R"("codeFontSizePx": )" << s.codeFontSizePx << ",\n";
+        out << R"("uiFontFamily": ")" << EscapeJsonString(s.uiFontFamily) << R"(",)" "\n";
+        out << R"("codeFontFamily": ")" << EscapeJsonString(s.codeFontFamily) << R"(")" "\n";
         out << "  },\n";
         out << "  \"input\": {\n";
-        out << "    \"orbitSensitivity\": " << doc->settings.orbitSensitivity << ",\n";
-        out << "    \"panSensitivity\": " << doc->settings.panSensitivity << ",\n";
-        out << "    \"invertOrbitY\": " << (doc->settings.invertOrbitY ? "true" : "false") << "\n";
+        out << R"("orbitSensitivity": )" << s.orbitSensitivity << ",\n";
+        out << R"("panSensitivity": )" << s.panSensitivity << ",\n";
+        out << R"("invertOrbitY": )" << (s.invertOrbitY ? "true" : "false") << "\n";
         out << "  },\n";
         out << "  \"rendering\": {\n";
-        out << "    \"viewportMode\": \"" << ToString(doc->settings.viewportMode) << "\",\n";
-        out << "    \"gridOverlay\": " << (doc->settings.gridOverlay ? "true" : "false") << ",\n";
-        out << "    \"renderingTier\": \"" << ToString(doc->settings.renderingTier) << "\",\n";
-        out << "    \"textureStreamingBudget\": \"" << EscapeJsonString(doc->settings.textureStreamingBudget) << "\"\n";
+        out << R"("viewportMode": ")" << ToString(s.viewportMode) << R"(",)" "\n";
+        out << R"("gridOverlay": )" << (s.gridOverlay ? "true" : "false") << ",\n";
+        out << R"("renderingTier": ")" << ToString(s.renderingTier) << R"(",)" "\n";
+        out << R"("textureStreamingBudget": ")" << EscapeJsonString(s.textureStreamingBudget) << R"(")" "\n";
         out << "  },\n";
         out << "  \"audio\": {\n";
-        out << "    \"masterVolume\": " << doc->settings.masterVolume << ",\n";
-        out << "    \"audioOutputDevice\": \"" << ToString(doc->settings.audioOutputDevice) << "\",\n";
-        out << "    \"audioEnabled\": " << (doc->settings.audioEnabled ? "true" : "false") << "\n";
+        out << R"("masterVolume": )" << s.masterVolume << ",\n";
+        out << R"("audioOutputDevice": ")" << ToString(s.audioOutputDevice) << R"(",)" "\n";
+        out << R"("audioEnabled": )" << (s.audioEnabled ? "true" : "false") << "\n";
         out << "  },\n";
         out << "  \"network\": {\n";
-        out << "    \"maxPreviewClients\": " << doc->settings.maxPreviewClients << ",\n";
-        out << "    \"simulatedLatencyMs\": " << doc->settings.simulatedLatencyMs << ",\n";
-        out << "    \"packageDownloadThreads\": " << doc->settings.packageDownloadThreads << "\n";
+        out << R"("maxPreviewClients": )" << s.maxPreviewClients << ",\n";
+        out << R"("simulatedLatencyMs": )" << s.simulatedLatencyMs << ",\n";
+        out << R"("packageDownloadThreads": )" << s.packageDownloadThreads << "\n";
         out << "  },\n";
         out << "  \"diagnostics\": {\n";
-        out << "    \"consoleLogLevel\": \"" << ToString(doc->settings.consoleLogLevel) << "\",\n";
-        out << "    \"writeLogToFile\": " << (doc->settings.writeLogToFile ? "true" : "false") << ",\n";
-        out << "    \"autoCaptureOnStutter\": " << (doc->settings.autoCaptureOnStutter ? "true" : "false") << ",\n";
-        out << "    \"stutterThresholdMs\": " << std::fixed << std::setprecision(1) << doc->settings.stutterThresholdMs << "\n";
+        out << R"("consoleLogLevel": ")" << ToString(s.consoleLogLevel) << R"(",)" "\n";
+        out << R"("writeLogToFile": )" << (s.writeLogToFile ? "true" : "false") << ",\n";
+        out << R"("autoCaptureOnStutter": )" << (s.autoCaptureOnStutter ? "true" : "false") << ",\n";
+        out << std::format(R"("stutterThresholdMs": {:.1f})" "\n", s.stutterThresholdMs);
         out << "  },\n";
         out << "  \"plugins\": {\n";
-        out << "    \"horoMcpBridgeEnabled\": " << (doc->settings.horoMcpBridgeEnabled ? "true" : "false") << ",\n";
-        out << "    \"fmodIntegrationEnabled\": " << (doc->settings.fmodIntegrationEnabled ? "true" : "false") << ",\n";
-        out << "    \"steamworksSdkEnabled\": " << (doc->settings.steamworksSdkEnabled ? "true" : "false") << ",\n";
-        out << "    \"pluginDiscoveryPath\": \"" << EscapeJsonString(doc->settings.pluginDiscoveryPath) << "\"\n";
+        out << R"("horoMcpBridgeEnabled": )" << (s.horoMcpBridgeEnabled ? "true" : "false") << ",\n";
+        out << R"("fmodIntegrationEnabled": )" << (s.fmodIntegrationEnabled ? "true" : "false") << ",\n";
+        out << R"("steamworksSdkEnabled": )" << (s.steamworksSdkEnabled ? "true" : "false") << ",\n";
+        out << R"("pluginDiscoveryPath": ")" << EscapeJsonString(s.pluginDiscoveryPath) << R"(")" "\n";
         out << "  }\n";
         out << "}\n";
 
