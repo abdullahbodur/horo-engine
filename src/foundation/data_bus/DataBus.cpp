@@ -28,8 +28,8 @@ namespace Horo
     };
 
     Subscription::~Subscription() { Reset(); }
-    Subscription::Subscription(Subscription &&other) noexcept : m_release(std::move(other.m_release)) {}
-    Subscription &Subscription::operator=(Subscription &&other) noexcept { if (this != &other) { Reset(); m_release = std::move(other.m_release); } return *this; }
+    Subscription::Subscription(Subscription &&other) noexcept : m_release(std::move(other.m_release)) { other.m_release = nullptr; }
+    Subscription &Subscription::operator=(Subscription &&other) noexcept { if (this != &other) { Reset(); m_release = std::move(other.m_release); other.m_release = nullptr; } return *this; }
     void Subscription::Reset() noexcept { if (m_release) { m_release(); m_release = {}; } }
 
     EngineDataBus::EngineDataBus(EngineDataBusConfig config) : m_state(std::make_shared<State>(config)) {}

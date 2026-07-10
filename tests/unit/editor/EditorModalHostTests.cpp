@@ -72,8 +72,8 @@ private:
 void AcceptedRootGatesInteractionBeforeItsFirstOpenBoundary()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats stats;
+    EditorModalHost host(events);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     assert(host.InteractionScope().kind == EditorInteractionScopeKind::Modal);
@@ -90,9 +90,9 @@ void AcceptedRootGatesInteractionBeforeItsFirstOpenBoundary()
 void SecondRootIsRejectedAsBusy()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats firstStats;
     ModalStats secondStats;
+    EditorModalHost host(events);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, firstStats)).HasValue());
 
     const Result<void> result = host.OpenRoot(std::make_unique<RecordingModal>(2, secondStats));
@@ -103,8 +103,8 @@ void SecondRootIsRejectedAsBusy()
 void CloseRequestedDuringUpdateIsDeferredUntilTheFrameBoundary()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats stats{.requestCloseOnUpdate = true};
+    EditorModalHost host(events);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
@@ -118,8 +118,8 @@ void CloseRequestedDuringUpdateIsDeferredUntilTheFrameBoundary()
 void CloseRequestedDuringDrawIsDeferredUntilTheDrawBoundary()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats stats{.requestCloseOnDraw = true};
+    EditorModalHost host(events);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
@@ -133,8 +133,8 @@ void CloseRequestedDuringDrawIsDeferredUntilTheDrawBoundary()
 void TopAndScopeRestoreOnlyAfterDeferredCloseBoundary()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats stats;
+    EditorModalHost host(events);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
 
@@ -150,10 +150,10 @@ void TopAndScopeRestoreOnlyAfterDeferredCloseBoundary()
 void OnlyCurrentTopModalMayPushAChild()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats rootStats;
     ModalStats rejectedStats;
     ModalStats childStats;
+    EditorModalHost host(events);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
 
@@ -169,9 +169,9 @@ void OnlyCurrentTopModalMayPushAChild()
 void ChildPushCommitsAtTheNextHostFrameBoundary()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats rootStats;
     ModalStats childStats;
+    EditorModalHost host(events);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
@@ -190,9 +190,9 @@ void ChildPushCommitsAtTheNextHostFrameBoundary()
 void ForceDetachClosesEachModalOnceAndDoesNotRepeatCallbacks()
 {
     EditorDataBus events;
-    EditorModalHost host(events);
     ModalStats rootStats;
     ModalStats childStats;
+    EditorModalHost host(events);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
