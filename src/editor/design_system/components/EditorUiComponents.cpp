@@ -312,6 +312,7 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleColor(2);
         ImGui::PopStyleVar(4);
         ImGui::PopID();
+        return changed;
     }
 
     // ── InputTextControl ─────────────────────────────────────────────────
@@ -327,10 +328,11 @@ namespace Horo::Editor::Ui
         ImGui::PushStyleColor(ImGuiCol_Border, error ? Theme::Err() : Theme::Border());
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
 
+        bool changed = false;
         ImGui::PushItemWidth(-1.0F);
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
-            ImGui::InputText(id, buffer, bufferSize);
+            changed = ImGui::InputText(id, buffer, bufferSize);
         }
         ImGui::PopItemWidth();
 
@@ -349,6 +351,7 @@ namespace Horo::Editor::Ui
 
         ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(3);
+        return changed;
     }
 
     // ── ColorHexControl ───────────────────────────────────────────────────
