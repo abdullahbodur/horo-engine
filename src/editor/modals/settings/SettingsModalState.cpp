@@ -1,4 +1,5 @@
-#include "editor/modals/settings/SettingsModal.h"
+#include "Horo/Editor/SettingsModalDraft.h"
+#include "Horo/Editor/EditorSettingsService.h"
 
 #include "Horo/Editor/EditorSettingsStore.h"
 
@@ -136,12 +137,7 @@ namespace Horo::Editor
         st.statusIsError = false;
         st.statusMessage = "Loaded committed editor settings.";
 
-        // Initialise shortcut defaults
         st.input.shortcutCount = SettingsState::InputTab::kShortcutActionCount;
-        std::snprintf(st.input.shortcuts[0].keys, sizeof(st.input.shortcuts[0].keys), "%s", "Ctrl+S");
-        std::snprintf(st.input.shortcuts[1].keys, sizeof(st.input.shortcuts[1].keys), "%s", "Ctrl+Z");
-        std::snprintf(st.input.shortcuts[2].keys, sizeof(st.input.shortcuts[2].keys), "%s", "Ctrl+Shift+B");
-        // Remaining shortcuts start unbound
     }
 
     /** @copydoc SettingsModal.h */

@@ -245,13 +245,7 @@ namespace Horo::Editor
                 InputTextControl("##custom-theme", st.appearance.customThemePath, sizeof(st.appearance.customThemePath), f);
             });
             SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
-                const ImVec2 p = ImGui::GetCursorScreenPos();
-                ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + 34.0F, p.y + 34.0F}, Theme::U32(Theme::Accent()), Layout::Radius);
-                ImGui::Dummy({42.0F, 34.0F});
-                ImGui::SameLine(0.0F, 8.0F);
-                ImGui::PushItemWidth(Layout::ControlW - 50.0F);
-                InputTextControl("##accent", st.appearance.accentHex, sizeof(st.appearance.accentHex), f);
-                ImGui::PopItemWidth();
+                (void)ColorHexControl("accent-color", st.appearance.accentHex, sizeof(st.appearance.accentHex), f);
             });
             SettingGroup("TYPOGRAPHY & SCALE", f);
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
@@ -1603,31 +1597,9 @@ namespace Horo::Editor
             return requestClose;
         }
 
-        /** @brief Internal draw implementation for the Settings modal.
-         *
-         *  Handles modal initialisation, deferred theme application,
-         *  viewport clamping, and dispatches to the shell/layout primitives.
-         */
-        void DrawSettingsModalImpl(SettingsState &st, EditorSettingsService &settings, const Fonts &f, const ::ImTextureID logo)
+        [[nodiscard]] ModalFrameResult DrawSettingsModalPresentationImpl(SettingsState &st, EditorSettingsService &settings, const Fonts &f, const ::ImTextureID logo)
         {
-            if (!st.open)
-            {
-                st.wasOpen = false;
-                return;
-            }
-
-            if (!st.wasOpen || !st.initialized)
-            {
-                LoadSettingsForModal(st, settings);
-                st.wasOpen = true;
-            }
-
-            // Clear one-shot feedback at frame start
             st.modalFeedback[0] = '\0';
-
-            // Appearance preview requires a resolved-settings overlay. Until that
-            // authority is composed, the modal keeps this draft-only and never
-            // mutates Theme directly.
             st.appearance.pendingThemeIndex = -1;
 
             const ImGuiViewport *vp = ImGui::GetMainViewport();
@@ -1644,64 +1616,36 @@ namespace Horo::Editor
             ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
             ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
 
-            if (const bool isOpen = ImGui::BeginPopupModal("Settings",
-                                                       &st.open,
-                                                       ImGuiWindowFlags_NoResize |
-                                                           ImGuiWindowFlags_NoTitleBar |
-                                                           ImGuiWindowFlags_NoMove |
-                                                           ImGuiWindowFlags_NoSavedSettings |
-                                                           ImGuiWindowFlags_NoScrollbar |
-                                                           ImGuiWindowFlags_NoScrollWithMouse);
-                !isOpen)
-            {
-                ImGui::PopStyleColor(2);
-                ImGui::PopStyleVar(3);
-                return;
-            }
-
-            DrawHeader(st, f, logo);
+            ImGui::Begin("Settings", nullptr,
+                         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            const bool headerRequestedClose = DrawHeader(st, f, logo);
             const float bodyH = ImGui::GetWindowHeight() - Layout::HeaderH - Layout::FooterH;
             DrawNavigation(st, f, bodyH);
             ImGui::SameLine(0.0F, 0.0F);
             DrawContent(st, f, bodyH);
             st.dirty = CollectDraftSettings(st) != st.committed;
-            DrawFooter(st, settings, f);
-
-            if (!st.open)
-            {
-                st.wasOpen = false;
-            }
-
-            ImGui::EndPopup();
+            const bool footerRequestedClose = DrawFooter(st, settings, f);
+            ImGui::End();
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(3);
+
+            return (headerRequestedClose || footerRequestedClose)
+                ? ModalFrameResult::RequestClose(ModalCloseReason::Cancelled)
+                : ModalFrameResult::None();
         }
 
     } // namespace
 
-    /** @copydoc DrawSettingsModal */
-    void DrawSettingsModal(SettingsState &state, EditorDataBus &events, EditorSettingsService &settings,
-                           const Theme::Fonts &fonts, const ::ImTextureID logo)
+    ModalFrameResult DrawSettingsModalPresentation(SettingsState &state, EditorSettingsService &settings,
+                                                   const Theme::Fonts &fonts, const ::ImTextureID logo)
     {
-        const bool wasOpen = state.open;
-        const bool wasDirty = state.dirty;
-        const EditorSettings before = CollectDraftSettings(state);
-        DrawSettingsModalImpl(state, settings, fonts, logo);
-        const EditorSettings after = CollectDraftSettings(state);
-        if (wasOpen && state.open && before.themePreset != after.themePreset)
-        {
-            const std::uint64_t revision = settings.Snapshot().revision;
-            HORO_LOG_TRACE("editor.modal.settings", "preview revision=%llu domains=appearance",
-                           static_cast<unsigned long long>(revision));
-            events.Publish(EditorSettingsChangedEvent{revision, SettingsChangePhase::Preview, SettingsDomain::Appearance});
-        }
-        if (wasDirty && !state.open)
-        {
-            const std::uint64_t revision = settings.Snapshot().revision;
-            HORO_LOG_TRACE("editor.modal.settings", "reverted revision=%llu domains=all",
-                           static_cast<unsigned long long>(revision));
-            events.Publish(EditorSettingsChangedEvent{revision, SettingsChangePhase::Reverted, SettingsDomain::All});
-        }
+        return DrawSettingsModalPresentationImpl(state, settings, fonts, logo);
     }
 
+    ModalFrameResult SettingsModal::Draw()
+    {
+        return DrawSettingsModalPresentation(m_draft, m_settings, m_fonts, static_cast<::ImTextureID>(m_logo));
+    }
 } // namespace Horo::Editor

@@ -17,6 +17,11 @@ namespace Horo::Editor::Theme
     struct Fonts;
 }
 
+Horo::Editor::ModalFrameResult Horo::Editor::SettingsModal::Draw()
+{
+    return Horo::Editor::ModalFrameResult::None();
+}
+
 namespace
 {
 
@@ -34,7 +39,7 @@ struct SettingsFixture
 
 SettingsModal *Open(SettingsFixture &fixture)
 {
-    auto modal = std::make_unique<SettingsModal>(fixture.settings, fixture.fonts, nullptr);
+    auto modal = std::make_unique<SettingsModal>(fixture.settings, fixture.fonts, 0);
     SettingsModal *const result = modal.get();
     assert(fixture.host.OpenRoot(std::move(modal)).HasValue());
     fixture.host.OnUpdate(0.0F);

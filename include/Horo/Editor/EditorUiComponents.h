@@ -145,6 +145,17 @@ namespace Horo::Editor::Ui
     /** @brief Text input with shared frame styling. */
     void InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts);
 
+    /**
+     * @brief Draws a hex color input paired with a clickable swatch and anchored picker popup.
+     *
+     * @param id Stable UI identity.
+     * @param buffer Mutable `#RRGGBB` draft buffer. Invalid intermediate text leaves the last valid swatch visible.
+     * @param bufferSize Buffer capacity.
+     * @param fonts Editor typography handles.
+     * @return True when a valid color value was committed into @p buffer by typing or the picker.
+     */
+    [[nodiscard]] bool ColorHexControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts);
+
     /** @brief Integer input with shared frame styling. */
     void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts);
 

@@ -7,11 +7,13 @@
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Editor/WelcomeScreen.h"
+#include "Horo/Editor/GuiRoute.h"
+#include "Horo/Editor/ProjectCreationScreen.h"
 #include "Horo/Foundation/Logging/Logger.h"
 
 #include "editor/screens/welcome/WelcomeScreenGui.h"
-#include "editor/modals/new_project/NewProjectModal.h"
-#include "editor/modals/settings/SettingsModal.h"
+#include "editor/screens/project_creation/ProjectCreationScreenGui.h"
+#include "Horo/Editor/SettingsModal.h"
 
 #include <SDL.h>
 
@@ -26,6 +28,8 @@
 #endif
 
 #include <cstdio>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -258,13 +262,16 @@ namespace Horo::Editor
         ImGui_ImplOpenGL3_Init(glsl);
 
         bool run = true;
-        NewProjectState np;
-        SettingsState sets;
+        GuiRoute activeRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
+        std::optional<GuiRoute> pendingRoute;
+        ProjectCreationController projectCreation;
+        ProjectCreationScreenGuiState projectCreationGuiState;
         EngineDataBus engineEvents;
         EditorDataBus editorEvents;
         const EditorSettings initialSettings = LoadEditorSettingsDocument().settings;
         ConfigurationService configuration = CreateEditorConfigurationService(initialSettings, &engineEvents);
         EditorSettingsService settings{initialSettings, configuration, editorEvents};
+        EditorModalHost modalHost{editorEvents};
         while (run)
         {
             engineEvents.DispatchQueued();
@@ -282,29 +289,41 @@ namespace Horo::Editor
             ImGui_ImplSDL2_NewFrame();
             ImGui::NewFrame();
 
-            // Apply any deferred theme change before any window renders,
-            // so the entire frame (Welcome Screen included) uses the new theme.
-            if (sets.appearance.pendingThemeIndex >= 0)
+            if (activeRoute.kind == GuiRouteKind::Welcome)
             {
-                Theme::SelectThemeByIndex(sets.appearance.pendingThemeIndex);
-                sets.appearance.pendingThemeIndex = -1;
-            }
-
-            if (const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
+                const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
                     vm, fonts, WelcomeScreenGuiAssets{textures.logo});
-                command == WelcomeScreenGuiCommand::NewProject)
-            {
-                np.open = true;
-                ImGui::OpenPopup("New Project");
+                if (command == WelcomeScreenGuiCommand::NewProject)
+                {
+                    pendingRoute = GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}};
+                }
+                else if (command == WelcomeScreenGuiCommand::OpenSettings)
+                {
+                    (void)modalHost.OpenRoot(std::make_unique<SettingsModal>(settings, fonts, textures.logo));
+                }
+
+                modalHost.OnUpdate(io.DeltaTime);
+                modalHost.Draw();
             }
-            else if (command == WelcomeScreenGuiCommand::OpenSettings)
+            else if (activeRoute.kind == GuiRouteKind::ProjectCreation)
             {
-                sets.open = true;
-                ImGui::OpenPopup("Settings");
+                if (DrawProjectCreationScreenGui(projectCreation, projectCreationGuiState, fonts, textures.logo) ==
+                    ProjectCreationScreenGuiCommand::ReturnToWelcome)
+                {
+                    pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
+                }
             }
 
-            DrawNewProjectModal(np, fonts, textures.logo);
-            DrawSettingsModal(sets, editorEvents, settings, fonts, textures.logo);
+            if (pendingRoute.has_value())
+            {
+                activeRoute = std::move(*pendingRoute);
+                pendingRoute.reset();
+                if (activeRoute.kind == GuiRouteKind::ProjectCreation)
+                {
+                    projectCreation = ProjectCreationController{};
+                    projectCreationGuiState = ProjectCreationScreenGuiState{};
+                }
+            }
 
             ImGui::Render();
             int drawableW = 0;

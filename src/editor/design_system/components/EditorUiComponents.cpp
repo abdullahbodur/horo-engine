@@ -216,6 +216,94 @@ namespace Horo::Editor::Ui
         PopControlStyle();
     }
 
+    // ── ColorHexControl ───────────────────────────────────────────────────
+
+    bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts)
+    {
+        const auto hexDigit = [](const char value) -> int {
+            if (value >= '0' && value <= '9') return value - '0';
+            if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+            if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+            return -1;
+        };
+        const auto parse = [&hexDigit](const char *text, ImVec4 &out) -> bool {
+            if (!text || text[0] != '#' || text[7] != '\0') return false;
+            const int digits[6] = {hexDigit(text[1]), hexDigit(text[2]), hexDigit(text[3]),
+                                   hexDigit(text[4]), hexDigit(text[5]), hexDigit(text[6])};
+            for (const int digit : digits) if (digit < 0) return false;
+            out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
+                         static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
+                         static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F};
+            return true;
+        };
+        const auto pack = [](const ImVec4 color) -> ImU32 { return ImGui::ColorConvertFloat4ToU32(color); };
+        const auto unpack = [](const ImU32 color) -> ImVec4 { return ImGui::ColorConvertU32ToFloat4(color); };
+        const auto writeCanonical = [buffer, bufferSize](const ImVec4 color) {
+            const int red = static_cast<int>(color.x * 255.0F + 0.5F);
+            const int green = static_cast<int>(color.y * 255.0F + 0.5F);
+            const int blue = static_cast<int>(color.z * 255.0F + 0.5F);
+            std::snprintf(buffer, bufferSize, "#%02X%02X%02X", red, green, blue);
+        };
+
+        ImGui::PushID(id);
+        ImGuiStorage *const storage = ImGui::GetStateStorage();
+        const ImGuiID lastValidKey = ImGui::GetID("last-valid-color");
+        ImVec4 current{};
+        if (parse(buffer, current))
+        {
+            storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
+        }
+        else if (storage->GetInt(lastValidKey, 0) != 0)
+        {
+            current = unpack(static_cast<ImU32>(storage->GetInt(lastValidKey)));
+        }
+        else
+        {
+            current = Theme::Accent();
+            storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
+        }
+
+        const ImVec2 swatchPosition = ImGui::GetCursorScreenPos();
+        constexpr ImVec2 swatchSize{34.0F, 34.0F};
+        ImGui::InvisibleButton("swatch", swatchSize);
+        const bool openPicker = ImGui::IsItemClicked();
+        ImDrawList *const drawList = ImGui::GetWindowDrawList();
+        const ImVec2 swatchEnd{swatchPosition.x + swatchSize.x, swatchPosition.y + swatchSize.y};
+        drawList->AddRectFilled(swatchPosition, swatchEnd, ImGui::ColorConvertFloat4ToU32(current), Theme::Layout::Radius);
+        drawList->AddRect(swatchPosition, swatchEnd, Theme::U32(Theme::Border()), Theme::Layout::Radius);
+        if (openPicker) ImGui::OpenPopup("picker");
+
+        ImGui::SameLine(0.0F, 8.0F);
+        PushControlStyle();
+        ImGui::PushItemWidth(-1.0F);
+        bool validChange = false;
+        {
+            Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+            if (ImGui::InputText("hex", buffer, bufferSize) && parse(buffer, current))
+            {
+                storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
+                validChange = true;
+            }
+        }
+        ImGui::PopItemWidth();
+        PopControlStyle();
+
+        if (ImGui::BeginPopup("picker"))
+        {
+            ImGui::TextUnformatted("Accent color");
+            ImGui::Separator();
+            if (ImGui::ColorPicker3("##color-picker", &current.x, ImGuiColorEditFlags_NoSidePreview))
+            {
+                writeCanonical(current);
+                storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
+                validChange = true;
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+        return validChange;
+    }
+
     // ── InputIntControl ──────────────────────────────────────────────────
 
     void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts)

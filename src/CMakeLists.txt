@@ -27,11 +27,15 @@ target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroEditorScreens STATIC
     editor/screens/WelcomeScreen.cpp
+    editor/screens/project_creation/ProjectCreationScreen.cpp
+    editor/project_model/ProjectCreationService.cpp
     editor/settings/EditorConfiguration.cpp
     editor/settings/EditorSettingsService.cpp
     editor/settings/EditorSettingsStore.cpp
     editor/data_bus/EditorDataBus.cpp
     editor/modals/EditorModalHost.cpp
+    editor/modals/settings/SettingsModalLifecycle.cpp
+    editor/modals/settings/SettingsModalState.cpp
 )
 
 add_library(HoroEngine::EditorScreens ALIAS HoroEditorScreens)
@@ -40,6 +44,8 @@ target_compile_features(HoroEditorScreens PUBLIC cxx_std_20)
 target_include_directories(HoroEditorScreens
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(HoroEditorScreens PUBLIC HoroEngine::Foundation)
@@ -51,8 +57,8 @@ if(HORO_BUILD_EDITOR_GUI)
         editor/app/EditorTheme.cpp
         editor/modals/new_project/NewProjectModal.cpp
         editor/modals/settings/SettingsModal.cpp
-        editor/modals/settings/SettingsModalState.cpp
         editor/screens/welcome/WelcomeScreenGui.cpp
+        editor/screens/project_creation/ProjectCreationScreenGui.cpp
     )
 
     add_library(HoroEngine::EditorGuiBackend ALIAS HoroEditorGuiBackend)

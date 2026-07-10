@@ -34,6 +34,30 @@ target_link_libraries(HoroSettingsModalLifecycleTests
 
 add_test(NAME HoroSettingsModalLifecycleTests COMMAND HoroSettingsModalLifecycleTests)
 
+add_executable(HoroProjectCreationScreenTests
+    unit/editor/ProjectCreationScreenTests.cpp
+)
+
+target_compile_features(HoroProjectCreationScreenTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectCreationScreenTests
+    PRIVATE
+        HoroEngine::EditorScreens
+)
+
+add_test(NAME HoroProjectCreationScreenTests COMMAND HoroProjectCreationScreenTests)
+
+add_executable(HoroProjectCreationServiceTests
+    unit/editor/ProjectCreationServiceTests.cpp
+)
+
+target_compile_features(HoroProjectCreationServiceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectCreationServiceTests
+    PRIVATE
+        HoroEngine::EditorScreens
+)
+
+add_test(NAME HoroProjectCreationServiceTests COMMAND HoroProjectCreationServiceTests)
+
 add_executable(HoroEditorSettingsStoreTests
     unit/editor/EditorSettingsStoreTests.cpp
 )

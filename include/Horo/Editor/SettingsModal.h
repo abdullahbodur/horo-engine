@@ -20,7 +20,7 @@ namespace Horo::Editor
         static constexpr std::uint64_t kModalId = 0x53455454494E4753ULL;
 
         /** @brief Constructs the settings workflow with only its settings authority and presentation assets. */
-        SettingsModal(EditorSettingsService &settings, const Theme::Fonts &fonts, void *logo) noexcept;
+        SettingsModal(EditorSettingsService &settings, const Theme::Fonts &fonts, std::uintptr_t logo) noexcept;
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;
@@ -38,7 +38,7 @@ namespace Horo::Editor
     private:
         EditorSettingsService &m_settings;
         const Theme::Fonts &m_fonts;
-        void *m_logo = nullptr;
+        std::uintptr_t m_logo = 0;
         EditorDataBus *m_events = nullptr;
         SettingsState m_draft;
         bool m_revertedPublished = false;
