@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
+#include <vector>
 
 namespace Horo::Editor::Ui
 {
@@ -407,6 +409,208 @@ namespace Horo::Editor::Ui
             ImGui::PopStyleColor(4);
             ImGui::PopStyleVar(2);
         }
+    }
+
+    // ── ShortcutRecorder ──────────────────────────────────────────────────
+
+    [[nodiscard]] bool ShortcutRecorder(const char *id,
+                                        const char *keysLabel,
+                                        bool *listening,
+                                        char *keysOut,
+                                        const int keysOutSize,
+                                        const Theme::Fonts &fonts)
+    {
+        using namespace Theme;
+        ImGui::PushID(id);
+
+        bool recorded = false;
+
+        if (*listening)
+        {
+            // ── Poll key state ──────────────────────────────────────────
+            const auto &io = ImGui::GetIO();
+
+            // Escape cancels listening
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            {
+                *listening = false;
+                ImGui::PopID();
+                return false;
+            }
+
+            const bool ctrl = io.KeyCtrl || io.KeySuper;
+            const bool shift = io.KeyShift;
+            const bool alt = io.KeyAlt;
+
+            // Check non-modifier keys (A-Z, 0-9)
+            for (int k = ImGuiKey_A; k <= ImGuiKey_Z; ++k)
+            {
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(k), false))
+                {
+                    std::string combo;
+                    if (ctrl) combo += "Ctrl+";
+                    if (shift) combo += "Shift+";
+                    if (alt) combo += "Alt+";
+                    combo += ImGui::GetKeyName(static_cast<ImGuiKey>(k));
+
+                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
+                                  "%s", combo.c_str());
+                    *listening = false;
+                    recorded = true;
+                    ImGui::PopID();
+                    return true;
+                }
+            }
+
+            // Check F-keys
+            for (int k = ImGuiKey_F1; k <= ImGuiKey_F12; ++k)
+            {
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(k), false))
+                {
+                    std::string combo;
+                    if (ctrl) combo += "Ctrl+";
+                    if (shift) combo += "Shift+";
+                    if (alt) combo += "Alt+";
+                    combo += ImGui::GetKeyName(static_cast<ImGuiKey>(k));
+
+                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
+                                  "%s", combo.c_str());
+                    *listening = false;
+                    recorded = true;
+                    ImGui::PopID();
+                    return true;
+                }
+            }
+
+            // Special keys
+            static constexpr ImGuiKey kSpecial[] = {
+                ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace,
+                ImGuiKey_Delete, ImGuiKey_Enter, ImGuiKey_Home, ImGuiKey_End,
+                ImGuiKey_LeftArrow, ImGuiKey_RightArrow,
+                ImGuiKey_UpArrow, ImGuiKey_DownArrow,
+                ImGuiKey_PageUp, ImGuiKey_PageDown,
+            };
+            for (const auto k : kSpecial)
+            {
+                if (ImGui::IsKeyPressed(k, false))
+                {
+                    std::string combo;
+                    if (ctrl) combo += "Ctrl+";
+                    if (shift) combo += "Shift+";
+                    if (alt) combo += "Alt+";
+                    combo += ImGui::GetKeyName(k);
+
+                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
+                                  "%s", combo.c_str());
+                    *listening = false;
+                    recorded = true;
+                    ImGui::PopID();
+                    return true;
+                }
+            }
+        }
+
+        // ── Draw the recorder UI ────────────────────────────────────────
+        const float width = Layout::ControlW;
+        const ImVec2 cursor = ImGui::GetCursorScreenPos();
+        const ImVec2 size = {width, 28.0F};
+
+        // Dashed border background
+        auto *dl = ImGui::GetWindowDrawList();
+        const ImU32 borderCol = *listening ? U32(Accent()) : U32(BorderStrong());
+        const ImU32 bgCol = *listening
+                                ? ImGui::GetColorU32(ImVec4{Accent().x, Accent().y, Accent().z, 0.06F})
+                                : U32(ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
+
+        dl->AddRectFilled(cursor, {cursor.x + size.x, cursor.y + size.y},
+                          bgCol, Layout::Radius);
+
+        // Draw dashed border manually (4px dash segments)
+        const ImU32 dashCol = borderCol;
+        const float r = Layout::Radius;
+        const auto drawDashRect = [&](ImVec2 p0, ImVec2 p1) {
+            // Simple solid border for now — dashed is complex in ImDrawList
+            dl->AddRect(p0, p1, dashCol, r, 0, 1.0F);
+        };
+        drawDashRect(cursor, {cursor.x + size.x, cursor.y + size.y});
+
+        // Invisible button for click detection
+        ImGui::SetCursorScreenPos(cursor);
+        ImGui::InvisibleButton("recorder", size);
+
+        if (ImGui::IsItemClicked() && !(*listening))
+        {
+            *listening = true;
+        }
+
+        // Draw content on top
+        if (*listening)
+        {
+            const char *text = "Press keys...";
+            const ImVec2 textSize = ImGui::CalcTextSize(text);
+            dl->AddText(fonts.mono, 11.0F,
+                        {cursor.x + (size.x - textSize.x) * 0.5F,
+                         cursor.y + (size.y - textSize.y) * 0.5F},
+                        U32(Accent()), text);
+        }
+        else if (keysLabel && keysLabel[0] != '\0')
+        {
+            // Parse keysLabel "Ctrl+Shift+B" into individual kbd chips
+            std::string label{keysLabel};
+            std::vector<std::string> parts;
+            std::size_t pos = 0;
+            while (pos < label.size())
+            {
+                auto next = label.find('+', pos);
+                parts.push_back(label.substr(pos, next - pos));
+                if (next == std::string::npos) break;
+                pos = next + 1;
+            }
+
+            float totalW = 0.0F;
+            for (std::size_t i = 0; i < parts.size(); ++i)
+            {
+                const auto &p = parts[i];
+                const ImVec2 ts = ImGui::CalcTextSize(p.c_str());
+                totalW += ts.x + 10.0F; // padding
+                if (i < parts.size() - 1) totalW += 8.0F; // "+"
+            }
+
+            float x = cursor.x + (size.x - totalW) * 0.5F;
+            const float y = cursor.y + (size.y - 14.0F) * 0.5F;
+            for (std::size_t i = 0; i < parts.size(); ++i)
+            {
+                const auto &p = parts[i];
+                const ImVec2 ts = ImGui::CalcTextSize(p.c_str());
+                const ImVec2 chipMin = {x, y};
+                const ImVec2 chipMax = {x + ts.x + 10.0F, y + 18.0F};
+
+                dl->AddRectFilled(chipMin, chipMax, U32(Bg3()), 3.0F);
+                dl->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
+                dl->AddText(fonts.mono, 10.5F,
+                            {x + 5.0F, y + 2.0F}, U32(Text()), p.c_str());
+
+                x += ts.x + 10.0F;
+                if (i < parts.size() - 1)
+                {
+                    dl->AddText(fonts.mono, 10.0F,
+                                {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
+                    x += 12.0F;
+                }
+            }
+        }
+        else
+        {
+            const char *placeholder = "Click to record";
+            const ImVec2 ts = ImGui::CalcTextSize(placeholder);
+            dl->AddText(fonts.mono, 11.0F,
+                        {cursor.x + (size.x - ts.x) * 0.5F,
+                         cursor.y + (size.y - ts.y) * 0.5F},
+                        U32(Dim()), placeholder);
+        }
+
+        ImGui::PopID();
+        return recorded;
     }
 
     // ── ThemeChip ────────────────────────────────────────────────────────

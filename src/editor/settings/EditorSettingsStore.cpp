@@ -371,6 +371,8 @@ namespace Horo::Editor
             if (auto v = FindStringValue(json, "accentColorHex"); v.has_value()) s.accentColorHex = *v;
             if (auto v = FindIntValue(json, "uiScalePercent"); v.has_value()) s.uiScalePercent = *v;
             if (auto v = FindIntValue(json, "codeFontSizePx"); v.has_value()) s.codeFontSizePx = *v;
+            if (auto v = FindStringValue(json, "uiFontFamily"); v.has_value()) s.uiFontFamily = *v;
+            if (auto v = FindStringValue(json, "codeFontFamily"); v.has_value()) s.codeFontFamily = *v;
 
             if (auto v = FindIntValue(json, "orbitSensitivity"); v.has_value()) s.orbitSensitivity = *v;
             if (auto v = FindIntValue(json, "panSensitivity"); v.has_value()) s.panSensitivity = *v;
@@ -601,7 +603,9 @@ namespace Horo::Editor
         out << "    \"themePreset\": \"" << ToString(doc->settings.themePreset) << "\",\n";
         out << "    \"accentColorHex\": \"" << EscapeJsonString(doc->settings.accentColorHex) << "\",\n";
         out << "    \"uiScalePercent\": " << doc->settings.uiScalePercent << ",\n";
-        out << "    \"codeFontSizePx\": " << doc->settings.codeFontSizePx << "\n";
+        out << "    \"codeFontSizePx\": " << doc->settings.codeFontSizePx << ",\n";
+        out << "    \"uiFontFamily\": \"" << EscapeJsonString(doc->settings.uiFontFamily) << "\",\n";
+        out << "    \"codeFontFamily\": \"" << EscapeJsonString(doc->settings.codeFontFamily) << "\"\n";
         out << "  },\n";
         out << "  \"input\": {\n";
         out << "    \"orbitSensitivity\": " << doc->settings.orbitSensitivity << ",\n";

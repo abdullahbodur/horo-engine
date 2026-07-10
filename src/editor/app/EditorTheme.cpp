@@ -18,7 +18,76 @@ namespace Horo::Editor::Theme
 
     namespace
     {
-        void ApplyHoroDark(ImGuiStyle &style);  // forward — defined below
+        using namespace DesignSystem;
+
+        void ApplyHoroDark(ImGuiStyle &style);   // forward — defined below
+        void ApplyMidnight(ImGuiStyle &style);   // forward — defined below
+        void ApplyLight(ImGuiStyle &style);      // forward — defined below
+
+        // ── Active design tokens (runtime-switchable) ──────────────────
+        DesignTokens g_activeTokens = DefaultDesignTokens();
+
+        /** @brief Light theme design tokens — surface colors inverted, accents unchanged. */
+        void ApplyLightDesignTokens()
+        {
+            g_activeTokens = DesignTokens{
+                ColorTokens{
+                    ::ImVec4{0.941F, 0.937F, 0.929F, 1.0F},  // surfaceRoot
+                    ::ImVec4{0.961F, 0.957F, 0.953F, 1.0F},  // surfaceWindow
+                    ::ImVec4{0.929F, 0.925F, 0.918F, 1.0F},  // surfacePanel
+                    ::ImVec4{0.902F, 0.898F, 0.890F, 1.0F},  // surfaceRaised
+                    ::ImVec4{0.867F, 0.863F, 0.855F, 1.0F},  // surfaceHover
+                    ::ImVec4{0.784F, 0.780F, 0.773F, 1.0F},  // border
+                    ::ImVec4{0.659F, 0.655F, 0.647F, 1.0F},  // borderStrong
+                    ::ImVec4{0.125F, 0.129F, 0.137F, 1.0F},  // textPrimary
+                    ::ImVec4{0.400F, 0.396F, 0.388F, 1.0F},  // textMuted
+                    ::ImVec4{0.529F, 0.525F, 0.518F, 1.0F},  // textDim
+                    ::ImVec4{0.016F, 0.647F, 0.988F, 1.0F},  // actionPrimary
+                    ::ImVec4{0.180F, 0.706F, 0.992F, 1.0F},  // actionPrimaryHover
+                    ::ImVec4{0.000F, 0.500F, 0.820F, 1.0F},  // actionPrimaryActive
+                    ::ImVec4{0.016F, 0.647F, 0.988F, 0.15F}, // actionPrimarySoft
+                    ::ImVec4{0.373F, 0.722F, 0.541F, 1.0F},  // statusOk
+                    ::ImVec4{0.910F, 0.639F, 0.239F, 1.0F},  // statusWarn
+                    ::ImVec4{0.831F, 0.322F, 0.290F, 1.0F},  // statusError
+                    ::ImVec4{0.071F, 0.082F, 0.102F, 1.0F},  // textOnActionPrimary
+                },
+                TypographyTokens{16.0F, 14.0F, 16.0F},
+                RadiusTokens{4.0F, 6.0F, 8.0F},
+                SizeTokens{280.0F, 32.0F, 900.0F, 680.0F, 58.0F, 52.0F, 220.0F, 620.0F, 440.0F},
+                SpacingTokens{18.0F, 14.0F, 28.0F, 24.0F, 14.0F, 18.0F},
+            };
+        }
+
+        /** @brief Midnight theme design tokens — dark surface with purple accents. */
+        void ApplyMidnightDesignTokens()
+        {
+            g_activeTokens = DesignTokens{
+                ColorTokens{
+                    ::ImVec4{0.027F, 0.039F, 0.063F, 1.0F},  // surfaceRoot
+                    ::ImVec4{0.047F, 0.063F, 0.094F, 1.0F},  // surfaceWindow
+                    ::ImVec4{0.059F, 0.078F, 0.110F, 1.0F},  // surfacePanel
+                    ::ImVec4{0.086F, 0.106F, 0.149F, 1.0F},  // surfaceRaised
+                    ::ImVec4{0.106F, 0.125F, 0.173F, 1.0F},  // surfaceHover
+                    ::ImVec4{0.149F, 0.169F, 0.216F, 1.0F},  // border
+                    ::ImVec4{0.212F, 0.231F, 0.278F, 1.0F},  // borderStrong
+                    ::ImVec4{0.867F, 0.855F, 0.898F, 1.0F},  // textPrimary
+                    ::ImVec4{0.600F, 0.580F, 0.640F, 1.0F},  // textMuted
+                    ::ImVec4{0.361F, 0.349F, 0.400F, 1.0F},  // textDim
+                    ::ImVec4{0.447F, 0.282F, 0.847F, 1.0F},  // actionPrimary
+                    ::ImVec4{0.545F, 0.400F, 0.902F, 1.0F},  // actionPrimaryHover
+                    ::ImVec4{0.369F, 0.220F, 0.749F, 1.0F},  // actionPrimaryActive
+                    ::ImVec4{0.447F, 0.282F, 0.847F, 0.15F}, // actionPrimarySoft
+                    ::ImVec4{0.373F, 0.722F, 0.541F, 1.0F},  // statusOk
+                    ::ImVec4{0.910F, 0.639F, 0.239F, 1.0F},  // statusWarn
+                    ::ImVec4{0.831F, 0.322F, 0.290F, 1.0F},  // statusError
+                    ::ImVec4{0.020F, 0.075F, 0.110F, 1.0F},  // textOnActionPrimary
+                },
+                TypographyTokens{16.0F, 14.0F, 16.0F},
+                RadiusTokens{4.0F, 6.0F, 8.0F},
+                SizeTokens{280.0F, 32.0F, 900.0F, 680.0F, 58.0F, 52.0F, 220.0F, 620.0F, 440.0F},
+                SpacingTokens{18.0F, 14.0F, 28.0F, 24.0F, 14.0F, 18.0F},
+            };
+        }
 
         // ── Built-in theme definitions ───────────────────────────────────
         void ApplyColorsToStyle(const std::unordered_map<std::string, ImVec4> &colors, ImGuiStyle &style)
@@ -135,6 +204,11 @@ namespace Horo::Editor::Theme
         return g_themeList;
     }
 
+    const DesignTokens &GetActiveTokens()
+    {
+        return g_activeTokens;
+    }
+
     void RefreshThemeList(const char *additionalPath)
     {
         g_themeList.clear();
@@ -169,6 +243,8 @@ namespace Horo::Editor::Theme
             e.colors["SliderGrab"]       = ImVec4{0.447F, 0.282F, 0.847F, 1.0F};
             e.colors["SliderGrabActive"] = ImVec4{0.545F, 0.400F, 0.902F, 1.0F};
             e.colors["Header"]           = ImVec4{0.447F, 0.282F, 0.847F, 0.18F};
+            e.colors["HeaderHovered"]    = ImVec4{0.106F, 0.125F, 0.173F, 1.0F};
+            e.colors["HeaderActive"]     = ImVec4{0.447F, 0.282F, 0.847F, 0.25F};
             e.colors["ResizeGrip"]       = ImVec4{0.447F, 0.282F, 0.847F, 0.25F};
             e.colors["ResizeGripHovered"] = ImVec4{0.447F, 0.282F, 0.847F, 0.67F};
             e.colors["ResizeGripActive"] = ImVec4{0.447F, 0.282F, 0.847F, 1.0F};
@@ -201,6 +277,8 @@ namespace Horo::Editor::Theme
             e.colors["SliderGrab"]       = ImVec4{0.016F, 0.647F, 0.988F, 1.0F};
             e.colors["SliderGrabActive"] = ImVec4{0.149F, 0.714F, 0.992F, 1.0F};
             e.colors["Header"]           = ImVec4{0.016F, 0.647F, 0.988F, 0.12F};
+            e.colors["HeaderHovered"]    = ImVec4{0.867F, 0.863F, 0.855F, 1.0F};
+            e.colors["HeaderActive"]     = ImVec4{0.016F, 0.647F, 0.988F, 0.18F};
             e.colors["ResizeGrip"]       = ImVec4{0.016F, 0.647F, 0.988F, 0.25F};
             e.colors["ResizeGripHovered"] = ImVec4{0.016F, 0.647F, 0.988F, 0.67F};
             e.colors["ResizeGripActive"] = ImVec4{0.016F, 0.647F, 0.988F, 1.0F};
@@ -277,14 +355,47 @@ namespace Horo::Editor::Theme
         g_activeThemeIndex = index;
         const auto &entry = g_themeList[index];
 
+        // Always apply ImGui style colors when the entry carries custom values.
         if (!entry.colors.empty())
-        {
             ApplyColorsToStyle(entry.colors, ImGui::GetStyle());
-        }
-        else if (index == 0)
+
+        // Select the DesignTokens based on the built-in preset index.
+        // Built-in entries (0=HoroDark, 1=Midnight, 2=Light) may or may
+        // not carry a colors map, but the token set is always known.
+        if (entry.isBuiltIn)
         {
-            // Horo Dark — default (no custom colors, uses constexpr palette)
-            ApplyHoroDark(ImGui::GetStyle());
+            if (index == 0)
+            {
+                // Horo Dark — apply style fallback if no colors in entry
+                if (entry.colors.empty())
+                    ApplyHoroDark(ImGui::GetStyle());
+                g_activeTokens = DefaultDesignTokens();
+            }
+            else if (index == 1)
+            {
+                // Midnight — dark surface + purple accent
+                if (entry.colors.empty())
+                    ApplyMidnight(ImGui::GetStyle());
+                ApplyMidnightDesignTokens();
+            }
+            else if (index == 2)
+            {
+                // Light — inverted surface + blue accent
+                if (entry.colors.empty())
+                    ApplyLight(ImGui::GetStyle());
+                ApplyLightDesignTokens();
+            }
+            else
+            {
+                // Future built-in: fall back to Horo Dark tokens
+                g_activeTokens = DefaultDesignTokens();
+            }
+        }
+        else
+        {
+            // Custom JSON theme: ImGui style already applied above;
+            // token derivation from JSON is future work.
+            g_activeTokens = DefaultDesignTokens();
         }
     }
 
@@ -434,9 +545,18 @@ namespace Horo::Editor::Theme
     {
         switch (g_preset)
         {
-        case Preset::Midnight: ApplyMidnight(ImGui::GetStyle()); break;
-        case Preset::Light:    ApplyLight(ImGui::GetStyle()); break;
-        default:               ApplyHoroDark(ImGui::GetStyle()); break;
+        case Preset::Midnight:
+            ApplyMidnight(ImGui::GetStyle());
+            ApplyMidnightDesignTokens();
+            break;
+        case Preset::Light:
+            ApplyLight(ImGui::GetStyle());
+            ApplyLightDesignTokens();
+            break;
+        default:
+            ApplyHoroDark(ImGui::GetStyle());
+            g_activeTokens = DefaultDesignTokens();
+            break;
         }
     }
 

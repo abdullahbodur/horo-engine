@@ -188,6 +188,26 @@ namespace Horo::Editor::Ui
     /** @brief Draws a keyboard shortcut display (keycap chips). */
     void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::Fonts &fonts);
 
+    /**
+     * @brief Interactive shortcut key recorder.
+     *
+     * When @p listening is false, renders the current key binding as kbd chips
+     * inside a dashed-border clickable area. Sets @p listening = true on click.
+     *
+     * When @p listening is true, shows "Press keys..." with a pulse effect
+     * and polls ImGui key state. On next non-modifier key press, writes the
+     * combo string into @p keysOut (truncated to @p keysOutSize) and sets
+     * @p listening = false. Escape cancels without writing.
+     *
+     * @return true if a new key combo was just recorded this frame.
+     */
+    [[nodiscard]] bool ShortcutRecorder(const char *id,
+                                        const char *keysLabel,
+                                        bool *listening,
+                                        char *keysOut,
+                                        int keysOutSize,
+                                        const Theme::Fonts &fonts);
+
     /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */
     [[nodiscard]] bool ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);
 

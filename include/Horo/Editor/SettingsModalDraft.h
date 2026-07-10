@@ -1,0 +1,59 @@
+#pragma once
+
+#include "Horo/Editor/EditorSettingsStore.h"
+
+#include <cstdint>
+#include <string>
+
+namespace Horo::Editor
+{
+    class EditorSettingsService;
+
+    /** @brief Modal-owned mutable draft for the editor settings workflow. */
+    struct SettingsState
+    {
+        bool initialized = false;
+        bool wasOpen = false;
+        bool dirty = false;
+        EditorSettings committed{};
+        std::string statusMessage;
+        bool statusIsError = false;
+        int activeTab = 0;
+        std::uint64_t settingsRevision = 0;
+
+        struct GeneralTab { int startupAction = 0; int autoSaveInterval = 5; bool confirmExit = true; bool restoreWorkspace = true; char defaultScene[64] = "Assets/Scenes/Main"; } general;
+        struct AppearanceTab { int themeIndex = 0; char customThemePath[128] = "~/.horo/themes/my-theme.json"; int uiScale = 100; char editorFontSize[8] = "15"; char accentHex[16] = "#04A5FC"; int pendingThemeIndex = -1; } appearance;
+        struct InputTab
+        {
+            int orbitSensitivity = 100;
+            int panSensitivity = 100;
+            bool invertOrbitY = false;
+            static constexpr int kMaxShortcuts = 16;
+            struct ShortcutBinding { char keys[32]{}; bool conflict = false; };
+            ShortcutBinding shortcuts[kMaxShortcuts];
+            int shortcutCount = 0;
+            int listeningShortcut = -1;
+            static constexpr const char *kShortcutActions[] = {"Save Scene", "Undo", "Build & Release", "Find", "Replace", "Duplicate", "Delete", "Select All"};
+            static constexpr int kShortcutActionCount = sizeof(kShortcutActions) / sizeof(kShortcutActions[0]);
+        } input;
+        struct RenderingTab { int viewportMode = 0; bool gridOverlay = true; int renderingTier = 0; char textureBudget[32] = "2048 MB"; int renderBackend = 0; } rendering;
+        struct AudioTab { int masterVolume = 80; int audioOutputDevice = 0; bool audioEnabled = true; } audio;
+        struct NetworkTab { int maxPreviewClients = 4; int simulatedLatencyMs = 0; int packageDownloadThreads = 8; } network;
+        struct DiagnosticsTab { int consoleLogLevel = 2; bool writeLogToFile = true; bool autoCaptureStutter = false; float stutterThresholdMs = 33.3F; bool showFps = false; bool anonymousTelemetry = false; } diagnostics;
+        int pluginSectionTab = 0;
+        int selectedPlugin = 0;
+        int pluginDetailTab[3] = {};
+        char pluginFilter[64]{};
+        char modalFeedback[256]{};
+        struct PluginToggles { bool horoMcpBridge = true; bool fmodIntegration = true; bool steamworksSdk = false; } plugins;
+        struct McpSettings { int transportMode = 0; int port = 8080; bool requireToken = true; bool allowRemote = false; int toolScope = 0; char assetRoot[64] = "Assets/Generated"; } mcp;
+        struct FmodSettings { char studioPath[128] = "/Applications/FMOD Studio.app"; char projectFile[64] = "Audio/HoroAudio.fspro"; char bankPath[64] = "Assets/Audio/Banks"; bool liveUpdate = true; bool failOnMissing = true; int targetPlatform = 0; } fmod;
+        struct SteamSettings { char sdkPath[64] = "ThirdParty/Steamworks"; int initMode = 0; bool overlay = true; bool achievements = true; bool networking = false; } steam;
+        struct PluginRuntime { char discoveryPaths[128] = "{project}/plugins; ~/.horo/plugins"; int loadOrder = 0; char devPath[64] = "~/dev/horo-plugins"; bool sandbox = true; int unsignedPolicy = 0; int networkPolicy = 0; int updateCheck = 0; int compatMode = 0; } runtime;
+    };
+
+    [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &state);
+    void ApplySettingsToDraft(SettingsState &state, const EditorSettings &settings);
+    void LoadSettingsForModal(SettingsState &state, const EditorSettingsService &settings);
+    [[nodiscard]] bool ApplySettings(SettingsState &state, EditorSettingsService &settings);
+} // namespace Horo::Editor

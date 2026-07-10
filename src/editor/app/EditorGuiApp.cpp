@@ -1,6 +1,11 @@
 #include "Horo/Editor/EditorGuiApp.h"
 
 #include "Horo/Editor/EditorTheme.h"
+#include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/EditorSettingsService.h"
+#include "Horo/Editor/EditorConfiguration.h"
+#include "Horo/Editor/EditorDataBus.h"
+#include "Horo/Foundation/DataBus.h"
 #include "Horo/Editor/WelcomeScreen.h"
 #include "Horo/Foundation/Logging/Logger.h"
 
@@ -235,6 +240,17 @@ namespace Horo::Editor
         auto fonts = LoadEditorFonts(io, QueryRasterizerDensity(w));
         auto textures = LoadEditorTextures();
         Theme::Apply(ImGui::GetStyle());
+
+        // Apply saved theme preference from disk, if available.
+        {
+            auto doc = LoadEditorSettingsDocument();
+            if (doc.loadedFromDisk && !doc.parseError)
+            {
+                const int savedIndex = static_cast<int>(doc.settings.themePreset);
+                Theme::SelectThemeByIndex(savedIndex);
+            }
+        }
+
         HORO_LOG_INFO("editor.startup", "Editor initialised — entering main loop");
 
         constexpr auto *glsl = "#version 150";
@@ -244,8 +260,14 @@ namespace Horo::Editor
         bool run = true;
         NewProjectState np;
         SettingsState sets;
+        EngineDataBus engineEvents;
+        EditorDataBus editorEvents;
+        const EditorSettings initialSettings = LoadEditorSettingsDocument().settings;
+        ConfigurationService configuration = CreateEditorConfigurationService(initialSettings, &engineEvents);
+        EditorSettingsService settings{initialSettings, configuration, editorEvents};
         while (run)
         {
+            engineEvents.DispatchQueued();
             SDL_Event ev;
             while (SDL_PollEvent(&ev))
             {
@@ -259,6 +281,14 @@ namespace Horo::Editor
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplSDL2_NewFrame();
             ImGui::NewFrame();
+
+            // Apply any deferred theme change before any window renders,
+            // so the entire frame (Welcome Screen included) uses the new theme.
+            if (sets.appearance.pendingThemeIndex >= 0)
+            {
+                Theme::SelectThemeByIndex(sets.appearance.pendingThemeIndex);
+                sets.appearance.pendingThemeIndex = -1;
+            }
 
             if (const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
                     vm, fonts, WelcomeScreenGuiAssets{textures.logo});
@@ -274,7 +304,7 @@ namespace Horo::Editor
             }
 
             DrawNewProjectModal(np, fonts, textures.logo);
-            DrawSettingsModal(sets, fonts, textures.logo);
+            DrawSettingsModal(sets, editorEvents, settings, fonts, textures.logo);
 
             ImGui::Render();
             int drawableW = 0;

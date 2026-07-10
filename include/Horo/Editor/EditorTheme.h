@@ -16,25 +16,32 @@ namespace Horo::Editor::Theme {
 //   --hover #232830 --bd #2a2f37    --bd2 #3a4049
 //   --txt #e8e4d9   --mut #9a958a   --dim #5e5b54
 //   --a #04A5FC     --ok #5fb88a    --warn #e8a33d  --err #d4524a
+//
+// These read from the active DesignTokens so theme switching
+// affects all custom-drawn editor UI, not just ImGui native widgets.
 // ─────────────────────────────────────────────────────────────────────────
-[[nodiscard]] constexpr ::ImVec4 Bg0()          { return DesignSystem::DefaultDesignTokens().colors.surfaceRoot; }
-[[nodiscard]] constexpr ::ImVec4 Bg1()          { return DesignSystem::DefaultDesignTokens().colors.surfaceWindow; }
-[[nodiscard]] constexpr ::ImVec4 Bg2()          { return DesignSystem::DefaultDesignTokens().colors.surfacePanel; }
-[[nodiscard]] constexpr ::ImVec4 Bg3()          { return DesignSystem::DefaultDesignTokens().colors.surfaceRaised; }
-[[nodiscard]] constexpr ::ImVec4 Hover()        { return DesignSystem::DefaultDesignTokens().colors.surfaceHover; }
-[[nodiscard]] constexpr ::ImVec4 Border()       { return DesignSystem::DefaultDesignTokens().colors.border; }
-[[nodiscard]] constexpr ::ImVec4 BorderStrong() { return DesignSystem::DefaultDesignTokens().colors.borderStrong; }
-[[nodiscard]] constexpr ::ImVec4 Text()         { return DesignSystem::DefaultDesignTokens().colors.textPrimary; }
-[[nodiscard]] constexpr ::ImVec4 Muted()        { return DesignSystem::DefaultDesignTokens().colors.textMuted; }
-[[nodiscard]] constexpr ::ImVec4 Dim()          { return DesignSystem::DefaultDesignTokens().colors.textDim; }
-[[nodiscard]] constexpr ::ImVec4 Accent()       { return DesignSystem::DefaultDesignTokens().colors.actionPrimary; }
-[[nodiscard]] constexpr ::ImVec4 AccentHover()  { return DesignSystem::DefaultDesignTokens().colors.actionPrimaryHover; }
-[[nodiscard]] constexpr ::ImVec4 AccentActive() { return DesignSystem::DefaultDesignTokens().colors.actionPrimaryActive; }
-[[nodiscard]] constexpr ::ImVec4 AccentSoft()   { return DesignSystem::DefaultDesignTokens().colors.actionPrimarySoft; }
-[[nodiscard]] constexpr ::ImVec4 Ok()           { return DesignSystem::DefaultDesignTokens().colors.statusOk; }
-[[nodiscard]] constexpr ::ImVec4 Warn()         { return DesignSystem::DefaultDesignTokens().colors.statusWarn; }
-[[nodiscard]] constexpr ::ImVec4 Err()          { return DesignSystem::DefaultDesignTokens().colors.statusError; }
-[[nodiscard]] constexpr ::ImVec4 DarkText()     { return DesignSystem::DefaultDesignTokens().colors.textOnActionPrimary; }
+
+/** @brief Returns the active (theme-aware) design token set. */
+[[nodiscard]] const DesignSystem::DesignTokens &GetActiveTokens();
+
+[[nodiscard]] inline ::ImVec4 Bg0()          { return GetActiveTokens().colors.surfaceRoot; }
+[[nodiscard]] inline ::ImVec4 Bg1()          { return GetActiveTokens().colors.surfaceWindow; }
+[[nodiscard]] inline ::ImVec4 Bg2()          { return GetActiveTokens().colors.surfacePanel; }
+[[nodiscard]] inline ::ImVec4 Bg3()          { return GetActiveTokens().colors.surfaceRaised; }
+[[nodiscard]] inline ::ImVec4 Hover()        { return GetActiveTokens().colors.surfaceHover; }
+[[nodiscard]] inline ::ImVec4 Border()       { return GetActiveTokens().colors.border; }
+[[nodiscard]] inline ::ImVec4 BorderStrong() { return GetActiveTokens().colors.borderStrong; }
+[[nodiscard]] inline ::ImVec4 Text()         { return GetActiveTokens().colors.textPrimary; }
+[[nodiscard]] inline ::ImVec4 Muted()        { return GetActiveTokens().colors.textMuted; }
+[[nodiscard]] inline ::ImVec4 Dim()          { return GetActiveTokens().colors.textDim; }
+[[nodiscard]] inline ::ImVec4 Accent()       { return GetActiveTokens().colors.actionPrimary; }
+[[nodiscard]] inline ::ImVec4 AccentHover()  { return GetActiveTokens().colors.actionPrimaryHover; }
+[[nodiscard]] inline ::ImVec4 AccentActive() { return GetActiveTokens().colors.actionPrimaryActive; }
+[[nodiscard]] inline ::ImVec4 AccentSoft()   { return GetActiveTokens().colors.actionPrimarySoft; }
+[[nodiscard]] inline ::ImVec4 Ok()           { return GetActiveTokens().colors.statusOk; }
+[[nodiscard]] inline ::ImVec4 Warn()         { return GetActiveTokens().colors.statusWarn; }
+[[nodiscard]] inline ::ImVec4 Err()          { return GetActiveTokens().colors.statusError; }
+[[nodiscard]] inline ::ImVec4 DarkText()     { return GetActiveTokens().colors.textOnActionPrimary; }
 
 [[nodiscard]] inline ::ImU32 U32(const ::ImVec4& c) { return ImGui::GetColorU32(c); }
 
