@@ -92,3 +92,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroThirdParty::ImGui
     )
 endif()
+
+if(HORO_BUILD_EDITOR_GUI)
+    target_link_libraries(HoroEditorScreens PRIVATE HoroEngine::EditorGuiBackend)
+endif()

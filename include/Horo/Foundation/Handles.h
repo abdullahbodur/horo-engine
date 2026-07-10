@@ -1,3 +1,4 @@
+#include <compare>
 #pragma once
 
 #include <cstdint>
