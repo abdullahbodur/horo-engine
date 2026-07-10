@@ -78,7 +78,8 @@ namespace Horo
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto replay = std::make_shared<EventT>(event);
-            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, replay.get(),
+            const void *raw = replay.get();
+            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
                           [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(*replay); });
         }
 
