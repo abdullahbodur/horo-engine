@@ -3,9 +3,6 @@
 #include <imgui.h>
 
 #include <algorithm>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -394,8 +391,24 @@ namespace Horo::Editor::Theme
         else
         {
             // Custom JSON theme: ImGui style already applied above;
-            // token derivation from JSON is future work.
+            // derive tokens from ImGui style colors.
             g_activeTokens = DefaultDesignTokens();
+            auto *c = ImGui::GetStyle().Colors;
+            g_activeTokens.colors.surfaceRoot = c[ImGuiCol_WindowBg];
+            g_activeTokens.colors.surfaceWindow = c[ImGuiCol_ChildBg];
+            g_activeTokens.colors.surfacePanel = c[ImGuiCol_PopupBg];
+            g_activeTokens.colors.surfaceRaised = c[ImGuiCol_FrameBg];
+            g_activeTokens.colors.surfaceHover = c[ImGuiCol_FrameBgHovered];
+            g_activeTokens.colors.border = c[ImGuiCol_Border];
+            g_activeTokens.colors.borderStrong = c[ImGuiCol_TableBorderStrong];
+            g_activeTokens.colors.textPrimary = c[ImGuiCol_Text];
+            g_activeTokens.colors.textMuted = c[ImGuiCol_TextDisabled];
+            g_activeTokens.colors.textDim = c[ImGuiCol_TextDisabled];
+            g_activeTokens.colors.actionPrimary = c[ImGuiCol_CheckMark];
+            g_activeTokens.colors.actionPrimaryHover = c[ImGuiCol_SliderGrabActive];
+            g_activeTokens.colors.actionPrimaryActive = c[ImGuiCol_SliderGrabActive];
+            g_activeTokens.colors.actionPrimarySoft = c[ImGuiCol_Header];
+            g_activeTokens.colors.textOnActionPrimary = c[ImGuiCol_WindowBg];
         }
     }
 

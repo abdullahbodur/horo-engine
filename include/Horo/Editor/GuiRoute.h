@@ -18,6 +18,7 @@ enum class GuiRouteKind {
     Welcome,
     ProjectBrowser,
     ProjectCreation,
+    ProjectLoading,
     EditorWorkspace,
 };
 
@@ -39,6 +40,14 @@ struct ProjectCreationRouteParameters {
 };
 
 /**
+ * @brief Route parameters for the project loading screen.
+ */
+struct ProjectLoadingRouteParameters {
+    std::string projectRoot;
+    std::string projectName;
+};
+
+/**
  * @brief Route parameters for an editor workspace screen.
  */
 struct EditorWorkspaceRouteParameters {
@@ -52,6 +61,7 @@ struct EditorWorkspaceRouteParameters {
 using RouteParameters = std::variant<WelcomeRouteParameters,
                                      ProjectBrowserRouteParameters,
                                      ProjectCreationRouteParameters,
+                                     ProjectLoadingRouteParameters,
                                      EditorWorkspaceRouteParameters>;
 
 /**

@@ -41,7 +41,9 @@ namespace Horo::Editor::Theme {
 [[nodiscard]] inline ::ImVec4 Ok()           { return GetActiveTokens().colors.statusOk; }
 [[nodiscard]] inline ::ImVec4 Warn()         { return GetActiveTokens().colors.statusWarn; }
 [[nodiscard]] inline ::ImVec4 Err()          { return GetActiveTokens().colors.statusError; }
+[[nodiscard]] inline ::ImVec4 ErrSoft()      { ::ImVec4 c = GetActiveTokens().colors.statusError; c.w = 0.12F; return c; }
 [[nodiscard]] inline ::ImVec4 DarkText()     { return GetActiveTokens().colors.textOnActionPrimary; }
+[[nodiscard]] inline ::ImVec4 Shadow()       { return {0.0F, 0.0F, 0.0F, 0.55F}; }
 
 [[nodiscard]] inline ::ImU32 U32(const ::ImVec4& c) { return ImGui::GetColorU32(c); }
 

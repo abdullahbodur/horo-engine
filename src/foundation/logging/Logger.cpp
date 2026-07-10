@@ -1,10 +1,13 @@
 /** @copydoc Logger.h */
 
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Logging/LogContext.h"
 
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <mutex>
@@ -111,12 +114,14 @@ namespace Horo::Log
             return {buf};
         }
 
-        /** @brief JSON-escapes a string value. */
+        /** @brief JSON-escapes a string value, including control characters outside \\n \\r \\t. */
         std::string JsonEscape(std::string_view s)
         {
+            static constexpr char kHex[] = "0123456789abcdef";
+
             std::string out;
             out.reserve(s.size() + 4);
-            for (const char c : s)
+            for (const unsigned char c : s)
             {
                 switch (c)
                 {
@@ -125,7 +130,22 @@ namespace Horo::Log
                 case '\n': out += "\\n"; break;
                 case '\r': out += "\\r"; break;
                 case '\t': out += "\\t"; break;
-                default:   out += c; break;
+                case '\b': out += "\\b"; break;
+                case '\f': out += "\\f"; break;
+                default:
+                    if (c < 0x20)
+                    {
+                        // Any other control character: emit \u00XX so the
+                        // record stays valid JSON.
+                        out += "\\u00";
+                        out += kHex[(c >> 4) & 0xF];
+                        out += kHex[c & 0xF];
+                    }
+                    else
+                    {
+                        out += static_cast<char>(c);
+                    }
+                    break;
                 }
             }
             return out;
@@ -153,6 +173,16 @@ namespace Horo::Log
         self.m_file = std::fopen(path.c_str(), "a");
         self.m_startTime = std::chrono::steady_clock::now();
         self.m_sequence = 0;
+
+        if (self.m_file == nullptr)
+        {
+            // Don't fail silently: a logger that can't write should still
+            // tell someone. Every subsequent Write() call is a no-op until
+            // this is fixed.
+            std::fprintf(stderr,
+                         "[Logger] failed to open log file \"%s\" for append (errno=%d): %s\n",
+                         path.c_str(), errno, std::strerror(errno));
+        }
 
         // Respect HORO_LOG_LEVEL env var
         if (const char *env = std::getenv("HORO_LOG_LEVEL"))
@@ -212,6 +242,44 @@ namespace Horo::Log
 
     void Logger::Write(std::string_view category, const Level level, std::string_view message)
     {
+        // Enforce the configured level here too, not just in the LOG_* macros —
+        // Write() is a public entry point and can be called directly.
+        if (level < Instance().m_level || Instance().m_level == Level::Off)
+            return;
+
+        // Capture MDC before acquiring the mutex — thread-local read, no lock needed.
+        const auto mdcFields = GetMdcFields();
+
+        // Build "mdc":{...} JSON fragment (empty string if no active context).
+        std::string mdcJson;
+        std::string mdcPrefix;
+        if (!mdcFields.empty())
+        {
+            mdcJson.reserve(64);
+            mdcPrefix.reserve(64);
+            mdcJson += ",\"mdc\":{";
+            mdcPrefix += " [";
+            for (std::size_t i = 0; i < mdcFields.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    mdcJson += ',';
+                    mdcPrefix += ", ";
+                }
+                mdcJson += '"';
+                mdcJson += JsonEscape(mdcFields[i].first);
+                mdcJson += "\":\"";
+                mdcJson += JsonEscape(mdcFields[i].second);
+                mdcJson += '"';
+
+                mdcPrefix += mdcFields[i].first;
+                mdcPrefix += '=';
+                mdcPrefix += mdcFields[i].second;
+            }
+            mdcJson += '}';
+            mdcPrefix += ']';
+        }
+
         auto &self = Instance();
         std::lock_guard lock(g_mutex);
 
@@ -231,7 +299,7 @@ namespace Horo::Log
         if (self.m_file != nullptr)
         {
             std::fprintf(self.m_file,
-                         R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld})"
+                         R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld%s})"
                          "\n",
                          NowUtc().c_str(),
                          static_cast<long long>(elapsed),
@@ -239,53 +307,59 @@ namespace Horo::Log
                          ToString(level),
                          JsonEscape(category).c_str(),
                          JsonEscape(message).c_str(),
-                         static_cast<long long>(pid));
+                         static_cast<long long>(pid),
+                         mdcJson.c_str());
             std::fflush(self.m_file);
         }
 
-        // Also echo to stderr in debug/dev builds
+        // Also echo to stderr in debug/dev builds.
+        // NOTE: string_view is not guaranteed null-terminated, so it must never
+        // be passed to a bare "%s" — use "%.*s" with an explicit length instead.
 #ifndef NDEBUG
-        std::fprintf(stderr, "[%s] %s: %s\n", ToString(level), category.data(), message.data());
+        std::fprintf(stderr, "[%s]%s %.*s: %.*s\n",
+                     ToString(level), mdcPrefix.c_str(),
+                     static_cast<int>(category.size()), category.data(),
+                     static_cast<int>(message.size()), message.data());
 #endif
     }
 
     void Logger::DumpStartupInfo()
     {
-        HORO_LOG_INFO("observability.startup", "Process started");
+        LOG_INFO("observability.startup", "Process started");
 
         // Platform
-        HORO_LOG_INFO("observability.startup", "Platform: %s %s", ResolvePlatform().c_str(), ResolveArch().c_str());
+        LOG_INFO("observability.startup", "Platform: %s %s", ResolvePlatform().c_str(), ResolveArch().c_str());
 
         // CPU
-        HORO_LOG_INFO("observability.startup", "Logical cores: %d", ResolveCpuCount());
+        LOG_INFO("observability.startup", "Logical cores: %d", ResolveCpuCount());
 
         // Process ID
 #if defined(_WIN32)
-        HORO_LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(GetCurrentProcessId()));
+        LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(GetCurrentProcessId()));
 #else
-        HORO_LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(getpid()));
+        LOG_INFO("observability.startup", "PID: %lld", static_cast<long long>(getpid()));
 #endif
 
         // Compiler
 #if defined(__clang__)
-        HORO_LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d",
+        LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d",
                       __clang_major__, __clang_minor__, __clang_patchlevel__);
 #elif defined(__GNUC__)
-        HORO_LOG_INFO("observability.startup", "Compiler: GCC %d.%d",
+        LOG_INFO("observability.startup", "Compiler: GCC %d.%d",
                       __GNUC__, __GNUC_MINOR__);
 #elif defined(_MSC_VER)
-        HORO_LOG_INFO("observability.startup", "Compiler: MSVC %d", _MSC_VER);
+        LOG_INFO("observability.startup", "Compiler: MSVC %d", _MSC_VER);
 #endif
 
         // Build config
 #ifdef NDEBUG
-        HORO_LOG_INFO("observability.startup", "Build: Release");
+        LOG_INFO("observability.startup", "Build: Release");
 #else
-        HORO_LOG_INFO("observability.startup", "Build: Debug");
+        LOG_INFO("observability.startup", "Build: Debug");
 #endif
 
         // Log level
-        HORO_LOG_INFO("observability.startup", "Log level: %s", ToString(Logger::GetLevel()));
+        LOG_INFO("observability.startup", "Log level: %s", ToString(Logger::GetLevel()));
     }
 
 } // namespace Horo::Log

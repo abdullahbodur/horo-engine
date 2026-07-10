@@ -4,8 +4,6 @@
 #include "Horo/Editor/EditorSettingsStore.h"
 
 #include <algorithm>
-#include <cstdio>
-#include <cstring>
 
 namespace Horo::Editor
 {

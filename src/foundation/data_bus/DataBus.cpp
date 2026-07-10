@@ -42,9 +42,9 @@ namespace Horo
         const auto state = m_state;
         std::uint64_t id = 0;
         { std::lock_guard lock(state->mutex); id = state->nextId++; state->handlers[type].push_back({id, std::move(handler)}); }
-        HORO_LOG_TRACE(state->config.logCategory, "subscribe event=%s handler=%llu", name.data(), static_cast<unsigned long long>(id));
+        LOG_TRACE(state->config.logCategory, "subscribe event=%s handler=%llu", name.data(), static_cast<unsigned long long>(id));
         return Subscription([weak = std::weak_ptr<State>(state), type, id, category = state->config.logCategory, eventName = std::string(name)] {
-            if (const auto locked = weak.lock()) { std::lock_guard lock(locked->mutex); auto it = locked->handlers.find(type); if (it != locked->handlers.end()) { auto &records = it->second; records.erase(std::remove_if(records.begin(), records.end(), [id](const State::Record &record) { return record.id == id; }), records.end()); } HORO_LOG_TRACE(category, "unsubscribe event=%s handler=%llu", eventName.c_str(), static_cast<unsigned long long>(id)); }
+            if (const auto locked = weak.lock()) { std::lock_guard lock(locked->mutex); auto it = locked->handlers.find(type); if (it != locked->handlers.end()) { auto &records = it->second; records.erase(std::remove_if(records.begin(), records.end(), [id](const State::Record &record) { return record.id == id; }), records.end()); } LOG_TRACE(category, "unsubscribe event=%s handler=%llu", eventName.c_str(), static_cast<unsigned long long>(id)); }
         });
     }
 
@@ -55,18 +55,18 @@ namespace Horo
         std::vector<Handler> snapshot;
         { std::lock_guard lock(state->mutex); if (const auto it = state->handlers.find(type); it != state->handlers.end()) for (const auto &record : it->second) snapshot.push_back(record.handler); }
         const auto start = std::chrono::steady_clock::now();
-        HORO_LOG_TRACE(state->config.logCategory, "publish event=%s handlers=%zu", name.data(), snapshot.size());
+        LOG_TRACE(state->config.logCategory, "publish event=%s handlers=%zu", name.data(), snapshot.size());
         state->activeTypes.push_back(type);
-        for (const auto &handler : snapshot) { try { handler(raw); } catch (const std::exception &exception) { HORO_LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what()); } catch (...) { HORO_LOG_ERROR(state->config.logCategory, "handler failed event=%s error=unknown", name.data()); } }
+        for (const auto &handler : snapshot) { try { handler(raw); } catch (const std::exception &exception) { LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what()); } catch (...) { LOG_ERROR(state->config.logCategory, "handler failed event=%s error=unknown", name.data()); } }
         state->activeTypes.pop_back();
-        HORO_LOG_TRACE(state->config.logCategory, "dispatch complete event=%s elapsed_us=%lld", name.data(), static_cast<long long>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count()));
+        LOG_TRACE(state->config.logCategory, "dispatch complete event=%s elapsed_us=%lld", name.data(), static_cast<long long>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count()));
         if (state->activeTypes.empty()) { auto deferred = std::move(state->deferred); state->deferred.clear(); for (auto &publish : deferred) publish(*this); }
     }
 
     void EngineDataBus::QueueErased(const EventTypeId type, const std::string_view name, std::shared_ptr<void> payload, QueuedPublisher publish)
     {
         std::lock_guard lock(m_state->mutex);
-        if (m_state->queued.size() >= m_state->config.maxAsyncQueueSize) { HORO_LOG_TRACE(m_state->config.logCategory, "async drop event=%s reason=queue_full", name.data()); return; }
+        if (m_state->queued.size() >= m_state->config.maxAsyncQueueSize) { LOG_TRACE(m_state->config.logCategory, "async drop event=%s reason=queue_full", name.data()); return; }
         m_state->queued.push_back({type, std::string(name), std::move(payload), std::move(publish)});
     }
     void EngineDataBus::DispatchQueued() { std::deque<State::Queued> queued; { std::lock_guard lock(m_state->mutex); queued.swap(m_state->queued); } for (auto &event : queued) event.publish(*this, event.payload.get()); }

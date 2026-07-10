@@ -1,4 +1,5 @@
 #include "Horo/Editor/EditorModalHost.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
 #include <utility>
@@ -60,9 +61,24 @@ EditorModalHost::~EditorModalHost()
 /** @copydoc EditorModalHost::OpenRoot */
 Result<void> EditorModalHost::OpenRoot(std::unique_ptr<EditorModal> modal)
 {
-    if (HasOpenModal()) return ErrorFor(ModalHostError::Busy);
-    if (!modal) return ErrorFor(ModalHostError::InvalidModal);
-    if (const Result<void> validation = ValidateModalForPush(*modal); validation.HasError()) return validation;
+    if (HasOpenModal())
+    {
+        LOG_WARN("editor.modal_host", "OpenRoot rejected: host is busy (top modal: %llu).",
+                      m_stack.back().modal->Id().Value());
+        return ErrorFor(ModalHostError::Busy);
+    }
+    if (!modal)
+    {
+        LOG_WARN("editor.modal_host", "OpenRoot rejected: null modal pointer.");
+        return ErrorFor(ModalHostError::InvalidModal);
+    }
+    if (const Result<void> validation = ValidateModalForPush(*modal); validation.HasError())
+    {
+        LOG_WARN("editor.modal_host", "OpenRoot rejected for modal %llu: %s",
+                      modal->Id().Value(), validation.ErrorValue().message.c_str());
+        return validation;
+    }
+    LOG_INFO("editor.modal_host", "Opening root modal %llu.", modal->Id().Value());
     m_stack.push_back(Entry{.modal = std::move(modal)});
     return Result<void>::Success();
 }
@@ -80,9 +96,20 @@ Result<void> EditorModalHost::PushChild(ModalId parentId, std::unique_ptr<Editor
 /** @copydoc EditorModalHost::RequestClose */
 Result<void> EditorModalHost::RequestClose(ModalId modalId, ModalCloseReason reason)
 {
-    if (m_stack.empty() || m_stack.back().modal->Id() != modalId) return ErrorFor(ModalHostError::ModalNotTop);
+    if (m_stack.empty() || m_stack.back().modal->Id() != modalId)
+    {
+        LOG_WARN("editor.modal_host", "RequestClose rejected: modal %llu is not the top of stack.",
+                      modalId.Value());
+        return ErrorFor(ModalHostError::ModalNotTop);
+    }
     if (m_stack.back().opened && m_stack.back().modal->CanClose(reason) != CloseDecision::Allow)
+    {
+        LOG_DEBUG("editor.modal_host", "RequestClose for modal %llu denied by CanClose (reason %d).",
+                       modalId.Value(), static_cast<int>(reason));
         return ErrorFor(ModalHostError::CloseDenied);
+    }
+    LOG_DEBUG("editor.modal_host", "Queuing close for modal %llu (reason %d).",
+                   modalId.Value(), static_cast<int>(reason));
     m_pendingCloseReasons.push_back(reason);
     return Result<void>::Success();
 }
@@ -187,10 +214,16 @@ void EditorModalHost::CommitPendingOpens()
         const Result<void> result = entry.modal->OnOpen(m_context);
         if (result.HasError())
         {
+            LOG_ERROR("editor.modal_host",
+                           "Modal %llu OnOpen failed (%s: %s) — removing from stack.",
+                           entry.modal->Id().Value(),
+                           result.ErrorValue().code.Value().c_str(),
+                           result.ErrorValue().message.c_str());
             entry.modal->OnClose(ModalCloseReason::Cancelled);
             m_stack.erase(m_stack.begin() + static_cast<std::ptrdiff_t>(index));
             continue;
         }
+        LOG_DEBUG("editor.modal_host", "Modal %llu opened successfully.", entry.modal->Id().Value());
         entry.opened = true;
         ++index;
     }
@@ -210,6 +243,8 @@ void EditorModalHost::CommitPendingCloses()
 void EditorModalHost::RemoveTop(ModalCloseReason reason)
 {
     Entry &entry = m_stack.back();
+    LOG_INFO("editor.modal_host", "Closing modal %llu (reason %d).",
+                  entry.modal->Id().Value(), static_cast<int>(reason));
     entry.modal->OnClose(reason);
     m_stack.pop_back();
 }

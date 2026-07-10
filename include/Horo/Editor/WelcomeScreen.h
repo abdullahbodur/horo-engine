@@ -3,6 +3,7 @@
 #include "Horo/Editor/GuiRoute.h"
 #include "Horo/Editor/RecentProject.h"
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -34,12 +35,27 @@ struct WelcomeAction {
 };
 
 /**
+ * @brief A single 'What's New' card entry shown on the Welcome Screen.
+ *
+ * Data is populated at build time from CHANGELOG.md via GeneratedBuildInfo.h.
+ * Defined here (not in the generated header) so public consumers do not need
+ * the generated include path.
+ */
+struct WhatsNewEntry {
+    const char* tag   = ""; ///< Card category label, e.g. "Release Notes"
+    const char* title = ""; ///< Card headline
+    const char* body  = ""; ///< Short description (≤120 chars)
+};
+
+/**
  * @brief Immutable data required by the welcome screen renderer.
  */
 struct WelcomeViewModel {
     std::string productName;
     std::string statusLabel;
     std::vector<RecentProjectEntry> recentProjects;
+    /// Up to two 'What's New' entries generated from CHANGELOG.md at build time.
+    std::array<WhatsNewEntry, 2> whatsNew{};
 };
 
 /**

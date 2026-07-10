@@ -47,7 +47,8 @@ namespace Horo::Editor::Ui
                             ImVec2 size,
                             float padX = Theme::Layout::CardPad,
                             float padY = Theme::Layout::CardPad,
-                            ImVec4 bg = Theme::Bg2());
+                            ImVec4 bg = Theme::Bg2(),
+                            bool autoResizeY = false);
         ~ScopedCard();
 
         ScopedCard(const ScopedCard &) = delete;
@@ -67,8 +68,11 @@ namespace Horo::Editor::Ui
     /** @brief Draws an uppercase field label. */
     void FieldLabel(const char *upperCaseLabel, const Theme::Fonts &fonts);
 
-    /** @brief Draws muted wrapped helper text. */
+    /** @brief Renders a hint string wrapped under a field. */
     void Hint(const char *text, const Theme::Fonts &fonts);
+
+    /** @brief Renders an error string wrapped under a field. */
+    void ErrorText(const char *text, const Theme::Fonts &fonts);
 
     // ── Separator ────────────────────────────────────────────────────────
 
@@ -139,11 +143,11 @@ namespace Horo::Editor::Ui
 
     // ── Form controls ────────────────────────────────────────────────────
 
-    /** @brief Dropdown / combo box with shared frame styling. */
-    void ComboControl(const char *id, int *value, const char *const items[], int itemCount, const Theme::Fonts &fonts);
+    /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
+    [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount, const Theme::Fonts &fonts, bool error = false);
 
-    /** @brief Text input with shared frame styling. */
-    void InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts);
+    /** @brief Input text field with shared frame styling and optional error state. Returns true if the text changed. */
+    [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts, bool error = false);
 
     /**
      * @brief Draws a hex color input paired with a clickable swatch and anchored picker popup.
@@ -183,6 +187,16 @@ namespace Horo::Editor::Ui
      * @return True when the toggle was clicked.
      */
     [[nodiscard]] bool ToggleControl(const char *id, bool *value, const Theme::Fonts &fonts, bool showLabel = true);
+
+    /**
+     * @brief A standard styled checkbox.
+     *
+     * @param label The label to show next to the checkbox.
+     * @param value Pointer to the boolean state.
+     * @param fonts The application font set.
+     * @return True when the checkbox was clicked.
+     */
+    [[nodiscard]] bool CheckboxControl(const char *label, bool *value, const Theme::Fonts &fonts);
 
     // ── Higher-order helpers ─────────────────────────────────────────────
 

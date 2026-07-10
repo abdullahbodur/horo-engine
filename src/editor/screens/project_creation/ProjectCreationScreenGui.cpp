@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include <imgui.h>
 
@@ -9,8 +10,6 @@
 #include <array>
 #include <cmath>
 #include <cfloat>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <optional>
@@ -52,53 +51,26 @@ namespace Horo::Editor
             constexpr float StepH = 62.0F;
             constexpr float StepGap = 6.0F;
 
-            constexpr float TemplateGap = 10.0F;
-            constexpr float TemplateH = 134.0F;
+            constexpr float TemplateGap = 12.0F;
+            constexpr float TemplateH = 116.0F;
             constexpr float TemplatePad = 14.0F;
             constexpr float TemplateIconPx = 24.0F;
             constexpr float TemplateNamePx = 17.0F;
             constexpr float TemplateDescPx = 14.0F;
 
-            constexpr float GridGap = 14.0F;
-            constexpr float FieldLabelGap = 4.0F;
+            constexpr float GridGap = 16.0F;
+            constexpr float FieldLabelGap = 5.0F;
             constexpr float HintGap = 3.0F;
             constexpr float CardPad = 18.0F;
-            constexpr float CardGap = 16.0F;
-            constexpr float CheckGap = 10.0F;
+            constexpr float CardGap = 18.0F;
+            constexpr float CheckGap = 12.0F;
 
             constexpr float Radius = 4.0F;
             constexpr float TemplateRadius = 6.0F;
             constexpr float ModalRadius = 8.0F;
         } // namespace WizardLayout
 
-        namespace WizardCss
-        {
-            [[nodiscard]] inline ImVec4 Rgba(float r, float g, float b, float a = 1.0F)
-            {
-                return ImVec4{r / 255.0F, g / 255.0F, b / 255.0F, a};
-            }
 
-            [[nodiscard]] inline ImVec4 Bg0() { return Rgba(0x0a, 0x0c, 0x0f); }
-            [[nodiscard]] inline ImVec4 Bg1() { return Rgba(0x12, 0x15, 0x1a); }
-            [[nodiscard]] inline ImVec4 Bg2() { return Rgba(0x18, 0x1c, 0x21); }
-            [[nodiscard]] inline ImVec4 Bg3() { return Rgba(0x1f, 0x24, 0x2b); }
-            [[nodiscard]] inline ImVec4 Hover() { return Rgba(0x23, 0x28, 0x30); }
-            [[nodiscard]] inline ImVec4 Border() { return Rgba(0x2a, 0x2f, 0x37); }
-            [[nodiscard]] inline ImVec4 Border2() { return Rgba(0x3a, 0x40, 0x49); }
-            [[nodiscard]] inline ImVec4 Text() { return Rgba(0xe8, 0xe4, 0xd9); }
-            [[nodiscard]] inline ImVec4 Muted() { return Rgba(0x9a, 0x95, 0x8a); }
-            [[nodiscard]] inline ImVec4 Dim() { return Rgba(0x5e, 0x5b, 0x54); }
-            [[nodiscard]] inline ImVec4 Accent() { return Rgba(0x04, 0xa5, 0xfc); }
-            [[nodiscard]] inline ImVec4 AccentSoft() { return Rgba(0x04, 0xa5, 0xfc, 0.15F); }
-            [[nodiscard]] inline ImVec4 AccentHover() { return Rgba(0x04, 0xa5, 0xfc, 0.22F); }
-            [[nodiscard]] inline ImVec4 AccentActive() { return Rgba(0x04, 0xa5, 0xfc, 0.30F); }
-            [[nodiscard]] inline ImVec4 Ok() { return Rgba(0x5f, 0xb8, 0x8a); }
-            [[nodiscard]] inline ImVec4 Warn() { return Rgba(0xe8, 0xa3, 0x3d); }
-            [[nodiscard]] inline ImVec4 Err() { return Rgba(0xd4, 0x52, 0x4a); }
-            [[nodiscard]] inline ImVec4 ErrSoft() { return Rgba(0xd4, 0x52, 0x4a, 0.12F); }
-            [[nodiscard]] inline ImVec4 DarkText() { return Rgba(0x05, 0x13, 0x1c); }
-            [[nodiscard]] inline ImVec4 Shadow() { return Rgba(0x00, 0x00, 0x00, 0.55F); }
-        } // namespace WizardCss
 
         void CopyDraftText(char *destination, const std::size_t capacity, const std::string &source)
         {
@@ -186,262 +158,6 @@ namespace Horo::Editor
             state.initialized = true;
         }
 
-        void DrawCssBorderForLastItem(const ImVec4 &color, float rounding, float thickness = 1.0F, float inflate = 0.0F)
-        {
-            const ImVec2 min = ImGui::GetItemRectMin();
-            const ImVec2 max = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(
-                {min.x - inflate, min.y - inflate},
-                {max.x + inflate, max.y + inflate},
-                Theme::U32(color),
-                rounding,
-                0,
-                thickness);
-        }
-
-        void DrawCssFocusRingForLastItem(const bool error = false)
-        {
-            if (ImGui::IsItemActive())
-            {
-                DrawCssBorderForLastItem(error ? WizardCss::ErrSoft() : WizardCss::AccentSoft(),
-                                         WizardLayout::Radius + 2.0F,
-                                         2.0F,
-                                         2.0F);
-            }
-            else if (ImGui::IsItemHovered())
-            {
-                DrawCssBorderForLastItem(WizardCss::Border2(), WizardLayout::Radius, 1.0F, 0.0F);
-            }
-        }
-
-        [[nodiscard]] bool DrawWizardButton(const char *label,
-                                            const ImVec2 size,
-                                            const bool primary,
-                                            const bool enabled,
-                                            const Fonts &f)
-        {
-            if (!enabled)
-            {
-                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45F);
-            }
-
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0F, 8.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-
-            if (primary)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, WizardCss::Accent());
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, WizardCss::Accent());
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, WizardCss::Accent());
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::DarkText());
-                ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Accent());
-            }
-            else
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, WizardCss::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, WizardCss::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, WizardCss::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Text());
-                ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border());
-            }
-
-            bool clicked = false;
-            {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
-                clicked = ImGui::Button(label, size);
-            }
-
-            if (enabled && !primary && ImGui::IsItemHovered())
-            {
-                DrawCssBorderForLastItem(WizardCss::Border2(), WizardLayout::Radius, 1.0F, 0.0F);
-            }
-
-            ImGui::PopStyleColor(5);
-            ImGui::PopStyleVar(3);
-            if (!enabled)
-            {
-                ImGui::PopStyleVar();
-                clicked = false;
-            }
-
-            return clicked;
-        }
-
-        [[nodiscard]] bool InputTextCss(const char *id,
-                                        char *buffer,
-                                        const size_t bufferSize,
-                                        const Fonts &f,
-                                        const bool error = false)
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, error ? WizardCss::ErrSoft() : WizardCss::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, error ? WizardCss::ErrSoft() : WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, error ? WizardCss::ErrSoft() : WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, error ? WizardCss::Err() : WizardCss::Border());
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Text());
-
-            bool changed = false;
-            {
-                ScopedTextStyle ts(f.mono, 15.0F, Theme::FontPx::Mono);
-                changed = ImGui::InputText(id, buffer, bufferSize);
-            }
-            DrawCssFocusRingForLastItem(error);
-
-            ImGui::PopStyleColor(5);
-            ImGui::PopStyleVar(3);
-            return changed;
-        }
-
-        [[nodiscard]] bool ComboCss(const char *id,
-                                    int *value,
-                                    const char *const items[],
-                                    const int itemCount,
-                                    const Fonts &f)
-        {
-            using namespace WizardLayout;
-
-            ImGui::PushID(id);
-
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
-            const float fieldW = ImGui::CalcItemWidth();
-            const float fieldH = ImGui::GetFrameHeight();
-            ImGui::PopStyleVar();
-
-            const ImVec2 fieldPos = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##field", ImVec2{fieldW, fieldH});
-            const bool fieldHovered = ImGui::IsItemHovered();
-
-            const std::string popupId = std::string("##popup_") + id;
-            if (ImGui::IsItemClicked())
-            {
-                ImGui::OpenPopup(popupId.c_str());
-            }
-
-            const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
-
-            auto *dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
-                              Theme::U32(fieldHovered ? WizardCss::Hover() : WizardCss::Bg3()), Radius);
-            dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
-                        Theme::U32(popupOpen ? WizardCss::Accent() : WizardCss::Border()),
-                        Radius, 0, popupOpen ? 1.5F : 1.0F);
-
-            {
-                ImFont *font = f.mono ? f.mono : ImGui::GetFont();
-                const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
-                dl->AddText(font, 15.0F,
-                            {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F},
-                            Theme::U32(WizardCss::Text()), label);
-            }
-
-            {
-                const float cx = fieldPos.x + fieldW - 18.0F;
-                const float cy = fieldPos.y + fieldH * 0.5F;
-                const ImU32 arrowCol = Theme::U32(fieldHovered ? WizardCss::Text() : WizardCss::Muted());
-                dl->AddTriangleFilled({cx - 4.0F, cy - 2.0F}, {cx + 4.0F, cy - 2.0F}, {cx, cy + 3.0F}, arrowCol);
-            }
-
-            bool changed = false;
-            ImGui::SetNextWindowPos({fieldPos.x, fieldPos.y + fieldH + 4.0F});
-            ImGui::SetNextWindowSize({fieldW, 0.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Radius);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{6.0F, 8.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{0.0F, 6.0F});
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, WizardCss::Bg2());
-            ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border2());
-
-            if (ImGui::BeginPopup(popupId.c_str()))
-            {
-                auto *popupDl = ImGui::GetWindowDrawList();
-                for (int i = 0; i < itemCount; ++i)
-                {
-                    const bool selected = (*value == i);
-                    ImGui::PushID(i);
-
-                    const float itemH = 34.0F;
-                    const float itemW = ImGui::GetContentRegionAvail().x;
-                    const ImVec2 itemPos = ImGui::GetCursorScreenPos();
-
-                    const bool clicked = ImGui::InvisibleButton("##item", ImVec2{itemW, itemH});
-                    const bool hovered = ImGui::IsItemHovered();
-                    const bool active = ImGui::IsItemActive();
-
-                    if (selected || hovered || active)
-                    {
-                        const ImU32 bgCol = Theme::U32(active ? WizardCss::AccentSoft() : (hovered ? WizardCss::Hover() : WizardCss::AccentSoft()));
-                        const ImU32 borderCol = Theme::U32((hovered || active) ? WizardCss::Accent() : WizardCss::Border());
-                        popupDl->AddRectFilled(itemPos, {itemPos.x + itemW, itemPos.y + itemH}, bgCol, Radius);
-                        if (selected || hovered || active)
-                        {
-                            popupDl->AddRect(itemPos, {itemPos.x + itemW, itemPos.y + itemH}, borderCol, Radius, 0, (hovered || active) ? 1.5F : 1.0F);
-                        }
-                    }
-
-                    {
-                        ScopedTextStyle ts(f.mono, 14.5F, Theme::FontPx::Mono);
-                        ImFont *font = f.mono ? f.mono : ImGui::GetFont();
-                        const ImU32 textCol = Theme::U32(selected ? WizardCss::Accent() : WizardCss::Text());
-                        popupDl->AddText(font, 14.5F,
-                                         {itemPos.x + 12.0F, itemPos.y + (itemH - 14.5F) * 0.5F},
-                                         textCol, items[i]);
-                    }
-
-                    if (clicked)
-                    {
-                        *value = i;
-                        changed = true;
-                        ImGui::CloseCurrentPopup();
-                    }
-
-                    ImGui::PopID();
-                }
-                ImGui::EndPopup();
-            }
-
-            ImGui::PopStyleColor(2);
-            ImGui::PopStyleVar(3);
-            ImGui::PopID();
-            return changed;
-        }
-
-        void WizardSectionTitle(const char *upperCaseLabel, const Fonts &f)
-        {
-            ScopedTextStyle ts(f.monoSemiBold, 16.0F, Theme::FontPx::MonoSemiBold);
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
-            ImGui::TextUnformatted(upperCaseLabel);
-            ImGui::PopStyleColor();
-        }
-
-        void WizardFieldLabel(const char *upperCaseLabel, const Fonts &f)
-        {
-            ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
-            ImGui::TextUnformatted(upperCaseLabel);
-            ImGui::PopStyleColor();
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (ImGui::GetStyle().ItemSpacing.y - WizardLayout::FieldLabelGap));
-        }
-
-        void WizardHint(const char *text, const Fonts &f)
-        {
-            ScopedTextStyle ts(f.mono, 13.5F, Theme::FontPx::Mono);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (ImGui::GetStyle().ItemSpacing.y - WizardLayout::HintGap));
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Dim());
-            ImGui::TextWrapped("%s", text);
-            ImGui::PopStyleColor();
-        }
-
-        void ErrorText(const char *text, const Fonts &f)
-        {
-            ScopedTextStyle ts(f.mono, 14.0F, Theme::FontPx::Mono);
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Err());
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (ImGui::GetStyle().ItemSpacing.y - WizardLayout::HintGap));
-            ImGui::TextWrapped("%s", text);
-            ImGui::PopStyleColor();
-        }
-
         [[nodiscard]] bool DrawFolderIconButton(const char *id,
                                                 const float width,
                                                 const Fonts &f,
@@ -459,8 +175,8 @@ namespace Horo::Editor
             const bool active = ImGui::IsItemActive();
 
             auto *dl = ImGui::GetWindowDrawList();
-            const ImU32 bgCol = Theme::U32(active ? WizardCss::AccentSoft() : (hovered ? WizardCss::Hover() : WizardCss::Bg3()));
-            const ImU32 borderCol = Theme::U32(error ? WizardCss::Err() : (active || hovered ? WizardCss::Accent() : WizardCss::Border()));
+            const ImU32 bgCol = Theme::U32(active ? Theme::AccentSoft() : (hovered ? Theme::Hover() : Theme::Bg3()));
+            const ImU32 borderCol = Theme::U32(error ? Theme::Err() : (active || hovered ? Theme::Accent() : Theme::Border()));
             const float rounding = WizardLayout::Radius;
 
             dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, bgCol, rounding);
@@ -470,7 +186,7 @@ namespace Horo::Editor
             const float iconH = 14.0F;
             const float ox = pos.x + (size.x - iconW) * 0.5F;
             const float oy = pos.y + (size.y - iconH) * 0.5F;
-            const ImU32 iconCol = Theme::U32((active || hovered) ? WizardCss::Accent() : WizardCss::Text());
+            const ImU32 iconCol = Theme::U32((active || hovered) ? Theme::Accent() : Theme::Text());
 
             dl->AddLine({ox, oy + 2.0F}, {ox + 6.0F, oy + 2.0F}, iconCol, 1.5F);
             dl->AddLine({ox + 6.0F, oy + 2.0F}, {ox + 8.0F, oy + 4.0F}, iconCol, 1.5F);
@@ -584,23 +300,23 @@ namespace Horo::Editor
         {
             ImGui::PushID(label);
             ImGui::BeginGroup();
-            WizardFieldLabel(label, f);
+            Ui::FieldLabel(label, f);
             if (width != 0.0F)
             {
                 ImGui::PushItemWidth(width);
             }
-            const bool changed = InputTextCss("##value", buffer, bufferSize, f, error);
+            const bool changed = Ui::InputTextControl("##value", buffer, bufferSize, f, error);
             if (width != 0.0F)
             {
                 ImGui::PopItemWidth();
             }
             if (error && errorText)
             {
-                ErrorText(errorText, f);
+                Ui::ErrorText(errorText, f);
             }
             else if (hint)
             {
-                WizardHint(hint, f);
+                Ui::Hint(hint, f);
             }
             ImGui::EndGroup();
             ImGui::PopID();
@@ -617,19 +333,19 @@ namespace Horo::Editor
         {
             ImGui::PushID(label);
             ImGui::BeginGroup();
-            WizardFieldLabel(label, f);
+            Ui::FieldLabel(label, f);
             if (width != 0.0F)
             {
                 ImGui::PushItemWidth(width);
             }
-            const bool changed = ComboCss("##value", value, items, itemCount, f);
+            const bool changed = Ui::ComboControl("##value", value, items, itemCount, f);
             if (width != 0.0F)
             {
                 ImGui::PopItemWidth();
             }
             if (hint)
             {
-                WizardHint(hint, f);
+                Ui::Hint(hint, f);
             }
             ImGui::EndGroup();
             ImGui::PopID();
@@ -642,12 +358,12 @@ namespace Horo::Editor
             ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, WizardLayout::Radius);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, WizardCss::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, WizardCss::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border());
-            ImGui::PushStyleColor(ImGuiCol_CheckMark, WizardCss::Accent());
-            ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             {
                 ScopedTextStyle ts(f.sans, 13.0F, Theme::FontPx::Sans);
                 ImGui::Checkbox(label, value);
@@ -687,7 +403,7 @@ namespace Horo::Editor
             using namespace Theme;
             using namespace WizardLayout;
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, WizardCss::Bg0());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
             ImGui::BeginChild("WizHdr", {0, HeaderH}, false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
@@ -702,7 +418,7 @@ namespace Horo::Editor
             }
             {
                 ScopedTextStyle ts(f.monoSemiBold, 14.0F, FontPx::MonoSemiBold);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Text());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                 ImGui::TextUnformatted("NEW PROJECT");
                 ImGui::PopStyleColor();
             }
@@ -710,7 +426,7 @@ namespace Horo::Editor
             ImGui::SetCursorPos({HeaderPadX, 36.0F});
             {
                 ScopedTextStyle ts(f.mono, 12.0F, FontPx::Mono);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Dim());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                 ImGui::TextUnformatted("Create portable .horo metadata and starter content");
                 ImGui::PopStyleColor();
             }
@@ -732,7 +448,7 @@ namespace Horo::Editor
             auto *dl = ImGui::GetWindowDrawList();
             dl->AddLine({headerPos.x, headerPos.y + HeaderH - 1.0F},
                         {headerPos.x + headerW, headerPos.y + HeaderH - 1.0F},
-                        Theme::U32(WizardCss::Border()),
+                        Theme::U32(Theme::Border()),
                         1.0F);
 
             ImGui::EndChild();
@@ -744,7 +460,7 @@ namespace Horo::Editor
             using namespace Theme;
             using namespace WizardLayout;
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, WizardCss::Bg2());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
             ImGui::BeginChild("WizSide", {SidebarW, sideH}, false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
@@ -769,7 +485,7 @@ namespace Horo::Editor
                 {
                     dl->AddRectFilled(rowMin,
                                       {rowMin.x + rowSize.x, rowMin.y + rowSize.y},
-                                      Theme::U32(WizardCss::AccentSoft()),
+                                      Theme::U32(Theme::AccentSoft()),
                                       Radius);
                 }
 
@@ -780,8 +496,8 @@ namespace Horo::Editor
                 }
 
                 const ImVec2 circleCenter{rowMin.x + 10.0F + 11.0F, rowMin.y + 11.0F + 11.0F};
-                dl->AddCircleFilled(circleCenter, 11.0F, Theme::U32(active ? WizardCss::Accent() : WizardCss::Bg3()), 24);
-                dl->AddCircle(circleCenter, 11.0F, Theme::U32(active ? WizardCss::Accent() : WizardCss::Border()), 24, 1.0F);
+                dl->AddCircleFilled(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Bg3()), 24);
+                dl->AddCircle(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Border()), 24, 1.0F);
 
                 static constexpr std::array<const char *, 5> kStepNumbers = {"", "1", "2", "3", "4"};
                 const char *number = kStepNumbers[s];
@@ -791,13 +507,13 @@ namespace Horo::Editor
                 dl->AddText(numberFont,
                             numberFontSize,
                             {circleCenter.x - numberSize.x * 0.5F, circleCenter.y - numberSize.y * 0.5F},
-                            Theme::U32(active ? WizardCss::DarkText() : WizardCss::Dim()),
+                            Theme::U32(active ? Theme::DarkText() : Theme::Dim()),
                             number);
 
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
                 {
                     ScopedTextStyle ts(f.sans, 17.0F, FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, active ? WizardCss::Text() : WizardCss::Muted());
+                    ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
                     ImGui::TextUnformatted(kStepLabels[s - 1]);
                     ImGui::PopStyleColor();
                 }
@@ -805,7 +521,7 @@ namespace Horo::Editor
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
                 {
                     ScopedTextStyle ts(f.mono, 14.0F, FontPx::Mono);
-                    ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Dim());
+                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                     ImGui::TextUnformatted(kStepDescs[s - 1]);
                     ImGui::PopStyleColor();
                 }
@@ -816,7 +532,7 @@ namespace Horo::Editor
 
             dl->AddLine({sidePos.x + SidebarW - 1.0F, sidePos.y},
                         {sidePos.x + SidebarW - 1.0F, sidePos.y + sideH},
-                        Theme::U32(WizardCss::Border()),
+                        Theme::U32(Theme::Border()),
                         1.0F);
 
             ImGui::EndChild();
@@ -837,7 +553,7 @@ namespace Horo::Editor
                 "Pick systems manually before project generation."
             };
 
-            WizardSectionTitle("CHOOSE A TEMPLATE", f);
+            Ui::SectionTitle("CHOOSE A TEMPLATE", f);
             ImGui::Dummy({0.0F, 14.0F});
 
             const float cardW = (ImGui::GetContentRegionAvail().x - TemplateGap * 2.0F) / 3.0F;
@@ -860,8 +576,8 @@ namespace Horo::Editor
                 ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, TemplateRadius);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{TemplatePad, TemplatePad});
                 ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0F);
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, selected ? WizardCss::AccentSoft() : WizardCss::Bg2());
-                ImGui::PushStyleColor(ImGuiCol_Border, selected ? WizardCss::Accent() : WizardCss::Border());
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, selected ? Theme::AccentSoft() : Theme::Bg2());
+                ImGui::PushStyleColor(ImGuiCol_Border, selected ? Theme::Accent() : Theme::Border());
 
                 ImGui::BeginChild("TemplateCard",
                                   {cardW, TemplateH},
@@ -872,7 +588,7 @@ namespace Horo::Editor
 
                 const ImVec2 iconPos = ImGui::GetCursorScreenPos();
                 auto *dl = ImGui::GetWindowDrawList();
-                const ImU32 iconColor = Theme::U32(selected ? WizardCss::Accent() : WizardCss::Text());
+                const ImU32 iconColor = Theme::U32(selected ? Theme::Accent() : Theme::Text());
 
                 if (i == 0)
                 {
@@ -925,7 +641,7 @@ namespace Horo::Editor
                     ImFont *nameFont = f.sans ? f.sans : ImGui::GetFont();
                     const ImVec2 namePos = ImGui::GetCursorScreenPos();
                     const char *name = kTemplateNames[i];
-                    ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, Theme::U32(WizardCss::Text()), name);
+                    ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, Theme::U32(Theme::Text()), name);
                     const ImVec2 nameSize = nameFont->CalcTextSizeA(TemplateNamePx, FLT_MAX, 0.0F, name);
                     ImGui::Dummy({nameSize.x, nameSize.y});
                 }
@@ -937,7 +653,7 @@ namespace Horo::Editor
                     const ImVec2 descPos = ImGui::GetCursorScreenPos();
                     const float wrapW = cardW - TemplatePad * 2.0F;
                     const char *desc = kDescs[i];
-                    ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, Theme::U32(WizardCss::Muted()), desc, nullptr, wrapW);
+                    ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, Theme::U32(Theme::Muted()), desc, nullptr, wrapW);
                     const ImVec2 descSize = descFont->CalcTextSizeA(TemplateDescPx, FLT_MAX, wrapW, desc);
                     ImGui::Dummy({wrapW, descSize.y});
                 }
@@ -947,10 +663,17 @@ namespace Horo::Editor
                 const bool hovered = ImGui::IsItemHovered();
                 if (hovered || selected)
                 {
-                    DrawCssBorderForLastItem(hovered && !selected ? WizardCss::Border2() : WizardCss::Accent(),
-                                             TemplateRadius,
-                                             selected ? 1.5F : 1.0F,
-                                             selected ? 1.0F : 0.0F);
+                    {
+                        const ImVec2 min = ImGui::GetItemRectMin();
+                        const ImVec2 max = ImGui::GetItemRectMax();
+                        ImGui::GetWindowDrawList()->AddRect(
+                            {min.x - (selected ? 1.0F : 0.0F), min.y - (selected ? 1.0F : 0.0F)},
+                            {max.x + (selected ? 1.0F : 0.0F), max.y + (selected ? 1.0F : 0.0F)},
+                            Theme::U32(hovered && !selected ? Theme::BorderStrong() : Theme::Accent()),
+                            TemplateRadius,
+                            0,
+                            selected ? 1.5F : 1.0F);
+                    }
                 }
 
                 if (ImGui::IsItemClicked())
@@ -993,94 +716,96 @@ namespace Horo::Editor
             const auto *pathErrWrt = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectParentNotWritable);
             const auto *pathErr = pathErrReq ? pathErrReq : (pathErrOcc ? pathErrOcc : (pathErrDir ? pathErrDir : (pathErrAcc ? pathErrAcc : pathErrWrt)));
 
+            Ui::SectionTitle("PROJECT IDENTITY", f);
+            ImGui::Dummy({0.0F, 14.0F});
+
+            DrawInputField("PROJECT NAME",
+                           st.projectName,
+                           sizeof(st.projectName),
+                           -1.0F,
+                           f,
+                           "Stored as project.json name; projectId is generated once.",
+                           nameErr != nullptr,
+                           nameErr ? nameErr->message.c_str() : nullptr);
+            controller.SetProjectName(st.projectName);
+
+            ImGui::Dummy({0.0F, GridGap});
+
             {
-                ScopedCard card("IdCard", {0.0F, 366.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("PROJECT IDENTITY", f);
-                ImGui::Dummy({0.0F, 8.0F});
+                ImGui::PushID("PROJECT LOCATION");
+                ImGui::BeginGroup();
+                Ui::FieldLabel("PROJECT LOCATION", f);
 
-                DrawInputField("PROJECT NAME",
-                               st.projectName,
-                               sizeof(st.projectName),
-                               -1.0F,
-                               f,
-                               "Stored as project.json name; projectId is generated once.",
-                               nameErr != nullptr,
-                               nameErr ? nameErr->message.c_str() : nullptr);
-                controller.SetProjectName(st.projectName);
+                const float btnW = 38.0F;
+                const float gapW = 8.0F;
+                const float inputW = ImGui::GetContentRegionAvail().x - (btnW + gapW);
 
-                ImGui::Dummy({0.0F, GridGap});
-
+                if (inputW > 0.0F)
                 {
-                    ImGui::PushID("PROJECT LOCATION");
-                    ImGui::BeginGroup();
-                    WizardFieldLabel("PROJECT LOCATION", f);
+                    ImGui::PushItemWidth(inputW);
+                }
+                [[maybe_unused]] const bool pathChanged = Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
+                if (inputW > 0.0F)
+                {
+                    ImGui::PopItemWidth();
+                }
+                controller.SetProjectPath(st.projectPath);
 
-                    const float btnW = 38.0F;
-                    const float gapW = 8.0F;
-                    const float inputW = ImGui::GetContentRegionAvail().x - (btnW + gapW);
-
-                    if (inputW > 0.0F)
+                ImGui::SameLine(0.0F, gapW);
+                if (DrawFolderIconButton("##browse_location", btnW, f, pathErr != nullptr))
+                {
+                    if (auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
                     {
-                        ImGui::PushItemWidth(inputW);
-                    }
-                    [[maybe_unused]] const bool pathChanged = InputTextCss("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
-                    if (inputW > 0.0F)
-                    {
-                        ImGui::PopItemWidth();
-                    }
-                    controller.SetProjectPath(st.projectPath);
-
-                    ImGui::SameLine(0.0F, gapW);
-                    if (DrawFolderIconButton("##browse_location", btnW, f, pathErr != nullptr))
-                    {
-                        if (auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
+                        if (sizeof(st.projectPath) > 0)
                         {
-                            if (sizeof(st.projectPath) > 0)
+                            std::filesystem::path finalPath = *selectedDir;
+                            if (st.projectName[0] != '\0' && finalPath.filename().string() != st.projectName)
                             {
-                                const std::string pathStr = selectedDir->string();
-                                std::strncpy(st.projectPath, pathStr.c_str(), sizeof(st.projectPath) - 1);
-                                st.projectPath[sizeof(st.projectPath) - 1] = '\0';
-                                controller.SetProjectPath(st.projectPath);
+                                finalPath /= st.projectName;
                             }
+                            const std::string pathStr = finalPath.string();
+                            std::strncpy(st.projectPath, pathStr.c_str(), sizeof(st.projectPath) - 1);
+                            st.projectPath[sizeof(st.projectPath) - 1] = '\0';
+                            controller.SetProjectPath(st.projectPath);
                         }
                     }
-
-                    if (pathErr && pathErr->message.c_str())
-                    {
-                        ErrorText(pathErr->message.c_str(), f);
-                    }
-                    else
-                    {
-                        WizardHint("Choose an empty folder or a missing location with a writable parent.", f);
-                    }
-                    ImGui::EndGroup();
-                    ImGui::PopID();
                 }
 
-                ImGui::Dummy({0.0F, GridGap});
-
-                DrawInputField("PROJECT VERSION",
-                               st.projectVersion,
-                               sizeof(st.projectVersion),
-                               -1.0F,
-                               f,
-                               "Game/product version. Does not select project-format migrations.");
-                controller.SetProjectVersion(st.projectVersion);
-
-                ImGui::Dummy({0.0F, GridGap});
-
-                DrawInputField("DEFAULT SCENE", st.defaultScene, sizeof(st.defaultScene), -1.0F, f);
-                controller.SetDefaultScene(st.defaultScene);
+                if (pathErr && pathErr->message.c_str())
+                {
+                    Ui::ErrorText(pathErr->message.c_str(), f);
+                }
+                else
+                {
+                    Ui::Hint("Choose an empty folder or a missing location with a writable parent.", f);
+                }
+                ImGui::EndGroup();
+                ImGui::PopID();
             }
+
+            ImGui::Dummy({0.0F, GridGap});
+
+            DrawInputField("PROJECT VERSION",
+                           st.projectVersion,
+                           sizeof(st.projectVersion),
+                           -1.0F,
+                           f,
+                           "Game/product version. Does not select project-format migrations.");
+            controller.SetProjectVersion(st.projectVersion);
+
+            ImGui::Dummy({0.0F, GridGap});
+
+            DrawInputField("DEFAULT SCENE", st.defaultScene, sizeof(st.defaultScene), -1.0F, f);
+            controller.SetDefaultScene(st.defaultScene);
 
             ImGui::Dummy({0.0F, CardGap});
 
             {
-                ScopedCard card("DirCard", {0.0F, 220.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("PROJECT DIRECTORY", f);
+                ScopedCard card("DirCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2());
+                Ui::SectionTitle("PROJECT DIRECTORY", f);
                 ImGui::Dummy({0.0F, 6.0F});
                 ScopedTextStyle ts(f.mono, 13.5F, Theme::FontPx::Mono);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 ImGui::TextUnformatted(
                     "MyGame/\n"
                     "  .horo/\n"
@@ -1109,9 +834,63 @@ namespace Horo::Editor
             static constexpr std::array<const char *, 4> kCompiler = {"default", "clang", "gcc", "msvc"};
             static constexpr std::array<const char *, 2> kCppStd = {"C++20", "C++17"};
 
+            const std::string &templateId = controller.Draft().templateId;
+            if (templateId == "package-based")
             {
-                ScopedCard card("RtCard", {0.0F, 256.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("RUNTIME DEFAULTS", f);
+                ScopedCard card("TcPkg", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("PACKAGE SOURCE CONFIGURATION", f);
+                ImGui::Dummy({0.0F, 8.0F});
+                const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
+                DrawInputField("TEMPLATE PACKAGE URL / REGISTRY", st.packageRegistryUrl, sizeof(st.packageRegistryUrl), colW, f);
+                ImGui::SameLine(0.0F, GridGap);
+                DrawInputField("PACKAGE VERSION / TAG", st.packageVersion, sizeof(st.packageVersion), colW, f);
+                ImGui::Dummy({0.0F, 8.0F});
+                Ui::Hint("Specify the remote registry package and version lockfile to scaffold this project.", f);
+            }
+            else if (templateId == "first-person")
+            {
+                ScopedCard card("TcFp", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("FIRST PERSON CONTROLLER SETTINGS", f);
+                ImGui::Dummy({0.0F, 8.0F});
+                const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
+                static constexpr std::array<const char *, 3> kInputMaps = {"QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"};
+                DrawComboField("CHARACTER INPUT MAP", &st.firstPersonInputMapIndex, kInputMaps.data(), static_cast<int>(kInputMaps.size()), colW, f);
+                ImGui::Dummy({0.0F, 8.0F});
+                Ui::Hint("A first-person camera and kinematic character capsule will be generated in defaultScene.", f);
+            }
+            else if (templateId == "tech-demo")
+            {
+                ScopedCard card("TcDemo", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("TECH DEMO CONFIGURATION", f);
+                ImGui::Dummy({0.0F, 8.0F});
+                CheckboxCss("Enable runtime observability and FPS overlays by default", &st.demoObservabilityOverlays, f);
+                ImGui::Dummy({0.0F, CheckGap});
+                CheckboxCss("Include high-detail benchmark scene and camera animation track", &st.demoBenchmarkScene, f);
+            }
+            else if (templateId == "custom")
+            {
+                ScopedCard card("TcCustom", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("CUSTOM SUBSYSTEM SELECTION", f);
+                ImGui::Dummy({0.0F, 8.0F});
+                CheckboxCss("Rendering Subsystem (Vulkan/OpenGL core pipeline)", &st.customSubsystems[0], f);
+                ImGui::Dummy({0.0F, CheckGap});
+                CheckboxCss("Physics Subsystem (Collision, Raycasting, Rigidbodies)", &st.customSubsystems[1], f);
+                ImGui::Dummy({0.0F, CheckGap});
+                CheckboxCss("Audio Subsystem (3D Spatial Audio & Mixer)", &st.customSubsystems[2], f);
+                ImGui::Dummy({0.0F, CheckGap});
+                CheckboxCss("UI Subsystem (ImGui & Retained Scene UI)", &st.customSubsystems[3], f);
+                ImGui::Dummy({0.0F, CheckGap});
+                CheckboxCss("Networking Subsystem (Replication & Socket Transport)", &st.customSubsystems[4], f);
+            }
+
+            if (templateId == "package-based" || templateId == "first-person" || templateId == "tech-demo" || templateId == "custom")
+            {
+                ImGui::Dummy({0.0F, CardGap});
+            }
+
+            {
+                ScopedCard card("RtCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("RUNTIME DEFAULTS", f);
                 ImGui::Dummy({0.0F, 8.0F});
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
@@ -1146,8 +925,8 @@ namespace Horo::Editor
             ImGui::Dummy({0.0F, CardGap});
 
             {
-                ScopedCard card("TcCard", {0.0F, 204.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("REQUIRED TOOLCHAIN", f);
+                ScopedCard card("TcCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("REQUIRED TOOLCHAIN", f);
                 ImGui::Dummy({0.0F, 8.0F});
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
@@ -1165,7 +944,7 @@ namespace Horo::Editor
                 controller.SetMinimumCxxStandard(st.cppStandardIndex == 0 ? 20 : 17);
 
                 ImGui::Dummy({0.0F, 10.0F});
-                WizardHint("Portable project settings describe build intent. Machine-specific paths and SDK "
+                Ui::Hint("Portable project settings describe build intent. Machine-specific paths and SDK "
                            "locations are resolved by user-level toolchain profiles, never stored in project.json.",
                            f);
             }
@@ -1173,8 +952,8 @@ namespace Horo::Editor
             ImGui::Dummy({0.0F, CardGap});
 
             {
-                ScopedCard card("OptCard", {0.0F, 172.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("OPTIONAL", f);
+                ScopedCard card("OptCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("OPTIONAL", f);
                 ImGui::Dummy({0.0F, 10.0F});
 
                 bool initGit = controller.Draft().initializeGit;
@@ -1187,9 +966,9 @@ namespace Horo::Editor
                 controller.SetRestorePackages(restorePkgs);
 
                 ImGui::Dummy({0.0F, CheckGap});
-                bool incStarter = controller.Draft().includeStarterContent;
-                CheckboxCss("Include starter content", &incStarter, f);
-                controller.SetIncludeStarterContent(incStarter);
+                bool inclStarter = controller.Draft().includeStarterContent;
+                CheckboxCss("Include starter content", &inclStarter, f);
+                controller.SetIncludeStarterContent(inclStarter);
 
                 ImGui::Dummy({0.0F, CheckGap});
                 bool genCMake = controller.Draft().generateCMakeProject;
@@ -1209,7 +988,7 @@ namespace Horo::Editor
 
             {
                 ScopedTextStyle ts(f.sans, 13.0F, Theme::FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 ImGui::TextUnformatted(label);
                 ImGui::PopStyleColor();
             }
@@ -1224,9 +1003,9 @@ namespace Horo::Editor
             {
                 ScopedTextStyle ts(f.mono, 12.0F, Theme::FontPx::Mono);
                 if (warn)
-                    ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Warn());
+                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Warn());
                 else
-                    ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Text());
+                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                 ImGui::TextUnformatted(value.c_str());
                 ImGui::PopStyleColor();
             }
@@ -1242,21 +1021,22 @@ namespace Horo::Editor
                 {
                     const float x0 = rowStart.x + static_cast<float>(i) * kDashStep;
                     const float x1 = std::min(rowStart.x + rowW, x0 + kDashLen);
-                    dl->AddLine({x0, rowStart.y + rowH - 1.0F}, {x1, rowStart.y + rowH - 1.0F}, Theme::U32(WizardCss::Border()), 1.0F);
+                    dl->AddLine({x0, rowStart.y + rowH - 1.0F}, {x1, rowStart.y + rowH - 1.0F}, Theme::U32(Theme::Border()), 1.0F);
                 }
             }
         }
 
         void DrawStepReview(ProjectCreationController &controller,
                             const ProjectCreationValidation &validation,
-                            const Fonts &f)
+                            const Fonts &f,
+                            const ProjectCreationScreenGuiState &st)
         {
             using namespace WizardLayout;
             const ProjectCreationDraft &draft = controller.Draft();
 
             {
-                ScopedCard card("RevCard1", {0.0F, 260.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("PROJECT SETTINGS", f);
+                ScopedCard card("RevCard1", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("PROJECT SETTINGS", f);
                 ImGui::Dummy({0.0F, 6.0F});
 
                 const int templateIdx = FindTemplateIndex(draft.templateId);
@@ -1267,14 +1047,35 @@ namespace Horo::Editor
                 SummaryRow("Default Scene", draft.defaultScene, f, false);
                 SummaryRow("Render Backend", draft.renderBackend, f, false);
                 SummaryRow("Physics", draft.physicsEnabled ? "Enabled" : "Disabled", f, false);
-                SummaryRow("Build Profile", draft.buildProfile, f, false, true);
+                const bool hasExtraRows = (draft.templateId == "package-based" || draft.templateId == "first-person" || draft.templateId == "tech-demo" || draft.templateId == "custom");
+                SummaryRow("Build Profile", draft.buildProfile, f, false, !hasExtraRows);
+
+                if (draft.templateId == "package-based")
+                {
+                    SummaryRow("Package Registry", st.packageRegistryUrl, f, false);
+                    SummaryRow("Package Version", st.packageVersion, f, false, true);
+                }
+                else if (draft.templateId == "first-person")
+                {
+                    static constexpr std::array<const char *, 3> kInputMaps = {"QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"};
+                    SummaryRow("Input Map", kInputMaps[st.firstPersonInputMapIndex], f, false, true);
+                }
+                else if (draft.templateId == "tech-demo")
+                {
+                    SummaryRow("Observability", st.demoObservabilityOverlays ? "Enabled" : "Disabled", f, false);
+                    SummaryRow("Benchmark Scene", st.demoBenchmarkScene ? "Included" : "Excluded", f, false, true);
+                }
+                else if (draft.templateId == "custom")
+                {
+                    SummaryRow("Subsystems", "Rendering, Physics, Audio", f, false, true);
+                }
             }
 
             ImGui::Dummy({0.0F, CardGap});
 
             {
-                ScopedCard card("RevCard2", {0.0F, 226.0F}, CardPad, CardPad, WizardCss::Bg2());
-                WizardSectionTitle("WHAT WILL BE CREATED", f);
+                ScopedCard card("RevCard2", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
+                Ui::SectionTitle("WHAT WILL BE CREATED", f);
                 ImGui::Dummy({0.0F, 6.0F});
                 SummaryRow("Portable metadata (commit)", ".horo/project.json, .horo/plugins.json, asset sidecars", f, false);
                 SummaryRow("Local / derived (ignore)", ".horo/editor workspace.json, .horo/asset index.json, .horo/local/", f, false);
@@ -1299,7 +1100,7 @@ namespace Horo::Editor
         {
             using namespace WizardLayout;
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, WizardCss::Bg0());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
             ImGui::BeginChild("WizFtr", {0, FooterH}, false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
@@ -1309,21 +1110,21 @@ namespace Horo::Editor
 
             dl->AddLine({footerPos.x, footerPos.y},
                         {footerPos.x + footerW, footerPos.y},
-                        Theme::U32(WizardCss::Border()),
+                        Theme::U32(Theme::Border()),
                         1.0F);
 
             const ImVec2 dotCenter{footerPos.x + 22.0F + 4.0F, footerPos.y + 26.0F};
             const bool isValid = validation.IsValid();
-            dl->AddCircleFilled(dotCenter, 4.0F, Theme::U32(isValid ? WizardCss::Ok() : WizardCss::Err()), 16);
+            dl->AddCircleFilled(dotCenter, 4.0F, Theme::U32(isValid ? Theme::Ok() : Theme::Err()), 16);
 
             ImGui::SetCursorPos({38.0F, 18.0F});
             {
                 ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Muted());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 const int templateIdx = FindTemplateIndex(controller.Draft().templateId);
                 if (!isValid && !validation.diagnostics.empty())
                 {
-                    ImGui::Text("Template: %s \xC2\xB7 validation failed", kTemplateNames[templateIdx]);
+                    ImGui::Text("Template: %s \xC2\xB7 %s", kTemplateNames[templateIdx], validation.diagnostics.front().message.c_str());
                 }
                 else
                 {
@@ -1341,7 +1142,7 @@ namespace Horo::Editor
             const float actionsW = isReview ? (backW + gap + createW) : (backW + gap + nextW);
             ImGui::SetCursorPos({footerW - 22.0F - actionsW, 10.0F});
 
-            if (DrawWizardButton("\xE2\x86\x90 Back", {backW, btnH}, false, st.step > 1, f))
+            if (Ui::Button({"\xE2\x86\x90 Back", {backW, btnH}, Ui::ButtonVariant::Secondary, st.step > 1, 13.0F, f.mono, Theme::FontPx::Mono}))
             {
                 st.step--;
             }
@@ -1350,17 +1151,28 @@ namespace Horo::Editor
 
             if (!isReview)
             {
-                if (DrawWizardButton("Next \xE2\x86\x92", {nextW, btnH}, true, true, f))
+                if (Ui::Button({"Next \xE2\x86\x92", {nextW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, f.mono, Theme::FontPx::Mono}))
                 {
                     st.step++;
                 }
             }
             else
             {
-                if (DrawWizardButton("Create Project", {createW, btnH}, true, isValid, f))
+                if (Ui::Button({"Create Project", {createW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, f.mono, Theme::FontPx::Mono}))
                 {
-                    (void)controller.BuildCreationRequest();
-                    outCommand = ProjectCreationScreenGuiCommand::ReturnToWelcome;
+                    if (isValid)
+                    {
+                        (void)controller.BuildCreationRequest();
+                        outCommand = ProjectCreationScreenGuiCommand::CreateProject;
+                    }
+                    else if (!validation.diagnostics.empty())
+                    {
+                        LOG_ERROR("editor.project_creation", "Cannot create project: %s", validation.diagnostics.front().message.c_str());
+                    }
+                    else
+                    {
+                        LOG_ERROR("editor.project_creation", "Cannot create project: validation failed.");
+                    }
                 }
             }
 
@@ -1396,8 +1208,8 @@ namespace Horo::Editor
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{0.0F, 0.0F});
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, WizardCss::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, WizardCss::Border());
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
 
         constexpr ImGuiWindowFlags modalFlags = ImGuiWindowFlags_NoTitleBar |
                                                 ImGuiWindowFlags_NoResize |
@@ -1417,33 +1229,35 @@ namespace Horo::Editor
         ImGui::SameLine(0.0F, 0.0F);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{WizardLayout::MainPadX, WizardLayout::MainPadY});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, WizardCss::Bg1());
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
         ImGui::BeginChild("WizMain", {0.0F, bodyH}, false, ImGuiWindowFlags_AlwaysUseWindowPadding);
 
         if (state.confirmingDiscard)
         {
-            ScopedCard confirmCard("DiscardConfirm", {0.0F, 66.0F}, 16.0F, 12.0F, WizardCss::ErrSoft());
+            ScopedCard confirmCard("DiscardConfirm", {0.0F, 74.0F}, 16.0F, 12.0F, Theme::ErrSoft());
             {
                 ScopedTextStyle ts(fonts.sans, 14.0F, Theme::FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, WizardCss::Err());
+                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
                 ImGui::TextUnformatted("Unsaved project draft: discard changes and return?");
                 ImGui::PopStyleColor();
             }
             ImGui::Dummy({0.0F, 6.0F});
 
-            if (DrawWizardButton("Keep Editing", {110.0F, 28.0F}, false, true, fonts))
+            if (Ui::Button({"Keep Editing", {110.0F, 28.0F}, Ui::ButtonVariant::Secondary, true, 13.0F, fonts.mono, Theme::FontPx::Mono}))
             {
                 state.confirmingDiscard = false;
             }
             ImGui::SameLine(0.0F, 8.0F);
-            if (DrawWizardButton("Discard & Return", {140.0F, 28.0F}, true, true, fonts))
+            if (Ui::Button({"Discard & Return", {140.0F, 28.0F}, Ui::ButtonVariant::Primary, true, 13.0F, fonts.mono, Theme::FontPx::Mono}))
             {
                 controller.DiscardDraft();
                 command = ProjectCreationScreenGuiCommand::ReturnToWelcome;
                 state.confirmingDiscard = false;
             }
-            ImGui::Dummy({0.0F, 14.0F});
+            ImGui::Dummy({0.0F, 12.0F});
         }
+
+        ImGui::Dummy({0.0F, 14.0F});
 
         const ProjectCreationValidation validation = controller.Validate();
         switch (state.step)
@@ -1458,7 +1272,7 @@ namespace Horo::Editor
             DrawStepSettings(controller, state, fonts);
             break;
         case 4:
-            DrawStepReview(controller, validation, fonts);
+            DrawStepReview(controller, validation, fonts, state);
             break;
         default:
             state.step = 1;

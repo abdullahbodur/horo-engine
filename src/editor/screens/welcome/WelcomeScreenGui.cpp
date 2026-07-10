@@ -3,20 +3,28 @@
 #include "Horo/Editor/EditorUiComponents.h"
 
 #include <cfloat>
-#include <cstddef>
 
 namespace Horo::Editor
 {
     namespace
     {
 
-        void DrawProjectCard(const RecentProjectEntry &project, const int index, const Theme::Fonts &fonts)
+        /// @brief Draws a single recent project card.
+        /// @return true if the card was clicked this frame.
+        [[nodiscard]] bool DrawProjectCard(const RecentProjectEntry &project,
+                                           const int index,
+                                           const Theme::Fonts &fonts)
         {
             using namespace Theme;
 
+            bool clicked = false;
             ImGui::PushID(index);
             {
-                Ui::ScopedCard card("ProjectCard", ImVec2{-1.0F, 64.0F}, 14.0F, 12.0F);
+                // Invisible button over the full card area for click detection.
+                const ImVec2 cardSize{-1.0F, 64.0F};
+                const ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
+
+                Ui::ScopedCard card("ProjectCard", cardSize, 14.0F, 12.0F);
 
                 auto *dl = ImGui::GetWindowDrawList();
                 const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
@@ -50,8 +58,22 @@ namespace Horo::Editor
                     ScopedTextStyle textStyle(fonts.mono, 11.0F, FontPx::Mono);
                     ImGui::TextDisabled("%s", project.lastOpenedLabel.c_str());
                 }
+
+                // Detect click over the card's bounding rect.
+                const ImVec2 cardEnd = ImGui::GetItemRectMax();
+                if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                    ImGui::IsWindowHovered(ImGuiHoveredFlags_None))
+                {
+                    const ImVec2 mouse = ImGui::GetMousePos();
+                    if (mouse.x >= cursorBefore.x && mouse.x <= cardEnd.x &&
+                        mouse.y >= cursorBefore.y && mouse.y <= cardEnd.y)
+                    {
+                        clicked = true;
+                    }
+                }
             }
             ImGui::PopID();
+            return clicked;
         }
 
         void DrawNewsCard(const char *tag, const char *title, const char *description, const ImVec2 size, const Theme::Fonts &fonts)
@@ -93,7 +115,7 @@ namespace Horo::Editor
 
     } // namespace
 
-    [[nodiscard]] WelcomeScreenGuiCommand DrawWelcomeScreenGui(const WelcomeViewModel &viewModel,
+    [[nodiscard]] WelcomeScreenGuiResult DrawWelcomeScreenGui(const WelcomeViewModel &viewModel,
                                                                const Theme::Fonts &fonts,
                                                                const WelcomeScreenGuiAssets &assets)
     {
@@ -107,7 +129,7 @@ namespace Horo::Editor
                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
-        WelcomeScreenGuiCommand command = WelcomeScreenGuiCommand::None;
+        WelcomeScreenGuiResult result;
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, Bg1());
         ImGui::Begin("Welcome", nullptr, flags);
@@ -152,7 +174,7 @@ namespace Horo::Editor
                 cursorX += titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, glyph).x + titleSpacing;
             }
             const ImVec2 titleSize = titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, title);
-            const float titleWidth = titleSize.x + titleSpacing * 3.0F; // 3 gaps for 4 chars
+            const float titleWidth = titleSize.x + titleSpacing * 3.0F;
             ImGui::Dummy({titleWidth, titleSize.y});
         }
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6.0F);
@@ -169,13 +191,15 @@ namespace Horo::Editor
 
         if (DrawWelcomeActionButton("+  New Project", Ui::ButtonVariant::Primary, fonts))
         {
-            command = WelcomeScreenGuiCommand::NewProject;
+            result.command = WelcomeScreenGuiCommand::NewProject;
         }
-        (void)DrawWelcomeActionButton("   Open Project", Ui::ButtonVariant::Secondary, fonts);
-        (void)DrawWelcomeActionButton("\xe2\x86\x93  Open Recent", Ui::ButtonVariant::Secondary, fonts);
+        if (DrawWelcomeActionButton("   Open Project", Ui::ButtonVariant::Secondary, fonts))
+        {
+            result.command = WelcomeScreenGuiCommand::OpenProject;
+        }
         if (DrawWelcomeActionButton("   Open Settings", Ui::ButtonVariant::Secondary, fonts))
         {
-            command = WelcomeScreenGuiCommand::OpenSettings;
+            result.command = WelcomeScreenGuiCommand::OpenSettings;
         }
 
         ImGui::EndChild();
@@ -208,7 +232,11 @@ namespace Horo::Editor
 
         for (std::size_t i = 0; i < viewModel.recentProjects.size(); ++i)
         {
-            DrawProjectCard(viewModel.recentProjects[i], static_cast<int>(i), fonts);
+            if (DrawProjectCard(viewModel.recentProjects[i], static_cast<int>(i), fonts))
+            {
+                result.command = WelcomeScreenGuiCommand::OpenRecentProject;
+                result.openRecentIndex = static_cast<int>(i);
+            }
         }
 
         ImGui::Dummy({0.0F, 28.0F});
@@ -220,17 +248,15 @@ namespace Horo::Editor
         ImGui::Dummy({0.0F, 14.0F});
 
         const float newsWidth = (ImGui::GetContentRegionAvail().x - 12.0F) * 0.5F;
-        DrawNewsCard("Release Notes",
-                     "GPU-driven rendering preview",
-                     "Experimental render graph and bindless resource backend now available.",
-                     {newsWidth, 104.0F},
-                     fonts);
-        ImGui::SameLine(0.0F, 12.0F);
-        DrawNewsCard("Documentation",
-                     "MCP workflow guide",
-                     "Author scenes and assets through the Model Context Protocol.",
-                     {newsWidth, 104.0F},
-                     fonts);
+        for (int i = 0; i < static_cast<int>(viewModel.whatsNew.size()); ++i)
+        {
+            const auto &entry = viewModel.whatsNew[static_cast<std::size_t>(i)];
+            DrawNewsCard(entry.tag, entry.title, entry.body, {newsWidth, 104.0F}, fonts);
+            if (i == 0)
+            {
+                ImGui::SameLine(0.0F, 12.0F);
+            }
+        }
 
         ImGui::EndChild();
         ImGui::PopStyleVar();
@@ -240,7 +266,7 @@ namespace Horo::Editor
         ImGui::End();
         ImGui::PopStyleColor();
 
-        return command;
+        return result;
     }
 
 } // namespace Horo::Editor

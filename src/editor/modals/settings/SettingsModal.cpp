@@ -1,6 +1,5 @@
 #include "editor/modals/settings/SettingsModal.h"
 #include "Horo/Editor/SettingsModal.h"
-#include "Horo/Editor/EditorSettingsEvents.h"
 
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Editor/EditorTheme.h"
@@ -11,9 +10,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
-#include <cstdio>
-#include <cstring>
 #include <vector>
 
 namespace Horo::Editor
@@ -1599,8 +1595,13 @@ namespace Horo::Editor
 
         [[nodiscard]] ModalFrameResult DrawSettingsModalPresentationImpl(SettingsState &st, EditorSettingsService &settings, const Fonts &f, const ::ImTextureID logo)
         {
+            if (st.appearance.pendingThemeIndex >= 0)
+            {
+                Theme::SelectThemeByIndex(st.appearance.pendingThemeIndex);
+                st.appearance.pendingThemeIndex = -1;
+            }
+            
             st.modalFeedback[0] = '\0';
-            st.appearance.pendingThemeIndex = -1;
 
             const ImGuiViewport *vp = ImGui::GetMainViewport();
             const float modalW = std::min(Layout::ModalW, std::max(360.0F, vp->WorkSize.x - Layout::ViewportPad));

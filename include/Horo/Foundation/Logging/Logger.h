@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Horo/Foundation/Logging/LogLevel.h"
+#include "Horo/Foundation/Logging/LogContext.h"
 
 #include <chrono>
 #include <cstdio>
@@ -130,3 +131,14 @@ namespace Horo::Log
     }
 
 } // namespace Horo::Log
+
+// ── Short aliases — prefer these for new call sites ───────────────────────
+// The HORO_LOG_* macros remain for backward compatibility.
+// clang-format off
+#define LOG_TRACE    HORO_LOG_TRACE
+#define LOG_DEBUG    HORO_LOG_DEBUG
+#define LOG_INFO     HORO_LOG_INFO
+#define LOG_WARN     HORO_LOG_WARN
+#define LOG_ERROR    HORO_LOG_ERROR
+#define LOG_CRITICAL HORO_LOG_CRITICAL
+// clang-format on

@@ -1,5 +1,6 @@
 add_library(HoroFoundation STATIC
     foundation/logging/Logger.cpp
+    foundation/logging/LogContext.cpp
     foundation/data_bus/DataBus.cpp
     foundation/jobs/JobSystem.cpp
 )
@@ -46,19 +47,24 @@ target_include_directories(HoroEditorScreens
         ${PROJECT_SOURCE_DIR}/include
     PRIVATE
         ${PROJECT_SOURCE_DIR}/src
+        ${HORO_GENERATED_DIR}
 )
 
 target_link_libraries(HoroEditorScreens PUBLIC HoroEngine::Foundation)
+
+if(TARGET HoroBuildInfo)
+    add_dependencies(HoroEditorScreens HoroBuildInfo)
+endif()
 
 if(HORO_BUILD_EDITOR_GUI)
     add_library(HoroEditorGuiBackend STATIC
         editor/design_system/components/EditorUiComponents.cpp
         editor/app/EditorGuiApp.cpp
         editor/app/EditorTheme.cpp
-        editor/modals/new_project/NewProjectModal.cpp
         editor/modals/settings/SettingsModal.cpp
         editor/screens/welcome/WelcomeScreenGui.cpp
         editor/screens/project_creation/ProjectCreationScreenGui.cpp
+        editor/screens/project_loading/ProjectLoadingScreenGui.cpp
     )
 
     add_library(HoroEngine::EditorGuiBackend ALIAS HoroEditorGuiBackend)
@@ -70,6 +76,8 @@ if(HORO_BUILD_EDITOR_GUI)
         PRIVATE
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/vendor/stb
+            ${PROJECT_SOURCE_DIR}/vendor/pfd
+            ${HORO_GENERATED_DIR}
     )
     target_compile_definitions(HoroEditorGuiBackend
         PRIVATE

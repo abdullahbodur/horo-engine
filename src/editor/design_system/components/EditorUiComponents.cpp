@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -80,11 +79,16 @@ namespace Horo::Editor::Ui
 
     // ── ScopedCard ───────────────────────────────────────────────────────
 
-    ScopedCard::ScopedCard(const char *id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg)
+    ScopedCard::ScopedCard(const char *id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg, const bool autoResizeY)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{padX, padY});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, bg);
-        ImGui::BeginChild(id, size, true, ImGuiWindowFlags_NoScrollbar);
+        ImGuiChildFlags childFlags = ImGuiChildFlags_Borders;
+        if (autoResizeY)
+        {
+            childFlags |= (ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize);
+        }
+        ImGui::BeginChild(id, size, childFlags, ImGuiWindowFlags_NoScrollbar);
     }
 
     ScopedCard::~ScopedCard()
@@ -149,6 +153,18 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleColor();
     }
 
+    // ── ErrorText ────────────────────────────────────────────────────────
+
+    void ErrorText(const char *text, const Theme::Fonts &fonts)
+    {
+        Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+        ImGui::TextWrapped("%s", text);
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+
     // ── DashedSeparator ──────────────────────────────────────────────────
 
     void DashedSeparator(const float dash, const float gap)
@@ -188,32 +204,151 @@ namespace Horo::Editor::Ui
 
     // ── ComboControl ─────────────────────────────────────────────────────
 
-    void ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts)
+    bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts, bool error)
     {
-        PushControlStyle();
-        ImGui::PushItemWidth(-1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 4.0F});
-        {
-            Theme::ScopedTextStyle ts(fonts.mono, 15.0F, Theme::FontPx::Mono);
-            ImGui::Combo(id, value, items, itemCount);
-        }
+        bool changed = false;
+        ImGui::PushID(id);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
+        const float fieldW = ImGui::CalcItemWidth();
+        const float fieldH = ImGui::GetFrameHeight();
         ImGui::PopStyleVar();
-        ImGui::PopItemWidth();
-        PopControlStyle();
+
+        const ImVec2 fieldPos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##field", ImVec2{fieldW, fieldH});
+        const bool fieldHovered = ImGui::IsItemHovered();
+        const bool fieldClicked = ImGui::IsItemClicked();
+
+        const std::string popupId = std::string("##popup_") + id;
+        const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
+
+        auto *dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
+                          Theme::U32(fieldHovered ? Theme::Hover() : Theme::Bg3()), Theme::Layout::Radius);
+        dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
+                    Theme::U32(error ? Theme::Err() : (popupOpen ? Theme::Accent() : Theme::Border())),
+                    Theme::Layout::Radius, 0, popupOpen ? 1.5F : 1.0F);
+
+        // Selected value label
+        {
+            ImFont *font = fonts.mono ? fonts.mono : ImGui::GetFont();
+            const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
+            dl->AddText(font, 15.0F,
+                        {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F},
+                        Theme::U32(Theme::Text()), label);
+        }
+
+        // Right-side arrow
+        {
+            const float cx = fieldPos.x + fieldW - 18.0F;
+            const float cy = fieldPos.y + fieldH * 0.5F;
+            const ImU32 arrowCol = Theme::U32(fieldHovered ? Theme::Text() : Theme::Muted());
+            dl->AddTriangleFilled({cx - 4.0F, cy - 2.0F}, {cx + 4.0F, cy - 2.0F}, {cx, cy + 3.0F}, arrowCol);
+        }
+
+        if (fieldClicked)
+            ImGui::OpenPopup(popupId.c_str());
+
+        ImGui::SetNextWindowPos({fieldPos.x, fieldPos.y + fieldH + 4.0F});
+        ImGui::SetNextWindowSize({fieldW, 0.0F});
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 5.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.0F);
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{0.0F, 0.0F});
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::Bg2());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::BorderStrong());
+
+        if (ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove))
+        {
+            const ImVec2 pMin = ImGui::GetWindowPos();
+            const ImVec2 pMax = {pMin.x + ImGui::GetWindowWidth(), pMin.y + ImGui::GetWindowHeight()};
+
+            auto *bgdl = ImGui::GetBackgroundDrawList();
+            constexpr int shadowLayers = 12;
+            for (int i = shadowLayers; i >= 1; --i)
+            {
+                const float t = static_cast<float>(i) / static_cast<float>(shadowLayers);
+                const float spread = 16.0F * t;
+                const float alpha = 0.45F * (1.0F - t) * 0.11F;
+                bgdl->AddRectFilled({pMin.x - spread, pMin.y + 3.0F - spread * 0.25F},
+                                    {pMax.x + spread, pMax.y + 3.0F + spread},
+                                    Theme::U32(ImVec4{0.0F, 0.0F, 0.0F, alpha}),
+                                    6.0F + spread);
+            }
+
+            for (int i = 0; i < itemCount; ++i)
+            {
+                ImGui::PushID(i);
+                const bool isSelected = (*value == i);
+                const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+                const float rowW = ImGui::GetContentRegionAvail().x;
+                constexpr float rowH = 28.0F;
+
+                ImGui::InvisibleButton("##row", {rowW, rowH});
+                const bool rowHovered = ImGui::IsItemHovered();
+
+                if (ImGui::IsItemClicked())
+                {
+                    *value = i;
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+
+                auto *wdl = ImGui::GetWindowDrawList();
+                if (rowHovered || isSelected)
+                {
+                    wdl->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH},
+                                       Theme::U32(isSelected ? Theme::Hover() : Theme::Hover()));
+                }
+                wdl->AddText(fonts.mono ? fonts.mono : ImGui::GetFont(), 14.0F,
+                             {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
+                             Theme::U32(isSelected ? Theme::Text() : Theme::Muted()), items[i]);
+                ImGui::PopID();
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(4);
+        ImGui::PopID();
     }
 
     // ── InputTextControl ─────────────────────────────────────────────────
 
-    void InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts)
+    bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts, bool error)
     {
-        PushControlStyle();
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, error ? Theme::ErrSoft() : Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, error ? Theme::ErrSoft() : Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, error ? Theme::ErrSoft() : Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_Border, error ? Theme::Err() : Theme::Border());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+
         ImGui::PushItemWidth(-1.0F);
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
             ImGui::InputText(id, buffer, bufferSize);
         }
         ImGui::PopItemWidth();
-        PopControlStyle();
+
+        if (ImGui::IsItemActive())
+        {
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(error ? Theme::ErrSoft() : Theme::AccentSoft()), Theme::Layout::Radius + 2.0F, 0, 2.0F);
+        }
+        else if (ImGui::IsItemHovered())
+        {
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(Theme::BorderStrong()), Theme::Layout::Radius, 0, 1.0F);
+        }
+
+        ImGui::PopStyleColor(5);
+        ImGui::PopStyleVar(3);
     }
 
     // ── ColorHexControl ───────────────────────────────────────────────────
@@ -430,6 +565,32 @@ namespace Horo::Editor::Ui
             ImGui::PopStyleColor();
         }
         ImGui::PopID();
+        return clicked;
+    }
+
+    // ── CheckboxControl ──────────────────────────────────────────────────
+
+    [[nodiscard]] bool CheckboxControl(const char *label, bool *value, const Theme::Fonts &fonts)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{0.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+
+        bool clicked = false;
+        {
+            Theme::ScopedTextStyle ts(fonts.sans, 13.0F, Theme::FontPx::Sans);
+            clicked = ImGui::Checkbox(label, value);
+        }
+
+        ImGui::PopStyleColor(6);
+        ImGui::PopStyleVar(4);
         return clicked;
     }
 

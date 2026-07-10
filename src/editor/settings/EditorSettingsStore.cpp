@@ -1,4 +1,5 @@
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
 #include <charconv>
@@ -515,6 +516,8 @@ namespace Horo::Editor
 
         if (std::error_code ec; !std::filesystem::exists(out.path, ec))
         {
+            LOG_DEBUG("editor.settings", "editor_settings.json not found at '%s' — using defaults.",
+                           out.path.string().c_str());
             return out;
         }
 
@@ -523,6 +526,8 @@ namespace Horo::Editor
         const std::string json = ReadWholeFile(out.path, &readError);
         if (!readError.empty())
         {
+            LOG_ERROR("editor.settings", "Failed to read editor_settings.json at '%s': %s",
+                           out.path.string().c_str(), readError.c_str());
             out.parseError = true;
             out.error = readError;
             return out;
@@ -530,6 +535,8 @@ namespace Horo::Editor
 
         if (json.find('{') == std::string::npos || json.find('}') == std::string::npos)
         {
+            LOG_ERROR("editor.settings", "editor_settings.json at '%s' is not a valid JSON object.",
+                           out.path.string().c_str());
             out.parseError = true;
             out.error = "Editor settings file must contain a JSON object.";
             return out;
@@ -538,7 +545,14 @@ namespace Horo::Editor
         ApplyJsonValues(json, out.settings);
         if (std::string validationError; !ValidateEditorSettings(out.settings, &validationError))
         {
+            LOG_WARN("editor.settings", "editor_settings.json loaded but failed validation: %s",
+                          validationError.c_str());
             out.error = validationError;
+        }
+        else
+        {
+            LOG_DEBUG("editor.settings", "editor_settings.json loaded successfully from '%s'.",
+                           out.path.string().c_str());
         }
         return out;
     }
@@ -644,6 +658,8 @@ namespace Horo::Editor
 
         if (!out.good())
         {
+            LOG_ERROR("editor.settings", "I/O error while writing editor_settings.json to '%s'.",
+                           doc->path.string().c_str());
             if (outError)
             {
                 *outError = "Failed while writing editor settings file.";
@@ -654,6 +670,7 @@ namespace Horo::Editor
         doc->loadedFromDisk = true;
         doc->parseError = false;
         doc->error.clear();
+        LOG_DEBUG("editor.settings", "editor_settings.json saved to '%s'.", doc->path.string().c_str());
         return true;
     }
 

@@ -23,12 +23,19 @@ struct ProjectCreationScreenGuiState {
     int targetPlatformIndex = 0;
     int compilerFamilyIndex = 0;
     int cppStandardIndex = 0;
+    char packageRegistryUrl[256]{"registry://horo/starter-package"};
+    char packageVersion[64]{"1.0.0"};
+    int firstPersonInputMapIndex = 0;
+    bool demoObservabilityOverlays = true;
+    bool demoBenchmarkScene = true;
+    bool customSubsystems[5]{true, true, true, false, false};
 };
 
 /** @brief Command emitted by the ProjectCreation route presentation. */
 enum class ProjectCreationScreenGuiCommand {
     None,
     ReturnToWelcome,
+    CreateProject,
 };
 
 /**

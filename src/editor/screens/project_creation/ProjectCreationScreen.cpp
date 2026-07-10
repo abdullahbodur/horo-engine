@@ -1,6 +1,7 @@
 #include "Horo/Editor/ProjectCreationScreen.h"
 
-#include <cctype>
+#include "Horo/Foundation/Logging/Logger.h"
+
 #include <system_error>
 #include <utility>
 
@@ -158,7 +159,39 @@ void ProjectCreationController::SetProjectPath(std::string projectPath) {
 
 /** @copydoc ProjectCreationController::SetTemplateId */
 void ProjectCreationController::SetTemplateId(std::string templateId) {
-    draft_.templateId = std::move(templateId);
+    if (draft_.templateId != templateId) {
+        draft_.templateId = std::move(templateId);
+        if (draft_.templateId == "empty") {
+            draft_.includeStarterContent = false;
+            draft_.defaultScene = "";
+        } else if (draft_.templateId == "3d-starter") {
+            draft_.includeStarterContent = true;
+            if (draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/main.horo";
+            }
+        } else if (draft_.templateId == "first-person") {
+            draft_.includeStarterContent = true;
+            draft_.physicsEnabled = true;
+            if (draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/first_person.horo";
+            }
+        } else if (draft_.templateId == "tech-demo") {
+            draft_.includeStarterContent = true;
+            draft_.targetFrameRate = 120;
+            if (draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/benchmark.horo";
+            }
+        } else if (draft_.templateId == "package-based") {
+            draft_.restorePackages = true;
+            if (draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/main.horo";
+            }
+        } else if (draft_.templateId == "custom") {
+            if (draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/main.horo";
+            }
+        }
+    }
 }
 
 /** @copydoc ProjectCreationController::MutableDraft */
@@ -285,9 +318,12 @@ ProjectCreationValidation ProjectCreationController::Validate() const {
 
 /** @copydoc ProjectCreationController::BuildCreationRequest */
 std::optional<ProjectCreationRequest> ProjectCreationController::BuildCreationRequest() const {
-    if (!Validate().IsValid()) {
+    const auto val = Validate();
+    if (!val.IsValid()) {
+        LOG_DEBUG("editor.project_creation", "BuildCreationRequest failed validation (%zu diagnostics)", val.diagnostics.size());
         return std::nullopt;
     }
+    LOG_DEBUG("editor.project_creation", "BuildCreationRequest succeeded for project '%s' at '%s'", draft_.projectName.c_str(), draft_.projectPath.c_str());
     return MakeRequest(draft_);
 }
 

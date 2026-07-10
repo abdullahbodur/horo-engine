@@ -2,11 +2,10 @@
 
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/JobSystem.h"
+#include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Progress.h"
 
-#include <cctype>
 #include <chrono>
-#include <ctime>
 #include <fstream>
 #include <mutex>
 #include <sstream>
@@ -113,6 +112,16 @@ namespace {
 [[nodiscard]] bool PromoteWithoutReplace(const std::filesystem::path& staging,
                                          const std::filesystem::path& destination,
                                          std::error_code& error) {
+    if (std::filesystem::exists(destination, error)) {
+        if (std::filesystem::is_directory(destination, error) && std::filesystem::is_empty(destination, error)) {
+            std::filesystem::remove(destination, error);
+            if (error) return false;
+        } else {
+            error = std::make_error_code(std::errc::file_exists);
+            return false;
+        }
+    }
+    if (error) return false;
 #if defined(__APPLE__)
     if (renameatx_np(AT_FDCWD, staging.c_str(), AT_FDCWD, destination.c_str(), RENAME_EXCL) == 0) return true;
     error = std::error_code(errno, std::generic_category());
@@ -235,9 +244,18 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
         std::filesystem::remove_all(staging, error);
     };
 
+    LOG_DEBUG("editor.project_creation", "Starting worker execution for operation %llu. Destination: '%s'", static_cast<unsigned long long>(operation->snapshot.id), destination.string().c_str());
+    LOG_DEBUG("editor.project_creation", "Resolved parent directory: '%s', staging directory: '%s'", parent.string().c_str(), staging.string().c_str());
+
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::Staging, "staging", 0.05F);
     if (IsCancelled(cancellation, state, operation)) return;
-    if (std::filesystem::exists(destination, error) || error) {
+    if (std::filesystem::exists(destination, error)) {
+        if (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error)) {
+            SetFailure(state, operation, ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion.");
+            return;
+        }
+    }
+    if (error) {
         SetFailure(state, operation, ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion.");
         return;
     }
@@ -254,6 +272,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::WritingMetadata, "metadata", 0.20F);
     if (IsCancelled(cancellation, state, operation)) { cleanup(); return; }
+    LOG_DEBUG("editor.project_creation", "Writing metadata files (.horo/project.json, .horo/plugins.json). ProjectId: '%s'", operation->snapshot.projectId.c_str());
     std::filesystem::create_directories(staging / ".horo", error);
     if (error || !WriteDurableFile(staging / ".horo/project.json", ProjectJson(request, operation->snapshot.projectId)) ||
         !WriteDurableFile(staging / ".horo/plugins.json", "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n")) {
@@ -264,6 +283,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::WritingScaffolding, "scaffolding", 0.50F);
     if (IsCancelled(cancellation, state, operation)) { cleanup(); return; }
+    LOG_DEBUG("editor.project_creation", "Scaffolding asset subdirectories (assets/models, textures, materials, shaders, scenes) for template '%s'", request.templateId.c_str());
     for (const char* directory : {"assets/models", "assets/textures", "assets/materials", "assets/shaders", "assets/scenes"}) {
         std::filesystem::create_directories(staging / directory, error);
         if (error) {
@@ -274,6 +294,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
     }
     if (request.includeStarterContent) {
         const std::filesystem::path starterScene = staging / request.defaultScene;
+        LOG_DEBUG("editor.project_creation", "Writing starter scene at '%s'", starterScene.string().c_str());
         std::filesystem::create_directories(starterScene.parent_path(), error);
         if (error || !WriteDurableFile(starterScene, "{\n  \"schemaVersion\": 1,\n  \"objects\": []\n}\n")) {
             cleanup();
@@ -281,19 +302,26 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
             return;
         }
     }
-    if (request.initializeGit && !WriteDurableFile(staging / ".gitignore", "build/\n.horo/local/\n.horo/editor_workspace.json\n.horo/asset_index.json\n")) {
-        cleanup();
-        SetFailure(state, operation, ProjectCreationErrorCode::WriteFailed, "Unable to write the project git ignore file.");
-        return;
+    if (request.initializeGit) {
+        LOG_DEBUG("editor.project_creation", "Writing .gitignore file for initial git tracking");
+        if (!WriteDurableFile(staging / ".gitignore", "build/\n.horo/local/\n.horo/editor_workspace.json\n.horo/asset_index.json\n")) {
+            cleanup();
+            SetFailure(state, operation, ProjectCreationErrorCode::WriteFailed, "Unable to write the project git ignore file.");
+            return;
+        }
     }
-    if (request.generateCMakeProject && !WriteDurableFile(staging / "CMakeLists.txt", "cmake_minimum_required(VERSION 3.25)\nproject(HoroGame LANGUAGES CXX)\n")) {
-        cleanup();
-        SetFailure(state, operation, ProjectCreationErrorCode::WriteFailed, "Unable to write the project CMake file.");
-        return;
+    if (request.generateCMakeProject) {
+        LOG_DEBUG("editor.project_creation", "Generating CMakeLists.txt project file");
+        if (!WriteDurableFile(staging / "CMakeLists.txt", "cmake_minimum_required(VERSION 3.25)\nproject(HoroGame LANGUAGES CXX)\n")) {
+            cleanup();
+            SetFailure(state, operation, ProjectCreationErrorCode::WriteFailed, "Unable to write the project CMake file.");
+            return;
+        }
     }
 
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::Promoting, "promoting", 0.90F);
     if (IsCancelled(cancellation, state, operation)) { cleanup(); return; }
+    LOG_DEBUG("editor.project_creation", "Promoting staging directory '%s' to target destination '%s'", staging.string().c_str(), destination.string().c_str());
     if (!PromoteWithoutReplace(staging, destination, error)) {
         cleanup();
         const ProjectCreationErrorCode code = error == std::errc::file_exists
@@ -316,6 +344,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
         created.revision = ++state->revision;
         changed.revision = created.revision;
     }
+    LOG_DEBUG("editor.project_creation", "Operation %llu completed cleanly. Publishing ProjectCreatedEvent (revision %llu)", static_cast<unsigned long long>(created.operationId), static_cast<unsigned long long>(created.revision));
     state->dataBus.PublishAsync(created);
     state->dataBus.PublishAsync(changed);
 }
@@ -330,8 +359,11 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
     if (request.targetFrameRate <= 0 || request.minimumCxxStandard < 20)
         return MakeFoundationError("project_creation.invalid_request", "Project numeric settings are outside supported bounds.");
     std::error_code error;
-    if (std::filesystem::exists(request.projectRoot, error))
-        return MakeFoundationError("project_creation.destination_occupied", "Project destination already exists and will not be overwritten.");
+    if (std::filesystem::exists(request.projectRoot, error)) {
+        if (!std::filesystem::is_directory(request.projectRoot, error) || !std::filesystem::is_empty(request.projectRoot, error)) {
+            return MakeFoundationError("project_creation.destination_occupied", "Project destination already exists and will not be overwritten.");
+        }
+    }
     if (error)
         return MakeFoundationError("project_creation.invalid_request", "Project destination cannot be inspected.");
     return std::nullopt;
@@ -347,7 +379,11 @@ ProjectCreationService::ProjectCreationService(ProjectCreationService&&) noexcep
 ProjectCreationService& ProjectCreationService::operator=(ProjectCreationService&&) noexcept = default;
 
 Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(ProjectCreationRequest request) {
-    if (const auto validation = ValidateRequest(request)) return Result<ProjectCreationOperationHandle>::Failure(*validation);
+    LOG_DEBUG("editor.project_creation", "StartCreate requested for project '%s' at path '%s', template '%s'", request.projectName.c_str(), request.projectRoot.string().c_str(), request.templateId.c_str());
+    if (const auto validation = ValidateRequest(request)) {
+        LOG_DEBUG("editor.project_creation", "StartCreate validation failed: %s", validation->message.c_str());
+        return Result<ProjectCreationOperationHandle>::Failure(*validation);
+    }
 
     auto operation = std::make_shared<ProjectCreationServiceState::Operation>();
     {
@@ -363,12 +399,14 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
     if (submitted.HasError()) {
         std::lock_guard lock(state_->mutex);
         state_->operations.erase(operation->snapshot.id);
+        LOG_DEBUG("editor.project_creation", "StartCreate job submission failed: %s", submitted.ErrorValue().message.c_str());
         return Result<ProjectCreationOperationHandle>::Failure(MakeFoundationError("project_creation.job_submission_failed", submitted.ErrorValue().message.c_str()));
     }
     {
         std::lock_guard lock(state_->mutex);
         operation->jobId = submitted.Value().Id();
     }
+    LOG_DEBUG("editor.project_creation", "Job %llu dispatched successfully for operation %llu (projectId=%s)", static_cast<unsigned long long>(operation->jobId), static_cast<unsigned long long>(operation->snapshot.id), operation->snapshot.projectId.c_str());
     return Result<ProjectCreationOperationHandle>::Success(ProjectCreationOperationHandle{operation->snapshot.id});
 }
 

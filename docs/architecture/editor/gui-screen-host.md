@@ -43,6 +43,7 @@ HoroEditorApp
   |     +-- WelcomeScreen
   |     +-- ProjectBrowserScreen
   |     +-- ProjectCreationScreen
+  |     +-- ProjectLoadingScreen
   |     +-- EditorWorkspaceScreen
   |
   +-- Application Services
@@ -79,6 +80,7 @@ enum class GuiRouteKind {
     Welcome,
     ProjectBrowser,
     ProjectCreation,
+    ProjectLoading,
     EditorWorkspace
 };
 ```
@@ -94,6 +96,10 @@ struct ProjectCreationRouteParameters {
     std::optional<TemplateId> initialTemplate;
 };
 
+struct ProjectLoadingRouteParameters {
+    std::string projectRoot;
+};
+
 struct EditorWorkspaceRouteParameters {
     ProjectId projectId;
     std::optional<ProjectPath> initialScene;
@@ -103,6 +109,7 @@ using RouteParameters =
     std::variant<WelcomeRouteParameters,
                  ProjectBrowserRouteParameters,
                  ProjectCreationRouteParameters,
+                 ProjectLoadingRouteParameters,
                  EditorWorkspaceRouteParameters>;
 
 struct GuiRoute {

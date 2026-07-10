@@ -9,11 +9,15 @@
 #include "Horo/Editor/WelcomeScreen.h"
 #include "Horo/Editor/GuiRoute.h"
 #include "Horo/Editor/ProjectCreationScreen.h"
+#include "Horo/Editor/ProjectCreationService.h"
+#include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
 
 #include "editor/screens/welcome/WelcomeScreenGui.h"
 #include "editor/screens/project_creation/ProjectCreationScreenGui.h"
+#include "editor/screens/project_loading/ProjectLoadingScreenGui.h"
 #include "Horo/Editor/SettingsModal.h"
+#include "Horo/Editor/EditorUiComponents.h"
 
 #include <SDL.h>
 
@@ -27,15 +31,20 @@
 #include <SDL_opengl.h>
 #endif
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#include <portable-file-dialogs.h>
+#include <filesystem>
 
 namespace Horo::Editor
 {
@@ -43,6 +52,7 @@ namespace Horo::Editor
     {
 
         using Theme::Fonts;
+
 
         struct EditorGuiOptions
         {
@@ -143,7 +153,7 @@ namespace Horo::Editor
             auto *px = stbi_load(path.c_str(), &w, &h, &c, 4);
             if (!px)
             {
-                std::fprintf(stderr, "logo fail: %s\n", path.c_str());
+                LOG_WARN("platform.assets", "Logo texture not found at '%s' — sidebar will render without image.", path.c_str());
                 return t;
             }
             GLuint tex = 0;
@@ -190,10 +200,15 @@ namespace Horo::Editor
     {
         // ── Bootstrap logging before any subsystem ───────────────────────
         Log::Logger::Init("~/.horo/logs", "horo-editor");
+        
+        // Setup base MDC for the whole application run
+        Horo::Log::LogContext appCtx("app", "horo-editor", "run_id", "1");
+        
         Log::Logger::DumpStartupInfo();
 
         auto opts = ParseOptions(argc, argv);
-        WelcomeScreenController ctrl{BuildBootstrapRecentProjects()};
+        std::vector<RecentProjectEntry> recentProjects = LoadRecentProjectsFromDisk();
+        WelcomeScreenController ctrl{recentProjects};
         auto vm = ctrl.BuildViewModel();
 
         if (opts.textPreview)
@@ -205,7 +220,7 @@ namespace Horo::Editor
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER))
         {
             const char *err = SDL_GetError();
-            HORO_LOG_CRITICAL("platform.sdl", "SDL_Init failed: %s", err);
+            LOG_CRITICAL("platform.sdl", "SDL_Init failed: %s", err);
             std::fprintf(stderr, "SDL_Init: %s\n", err);
             Log::Logger::Shutdown();
             return 1;
@@ -222,14 +237,14 @@ namespace Horo::Editor
                                    1000, 760, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
         if (!w)
         {
-            std::fprintf(stderr, "Window: %s\n", SDL_GetError());
+            LOG_CRITICAL("platform.sdl", "SDL_CreateWindow failed: %s", SDL_GetError());
             SDL_Quit();
             return 1;
         }
         auto *gl = SDL_GL_CreateContext(w);
         if (!gl)
         {
-            std::fprintf(stderr, "GL: %s\n", SDL_GetError());
+            LOG_CRITICAL("platform.gl", "SDL_GL_CreateContext failed: %s", SDL_GetError());
             SDL_DestroyWindow(w);
             SDL_Quit();
             return 1;
@@ -252,10 +267,19 @@ namespace Horo::Editor
             {
                 const int savedIndex = static_cast<int>(doc.settings.themePreset);
                 Theme::SelectThemeByIndex(savedIndex);
+                LOG_DEBUG("editor.settings", "Restored theme preset index %d from disk.", savedIndex);
+            }
+            else if (doc.loadedFromDisk && doc.parseError)
+            {
+                LOG_WARN("editor.settings", "editor_settings.json exists but failed to parse — using defaults.");
+            }
+            else
+            {
+                LOG_DEBUG("editor.settings", "No editor_settings.json on disk — using defaults.");
             }
         }
 
-        HORO_LOG_INFO("editor.startup", "Editor initialised — entering main loop");
+        LOG_INFO("editor.startup", "Editor initialised — entering main loop");
 
         constexpr auto *glsl = "#version 150";
         ImGui_ImplSDL2_InitForOpenGL(w, gl);
@@ -266,7 +290,10 @@ namespace Horo::Editor
         std::optional<GuiRoute> pendingRoute;
         ProjectCreationController projectCreation;
         ProjectCreationScreenGuiState projectCreationGuiState;
+        ProjectLoadingScreenGuiState projectLoadingState;
         EngineDataBus engineEvents;
+        JobSystem jobSystem{JobSystemConfig{.workerCount = 2, .maxQueuedJobs = 256}};
+        ProjectCreationService projectCreationService{jobSystem, engineEvents};
         EditorDataBus editorEvents;
         const EditorSettings initialSettings = LoadEditorSettingsDocument().settings;
         ConfigurationService configuration = CreateEditorConfigurationService(initialSettings, &engineEvents);
@@ -274,6 +301,7 @@ namespace Horo::Editor
         EditorModalHost modalHost{editorEvents};
         while (run)
         {
+            projectCreationService.PumpMainThread();
             engineEvents.DispatchQueued();
             SDL_Event ev;
             while (SDL_PollEvent(&ev))
@@ -291,15 +319,77 @@ namespace Horo::Editor
 
             if (activeRoute.kind == GuiRouteKind::Welcome)
             {
-                const WelcomeScreenGuiCommand command = DrawWelcomeScreenGui(
+                const WelcomeScreenGuiResult guiResult = DrawWelcomeScreenGui(
                     vm, fonts, WelcomeScreenGuiAssets{textures.logo});
-                if (command == WelcomeScreenGuiCommand::NewProject)
+
+                if (guiResult.command == WelcomeScreenGuiCommand::NewProject)
                 {
                     pendingRoute = GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}};
                 }
-                else if (command == WelcomeScreenGuiCommand::OpenSettings)
+                else if (guiResult.command == WelcomeScreenGuiCommand::OpenSettings)
                 {
                     (void)modalHost.OpenRoot(std::make_unique<SettingsModal>(settings, fonts, textures.logo));
+                }
+                else if (guiResult.command == WelcomeScreenGuiCommand::OpenRecentProject)
+                {
+                    const int idx = guiResult.openRecentIndex;
+                    if (const auto action = ctrl.RequestOpenRecentProject(static_cast<std::size_t>(idx)))
+                    {
+                        LOG_INFO("editor.welcome", "Opening recent project at index %d", idx);
+                        // Convert to Project Loading instead of jumping directly
+                        if (std::holds_alternative<EditorWorkspaceRouteParameters>(action->route.parameters)) {
+                            const auto& wsParams = std::get<EditorWorkspaceRouteParameters>(action->route.parameters);
+                            projectLoadingState = ProjectLoadingScreenGuiState{};
+                            projectLoadingState.projectName = recentProjects[idx].name; // Best effort 
+                            projectLoadingState.projectRoot = wsParams.projectRoot;
+                            pendingRoute = GuiRoute{
+                                GuiRouteKind::ProjectLoading,
+                                ProjectLoadingRouteParameters{wsParams.projectRoot, recentProjects[idx].name}};
+                        } else {
+                            pendingRoute = action->route;
+                        }
+                    }
+                }
+                else if (guiResult.command == WelcomeScreenGuiCommand::OpenProject)
+                {
+                    LOG_INFO("editor.welcome", "Opening native folder picker for project selection.");
+                    pfd::select_folder dialog("Select Horo Engine Project", "");
+                    std::string folderPath = dialog.result();
+
+                    if (!folderPath.empty())
+                    {
+                        std::filesystem::path path{folderPath};
+                        std::string projectName = path.filename().string();
+                        if (projectName.empty()) projectName = "Unknown Project";
+
+                        LOG_INFO("editor.welcome", "Selected project folder: %s (%s)", projectName.c_str(), folderPath.c_str());
+
+                        // Update recent projects
+                        for (auto it = recentProjects.begin(); it != recentProjects.end();)
+                        {
+                            if (it->rootPath == folderPath)
+                                it = recentProjects.erase(it);
+                            else
+                                ++it;
+                        }
+                        recentProjects.insert(recentProjects.begin(), RecentProjectEntry{projectName, folderPath, "Just now", "empty"});
+                        SaveRecentProjectsToDisk(recentProjects);
+                        
+                        ctrl = WelcomeScreenController{recentProjects};
+                        vm = ctrl.BuildViewModel();
+
+                        // Navigate to Project Loading
+                        projectLoadingState = ProjectLoadingScreenGuiState{};
+                        projectLoadingState.projectName = projectName;
+                        projectLoadingState.projectRoot = folderPath;
+                        pendingRoute = GuiRoute{
+                            GuiRouteKind::ProjectLoading,
+                            ProjectLoadingRouteParameters{folderPath, projectName}};
+                    }
+                    else
+                    {
+                        LOG_INFO("editor.welcome", "Open Project cancelled by user.");
+                    }
                 }
 
                 modalHost.OnUpdate(io.DeltaTime);
@@ -307,21 +397,208 @@ namespace Horo::Editor
             }
             else if (activeRoute.kind == GuiRouteKind::ProjectCreation)
             {
-                if (DrawProjectCreationScreenGui(projectCreation, projectCreationGuiState, fonts, textures.logo) ==
-                    ProjectCreationScreenGuiCommand::ReturnToWelcome)
+                const ProjectCreationScreenGuiCommand cmd = DrawProjectCreationScreenGui(projectCreation, projectCreationGuiState, fonts, textures.logo);
+                if (cmd == ProjectCreationScreenGuiCommand::ReturnToWelcome)
                 {
                     pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
                 }
+                else if (cmd == ProjectCreationScreenGuiCommand::CreateProject)
+                {
+                    if (const auto req = projectCreation.BuildCreationRequest())
+                    {
+                        if (auto handleRes = projectCreationService.StartCreate(*req); handleRes.HasValue())
+                        {
+                            LOG_INFO("editor.project_creation", "Starting project creation for '%s' at '%s'", req->projectName.c_str(), req->projectRoot.string().c_str());
+                            while (true)
+                            {
+                                projectCreationService.PumpMainThread();
+                                engineEvents.DispatchQueued();
+                                auto snap = projectCreationService.Query(handleRes.Value().id);
+                                if (!snap)
+                                    break;
+                                if (snap->state == ProjectCreationOperationState::Succeeded)
+                                {
+                                    LOG_INFO("editor.project_creation", "Project '%s' created successfully.", req->projectName.c_str());
+                                    for (auto it = recentProjects.begin(); it != recentProjects.end();)
+                                    {
+                                        if (it->rootPath == req->projectRoot.string())
+                                            it = recentProjects.erase(it);
+                                        else
+                                            ++it;
+                                    }
+                                    recentProjects.insert(recentProjects.begin(), RecentProjectEntry{req->projectName, req->projectRoot.string(), "Just now", req->templateId});
+                                    SaveRecentProjectsToDisk(recentProjects);
+                                    ctrl = WelcomeScreenController{recentProjects};
+                                    vm = ctrl.BuildViewModel();
+                                    // Navigate to Project Loading
+                                    projectLoadingState = ProjectLoadingScreenGuiState{};
+                                    projectLoadingState.projectName = req->projectName;
+                                    projectLoadingState.projectRoot = req->projectRoot.string();
+                                    pendingRoute = GuiRoute{
+                                        GuiRouteKind::ProjectLoading,
+                                        ProjectLoadingRouteParameters{req->projectRoot.string(), req->projectName}};
+                                    break;
+                                }
+                                if (snap->state == ProjectCreationOperationState::Failed ||
+                                    snap->state == ProjectCreationOperationState::Cancelled)
+                                {
+                                    if (snap->error)
+                                    {
+                                        LOG_ERROR("editor.project_creation", "Project creation failed: [code %d] %s", static_cast<int>(snap->error->code), snap->error->message.c_str());
+                                    }
+                                    else
+                                    {
+                                        LOG_ERROR("editor.project_creation", "Project creation operation %s.", snap->state == ProjectCreationOperationState::Cancelled ? "cancelled" : "failed");
+                                    }
+                                    break;
+                                }
+                                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                            }
+                        }
+                        else
+                        {
+                            LOG_ERROR("editor.project_creation", "StartCreate failed: [%s] %s", handleRes.ErrorValue().code.Value().c_str(), handleRes.ErrorValue().message.c_str());
+                        }
+                    }
+                    else
+                    {
+                        LOG_ERROR("editor.project_creation", "BuildCreationRequest failed due to validation errors.");
+                        for (const auto &diag : projectCreation.Validate().diagnostics)
+                        {
+                            LOG_ERROR("editor.project_creation", " - %s", diag.message.c_str());
+                        }
+                    }
+                }
+            }
+
+            else if (activeRoute.kind == GuiRouteKind::ProjectLoading)
+            {
+                // Simulate loading process
+                if (!projectLoadingState.isCancelled)
+                {
+                    projectLoadingState.progress += io.DeltaTime * 35.0f; // Approx 3 seconds to load
+                    
+                    if (projectLoadingState.progress < 20.0f) projectLoadingState.statusText = "Initializing asset database...";
+                    else if (projectLoadingState.progress < 50.0f) projectLoadingState.statusText = "Parsing project manifests...";
+                    else if (projectLoadingState.progress < 80.0f) projectLoadingState.statusText = "Loading default scene...";
+                    else projectLoadingState.statusText = "Finalizing workspace...";
+
+                    if (projectLoadingState.progress >= 100.0f)
+                    {
+                        projectLoadingState.progress = 100.0f;
+                        LOG_INFO("editor.loading", "Project loading complete. Transitioning to EditorWorkspace.");
+                        pendingRoute = GuiRoute{
+                            GuiRouteKind::EditorWorkspace,
+                            EditorWorkspaceRouteParameters{projectLoadingState.projectRoot, std::nullopt}};
+                    }
+                }
+
+                const ProjectLoadingScreenGuiCommand cmd = DrawProjectLoadingScreenGui(projectLoadingState, fonts);
+                
+                if (cmd == ProjectLoadingScreenGuiCommand::Cancel)
+                {
+                    LOG_INFO("editor.loading", "Project loading cancelled by user.");
+                    pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
+                }
+            }
+
+            else if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
+            {
+                // ── Editor Workspace Placeholder ─────────────────────────────────
+                // Full EditorWorkspaceScreen (EditorLayer, EditorPanelHost, etc.)
+                // is not yet implemented. This placeholder keeps the route alive
+                // and provides a minimal "Return to Welcome" escape hatch.
+                const auto *viewport = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(viewport->WorkPos);
+                ImGui::SetNextWindowSize(viewport->WorkSize);
+                constexpr auto wsFlags =
+                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration |
+                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg0());
+                ImGui::Begin("EditorWorkspace", nullptr, wsFlags);
+
+                const std::string *projectRoot = nullptr;
+                if (std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
+                {
+                    projectRoot = &std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters).projectRoot;
+                }
+
+                const ImVec2 centre = ImGui::GetContentRegionAvail();
+                const float labelY = ImGui::GetCursorPosY() + centre.y * 0.4F;
+                ImGui::SetCursorPosY(labelY);
+
+                {
+                    Theme::ScopedTextStyle ts(fonts.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
+                    const char *title = "Editor Workspace";
+                    const float tw = ImGui::CalcTextSize(title).x;
+                    ImGui::SetCursorPosX((centre.x - tw) * 0.5F);
+                    ImGui::TextDisabled("%s", title);
+                }
+                ImGui::Dummy({0.0F, 8.0F});
+                if (projectRoot)
+                {
+                    Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
+                    const float pw = ImGui::CalcTextSize(projectRoot->c_str()).x;
+                    ImGui::SetCursorPosX((centre.x - pw) * 0.5F);
+                    ImGui::TextDisabled("%s", projectRoot->c_str());
+                }
+                ImGui::Dummy({0.0F, 20.0F});
+                {
+                    const float bw = 160.0F;
+                    ImGui::SetCursorPosX((centre.x - bw) * 0.5F);
+                    if (Ui::Button(Ui::ButtonProps{"← Return to Welcome",
+                                                  {bw, 34.0F},
+                                                  Ui::ButtonVariant::Secondary,
+                                                  true,
+                                                  13.0F,
+                                                  fonts.sans,
+                                                  Theme::FontPx::Sans}))
+                    {
+                        pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
+                    }
+                }
+
+                ImGui::End();
+                ImGui::PopStyleColor();
             }
 
             if (pendingRoute.has_value())
             {
                 activeRoute = std::move(*pendingRoute);
                 pendingRoute.reset();
+
+                // ── Route transition log ──────────────────────────────────────
+                const char *routeName = "Unknown";
+                switch (activeRoute.kind)
+                {
+                case GuiRouteKind::Welcome:          routeName = "Welcome";          break;
+                case GuiRouteKind::ProjectBrowser:   routeName = "ProjectBrowser";   break;
+                case GuiRouteKind::ProjectCreation:  routeName = "ProjectCreation";  break;
+                case GuiRouteKind::ProjectLoading:   routeName = "ProjectLoading";   break;
+                case GuiRouteKind::EditorWorkspace:  routeName = "EditorWorkspace";  break;
+                }
+                LOG_DEBUG("editor.routing", "Route committed: %s", routeName);
+
                 if (activeRoute.kind == GuiRouteKind::ProjectCreation)
                 {
                     projectCreation = ProjectCreationController{};
                     projectCreationGuiState = ProjectCreationScreenGuiState{};
+                }
+                else if (activeRoute.kind == GuiRouteKind::Welcome)
+                {
+                    recentProjects = LoadRecentProjectsFromDisk();
+                    ctrl = WelcomeScreenController{recentProjects};
+                    vm = ctrl.BuildViewModel();
+                }
+                else if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
+                {
+                    if (std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
+                    {
+                        const auto &wsParams = std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters);
+                        LOG_INFO("editor.workspace", "Entering workspace for project at '%s'", wsParams.projectRoot.c_str());
+                    }
                 }
             }
 
