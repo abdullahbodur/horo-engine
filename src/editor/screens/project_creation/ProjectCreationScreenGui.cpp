@@ -305,7 +305,7 @@ namespace Horo::Editor
             {
                 ImGui::PushItemWidth(width);
             }
-            const bool changed = Ui::InputTextControl("##value", buffer, bufferSize, f, error);
+            bool changed = Ui::InputTextControl("##value", buffer, bufferSize, f, error);
             if (width != 0.0F)
             {
                 ImGui::PopItemWidth();
@@ -338,7 +338,7 @@ namespace Horo::Editor
             {
                 ImGui::PushItemWidth(width);
             }
-            const bool changed = Ui::ComboControl("##value", value, items, itemCount, f);
+            bool changed = Ui::ComboControl("##value", value, items, itemCount, f);
             if (width != 0.0F)
             {
                 ImGui::PopItemWidth();
@@ -744,7 +744,7 @@ namespace Horo::Editor
                 {
                     ImGui::PushItemWidth(inputW);
                 }
-                [[maybe_unused]] const bool pathChanged = Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
+                (void)Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
                 if (inputW > 0.0F)
                 {
                     ImGui::PopItemWidth();

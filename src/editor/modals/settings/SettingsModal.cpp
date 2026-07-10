@@ -201,7 +201,7 @@ namespace Horo::Editor
             SectionTitle("General", f);
             SettingGroup("STARTUP & PROJECT", f, true);
             SettingRow("Startup Behavior", "What to show when the editor launches.", f,
-                       [&st, &f]() { ComboControl("##startup", &st.general.startupAction, kStartup.data(), static_cast<int>(kStartup.size()), f); });
+                       [&st, &f]() { (void)ComboControl("##startup", &st.general.startupAction, kStartup.data(), static_cast<int>(kStartup.size()), f); });
             SettingRow("Auto-save Interval", "Minutes between automatic scene saves. Zero disables auto-save.", f,
                        [&st, &f]() { SliderIntControl("##autosave", &st.general.autoSaveInterval, 0, 30, "%d min", f); });
             SettingRow("Confirm Exit With Unsaved Changes", "Prompt before closing when unsaved changes exist.", f,
@@ -210,7 +210,7 @@ namespace Horo::Editor
             SettingRow("Restore Workspace Layout", "Reopen tabs and panel layout from last session.", f,
                        [&st, &f]() { (void)ToggleControl("restore-workspace", &st.general.restoreWorkspace, f); });
             SettingRow("Default Scene On Project Open", "Scene file loaded automatically when opening a project.", f,
-                       [&st, &f]() { InputTextControl("##default-scene", st.general.defaultScene, sizeof(st.general.defaultScene), f); });
+                       [&st, &f]() { (void)InputTextControl("##default-scene", st.general.defaultScene, sizeof(st.general.defaultScene), f); });
         }
 
         void DrawAppearance(SettingsState &st, const Fonts &f)
@@ -229,7 +229,7 @@ namespace Horo::Editor
                     st.appearance.themeIndex = 0;
 
                 const int prev = st.appearance.themeIndex;
-                ComboControl("##theme", &st.appearance.themeIndex, s_names.data(), count, f);
+                (void)ComboControl("##theme", &st.appearance.themeIndex, s_names.data(), count, f);
                 if (st.appearance.themeIndex != prev)
                 {
                     // Defer: apply at start of next frame to avoid mid-frame style glitches
@@ -238,7 +238,7 @@ namespace Horo::Editor
                 }
             });
             SettingRow("Custom Theme", "Path to a JSON theme file. Leave empty to use built-in.", f, [&st, &f]() {
-                InputTextControl("##custom-theme", st.appearance.customThemePath, sizeof(st.appearance.customThemePath), f);
+                (void)InputTextControl("##custom-theme", st.appearance.customThemePath, sizeof(st.appearance.customThemePath), f);
             });
             SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
                 (void)ColorHexControl("accent-color", st.appearance.accentHex, sizeof(st.appearance.accentHex), f);
@@ -247,7 +247,7 @@ namespace Horo::Editor
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
                        [&st, &f]() { SliderIntControl("##ui-scale", &st.appearance.uiScale, 75, 200, "%d%%", f, 25); });
             SettingRow("Code Font Size", "Point size for the script editor and console output.", f,
-                       [&st, &f]() { InputTextControl("##font-size", st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), f); });
+                       [&st, &f]() { (void)InputTextControl("##font-size", st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), f); });
         }
 
         void DrawInput(SettingsState &st, const Fonts &f)
@@ -364,13 +364,13 @@ namespace Horo::Editor
             static constexpr std::array<const char *, 4> kTier = {"High End", "DX12 / Vulkan", "DX11", "ES3"};
             SectionTitle("Rendering", f);
             SettingGroup("VIEWPORT", f, true);
-            SettingRow("Default Viewport Mode", "Shading mode used for new viewport panels.", f, [&st, &f]() { ComboControl("##viewport", &st.rendering.viewportMode, kViewport.data(), static_cast<int>(kViewport.size()), f); });
+            SettingRow("Default Viewport Mode", "Shading mode used for new viewport panels.", f, [&st, &f]() { (void)ComboControl("##viewport", &st.rendering.viewportMode, kViewport.data(), static_cast<int>(kViewport.size()), f); });
             SettingRow("Grid Overlay", "Show the reference grid in the editor viewport.", f, [&st, &f]() { (void)ToggleControl("grid", &st.rendering.gridOverlay, f); });
             SettingGroup("QUALITY", f);
             SettingRow("Editor Rendering Tier", "Maximum feature tier used in the editor viewport.", f,
-                       [&st, &f]() { ComboControl("##tier", &st.rendering.renderingTier, kTier.data(), static_cast<int>(kTier.size()), f); });
+                       [&st, &f]() { (void)ComboControl("##tier", &st.rendering.renderingTier, kTier.data(), static_cast<int>(kTier.size()), f); });
             SettingRow("Texture Streaming Budget", "Maximum texture memory pool used by the streaming system.", f,
-                       [&st, &f]() { InputTextControl("##texture-budget", st.rendering.textureBudget, sizeof(st.rendering.textureBudget), f); });
+                       [&st, &f]() { (void)InputTextControl("##texture-budget", st.rendering.textureBudget, sizeof(st.rendering.textureBudget), f); });
         }
 
         void DrawAudio(SettingsState &st, const Fonts &f)
@@ -381,7 +381,7 @@ namespace Horo::Editor
             SettingRow("Master Volume", "Global audio output level for the editor (0–100).", f,
                        [&st, &f]() { SliderIntControl("##volume", &st.audio.masterVolume, 0, 100, "%d", f); });
             SettingRow("Audio Output Device", "Preferred playback device for editor audio.", f,
-                       [&st, &f]() { ComboControl("##audio-device", &st.audio.audioOutputDevice, kDevices.data(), static_cast<int>(kDevices.size()), f); });
+                       [&st, &f]() { (void)ComboControl("##audio-device", &st.audio.audioOutputDevice, kDevices.data(), static_cast<int>(kDevices.size()), f); });
             SettingRow("Enable Audio In Editor", "Play in-editor sounds and preview audio assets.", f,
                        [&st, &f]() { (void)ToggleControl("audio-enabled", &st.audio.audioEnabled, f); });
         }
@@ -404,7 +404,7 @@ namespace Horo::Editor
             SectionTitle("Diagnostics", f);
             SettingGroup("LOGGING", f, true);
             SettingRow("Console Log Level", "Minimum severity shown in the editor console output.", f,
-                       [&st, &f]() { ComboControl("##log-level", &st.diagnostics.consoleLogLevel, kLogLevels.data(), static_cast<int>(kLogLevels.size()), f); });
+                       [&st, &f]() { (void)ComboControl("##log-level", &st.diagnostics.consoleLogLevel, kLogLevels.data(), static_cast<int>(kLogLevels.size()), f); });
             SettingRow("Write Log To File", "Persist the console log to a timestamped file on disk.", f,
                        [&st, &f]() { (void)ToggleControl("write-log", &st.diagnostics.writeLogToFile, f); });
             SettingGroup("PROFILER", f);
@@ -1150,7 +1150,7 @@ namespace Horo::Editor
                                  "Use stdio for local tools; HTTP is useful for explicit local integrations.",
                                  f, [&st, &f]() {
                                      static constexpr const char *kModes[] = {"Local HTTP", "stdio", "Named Pipe"};
-                                     ComboControl("##transport", &st.mcp.transportMode, kModes, 3, f);
+                                     (void)ComboControl("##transport", &st.mcp.transportMode, kModes, 3, f);
                                  });
                 PluginSettingRow("MCP Port", "Bound to localhost unless remote access is enabled.", f,
                                  [&st, &f]() { InputIntControl("##mcp-port", &st.mcp.port, f); });
@@ -1164,10 +1164,10 @@ namespace Horo::Editor
                                  [&st, &f]() {
                                      static constexpr const char *kScopes[] = {
                                          "Read + Safe Mutations", "Read Only", "Full Project Access", "Custom Policy..."};
-                                     ComboControl("##scope", &st.mcp.toolScope, kScopes, 4, f);
+                                     (void)ComboControl("##scope", &st.mcp.toolScope, kScopes, 4, f);
                                  });
                 PluginSettingRow("Asset Write Root", "All generated assets must stay under this folder.", f,
-                                 [&st, &f]() { InputTextControl("##root", st.mcp.assetRoot, sizeof(st.mcp.assetRoot), f); });
+                                 [&st, &f]() { (void)InputTextControl("##root", st.mcp.assetRoot, sizeof(st.mcp.assetRoot), f); });
                 break;
 
             case 1:
@@ -1226,11 +1226,11 @@ namespace Horo::Editor
             case 0:
                 SettingGroup("AUTHORING", f, true);
                 PluginSettingRow("FMOD Studio Path", "Used to open projects and compile banks from the editor.", f,
-                                 [&st, &f]() { InputTextControl("##fmod-path", st.fmod.studioPath, sizeof(st.fmod.studioPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-path", st.fmod.studioPath, sizeof(st.fmod.studioPath), f); });
                 PluginSettingRow("FMOD Project File", "Relative to project root.", f,
-                                 [&st, &f]() { InputTextControl("##fmod-proj", st.fmod.projectFile, sizeof(st.fmod.projectFile), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-proj", st.fmod.projectFile, sizeof(st.fmod.projectFile), f); });
                 PluginSettingRow("Bank Output Path", "Compiled banks copied into the runtime asset tree.", f,
-                                 [&st, &f]() { InputTextControl("##fmod-bank", st.fmod.bankPath, sizeof(st.fmod.bankPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-bank", st.fmod.bankPath, sizeof(st.fmod.bankPath), f); });
                 SettingGroup("RUNTIME & BUILD", f);
                 PluginSettingRow("Live Update", "Reload event metadata and banks without restarting the editor.", f,
                                  [&st, &f]() { DrawToggleState("##fmod-live", &st.fmod.liveUpdate, f); });
@@ -1239,7 +1239,7 @@ namespace Horo::Editor
                 PluginSettingRow("Target Platform", "Bank platform used for editor preview.", f,
                                  [&st, &f]() {
                                      static constexpr const char *kPlatforms[] = {"Desktop", "Windows", "macOS", "Linux", "Console"};
-                                     ComboControl("##fmod-plat", &st.fmod.targetPlatform, kPlatforms, 5, f);
+                                     (void)ComboControl("##fmod-plat", &st.fmod.targetPlatform, kPlatforms, 5, f);
                                  });
                 break;
 
@@ -1301,11 +1301,11 @@ namespace Horo::Editor
                                      InputIntControl("##steam-appid", &steamAppId, f);
                                  });
                 PluginSettingRow("SDK Path", "Path to the local Steamworks SDK root.", f,
-                                 [&st, &f]() { InputTextControl("##steam-sdk", st.steam.sdkPath, sizeof(st.steam.sdkPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##steam-sdk", st.steam.sdkPath, sizeof(st.steam.sdkPath), f); });
                 PluginSettingRow("Initialize On", "Controls when Steam API is started during editor workflows.", f,
                                  [&st, &f]() {
                                      static constexpr const char *kModes[] = {"Play Mode Only", "Editor Launch", "Build Runtime Only"};
-                                     ComboControl("##steam-init", &st.steam.initMode, kModes, 3, f);
+                                     (void)ComboControl("##steam-init", &st.steam.initMode, kModes, 3, f);
                                  });
                 SettingGroup("FEATURES", f);
                 PluginSettingRow("Overlay", "Enable Steam overlay while testing from Play Mode.", f,
@@ -1408,7 +1408,7 @@ namespace Horo::Editor
             PluginSettingRow("Plugin Discovery Paths",
                              "Semicolon-separated paths. Project plugins override editor plugins only when trusted.",
                              f, [&st, &f]() {
-                                 InputTextControl("##disc-path", st.runtime.discoveryPaths,
+                                 (void)InputTextControl("##disc-path", st.runtime.discoveryPaths,
                                                   sizeof(st.runtime.discoveryPaths), f);
                              });
             PluginSettingRow("Load Order Policy",
@@ -1417,12 +1417,12 @@ namespace Horo::Editor
                                  static constexpr const char *kOrders[] = {
                                      "Project overrides editor if trusted", "Editor plugins first",
                                      "Project plugins first", "Locked by project manifest"};
-                                 ComboControl("##order", &st.runtime.loadOrder, kOrders, 4, f);
+                                 (void)ComboControl("##order", &st.runtime.loadOrder, kOrders, 4, f);
                              });
             PluginSettingRow("Development Plugin Path",
                              "Optional local path used for plugin authorship and hot-reload testing.",
                              f, [&st, &f]() {
-                                 InputTextControl("##dev-path", st.runtime.devPath,
+                                 (void)InputTextControl("##dev-path", st.runtime.devPath,
                                                   sizeof(st.runtime.devPath), f);
                              });
 
@@ -1436,7 +1436,7 @@ namespace Horo::Editor
                                  static constexpr const char *kPolicies[] = {"Block by default",
                                                                              "Allow after warning",
                                                                              "Allow local development only"};
-                                 ComboControl("##unsigned", &st.runtime.unsignedPolicy, kPolicies, 3, f);
+                                 (void)ComboControl("##unsigned", &st.runtime.unsignedPolicy, kPolicies, 3, f);
                              });
             PluginSettingRow("Network Access Policy",
                              "Default network behavior for plugins unless a plugin-specific permission overrides it.",
@@ -1444,7 +1444,7 @@ namespace Horo::Editor
                                  static constexpr const char *kNets[] = {"Deny by default", "Localhost only",
                                                                          "Prompt per plugin",
                                                                          "Allow trusted plugins"};
-                                 ComboControl("##net", &st.runtime.networkPolicy, kNets, 4, f);
+                                 (void)ComboControl("##net", &st.runtime.networkPolicy, kNets, 4, f);
                              });
 
             SettingGroup("UPDATES & COMPATIBILITY", f);
@@ -1452,7 +1452,7 @@ namespace Horo::Editor
                              "Checks signed registries only; local plugins are never updated automatically.",
                              f, [&st, &f]() {
                                  static constexpr const char *kChecks[] = {"Weekly", "Daily", "Manual Only"};
-                                 ComboControl("##update", &st.runtime.updateCheck, kChecks, 3, f);
+                                 (void)ComboControl("##update", &st.runtime.updateCheck, kChecks, 3, f);
                              });
             PluginSettingRow("Compatibility Mode",
                              "How strictly plugin API versions are validated when opening a project.",
@@ -1460,7 +1460,7 @@ namespace Horo::Editor
                                  static constexpr const char *kModes[] = {"Strict semantic versioning",
                                                                           "Allow compatible minors",
                                                                           "Prompt on mismatch"};
-                                 ComboControl("##compat", &st.runtime.compatMode, kModes, 3, f);
+                                 (void)ComboControl("##compat", &st.runtime.compatMode, kModes, 3, f);
                              });
 
             ImGui::Dummy({0.0F, 4.0F});
