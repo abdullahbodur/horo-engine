@@ -1,3 +1,4 @@
+#include <cstring>
 #include "editor/modals/settings/SettingsModal.h"
 #include "Horo/Editor/SettingsModal.h"
 
