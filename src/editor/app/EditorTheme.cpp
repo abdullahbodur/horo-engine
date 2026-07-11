@@ -143,6 +143,19 @@ namespace Horo::Editor::Theme
             return index;
         }
 
+        [[nodiscard]] bool ParseHexColor(const std::string &hex, ImVec4 &color)
+        {
+            if (hex.size() < 7 || hex[0] != '#') return false;
+            char channels[3][3] = {{hex[1], hex[2], '\0'}, {hex[3], hex[4], '\0'}, {hex[5], hex[6], '\0'}};
+            const auto red = std::strtoul(channels[0], nullptr, 16);
+            const auto green = std::strtoul(channels[1], nullptr, 16);
+            const auto blue = std::strtoul(channels[2], nullptr, 16);
+            color = ImVec4{static_cast<float>(red) / 255.0F,
+                           static_cast<float>(green) / 255.0F,
+                           static_cast<float>(blue) / 255.0F, 1.0F};
+            return true;
+        }
+
         /** @brief Tiny JSON key-value reader — dependency free. */
         bool ReadJsonColors(const std::string &json, std::unordered_map<std::string, ImVec4> &out)
         {
@@ -172,20 +185,8 @@ namespace Horo::Editor::Theme
                 std::string hex(valStart, static_cast<std::size_t>(p - valStart));
                 if (*p == '"') ++p;
 
-                // Parse #rrggbb
-                if (hex.size() >= 7 && hex[0] == '#')
-                {
-                    unsigned int r = 0, g = 0, b = 0;
-                    char rr[3] = {hex[1], hex[2], '\0'};
-                    char gg[3] = {hex[3], hex[4], '\0'};
-                    char bb[3] = {hex[5], hex[6], '\0'};
-                    r = static_cast<unsigned int>(std::strtoul(rr, nullptr, 16));
-                    g = static_cast<unsigned int>(std::strtoul(gg, nullptr, 16));
-                    b = static_cast<unsigned int>(std::strtoul(bb, nullptr, 16));
-                    out[key] = ImVec4{static_cast<float>(r) / 255.0F,
-                                      static_cast<float>(g) / 255.0F,
-                                      static_cast<float>(b) / 255.0F, 1.0F};
-                }
+                ImVec4 color{};
+                if (ParseHexColor(hex, color)) out[key] = color;
 
                 // Skip comma
                 while (*p && (*p == ' ' || *p == ',')) ++p;
