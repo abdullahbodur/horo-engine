@@ -215,6 +215,108 @@ namespace Horo::Editor
                                 ProjectLoadingRouteParameters{workspace.projectRoot, loadingState.projectName}};
     }
 
+    static void HandleFolderProjectOpen(std::vector<RecentProjectEntry> &recentProjects,
+                                        WelcomeScreenController &controller,
+                                        WelcomeViewModel &viewModel,
+                                        ProjectLoadingScreenGuiState &loadingState,
+                                        std::optional<GuiRoute> &pendingRoute)
+    {
+        LOG_INFO("editor.welcome", "Opening native folder picker for project selection.");
+        pfd::select_folder dialog("Select Horo Engine Project", "");
+        const std::string folderPath = dialog.result();
+        if (folderPath.empty())
+        {
+            LOG_INFO("editor.welcome", "Open Project cancelled by user.");
+            return;
+        }
+        const std::filesystem::path path{folderPath};
+        std::string projectName = path.filename().string();
+        if (projectName.empty()) projectName = "Unknown Project";
+        LOG_INFO("editor.welcome", "Selected project folder: %s (%s)", projectName.c_str(), folderPath.c_str());
+        recentProjects.erase(std::remove_if(recentProjects.begin(), recentProjects.end(),
+                                            [&folderPath](const RecentProjectEntry &entry) {
+                                                return entry.rootPath == folderPath;
+                                            }),
+                             recentProjects.end());
+        recentProjects.insert(recentProjects.begin(), RecentProjectEntry{projectName, folderPath, "Just now", "empty"});
+        SaveRecentProjectsToDisk(recentProjects);
+        controller = WelcomeScreenController{recentProjects};
+        viewModel = controller.BuildViewModel();
+        loadingState = ProjectLoadingScreenGuiState{};
+        loadingState.projectName = projectName;
+        loadingState.projectRoot = folderPath;
+        pendingRoute = GuiRoute{GuiRouteKind::ProjectLoading,
+                                ProjectLoadingRouteParameters{folderPath, projectName}};
+    }
+
+    static void HandleProjectCreationCommand(ProjectCreationController &controller,
+                                             ProjectCreationService &service,
+                                             EngineDataBus &engineEvents,
+                                             std::vector<RecentProjectEntry> &recentProjects,
+                                             WelcomeScreenController &welcomeController,
+                                             WelcomeViewModel &viewModel,
+                                             ProjectLoadingScreenGuiState &loadingState,
+                                             std::optional<GuiRoute> &pendingRoute)
+    {
+        const auto request = controller.BuildCreationRequest();
+        if (!request)
+        {
+            LOG_ERROR("editor.project_creation", "BuildCreationRequest failed due to validation errors.");
+            for (const auto &diagnostic : controller.Validate().diagnostics)
+                LOG_ERROR("editor.project_creation", " - %s", diagnostic.message.c_str());
+            return;
+        }
+        auto handle = service.StartCreate(*request);
+        if (!handle.HasValue())
+        {
+            LOG_ERROR("editor.project_creation", "StartCreate failed: [%s] %s",
+                      handle.ErrorValue().code.Value().c_str(), handle.ErrorValue().message.c_str());
+            return;
+        }
+        LOG_INFO("editor.project_creation", "Starting project creation for '%s' at '%s'",
+                 request->projectName.c_str(), request->projectRoot.string().c_str());
+        while (true)
+        {
+            service.PumpMainThread();
+            engineEvents.DispatchQueued();
+            const auto snapshot = service.Query(handle.Value().id);
+            if (!snapshot) break;
+            if (snapshot->state == ProjectCreationOperationState::Succeeded)
+            {
+                LOG_INFO("editor.project_creation", "Project '%s' created successfully.", request->projectName.c_str());
+                recentProjects.erase(std::remove_if(recentProjects.begin(), recentProjects.end(),
+                                                    [&request](const RecentProjectEntry &entry) {
+                                                        return entry.rootPath == request->projectRoot.string();
+                                                    }),
+                                     recentProjects.end());
+                recentProjects.insert(recentProjects.begin(), RecentProjectEntry{
+                    request->projectName, request->projectRoot.string(), "Just now", request->templateId});
+                SaveRecentProjectsToDisk(recentProjects);
+                welcomeController = WelcomeScreenController{recentProjects};
+                viewModel = welcomeController.BuildViewModel();
+                loadingState = ProjectLoadingScreenGuiState{};
+                loadingState.projectName = request->projectName;
+                loadingState.projectRoot = request->projectRoot.string();
+                pendingRoute = GuiRoute{GuiRouteKind::ProjectLoading,
+                                        ProjectLoadingRouteParameters{
+                                            request->projectRoot.string(), request->projectName}};
+                break;
+            }
+            if (snapshot->state == ProjectCreationOperationState::Failed ||
+                snapshot->state == ProjectCreationOperationState::Cancelled)
+            {
+                if (snapshot->error)
+                    LOG_ERROR("editor.project_creation", "Project creation failed: [code %d] %s",
+                              static_cast<int>(snapshot->error->code), snapshot->error->message.c_str());
+                else
+                    LOG_ERROR("editor.project_creation", "Project creation operation %s.",
+                              snapshot->state == ProjectCreationOperationState::Cancelled ? "cancelled" : "failed");
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
@@ -359,44 +461,7 @@ namespace Horo::Editor
                 }
                 else if (guiResult.command == WelcomeScreenGuiCommand::OpenProject)
                 {
-                    LOG_INFO("editor.welcome", "Opening native folder picker for project selection.");
-                    pfd::select_folder dialog("Select Horo Engine Project", "");
-                    std::string folderPath = dialog.result();
-
-                    if (!folderPath.empty())
-                    {
-                        std::filesystem::path path{folderPath};
-                        std::string projectName = path.filename().string();
-                        if (projectName.empty()) projectName = "Unknown Project";
-
-                        LOG_INFO("editor.welcome", "Selected project folder: %s (%s)", projectName.c_str(), folderPath.c_str());
-
-                        // Update recent projects
-                        for (auto it = recentProjects.begin(); it != recentProjects.end();)
-                        {
-                            if (it->rootPath == folderPath)
-                                it = recentProjects.erase(it);
-                            else
-                                ++it;
-                        }
-                        recentProjects.insert(recentProjects.begin(), RecentProjectEntry{projectName, folderPath, "Just now", "empty"});
-                        SaveRecentProjectsToDisk(recentProjects);
-                        
-                        ctrl = WelcomeScreenController{recentProjects};
-                        vm = ctrl.BuildViewModel();
-
-                        // Navigate to Project Loading
-                        projectLoadingState = ProjectLoadingScreenGuiState{};
-                        projectLoadingState.projectName = projectName;
-                        projectLoadingState.projectRoot = folderPath;
-                        pendingRoute = GuiRoute{
-                            GuiRouteKind::ProjectLoading,
-                            ProjectLoadingRouteParameters{folderPath, projectName}};
-                    }
-                    else
-                    {
-                        LOG_INFO("editor.welcome", "Open Project cancelled by user.");
-                    }
+                    HandleFolderProjectOpen(recentProjects, ctrl, vm, projectLoadingState, pendingRoute);
                 }
 
                 modalHost.OnUpdate(io.DeltaTime);
@@ -411,70 +476,8 @@ namespace Horo::Editor
                 }
                 else if (cmd == ProjectCreationScreenGuiCommand::CreateProject)
                 {
-                    if (const auto req = projectCreation.BuildCreationRequest())
-                    {
-                        if (auto handleRes = projectCreationService.StartCreate(*req); handleRes.HasValue())
-                        {
-                            LOG_INFO("editor.project_creation", "Starting project creation for '%s' at '%s'", req->projectName.c_str(), req->projectRoot.string().c_str());
-                            while (true)
-                            {
-                                projectCreationService.PumpMainThread();
-                                engineEvents.DispatchQueued();
-                                auto snap = projectCreationService.Query(handleRes.Value().id);
-                                if (!snap)
-                                    break;
-                                if (snap->state == ProjectCreationOperationState::Succeeded)
-                                {
-                                    LOG_INFO("editor.project_creation", "Project '%s' created successfully.", req->projectName.c_str());
-                                    for (auto it = recentProjects.begin(); it != recentProjects.end();)
-                                    {
-                                        if (it->rootPath == req->projectRoot.string())
-                                            it = recentProjects.erase(it);
-                                        else
-                                            ++it;
-                                    }
-                                    recentProjects.insert(recentProjects.begin(), RecentProjectEntry{req->projectName, req->projectRoot.string(), "Just now", req->templateId});
-                                    SaveRecentProjectsToDisk(recentProjects);
-                                    ctrl = WelcomeScreenController{recentProjects};
-                                    vm = ctrl.BuildViewModel();
-                                    // Navigate to Project Loading
-                                    projectLoadingState = ProjectLoadingScreenGuiState{};
-                                    projectLoadingState.projectName = req->projectName;
-                                    projectLoadingState.projectRoot = req->projectRoot.string();
-                                    pendingRoute = GuiRoute{
-                                        GuiRouteKind::ProjectLoading,
-                                        ProjectLoadingRouteParameters{req->projectRoot.string(), req->projectName}};
-                                    break;
-                                }
-                                if (snap->state == ProjectCreationOperationState::Failed ||
-                                    snap->state == ProjectCreationOperationState::Cancelled)
-                                {
-                                    if (snap->error)
-                                    {
-                                        LOG_ERROR("editor.project_creation", "Project creation failed: [code %d] %s", static_cast<int>(snap->error->code), snap->error->message.c_str());
-                                    }
-                                    else
-                                    {
-                                        LOG_ERROR("editor.project_creation", "Project creation operation %s.", snap->state == ProjectCreationOperationState::Cancelled ? "cancelled" : "failed");
-                                    }
-                                    break;
-                                }
-                                std::this_thread::sleep_for(std::chrono::milliseconds(2));
-                            }
-                        }
-                        else
-                        {
-                            LOG_ERROR("editor.project_creation", "StartCreate failed: [%s] %s", handleRes.ErrorValue().code.Value().c_str(), handleRes.ErrorValue().message.c_str());
-                        }
-                    }
-                    else
-                    {
-                        LOG_ERROR("editor.project_creation", "BuildCreationRequest failed due to validation errors.");
-                        for (const auto &diag : projectCreation.Validate().diagnostics)
-                        {
-                            LOG_ERROR("editor.project_creation", " - %s", diag.message.c_str());
-                        }
-                    }
+                    HandleProjectCreationCommand(projectCreation, projectCreationService, engineEvents,
+                                                 recentProjects, ctrl, vm, projectLoadingState, pendingRoute);
                 }
             }
             else if (activeRoute.kind == GuiRouteKind::ProjectLoading)
