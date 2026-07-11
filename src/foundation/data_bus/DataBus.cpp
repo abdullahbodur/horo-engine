@@ -16,7 +16,7 @@ namespace Horo
     struct EngineDataBus::State
     {
         struct Record { std::uint64_t id; Handler handler; };
-        struct Queued { EventTypeId type; std::string name; std::shared_ptr<const EventPayload> payload; QueuedPublisher publish; };
+        struct Queued { EventTypeId type; std::string name; std::shared_ptr<void> payload; QueuedPublisher publish; };
         EngineDataBusConfig config;
         std::mutex mutex;
         std::unordered_map<EventTypeId, std::vector<Record>> handlers;
@@ -48,7 +48,7 @@ namespace Horo
         });
     }
 
-    void EngineDataBus::PublishErased(const EventTypeId type, const std::string_view name, const EventPayload &raw, DeferredPublisher retry)
+    void EngineDataBus::PublishErased(const EventTypeId type, const std::string_view name, const void *raw, DeferredPublisher retry)
     {
         const auto state = m_state;
         if (std::find(state->activeTypes.begin(), state->activeTypes.end(), type) != state->activeTypes.end()) { state->deferred.push_back(std::move(retry)); return; }
@@ -63,13 +63,13 @@ namespace Horo
         if (state->activeTypes.empty()) { auto deferred = std::move(state->deferred); state->deferred.clear(); for (auto &publish : deferred) publish(*this); }
     }
 
-    void EngineDataBus::QueueErased(const EventTypeId type, const std::string_view name, std::shared_ptr<const EventPayload> payload, QueuedPublisher publish)
+    void EngineDataBus::QueueErased(const EventTypeId type, const std::string_view name, std::shared_ptr<void> payload, QueuedPublisher publish)
     {
         std::lock_guard lock(m_state->mutex);
         if (m_state->queued.size() >= m_state->config.maxAsyncQueueSize) { LOG_TRACE(m_state->config.logCategory, "async drop event=%s reason=queue_full", name.data()); return; }
         m_state->queued.push_back({type, std::string(name), std::move(payload), std::move(publish)});
     }
-    void EngineDataBus::DispatchQueued() { std::deque<State::Queued> queued; { std::lock_guard lock(m_state->mutex); queued.swap(m_state->queued); } for (auto &event : queued) event.publish(*this, *event.payload); }
+    void EngineDataBus::DispatchQueued() { std::deque<State::Queued> queued; { std::lock_guard lock(m_state->mutex); queued.swap(m_state->queued); } for (auto &event : queued) event.publish(*this, event.payload.get()); }
     void EngineDataBus::Clear() { if (!m_state) return; std::lock_guard lock(m_state->mutex); m_state->handlers.clear(); m_state->queued.clear(); }
 }
 

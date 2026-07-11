@@ -54,18 +54,6 @@ namespace Horo
         const char *logCategory = "engine.data_bus";
     };
 
-    struct EventPayload
-    {
-        virtual ~EventPayload() = default;
-    };
-
-    template <typename EventT>
-    struct TypedEventPayload final : EventPayload
-    {
-        explicit TypedEventPayload(EventT value) : event(std::move(value)) {}
-        EventT event;
-    };
-
     /** @brief Process-scoped typed notification bus; commands and state ownership remain external. */
     class EngineDataBus
     {
@@ -81,10 +69,7 @@ namespace Horo
         Subscription Subscribe(Handler &&handler)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto typed = [callback = std::forward<Handler>(handler)](const EventPayload &raw) {
-                const auto *payload = dynamic_cast<const TypedEventPayload<EventT> *>(&raw);
-                if (payload != nullptr) callback(payload->event);
-            };
+            auto typed = [callback = std::forward<Handler>(handler)](const void *raw) { callback(*static_cast<const EventT *>(raw)); };
             return SubscribeErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(typed));
         }
 
@@ -92,23 +77,19 @@ namespace Horo
         void Publish(const EventT &event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto replay = std::make_shared<TypedEventPayload<EventT>>(EventT(event));
-            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, *replay,
-                          [replay = std::move(replay)](EngineDataBus &bus) {
-                              bus.Publish(replay->event);
-                          });
+            auto replay = std::make_shared<EventT>(event);
+            const void *raw = replay.get();
+            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
+                          [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(*replay); });
         }
 
         template <typename EventT>
         void PublishAsync(EventT event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto payload = std::make_shared<TypedEventPayload<EventT>>(EventT(std::move(event)));
+            auto payload = std::make_shared<EventT>(std::move(event));
             QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
-                        [](EngineDataBus &bus, const EventPayload &raw) {
-                            const auto *typed = dynamic_cast<const TypedEventPayload<EventT> *>(&raw);
-                            if (typed != nullptr) bus.Publish(typed->event);
-                        });
+                        [](EngineDataBus &bus, const void *raw) { bus.Publish(*static_cast<const EventT *>(raw)); });
         }
 
         /** @brief Delivers worker-thread notifications at the owner synchronization point. */
@@ -117,13 +98,13 @@ namespace Horo
         void Clear();
 
     private:
-        using Handler = std::function<void(const EventPayload &)>;
+        using Handler = std::function<void(const void *)>;
         using DeferredPublisher = std::function<void(EngineDataBus &)>;
-        using QueuedPublisher = std::function<void(EngineDataBus &, const EventPayload &)>;
+        using QueuedPublisher = std::function<void(EngineDataBus &, const void *)>;
         struct State;
         Subscription SubscribeErased(EventTypeId type, std::string_view name, Handler handler);
-        void PublishErased(EventTypeId type, std::string_view name, const EventPayload &raw, DeferredPublisher retry);
-        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<const EventPayload> payload, QueuedPublisher publish);
+        void PublishErased(EventTypeId type, std::string_view name, const void *raw, DeferredPublisher retry);
+        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<void> payload, QueuedPublisher publish);
         std::shared_ptr<State> m_state;
     };
 } // namespace Horo
