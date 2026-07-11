@@ -156,40 +156,39 @@ namespace Horo::Editor::Theme
             return true;
         }
 
+        void SkipJsonSeparators(const char *&cursor)
+        {
+            while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r' || *cursor == ':' || *cursor == ',')
+                ++cursor;
+        }
+
+        [[nodiscard]] bool ReadJsonQuoted(const char *&cursor, std::string &value)
+        {
+            if (*cursor != '"') return false;
+            ++cursor;
+            const char *start = cursor;
+            while (*cursor != '\0' && *cursor != '"') ++cursor;
+            value.assign(start, static_cast<std::size_t>(cursor - start));
+            if (*cursor == '"') ++cursor;
+            return true;
+        }
+
         /** @brief Tiny JSON key-value reader — dependency free. */
         bool ReadJsonColors(const std::string &json, std::unordered_map<std::string, ImVec4> &out)
         {
             const char *p = json.c_str();
             while (*p)
             {
-                // Skip whitespace
-                while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) ++p;
+                SkipJsonSeparators(p);
                 if (*p == '\0') break;
-
-                // Expect "key"
-                if (*p != '"') { ++p; continue; }
-                ++p;
-                const char *keyStart = p;
-                while (*p && *p != '"') ++p;
-                std::string key(keyStart, static_cast<std::size_t>(p - keyStart));
-                if (*p == '"') ++p;
-
-                // Skip :
-                while (*p && (*p == ' ' || *p == ':')) ++p;
-
-                // Expect "value" (hex string)
-                if (*p != '"') { ++p; continue; }
-                ++p;
-                const char *valStart = p;
-                while (*p && *p != '"') ++p;
-                std::string hex(valStart, static_cast<std::size_t>(p - valStart));
-                if (*p == '"') ++p;
+                std::string key;
+                if (!ReadJsonQuoted(p, key)) { ++p; continue; }
+                SkipJsonSeparators(p);
+                std::string hex;
+                if (!ReadJsonQuoted(p, hex)) { ++p; continue; }
 
                 ImVec4 color{};
                 if (ParseHexColor(hex, color)) out[key] = color;
-
-                // Skip comma
-                while (*p && (*p == ' ' || *p == ',')) ++p;
             }
             return !out.empty();
         }
