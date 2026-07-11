@@ -251,6 +251,22 @@ namespace Horo::Editor
                        [&st, &f]() { (void)InputTextControl("##font-size", st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), f); });
         }
 
+        void ResolveShortcutConflicts(SettingsState::InputTab &input, const int editedIndex)
+        {
+            for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
+                input.shortcuts[index].conflict = false;
+            if (input.shortcuts[editedIndex].keys[0] == '\0') return;
+            for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
+            {
+                if (index == editedIndex || input.shortcuts[index].keys[0] == '\0') continue;
+                if (std::strcmp(input.shortcuts[editedIndex].keys, input.shortcuts[index].keys) == 0)
+                {
+                    input.shortcuts[editedIndex].conflict = true;
+                    input.shortcuts[index].conflict = true;
+                }
+            }
+        }
+
         void DrawInput(SettingsState &st, const Fonts &f)
         {
             SectionTitle("Input", f);
@@ -303,28 +319,7 @@ namespace Horo::Editor
                                              sizeof(st.input.shortcuts[i].keys),
                                              f))
                     {
-                        // Key was recorded — validate conflicts
-                        st.input.shortcuts[i].conflict = false;
-
-                        // Clear all conflicts first
-                        for (int j = 0; j < SettingsState::InputTab::kShortcutActionCount; ++j)
-                            st.input.shortcuts[j].conflict = false;
-
-                        // Check for duplicates
-                        if (st.input.shortcuts[i].keys[0] != '\0')
-                        {
-                            for (int j = 0; j < SettingsState::InputTab::kShortcutActionCount; ++j)
-                            {
-                                if (j == i) continue;
-                                if (std::strcmp(st.input.shortcuts[i].keys,
-                                                st.input.shortcuts[j].keys) == 0 &&
-                                    st.input.shortcuts[j].keys[0] != '\0')
-                                {
-                                    st.input.shortcuts[i].conflict = true;
-                                    st.input.shortcuts[j].conflict = true;
-                                }
-                            }
-                        }
+                        ResolveShortcutConflicts(st.input, i);
                         st.input.listeningShortcut = -1;
                         st.dirty = true;
                     }
