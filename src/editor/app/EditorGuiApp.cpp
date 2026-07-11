@@ -338,6 +338,48 @@ namespace Horo::Editor
                                 EditorWorkspaceRouteParameters{loadingState.projectRoot, std::nullopt}};
     }
 
+    static void DrawEditorWorkspace(const GuiRoute &activeRoute,
+                                    const Theme::Fonts &fonts,
+                                    std::optional<GuiRoute> &pendingRoute)
+    {
+        const auto *viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        constexpr auto workspaceFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration |
+                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg0());
+        ImGui::Begin("EditorWorkspace", nullptr, workspaceFlags);
+
+        const std::string *projectRoot = nullptr;
+        if (std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
+            projectRoot = &std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters).projectRoot;
+        const ImVec2 centre = ImGui::GetContentRegionAvail();
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + centre.y * 0.4F);
+        {
+            Theme::ScopedTextStyle textStyle(fonts.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
+            constexpr const char *title = "Editor Workspace";
+            ImGui::SetCursorPosX((centre.x - ImGui::CalcTextSize(title).x) * 0.5F);
+            ImGui::TextDisabled("%s", title);
+        }
+        ImGui::Dummy({0.0F, 8.0F});
+        if (projectRoot)
+        {
+            Theme::ScopedTextStyle textStyle(fonts.mono, 12.0F, Theme::FontPx::Mono);
+            ImGui::SetCursorPosX((centre.x - ImGui::CalcTextSize(projectRoot->c_str()).x) * 0.5F);
+            ImGui::TextDisabled("%s", projectRoot->c_str());
+        }
+        ImGui::Dummy({0.0F, 20.0F});
+        constexpr float buttonWidth = 160.0F;
+        ImGui::SetCursorPosX((centre.x - buttonWidth) * 0.5F);
+        if (Ui::Button(Ui::ButtonProps{"← Return to Welcome", {buttonWidth, 34.0F},
+                                       Ui::ButtonVariant::Secondary, true, 13.0F, fonts.sans,
+                                       Theme::FontPx::Sans}))
+            pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
+        ImGui::End();
+        ImGui::PopStyleColor();
+    }
+
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
@@ -515,64 +557,7 @@ namespace Horo::Editor
             }
             else if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
             {
-                // ── Editor Workspace Placeholder ─────────────────────────────────
-                // Full EditorWorkspaceScreen (EditorLayer, EditorPanelHost, etc.)
-                // is not yet implemented. This placeholder keeps the route alive
-                // and provides a minimal "Return to Welcome" escape hatch.
-                const auto *viewport = ImGui::GetMainViewport();
-                ImGui::SetNextWindowPos(viewport->WorkPos);
-                ImGui::SetNextWindowSize(viewport->WorkSize);
-                constexpr auto wsFlags =
-                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration |
-                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-                ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg0());
-                ImGui::Begin("EditorWorkspace", nullptr, wsFlags);
-
-                const std::string *projectRoot = nullptr;
-                if (std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
-                {
-                    projectRoot = &std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters).projectRoot;
-                }
-
-                const ImVec2 centre = ImGui::GetContentRegionAvail();
-                const float labelY = ImGui::GetCursorPosY() + centre.y * 0.4F;
-                ImGui::SetCursorPosY(labelY);
-
-                {
-                    Theme::ScopedTextStyle ts(fonts.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
-                    const char *title = "Editor Workspace";
-                    const float tw = ImGui::CalcTextSize(title).x;
-                    ImGui::SetCursorPosX((centre.x - tw) * 0.5F);
-                    ImGui::TextDisabled("%s", title);
-                }
-                ImGui::Dummy({0.0F, 8.0F});
-                if (projectRoot)
-                {
-                    Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
-                    const float pw = ImGui::CalcTextSize(projectRoot->c_str()).x;
-                    ImGui::SetCursorPosX((centre.x - pw) * 0.5F);
-                    ImGui::TextDisabled("%s", projectRoot->c_str());
-                }
-                ImGui::Dummy({0.0F, 20.0F});
-                {
-                    const float bw = 160.0F;
-                    ImGui::SetCursorPosX((centre.x - bw) * 0.5F);
-                    if (Ui::Button(Ui::ButtonProps{"← Return to Welcome",
-                                                  {bw, 34.0F},
-                                                  Ui::ButtonVariant::Secondary,
-                                                  true,
-                                                  13.0F,
-                                                  fonts.sans,
-                                                  Theme::FontPx::Sans}))
-                    {
-                        pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
-                    }
-                }
-
-                ImGui::End();
-                ImGui::PopStyleColor();
+                DrawEditorWorkspace(activeRoute, fonts, pendingRoute);
             }
             if (pendingRoute.has_value())
             {
