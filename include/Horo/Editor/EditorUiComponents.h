@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <utility>
 
