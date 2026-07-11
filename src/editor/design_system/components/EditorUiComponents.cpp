@@ -354,38 +354,45 @@ namespace Horo::Editor::Ui
 
     // ── ColorHexControl ───────────────────────────────────────────────────
 
+    [[nodiscard]] int HexDigit(const char value)
+    {
+        if (value >= '0' && value <= '9') return value - '0';
+        if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+        if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+        return -1;
+    }
+
+    [[nodiscard]] bool ParseHexColor(const char *text, ImVec4 &out)
+    {
+        if (text == nullptr || text[0] != '#' || text[7] != '\0') return false;
+        const int digits[6] = {HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
+                               HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])};
+        for (const int digit : digits)
+            if (digit < 0) return false;
+        out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
+                     static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
+                     static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F};
+        return true;
+    }
+
+    void WriteCanonicalColor(char *buffer, const size_t bufferSize, const ImVec4 color)
+    {
+        const int red = static_cast<int>(color.x * 255.0F + 0.5F);
+        const int green = static_cast<int>(color.y * 255.0F + 0.5F);
+        const int blue = static_cast<int>(color.z * 255.0F + 0.5F);
+        std::snprintf(buffer, bufferSize, "#%02X%02X%02X", red, green, blue);
+    }
+
     bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts)
     {
-        const auto hexDigit = [](const char value) -> int {
-            if (value >= '0' && value <= '9') return value - '0';
-            if (value >= 'a' && value <= 'f') return value - 'a' + 10;
-            if (value >= 'A' && value <= 'F') return value - 'A' + 10;
-            return -1;
-        };
-        const auto parse = [&hexDigit](const char *text, ImVec4 &out) -> bool {
-            if (!text || text[0] != '#' || text[7] != '\0') return false;
-            const int digits[6] = {hexDigit(text[1]), hexDigit(text[2]), hexDigit(text[3]),
-                                   hexDigit(text[4]), hexDigit(text[5]), hexDigit(text[6])};
-            for (const int digit : digits) if (digit < 0) return false;
-            out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
-                         static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
-                         static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F};
-            return true;
-        };
         const auto pack = [](const ImVec4 color) -> ImU32 { return ImGui::ColorConvertFloat4ToU32(color); };
         const auto unpack = [](const ImU32 color) -> ImVec4 { return ImGui::ColorConvertU32ToFloat4(color); };
-        const auto writeCanonical = [buffer, bufferSize](const ImVec4 color) {
-            const int red = static_cast<int>(color.x * 255.0F + 0.5F);
-            const int green = static_cast<int>(color.y * 255.0F + 0.5F);
-            const int blue = static_cast<int>(color.z * 255.0F + 0.5F);
-            std::snprintf(buffer, bufferSize, "#%02X%02X%02X", red, green, blue);
-        };
 
         ImGui::PushID(id);
         ImGuiStorage *const storage = ImGui::GetStateStorage();
         const ImGuiID lastValidKey = ImGui::GetID("last-valid-color");
         ImVec4 current{};
-        if (parse(buffer, current))
+        if (ParseHexColor(buffer, current))
         {
             storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
         }
@@ -415,7 +422,7 @@ namespace Horo::Editor::Ui
         bool validChange = false;
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
-            if (ImGui::InputText("hex", buffer, bufferSize) && parse(buffer, current))
+            if (ImGui::InputText("hex", buffer, bufferSize) && ParseHexColor(buffer, current))
             {
                 storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
                 validChange = true;
@@ -430,7 +437,7 @@ namespace Horo::Editor::Ui
             ImGui::Separator();
             if (ImGui::ColorPicker3("##color-picker", &current.x, ImGuiColorEditFlags_NoSidePreview))
             {
-                writeCanonical(current);
+                WriteCanonicalColor(buffer, bufferSize, current);
                 storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
                 validChange = true;
             }
