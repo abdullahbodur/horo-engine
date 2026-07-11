@@ -379,10 +379,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 } // namespace
 
 ProjectCreationService::ProjectCreationService(JobSystem& jobs, EngineDataBus& dataBus)
-    : state_(std::make_shared<ProjectCreationServiceState>(dataBus)), jobs_(&jobs) {}
-
-ProjectCreationService::ProjectCreationService(ProjectCreationService&&) noexcept = default;
-ProjectCreationService& ProjectCreationService::operator=(ProjectCreationService&&) noexcept = default;
+    : state_(std::make_shared<ProjectCreationServiceState>(dataBus)), jobs_(jobs) {}
 
 Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(ProjectCreationRequest request) {
     LOG_DEBUG("editor.project_creation", "StartCreate requested for project '%s' at path '%s', template '%s'", request.projectName.c_str(), request.projectRoot.string().c_str(), request.templateId.c_str());
@@ -399,7 +396,7 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
         operation->snapshot.projectId = MakeProjectId(operation->snapshot.id);
         state_->operations.emplace(operation->snapshot.id, operation);
     }
-    const auto submitted = jobs_->Submit(JobDescriptor{}, [state = state_, operation, request = std::move(request)](const CancellationToken& cancellation) {
+    const auto submitted = jobs_.get().Submit(JobDescriptor{}, [state = state_, operation, request = std::move(request)](const CancellationToken& cancellation) {
         RunCreate(state, operation, request, cancellation);
     });
     if (submitted.HasError()) {
@@ -436,9 +433,9 @@ Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperatio
         operation->snapshot.state = ProjectCreationOperationState::Cancelling;
     }
     if (jobId == 0) return Result<void>::Failure(MakeFoundationError("project_creation.not_ready", "Project creation operation is not ready for cancellation."));
-    const auto cancelled = jobs_->RequestCancel(jobId);
+    const auto cancelled = jobs_.get().RequestCancel(jobId);
     if (cancelled.HasError()) return cancelled;
-    if (jobs_->Query(jobId).state == JobState::Cancelled) SetCancelled(state_, operation);
+    if (jobs_.get().Query(jobId).state == JobState::Cancelled) SetCancelled(state_, operation);
     return Result<void>::Success();
 }
 

@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -108,8 +109,7 @@ public:
 
     ProjectCreationService(const ProjectCreationService&) = delete;
     ProjectCreationService& operator=(const ProjectCreationService&) = delete;
-    ProjectCreationService(ProjectCreationService&&) noexcept;
-    ProjectCreationService& operator=(ProjectCreationService&&) noexcept;
+
 
     /**
      * @brief Validates and submits a project creation operation without writing from the caller thread.
@@ -141,7 +141,7 @@ public:
 
 private:
     std::shared_ptr<ProjectCreationServiceState> state_;
-    JobSystem* jobs_ = nullptr;
+    std::reference_wrapper<JobSystem> jobs_;
 };
 
 } // namespace Horo::Editor
