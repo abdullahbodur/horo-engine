@@ -764,13 +764,13 @@ namespace Horo::Editor
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }
-        [[nodiscard]] bool ContainsCaseInsensitive(const char *text, const char *query)
+        [[nodiscard]] bool ContainsCaseInsensitive(const char *text, const std::string &query)
         {
-            if (query == nullptr || query[0] == '\0') return true;
+            if (query.empty()) return true;
             for (const char *start = text; *start != '\0'; ++start)
             {
                 const char *candidate = start;
-                const char *needle = query;
+                const char *needle = query.c_str();
                 while (*candidate != '\0' && *needle != '\0' &&
                        std::tolower(static_cast<unsigned char>(*candidate)) ==
                            std::tolower(static_cast<unsigned char>(*needle)))
@@ -791,7 +791,10 @@ namespace Horo::Editor
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
             ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-            ImGui::InputTextWithHint("##filter", "Filter plugins...", st.pluginFilter, sizeof(st.pluginFilter));
+            st.pluginFilter.resize(std::min(st.pluginFilter.size(), std::size_t{63}));
+            st.pluginFilter.resize(63, '\0');
+            ImGui::InputTextWithHint("##filter", "Filter plugins...", st.pluginFilter.data(), st.pluginFilter.size() + 1);
+            st.pluginFilter.resize(std::strlen(st.pluginFilter.c_str()));
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar();
             ImGui::Dummy({0.0F, 10.0F});

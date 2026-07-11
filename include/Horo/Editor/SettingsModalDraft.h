@@ -44,7 +44,7 @@ namespace Horo::Editor
         int pluginSectionTab = 0;
         int selectedPlugin = 0;
         int pluginDetailTab[3] = {};
-        char pluginFilter[64]{};
+        std::string pluginFilter;
         std::string modalFeedback;
         struct PluginToggles { bool horoMcpBridge = true; bool fmodIntegration = true; bool steamworksSdk = false; } plugins;
         struct McpSettings { int transportMode = 0; int port = 8080; bool requireToken = true; bool allowRemote = false; int toolScope = 0; std::string assetRoot = "Assets/Generated"; } mcp;
