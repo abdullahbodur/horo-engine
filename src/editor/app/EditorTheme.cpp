@@ -207,6 +207,28 @@ namespace Horo::Editor::Theme
             return dir;
         }
 
+        void AppendCustomThemes(const char *additionalPath)
+        {
+            std::vector<std::string> scanPaths{GetThemesDir()};
+            if (additionalPath != nullptr && additionalPath[0] != '\0')
+                scanPaths.emplace_back(additionalPath);
+
+            for (const auto &dir : scanPaths)
+            {
+                std::error_code ec;
+                if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec))
+                    continue;
+                for (const auto &entry : std::filesystem::directory_iterator(dir, ec))
+                {
+                    if (ec) break;
+                    if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
+                    ThemeEntry theme;
+                    if (LoadThemeFromJson(entry.path().string().c_str(), theme))
+                        ThemeList().push_back(std::move(theme));
+                }
+            }
+        }
+
     } // namespace
 
     const std::vector<ThemeEntry> &GetThemeList()
@@ -299,30 +321,7 @@ namespace Horo::Editor::Theme
             ThemeList().push_back(std::move(e));
         }
 
-        // Scan custom themes
-        std::vector<std::string> scanPaths;
-        scanPaths.push_back(GetThemesDir());
-        if (additionalPath && additionalPath[0] != '\0')
-            scanPaths.emplace_back(additionalPath);
-
-        for (const auto &dir : scanPaths)
-        {
-            std::error_code ec;
-            if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec))
-                continue;
-
-            for (const auto &entry : std::filesystem::directory_iterator(dir, ec))
-            {
-                if (ec) break;
-                if (!entry.is_regular_file()) continue;
-                const auto &path = entry.path();
-                if (path.extension() != ".json") continue;
-
-                ThemeEntry te;
-                if (LoadThemeFromJson(path.string().c_str(), te))
-                    ThemeList().push_back(std::move(te));
-            }
-        }
+        AppendCustomThemes(additionalPath);
     }
 
     bool LoadThemeFromJson(const char *path, ThemeEntry &outEntry)
