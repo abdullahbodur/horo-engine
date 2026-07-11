@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -398,10 +399,14 @@ namespace Horo::Editor::Ui
 
     void WriteCanonicalColor(char *buffer, const size_t bufferSize, const ImVec4 color)
     {
+        if (buffer == nullptr || bufferSize == 0) return;
         const int red = static_cast<int>(color.x * 255.0F + 0.5F);
         const int green = static_cast<int>(color.y * 255.0F + 0.5F);
         const int blue = static_cast<int>(color.z * 255.0F + 0.5F);
-        std::snprintf(buffer, bufferSize, "#%02X%02X%02X", red, green, blue);
+        const std::string value = std::format("#{:02X}{:02X}{:02X}", red, green, blue);
+        const std::size_t count = std::min(bufferSize - 1, value.size());
+        std::memcpy(buffer, value.data(), count);
+        buffer[count] = '\0';
     }
 
     bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts)
@@ -548,18 +553,10 @@ namespace Horo::Editor::Ui
         std::string text(32, '\0');
         switch (format)
         {
-        case SliderValueFormat::Minutes:
-            std::snprintf(text.data(), text.size(), "%d min", *value);
-            break;
-        case SliderValueFormat::Percent:
-            std::snprintf(text.data(), text.size(), "%d%%", *value);
-            break;
-        case SliderValueFormat::Milliseconds:
-            std::snprintf(text.data(), text.size(), "%d ms", *value);
-            break;
-        case SliderValueFormat::Integer:
-            std::snprintf(text.data(), text.size(), "%d", *value);
-            break;
+        case SliderValueFormat::Minutes: text = std::format("{} min", *value); break;
+        case SliderValueFormat::Percent: text = std::format("{}%", *value); break;
+        case SliderValueFormat::Milliseconds: text = std::format("{} ms", *value); break;
+        case SliderValueFormat::Integer: text = std::format("{}", *value); break;
         }
         text.resize(std::strlen(text.c_str()));
         {
