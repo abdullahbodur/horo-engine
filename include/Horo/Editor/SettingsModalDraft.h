@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorSettingsStore.h"
 
 #include <cstdint>
+#include <iterator>
 #include <string>
 
 namespace Horo::Editor
@@ -34,7 +35,7 @@ namespace Horo::Editor
             int shortcutCount = 0;
             int listeningShortcut = -1;
             static constexpr const char *kShortcutActions[] = {"Save Scene", "Undo", "Build & Release", "Find", "Replace", "Duplicate", "Delete", "Select All"};
-            static constexpr int kShortcutActionCount = sizeof(kShortcutActions) / sizeof(kShortcutActions[0]);
+            static constexpr int kShortcutActionCount = static_cast<int>(std::size(kShortcutActions));
         } input;
         struct RenderingTab { int viewportMode = 0; bool gridOverlay = true; int renderingTier = 0; char textureBudget[32] = "2048 MB"; int renderBackend = 0; } rendering;
         struct AudioTab { int masterVolume = 80; int audioOutputDevice = 0; bool audioEnabled = true; } audio;

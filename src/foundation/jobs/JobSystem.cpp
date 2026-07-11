@@ -35,9 +35,14 @@ namespace Horo
         JobRecord(const JobId jobId, const JobDescriptor &, std::function<void(const CancellationToken &)> jobWork)
             : id(jobId), work(std::move(jobWork)) {}
 
-        JobId id;
+        [[nodiscard]] std::mutex& Mutex() const noexcept { return mutex; }
+
+        private:
         mutable std::mutex mutex;
-        std::condition_variable completed;
+
+        public:
+            JobId id;
+            std::condition_variable completed;
         JobState state = JobState::Queued;
         std::optional<Error> error;
         CancellationSource cancellation;
@@ -64,7 +69,7 @@ namespace Horo
     {
         void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt)
         {
-            std::lock_guard lock(record->mutex);
+            std::lock_guard lock(record->Mutex());
             if (IsTerminal(record->state)) return;
             record->state = state;
             record->error = std::move(error);
@@ -79,7 +84,7 @@ namespace Horo
             std::shared_ptr<JobRecord> record;
             {
                 std::unique_lock lock(state->mutex);
-                state->workAvailable.wait(lock, [&] { return state->stopping || !state->queue.empty(); });
+                state->workAvailable.wait(lock, [&state] { return state->stopping || !state->queue.empty(); });
                 if (state->queue.empty())
                 {
                     if (state->stopping) return;
@@ -90,7 +95,7 @@ namespace Horo
             }
 
             {
-                std::lock_guard lock(record->mutex);
+                std::lock_guard lock(record->Mutex());
                 if (record->state != JobState::Queued) continue;
                 record->state = JobState::Running;
             }
@@ -152,7 +157,7 @@ namespace Horo
         }
         record->cancellation.RequestCancellation();
         {
-            std::lock_guard lock(record->mutex);
+            std::lock_guard lock(record->Mutex());
             if (record->state == JobState::Queued)
             {
                 record->state = JobState::Cancelled;
@@ -173,7 +178,7 @@ namespace Horo
             record = found->second;
         }
 
-        std::lock_guard lock(record->mutex);
+        std::lock_guard lock(record->Mutex());
         return JobSnapshot{.id = record->id, .state = record->state, .error = record->error};
     }
 
@@ -209,10 +214,11 @@ namespace Horo
         if (!m_record)
             return Result<void>::Failure(MakeJobError("job.invalid_handle", "Cannot wait on an invalid job handle."));
 
-        std::unique_lock lock(m_record->mutex);
-        m_record->completed.wait(lock, [&] { return IsTerminal(m_record->state); });
-        if (m_record->state == JobState::Succeeded) return Result<void>::Success();
-        return Result<void>::Failure(*m_record->error);
+        const auto record = m_record;
+        std::unique_lock lock(record->Mutex());
+        record->completed.wait(lock, [record] { return IsTerminal(record->state); });
+        if (record->state == JobState::Succeeded) return Result<void>::Success();
+        return Result<void>::Failure(*record->error);
     }
 
     JobId JobHandle::Id() const noexcept
