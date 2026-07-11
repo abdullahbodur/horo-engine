@@ -317,6 +317,27 @@ namespace Horo::Editor
         }
     }
 
+    static void UpdateProjectLoadingState(ProjectLoadingScreenGuiState &loadingState,
+                                          const float deltaTime,
+                                          std::optional<GuiRoute> &pendingRoute)
+    {
+        if (loadingState.isCancelled) return;
+        loadingState.progress += deltaTime * 35.0F;
+        if (loadingState.progress < 20.0F)
+            loadingState.statusText = "Initializing asset database...";
+        else if (loadingState.progress < 50.0F)
+            loadingState.statusText = "Parsing project manifests...";
+        else if (loadingState.progress < 80.0F)
+            loadingState.statusText = "Loading default scene...";
+        else
+            loadingState.statusText = "Finalizing workspace...";
+        if (loadingState.progress < 100.0F) return;
+        loadingState.progress = 100.0F;
+        LOG_INFO("editor.loading", "Project loading complete. Transitioning to EditorWorkspace.");
+        pendingRoute = GuiRoute{GuiRouteKind::EditorWorkspace,
+                                EditorWorkspaceRouteParameters{loadingState.projectRoot, std::nullopt}};
+    }
+
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
@@ -482,25 +503,7 @@ namespace Horo::Editor
             }
             else if (activeRoute.kind == GuiRouteKind::ProjectLoading)
             {
-                // Simulate loading process
-                if (!projectLoadingState.isCancelled)
-                {
-                    projectLoadingState.progress += io.DeltaTime * 35.0f; // Approx 3 seconds to load
-                    
-                    if (projectLoadingState.progress < 20.0f) projectLoadingState.statusText = "Initializing asset database...";
-                    else if (projectLoadingState.progress < 50.0f) projectLoadingState.statusText = "Parsing project manifests...";
-                    else if (projectLoadingState.progress < 80.0f) projectLoadingState.statusText = "Loading default scene...";
-                    else projectLoadingState.statusText = "Finalizing workspace...";
-
-                    if (projectLoadingState.progress >= 100.0f)
-                    {
-                        projectLoadingState.progress = 100.0f;
-                        LOG_INFO("editor.loading", "Project loading complete. Transitioning to EditorWorkspace.");
-                        pendingRoute = GuiRoute{
-                            GuiRouteKind::EditorWorkspace,
-                            EditorWorkspaceRouteParameters{projectLoadingState.projectRoot, std::nullopt}};
-                    }
-                }
+                UpdateProjectLoadingState(projectLoadingState, io.DeltaTime, pendingRoute);
 
                 const ProjectLoadingScreenGuiCommand cmd = DrawProjectLoadingScreenGui(projectLoadingState, fonts);
                 
