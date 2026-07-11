@@ -92,7 +92,7 @@ namespace Horo
         [[nodiscard]] Result<void> Register(const SettingDescriptor &descriptor)
         {
             if (m_sealed || m_descriptors.contains(descriptor.key) || !MatchesType(descriptor.type, descriptor.defaultValue)) return Result<void>::Failure(ErrorFor("configuration.schema_invalid"));
-            m_descriptors.emplace(descriptor.key, descriptor);
+            m_descriptors.try_emplace(descriptor.key, descriptor);
             return Result<void>::Success();
         }
         [[nodiscard]] Result<void> Seal() { if (m_sealed) return Result<void>::Failure(ErrorFor("configuration.schema_sealed")); m_sealed = true; return Result<void>::Success(); }
@@ -115,7 +115,7 @@ namespace Horo
         {
             assert(m_schema.m_sealed);
             auto initial = std::make_shared<ConfigurationSnapshot::Data>();
-            for (const auto &[key, descriptor] : m_schema.m_descriptors) initial->values.emplace(key, descriptor.defaultValue);
+            for (const auto &[key, descriptor] : m_schema.m_descriptors) initial->values.try_emplace(key, descriptor.defaultValue);
             m_active = std::move(initial);
         }
         [[nodiscard]] ConfigurationSnapshot Snapshot() const { std::lock_guard lock(m_mutex); return ConfigurationSnapshot(m_active); }

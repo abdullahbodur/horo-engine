@@ -764,7 +764,7 @@ namespace Horo::Editor
                                 finalPath /= st.projectName;
                             }
                             const std::string pathStr = finalPath.string();
-                            std::strncpy(st.projectPath, pathStr.c_str(), sizeof(st.projectPath) - 1);
+                            pathStr.copy(st.projectPath, sizeof(st.projectPath) - 1);
                             st.projectPath[sizeof(st.projectPath) - 1] = '\0';
                             controller.SetProjectPath(st.projectPath);
                         }

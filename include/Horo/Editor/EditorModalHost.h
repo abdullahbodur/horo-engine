@@ -88,10 +88,10 @@ namespace Horo::Editor
         [[nodiscard]] virtual ModalPresentation Presentation() const = 0;
         [[nodiscard]] virtual ModalClosePolicy ClosePolicy() const = 0;
         [[nodiscard]] virtual Result<void> OnOpen(EditorModalContext &context) = 0;
-        virtual void OnUpdate(float dt) {}
+        virtual void OnUpdate(float /*dt*/) {}
         [[nodiscard]] virtual ModalFrameResult Draw() = 0;
         [[nodiscard]] virtual CloseDecision CanClose(ModalCloseReason reason) = 0;
-        virtual void OnClose(ModalCloseReason reason) {}
+        virtual void OnClose(ModalCloseReason /*reason*/) {}
     };
 
     /** @brief Owns the exclusive editor modal stack and commits lifecycle changes only at host frame boundaries. */

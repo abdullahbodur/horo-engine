@@ -27,21 +27,25 @@ struct MdcStack
     std::vector<std::vector<MdcField>> frames;
 };
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-thread_local MdcStack g_mdcStack;
+MdcStack &MdcState()
+{
+    thread_local MdcStack state;
+    return state;
+}
 
 } // namespace
 
 std::size_t LogContext::PushFrame(std::vector<MdcField> fields)
 {
-    const std::size_t index = g_mdcStack.frames.size();
-    g_mdcStack.frames.push_back(std::move(fields));
+    auto &state = MdcState();
+    const std::size_t index = state.frames.size();
+    state.frames.push_back(std::move(fields));
     return index;
 }
 
 LogContext::~LogContext()
 {
-    auto &frames = g_mdcStack.frames;
+    auto &frames = MdcState().frames;
 
     // Already removed (e.g. this object was moved-from) — nothing to do.
     if (m_frameIndex >= frames.size())
@@ -64,7 +68,7 @@ LogContext::~LogContext()
 
 std::vector<MdcField> GetMdcFields()
 {
-    const auto &frames = g_mdcStack.frames;
+    const auto &frames = MdcState().frames;
     if (frames.empty())
         return {};
 
@@ -88,7 +92,7 @@ std::vector<MdcField> GetMdcFields()
 
 void LogContext::ClearAll()
 {
-    g_mdcStack.frames.clear();
+    MdcState().frames.clear();
 }
 
 } // namespace Horo::Log

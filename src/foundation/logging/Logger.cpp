@@ -34,7 +34,11 @@ namespace Horo::Log
 
     namespace
     {
-        std::mutex g_mutex;
+        std::mutex &LoggerMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
 
         std::string ResolvePlatform()
         {
@@ -162,7 +166,7 @@ namespace Horo::Log
     void Logger::Init(std::string_view logDir, std::string_view baseName)
     {
         auto &self = Instance();
-        std::lock_guard lock(g_mutex);
+        std::lock_guard lock(LoggerMutex());
 
         if (self.m_file != nullptr)
             return; // already initialised
@@ -211,7 +215,7 @@ namespace Horo::Log
     void Logger::Shutdown()
     {
         auto &self = Instance();
-        std::lock_guard lock(g_mutex);
+        std::lock_guard lock(LoggerMutex());
 
         if (self.m_file != nullptr)
         {
@@ -281,7 +285,7 @@ namespace Horo::Log
         }
 
         auto &self = Instance();
-        std::lock_guard lock(g_mutex);
+        std::lock_guard lock(LoggerMutex());
 
         const auto seq = ++self.m_sequence;
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(

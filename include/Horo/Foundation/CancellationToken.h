@@ -13,7 +13,7 @@ namespace Horo
         {
             for (auto state = m_state; state; state = state->parent)
             {
-                if (state->requested.load(std::memory_order_acquire)) return true;
+                if (state->requested.load()) return true;
             }
             return false;
         }
@@ -37,8 +37,8 @@ namespace Horo
         {
             m_state->parent = parent.m_state;
         }
-        [[nodiscard]] CancellationToken Token() const { return CancellationToken(m_state); }
-        void RequestCancellation() noexcept { m_state->requested.store(true, std::memory_order_release); }
+        [[nodiscard]] CancellationToken Token() const noexcept { return CancellationToken(m_state); }
+        void RequestCancellation() noexcept { m_state->requested.store(true); }
     private:
         std::shared_ptr<CancellationToken::State> m_state;
     };

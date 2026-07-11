@@ -79,7 +79,10 @@ private:
     static std::size_t PushFrame(std::vector<MdcField> fields);
 
     // Recursion base case.
-    static void CollectPairs(std::vector<MdcField>&) {}
+    static void CollectPairs(std::vector<MdcField>&)
+    {
+        // The empty overload terminates recursive pair collection.
+    }
 
     // Consume one key-value pair then recurse.
     template<typename K, typename V, typename... Rest>

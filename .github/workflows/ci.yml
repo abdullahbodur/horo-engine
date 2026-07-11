@@ -221,3 +221,5 @@ jobs:
             -Dsonar.projectKey=abdullahbodur_horo-engine
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300

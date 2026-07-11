@@ -10,7 +10,7 @@ namespace Horo::Editor
     class EditorDataBus
     {
     public:
-        EditorDataBus() : m_ownerThread(std::this_thread::get_id()), m_bus(EngineDataBusConfig{.logCategory = "editor.data_bus"}) {}
+        EditorDataBus() = default;
 
         template <typename EventT, typename Handler>
         Subscription Subscribe(Handler &&handler)
@@ -34,7 +34,7 @@ namespace Horo::Editor
 
     private:
         void AssertOwnerThread() const noexcept;
-        std::thread::id m_ownerThread;
-        EngineDataBus m_bus;
+        std::thread::id m_ownerThread = std::this_thread::get_id();
+        EngineDataBus m_bus{EngineDataBusConfig{.logCategory = "editor.data_bus"}};
     };
 } // namespace Horo::Editor

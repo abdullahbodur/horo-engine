@@ -107,6 +107,8 @@ bool IsRoutePayloadValid(const GuiRoute& route) noexcept {
         return std::holds_alternative<ProjectBrowserRouteParameters>(route.parameters);
     case GuiRouteKind::ProjectCreation:
         return std::holds_alternative<ProjectCreationRouteParameters>(route.parameters);
+    case GuiRouteKind::ProjectLoading:
+        return std::holds_alternative<ProjectLoadingRouteParameters>(route.parameters);
     case GuiRouteKind::EditorWorkspace:
         return std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters);
     }

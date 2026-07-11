@@ -38,7 +38,7 @@ namespace Horo
         [[nodiscard]] const Error &ErrorValue() const { assert(HasError()); return m_error; }
     private:
         explicit Result(bool success) : m_success(success) {}
-        explicit Result(Error error) : m_success(false), m_error(std::move(error)) {}
+        explicit Result(Error error) : m_error(std::move(error)) {}
         bool m_success = false;
         Error m_error{ErrorCode{"foundation.result.no_error"}, ErrorDomainId{"horo.foundation"}, ErrorSeverity::Info, ""};
     };
