@@ -45,12 +45,12 @@ namespace Horo::Editor
         int selectedPlugin = 0;
         int pluginDetailTab[3] = {};
         char pluginFilter[64]{};
-        char modalFeedback[256]{};
+        std::string modalFeedback;
         struct PluginToggles { bool horoMcpBridge = true; bool fmodIntegration = true; bool steamworksSdk = false; } plugins;
-        struct McpSettings { int transportMode = 0; int port = 8080; bool requireToken = true; bool allowRemote = false; int toolScope = 0; char assetRoot[64] = "Assets/Generated"; } mcp;
-        struct FmodSettings { char studioPath[128] = "/Applications/FMOD Studio.app"; char projectFile[64] = "Audio/HoroAudio.fspro"; char bankPath[64] = "Assets/Audio/Banks"; bool liveUpdate = true; bool failOnMissing = true; int targetPlatform = 0; } fmod;
-        struct SteamSettings { char sdkPath[64] = "ThirdParty/Steamworks"; int initMode = 0; bool overlay = true; bool achievements = true; bool networking = false; } steam;
-        struct PluginRuntime { char discoveryPaths[128] = "{project}/plugins; ~/.horo/plugins"; int loadOrder = 0; char devPath[64] = "~/dev/horo-plugins"; bool sandbox = true; int unsignedPolicy = 0; int networkPolicy = 0; int updateCheck = 0; int compatMode = 0; } runtime;
+        struct McpSettings { int transportMode = 0; int port = 8080; bool requireToken = true; bool allowRemote = false; int toolScope = 0; std::string assetRoot = "Assets/Generated"; } mcp;
+        struct FmodSettings { std::string studioPath = "/Applications/FMOD Studio.app"; std::string projectFile = "Audio/HoroAudio.fspro"; std::string bankPath = "Assets/Audio/Banks"; bool liveUpdate = true; bool failOnMissing = true; int targetPlatform = 0; } fmod;
+        struct SteamSettings { std::string sdkPath = "ThirdParty/Steamworks"; int initMode = 0; bool overlay = true; bool achievements = true; bool networking = false; } steam;
+        struct PluginRuntime { std::string discoveryPaths = "{project}/plugins; ~/.horo/plugins"; int loadOrder = 0; std::string devPath = "~/dev/horo-plugins"; bool sandbox = true; int unsignedPolicy = 0; int networkPolicy = 0; int updateCheck = 0; int compatMode = 0; } runtime;
     };
 
     [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &state);

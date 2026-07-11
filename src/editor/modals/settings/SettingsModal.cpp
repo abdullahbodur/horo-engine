@@ -442,14 +442,12 @@ namespace Horo::Editor
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 6.0F});
                 if (ImGui::Button("Install...", {btnW, 32.0F}))
                 {
-                    std::snprintf(st.modalFeedback, sizeof(st.modalFeedback),
-                                  "Plugin installation dialog not yet implemented.");
+                    st.modalFeedback = "Plugin installation dialog not yet implemented.";
                 }
                 ImGui::SameLine(0.0F, btnGap);
                 if (ImGui::Button("Reload", {btnW, 32.0F}))
                 {
-                    std::snprintf(st.modalFeedback, sizeof(st.modalFeedback),
-                                  "Plugins reloaded successfully.");
+                    st.modalFeedback = "Plugins reloaded successfully.";
                 }
                 ImGui::PopStyleVar();
             }
@@ -1024,11 +1022,9 @@ namespace Horo::Editor
                     if (ImGui::Button(hdr.action1, {actionW, 28.0F}))
                     {
                         if (std::strcmp(hdr.action1, "Open Logs") == 0)
-                            std::snprintf(st.modalFeedback, sizeof(st.modalFeedback),
-                                          "Opening Horo MCP Bridge logs...");
+                            st.modalFeedback = "Opening Horo MCP Bridge logs...";
                         else if (std::strcmp(hdr.action1, "Validate") == 0)
-                            std::snprintf(st.modalFeedback, sizeof(st.modalFeedback),
-                                          "FMOD integration validated successfully.");
+                            st.modalFeedback = "FMOD integration validated successfully.";
                         else if (std::strcmp(hdr.action1, "Enable") == 0)
                             st.plugins.steamworksSdk = true;
                     }
@@ -1043,8 +1039,7 @@ namespace Horo::Editor
                         else if (danger && st.selectedPlugin == 1)
                             st.plugins.fmodIntegration = false;
                         else if (std::strcmp(hdr.action2, "Open Docs") == 0)
-                            std::snprintf(st.modalFeedback, sizeof(st.modalFeedback),
-                                          "Opening Steamworks SDK documentation...");
+                            st.modalFeedback = "Opening Steamworks SDK documentation...";
                     }
                     if (danger) ImGui::PopStyleColor();
                     ImGui::PopStyleVar();
@@ -1159,7 +1154,7 @@ namespace Horo::Editor
                                      (void)ComboControl("##scope", &st.mcp.toolScope, kScopes, 4, f);
                                  });
                 PluginSettingRow("Asset Write Root", "All generated assets must stay under this folder.", f,
-                                 [&st, &f]() { (void)InputTextControl("##root", st.mcp.assetRoot, sizeof(st.mcp.assetRoot), f); });
+                                 [&st, &f]() { (void)InputTextControl("##root", st.mcp.assetRoot, 64, f); });
                 break;
 
             case 1:
@@ -1218,11 +1213,11 @@ namespace Horo::Editor
             case 0:
                 SettingGroup("AUTHORING", f, true);
                 PluginSettingRow("FMOD Studio Path", "Used to open projects and compile banks from the editor.", f,
-                                 [&st, &f]() { (void)InputTextControl("##fmod-path", st.fmod.studioPath, sizeof(st.fmod.studioPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-path", st.fmod.studioPath, 128, f); });
                 PluginSettingRow("FMOD Project File", "Relative to project root.", f,
-                                 [&st, &f]() { (void)InputTextControl("##fmod-proj", st.fmod.projectFile, sizeof(st.fmod.projectFile), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-proj", st.fmod.projectFile, 64, f); });
                 PluginSettingRow("Bank Output Path", "Compiled banks copied into the runtime asset tree.", f,
-                                 [&st, &f]() { (void)InputTextControl("##fmod-bank", st.fmod.bankPath, sizeof(st.fmod.bankPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##fmod-bank", st.fmod.bankPath, 64, f); });
                 SettingGroup("RUNTIME & BUILD", f);
                 PluginSettingRow("Live Update", "Reload event metadata and banks without restarting the editor.", f,
                                  [&st, &f]() { DrawToggleState("##fmod-live", &st.fmod.liveUpdate, f); });
@@ -1293,7 +1288,7 @@ namespace Horo::Editor
                                      InputIntControl("##steam-appid", &steamAppId, f);
                                  });
                 PluginSettingRow("SDK Path", "Path to the local Steamworks SDK root.", f,
-                                 [&st, &f]() { (void)InputTextControl("##steam-sdk", st.steam.sdkPath, sizeof(st.steam.sdkPath), f); });
+                                 [&st, &f]() { (void)InputTextControl("##steam-sdk", st.steam.sdkPath, 64, f); });
                 PluginSettingRow("Initialize On", "Controls when Steam API is started during editor workflows.", f,
                                  [&st, &f]() {
                                      static constexpr const char *kModes[] = {"Play Mode Only", "Editor Launch", "Build Runtime Only"};
@@ -1400,8 +1395,7 @@ namespace Horo::Editor
             PluginSettingRow("Plugin Discovery Paths",
                              "Semicolon-separated paths. Project plugins override editor plugins only when trusted.",
                              f, [&st, &f]() {
-                                 (void)InputTextControl("##disc-path", st.runtime.discoveryPaths,
-                                                  sizeof(st.runtime.discoveryPaths), f);
+                                 (void)InputTextControl("##disc-path", st.runtime.discoveryPaths, 128, f);
                              });
             PluginSettingRow("Load Order Policy",
                              "Defines how editor, project, vendor, and local-development plugins are resolved.",
@@ -1414,8 +1408,7 @@ namespace Horo::Editor
             PluginSettingRow("Development Plugin Path",
                              "Optional local path used for plugin authorship and hot-reload testing.",
                              f, [&st, &f]() {
-                                 (void)InputTextControl("##dev-path", st.runtime.devPath,
-                                                  sizeof(st.runtime.devPath), f);
+                                 (void)InputTextControl("##dev-path", st.runtime.devPath, 64, f);
                              });
 
             SettingGroup("SECURITY & ISOLATION", f);
@@ -1545,13 +1538,13 @@ namespace Horo::Editor
             }
 
             // ── Feedback line (one-shot modal notifications) ──────────
-            if (st.modalFeedback[0] != '\0')
+            if (!st.modalFeedback.empty())
             {
                 ImGui::SetCursorPosX(22.0F);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Accent());
                 {
                     ScopedTextStyle ts(f.mono, 11.0F, Theme::FontPx::Mono);
-                    ImGui::TextUnformatted(st.modalFeedback);
+                    ImGui::TextUnformatted(st.modalFeedback.c_str());
                 }
                 ImGui::PopStyleColor();
             }
@@ -1593,7 +1586,7 @@ namespace Horo::Editor
                 st.appearance.pendingThemeIndex = -1;
             }
             
-            st.modalFeedback[0] = '\0';
+            st.modalFeedback.clear();
 
             const ImGuiViewport *vp = ImGui::GetMainViewport();
             const float modalW = std::min(Layout::ModalW, std::max(360.0F, vp->WorkSize.x - Layout::ViewportPad));

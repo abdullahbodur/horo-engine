@@ -115,7 +115,7 @@ namespace Horo::Editor
         st.plugins.horoMcpBridge = settings.horoMcpBridgeEnabled;
         st.plugins.fmodIntegration = settings.fmodIntegrationEnabled;
         st.plugins.steamworksSdk = settings.steamworksSdkEnabled;
-        CopyString(st.runtime.discoveryPaths, sizeof(st.runtime.discoveryPaths), settings.pluginDiscoveryPath);
+        st.runtime.discoveryPaths = settings.pluginDiscoveryPath;
 
         // Restore shortcut key bindings
         for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
