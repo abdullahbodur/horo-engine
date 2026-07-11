@@ -698,6 +698,41 @@ namespace Horo::Editor
             return nullptr;
         }
 
+        void DrawProjectLocationField(ProjectCreationController &controller,
+                                      ProjectCreationScreenGuiState &st,
+                                      const Fonts &f,
+                                      const ProjectCreationDiagnostic *pathErr)
+        {
+            ImGui::PushID("PROJECT LOCATION");
+            ImGui::BeginGroup();
+            Ui::FieldLabel("PROJECT LOCATION", f);
+            constexpr float buttonWidth = 38.0F;
+            constexpr float gapWidth = 8.0F;
+            const float inputWidth = ImGui::GetContentRegionAvail().x - (buttonWidth + gapWidth);
+            if (inputWidth > 0.0F) ImGui::PushItemWidth(inputWidth);
+            (void)Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
+            if (inputWidth > 0.0F) ImGui::PopItemWidth();
+            controller.SetProjectPath(st.projectPath);
+            ImGui::SameLine(0.0F, gapWidth);
+            if (DrawFolderIconButton("##browse_location", buttonWidth, f, pathErr != nullptr))
+            {
+                if (const auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
+                {
+                    std::filesystem::path finalPath = *selectedDir;
+                    if (st.projectName[0] != '\0' && finalPath.filename().string() != st.projectName)
+                        finalPath /= st.projectName;
+                    const std::string pathString = finalPath.string();
+                    pathString.copy(st.projectPath, sizeof(st.projectPath) - 1);
+                    st.projectPath[sizeof(st.projectPath) - 1] = '\0';
+                    controller.SetProjectPath(st.projectPath);
+                }
+            }
+            if (pathErr) Ui::ErrorText(pathErr->message.c_str(), f);
+            else Ui::Hint("Choose an empty folder or a missing location with a writable parent.", f);
+            ImGui::EndGroup();
+            ImGui::PopID();
+        }
+
         void DrawStepIdentity(ProjectCreationController &controller,
                               ProjectCreationScreenGuiState &st,
                               const Fonts &f,
@@ -731,57 +766,7 @@ namespace Horo::Editor
 
             ImGui::Dummy({0.0F, GridGap});
 
-            {
-                ImGui::PushID("PROJECT LOCATION");
-                ImGui::BeginGroup();
-                Ui::FieldLabel("PROJECT LOCATION", f);
-
-                const float btnW = 38.0F;
-                const float gapW = 8.0F;
-                const float inputW = ImGui::GetContentRegionAvail().x - (btnW + gapW);
-
-                if (inputW > 0.0F)
-                {
-                    ImGui::PushItemWidth(inputW);
-                }
-                (void)Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
-                if (inputW > 0.0F)
-                {
-                    ImGui::PopItemWidth();
-                }
-                controller.SetProjectPath(st.projectPath);
-
-                ImGui::SameLine(0.0F, gapW);
-                if (DrawFolderIconButton("##browse_location", btnW, f, pathErr != nullptr))
-                {
-                    if (auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
-                    {
-                        if (sizeof(st.projectPath) > 0)
-                        {
-                            std::filesystem::path finalPath = *selectedDir;
-                            if (st.projectName[0] != '\0' && finalPath.filename().string() != st.projectName)
-                            {
-                                finalPath /= st.projectName;
-                            }
-                            const std::string pathStr = finalPath.string();
-                            pathStr.copy(st.projectPath, sizeof(st.projectPath) - 1);
-                            st.projectPath[sizeof(st.projectPath) - 1] = '\0';
-                            controller.SetProjectPath(st.projectPath);
-                        }
-                    }
-                }
-
-                if (pathErr && pathErr->message.c_str())
-                {
-                    Ui::ErrorText(pathErr->message.c_str(), f);
-                }
-                else
-                {
-                    Ui::Hint("Choose an empty folder or a missing location with a writable parent.", f);
-                }
-                ImGui::EndGroup();
-                ImGui::PopID();
-            }
+            DrawProjectLocationField(controller, st, f, pathErr);
 
             ImGui::Dummy({0.0F, GridGap});
 
