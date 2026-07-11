@@ -353,6 +353,16 @@ namespace Horo::Editor::Ui
         return changed;
     }
 
+    bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts, bool error)
+    {
+        if (maxSize == 0) return false;
+        value.resize(std::min(value.size(), maxSize - 1));
+        value.resize(maxSize - 1, '\0');
+        const bool changed = InputTextControl(id, value.data(), value.size() + 1, fonts, error);
+        value.resize(std::strlen(value.c_str()));
+        return changed;
+    }
+
     // ── ColorHexControl ───────────────────────────────────────────────────
 
     [[nodiscard]] int HexDigit(const char value)

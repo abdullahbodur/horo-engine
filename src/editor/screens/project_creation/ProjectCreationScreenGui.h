@@ -3,6 +3,8 @@
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/ProjectCreationScreen.h"
 
+#include <string>
+
 namespace Horo::Editor {
 
 /** @brief Transient ImGui state retained by the ProjectCreation route presentation. */
@@ -10,11 +12,11 @@ struct ProjectCreationScreenGuiState {
     bool initialized = false;
     int step = 1;
     bool confirmingDiscard = false;
-    char projectName[128]{};
-    char projectPath[512]{};
-    char projectVersion[32]{};
-    char defaultScene[128]{};
-    char targetFps[16]{};
+    std::string projectName;
+    std::string projectPath;
+    std::string projectVersion;
+    std::string defaultScene;
+    std::string targetFps;
     int renderBackendIndex = 0;
     int physicsIndex = 0;
     int buildProfileIndex = 0;
@@ -23,8 +25,8 @@ struct ProjectCreationScreenGuiState {
     int targetPlatformIndex = 0;
     int compilerFamilyIndex = 0;
     int cppStandardIndex = 0;
-    char packageRegistryUrl[256]{"registry://horo/starter-package"};
-    char packageVersion[64]{"1.0.0"};
+    std::string packageRegistryUrl = "registry://horo/starter-package";
+    std::string packageVersion = "1.0.0";
     int firstPersonInputMapIndex = 0;
     bool demoObservabilityOverlays = true;
     bool demoBenchmarkScene = true;

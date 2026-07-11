@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <utility>
 
 namespace Horo::Editor::Ui
@@ -149,6 +150,7 @@ namespace Horo::Editor::Ui
 
     /** @brief Input text field with shared frame styling and optional error state. Returns true if the text changed. */
     [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts, bool error = false);
+    [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts, bool error = false);
 
     /**
      * @brief Draws a hex color input paired with a clickable swatch and anchored picker popup.

@@ -98,11 +98,11 @@ namespace Horo::Editor
                 return;
             }
             const ProjectCreationDraft &draft = controller.Draft();
-            CopyDraftText(state.projectName, sizeof(state.projectName), draft.projectName);
-            CopyDraftText(state.projectPath, sizeof(state.projectPath), draft.projectPath);
-            CopyDraftText(state.projectVersion, sizeof(state.projectVersion), draft.projectVersion);
-            CopyDraftText(state.defaultScene, sizeof(state.defaultScene), draft.defaultScene);
-            CopyDraftText(state.targetFps, sizeof(state.targetFps), std::to_string(draft.targetFrameRate));
+            state.projectName = draft.projectName;
+            state.projectPath = draft.projectPath;
+            state.projectVersion = draft.projectVersion;
+            state.defaultScene = draft.defaultScene;
+            state.targetFps = std::to_string(draft.targetFrameRate);
 
             if (draft.renderBackend == "opengl")
                 state.renderBackendIndex = 0;
@@ -318,6 +318,30 @@ namespace Horo::Editor
             {
                 Ui::Hint(hint, f);
             }
+            ImGui::EndGroup();
+            ImGui::PopID();
+            return changed;
+        }
+
+        bool DrawInputField(const char *label,
+                            std::string &value,
+                            const size_t maxSize,
+                            const float width,
+                            const Fonts &f,
+                            const char *hint = nullptr,
+                            const bool error = false,
+                            const char *errorText = nullptr)
+        {
+            ImGui::PushID(label);
+            ImGui::BeginGroup();
+            Ui::FieldLabel(label, f);
+            if (width != 0.0F) ImGui::PushItemWidth(width);
+            const bool changed = Ui::InputTextControl("##value", value, maxSize, f, error);
+            if (width != 0.0F) ImGui::PopItemWidth();
+            if (error && errorText)
+                Ui::ErrorText(errorText, f);
+            else if (hint)
+                Ui::Hint(hint, f);
             ImGui::EndGroup();
             ImGui::PopID();
             return changed;
@@ -716,7 +740,7 @@ namespace Horo::Editor
             constexpr float gapWidth = 8.0F;
             const float inputWidth = ImGui::GetContentRegionAvail().x - (buttonWidth + gapWidth);
             if (inputWidth > 0.0F) ImGui::PushItemWidth(inputWidth);
-            (void)Ui::InputTextControl("##value", st.projectPath, sizeof(st.projectPath), f, pathErr != nullptr);
+            (void)Ui::InputTextControl("##value", st.projectPath, 512, f, pathErr != nullptr);
             if (inputWidth > 0.0F) ImGui::PopItemWidth();
             controller.SetProjectPath(st.projectPath);
             ImGui::SameLine(0.0F, gapWidth);
@@ -725,11 +749,10 @@ namespace Horo::Editor
                 if (const auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
                 {
                     std::filesystem::path finalPath = *selectedDir;
-                    if (st.projectName[0] != '\0' && finalPath.filename().string() != st.projectName)
+                    if (!st.projectName.empty() && finalPath.filename().string() != st.projectName)
                         finalPath /= st.projectName;
                     const std::string pathString = finalPath.string();
-                    pathString.copy(st.projectPath, sizeof(st.projectPath) - 1);
-                    st.projectPath[sizeof(st.projectPath) - 1] = '\0';
+                    st.projectPath = pathString.substr(0, 511);
                     controller.SetProjectPath(st.projectPath);
                 }
             }
@@ -762,7 +785,7 @@ namespace Horo::Editor
 
             DrawInputField("PROJECT NAME",
                            st.projectName,
-                           sizeof(st.projectName),
+                           128,
                            -1.0F,
                            f,
                            "Stored as project.json name; projectId is generated once.",
@@ -778,7 +801,7 @@ namespace Horo::Editor
 
             DrawInputField("PROJECT VERSION",
                            st.projectVersion,
-                           sizeof(st.projectVersion),
+                           32,
                            -1.0F,
                            f,
                            "Game/product version. Does not select project-format migrations.");
@@ -786,7 +809,7 @@ namespace Horo::Editor
 
             ImGui::Dummy({0.0F, GridGap});
 
-            DrawInputField("DEFAULT SCENE", st.defaultScene, sizeof(st.defaultScene), -1.0F, f);
+            DrawInputField("DEFAULT SCENE", st.defaultScene, 128, -1.0F, f);
             controller.SetDefaultScene(st.defaultScene);
 
             ImGui::Dummy({0.0F, CardGap});
@@ -832,9 +855,9 @@ namespace Horo::Editor
                 Ui::SectionTitle("PACKAGE SOURCE CONFIGURATION", f);
                 ImGui::Dummy({0.0F, 8.0F});
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
-                DrawInputField("TEMPLATE PACKAGE URL / REGISTRY", st.packageRegistryUrl, sizeof(st.packageRegistryUrl), colW, f);
+                DrawInputField("TEMPLATE PACKAGE URL / REGISTRY", st.packageRegistryUrl, 256, colW, f);
                 ImGui::SameLine(0.0F, GridGap);
-                DrawInputField("PACKAGE VERSION / TAG", st.packageVersion, sizeof(st.packageVersion), colW, f);
+                DrawInputField("PACKAGE VERSION / TAG", st.packageVersion, 64, colW, f);
                 ImGui::Dummy({0.0F, 8.0F});
                 Ui::Hint("Specify the remote registry package and version lockfile to scaffold this project.", f);
             }
@@ -891,8 +914,8 @@ namespace Horo::Editor
                 controller.SetRenderBackend(kRenderBackend[st.renderBackendIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
-                DrawInputField("TARGET FRAME RATE", st.targetFps, sizeof(st.targetFps), colW, f);
-                controller.SetTargetFrameRate(std::atoi(st.targetFps));
+                DrawInputField("TARGET FRAME RATE", st.targetFps, 16, colW, f);
+                controller.SetTargetFrameRate(std::atoi(st.targetFps.c_str()));
 
                 ImGui::Dummy({0.0F, GridGap});
 
