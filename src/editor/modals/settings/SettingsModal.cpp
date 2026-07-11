@@ -767,6 +767,25 @@ namespace Horo::Editor
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }
+        [[nodiscard]] bool ContainsCaseInsensitive(const char *text, const char *query)
+        {
+            if (query == nullptr || query[0] == '\0') return true;
+            for (const char *start = text; *start != '\0'; ++start)
+            {
+                const char *candidate = start;
+                const char *needle = query;
+                while (*candidate != '\0' && *needle != '\0' &&
+                       std::tolower(static_cast<unsigned char>(*candidate)) ==
+                           std::tolower(static_cast<unsigned char>(*needle)))
+                {
+                    ++candidate;
+                    ++needle;
+                }
+                if (*needle == '\0') return true;
+            }
+            return false;
+        }
+
         // ── Plugin list (left column) ─────────────────────────────────
         void DrawPluginList(SettingsState &st, const Fonts &f, float /*listW*/)
         {
@@ -807,30 +826,7 @@ namespace Horo::Editor
 
             for (const auto &p : kPlugins)
             {
-                // Filter by name (case-insensitive substring match)
-                if (st.pluginFilter[0] != '\0')
-                {
-                    bool match = false;
-                    const char *f = st.pluginFilter;
-                    const char *n = p.name;
-                    while (*n)
-                    {
-                        const char *fp = f;
-                        const char *np = n;
-                        while (*fp && *np && std::tolower(*fp) == std::tolower(*np))
-                        {
-                            ++fp;
-                            ++np;
-                        }
-                        if (*fp == '\0')
-                        {
-                            match = true;
-                            break;
-                        }
-                        ++n;
-                    }
-                    if (!match) continue;
-                }
+                if (!ContainsCaseInsensitive(p.name, st.pluginFilter)) continue;
 
                 const bool active = (st.selectedPlugin == p.idx);
                 const bool enabled = *p.enabled;
