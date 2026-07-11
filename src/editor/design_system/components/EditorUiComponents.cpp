@@ -665,6 +665,47 @@ namespace Horo::Editor::Ui
 
     // ── ShortcutRecorder ──────────────────────────────────────────────────
 
+    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO &io, char *keysOut, const int keysOutSize)
+    {
+        std::string combo;
+        if (io.KeyCtrl || io.KeySuper) combo += "Ctrl+";
+        if (io.KeyShift) combo += "Shift+";
+        if (io.KeyAlt) combo += "Alt+";
+        combo += ImGui::GetKeyName(key);
+        std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize), "%s", combo.c_str());
+        return true;
+    }
+
+    [[nodiscard]] bool PollShortcutInput(bool *listening, char *keysOut, const int keysOutSize)
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            *listening = false;
+            return false;
+        }
+        const auto &io = ImGui::GetIO();
+        for (int key = ImGuiKey_A; key <= ImGuiKey_Z; ++key)
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+                *listening = false;
+                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut, keysOutSize);
+            }
+        for (int key = ImGuiKey_F1; key <= ImGuiKey_F12; ++key)
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+                *listening = false;
+                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut, keysOutSize);
+            }
+        static constexpr ImGuiKey specialKeys[] = {
+            ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace, ImGuiKey_Delete,
+            ImGuiKey_Enter, ImGuiKey_Home, ImGuiKey_End, ImGuiKey_LeftArrow,
+            ImGuiKey_RightArrow, ImGuiKey_UpArrow, ImGuiKey_DownArrow,
+            ImGuiKey_PageUp, ImGuiKey_PageDown};
+        for (const auto key : specialKeys)
+            if (ImGui::IsKeyPressed(key, false)) {
+                *listening = false;
+                return StoreShortcut(key, io, keysOut, keysOutSize);
+            }
+        return false;
+    }
+
     [[nodiscard]] bool ShortcutRecorder(const char *id,
                                         const char *keysLabel,
                                         bool *listening,
@@ -678,89 +719,7 @@ namespace Horo::Editor::Ui
         bool recorded = false;
 
         if (*listening)
-        {
-            // ── Poll key state ──────────────────────────────────────────
-            const auto &io = ImGui::GetIO();
-
-            // Escape cancels listening
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-            {
-                *listening = false;
-                ImGui::PopID();
-                return false;
-            }
-
-            const bool ctrl = io.KeyCtrl || io.KeySuper;
-            const bool shift = io.KeyShift;
-            const bool alt = io.KeyAlt;
-
-            // Check non-modifier keys (A-Z, 0-9)
-            for (int k = ImGuiKey_A; k <= ImGuiKey_Z; ++k)
-            {
-                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(k), false))
-                {
-                    std::string combo;
-                    if (ctrl) combo += "Ctrl+";
-                    if (shift) combo += "Shift+";
-                    if (alt) combo += "Alt+";
-                    combo += ImGui::GetKeyName(static_cast<ImGuiKey>(k));
-
-                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
-                                  "%s", combo.c_str());
-                    *listening = false;
-                    recorded = true;
-                    ImGui::PopID();
-                    return true;
-                }
-            }
-
-            // Check F-keys
-            for (int k = ImGuiKey_F1; k <= ImGuiKey_F12; ++k)
-            {
-                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(k), false))
-                {
-                    std::string combo;
-                    if (ctrl) combo += "Ctrl+";
-                    if (shift) combo += "Shift+";
-                    if (alt) combo += "Alt+";
-                    combo += ImGui::GetKeyName(static_cast<ImGuiKey>(k));
-
-                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
-                                  "%s", combo.c_str());
-                    *listening = false;
-                    recorded = true;
-                    ImGui::PopID();
-                    return true;
-                }
-            }
-
-            // Special keys
-            static constexpr ImGuiKey kSpecial[] = {
-                ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace,
-                ImGuiKey_Delete, ImGuiKey_Enter, ImGuiKey_Home, ImGuiKey_End,
-                ImGuiKey_LeftArrow, ImGuiKey_RightArrow,
-                ImGuiKey_UpArrow, ImGuiKey_DownArrow,
-                ImGuiKey_PageUp, ImGuiKey_PageDown,
-            };
-            for (const auto k : kSpecial)
-            {
-                if (ImGui::IsKeyPressed(k, false))
-                {
-                    std::string combo;
-                    if (ctrl) combo += "Ctrl+";
-                    if (shift) combo += "Shift+";
-                    if (alt) combo += "Alt+";
-                    combo += ImGui::GetKeyName(k);
-
-                    std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize),
-                                  "%s", combo.c_str());
-                    *listening = false;
-                    recorded = true;
-                    ImGui::PopID();
-                    return true;
-                }
-            }
-        }
+            recorded = PollShortcutInput(listening, keysOut, keysOutSize);
 
         // ── Draw the recorder UI ────────────────────────────────────────
         const float width = Layout::ControlW;
