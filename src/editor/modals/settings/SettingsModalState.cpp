@@ -7,24 +7,6 @@
 
 namespace Horo::Editor
 {
-    namespace
-    {
-        /**
-         * @brief Safe string copy into a fixed-size buffer.
-         * @param dst Destination buffer.
-         * @param dstSize Size of destination buffer in bytes.
-         * @param src Source string to copy.
-         */
-        void CopyString(char *dst, const size_t dstSize, const std::string &src)
-        {
-            if (!dst || dstSize == 0)
-            {
-                return;
-            }
-            std::snprintf(dst, dstSize, "%s", src.c_str());
-        }
-
-    } // namespace
 
     /** @copydoc SettingsModal.h */
     [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &st)
