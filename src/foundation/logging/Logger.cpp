@@ -180,10 +180,10 @@ namespace Horo::Log
         if (self.m_file != nullptr)
             return; // already initialised
 
-        const auto dir = ResolveLogDir(logDir);
-        const auto path = dir + "/" + std::string{baseName} + ".jsonl";
+        const std::filesystem::path dir = ResolveLogDir(logDir);
+        const std::filesystem::path path = dir / (std::string{baseName} + ".jsonl");
 
-        self.m_file = std::fopen(path.c_str(), "a");
+        self.m_file = std::fopen(path.string().c_str(), "a");
         self.m_startTime = std::chrono::steady_clock::now();
         self.m_sequence = 0;
 
@@ -216,7 +216,7 @@ namespace Horo::Log
             std::fprintf(self.m_file,
                          R"({"schemaVersion":1,"level":"info","category":"observability.startup","message":"Logger initialised","path":"%s"})"
                          "\n",
-                         JsonEscape(path).c_str());
+                         JsonEscape(path.string()).c_str());
             std::fflush(self.m_file);
         }
     }

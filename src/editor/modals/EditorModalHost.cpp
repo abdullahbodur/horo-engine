@@ -2,10 +2,12 @@
 #include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
+#include <ranges>
 #include <utility>
 
 namespace Horo::Editor
 {
+using enum ModalHostError;
 namespace
 {
 
@@ -15,29 +17,29 @@ namespace
     const char *message = "The modal request is invalid.";
     switch (error)
     {
-    case ModalHostError::Busy:
+    case Busy:
         code = "editor.modal_host.busy";
         message = "Another root modal is already active.";
         break;
-    case ModalHostError::InvalidModal:
+    case InvalidModal:
         break;
-    case ModalHostError::DuplicateId:
+    case DuplicateId:
         code = "editor.modal_host.duplicate_id";
         message = "The modal ID is already active.";
         break;
-    case ModalHostError::ParentNotTop:
+    case ParentNotTop:
         code = "editor.modal_host.parent_not_top";
         message = "Only the current top modal may push a child.";
         break;
-    case ModalHostError::ModalNotTop:
+    case ModalNotTop:
         code = "editor.modal_host.modal_not_top";
         message = "Only the current top modal may close.";
         break;
-    case ModalHostError::StackLimitReached:
+    case StackLimitReached:
         code = "editor.modal_host.stack_limit_reached";
         message = "The modal stack has reached its configured depth limit.";
         break;
-    case ModalHostError::CloseDenied:
+    case CloseDenied:
         code = "editor.modal_host.close_denied";
         message = "A modal denied the requested close.";
         break;
@@ -65,12 +67,12 @@ Result<void> EditorModalHost::OpenRoot(std::unique_ptr<EditorModal> modal)
     {
         LOG_WARN("editor.modal_host", "OpenRoot rejected: host is busy (top modal: %llu).",
                       m_stack.back().modal->Id().Value());
-        return ErrorFor(ModalHostError::Busy);
+        return ErrorFor(Busy);
     }
     if (!modal)
     {
         LOG_WARN("editor.modal_host", "OpenRoot rejected: null modal pointer.");
-        return ErrorFor(ModalHostError::InvalidModal);
+        return ErrorFor(InvalidModal);
     }
     if (const Result<void> validation = ValidateModalForPush(*modal); validation.HasError())
     {
@@ -86,8 +88,8 @@ Result<void> EditorModalHost::OpenRoot(std::unique_ptr<EditorModal> modal)
 /** @copydoc EditorModalHost::PushChild */
 Result<void> EditorModalHost::PushChild(ModalId parentId, std::unique_ptr<EditorModal> modal)
 {
-    if (!modal) return ErrorFor(ModalHostError::InvalidModal);
-    if (m_stack.empty() || m_stack.back().modal->Id() != parentId) return ErrorFor(ModalHostError::ParentNotTop);
+    if (!modal) return ErrorFor(InvalidModal);
+    if (m_stack.empty() || m_stack.back().modal->Id() != parentId) return ErrorFor(ParentNotTop);
     if (const Result<void> validation = ValidateModalForPush(*modal); validation.HasError()) return validation;
     m_pendingChildOpens.push_back(Entry{.modal = std::move(modal)});
     return Result<void>::Success();
@@ -100,13 +102,13 @@ Result<void> EditorModalHost::RequestClose(ModalId modalId, ModalCloseReason rea
     {
         LOG_WARN("editor.modal_host", "RequestClose rejected: modal %llu is not the top of stack.",
                       modalId.Value());
-        return ErrorFor(ModalHostError::ModalNotTop);
+        return ErrorFor(ModalNotTop);
     }
     if (m_stack.back().opened && m_stack.back().modal->CanClose(reason) != CloseDecision::Allow)
     {
         LOG_DEBUG("editor.modal_host", "RequestClose for modal %llu denied by CanClose (reason %d).",
                        modalId.Value(), static_cast<int>(reason));
-        return ErrorFor(ModalHostError::CloseDenied);
+        return ErrorFor(CloseDenied);
     }
     LOG_DEBUG("editor.modal_host", "Queuing close for modal %llu (reason %d).",
                    modalId.Value(), static_cast<int>(reason));
@@ -161,10 +163,11 @@ void EditorModalHost::Draw()
 /** @copydoc EditorModalHost::RequestCloseAllForShutdown */
 Result<void> EditorModalHost::RequestCloseAllForShutdown()
 {
+    using enum ModalHostError;
     for (auto it = m_stack.rbegin(); it != m_stack.rend(); ++it)
     {
         if (it->opened && it->modal->CanClose(ModalCloseReason::ApplicationShutdown) != CloseDecision::Allow)
-            return ErrorFor(ModalHostError::CloseDenied);
+            return ErrorFor(CloseDenied);
     }
     m_pendingCloseReasons.assign(m_stack.size(), ModalCloseReason::ApplicationShutdown);
     return Result<void>::Success();
@@ -183,9 +186,9 @@ void EditorModalHost::ForceDetachAllForShutdown()
 
 Result<void> EditorModalHost::ValidateModalForPush(const EditorModal &modal) const
 {
-    if (!modal.Id().IsValid()) return ErrorFor(ModalHostError::InvalidModal);
-    if (m_stack.size() + m_pendingChildOpens.size() >= m_maximumDepth) return ErrorFor(ModalHostError::StackLimitReached);
-    if (ContainsId(modal.Id())) return ErrorFor(ModalHostError::DuplicateId);
+    if (!modal.Id().IsValid()) return ErrorFor(InvalidModal);
+    if (m_stack.size() + m_pendingChildOpens.size() >= m_maximumDepth) return ErrorFor(StackLimitReached);
+    if (ContainsId(modal.Id())) return ErrorFor(DuplicateId);
     return Result<void>::Success();
 }
 
@@ -211,8 +214,7 @@ void EditorModalHost::CommitPendingOpens()
             ++index;
             continue;
         }
-        const Result<void> result = entry.modal->OnOpen(m_context);
-        if (result.HasError())
+        if (const Result<void> result = entry.modal->OnOpen(m_context); result.HasError())
         {
             LOG_ERROR("editor.modal_host",
                            "Modal %llu OnOpen failed (%s: %s) — removing from stack.",
@@ -252,7 +254,6 @@ void EditorModalHost::RemoveTop(ModalCloseReason reason)
 bool EditorModalHost::ContainsId(ModalId id) const noexcept
 {
     const auto hasId = [id](const Entry &entry) { return entry.modal->Id() == id; };
-    return std::any_of(m_stack.begin(), m_stack.end(), hasId) ||
-           std::any_of(m_pendingChildOpens.begin(), m_pendingChildOpens.end(), hasId);
+    return std::ranges::any_of(m_stack, hasId) || std::ranges::any_of(m_pendingChildOpens, hasId);
 }
 } // namespace Horo::Editor

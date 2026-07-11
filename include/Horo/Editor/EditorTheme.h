@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -127,6 +128,14 @@ enum class Preset
     // Custom themes start at index 3+
 };
 
+struct ThemeStringHash
+{
+    using is_transparent = void;
+    [[nodiscard]] std::size_t operator()(std::string_view value) const noexcept { return std::hash<std::string_view>{}(value); }
+    [[nodiscard]] std::size_t operator()(const std::string &value) const noexcept { return (*this)(std::string_view{value}); }
+    [[nodiscard]] std::size_t operator()(const char *value) const noexcept { return (*this)(std::string_view{value}); }
+};
+
 /**
  * @brief A loaded theme entry — either built-in or from a JSON file.
  */
@@ -134,7 +143,7 @@ struct ThemeEntry
 {
     std::string name;           // display name (e.g. "Monokai")
     std::string sourcePath;     // empty for built-in, file path for custom
-    std::unordered_map<std::string, ::ImVec4> colors; // key → RGBA
+    std::unordered_map<std::string, ::ImVec4, ThemeStringHash, std::equal_to<>> colors; // key → RGBA
     bool isBuiltIn = true;
 };
 

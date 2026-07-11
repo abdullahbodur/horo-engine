@@ -91,9 +91,9 @@ namespace Horo::Editor::Theme
         }
 
         // ── Built-in theme definitions ───────────────────────────────────
-        void ApplyColorsToStyle(const std::unordered_map<std::string, ImVec4> &colors, ImGuiStyle &style)
+        void ApplyColorsToStyle(const std::unordered_map<std::string, ImVec4, ThemeStringHash, std::equal_to<>> &colors, ImGuiStyle &style)
         {
-            auto *c = style.Colors;
+            ImVec4 *const c = style.Colors;
             auto get = [&](const char *key, const ImVec4 fallback) -> ImVec4 {
                 const auto it = colors.find(key);
                 return it != colors.end() ? it->second : fallback;
@@ -178,7 +178,7 @@ namespace Horo::Editor::Theme
         }
 
         /** @brief Tiny JSON key-value reader — dependency free. */
-        bool ReadJsonColors(const std::string &json, std::unordered_map<std::string, ImVec4> &out)
+        bool ReadJsonColors(const std::string &json, std::unordered_map<std::string, ImVec4, ThemeStringHash, std::equal_to<>> &out)
         {
             const char *p = json.c_str();
             while (*p)
@@ -340,8 +340,7 @@ namespace Horo::Editor::Theme
 
         // Extract name from "name" key
         const char *nameKey = "\"name\"";
-        auto namePos = json.find(nameKey);
-        if (namePos != std::string::npos)
+        if (const auto namePos = json.find(nameKey); namePos != std::string::npos)
         {
             auto start = json.find('"', namePos + 6);
             if (start != std::string::npos)

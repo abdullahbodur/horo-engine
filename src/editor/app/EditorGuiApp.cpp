@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -172,12 +173,12 @@ namespace Horo::Editor
 
     } // namespace
 
-    [[nodiscard]] static EditorGuiOptions ParseOptions(int argc, char **argv) noexcept
+    [[nodiscard]] static EditorGuiOptions ParseOptions(const std::span<char *> args) noexcept
     {
         EditorGuiOptions opts;
-        for (int i = 1; i < argc; ++i)
+        for (std::size_t i = 1; i < args.size(); ++i)
         {
-            std::string_view a{argv[i]};
+            std::string_view a{args[i]};
             if (a == "--text-preview")
                 opts.textPreview = true;
             else if (a == "--exit-after-first-frame")
@@ -236,7 +237,7 @@ namespace Horo::Editor
         std::erase_if(recentProjects, [&folderPath](const RecentProjectEntry &entry) {
             return entry.rootPath == folderPath;
         });
-        recentProjects.insert(recentProjects.begin(), RecentProjectEntry{projectName, folderPath, "Just now", "empty"});
+        recentProjects.emplace(recentProjects.begin(), projectName, folderPath, "Just now", "empty");
         SaveRecentProjectsToDisk(recentProjects);
         controller = WelcomeScreenController{recentProjects};
         viewModel = controller.BuildViewModel();
@@ -247,14 +248,19 @@ namespace Horo::Editor
                                 ProjectLoadingRouteParameters{folderPath, projectName}};
     }
 
-    static void HandleProjectCreationCommand(ProjectCreationController &controller,
-                                             ProjectCreationService &service,
-                                             EngineDataBus &engineEvents,
-                                             std::vector<RecentProjectEntry> &recentProjects,
-                                             WelcomeScreenController &welcomeController,
-                                             WelcomeViewModel &viewModel,
-                                             ProjectLoadingScreenGuiState &loadingState,
-                                             std::optional<GuiRoute> &pendingRoute)
+    struct ProjectCreationRouteContext
+    {
+        ProjectCreationService &service;
+        EngineDataBus &engineEvents;
+        std::vector<RecentProjectEntry> &recentProjects;
+        WelcomeScreenController &welcomeController;
+        WelcomeViewModel &viewModel;
+        ProjectLoadingScreenGuiState &loadingState;
+        std::optional<GuiRoute> &pendingRoute;
+    };
+
+    static void HandleProjectCreationCommand(const ProjectCreationController &controller,
+                                             ProjectCreationRouteContext context)
     {
         const auto request = controller.BuildCreationRequest();
         if (!request)
@@ -264,7 +270,7 @@ namespace Horo::Editor
                 LOG_ERROR("editor.project_creation", " - %s", diagnostic.message.c_str());
             return;
         }
-        auto handle = service.StartCreate(*request);
+        auto handle = context.service.StartCreate(*request);
         if (!handle.HasValue())
         {
             LOG_ERROR("editor.project_creation", "StartCreate failed: [%s] %s",
@@ -275,30 +281,28 @@ namespace Horo::Editor
                  request->projectName.c_str(), request->projectRoot.string().c_str());
         while (true)
         {
-            service.PumpMainThread();
-            engineEvents.DispatchQueued();
-            const auto snapshot = service.Query(handle.Value().id);
-            if (!snapshot) break;
+            context.service.PumpMainThread();
+            context.engineEvents.DispatchQueued();
+            const auto snapshot = context.service.Query(handle.Value().id);
+            if (!snapshot) return;
             if (snapshot->state == ProjectCreationOperationState::Succeeded)
             {
                 LOG_INFO("editor.project_creation", "Project '%s' created successfully.", request->projectName.c_str());
-                recentProjects.erase(std::remove_if(recentProjects.begin(), recentProjects.end(),
-                                                    [&request](const RecentProjectEntry &entry) {
-                                                        return entry.rootPath == request->projectRoot.string();
-                                                    }),
-                                     recentProjects.end());
-                recentProjects.insert(recentProjects.begin(), RecentProjectEntry{
-                    request->projectName, request->projectRoot.string(), "Just now", request->templateId});
-                SaveRecentProjectsToDisk(recentProjects);
-                welcomeController = WelcomeScreenController{recentProjects};
-                viewModel = welcomeController.BuildViewModel();
-                loadingState = ProjectLoadingScreenGuiState{};
-                loadingState.projectName = request->projectName;
-                loadingState.projectRoot = request->projectRoot.string();
-                pendingRoute = GuiRoute{GuiRouteKind::ProjectLoading,
+                std::erase_if(context.recentProjects, [&request](const RecentProjectEntry &entry) {
+                    return entry.rootPath == request->projectRoot.string();
+                });
+                context.recentProjects.emplace(context.recentProjects.begin(), request->projectName,
+                                               request->projectRoot.string(), "Just now", request->templateId);
+                SaveRecentProjectsToDisk(context.recentProjects);
+                context.welcomeController = WelcomeScreenController{context.recentProjects};
+                context.viewModel = context.welcomeController.BuildViewModel();
+                context.loadingState = ProjectLoadingScreenGuiState{};
+                context.loadingState.projectName = request->projectName;
+                context.loadingState.projectRoot = request->projectRoot.string();
+                context.pendingRoute = GuiRoute{GuiRouteKind::ProjectLoading,
                                         ProjectLoadingRouteParameters{
                                             request->projectRoot.string(), request->projectName}};
-                break;
+                return;
             }
             if (snapshot->state == ProjectCreationOperationState::Failed ||
                 snapshot->state == ProjectCreationOperationState::Cancelled)
@@ -309,7 +313,7 @@ namespace Horo::Editor
                 else
                     LOG_ERROR("editor.project_creation", "Project creation operation %s.",
                               snapshot->state == ProjectCreationOperationState::Cancelled ? "cancelled" : "failed");
-                break;
+                return;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
@@ -391,7 +395,7 @@ namespace Horo::Editor
         
         Log::Logger::DumpStartupInfo();
 
-        auto opts = ParseOptions(argc, argv);
+        auto opts = ParseOptions(std::span<char *>{argv, static_cast<std::size_t>(argc)});
         std::vector<RecentProjectEntry> recentProjects = LoadRecentProjectsFromDisk();
         WelcomeScreenController ctrl{recentProjects};
         auto vm = ctrl.BuildViewModel();
@@ -450,7 +454,7 @@ namespace Horo::Editor
             auto doc = LoadEditorSettingsDocument();
             if (doc.loadedFromDisk && !doc.parseError)
             {
-                const int savedIndex = static_cast<int>(doc.settings.themePreset);
+                const auto savedIndex = static_cast<int>(doc.settings.themePreset);
                 Theme::SelectThemeByIndex(savedIndex);
                 LOG_DEBUG("editor.settings", "Restored theme preset index %d from disk.", savedIndex);
             }
@@ -537,8 +541,14 @@ namespace Horo::Editor
                 }
                 else if (cmd == ProjectCreationScreenGuiCommand::CreateProject)
                 {
-                    HandleProjectCreationCommand(projectCreation, projectCreationService, engineEvents,
-                                                 recentProjects, ctrl, vm, projectLoadingState, pendingRoute);
+                    HandleProjectCreationCommand(projectCreation,
+                                                 ProjectCreationRouteContext{projectCreationService,
+                                                                              engineEvents,
+                                                                              recentProjects,
+                                                                              ctrl,
+                                                                              vm,
+                                                                              projectLoadingState,
+                                                                              pendingRoute});
                 }
             }
             else if (activeRoute.kind == GuiRouteKind::ProjectLoading)
@@ -563,14 +573,15 @@ namespace Horo::Editor
                 pendingRoute.reset();
 
                 // ── Route transition log ──────────────────────────────────────
+                using enum GuiRouteKind;
                 const char *routeName = "Unknown";
                 switch (activeRoute.kind)
                 {
-                case GuiRouteKind::Welcome:          routeName = "Welcome";          break;
-                case GuiRouteKind::ProjectBrowser:   routeName = "ProjectBrowser";   break;
-                case GuiRouteKind::ProjectCreation:  routeName = "ProjectCreation";  break;
-                case GuiRouteKind::ProjectLoading:   routeName = "ProjectLoading";   break;
-                case GuiRouteKind::EditorWorkspace:  routeName = "EditorWorkspace";  break;
+                case Welcome:          routeName = "Welcome";          break;
+                case ProjectBrowser:   routeName = "ProjectBrowser";   break;
+                case ProjectCreation:  routeName = "ProjectCreation";  break;
+                case ProjectLoading:   routeName = "ProjectLoading";   break;
+                case EditorWorkspace:  routeName = "EditorWorkspace";  break;
                 }
                 LOG_DEBUG("editor.routing", "Route committed: %s", routeName);
 
@@ -585,13 +596,11 @@ namespace Horo::Editor
                     ctrl = WelcomeScreenController{recentProjects};
                     vm = ctrl.BuildViewModel();
                 }
-                else if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
+                else if (activeRoute.kind == GuiRouteKind::EditorWorkspace &&
+                         std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
                 {
-                    if (std::holds_alternative<EditorWorkspaceRouteParameters>(activeRoute.parameters))
-                    {
-                        const auto &wsParams = std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters);
-                        LOG_INFO("editor.workspace", "Entering workspace for project at '%s'", wsParams.projectRoot.c_str());
-                    }
+                    const auto &wsParams = std::get<EditorWorkspaceRouteParameters>(activeRoute.parameters);
+                    LOG_INFO("editor.workspace", "Entering workspace for project at '%s'", wsParams.projectRoot.c_str());
                 }
             }
 

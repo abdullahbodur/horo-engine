@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <span>
 #include <vector>
 
 namespace Horo::Editor
@@ -40,7 +41,7 @@ namespace Horo::Editor
             constexpr float NavW = 200.0F;
             constexpr float Radius = 4.0F;
             constexpr float ModalRadius = 8.0F;
-            constexpr float ControlW = 260.0F;
+
         } // namespace Layout
 
         enum class SettingsTab : int
@@ -62,13 +63,29 @@ namespace Horo::Editor
             SettingsTab tab;
         };
 
-        void DiscardSettings(SettingsState &st)
+        struct PluginSpec
         {
-            ApplySettingsToDraft(st, st.committed);
-            st.dirty = false;
-            st.statusMessage = "Changes discarded.";
-            st.statusIsError = false;
-        }
+            const char *name;
+            const char *desc;
+            const char *version;
+            const char *statusLabel;
+            ImVec4 statusColour;
+            const char *category;
+            int idx;
+            bool *enabled;
+        };
+
+        struct PluginDetailHeaderSpec
+        {
+            const char *name;
+            const char *desc;
+            const char *scopeBadge;
+            const char *signedBadge;
+            ImVec4 signedColour;
+            const char *restartBadge;
+            const char *action1;
+            const char *action2;
+        };
 
 
         void DrawNavGroup(const char *label, const Fonts &f)
@@ -125,7 +142,7 @@ namespace Horo::Editor
             ImGui::PopID();
         }
 
-        [[nodiscard]] bool DrawHeader(SettingsState &st, const Fonts &f, const ::ImTextureID logo)
+        [[nodiscard]] bool DrawHeader(SettingsState &, const Fonts &f, const ::ImTextureID logo)
         {
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
             ImGui::BeginChild("SettingsHeader", {0.0F, Layout::HeaderH}, false,
@@ -310,9 +327,7 @@ namespace Horo::Editor
                     // Key recorder
                     ImGui::TableSetColumnIndex(1);
                     const bool isListening = (st.input.listeningShortcut == i);
-                    bool localListening = isListening;
-
-                    if (Ui::ShortcutRecorder("recorder",
+                    if (bool localListening = isListening; Ui::ShortcutRecorder("recorder",
                                              st.input.shortcuts[i].keys.c_str(),
                                              &localListening,
                                              st.input.shortcuts[i].keys,
@@ -455,7 +470,7 @@ namespace Horo::Editor
 
             // Segment tabs. Widths are explicit so the second label does not get clipped.
             {
-                static constexpr const char *kSectionTabs[] = {"Installed", "Runtime & Discovery"};
+                static constexpr std::array kSectionTabs = {"Installed", "Runtime & Discovery"};
                 constexpr float pad = 4.0F;
                 constexpr float tabH = 31.0F;
                 const float containerW = ImGui::GetContentRegionAvail().x;
@@ -611,11 +626,10 @@ namespace Horo::Editor
             ImGui::PopStyleColor();
         }
 
-        void DrawPermissionRows(const PermissionRowSpec *rows, const int rowCount, const Fonts &f)
+        void DrawPermissionRows(const std::span<const PermissionRowSpec> rows, const Fonts &f)
         {
-            for (int i = 0; i < rowCount; ++i)
+            for (const auto &perm : rows)
             {
-                const auto &perm = rows[i];
                 ImGui::PushID(perm.title);
                 const float cardW = ImGui::GetContentRegionAvail().x;
                 constexpr float cardH = 66.0F;
@@ -660,17 +674,17 @@ namespace Horo::Editor
             }
         }
 
-        void DrawDiagnosticMetrics(const DiagnosticMetricSpec *metrics, const int metricCount, const Fonts &f)
+        void DrawDiagnosticMetrics(const std::span<const DiagnosticMetricSpec> metrics, const Fonts &f)
         {
             constexpr float gap = 8.0F;
             constexpr float cardH = 68.0F;
             const float availW = ImGui::GetContentRegionAvail().x;
-            const float cardW = (availW - gap * static_cast<float>(metricCount - 1)) /
-                                static_cast<float>(metricCount);
+            const float cardW = (availW - gap * static_cast<float>(metrics.size() - 1)) /
+                                static_cast<float>(metrics.size());
             const ImVec2 start = ImGui::GetCursorScreenPos();
             auto *dl = ImGui::GetWindowDrawList();
 
-            for (int i = 0; i < metricCount; ++i)
+            for (std::size_t i = 0; i < metrics.size(); ++i)
             {
                 const ImVec2 p{start.x + static_cast<float>(i) * (cardW + gap), start.y};
                 const auto &m = metrics[i];
@@ -706,10 +720,10 @@ namespace Horo::Editor
             ImGui::SetCursorScreenPos({start.x, start.y + cardH + 12.0F});
         }
 
-        void DrawDiagnosticActivity(const char *const *items, const int itemCount, const Fonts &f)
+        void DrawDiagnosticActivity(const std::span<const char *const> items, const Fonts &f)
         {
             SettingGroup("RECENT ACTIVITY", f);
-            for (int i = 0; i < itemCount; ++i)
+            for (std::size_t i = 0; i < items.size(); ++i)
             {
                 ImGui::PushID(i);
                 const float rowW = ImGui::GetContentRegionAvail().x;
@@ -794,22 +808,12 @@ namespace Horo::Editor
             st.pluginFilter.resize(std::min(st.pluginFilter.size(), std::size_t{63}));
             st.pluginFilter.resize(63, '\0');
             ImGui::InputTextWithHint("##filter", "Filter plugins...", st.pluginFilter.data(), st.pluginFilter.size() + 1);
-            st.pluginFilter.resize(std::strlen(st.pluginFilter.c_str()));
+            st.pluginFilter.resize(st.pluginFilter.find('\0'));
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar();
             ImGui::Dummy({0.0F, 10.0F});
 
-            static const struct
-            {
-                const char *name;
-                const char *desc;
-                const char *version;
-                const char *statusLabel;
-                ImVec4 statusColour;
-                const char *category;
-                int idx;
-                bool *enabled;
-            } kPlugins[] = {
+            static const std::array<PluginSpec, 3> kPlugins = {{
                 {"Horo MCP Bridge",
                  "Local automation bridge for scene, asset, and editor operations.",
                  "v0.4.0", "Trusted", Theme::Ok(), "Editor Tool", 0,
@@ -822,7 +826,7 @@ namespace Horo::Editor
                  "Steam achievements, overlay, networking sockets, and build metadata.",
                  "v1.59", "Disabled", Theme::Warn(), "Platform", 2,
                  &st.plugins.steamworksSdk},
-            };
+            }};
 
             for (const auto &p : kPlugins)
             {
@@ -931,17 +935,7 @@ namespace Horo::Editor
                 return;
             }
 
-            static const struct
-            {
-                const char *name;
-                const char *desc;
-                const char *scopeBadge;
-                const char *signedBadge;
-                ImVec4 signedColour;
-                const char *restartBadge;
-                const char *action1;
-                const char *action2;
-            } kDetailHeaders[] = {
+            static const std::array<PluginDetailHeaderSpec, 3> kDetailHeaders = {{
                 {"Horo MCP Bridge",
                  "Exposes a local MCP endpoint so external tools can inspect project state, create assets, run editor commands, and query diagnostics.",
                  "Editor-wide", "Signed", Theme::Ok(), "Restart not required",
@@ -954,7 +948,7 @@ namespace Horo::Editor
                  "Adds Steam platform services such as overlay, achievements, networking sockets, and App ID metadata.",
                  "Platform", "Disabled", Theme::Warn(), "Restart on enable",
                  "Enable", "Open Docs"},
-            };
+            }};
 
             const auto &hdr = kDetailHeaders[st.selectedPlugin];
             int &activeTab = st.pluginDetailTab[st.selectedPlugin];
@@ -1051,7 +1045,7 @@ namespace Horo::Editor
             }
 
             {
-                static constexpr const char *kDetailTabs[] = {"Settings", "Permissions", "Diagnostics", "Manifest"};
+                static constexpr std::array kDetailTabs = {"Settings", "Permissions", "Diagnostics", "Manifest"};
                 const float tabAvail = ImGui::GetContentRegionAvail().x;
                 const float tabGap = 4.0F;
                 const float tabW = (tabAvail - tabGap * 3.0F) / 4.0F;
@@ -1114,6 +1108,8 @@ namespace Horo::Editor
             case 2:
                 DrawSteamDetailContent(st, f, activeTab);
                 break;
+            default:
+                break;
             }
 
             ImGui::EndChild();
@@ -1138,8 +1134,8 @@ namespace Horo::Editor
                 PluginSettingRow("Transport Mode",
                                  "Use stdio for local tools; HTTP is useful for explicit local integrations.",
                                  f, [&st, &f]() {
-                                     static constexpr const char *kModes[] = {"Local HTTP", "stdio", "Named Pipe"};
-                                     (void)ComboControl("##transport", &st.mcp.transportMode, kModes, 3, f);
+                                     static constexpr std::array kModes = {"Local HTTP", "stdio", "Named Pipe"};
+                                     (void)ComboControl("##transport", &st.mcp.transportMode, kModes.data(), 3, f);
                                  });
                 PluginSettingRow("MCP Port", "Bound to localhost unless remote access is enabled.", f,
                                  [&st, &f]() { InputIntControl("##mcp-port", &st.mcp.port, f); });
@@ -1151,9 +1147,9 @@ namespace Horo::Editor
                 SettingGroup("TOOL SCOPE", f);
                 PluginSettingRow("Allowed Tool Groups", "Restrict what external tools can invoke.", f,
                                  [&st, &f]() {
-                                     static constexpr const char *kScopes[] = {
+                                     static constexpr std::array kScopes = {
                                          "Read + Safe Mutations", "Read Only", "Full Project Access", "Custom Policy..."};
-                                     (void)ComboControl("##scope", &st.mcp.toolScope, kScopes, 4, f);
+                                     (void)ComboControl("##scope", &st.mcp.toolScope, kScopes.data(), 4, f);
                                  });
                 PluginSettingRow("Asset Write Root", "All generated assets must stay under this folder.", f,
                                  [&st, &f]() { (void)InputTextControl("##root", st.mcp.assetRoot, 64, f); });
@@ -1161,7 +1157,7 @@ namespace Horo::Editor
 
             case 1:
                 {
-                    static const PermissionRowSpec kPerms[] = {
+                    static const std::array<PermissionRowSpec, 3> kPerms = {{
                         {"✓", "Read project metadata",
                          "Read project name, scene list, package graph, and editor state.",
                          "Allowed", Theme::Ok()},
@@ -1171,24 +1167,24 @@ namespace Horo::Editor
                         {"!", "Execute build commands",
                          "Requires interactive confirmation before running build or release tasks.",
                          "Confirm", Theme::Warn()},
-                    };
-                    DrawPermissionRows(kPerms, static_cast<int>(std::size(kPerms)), f);
+                    }};
+                    DrawPermissionRows(kPerms, f);
                 }
                 break;
 
             case 2:
                 {
-                    static const DiagnosticMetricSpec kMetrics[] = {
+                    static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
                         {"STATUS", "Running", "sandboxed", Theme::Ok()},
                         {"LAST CALL", "2m ago", "tool request", Theme::Text()},
                         {"ERRORS", "0", "last 24h", Theme::Ok()},
-                    };
-                    DrawDiagnosticMetrics(kMetrics, static_cast<int>(std::size(kMetrics)), f);
-                    const char *kActivity[] = {
+                    }};
+                    DrawDiagnosticMetrics(kMetrics, f);
+                    const std::array kActivity = {
                         "14:22  project.read completed in 18ms",
                         "14:20  assets.write.scoped created /Assets/Generated/mesh.json",
                         "14:16  command.run requested confirmation"};
-                    DrawDiagnosticActivity(kActivity, static_cast<int>(std::size(kActivity)), f);
+                    DrawDiagnosticActivity(kActivity, f);
                 }
                 break;
 
@@ -1203,6 +1199,8 @@ namespace Horo::Editor
                                   "  - assets.write.scoped\n"
                                   "  - commands.run.confirmed",
                                   f);
+                break;
+            default:
                 break;
             }
         }
@@ -1227,38 +1225,38 @@ namespace Horo::Editor
                                  [&st, &f]() { DrawToggleState("##fmod-fail", &st.fmod.failOnMissing, f); });
                 PluginSettingRow("Target Platform", "Bank platform used for editor preview.", f,
                                  [&st, &f]() {
-                                     static constexpr const char *kPlatforms[] = {"Desktop", "Windows", "macOS", "Linux", "Console"};
-                                     (void)ComboControl("##fmod-plat", &st.fmod.targetPlatform, kPlatforms, 5, f);
+                                     static constexpr std::array kPlatforms = {"Desktop", "Windows", "macOS", "Linux", "Console"};
+                                     (void)ComboControl("##fmod-plat", &st.fmod.targetPlatform, kPlatforms.data(), 5, f);
                                  });
                 break;
 
             case 1:
                 {
-                    static const PermissionRowSpec kPerms[] = {
+                    static const std::array<PermissionRowSpec, 3> kPerms = {{
                         {"✓", "Read and write audio banks",
                          "Limited to configured FMOD project and bank output paths.",
                          "Scoped", Theme::Ok()},
                         {"!", "Launch external FMOD Studio process",
                          "Requires a configured executable path and user initiated action.",
                          "User action", Theme::Warn()},
-                    };
-                    DrawPermissionRows(kPerms, static_cast<int>(std::size(kPerms)), f);
+                    }};
+                    DrawPermissionRows(kPerms, f);
                 }
                 break;
 
             case 2:
                 {
-                    static const DiagnosticMetricSpec kMetrics[] = {
+                    static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
                         {"BANKS", "14", "loaded", Theme::Text()},
                         {"UNRESOLVED", "2", "events", Theme::Warn()},
                         {"LIVE UPDATE", "On", "connected", Theme::Ok()},
-                    };
-                    DrawDiagnosticMetrics(kMetrics, static_cast<int>(std::size(kMetrics)), f);
-                    const char *kActivity[] = {
+                    }};
+                    DrawDiagnosticMetrics(kMetrics, f);
+                    const std::array kActivity = {
                         "13:58  bank import finished with 2 unresolved event refs",
                         "13:44  live update connection established",
                         "13:31  Desktop bank validation completed"};
-                    DrawDiagnosticActivity(kActivity, static_cast<int>(std::size(kActivity)), f);
+                    DrawDiagnosticActivity(kActivity, f);
                 }
                 break;
 
@@ -1274,6 +1272,8 @@ namespace Horo::Editor
                                   "  - build.validation",
                                   f);
                 break;
+            default:
+                break;
             }
         }
 
@@ -1285,7 +1285,7 @@ namespace Horo::Editor
             case 0:
                 SettingGroup("STEAM APP", f, true);
                 PluginSettingRow("App ID", "Use 480 for local Spacewar-style testing only.", f,
-                                 [&st, &f]() {
+                                 [&f]() {
                                      static int steamAppId = 480;
                                      InputIntControl("##steam-appid", &steamAppId, f);
                                  });
@@ -1293,8 +1293,8 @@ namespace Horo::Editor
                                  [&st, &f]() { (void)InputTextControl("##steam-sdk", st.steam.sdkPath, 64, f); });
                 PluginSettingRow("Initialize On", "Controls when Steam API is started during editor workflows.", f,
                                  [&st, &f]() {
-                                     static constexpr const char *kModes[] = {"Play Mode Only", "Editor Launch", "Build Runtime Only"};
-                                     (void)ComboControl("##steam-init", &st.steam.initMode, kModes, 3, f);
+                                     static constexpr std::array kModes = {"Play Mode Only", "Editor Launch", "Build Runtime Only"};
+                                     (void)ComboControl("##steam-init", &st.steam.initMode, kModes.data(), 3, f);
                                  });
                 SettingGroup("FEATURES", f);
                 PluginSettingRow("Overlay", "Enable Steam overlay while testing from Play Mode.", f,
@@ -1307,31 +1307,31 @@ namespace Horo::Editor
 
             case 1:
                 {
-                    static const PermissionRowSpec kPerms[] = {
+                    static const std::array<PermissionRowSpec, 3> kPerms = {{
                         {"✓", "Read platform config",
                          "Reads App ID, achievements config, and build target metadata.",
                          "Allowed", Theme::Ok()},
                         {"!", "Network access",
                          "Only enabled when Steam networking transport is selected.",
                          "Conditional", Theme::Warn()},
-                    };
-                    DrawPermissionRows(kPerms, static_cast<int>(std::size(kPerms)), f);
+                    }};
+                    DrawPermissionRows(kPerms, f);
                 }
                 break;
 
             case 2:
                 {
-                    static const DiagnosticMetricSpec kMetrics[] = {
+                    static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
                         {"STATUS", "Disabled", "not loaded", Theme::Dim()},
                         {"SDK", "Missing", "path required", Theme::Warn()},
                         {"OVERLAY", "Ready", "waiting", Theme::Ok()},
-                    };
-                    DrawDiagnosticMetrics(kMetrics, static_cast<int>(std::size(kMetrics)), f);
-                    const char *kActivity[] = {
+                    }};
+                    DrawDiagnosticMetrics(kMetrics, f);
+                    const std::array kActivity = {
                         "12:45  skipped init because Steamworks SDK is disabled",
                         "12:44  overlay check passed",
                         "12:42  missing SDK path warning emitted"};
-                    DrawDiagnosticActivity(kActivity, static_cast<int>(std::size(kActivity)), f);
+                    DrawDiagnosticActivity(kActivity, f);
                 }
                 break;
 
@@ -1386,12 +1386,12 @@ namespace Horo::Editor
         {
             SettingGroup("RUNTIME OVERVIEW", f, true);
 
-            static const DiagnosticMetricSpec kRuntimeCards[] = {
+            static const std::array<DiagnosticMetricSpec, 3> kRuntimeCards = {{
                 {"ISOLATION", "Sandboxed", "processes", Theme::Text()},
                 {"DISCOVERY", "Project + editor", "paths", Theme::Text()},
                 {"UPDATES", "Signed only", "registries", Theme::Ok()},
-            };
-            DrawDiagnosticMetrics(kRuntimeCards, static_cast<int>(std::size(kRuntimeCards)), f);
+            }};
+            DrawDiagnosticMetrics(kRuntimeCards, f);
 
             SettingGroup("DISCOVERY", f);
             PluginSettingRow("Plugin Discovery Paths",
@@ -1402,10 +1402,10 @@ namespace Horo::Editor
             PluginSettingRow("Load Order Policy",
                              "Defines how editor, project, vendor, and local-development plugins are resolved.",
                              f, [&st, &f]() {
-                                 static constexpr const char *kOrders[] = {
+                                 static constexpr std::array kOrders = {
                                      "Project overrides editor if trusted", "Editor plugins first",
                                      "Project plugins first", "Locked by project manifest"};
-                                 (void)ComboControl("##order", &st.runtime.loadOrder, kOrders, 4, f);
+                                 (void)ComboControl("##order", &st.runtime.loadOrder, kOrders.data(), 4, f);
                              });
             PluginSettingRow("Development Plugin Path",
                              "Optional local path used for plugin authorship and hot-reload testing.",
@@ -1420,34 +1420,34 @@ namespace Horo::Editor
             PluginSettingRow("Unsigned Plugin Policy",
                              "Controls what happens when a plugin is not signed by a trusted vendor or local workspace.",
                              f, [&st, &f]() {
-                                 static constexpr const char *kPolicies[] = {"Block by default",
+                                 static constexpr std::array kPolicies = {"Block by default",
                                                                              "Allow after warning",
                                                                              "Allow local development only"};
-                                 (void)ComboControl("##unsigned", &st.runtime.unsignedPolicy, kPolicies, 3, f);
+                                 (void)ComboControl("##unsigned", &st.runtime.unsignedPolicy, kPolicies.data(), 3, f);
                              });
             PluginSettingRow("Network Access Policy",
                              "Default network behavior for plugins unless a plugin-specific permission overrides it.",
                              f, [&st, &f]() {
-                                 static constexpr const char *kNets[] = {"Deny by default", "Localhost only",
+                                 static constexpr std::array kNets = {"Deny by default", "Localhost only",
                                                                          "Prompt per plugin",
                                                                          "Allow trusted plugins"};
-                                 (void)ComboControl("##net", &st.runtime.networkPolicy, kNets, 4, f);
+                                 (void)ComboControl("##net", &st.runtime.networkPolicy, kNets.data(), 4, f);
                              });
 
             SettingGroup("UPDATES & COMPATIBILITY", f);
             PluginSettingRow("Auto-check Plugin Updates",
                              "Checks signed registries only; local plugins are never updated automatically.",
                              f, [&st, &f]() {
-                                 static constexpr const char *kChecks[] = {"Weekly", "Daily", "Manual Only"};
-                                 (void)ComboControl("##update", &st.runtime.updateCheck, kChecks, 3, f);
+                                 static constexpr std::array kChecks = {"Weekly", "Daily", "Manual Only"};
+                                 (void)ComboControl("##update", &st.runtime.updateCheck, kChecks.data(), 3, f);
                              });
             PluginSettingRow("Compatibility Mode",
                              "How strictly plugin API versions are validated when opening a project.",
                              f, [&st, &f]() {
-                                 static constexpr const char *kModes[] = {"Strict semantic versioning",
+                                 static constexpr std::array kModes = {"Strict semantic versioning",
                                                                           "Allow compatible minors",
                                                                           "Prompt on mismatch"};
-                                 (void)ComboControl("##compat", &st.runtime.compatMode, kModes, 3, f);
+                                 (void)ComboControl("##compat", &st.runtime.compatMode, kModes.data(), 3, f);
                              });
 
             ImGui::Dummy({0.0F, 4.0F});
@@ -1506,6 +1506,8 @@ namespace Horo::Editor
                 break;
             case Plugins:
                 DrawPlugins(st, f);
+                break;
+            default:
                 break;
             }
 
