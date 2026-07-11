@@ -204,6 +204,31 @@ namespace Horo::Editor::Ui
 
     // ── ComboControl ─────────────────────────────────────────────────────
 
+    bool DrawComboRow(const int index, int *value, const char *const items[], const Theme::Fonts &fonts)
+    {
+        ImGui::PushID(index);
+        const bool isSelected = (*value == index);
+        const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        constexpr float rowH = 28.0F;
+        const float rowW = ImGui::GetContentRegionAvail().x;
+        ImGui::InvisibleButton("##row", {rowW, rowH});
+        const bool rowHovered = ImGui::IsItemHovered();
+        const bool clicked = ImGui::IsItemClicked();
+        if (clicked)
+        {
+            *value = index;
+            ImGui::CloseCurrentPopup();
+        }
+        auto *drawList = ImGui::GetWindowDrawList();
+        if (rowHovered || isSelected)
+            drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
+        drawList->AddText(fonts.mono ? fonts.mono : ImGui::GetFont(), 14.0F,
+                          {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
+                          Theme::U32(isSelected ? Theme::Text() : Theme::Muted()), items[index]);
+        ImGui::PopID();
+        return clicked;
+    }
+
     bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts, bool error)
     {
         bool changed = false;
@@ -278,34 +303,7 @@ namespace Horo::Editor::Ui
             }
 
             for (int i = 0; i < itemCount; ++i)
-            {
-                ImGui::PushID(i);
-                const bool isSelected = (*value == i);
-                const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-                const float rowW = ImGui::GetContentRegionAvail().x;
-                constexpr float rowH = 28.0F;
-
-                ImGui::InvisibleButton("##row", {rowW, rowH});
-                const bool rowHovered = ImGui::IsItemHovered();
-
-                if (ImGui::IsItemClicked())
-                {
-                    *value = i;
-                    changed = true;
-                    ImGui::CloseCurrentPopup();
-                }
-
-                auto *wdl = ImGui::GetWindowDrawList();
-                if (rowHovered || isSelected)
-                {
-                    wdl->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH},
-                                       Theme::U32(isSelected ? Theme::Hover() : Theme::Hover()));
-                }
-                wdl->AddText(fonts.mono ? fonts.mono : ImGui::GetFont(), 14.0F,
-                             {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
-                             Theme::U32(isSelected ? Theme::Text() : Theme::Muted()), items[i]);
-                ImGui::PopID();
-            }
+                changed = DrawComboRow(i, value, items, fonts) || changed;
             ImGui::EndPopup();
         }
 
