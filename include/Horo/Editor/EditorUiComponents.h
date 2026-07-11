@@ -241,8 +241,7 @@ namespace Horo::Editor::Ui
     [[nodiscard]] bool ShortcutRecorder(const char *id,
                                         const char *keysLabel,
                                         bool *listening,
-                                        char *keysOut,
-                                        int keysOutSize,
+                                        std::string &keysOut,
                                         const Theme::Fonts &fonts);
 
     /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */

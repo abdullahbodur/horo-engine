@@ -70,8 +70,7 @@ namespace Horo::Editor
 
         // Serialise shortcut key bindings
         for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
-            std::snprintf(out.shortcutKeys[i], sizeof(out.shortcutKeys[i]),
-                          "%s", st.input.shortcuts[i].keys);
+            out.shortcutKeys[static_cast<std::size_t>(i)] = st.input.shortcuts[i].keys;
 
         return out;
     }
@@ -119,8 +118,7 @@ namespace Horo::Editor
 
         // Restore shortcut key bindings
         for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
-            std::snprintf(st.input.shortcuts[i].keys, sizeof(st.input.shortcuts[i].keys),
-                          "%s", settings.shortcutKeys[i]);
+            st.input.shortcuts[i].keys = settings.shortcutKeys[static_cast<std::size_t>(i)];
     }
 
     /** @copydoc SettingsModal.h */

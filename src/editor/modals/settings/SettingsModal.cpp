@@ -255,11 +255,11 @@ namespace Horo::Editor
         {
             for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
                 input.shortcuts[index].conflict = false;
-            if (input.shortcuts[editedIndex].keys[0] == '\0') return;
+            if (input.shortcuts[editedIndex].keys.empty()) return;
             for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
             {
-                if (index == editedIndex || input.shortcuts[index].keys[0] == '\0') continue;
-                if (std::strcmp(input.shortcuts[editedIndex].keys, input.shortcuts[index].keys) == 0)
+                if (index == editedIndex || input.shortcuts[index].keys.empty()) continue;
+                if (input.shortcuts[editedIndex].keys == input.shortcuts[index].keys)
                 {
                     input.shortcuts[editedIndex].conflict = true;
                     input.shortcuts[index].conflict = true;
@@ -313,10 +313,9 @@ namespace Horo::Editor
                     bool localListening = isListening;
 
                     if (Ui::ShortcutRecorder("recorder",
-                                             st.input.shortcuts[i].keys,
+                                             st.input.shortcuts[i].keys.c_str(),
                                              &localListening,
                                              st.input.shortcuts[i].keys,
-                                             sizeof(st.input.shortcuts[i].keys),
                                              f))
                     {
                         ResolveShortcutConflicts(st.input, i);

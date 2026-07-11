@@ -30,7 +30,7 @@ namespace Horo::Editor
             int panSensitivity = 100;
             bool invertOrbitY = false;
             static constexpr int kMaxShortcuts = 16;
-            struct ShortcutBinding { char keys[32]{}; bool conflict = false; };
+            struct ShortcutBinding { std::string keys; bool conflict = false; };
             ShortcutBinding shortcuts[kMaxShortcuts];
             int shortcutCount = 0;
             int listeningShortcut = -1;

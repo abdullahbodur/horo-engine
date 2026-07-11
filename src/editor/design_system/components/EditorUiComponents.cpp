@@ -705,18 +705,18 @@ namespace Horo::Editor::Ui
 
     // ── ShortcutRecorder ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO &io, char *keysOut, const int keysOutSize)
+    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO &io, std::string &keysOut)
     {
         std::string combo;
         if (io.KeyCtrl || io.KeySuper) combo += "Ctrl+";
         if (io.KeyShift) combo += "Shift+";
         if (io.KeyAlt) combo += "Alt+";
         combo += ImGui::GetKeyName(key);
-        std::snprintf(keysOut, static_cast<std::size_t>(keysOutSize), "%s", combo.c_str());
+        keysOut = std::move(combo);
         return true;
     }
 
-    [[nodiscard]] bool PollShortcutInput(bool *listening, char *keysOut, const int keysOutSize)
+    [[nodiscard]] bool PollShortcutInput(bool *listening, std::string &keysOut)
     {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             *listening = false;
@@ -726,12 +726,12 @@ namespace Horo::Editor::Ui
         for (int key = ImGuiKey_A; key <= ImGuiKey_Z; ++key)
             if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
                 *listening = false;
-                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut, keysOutSize);
+                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
         for (int key = ImGuiKey_F1; key <= ImGuiKey_F12; ++key)
             if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
                 *listening = false;
-                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut, keysOutSize);
+                return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
         static constexpr ImGuiKey specialKeys[] = {
             ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace, ImGuiKey_Delete,
@@ -741,7 +741,7 @@ namespace Horo::Editor::Ui
         for (const auto key : specialKeys)
             if (ImGui::IsKeyPressed(key, false)) {
                 *listening = false;
-                return StoreShortcut(key, io, keysOut, keysOutSize);
+                return StoreShortcut(key, io, keysOut);
             }
         return false;
     }
@@ -815,8 +815,7 @@ namespace Horo::Editor::Ui
     [[nodiscard]] bool ShortcutRecorder(const char *id,
                                         const char *keysLabel,
                                         bool *listening,
-                                        char *keysOut,
-                                        const int keysOutSize,
+                                        std::string &keysOut,
                                         const Theme::Fonts &fonts)
     {
         using namespace Theme;
@@ -825,7 +824,7 @@ namespace Horo::Editor::Ui
         bool recorded = false;
 
         if (*listening)
-            recorded = PollShortcutInput(listening, keysOut, keysOutSize);
+            recorded = PollShortcutInput(listening, keysOut);
 
         // ── Draw the recorder UI ────────────────────────────────────────
         const float width = Layout::ControlW;

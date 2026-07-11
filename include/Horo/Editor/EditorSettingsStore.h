@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <string>
 
@@ -100,7 +101,7 @@ struct EditorSettings
     bool steamworksSdkEnabled = false;
     std::string pluginDiscoveryPath = "{project}/plugins";
 
-    char shortcutKeys[8][32]{}; // Per-action key binding strings
+    std::array<std::string, 8> shortcutKeys{}; // Per-action key binding strings
 
     bool operator==(const EditorSettings &) const = default;
 };
