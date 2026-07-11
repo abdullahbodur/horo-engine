@@ -706,6 +706,72 @@ namespace Horo::Editor::Ui
         return false;
     }
 
+    void DrawShortcutContent(ImDrawList *drawList,
+                             const Theme::Fonts &fonts,
+                             const bool listening,
+                             const char *keysLabel,
+                             const ImVec2 cursor,
+                             const ImVec2 size)
+    {
+        using namespace Theme;
+        if (listening)
+        {
+            const char *text = "Press keys...";
+            const ImVec2 textSize = ImGui::CalcTextSize(text);
+            drawList->AddText(fonts.mono, 11.0F,
+                              {cursor.x + (size.x - textSize.x) * 0.5F,
+                               cursor.y + (size.y - textSize.y) * 0.5F},
+                              U32(Accent()), text);
+            return;
+        }
+        if (keysLabel == nullptr || keysLabel[0] == '\0')
+        {
+            const char *placeholder = "Click to record";
+            const ImVec2 textSize = ImGui::CalcTextSize(placeholder);
+            drawList->AddText(fonts.mono, 11.0F,
+                              {cursor.x + (size.x - textSize.x) * 0.5F,
+                               cursor.y + (size.y - textSize.y) * 0.5F},
+                              U32(Dim()), placeholder);
+            return;
+        }
+
+        std::string label{keysLabel};
+        std::vector<std::string> parts;
+        std::size_t pos = 0;
+        while (pos < label.size())
+        {
+            const auto next = label.find('+', pos);
+            parts.push_back(label.substr(pos, next - pos));
+            if (next == std::string::npos) break;
+            pos = next + 1;
+        }
+        float totalWidth = 0.0F;
+        for (std::size_t index = 0; index < parts.size(); ++index)
+        {
+            totalWidth += ImGui::CalcTextSize(parts[index].c_str()).x + 10.0F;
+            if (index + 1 < parts.size()) totalWidth += 8.0F;
+        }
+
+        float x = cursor.x + (size.x - totalWidth) * 0.5F;
+        const float y = cursor.y + (size.y - 14.0F) * 0.5F;
+        for (std::size_t index = 0; index < parts.size(); ++index)
+        {
+            const auto &part = parts[index];
+            const ImVec2 textSize = ImGui::CalcTextSize(part.c_str());
+            const ImVec2 chipMin{x, y};
+            const ImVec2 chipMax{x + textSize.x + 10.0F, y + 18.0F};
+            drawList->AddRectFilled(chipMin, chipMax, U32(Bg3()), 3.0F);
+            drawList->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
+            drawList->AddText(fonts.mono, 10.5F, {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
+            x += textSize.x + 10.0F;
+            if (index + 1 < parts.size())
+            {
+                drawList->AddText(fonts.mono, 10.0F, {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
+                x += 12.0F;
+            }
+        }
+    }
+
     [[nodiscard]] bool ShortcutRecorder(const char *id,
                                         const char *keysLabel,
                                         bool *listening,
@@ -754,71 +820,7 @@ namespace Horo::Editor::Ui
             *listening = true;
         }
 
-        // Draw content on top
-        if (*listening)
-        {
-            const char *text = "Press keys...";
-            const ImVec2 textSize = ImGui::CalcTextSize(text);
-            dl->AddText(fonts.mono, 11.0F,
-                        {cursor.x + (size.x - textSize.x) * 0.5F,
-                         cursor.y + (size.y - textSize.y) * 0.5F},
-                        U32(Accent()), text);
-        }
-        else if (keysLabel && keysLabel[0] != '\0')
-        {
-            // Parse keysLabel "Ctrl+Shift+B" into individual kbd chips
-            std::string label{keysLabel};
-            std::vector<std::string> parts;
-            std::size_t pos = 0;
-            while (pos < label.size())
-            {
-                auto next = label.find('+', pos);
-                parts.push_back(label.substr(pos, next - pos));
-                if (next == std::string::npos) break;
-                pos = next + 1;
-            }
-
-            float totalW = 0.0F;
-            for (std::size_t i = 0; i < parts.size(); ++i)
-            {
-                const auto &p = parts[i];
-                const ImVec2 ts = ImGui::CalcTextSize(p.c_str());
-                totalW += ts.x + 10.0F; // padding
-                if (i < parts.size() - 1) totalW += 8.0F; // "+"
-            }
-
-            float x = cursor.x + (size.x - totalW) * 0.5F;
-            const float y = cursor.y + (size.y - 14.0F) * 0.5F;
-            for (std::size_t i = 0; i < parts.size(); ++i)
-            {
-                const auto &p = parts[i];
-                const ImVec2 ts = ImGui::CalcTextSize(p.c_str());
-                const ImVec2 chipMin = {x, y};
-                const ImVec2 chipMax = {x + ts.x + 10.0F, y + 18.0F};
-
-                dl->AddRectFilled(chipMin, chipMax, U32(Bg3()), 3.0F);
-                dl->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
-                dl->AddText(fonts.mono, 10.5F,
-                            {x + 5.0F, y + 2.0F}, U32(Text()), p.c_str());
-
-                x += ts.x + 10.0F;
-                if (i < parts.size() - 1)
-                {
-                    dl->AddText(fonts.mono, 10.0F,
-                                {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
-                    x += 12.0F;
-                }
-            }
-        }
-        else
-        {
-            const char *placeholder = "Click to record";
-            const ImVec2 ts = ImGui::CalcTextSize(placeholder);
-            dl->AddText(fonts.mono, 11.0F,
-                        {cursor.x + (size.x - ts.x) * 0.5F,
-                         cursor.y + (size.y - ts.y) * 0.5F},
-                        U32(Dim()), placeholder);
-        }
+        DrawShortcutContent(dl, fonts, *listening, keysLabel, cursor, size);
 
         ImGui::PopID();
         return recorded;
