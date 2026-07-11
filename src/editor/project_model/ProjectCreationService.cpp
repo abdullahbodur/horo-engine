@@ -6,9 +6,11 @@
 #include "Horo/Foundation/Progress.h"
 
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -87,8 +89,9 @@ namespace {
 #else
     gmtime_r(&now, &utc);
 #endif
-    char buffer[32]{};
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    std::string buffer(32, '\0');
+    std::strftime(buffer.data(), buffer.size(), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    buffer.resize(std::strlen(buffer.c_str()));
     return buffer;
 }
 

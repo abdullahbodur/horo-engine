@@ -146,10 +146,14 @@ namespace Horo::Editor::Theme
         [[nodiscard]] bool ParseHexColor(const std::string &hex, ImVec4 &color)
         {
             if (hex.size() < 7 || hex[0] != '#') return false;
-            char channels[3][3] = {{hex[1], hex[2], '\0'}, {hex[3], hex[4], '\0'}, {hex[5], hex[6], '\0'}};
-            const auto red = std::strtoul(channels[0], nullptr, 16);
-            const auto green = std::strtoul(channels[1], nullptr, 16);
-            const auto blue = std::strtoul(channels[2], nullptr, 16);
+            const auto hexDigit = [](const char value) {
+                if (value >= '0' && value <= '9') return value - '0';
+                if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+                return value - 'A' + 10;
+            };
+            const auto red = hexDigit(hex[1]) * 16 + hexDigit(hex[2]);
+            const auto green = hexDigit(hex[3]) * 16 + hexDigit(hex[4]);
+            const auto blue = hexDigit(hex[5]) * 16 + hexDigit(hex[6]);
             color = ImVec4{static_cast<float>(red) / 255.0F,
                            static_cast<float>(green) / 255.0F,
                            static_cast<float>(blue) / 255.0F, 1.0F};
