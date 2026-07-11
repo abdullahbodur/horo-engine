@@ -105,7 +105,7 @@ public:
      * @param dataBus Process data bus, which must outlive this service and its accepted work.
      */
     ProjectCreationService(JobSystem& jobs, EngineDataBus& dataBus);
-    ~ProjectCreationService() = default;
+
     ProjectCreationService(const ProjectCreationService&) = delete;
     ProjectCreationService& operator=(const ProjectCreationService&) = delete;
     ProjectCreationService(ProjectCreationService&&) noexcept;

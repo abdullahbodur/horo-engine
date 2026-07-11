@@ -35,27 +35,29 @@ namespace {
     return escaped.str();
 }
 
+void AppendRecentJsonEscape(std::string_view value, std::size_t &index, std::string &out) {
+    const char next = value[++index];
+    switch (next) {
+    case '"': out.push_back('"'); break;
+    case '\\': out.push_back('\\'); break;
+    case 'b': out.push_back('\b'); break;
+    case 'f': out.push_back('\f'); break;
+    case 'n': out.push_back('\n'); break;
+    case 'r': out.push_back('\r'); break;
+    case 't': out.push_back('\t'); break;
+    case 'u':
+        if (index + 4 < value.size()) index += 4;
+        break;
+    default: out.push_back(next); break;
+    }
+}
+
 [[nodiscard]] std::string UnescapeRecentJsonString(std::string_view value) {
     std::string out;
     out.reserve(value.size());
     for (std::size_t i = 0; i < value.size(); ++i) {
         if (value[i] == '\\' && i + 1 < value.size()) {
-            const char next = value[++i];
-            switch (next) {
-            case '"': out.push_back('"'); break;
-            case '\\': out.push_back('\\'); break;
-            case 'b': out.push_back('\b'); break;
-            case 'f': out.push_back('\f'); break;
-            case 'n': out.push_back('\n'); break;
-            case 'r': out.push_back('\r'); break;
-            case 't': out.push_back('\t'); break;
-            case 'u':
-                if (i + 4 < value.size()) {
-                    i += 4;
-                }
-                break;
-            default: out.push_back(next); break;
-            }
+            AppendRecentJsonEscape(value, i, out);
         } else {
             out.push_back(value[i]);
         }
