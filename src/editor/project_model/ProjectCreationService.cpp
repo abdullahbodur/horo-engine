@@ -237,6 +237,31 @@ void SetCancelled(const std::shared_ptr<ProjectCreationServiceState>& state,
     return json.str();
 }
 
+struct StagingPreparationFailure {
+    ProjectCreationErrorCode code;
+    const char* message;
+};
+
+[[nodiscard]] std::optional<StagingPreparationFailure> PrepareStagingDirectory(
+    const std::filesystem::path& destination,
+    const std::filesystem::path& parent,
+    const std::filesystem::path& staging,
+    std::error_code& error) {
+    if (std::filesystem::exists(destination, error)) {
+        if (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error))
+            return StagingPreparationFailure{ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion."};
+    }
+    if (error)
+        return StagingPreparationFailure{ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion."};
+    std::filesystem::create_directories(parent, error);
+    if (error)
+        return StagingPreparationFailure{ProjectCreationErrorCode::ParentUnavailable, "Unable to create the project destination parent directory."};
+    std::filesystem::create_directory(staging, error);
+    if (error)
+        return StagingPreparationFailure{ProjectCreationErrorCode::StagingFailed, "Unable to create a sibling project staging directory."};
+    return std::nullopt;
+}
+
 void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
                const std::shared_ptr<ProjectCreationServiceState::Operation>& operation,
                const ProjectCreationRequest request,
@@ -256,24 +281,8 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::Staging, "staging", 0.05F);
     if (IsCancelled(cancellation, state, operation)) return;
-    if (std::filesystem::exists(destination, error)) {
-        if (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error)) {
-            SetFailure(state, operation, ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion.");
-            return;
-        }
-    }
-    if (error) {
-        SetFailure(state, operation, ProjectCreationErrorCode::DestinationOccupied, "Project destination became occupied before promotion.");
-        return;
-    }
-    std::filesystem::create_directories(parent, error);
-    if (error) {
-        SetFailure(state, operation, ProjectCreationErrorCode::ParentUnavailable, "Unable to create the project destination parent directory.");
-        return;
-    }
-    std::filesystem::create_directory(staging, error);
-    if (error) {
-        SetFailure(state, operation, ProjectCreationErrorCode::StagingFailed, "Unable to create a sibling project staging directory.");
+    if (const auto failure = PrepareStagingDirectory(destination, parent, staging, error)) {
+        SetFailure(state, operation, failure->code, failure->message);
         return;
     }
 
