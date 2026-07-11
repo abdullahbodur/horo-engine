@@ -194,7 +194,7 @@ namespace Horo::Editor
     }
 
     static void HandleRecentProjectOpen(const int index,
-                                        WelcomeScreenController &controller,
+                                        const WelcomeScreenController &controller,
                                         const std::vector<RecentProjectEntry> &recentProjects,
                                         ProjectLoadingScreenGuiState &loadingState,
                                         std::optional<GuiRoute> &pendingRoute)
@@ -233,11 +233,9 @@ namespace Horo::Editor
         std::string projectName = path.filename().string();
         if (projectName.empty()) projectName = "Unknown Project";
         LOG_INFO("editor.welcome", "Selected project folder: %s (%s)", projectName.c_str(), folderPath.c_str());
-        recentProjects.erase(std::remove_if(recentProjects.begin(), recentProjects.end(),
-                                            [&folderPath](const RecentProjectEntry &entry) {
-                                                return entry.rootPath == folderPath;
-                                            }),
-                             recentProjects.end());
+        std::erase_if(recentProjects, [&folderPath](const RecentProjectEntry &entry) {
+            return entry.rootPath == folderPath;
+        });
         recentProjects.insert(recentProjects.begin(), RecentProjectEntry{projectName, folderPath, "Just now", "empty"});
         SaveRecentProjectsToDisk(recentProjects);
         controller = WelcomeScreenController{recentProjects};
