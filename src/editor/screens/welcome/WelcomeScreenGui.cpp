@@ -169,9 +169,9 @@ namespace Horo::Editor
             float cursorX = titlePos.x;
             for (const char *c = title; *c != '\0'; ++c)
             {
-                const char glyph[2] = {*c, '\0'};
-                dl->AddText(titleFont, titlePx, {cursorX, titlePos.y}, U32(Text()), glyph);
-                cursorX += titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, glyph).x + titleSpacing;
+                const std::string glyph{*c};
+                dl->AddText(titleFont, titlePx, {cursorX, titlePos.y}, U32(Text()), glyph.c_str());
+                cursorX += titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, glyph.c_str()).x + titleSpacing;
             }
             const ImVec2 titleSize = titleFont->CalcTextSizeA(titlePx, FLT_MAX, 0.0F, title);
             const float titleWidth = titleSize.x + titleSpacing * 3.0F;

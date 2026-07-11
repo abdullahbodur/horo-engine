@@ -211,11 +211,11 @@ namespace Horo::Editor
             FILE *pipe = popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
-            char buffer[1024];
+            std::string buffer(1024, '\0');
             std::string result;
-            while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
             {
-                result += buffer;
+                result += buffer.c_str();
             }
             int status = pclose(pipe);
             if (status != 0 || result.empty())
@@ -239,11 +239,11 @@ namespace Horo::Editor
             FILE *pipe = popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
-            char buffer[1024];
+            std::string buffer(1024, '\0');
             std::string result;
-            while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
             {
-                result += buffer;
+                result += buffer.c_str();
             }
             int status = pclose(pipe);
             if (status != 0 || result.empty())
@@ -267,11 +267,11 @@ namespace Horo::Editor
             FILE *pipe = _popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
-            char buffer[1024];
+            std::string buffer(1024, '\0');
             std::string result;
-            while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
             {
-                result += buffer;
+                result += buffer.c_str();
             }
             int status = _pclose(pipe);
             if (status != 0 || result.empty())
