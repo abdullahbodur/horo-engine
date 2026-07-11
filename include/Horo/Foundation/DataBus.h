@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -69,7 +70,9 @@ namespace Horo
         Subscription Subscribe(Handler &&handler)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto typed = [callback = std::forward<Handler>(handler)](const void *raw) { callback(*static_cast<const EventT *>(raw)); };
+            auto typed = [callback = std::forward<Handler>(handler)](const std::any &raw) {
+                callback(std::any_cast<const EventT &>(raw));
+            };
             return SubscribeErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(typed));
         }
 
@@ -77,19 +80,22 @@ namespace Horo
         void Publish(const EventT &event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto replay = std::make_shared<EventT>(event);
-            const void *raw = replay.get();
-            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
-                          [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(*replay); });
+            auto replay = std::make_shared<std::any>(event);
+            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, *replay,
+                          [replay = std::move(replay)](EngineDataBus &bus) {
+                              bus.Publish(std::any_cast<const EventT &>(*replay));
+                          });
         }
 
         template <typename EventT>
         void PublishAsync(EventT event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto payload = std::make_shared<EventT>(std::move(event));
+            auto payload = std::make_shared<std::any>(std::move(event));
             QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
-                        [](EngineDataBus &bus, const void *raw) { bus.Publish(*static_cast<const EventT *>(raw)); });
+                        [](EngineDataBus &bus, const std::any &raw) {
+                            bus.Publish(std::any_cast<const EventT &>(raw));
+                        });
         }
 
         /** @brief Delivers worker-thread notifications at the owner synchronization point. */
@@ -98,13 +104,13 @@ namespace Horo
         void Clear();
 
     private:
-        using Handler = std::function<void(const void *)>;
+        using Handler = std::function<void(const std::any &)>;
         using DeferredPublisher = std::function<void(EngineDataBus &)>;
-        using QueuedPublisher = std::function<void(EngineDataBus &, const void *)>;
+        using QueuedPublisher = std::function<void(EngineDataBus &, const std::any &)>;
         struct State;
         Subscription SubscribeErased(EventTypeId type, std::string_view name, Handler handler);
-        void PublishErased(EventTypeId type, std::string_view name, const void *raw, DeferredPublisher retry);
-        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<void> payload, QueuedPublisher publish);
+        void PublishErased(EventTypeId type, std::string_view name, const std::any &raw, DeferredPublisher retry);
+        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<std::any> payload, QueuedPublisher publish);
         std::shared_ptr<State> m_state;
     };
 } // namespace Horo
