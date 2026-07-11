@@ -365,8 +365,8 @@ namespace Horo::Editor::Ui
     [[nodiscard]] bool ParseHexColor(const char *text, ImVec4 &out)
     {
         if (text == nullptr || text[0] != '#' || text[7] != '\0') return false;
-        const int digits[6] = {HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
-                               HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])};
+        const std::array<int, 6> digits = {HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
+                                           HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])};
         for (const int digit : digits)
             if (digit < 0) return false;
         out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
@@ -524,28 +524,29 @@ namespace Horo::Editor::Ui
 
         ImGui::SameLine(0.0F, 10.0F);
 
-        char text[32]{};
+        std::string text(32, '\0');
         switch (format)
         {
         case SliderValueFormat::Minutes:
-            std::snprintf(text, sizeof(text), "%d min", *value);
+            std::snprintf(text.data(), text.size(), "%d min", *value);
             break;
         case SliderValueFormat::Percent:
-            std::snprintf(text, sizeof(text), "%d%%", *value);
+            std::snprintf(text.data(), text.size(), "%d%%", *value);
             break;
         case SliderValueFormat::Milliseconds:
-            std::snprintf(text, sizeof(text), "%d ms", *value);
+            std::snprintf(text.data(), text.size(), "%d ms", *value);
             break;
         case SliderValueFormat::Integer:
-            std::snprintf(text, sizeof(text), "%d", *value);
+            std::snprintf(text.data(), text.size(), "%d", *value);
             break;
         }
+        text.resize(std::strlen(text.c_str()));
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
-            const ImVec2 textSize = ImGui::CalcTextSize(text);
+            const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (HitH - textSize.y) * 0.5F);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-            ImGui::TextUnformatted(text);
+            ImGui::TextUnformatted(text.c_str());
             ImGui::PopStyleColor();
         }
         ImGui::PopID();
