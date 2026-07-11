@@ -623,7 +623,7 @@ namespace Horo::Editor::Ui
                    bool *enabled,
                    const Theme::Fonts &fonts)
     {
-        SettingRow(name, nullptr, fonts, [&]() {
+        SettingRow(name, nullptr, fonts, [name, version, description, enabled, &fonts]() {
             const float cursorY = ImGui::GetCursorPosY();
             ImGui::SetCursorPosY(cursorY + 4.0F);
             {
@@ -823,7 +823,7 @@ namespace Horo::Editor::Ui
         // Draw dashed border manually (4px dash segments)
         const ImU32 dashCol = borderCol;
         const float r = Layout::Radius;
-        const auto drawDashRect = [&](ImVec2 p0, ImVec2 p1) {
+        const auto drawDashRect = [dl, dashCol, r](ImVec2 p0, ImVec2 p1) {
             // Simple solid border for now — dashed is complex in ImDrawList
             dl->AddRect(p0, p1, dashCol, r, 0, 1.0F);
         };
