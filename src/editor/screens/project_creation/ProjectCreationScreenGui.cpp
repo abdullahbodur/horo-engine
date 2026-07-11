@@ -539,6 +539,54 @@ namespace Horo::Editor
             ImGui::PopStyleColor();
         }
 
+        void DrawTemplateIcon(ImDrawList *drawList, const int index, const ImVec2 iconPos, const ImU32 iconColor)
+        {
+            if (index == 0)
+            {
+                constexpr float size = 18.0F;
+                const float offset = (WizardLayout::TemplateIconPx - size) * 0.5F;
+                drawList->AddRect({iconPos.x + offset, iconPos.y + offset},
+                                  {iconPos.x + offset + size, iconPos.y + offset + size}, iconColor, 3.0F, 0, 2.0F);
+                return;
+            }
+            if (index == 1)
+            {
+                const float centerX = iconPos.x + 12.0F;
+                const float centerY = iconPos.y + 12.0F;
+                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
+                drawList->AddLine({centerX, iconPos.y + 6.0F}, {centerX, iconPos.y + 18.0F}, iconColor, 1.5F);
+                drawList->AddLine({iconPos.x + 4.0F, centerY}, {iconPos.x + 20.0F, centerY}, iconColor, 1.5F);
+                return;
+            }
+            if (index == 2)
+            {
+                const float centerX = iconPos.x + 12.0F;
+                drawList->AddCircle({centerX, iconPos.y + 6.0F}, 3.5F, iconColor, 12, 1.5F);
+                drawList->AddRect({centerX - 7.0F, iconPos.y + 12.0F}, {centerX + 7.0F, iconPos.y + 20.0F}, iconColor, 4.0F, 0, 1.5F);
+                return;
+            }
+            if (index == 3)
+            {
+                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
+                drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 10.0F}, {iconPos.x + 20.0F, iconPos.y + 10.0F}, iconColor, 1.5F);
+                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 10.0F}, {iconPos.x + 12.0F, iconPos.y + 18.0F}, iconColor, 1.5F);
+                return;
+            }
+            if (index == 4)
+            {
+                drawList->AddRect({iconPos.x + 3.0F, iconPos.y + 5.0F}, {iconPos.x + 21.0F, iconPos.y + 17.0F}, iconColor, 2.0F, 0, 1.5F);
+                drawList->AddLine({iconPos.x + 8.0F, iconPos.y + 20.0F}, {iconPos.x + 16.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
+                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 17.0F}, {iconPos.x + 12.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
+                return;
+            }
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 7.0F}, {iconPos.x + 20.0F, iconPos.y + 7.0F}, iconColor, 1.5F);
+            drawList->AddCircleFilled({iconPos.x + 9.0F, iconPos.y + 7.0F}, 2.0F, iconColor);
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 12.0F}, {iconPos.x + 20.0F, iconPos.y + 12.0F}, iconColor, 1.5F);
+            drawList->AddCircleFilled({iconPos.x + 15.0F, iconPos.y + 12.0F}, 2.0F, iconColor);
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 17.0F}, {iconPos.x + 20.0F, iconPos.y + 17.0F}, iconColor, 1.5F);
+            drawList->AddCircleFilled({iconPos.x + 11.0F, iconPos.y + 17.0F}, 2.0F, iconColor);
+        }
+
         void DrawStepTemplate(ProjectCreationController &controller, ProjectCreationScreenGuiState &st, const Fonts &f)
         {
             using namespace Theme;
@@ -590,49 +638,7 @@ namespace Horo::Editor
                 auto *dl = ImGui::GetWindowDrawList();
                 const ImU32 iconColor = Theme::U32(selected ? Theme::Accent() : Theme::Text());
 
-                if (i == 0)
-                {
-                    const float s = 18.0F;
-                    const float o = (TemplateIconPx - s) * 0.5F;
-                    dl->AddRect({iconPos.x + o, iconPos.y + o},
-                                {iconPos.x + o + s, iconPos.y + o + s},
-                                iconColor, 3.0F, 0, 2.0F);
-                }
-                else if (i == 1)
-                {
-                    const float cx = iconPos.x + 12.0F;
-                    const float cy = iconPos.y + 12.0F;
-                    dl->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
-                    dl->AddLine({cx, iconPos.y + 6.0F}, {cx, iconPos.y + 18.0F}, iconColor, 1.5F);
-                    dl->AddLine({iconPos.x + 4.0F, cy}, {iconPos.x + 20.0F, cy}, iconColor, 1.5F);
-                }
-                else if (i == 2)
-                {
-                    const float cx = iconPos.x + 12.0F;
-                    dl->AddCircle({cx, iconPos.y + 6.0F}, 3.5F, iconColor, 12, 1.5F);
-                    dl->AddRect({cx - 7.0F, iconPos.y + 12.0F}, {cx + 7.0F, iconPos.y + 20.0F}, iconColor, 4.0F, 0, 1.5F);
-                }
-                else if (i == 3)
-                {
-                    dl->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
-                    dl->AddLine({iconPos.x + 4.0F, iconPos.y + 10.0F}, {iconPos.x + 20.0F, iconPos.y + 10.0F}, iconColor, 1.5F);
-                    dl->AddLine({iconPos.x + 12.0F, iconPos.y + 10.0F}, {iconPos.x + 12.0F, iconPos.y + 18.0F}, iconColor, 1.5F);
-                }
-                else if (i == 4)
-                {
-                    dl->AddRect({iconPos.x + 3.0F, iconPos.y + 5.0F}, {iconPos.x + 21.0F, iconPos.y + 17.0F}, iconColor, 2.0F, 0, 1.5F);
-                    dl->AddLine({iconPos.x + 8.0F, iconPos.y + 20.0F}, {iconPos.x + 16.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
-                    dl->AddLine({iconPos.x + 12.0F, iconPos.y + 17.0F}, {iconPos.x + 12.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
-                }
-                else if (i == 5)
-                {
-                    dl->AddLine({iconPos.x + 4.0F, iconPos.y + 7.0F}, {iconPos.x + 20.0F, iconPos.y + 7.0F}, iconColor, 1.5F);
-                    dl->AddCircleFilled({iconPos.x + 9.0F, iconPos.y + 7.0F}, 2.0F, iconColor);
-                    dl->AddLine({iconPos.x + 4.0F, iconPos.y + 12.0F}, {iconPos.x + 20.0F, iconPos.y + 12.0F}, iconColor, 1.5F);
-                    dl->AddCircleFilled({iconPos.x + 15.0F, iconPos.y + 12.0F}, 2.0F, iconColor);
-                    dl->AddLine({iconPos.x + 4.0F, iconPos.y + 17.0F}, {iconPos.x + 20.0F, iconPos.y + 17.0F}, iconColor, 1.5F);
-                    dl->AddCircleFilled({iconPos.x + 11.0F, iconPos.y + 17.0F}, 2.0F, iconColor);
-                }
+                DrawTemplateIcon(dl, i, iconPos, iconColor);
 
                 ImGui::Dummy({TemplateIconPx, TemplateIconPx});
                 ImGui::Dummy({0.0F, 8.0F});
