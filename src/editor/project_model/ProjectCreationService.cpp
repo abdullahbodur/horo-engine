@@ -379,7 +379,6 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 ProjectCreationService::ProjectCreationService(JobSystem& jobs, EngineDataBus& dataBus)
     : state_(std::make_shared<ProjectCreationServiceState>(dataBus)), jobs_(&jobs) {}
 
-ProjectCreationService::~ProjectCreationService() = default;
 ProjectCreationService::ProjectCreationService(ProjectCreationService&&) noexcept = default;
 ProjectCreationService& ProjectCreationService::operator=(ProjectCreationService&&) noexcept = default;
 
