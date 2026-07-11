@@ -160,6 +160,14 @@ namespace Horo::Editor::Ui
      */
     [[nodiscard]] bool ColorHexControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts);
 
+    enum class SliderValueFormat : std::uint8_t
+    {
+        Integer,
+        Minutes,
+        Percent,
+        Milliseconds,
+    };
+
     /** @brief Integer input with shared frame styling. */
     void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts);
 
@@ -169,14 +177,14 @@ namespace Horo::Editor::Ui
     /**
      * @brief Custom slider imitating an HTML <input type="range">.
      *
-     * @param suffix A printf-style format string for the value label (e.g. "%d%%").
+     * @param format Typed format for the value label.
      * @param step   Quantisation step; a value of 25 for a 75–200 scale snaps to 75/100/125/….
      */
     void SliderIntControl(const char *id,
                           int *value,
                           int minValue,
                           int maxValue,
-                          const char *suffix,
+                          SliderValueFormat format,
                           const Theme::Fonts &fonts,
                           int step = 1);
 

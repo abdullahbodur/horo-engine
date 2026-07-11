@@ -204,7 +204,7 @@ namespace Horo::Editor
             SettingRow("Startup Behavior", "What to show when the editor launches.", f,
                        [&st, &f]() { (void)ComboControl("##startup", &st.general.startupAction, kStartup.data(), static_cast<int>(kStartup.size()), f); });
             SettingRow("Auto-save Interval", "Minutes between automatic scene saves. Zero disables auto-save.", f,
-                       [&st, &f]() { SliderIntControl("##autosave", &st.general.autoSaveInterval, 0, 30, "%d min", f); });
+                       [&st, &f]() { SliderIntControl("##autosave", &st.general.autoSaveInterval, 0, 30, SliderValueFormat::Minutes, f); });
             SettingRow("Confirm Exit With Unsaved Changes", "Prompt before closing when unsaved changes exist.", f,
                        [&st, &f]() { (void)ToggleControl("confirm-exit", &st.general.confirmExit, f); });
             SettingGroup("EDITOR SESSION", f);
@@ -246,7 +246,7 @@ namespace Horo::Editor
             });
             SettingGroup("TYPOGRAPHY & SCALE", f);
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
-                       [&st, &f]() { SliderIntControl("##ui-scale", &st.appearance.uiScale, 75, 200, "%d%%", f, 25); });
+                       [&st, &f]() { SliderIntControl("##ui-scale", &st.appearance.uiScale, 75, 200, SliderValueFormat::Percent, f, 25); });
             SettingRow("Code Font Size", "Point size for the script editor and console output.", f,
                        [&st, &f]() { (void)InputTextControl("##font-size", st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), f); });
         }
@@ -272,9 +272,9 @@ namespace Horo::Editor
             SectionTitle("Input", f);
             SettingGroup("NAVIGATION", f, true);
             SettingRow("Orbit Sensitivity", "Mouse drag multiplier for orbiting the viewport camera.", f,
-                       [&st, &f]() { SliderIntControl("##orbit", &st.input.orbitSensitivity, 10, 300, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##orbit", &st.input.orbitSensitivity, 10, 300, SliderValueFormat::Integer, f); });
             SettingRow("Pan Sensitivity", "Mouse drag multiplier for panning the viewport camera.", f,
-                       [&st, &f]() { SliderIntControl("##pan", &st.input.panSensitivity, 10, 300, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##pan", &st.input.panSensitivity, 10, 300, SliderValueFormat::Integer, f); });
             SettingRow("Invert Orbit Y", "Reverse the vertical orbit direction (push up to look down).", f,
                        [&st, &f]() { (void)ToggleControl("invert-y", &st.input.invertOrbitY, f); });
 
@@ -375,7 +375,7 @@ namespace Horo::Editor
             SectionTitle("Audio", f);
             SettingGroup("OUTPUT", f, true);
             SettingRow("Master Volume", "Global audio output level for the editor (0–100).", f,
-                       [&st, &f]() { SliderIntControl("##volume", &st.audio.masterVolume, 0, 100, "%d", f); });
+                       [&st, &f]() { SliderIntControl("##volume", &st.audio.masterVolume, 0, 100, SliderValueFormat::Integer, f); });
             SettingRow("Audio Output Device", "Preferred playback device for editor audio.", f,
                        [&st, &f]() { (void)ComboControl("##audio-device", &st.audio.audioOutputDevice, kDevices.data(), static_cast<int>(kDevices.size()), f); });
             SettingRow("Enable Audio In Editor", "Play in-editor sounds and preview audio assets.", f,
@@ -389,7 +389,7 @@ namespace Horo::Editor
             SettingRow("Max Preview Clients", "Maximum concurrent PIE (Play In Editor) client connections.", f,
                        [&st, &f]() { InputIntControl("##max-clients", &st.network.maxPreviewClients, f); });
             SettingRow("Simulate Latency", "Artificial one-way delay injected on loopback (ms).", f,
-                       [&st, &f]() { SliderIntControl("##latency", &st.network.simulatedLatencyMs, 0, 500, "%d ms", f); });
+                       [&st, &f]() { SliderIntControl("##latency", &st.network.simulatedLatencyMs, 0, 500, SliderValueFormat::Milliseconds, f); });
             SettingRow("Package Download Threads", "Parallel download workers for template and asset packages.", f,
                        [&st, &f]() { InputIntControl("##download-threads", &st.network.packageDownloadThreads, f); });
         }

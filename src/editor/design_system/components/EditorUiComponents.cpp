@@ -481,7 +481,7 @@ namespace Horo::Editor::Ui
                           int *value,
                           const int minValue,
                           const int maxValue,
-                          const char *suffix,
+                          const SliderValueFormat format,
                           const Theme::Fonts &fonts,
                           const int step)
     {
@@ -525,8 +525,21 @@ namespace Horo::Editor::Ui
         ImGui::SameLine(0.0F, 10.0F);
 
         char text[32]{};
-        // cppcheck-suppress wrongPrintfScanfArgNum — suffix is a format string
-        std::snprintf(text, sizeof(text), suffix, *value);
+        switch (format)
+        {
+        case SliderValueFormat::Minutes:
+            std::snprintf(text, sizeof(text), "%d min", *value);
+            break;
+        case SliderValueFormat::Percent:
+            std::snprintf(text, sizeof(text), "%d%%", *value);
+            break;
+        case SliderValueFormat::Milliseconds:
+            std::snprintf(text, sizeof(text), "%d ms", *value);
+            break;
+        case SliderValueFormat::Integer:
+            std::snprintf(text, sizeof(text), "%d", *value);
+            break;
+        }
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
             const ImVec2 textSize = ImGui::CalcTextSize(text);
