@@ -193,6 +193,28 @@ namespace Horo::Editor
                  {"Tech Demo", "~/projects/tech-demo", "3 days ago", "tech-demo"}}};
     }
 
+    static void HandleRecentProjectOpen(const int index,
+                                        WelcomeScreenController &controller,
+                                        const std::vector<RecentProjectEntry> &recentProjects,
+                                        ProjectLoadingScreenGuiState &loadingState,
+                                        std::optional<GuiRoute> &pendingRoute)
+    {
+        const auto action = controller.RequestOpenRecentProject(static_cast<std::size_t>(index));
+        if (!action) return;
+        LOG_INFO("editor.welcome", "Opening recent project at index %d", index);
+        if (!std::holds_alternative<EditorWorkspaceRouteParameters>(action->route.parameters))
+        {
+            pendingRoute = action->route;
+            return;
+        }
+        const auto &workspace = std::get<EditorWorkspaceRouteParameters>(action->route.parameters);
+        loadingState = ProjectLoadingScreenGuiState{};
+        loadingState.projectName = recentProjects[static_cast<std::size_t>(index)].name;
+        loadingState.projectRoot = workspace.projectRoot;
+        pendingRoute = GuiRoute{GuiRouteKind::ProjectLoading,
+                                ProjectLoadingRouteParameters{workspace.projectRoot, loadingState.projectName}};
+    }
+
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
@@ -332,23 +354,8 @@ namespace Horo::Editor
                 }
                 else if (guiResult.command == WelcomeScreenGuiCommand::OpenRecentProject)
                 {
-                    const int idx = guiResult.openRecentIndex;
-                    if (const auto action = ctrl.RequestOpenRecentProject(static_cast<std::size_t>(idx)))
-                    {
-                        LOG_INFO("editor.welcome", "Opening recent project at index %d", idx);
-                        // Convert to Project Loading instead of jumping directly
-                        if (std::holds_alternative<EditorWorkspaceRouteParameters>(action->route.parameters)) {
-                            const auto& wsParams = std::get<EditorWorkspaceRouteParameters>(action->route.parameters);
-                            projectLoadingState = ProjectLoadingScreenGuiState{};
-                            projectLoadingState.projectName = recentProjects[idx].name; // Best effort 
-                            projectLoadingState.projectRoot = wsParams.projectRoot;
-                            pendingRoute = GuiRoute{
-                                GuiRouteKind::ProjectLoading,
-                                ProjectLoadingRouteParameters{wsParams.projectRoot, recentProjects[idx].name}};
-                        } else {
-                            pendingRoute = action->route;
-                        }
-                    }
+                    HandleRecentProjectOpen(guiResult.openRecentIndex, ctrl, recentProjects,
+                                            projectLoadingState, pendingRoute);
                 }
                 else if (guiResult.command == WelcomeScreenGuiCommand::OpenProject)
                 {
