@@ -11,8 +11,19 @@ namespace Horo
 {
     using EventTypeId = std::uint64_t;
 
-    /** @brief Opaque transport view for a typed event payload owned by the bus operation. */
-    struct EventPayload;
+    /** @brief Polymorphic transport base for a typed event payload owned by the bus operation. */
+    struct EventPayload
+    {
+        virtual ~EventPayload() = default;
+    };
+
+    template <typename EventT>
+    struct TypedEventPayload final : EventPayload
+    {
+        explicit TypedEventPayload(const EventT &event) : value(event) {}
+        explicit TypedEventPayload(EventT &&event) : value(std::move(event)) {}
+        EventT value;
+    };
 
     /** @brief Hashes an explicit, stable event name with FNV-1a. */
     constexpr EventTypeId HashEventTypeName(const std::string_view name) noexcept
@@ -73,7 +84,8 @@ namespace Horo
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto typed = [callback = std::forward<Handler>(handler)](const EventPayload *raw) {
-                callback(*reinterpret_cast<const EventT *>(raw));
+                const auto *payload = dynamic_cast<const TypedEventPayload<EventT> *>(raw);
+                if (payload != nullptr) callback(payload->value);
             };
             return SubscribeErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(typed));
         }
@@ -82,21 +94,21 @@ namespace Horo
         void Publish(const EventT &event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto replay = std::make_shared<EventT>(event);
-            const auto *raw = reinterpret_cast<const EventPayload *>(replay.get());
+            auto replay = std::make_shared<TypedEventPayload<EventT>>(event);
+            const auto *raw = replay.get();
             PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
-                          [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(*replay); });
+                          [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(replay->value); });
         }
 
         template <typename EventT>
         void PublishAsync(EventT event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto payload = std::make_shared<EventT>(std::move(event));
-            std::shared_ptr<const EventPayload> opaquePayload(payload, reinterpret_cast<const EventPayload *>(payload.get()));
-            QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(opaquePayload),
+            auto payload = std::make_shared<TypedEventPayload<EventT>>(std::move(event));
+            QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
                         [](EngineDataBus &bus, const EventPayload *raw) {
-                            bus.Publish(*reinterpret_cast<const EventT *>(raw));
+                            const auto *typed = dynamic_cast<const TypedEventPayload<EventT> *>(raw);
+                            if (typed != nullptr) bus.Publish(typed->value);
                         });
         }
 
