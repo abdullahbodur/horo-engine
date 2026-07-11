@@ -2,7 +2,7 @@
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/WelcomeScreen.h"
-
+#include "Horo/Editor/EditorGuiContext.h"
 #include <imgui.h>
 
 namespace Horo::Editor
@@ -47,7 +47,7 @@ struct WelcomeScreenGuiResult
  * @return Result describing the user action that occurred this frame.
  */
 [[nodiscard]] WelcomeScreenGuiResult DrawWelcomeScreenGui(const WelcomeViewModel &viewModel,
-                                                          const Theme::Fonts &fonts,
+                                                          const EditorGuiContext &ctx,
                                                           const WelcomeScreenGuiAssets &assets);
 
 } // namespace Horo::Editor

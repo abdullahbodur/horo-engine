@@ -242,7 +242,9 @@ namespace Horo::Editor::Ui
                                         const char *keysLabel,
                                         bool *listening,
                                         std::string &keysOut,
-                                        const Theme::Fonts &fonts);
+                                        const Theme::Fonts &fonts,
+                                        const char *placeholderText = "Click to record",
+                                        const char *listeningText = "Press keys...");
 
     /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */
     [[nodiscard]] bool ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);

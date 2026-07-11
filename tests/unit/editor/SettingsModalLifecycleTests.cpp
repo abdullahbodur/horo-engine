@@ -1,9 +1,11 @@
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
+#include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Editor/EditorSettingsEvents.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Editor/SettingsModal.h"
 #include "Horo/Foundation/DataBus.h"
 
@@ -30,16 +32,21 @@ using namespace Horo::Editor;
 
 struct SettingsFixture
 {
+    EngineDataBus engineEvents;
     EditorDataBus events;
     ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
-    EditorSettingsService settings{DefaultEditorSettings(), configuration, events};
+    LocalizationService localization{LocaleTag{"en-US"}};
+    EditorSettingsService settings{DefaultEditorSettings(), configuration, events, localization};
     const Theme::Fonts &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
+    ThemeContext theme{fonts};
+    EditorSettingsSnapshot snapshot = settings.Snapshot();
+    EditorGuiContext ctx{engineEvents, events, localization, theme, snapshot};
     EditorModalHost host{events};
 };
 
 SettingsModal *Open(SettingsFixture &fixture)
 {
-    auto modal = std::make_unique<SettingsModal>(fixture.settings, fixture.fonts, 0);
+    auto modal = std::make_unique<SettingsModal>(fixture.ctx, fixture.settings, 0);
     SettingsModal *const result = modal.get();
     assert(fixture.host.OpenRoot(std::move(modal)).HasValue());
     fixture.host.OnUpdate(0.0F);

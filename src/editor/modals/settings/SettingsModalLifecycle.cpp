@@ -3,8 +3,10 @@
 
 namespace Horo::Editor
 {
-    SettingsModal::SettingsModal(EditorSettingsService &settings, const Theme::Fonts &fonts, const std::uintptr_t logo) noexcept
-        : m_settings(settings), m_fonts(fonts), m_logo(logo)
+    SettingsModal::SettingsModal(const EditorGuiContext &context,
+                                 EditorSettingsService &settings,
+                                 const std::uintptr_t logo) noexcept
+        : m_context(context), m_settings(settings), m_logo(logo)
     {
     }
 

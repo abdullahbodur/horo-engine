@@ -15,10 +15,8 @@
 
 namespace Horo::Editor::Ui
 {
-
     namespace
     {
-
         void PushControlStyle()
         {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 5.0F});
@@ -36,12 +34,11 @@ namespace Horo::Editor::Ui
             ImGui::PopStyleColor(5);
             ImGui::PopStyleVar(3);
         }
-
     } // namespace
 
     // ── Button ───────────────────────────────────────────────────────────
 
-    [[nodiscard]] bool Button(const ButtonProps &props)
+    [[nodiscard]] bool Button(const ButtonProps& props)
     {
         using namespace Theme;
 
@@ -81,7 +78,8 @@ namespace Horo::Editor::Ui
 
     // ── ScopedCard ───────────────────────────────────────────────────────
 
-    ScopedCard::ScopedCard(const char *id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg, const bool autoResizeY)
+    ScopedCard::ScopedCard(const char* id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg,
+                           const bool autoResizeY)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{padX, padY});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, bg);
@@ -102,7 +100,7 @@ namespace Horo::Editor::Ui
 
     // ── IconCloseButton ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool IconCloseButton(const char *id, const ImVec2 size)
+    [[nodiscard]] bool IconCloseButton(const char* id, const ImVec2 size)
     {
         using namespace Theme;
 
@@ -111,7 +109,7 @@ namespace Horo::Editor::Ui
         const bool clicked = ImGui::InvisibleButton("##close", size);
         const bool hovered = ImGui::IsItemHovered();
 
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         const float pad = 4.0F;
         const ImVec2 a{pos.x + pad, pos.y + pad};
         const ImVec2 b{pos.x + size.x - pad, pos.y + size.y - pad};
@@ -125,7 +123,7 @@ namespace Horo::Editor::Ui
 
     // ── SectionTitle ─────────────────────────────────────────────────────
 
-    void SectionTitle(const char *upperCaseLabel, const Theme::Fonts &fonts)
+    void SectionTitle(const char* upperCaseLabel, const Theme::Fonts& fonts)
     {
         Theme::ScopedTextStyle ts(fonts.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
@@ -135,7 +133,7 @@ namespace Horo::Editor::Ui
 
     // ── FieldLabel ───────────────────────────────────────────────────────
 
-    void FieldLabel(const char *upperCaseLabel, const Theme::Fonts &fonts)
+    void FieldLabel(const char* upperCaseLabel, const Theme::Fonts& fonts)
     {
         Theme::ScopedTextStyle ts(fonts.monoSemiBold, 12.0F, Theme::FontPx::MonoSemiBold);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
@@ -145,7 +143,7 @@ namespace Horo::Editor::Ui
 
     // ── Hint ─────────────────────────────────────────────────────────────
 
-    void Hint(const char *text, const Theme::Fonts &fonts)
+    void Hint(const char* text, const Theme::Fonts& fonts)
     {
         Theme::ScopedTextStyle ts(fonts.sans, 12.0F, Theme::FontPx::Sans);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
@@ -157,7 +155,7 @@ namespace Horo::Editor::Ui
 
     // ── ErrorText ────────────────────────────────────────────────────────
 
-    void ErrorText(const char *text, const Theme::Fonts &fonts)
+    void ErrorText(const char* text, const Theme::Fonts& fonts)
     {
         Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
@@ -173,7 +171,7 @@ namespace Horo::Editor::Ui
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         float x = p.x;
         while (x < p.x + w)
         {
@@ -186,7 +184,7 @@ namespace Horo::Editor::Ui
 
     // ── SettingGroup ─────────────────────────────────────────────────────
 
-    void SettingGroup(const char *label, const Theme::Fonts &fonts, const bool first)
+    void SettingGroup(const char* label, const Theme::Fonts& fonts, const bool first)
     {
         if (!first)
         {
@@ -206,7 +204,7 @@ namespace Horo::Editor::Ui
 
     // ── ComboControl ─────────────────────────────────────────────────────
 
-    bool DrawComboRow(const int index, int *value, const char *const items[], const Theme::Fonts &fonts)
+    bool DrawComboRow(const int index, int* value, const char* const items[], const Theme::Fonts& fonts)
     {
         ImGui::PushID(index);
         const bool isSelected = (*value == index);
@@ -221,7 +219,7 @@ namespace Horo::Editor::Ui
             *value = index;
             ImGui::CloseCurrentPopup();
         }
-        auto *drawList = ImGui::GetWindowDrawList();
+        auto* drawList = ImGui::GetWindowDrawList();
         if (rowHovered || isSelected)
             drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
         drawList->AddText(fonts.mono ? fonts.mono : ImGui::GetFont(), 14.0F,
@@ -231,7 +229,8 @@ namespace Horo::Editor::Ui
         return clicked;
     }
 
-    bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts, bool error)
+    bool ComboControl(const char* id, int* value, const char* const items[], const int itemCount,
+                      const Theme::Fonts& fonts, bool error)
     {
         bool changed = false;
         ImGui::PushID(id);
@@ -249,17 +248,19 @@ namespace Horo::Editor::Ui
         const std::string popupId = std::string("##popup_") + id;
         const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
 
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
                           Theme::U32(fieldHovered ? Theme::Hover() : Theme::Bg3()), Theme::Layout::Radius);
+        const ImVec4 borderColor = error ? Theme::Err() : Theme::Border();
+        const ImVec4 popupBorderColor = popupOpen ? Theme::Accent() : borderColor;
         dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
-                    Theme::U32(error ? Theme::Err() : (popupOpen ? Theme::Accent() : Theme::Border())),
+                    Theme::U32(popupBorderColor),
                     Theme::Layout::Radius, 0, popupOpen ? 1.5F : 1.0F);
 
         // Selected value label
         {
-            ImFont *font = fonts.mono ? fonts.mono : ImGui::GetFont();
-            const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
+            ImFont* font = fonts.mono ? fonts.mono : ImGui::GetFont();
+            const char* label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
             dl->AddText(font, 15.0F,
                         {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F},
                         Theme::U32(Theme::Text()), label);
@@ -291,7 +292,7 @@ namespace Horo::Editor::Ui
             const ImVec2 pMin = ImGui::GetWindowPos();
             const ImVec2 pMax = {pMin.x + ImGui::GetWindowWidth(), pMin.y + ImGui::GetWindowHeight()};
 
-            auto *bgdl = ImGui::GetBackgroundDrawList();
+            auto* bgdl = ImGui::GetBackgroundDrawList();
             constexpr int shadowLayers = 12;
             for (int i = shadowLayers; i >= 1; --i)
             {
@@ -317,7 +318,7 @@ namespace Horo::Editor::Ui
 
     // ── InputTextControl ─────────────────────────────────────────────────
 
-    bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts, bool error)
+    bool InputTextControl(const char* id, char* buffer, const size_t bufferSize, const Theme::Fonts& fonts, bool error)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
@@ -340,13 +341,15 @@ namespace Horo::Editor::Ui
         {
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(error ? Theme::ErrSoft() : Theme::AccentSoft()), Theme::Layout::Radius + 2.0F, 0, 2.0F);
+            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(error ? Theme::ErrSoft() : Theme::AccentSoft()),
+                                                Theme::Layout::Radius + 2.0F, 0, 2.0F);
         }
         else if (ImGui::IsItemHovered())
         {
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(Theme::BorderStrong()), Theme::Layout::Radius, 0, 1.0F);
+            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(Theme::BorderStrong()), Theme::Layout::Radius, 0,
+                                                1.0F);
         }
 
         ImGui::PopStyleColor(5);
@@ -354,23 +357,26 @@ namespace Horo::Editor::Ui
         return changed;
     }
 
-    bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts, bool error)
+    bool InputTextControl(const char* id, std::string& value, const size_t maxSize, const Theme::Fonts& fonts,
+                          bool error)
     {
         if (maxSize == 0) return false;
         value.resize(std::min(value.size(), maxSize - 1));
         value.resize(maxSize - 1, '\0');
         const bool changed = InputTextControl(id, value.data(), value.size() + 1, fonts, error);
-        value.resize(std::strlen(value.c_str()));
+        const auto nullPos = value.find('\0');
+        value.resize(nullPos == std::string::npos ? value.size() : nullPos);
         return changed;
     }
 
-    bool ColorHexControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts)
+    bool ColorHexControl(const char* id, std::string& value, const size_t maxSize, const Theme::Fonts& fonts)
     {
         if (maxSize == 0) return false;
         value.resize(std::min(value.size(), maxSize - 1));
         value.resize(maxSize - 1, '\0');
         const bool changed = ColorHexControl(id, value.data(), value.size() + 1, fonts);
-        value.resize(std::strlen(value.c_str()));
+        const auto nullPos = value.find('\0');
+        value.resize(nullPos == std::string::npos ? value.size() : nullPos);
         return changed;
     }
 
@@ -384,38 +390,42 @@ namespace Horo::Editor::Ui
         return -1;
     }
 
-    [[nodiscard]] bool ParseHexColor(const char *text, ImVec4 &out)
+    [[nodiscard]] bool ParseHexColor(const char* text, ImVec4& out)
     {
         if (text == nullptr || text[0] != '#' || text[7] != '\0') return false;
-        const std::array<int, 6> digits = {HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
-                                           HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])};
+        const std::array<int, 6> digits = {
+            HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
+            HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])
+        };
         for (const int digit : digits)
             if (digit < 0) return false;
-        out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
-                     static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
-                     static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F};
+        out = ImVec4{
+            static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
+            static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
+            static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F
+        };
         return true;
     }
 
-    void WriteCanonicalColor(char *buffer, const size_t bufferSize, const ImVec4 color)
+    void WriteCanonicalColor(char* buffer, const size_t bufferSize, const ImVec4 color)
     {
         if (buffer == nullptr || bufferSize == 0) return;
-        const int red = static_cast<int>(color.x * 255.0F + 0.5F);
-        const int green = static_cast<int>(color.y * 255.0F + 0.5F);
-        const int blue = static_cast<int>(color.z * 255.0F + 0.5F);
+        const auto red = static_cast<int>(color.x * 255.0F + 0.5F);
+        const auto green = static_cast<int>(color.y * 255.0F + 0.5F);
+        const auto blue = static_cast<int>(color.z * 255.0F + 0.5F);
         const std::string value = std::format("#{:02X}{:02X}{:02X}", red, green, blue);
         const std::size_t count = std::min(bufferSize - 1, value.size());
         std::memcpy(buffer, value.data(), count);
         buffer[count] = '\0';
     }
 
-    bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts)
+    bool ColorHexControl(const char* id, char* buffer, const size_t bufferSize, const Theme::Fonts& fonts)
     {
-        const auto pack = [](const ImVec4 color) -> ImU32 { return ImGui::ColorConvertFloat4ToU32(color); };
-        const auto unpack = [](const ImU32 color) -> ImVec4 { return ImGui::ColorConvertU32ToFloat4(color); };
+        const auto pack = [](const ImVec4 color) { return ImGui::ColorConvertFloat4ToU32(color); };
+        const auto unpack = [](const ImU32 color) { return ImGui::ColorConvertU32ToFloat4(color); };
 
         ImGui::PushID(id);
-        ImGuiStorage *const storage = ImGui::GetStateStorage();
+        ImGuiStorage* const storage = ImGui::GetStateStorage();
         const ImGuiID lastValidKey = ImGui::GetID("last-valid-color");
         ImVec4 current{};
         if (ParseHexColor(buffer, current))
@@ -436,9 +446,10 @@ namespace Horo::Editor::Ui
         constexpr ImVec2 swatchSize{34.0F, 34.0F};
         ImGui::InvisibleButton("swatch", swatchSize);
         const bool openPicker = ImGui::IsItemClicked();
-        ImDrawList *const drawList = ImGui::GetWindowDrawList();
+        ImDrawList* const drawList = ImGui::GetWindowDrawList();
         const ImVec2 swatchEnd{swatchPosition.x + swatchSize.x, swatchPosition.y + swatchSize.y};
-        drawList->AddRectFilled(swatchPosition, swatchEnd, ImGui::ColorConvertFloat4ToU32(current), Theme::Layout::Radius);
+        drawList->AddRectFilled(swatchPosition, swatchEnd, ImGui::ColorConvertFloat4ToU32(current),
+                                Theme::Layout::Radius);
         drawList->AddRect(swatchPosition, swatchEnd, Theme::U32(Theme::Border()), Theme::Layout::Radius);
         if (openPicker) ImGui::OpenPopup("picker");
 
@@ -475,7 +486,7 @@ namespace Horo::Editor::Ui
 
     // ── InputIntControl ──────────────────────────────────────────────────
 
-    void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts)
+    void InputIntControl(const char* id, int* value, const Theme::Fonts& fonts)
     {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
@@ -489,7 +500,7 @@ namespace Horo::Editor::Ui
 
     // ── InputFloatControl ────────────────────────────────────────────────
 
-    void InputFloatControl(const char *id, float *value, const Theme::Fonts &fonts)
+    void InputFloatControl(const char* id, float* value, const Theme::Fonts& fonts)
     {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
@@ -503,12 +514,12 @@ namespace Horo::Editor::Ui
 
     // ── SliderIntControl ─────────────────────────────────────────────────
 
-    void SliderIntControl(const char *id,
-                          int *value,
+    void SliderIntControl(const char* id,
+                          int* value,
                           const int minValue,
                           const int maxValue,
                           const SliderValueFormat format,
-                          const Theme::Fonts &fonts,
+                          const Theme::Fonts& fonts,
                           const int step)
     {
         ImGui::PushID(id);
@@ -527,19 +538,21 @@ namespace Horo::Editor::Ui
             const float mouseT = (ImGui::GetIO().MousePos.x - pos.x) / TrackW;
             const float clampedT = std::clamp(mouseT, 0.0F, 1.0F);
             const float rawValue = static_cast<float>(minValue) +
-                                   clampedT * static_cast<float>(maxValue - minValue);
+                clampedT * static_cast<float>(maxValue - minValue);
             const int snapped = minValue +
-                                static_cast<int>(std::round((rawValue - static_cast<float>(minValue)) /
-                                                            static_cast<float>(step))) *
-                                    step;
+                static_cast<int>(std::round((rawValue - static_cast<float>(minValue)) /
+                    static_cast<float>(step))) *
+                step;
             *value = std::clamp(snapped, minValue, maxValue);
         }
 
-        const float t = maxValue > minValue
-                            ? (static_cast<float>(*value - minValue) / static_cast<float>(maxValue - minValue))
-                            : 0.0F;
+        float t = 0.0F;
+        if (maxValue > minValue)
+        {
+            t = static_cast<float>(*value - minValue) / static_cast<float>(maxValue - minValue);
+        }
         const float trackY = pos.y + (HitH - TrackH) * 0.5F;
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW, trackY + TrackH}, Theme::U32(Theme::BorderStrong()), 2.0F);
         dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW * t, trackY + TrackH}, Theme::U32(Theme::Accent()), 2.0F);
 
@@ -550,15 +563,19 @@ namespace Horo::Editor::Ui
 
         ImGui::SameLine(0.0F, 10.0F);
 
-        std::string text(32, '\0');
+        std::string text;
+        using enum Horo::Editor::Ui::SliderValueFormat;
         switch (format)
         {
-        case SliderValueFormat::Minutes: text = std::format("{} min", *value); break;
-        case SliderValueFormat::Percent: text = std::format("{}%", *value); break;
-        case SliderValueFormat::Milliseconds: text = std::format("{} ms", *value); break;
-        case SliderValueFormat::Integer: text = std::format("{}", *value); break;
+        case Minutes: text = std::format("{} min", *value);
+            break;
+        case Percent: text = std::format("{}%", *value);
+            break;
+        case Milliseconds: text = std::format("{} ms", *value);
+            break;
+        case Integer: text = std::format("{}", *value);
+            break;
         }
-        text.resize(std::strlen(text.c_str()));
         {
             Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
             const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
@@ -572,7 +589,7 @@ namespace Horo::Editor::Ui
 
     // ── ToggleControl ────────────────────────────────────────────────────
 
-    [[nodiscard]] bool ToggleControl(const char *id, bool *value, const Theme::Fonts &fonts, const bool showLabel)
+    [[nodiscard]] bool ToggleControl(const char* id, bool* value, const Theme::Fonts& fonts, const bool showLabel)
     {
         ImGui::PushID(id);
         const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -585,16 +602,18 @@ namespace Horo::Editor::Ui
         }
 
         const bool hovered = ImGui::IsItemHovered();
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         ImVec4 bg = Theme::Bg3();
         if (*value)
             bg = Theme::Accent();
         else if (hovered)
             bg = Theme::Hover();
         dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(bg), 10.0F);
-        dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()), 10.0F);
+        dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()),
+                    10.0F);
         const float knobX = *value ? pos.x + 21.0F : pos.x + 3.0F;
-        dl->AddCircleFilled({knobX + 6.0F, pos.y + 10.0F}, 6.0F, Theme::U32(*value ? ImVec4{1, 1, 1, 1} : Theme::Dim()), 16);
+        dl->AddCircleFilled({knobX + 6.0F, pos.y + 10.0F}, 6.0F, Theme::U32(*value ? ImVec4{1, 1, 1, 1} : Theme::Dim()),
+                            16);
 
         if (showLabel)
         {
@@ -610,7 +629,7 @@ namespace Horo::Editor::Ui
 
     // ── CheckboxControl ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool CheckboxControl(const char *label, bool *value, const Theme::Fonts &fonts)
+    [[nodiscard]] bool CheckboxControl(const char* label, bool* value, const Theme::Fonts& fonts)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{0.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
@@ -636,40 +655,49 @@ namespace Horo::Editor::Ui
 
     // ── PluginRow ────────────────────────────────────────────────────────
 
-    void PluginRow(const char *name,
-                   const char *version,
-                   const char *description,
-                   bool *enabled,
-                   const Theme::Fonts &fonts)
+    void DrawPluginRowContent(const char* version,
+                              const char* description,
+                              bool* enabled,
+                              const Theme::Fonts& fonts)
     {
-        SettingRow(name, nullptr, fonts, [name, version, description, enabled, &fonts]() {
-            const float cursorY = ImGui::GetCursorPosY();
-            ImGui::SetCursorPosY(cursorY + 4.0F);
-            {
-                Theme::ScopedTextStyle ts(fonts.mono, 10.5F, Theme::FontPx::Mono);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                ImGui::TextUnformatted(version);
-                ImGui::PopStyleColor();
-            }
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0F);
-            {
-                Theme::ScopedTextStyle ts(fonts.sans, 12.0F, Theme::FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Theme::Layout::ControlW - 52.0F);
-                ImGui::TextWrapped("%s", description);
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-            }
-            ImGui::SetCursorPos({Theme::Layout::ControlW - 42.0F, cursorY + 6.0F});
-            (void)ToggleControl("plugin-toggle", enabled, fonts, false);
+        const float cursorY = ImGui::GetCursorPosY();
+        ImGui::SetCursorPosY(cursorY + 4.0F);
+        {
+            Theme::ScopedTextStyle ts(fonts.mono, 10.5F, Theme::FontPx::Mono);
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ImGui::TextUnformatted(version);
+            ImGui::PopStyleColor();
+        }
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0F);
+        {
+            Theme::ScopedTextStyle ts(fonts.sans, 12.0F, Theme::FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Theme::Layout::ControlW - 52.0F);
+            ImGui::TextWrapped("%s", description);
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+        }
+        ImGui::SetCursorPos({Theme::Layout::ControlW - 42.0F, cursorY + 6.0F});
+        (void)ToggleControl("plugin-toggle", enabled, fonts, false);
+    }
+
+    void PluginRow(const char* name,
+                   const char* version,
+                   const char* description,
+                   bool* enabled,
+                   const Theme::Fonts& fonts)
+    {
+        SettingRow(name, nullptr, fonts, [version, description, enabled, &fonts]()
+        {
+            DrawPluginRowContent(version, description, enabled, fonts);
         });
     }
 
     // ── ShortcutDisplay ──────────────────────────────────────────────────
 
-    void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::Fonts &fonts)
+    void ShortcutDisplay(const char* a, const char* b, const char* c, const Theme::Fonts& fonts)
     {
-        const std::array<const char *, 3> keys = {a, b, c};
+        const std::array<const char*, 3> keys = {a, b, c};
         for (int i = 0; i < 3; ++i)
         {
             if (keys[i] == nullptr || keys[i][0] == '\0')
@@ -702,7 +730,7 @@ namespace Horo::Editor::Ui
 
     // ── ShortcutRecorder ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO &io, std::string &keysOut)
+    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO& io, std::string& keysOut)
     {
         std::string combo;
         if (io.KeyCtrl || io.KeySuper) combo += "Ctrl+";
@@ -713,62 +741,76 @@ namespace Horo::Editor::Ui
         return true;
     }
 
-    [[nodiscard]] bool PollShortcutInput(bool *listening, std::string &keysOut)
+    [[nodiscard]] bool PollShortcutInput(bool* listening, std::string& keysOut)
     {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
             *listening = false;
             return false;
         }
-        const auto &io = ImGui::GetIO();
+        const auto& io = ImGui::GetIO();
         for (int key = ImGuiKey_A; key <= ImGuiKey_Z; ++key)
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false))
+            {
                 *listening = false;
                 return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
         for (int key = ImGuiKey_F1; key <= ImGuiKey_F12; ++key)
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false))
+            {
                 *listening = false;
                 return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
-        static constexpr ImGuiKey specialKeys[] = {
+        static constexpr std::array<ImGuiKey, 13> specialKeys = {
             ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace, ImGuiKey_Delete,
             ImGuiKey_Enter, ImGuiKey_Home, ImGuiKey_End, ImGuiKey_LeftArrow,
             ImGuiKey_RightArrow, ImGuiKey_UpArrow, ImGuiKey_DownArrow,
-            ImGuiKey_PageUp, ImGuiKey_PageDown};
+            ImGuiKey_PageUp, ImGuiKey_PageDown
+        };
         for (const auto key : specialKeys)
-            if (ImGui::IsKeyPressed(key, false)) {
+            if (ImGui::IsKeyPressed(key, false))
+            {
                 *listening = false;
                 return StoreShortcut(key, io, keysOut);
             }
         return false;
     }
 
-    void DrawShortcutContent(ImDrawList *drawList,
-                             const Theme::Fonts &fonts,
+    struct ShortcutRecorderText
+    {
+        const char* placeholder;
+        const char* listening;
+    };
+
+    void DrawShortcutContent(ImDrawList* drawList,
+                             const Theme::Fonts& fonts,
                              const bool listening,
-                             const char *keysLabel,
+                             const char* keysLabel,
                              const ImVec2 cursor,
-                             const ImVec2 size)
+                             const ImVec2 size,
+                             const ShortcutRecorderText text)
     {
         using namespace Theme;
         if (listening)
         {
-            const char *text = "Press keys...";
-            const ImVec2 textSize = ImGui::CalcTextSize(text);
+            const ImVec2 textSize = ImGui::CalcTextSize(text.listening);
             drawList->AddText(fonts.mono, 11.0F,
-                              {cursor.x + (size.x - textSize.x) * 0.5F,
-                               cursor.y + (size.y - textSize.y) * 0.5F},
-                              U32(Accent()), text);
+                              {
+                                  cursor.x + (size.x - textSize.x) * 0.5F,
+                                  cursor.y + (size.y - textSize.y) * 0.5F
+                              },
+                              U32(Accent()), text.listening);
             return;
         }
         if (keysLabel == nullptr || keysLabel[0] == '\0')
         {
-            const char *placeholder = "Click to record";
-            const ImVec2 textSize = ImGui::CalcTextSize(placeholder);
+            const ImVec2 textSize = ImGui::CalcTextSize(text.placeholder);
             drawList->AddText(fonts.mono, 11.0F,
-                              {cursor.x + (size.x - textSize.x) * 0.5F,
-                               cursor.y + (size.y - textSize.y) * 0.5F},
-                              U32(Dim()), placeholder);
+                              {
+                                  cursor.x + (size.x - textSize.x) * 0.5F,
+                                  cursor.y + (size.y - textSize.y) * 0.5F
+                              },
+                              U32(Dim()), text.placeholder);
             return;
         }
 
@@ -793,7 +835,7 @@ namespace Horo::Editor::Ui
         const float y = cursor.y + (size.y - 14.0F) * 0.5F;
         for (std::size_t index = 0; index < parts.size(); ++index)
         {
-            const auto &part = parts[index];
+            const auto& part = parts[index];
             const ImVec2 textSize = ImGui::CalcTextSize(part.c_str());
             const ImVec2 chipMin{x, y};
             const ImVec2 chipMax{x + textSize.x + 10.0F, y + 18.0F};
@@ -809,11 +851,13 @@ namespace Horo::Editor::Ui
         }
     }
 
-    [[nodiscard]] bool ShortcutRecorder(const char *id,
-                                        const char *keysLabel,
-                                        bool *listening,
-                                        std::string &keysOut,
-                                        const Theme::Fonts &fonts)
+    [[nodiscard]] bool ShortcutRecorder(const char* id,
+                                        const char* keysLabel,
+                                        bool* listening,
+                                        std::string& keysOut,
+                                        const Theme::Fonts& fonts,
+                                        const char* placeholderText,
+                                        const char* listeningText)
     {
         using namespace Theme;
         ImGui::PushID(id);
@@ -829,7 +873,7 @@ namespace Horo::Editor::Ui
         const ImVec2 size = {width, 28.0F};
 
         // Dashed border background
-        auto *dl = ImGui::GetWindowDrawList();
+        auto* dl = ImGui::GetWindowDrawList();
         const ImU32 borderCol = *listening ? U32(Accent()) : U32(BorderStrong());
         const ImU32 bgCol = *listening
                                 ? ImGui::GetColorU32(ImVec4{Accent().x, Accent().y, Accent().z, 0.06F})
@@ -841,7 +885,8 @@ namespace Horo::Editor::Ui
         // Draw dashed border manually (4px dash segments)
         const ImU32 dashCol = borderCol;
         const float r = Layout::Radius;
-        const auto drawDashRect = [dl, dashCol, r](ImVec2 p0, ImVec2 p1) {
+        const auto drawDashRect = [dl, dashCol, r](ImVec2 p0, ImVec2 p1)
+        {
             // Simple solid border for now — dashed is complex in ImDrawList
             dl->AddRect(p0, p1, dashCol, r, 0, 1.0F);
         };
@@ -856,7 +901,8 @@ namespace Horo::Editor::Ui
             *listening = true;
         }
 
-        DrawShortcutContent(dl, fonts, *listening, keysLabel, cursor, size);
+        DrawShortcutContent(dl, fonts, *listening, keysLabel, cursor, size,
+                            ShortcutRecorderText{placeholderText, listeningText});
 
         ImGui::PopID();
         return recorded;
@@ -864,7 +910,7 @@ namespace Horo::Editor::Ui
 
     // ── ThemeChip ────────────────────────────────────────────────────────
 
-    [[nodiscard]] bool ThemeChip(const char *label, const ImVec4 swatch, const bool active, const Theme::Fonts &fonts)
+    [[nodiscard]] bool ThemeChip(const char* label, const ImVec4 swatch, const bool active, const Theme::Fonts& fonts)
     {
         ImGui::PushID(label);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 7.0F});
@@ -890,5 +936,4 @@ namespace Horo::Editor::Ui
         ImGui::PopID();
         return clicked;
     }
-
 } // namespace Horo::Editor::Ui

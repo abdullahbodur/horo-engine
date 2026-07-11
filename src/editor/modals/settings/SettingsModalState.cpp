@@ -17,6 +17,7 @@ namespace Horo::Editor
         out.confirmExitWithUnsavedChanges = st.general.confirmExit;
         out.restoreWorkspaceLayout = st.general.restoreWorkspace;
         out.defaultSceneOnProjectOpen = st.general.defaultScene;
+        out.languageTag = st.general.languageTag;
 
         out.themePreset = static_cast<EditorThemePreset>(st.appearance.themeIndex);
         out.accentColorHex = st.appearance.accentHex;
@@ -65,6 +66,7 @@ namespace Horo::Editor
         st.general.confirmExit = settings.confirmExitWithUnsavedChanges;
         st.general.restoreWorkspace = settings.restoreWorkspaceLayout;
         st.general.defaultScene = settings.defaultSceneOnProjectOpen;
+        st.general.languageTag = settings.languageTag;
 
         st.appearance.themeIndex = static_cast<int>(settings.themePreset);
         st.appearance.uiScale = settings.uiScalePercent;

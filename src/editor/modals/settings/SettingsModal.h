@@ -4,6 +4,7 @@
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/SettingsModalDraft.h"
+#include "Horo/Editor/Localization/LocalizationService.h"
 
 #include <imgui.h>
 
@@ -15,6 +16,7 @@ namespace Horo::Editor
      */
     [[nodiscard]] ModalFrameResult DrawSettingsModalPresentation(SettingsState &state,
                                                                    EditorSettingsService &settings,
+                                                                   LocalizationService &localization,
                                                                    const Theme::Fonts &fonts,
                                                                    ::ImTextureID logo);
 } // namespace Horo::Editor

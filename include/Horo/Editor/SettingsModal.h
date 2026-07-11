@@ -3,13 +3,9 @@
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/SettingsModalDraft.h"
+#include "Horo/Editor/EditorGuiContext.h"
 
 #include <cstdint>
-
-namespace Horo::Editor::Theme
-{
-    struct Fonts;
-}
 
 namespace Horo::Editor
 {
@@ -20,7 +16,9 @@ namespace Horo::Editor
         static constexpr std::uint64_t kModalId = 0x53455454494E4753ULL;
 
         /** @brief Constructs the settings workflow with only its settings authority and presentation assets. */
-        SettingsModal(EditorSettingsService &settings, const Theme::Fonts &fonts, std::uintptr_t logo) noexcept;
+        SettingsModal(const EditorGuiContext &context,
+                      EditorSettingsService &settings,
+                      std::uintptr_t logo) noexcept;
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;
@@ -36,8 +34,8 @@ namespace Horo::Editor
         [[nodiscard]] bool ApplyDraft();
 
     private:
+        const EditorGuiContext &m_context;
         EditorSettingsService &m_settings;
-        const Theme::Fonts &m_fonts;
         std::uintptr_t m_logo = 0;
         EditorDataBus *m_events = nullptr;
         SettingsState m_draft;

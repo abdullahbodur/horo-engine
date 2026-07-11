@@ -1,0 +1,638 @@
+{
+  "schemaVersion": 1,
+  "messageFormat": "plain-text-1",
+  "locale": "en-US",
+  "namespace": "editor",
+  "messages": {
+    "editor_workspace.action.return_to_welcome": {
+      "text": "← Return to Welcome"
+    },
+    "editor_workspace.title": {
+      "text": "Editor Workspace"
+    },
+    "project_creation.back": {
+      "text": "← Back"
+    },
+    "project_creation.create": {
+      "text": "Create Project"
+    },
+    "project_creation.identity.directory": {
+      "text": "PROJECT DIRECTORY"
+    },
+    "project_creation.identity.location": {
+      "text": "PROJECT LOCATION"
+    },
+    "project_creation.identity.location.hint": {
+      "text": "Choose an empty folder or a missing location with a writable parent."
+    },
+    "project_creation.identity.location.select": {
+      "text": "Select Project Location"
+    },
+    "project_creation.identity.name": {
+      "text": "PROJECT NAME"
+    },
+    "project_creation.identity.name.hint": {
+      "text": "Stored as project.json name; projectId is generated once."
+    },
+    "project_creation.identity.scene": {
+      "text": "DEFAULT SCENE"
+    },
+    "project_creation.identity.version": {
+      "text": "PROJECT VERSION"
+    },
+    "project_creation.identity.version.hint": {
+      "text": "Game/product version. Does not select project-format migrations."
+    },
+    "project_creation.next": {
+      "text": "Next →"
+    },
+    "project_creation.review.settings": {
+      "text": "PROJECT SETTINGS"
+    },
+    "project_creation.review.what_will_be_created": {
+      "text": "WHAT WILL BE CREATED"
+    },
+    "project_creation.settings.custom": {
+      "text": "CUSTOM SUBSYSTEM SELECTION"
+    },
+    "project_creation.settings.first_person": {
+      "text": "FIRST PERSON CONTROLLER SETTINGS"
+    },
+    "project_creation.settings.optional": {
+      "text": "OPTIONAL"
+    },
+    "project_creation.settings.package": {
+      "text": "PACKAGE SOURCE CONFIGURATION"
+    },
+    "project_creation.settings.runtime": {
+      "text": "RUNTIME DEFAULTS"
+    },
+    "project_creation.settings.tech_demo": {
+      "text": "TECH DEMO CONFIGURATION"
+    },
+    "project_creation.settings.toolchain": {
+      "text": "REQUIRED TOOLCHAIN"
+    },
+    "project_creation.step.identity.desc": {
+      "text": "Name & location"
+    },
+    "project_creation.step.identity.title": {
+      "text": "Identity"
+    },
+    "project_creation.step.review.desc": {
+      "text": "Validate & create"
+    },
+    "project_creation.step.review.title": {
+      "text": "Review"
+    },
+    "project_creation.step.settings.desc": {
+      "text": "Runtime defaults"
+    },
+    "project_creation.step.settings.title": {
+      "text": "Settings"
+    },
+    "project_creation.step.template.choose": {
+      "text": "CHOOSE A TEMPLATE"
+    },
+    "project_creation.step.template.desc": {
+      "text": "Choose starter"
+    },
+    "project_creation.step.template.title": {
+      "text": "Template"
+    },
+    "project_creation.subtitle": {
+      "text": "Create portable .horo metadata and starter content"
+    },
+    "project_creation.template.3d_starter": {
+      "text": "3D Starter"
+    },
+    "project_creation.template.3d_starter.desc": {
+      "text": "Scene, camera, directional light, floor, material defaults."
+    },
+    "project_creation.template.custom": {
+      "text": "Custom"
+    },
+    "project_creation.template.custom.desc": {
+      "text": "Pick systems manually before project generation."
+    },
+    "project_creation.template.empty": {
+      "text": "Empty"
+    },
+    "project_creation.template.empty.desc": {
+      "text": "No starter scene. Minimal asset tree and project.json."
+    },
+    "project_creation.template.first_person": {
+      "text": "First Person"
+    },
+    "project_creation.template.first_person.desc": {
+      "text": "Character controller, input map, capsule, and test level."
+    },
+    "project_creation.template.package_based": {
+      "text": "Package Based"
+    },
+    "project_creation.template.package_based.desc": {
+      "text": "Create from a verified template package and lockfile."
+    },
+    "project_creation.template.tech_demo": {
+      "text": "Tech Demo"
+    },
+    "project_creation.template.tech_demo.desc": {
+      "text": "Rendering samples, observability overlays, benchmark scene."
+    },
+    "project_creation.title": {
+      "text": "NEW PROJECT"
+    },
+    "project_loading.action.cancel": {
+      "text": "Cancel"
+    },
+    "project_loading.status.cancelling": {
+      "text": "Cancelling..."
+    },
+    "project_loading.status.finalizing": {
+      "text": "Finalizing workspace..."
+    },
+    "project_loading.status.init_db": {
+      "text": "Initializing asset database..."
+    },
+    "project_loading.status.loading_scene": {
+      "text": "Loading default scene..."
+    },
+    "project_loading.status.parsing": {
+      "text": "Parsing project manifests..."
+    },
+    "project_loading.title.opening": {
+      "text": "Opening"
+    },
+    "settings.appearance.accent_color": {
+      "text": "Accent Color"
+    },
+    "settings.appearance.accent_color.description": {
+      "text": "Used for focus rings, active states, and primary actions."
+    },
+    "settings.appearance.code_font_size": {
+      "text": "Code Font Size"
+    },
+    "settings.appearance.code_font_size.description": {
+      "text": "Point size for the script editor and console output."
+    },
+    "settings.appearance.color_theme": {
+      "text": "Color Theme"
+    },
+    "settings.appearance.color_theme.description": {
+      "text": "Built-in themes or custom JSON theme file."
+    },
+    "settings.appearance.custom_theme": {
+      "text": "Custom Theme"
+    },
+    "settings.appearance.custom_theme.description": {
+      "text": "Path to a JSON theme file. Leave empty to use built-in."
+    },
+    "settings.appearance.theme_group": {
+      "text": "THEME"
+    },
+    "settings.appearance.typography_group": {
+      "text": "TYPOGRAPHY & SCALE"
+    },
+    "settings.appearance.ui_scale": {
+      "text": "UI Scale"
+    },
+    "settings.appearance.ui_scale.description": {
+      "text": "Scales all editor chrome uniformly."
+    },
+    "settings.apply": {
+      "text": "Apply"
+    },
+    "settings.audio.enable_in_editor": {
+      "text": "Enable Audio In Editor"
+    },
+    "settings.audio.enable_in_editor.description": {
+      "text": "Play in-editor sounds and preview audio assets."
+    },
+    "settings.audio.headphones": {
+      "text": "Headphones"
+    },
+    "settings.audio.master_volume": {
+      "text": "Master Volume"
+    },
+    "settings.audio.master_volume.description": {
+      "text": "Global audio output level for the editor (0–100)."
+    },
+    "settings.audio.output_device": {
+      "text": "Audio Output Device"
+    },
+    "settings.audio.output_device.description": {
+      "text": "Preferred playback device for editor audio."
+    },
+    "settings.audio.output_group": {
+      "text": "OUTPUT"
+    },
+    "settings.audio.speakers": {
+      "text": "Speakers"
+    },
+    "settings.audio.system_default": {
+      "text": "System Default"
+    },
+    "settings.cancel": {
+      "text": "Cancel"
+    },
+    "settings.diagnostics.auto_capture": {
+      "text": "Auto-capture On Stutter"
+    },
+    "settings.diagnostics.auto_capture.description": {
+      "text": "Automatically start a profiler capture when a frame spike is detected."
+    },
+    "settings.diagnostics.debug": {
+      "text": "Debug"
+    },
+    "settings.diagnostics.error": {
+      "text": "Error"
+    },
+    "settings.diagnostics.info": {
+      "text": "Info"
+    },
+    "settings.diagnostics.log_level": {
+      "text": "Console Log Level"
+    },
+    "settings.diagnostics.log_level.description": {
+      "text": "Minimum severity shown in the editor console output."
+    },
+    "settings.diagnostics.logging_group": {
+      "text": "LOGGING"
+    },
+    "settings.diagnostics.profiler_group": {
+      "text": "PROFILER"
+    },
+    "settings.diagnostics.stutter_threshold": {
+      "text": "Stutter Threshold (ms)"
+    },
+    "settings.diagnostics.stutter_threshold.description": {
+      "text": "Frame time above this value triggers an auto-capture."
+    },
+    "settings.diagnostics.warning": {
+      "text": "Warning"
+    },
+    "settings.diagnostics.write_log": {
+      "text": "Write Log To File"
+    },
+    "settings.diagnostics.write_log.description": {
+      "text": "Persist the console log to a timestamped file on disk."
+    },
+    "settings.general.autosave_interval": {
+      "text": "Auto-save Interval"
+    },
+    "settings.general.autosave_interval.description": {
+      "text": "Minutes between automatic scene saves. Zero disables auto-save."
+    },
+    "settings.general.confirm_exit": {
+      "text": "Confirm Exit With Unsaved Changes"
+    },
+    "settings.general.confirm_exit.description": {
+      "text": "Prompt before closing when unsaved changes exist."
+    },
+    "settings.general.default_scene": {
+      "text": "Default Scene On Project Open"
+    },
+    "settings.general.default_scene.description": {
+      "text": "Scene file loaded automatically when opening a project."
+    },
+    "settings.general.restore_workspace": {
+      "text": "Restore Workspace Layout"
+    },
+    "settings.general.restore_workspace.description": {
+      "text": "Reopen tabs and panel layout from last session."
+    },
+    "settings.general.session_group": {
+      "text": "EDITOR SESSION"
+    },
+    "settings.general.startup_behavior": {
+      "text": "Startup Behavior"
+    },
+    "settings.general.startup_behavior.description": {
+      "text": "What to show when the editor launches."
+    },
+    "settings.general.startup_browser": {
+      "text": "Project browser"
+    },
+    "settings.general.startup_group": {
+      "text": "STARTUP & PROJECT"
+    },
+    "settings.general.startup_last": {
+      "text": "Last project"
+    },
+    "settings.general.startup_welcome": {
+      "text": "Welcome screen"
+    },
+    "settings.input.action": {
+      "text": "Action"
+    },
+    "settings.input.invert_orbit_y": {
+      "text": "Invert Orbit Y"
+    },
+    "settings.input.invert_orbit_y.description": {
+      "text": "Reverse the vertical orbit direction (push up to look down)."
+    },
+    "settings.input.navigation_group": {
+      "text": "NAVIGATION"
+    },
+    "settings.input.orbit_sensitivity": {
+      "text": "Orbit Sensitivity"
+    },
+    "settings.input.orbit_sensitivity.description": {
+      "text": "Mouse drag multiplier for orbiting the viewport camera."
+    },
+    "settings.input.pan_sensitivity": {
+      "text": "Pan Sensitivity"
+    },
+    "settings.input.pan_sensitivity.description": {
+      "text": "Mouse drag multiplier for panning the viewport camera."
+    },
+    "settings.input.shortcut": {
+      "text": "Shortcut"
+    },
+    "settings.input.shortcut.build": {
+      "text": "Build & Release"
+    },
+    "settings.input.shortcut.delete": {
+      "text": "Delete"
+    },
+    "settings.input.shortcut.duplicate": {
+      "text": "Duplicate"
+    },
+    "settings.input.shortcut.find": {
+      "text": "Find"
+    },
+    "settings.input.shortcut.replace": {
+      "text": "Replace"
+    },
+    "settings.input.shortcut.save_scene": {
+      "text": "Save Scene"
+    },
+    "settings.input.shortcut.select_all": {
+      "text": "Select All"
+    },
+    "settings.input.shortcut.undo": {
+      "text": "Undo"
+    },
+    "settings.input.shortcut_conflict": {
+      "text": "⚠ Conflicts with another shortcut"
+    },
+    "settings.input.shortcuts_group": {
+      "text": "SHORTCUTS"
+    },
+    "settings.language": {
+      "text": "Language"
+    },
+    "settings.language.description": {
+      "text": "Language used by the editor interface."
+    },
+    "settings.language.english": {
+      "text": "English"
+    },
+    "settings.language.turkish": {
+      "text": "Turkish"
+    },
+    "settings.nav.appearance": {
+      "text": "Appearance"
+    },
+    "settings.nav.audio": {
+      "text": "Audio"
+    },
+    "settings.nav.diagnostics": {
+      "text": "Diagnostics"
+    },
+    "settings.nav.editor": {
+      "text": "Editor"
+    },
+    "settings.nav.engine": {
+      "text": "Engine"
+    },
+    "settings.nav.general": {
+      "text": "General"
+    },
+    "settings.nav.input": {
+      "text": "Input"
+    },
+    "settings.nav.network": {
+      "text": "Network"
+    },
+    "settings.nav.plugins": {
+      "text": "Plugins"
+    },
+    "settings.nav.rendering": {
+      "text": "Rendering"
+    },
+    "settings.nav.tools": {
+      "text": "Tools"
+    },
+    "settings.network.download_threads": {
+      "text": "Package Download Threads"
+    },
+    "settings.network.download_threads.description": {
+      "text": "Parallel download workers for template and asset packages."
+    },
+    "settings.network.max_preview_clients": {
+      "text": "Max Preview Clients"
+    },
+    "settings.network.max_preview_clients.description": {
+      "text": "Maximum concurrent PIE (Play In Editor) client connections."
+    },
+    "settings.network.multiplayer_group": {
+      "text": "MULTIPLAYER PREVIEW"
+    },
+    "settings.network.simulate_latency": {
+      "text": "Simulate Latency"
+    },
+    "settings.network.simulate_latency.description": {
+      "text": "Artificial one-way delay injected on loopback (ms)."
+    },
+    "settings.plugins.action.disable": {
+      "text": "Disable"
+    },
+    "settings.plugins.action.enable": {
+      "text": "Enable"
+    },
+    "settings.plugins.action.install": {
+      "text": "Install..."
+    },
+    "settings.plugins.action.open_docs": {
+      "text": "Open Docs"
+    },
+    "settings.plugins.action.open_logs": {
+      "text": "Open Logs"
+    },
+    "settings.plugins.action.reload": {
+      "text": "Reload"
+    },
+    "settings.plugins.action.validate": {
+      "text": "Validate"
+    },
+    "settings.plugins.category.audio": {
+      "text": "Audio"
+    },
+    "settings.plugins.category.editor": {
+      "text": "Editor Tool"
+    },
+    "settings.plugins.category.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.description": {
+      "text": "Installed plugins expose settings, permissions, diagnostics, and manifest metadata. Project plugins override editor plugins only when trusted."
+    },
+    "settings.plugins.feedback.install_not_implemented": {
+      "text": "Plugin installation dialog not yet implemented."
+    },
+    "settings.plugins.feedback.reloaded": {
+      "text": "Plugins reloaded successfully."
+    },
+    "settings.plugins.fmod.desc": {
+      "text": "FMOD Studio authoring, live update, bank import, and runtime binding."
+    },
+    "settings.plugins.fmod.detail_desc": {
+      "text": "Connects Horo audio assets with FMOD Studio banks, event references, live update, and build validation."
+    },
+    "settings.plugins.installed": {
+      "text": "Installed"
+    },
+    "settings.plugins.mcp.desc": {
+      "text": "Local automation bridge for scene, asset, and editor operations."
+    },
+    "settings.plugins.mcp.detail_desc": {
+      "text": "Exposes a local MCP endpoint so external tools can inspect project state, create assets, run editor commands, and query diagnostics."
+    },
+    "settings.plugins.restart.needs_sdk": {
+      "text": "Needs SDK path"
+    },
+    "settings.plugins.restart.not_required": {
+      "text": "Restart not required"
+    },
+    "settings.plugins.restart.on_enable": {
+      "text": "Restart on enable"
+    },
+    "settings.plugins.runtime": {
+      "text": "Runtime & Discovery"
+    },
+    "settings.plugins.scope.editor": {
+      "text": "Editor-wide"
+    },
+    "settings.plugins.scope.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.scope.project": {
+      "text": "Project-scoped"
+    },
+    "settings.plugins.signed.disabled": {
+      "text": "Disabled"
+    },
+    "settings.plugins.signed.signed": {
+      "text": "Signed"
+    },
+    "settings.plugins.signed.vendor": {
+      "text": "Verified Vendor"
+    },
+    "settings.plugins.status.disabled": {
+      "text": "Disabled"
+    },
+    "settings.plugins.status.enabled": {
+      "text": "Enabled"
+    },
+    "settings.plugins.status.trusted": {
+      "text": "Trusted"
+    },
+    "settings.plugins.status.vendor": {
+      "text": "Verified Vendor"
+    },
+    "settings.plugins.steam.desc": {
+      "text": "Steam achievements, overlay, networking sockets, and build metadata."
+    },
+    "settings.plugins.steam.detail_desc": {
+      "text": "Adds Steam platform services such as overlay, achievements, networking sockets, and App ID metadata."
+    },
+    "settings.rendering.dx11": {
+      "text": "DX11"
+    },
+    "settings.rendering.dx12_vulkan": {
+      "text": "DX12 / Vulkan"
+    },
+    "settings.rendering.es3": {
+      "text": "ES3"
+    },
+    "settings.rendering.grid_overlay": {
+      "text": "Grid Overlay"
+    },
+    "settings.rendering.grid_overlay.description": {
+      "text": "Show the reference grid in the editor viewport."
+    },
+    "settings.rendering.high_end": {
+      "text": "High End"
+    },
+    "settings.rendering.lit": {
+      "text": "Lit"
+    },
+    "settings.rendering.quality_group": {
+      "text": "QUALITY"
+    },
+    "settings.rendering.shaded": {
+      "text": "Shaded"
+    },
+    "settings.rendering.texture_budget": {
+      "text": "Texture Streaming Budget"
+    },
+    "settings.rendering.texture_budget.description": {
+      "text": "Maximum texture memory pool used by the streaming system."
+    },
+    "settings.rendering.tier": {
+      "text": "Editor Rendering Tier"
+    },
+    "settings.rendering.tier.description": {
+      "text": "Maximum feature tier used in the editor viewport."
+    },
+    "settings.rendering.unlit": {
+      "text": "Unlit"
+    },
+    "settings.rendering.viewport_group": {
+      "text": "VIEWPORT"
+    },
+    "settings.rendering.viewport_mode": {
+      "text": "Default Viewport Mode"
+    },
+    "settings.rendering.viewport_mode.description": {
+      "text": "Shading mode used for new viewport panels."
+    },
+    "settings.rendering.wireframe": {
+      "text": "Wireframe"
+    },
+    "settings.restore_defaults": {
+      "text": "Restore Defaults"
+    },
+    "settings.title": {
+      "text": "Editor Settings"
+    },
+    "welcome.browse_all": {
+      "text": "BROWSE ALL"
+    },
+    "welcome.new_project": {
+      "text": "+  New Project"
+    },
+    "welcome.open_project": {
+      "text": "   Open Project"
+    },
+    "welcome.open_settings": {
+      "text": "   Open Settings"
+    },
+    "welcome.recent_projects": {
+      "text": "RECENT PROJECTS"
+    },
+    "welcome.subtitle": {
+      "text": "Game Engine"
+    },
+    "welcome.whats_new": {
+      "text": "WHAT'S NEW"
+    }
+  },
+  "settings.input.shortcut.click_to_record": {
+    "value": "Click to record"
+  },
+  "settings.input.shortcut.press_keys": {
+    "value": "Press keys..."
+  }
+}

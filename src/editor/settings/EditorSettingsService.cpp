@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsEvents.h"
+#include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Foundation/Configuration.h"
 
 #include <string>
@@ -12,16 +13,21 @@ namespace Horo::Editor
 {
     namespace
     {
-        [[nodiscard]] Error SettingsError(const char *code, std::string message)
+        [[nodiscard]] Error SettingsError(const char* code, std::string message)
         {
-            return Error{ErrorCode{code}, ErrorDomainId{"horo.editor.settings"}, ErrorSeverity::Error, std::move(message)};
+            return Error{
+                ErrorCode{code}, ErrorDomainId{"horo.editor.settings"}, ErrorSeverity::Error, std::move(message)
+            };
         }
     } // namespace
 
     /** @copydoc EditorSettingsService::EditorSettingsService */
-    EditorSettingsService::EditorSettingsService(EditorSettings initialSettings, ConfigurationService &configuration,
-                                                 EditorDataBus &events)
-        : m_committed(std::move(initialSettings)), m_configuration(configuration), m_events(events)
+    EditorSettingsService::EditorSettingsService(EditorSettings initialSettings,
+                                                 ConfigurationService& configuration,
+                                                 EditorDataBus& events,
+                                                 LocalizationService& localization)
+        : m_committed(std::move(initialSettings)), m_configuration(configuration), m_events(events),
+          m_localization(localization)
     {
         (void)ValidateEditorSettings(m_committed, nullptr);
     }
@@ -33,7 +39,7 @@ namespace Horo::Editor
     }
 
     /** @copydoc EditorSettingsService::Commit */
-    Result<EditorSettingsSnapshot> EditorSettingsService::Commit(const EditorSettingsDraft &draft)
+    Result<EditorSettingsSnapshot> EditorSettingsService::Commit(const EditorSettingsDraft& draft)
     {
         if (draft.baseRevision != m_revision)
         {
@@ -42,11 +48,22 @@ namespace Horo::Editor
         }
 
         EditorSettings candidate = draft.settings;
-        std::string validationError;
-        if (!ValidateEditorSettings(candidate, &validationError))
+        if (std::string validationError; !ValidateEditorSettings(candidate, &validationError))
         {
             return Result<EditorSettingsSnapshot>::Failure(
                 SettingsError("editor.settings.validation_failed", std::move(validationError)));
+        }
+
+        const bool languageChanged = candidate.languageTag != m_committed.languageTag;
+        if (languageChanged)
+        {
+            const auto locale = LocaleTag::Parse(candidate.languageTag);
+            LocalizationError localizationError;
+            if (!locale.has_value() || !m_localization.Prepare(*locale, &localizationError))
+            {
+                return Result<EditorSettingsSnapshot>::Failure(
+                    SettingsError(localizationError.code.c_str(), std::move(localizationError.message)));
+            }
         }
 
         const ConfigurationSnapshot configurationSnapshot = m_configuration.Snapshot();
@@ -58,11 +75,20 @@ namespace Horo::Editor
         }
 
         EditorSettingsDocument document{.settings = candidate};
-        std::string persistenceError;
-        if (!SaveEditorSettingsDocument(&document, &persistenceError))
+        if (std::string persistenceError; !SaveEditorSettingsDocument(&document, &persistenceError))
         {
             return Result<EditorSettingsSnapshot>::Failure(
                 SettingsError("editor.settings.persistence_failed", std::move(persistenceError)));
+        }
+
+        if (languageChanged)
+        {
+            LocalizationError localizationError;
+            if (!m_localization.ActivatePrepared(&localizationError))
+            {
+                return Result<EditorSettingsSnapshot>::Failure(
+                    SettingsError(localizationError.code.c_str(), std::move(localizationError.message)));
+            }
         }
 
         if (const Result<void> result = m_configuration.Commit(appearanceDraft); result.HasError())

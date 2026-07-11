@@ -11,6 +11,7 @@ namespace Horo::Editor
     {
         None = 0,
         Appearance = 1u << 0u,
+        Localization = 1u << 1u,
         All = 0xffffffffu,
     };
 

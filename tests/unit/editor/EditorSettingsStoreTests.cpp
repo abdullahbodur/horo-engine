@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorSettingsEvents.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Foundation/DataBus.h"
 
 #include <algorithm>
@@ -160,7 +161,8 @@ void FailedOrStaleAuthorityCommitRetainsCommittedSnapshotAndDoesNotPublish()
     const EditorSettings initial = DefaultEditorSettings();
     ConfigurationService configuration = CreateEditorConfigurationService(initial);
     EditorDataBus events;
-    EditorSettingsService settings{initial, configuration, events};
+    LocalizationService localization{LocaleTag{"en-US"}};
+    EditorSettingsService settings{initial, configuration, events, localization};
     int committedEventCount = 0;
     const Subscription subscription = events.Subscribe<EditorSettingsChangedEvent>([&committedEventCount](const EditorSettingsChangedEvent &event) {
         if (event.phase == SettingsChangePhase::Committed)
@@ -204,7 +206,8 @@ void SuccessfulAuthorityCommitPersistsActivatesAndPublishesOneCommittedEvent()
     const EditorSettings initial = DefaultEditorSettings();
     ConfigurationService configuration = CreateEditorConfigurationService(initial);
     EditorDataBus events;
-    EditorSettingsService settings{initial, configuration, events};
+    LocalizationService localization{LocaleTag{"en-US"}};
+    EditorSettingsService settings{initial, configuration, events, localization};
     int eventCount = 0;
     EditorSettingsChangedEvent observed{};
     const Subscription subscription = events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {

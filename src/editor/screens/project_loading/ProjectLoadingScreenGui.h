@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Horo/Editor/EditorTheme.h"
-
+#include "Horo/Editor/EditorGuiContext.h"
 #include <imgui.h>
 #include <string>
 
@@ -34,6 +34,6 @@ namespace Horo::Editor
      */
     [[nodiscard]] ProjectLoadingScreenGuiCommand DrawProjectLoadingScreenGui(
         ProjectLoadingScreenGuiState &state,
-        const Theme::Fonts &fonts);
+        const EditorGuiContext &ctx);
 
 } // namespace Horo::Editor

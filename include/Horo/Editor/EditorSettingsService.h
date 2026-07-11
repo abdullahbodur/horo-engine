@@ -13,6 +13,7 @@ namespace Horo
 namespace Horo::Editor
 {
     class EditorDataBus;
+    class LocalizationService;
 
     /** @brief Immutable value snapshot returned by the editor settings authority. */
     struct EditorSettingsSnapshot
@@ -47,7 +48,10 @@ namespace Horo::Editor
          * @param configuration Borrowed Foundation configuration appearance adapter.
          * @param events Borrowed editor-session event bus.
          */
-        EditorSettingsService(EditorSettings initialSettings, ConfigurationService &configuration, EditorDataBus &events);
+        EditorSettingsService(EditorSettings initialSettings,
+                               ConfigurationService &configuration,
+                               EditorDataBus &events,
+                               LocalizationService &localization);
 
         /** @brief Returns a stable value copy of the currently committed editor settings. */
         [[nodiscard]] EditorSettingsSnapshot Snapshot() const noexcept;
@@ -65,5 +69,6 @@ namespace Horo::Editor
         std::uint64_t m_revision = 0;
         ConfigurationService &m_configuration;
         EditorDataBus &m_events;
+        LocalizationService &m_localization;
     };
 } // namespace Horo::Editor

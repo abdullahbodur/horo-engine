@@ -5,11 +5,13 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <format>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -31,10 +33,9 @@
 
 namespace Horo::Log
 {
-
     namespace
     {
-        std::mutex &LoggerMutex()
+        std::mutex& LoggerMutex()
         {
             static std::mutex mutex;
             return mutex;
@@ -83,7 +84,7 @@ namespace Horo::Log
             std::string resolved{dir};
             if (!resolved.empty() && resolved[0] == '~')
             {
-                const char *home = std::getenv("HOME");
+                const char* home = std::getenv("HOME");
                 if (home == nullptr)
                     home = std::getenv("USERPROFILE");
                 if (home != nullptr)
@@ -92,7 +93,7 @@ namespace Horo::Log
             const std::filesystem::path path{resolved};
             if (path.empty() || path.is_relative())
                 return {};
-            for (const auto &component : path)
+            for (const auto& component : path)
             {
                 if (component == "..")
                     return {};
@@ -108,8 +109,8 @@ namespace Horo::Log
             const auto now = std::chrono::system_clock::now();
             const auto timeT = std::chrono::system_clock::to_time_t(now);
             const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                now.time_since_epoch()) %
-                            1000;
+                    now.time_since_epoch()) %
+                1000;
 
             std::tm tm{};
 #if defined(_WIN32)
@@ -118,13 +119,10 @@ namespace Horo::Log
             gmtime_r(&timeT, &tm);
 #endif
 
-            std::string buf(64, '\0');
-            std::snprintf(buf.data(), buf.size(), "%04d-%02d-%02dT%02d:%02d:%02d.%03lldZ",
-                          tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                          tm.tm_hour, tm.tm_min, tm.tm_sec,
-                          static_cast<long long>(ms.count()));
-            buf.resize(std::strlen(buf.c_str()));
-            return buf;
+            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z",
+                               tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                               tm.tm_hour, tm.tm_min, tm.tm_sec,
+                               static_cast<long long>(ms.count()));
         }
 
         /** @brief JSON-escapes a string value, including control characters outside \\n \\r \\t. */
@@ -138,21 +136,29 @@ namespace Horo::Log
             {
                 switch (c)
                 {
-                case '"':  out += "\\\""; break;
-                case '\\': out += "\\\\"; break;
-                case '\n': out += "\\n"; break;
-                case '\r': out += "\\r"; break;
-                case '\t': out += "\\t"; break;
-                case '\b': out += "\\b"; break;
-                case '\f': out += "\\f"; break;
+                case '"': out += R"(\")";
+                    break;
+                case '\\': out += R"(\\)";
+                    break;
+                case '\n': out += "\\n";
+                    break;
+                case '\r': out += "\\r";
+                    break;
+                case '\t': out += "\\t";
+                    break;
+                case '\b': out += "\\b";
+                    break;
+                case '\f': out += "\\f";
+                    break;
                 default:
                     if (c < 0x20)
                     {
                         // Any other control character: emit \u00XX so the
                         // record stays valid JSON.
                         out += "\\u00";
-                        out += kHex[(c >> 4) & 0xF];
-                        out += kHex[c & 0xF];
+                        const auto byte = static_cast<std::byte>(c);
+                        out += kHex[std::to_integer<unsigned>(byte >> 4) & 0xFU];
+                        out += kHex[std::to_integer<unsigned>(byte) & 0xFU];
                     }
                     else
                     {
@@ -163,10 +169,9 @@ namespace Horo::Log
             }
             return out;
         }
-
     } // namespace
 
-    Logger &Logger::Instance()
+    Logger& Logger::Instance()
     {
         static Logger logger;
         return logger;
@@ -174,7 +179,7 @@ namespace Horo::Log
 
     void Logger::Init(std::string_view logDir, std::string_view baseName)
     {
-        auto &self = Instance();
+        auto& self = Instance();
         std::lock_guard lock(LoggerMutex());
 
         if (self.m_file != nullptr)
@@ -198,16 +203,17 @@ namespace Horo::Log
         }
 
         // Respect HORO_LOG_LEVEL env var
-        if (const char *env = std::getenv("HORO_LOG_LEVEL"))
+        if (const char* env = std::getenv("HORO_LOG_LEVEL"))
         {
+            using enum Level;
             const std::string_view sv{env};
-            if (sv == "trace") self.m_level = Level::Trace;
-            else if (sv == "debug") self.m_level = Level::Debug;
-            else if (sv == "info") self.m_level = Level::Info;
-            else if (sv == "warn") self.m_level = Level::Warn;
-            else if (sv == "error") self.m_level = Level::Error;
-            else if (sv == "critical") self.m_level = Level::Critical;
-            else if (sv == "off") self.m_level = Level::Off;
+            if (sv == "trace") self.m_level = Trace;
+            else if (sv == "debug") self.m_level = Debug;
+            else if (sv == "info") self.m_level = Info;
+            else if (sv == "warn") self.m_level = Warn;
+            else if (sv == "error") self.m_level = Error;
+            else if (sv == "critical") self.m_level = Critical;
+            else if (sv == "off") self.m_level = Off;
         }
 
         // Bootstrap log — goes to stderr if file not yet open
@@ -223,14 +229,14 @@ namespace Horo::Log
 
     void Logger::Shutdown()
     {
-        auto &self = Instance();
+        auto& self = Instance();
         std::lock_guard lock(LoggerMutex());
 
         if (self.m_file != nullptr)
         {
             const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::steady_clock::now() - self.m_startTime)
-                                     .count();
+                    std::chrono::steady_clock::now() - self.m_startTime)
+                .count();
 
             std::fprintf(self.m_file,
                          R"({"schemaVersion":1,"level":"info","category":"observability.shutdown","message":"Logger shut down cleanly","elapsedMs":%lld,"sequence":%llu})"
@@ -293,13 +299,13 @@ namespace Horo::Log
             mdcPrefix += ']';
         }
 
-        auto &self = Instance();
+        auto& self = Instance();
         std::lock_guard lock(LoggerMutex());
 
         const auto seq = ++self.m_sequence;
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::steady_clock::now() - self.m_startTime)
-                                 .count();
+                std::chrono::steady_clock::now() - self.m_startTime)
+            .count();
 
         const auto pid =
 #if defined(_WIN32)
@@ -356,10 +362,10 @@ namespace Horo::Log
         // Compiler
 #if defined(__clang__)
         LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d",
-                      __clang_major__, __clang_minor__, __clang_patchlevel__);
+                 __clang_major__, __clang_minor__, __clang_patchlevel__);
 #elif defined(__GNUC__)
         LOG_INFO("observability.startup", "Compiler: GCC %d.%d",
-                      __GNUC__, __GNUC_MINOR__);
+                 __GNUC__, __GNUC_MINOR__);
 #elif defined(_MSC_VER)
         LOG_INFO("observability.startup", "Compiler: MSVC %d", _MSC_VER);
 #endif
@@ -374,5 +380,4 @@ namespace Horo::Log
         // Log level
         LOG_INFO("observability.startup", "Log level: %s", ToString(Logger::GetLevel()));
     }
-
 } // namespace Horo::Log

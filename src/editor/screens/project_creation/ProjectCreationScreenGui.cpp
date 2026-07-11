@@ -1,3 +1,4 @@
+#include <Horo/Editor/Localization/ILocalizationService.h>
 #include "editor/screens/project_creation/ProjectCreationScreenGui.h"
 
 #include "Horo/Editor/EditorTheme.h"
@@ -25,10 +26,21 @@ namespace Horo::Editor
         using Theme::ScopedTextStyle;
         using Ui::ScopedCard;
 
-        constexpr std::array<const char *, 6> kTemplateNames = {
-            "Empty", "3D Starter", "First Person", "Package Based", "Tech Demo", "Custom"
-        };
-        constexpr std::array<const char *, 6> kTemplateIds = {
+        [[nodiscard]] std::string GetTemplateName(const int index, const EditorGuiContext& ctx)
+        {
+            switch (index)
+            {
+            case 0: return ctx.localization.Get("editor", "project_creation.template.empty");
+            case 1: return ctx.localization.Get("editor", "project_creation.template.3d_starter");
+            case 2: return ctx.localization.Get("editor", "project_creation.template.first_person");
+            case 3: return ctx.localization.Get("editor", "project_creation.template.package_based");
+            case 4: return ctx.localization.Get("editor", "project_creation.template.tech_demo");
+            case 5: return ctx.localization.Get("editor", "project_creation.template.custom");
+            default: return "Unknown";
+            }
+        }
+
+        constexpr std::array<const char*, 6> kTemplateIds = {
             "empty", "3d-starter", "first-person", "package-based", "tech-demo", "custom"
         };
 
@@ -59,8 +71,6 @@ namespace Horo::Editor
             constexpr float TemplateDescPx = 14.0F;
 
             constexpr float GridGap = 16.0F;
-            constexpr float FieldLabelGap = 5.0F;
-            constexpr float HintGap = 3.0F;
             constexpr float CardPad = 18.0F;
             constexpr float CardGap = 18.0F;
             constexpr float CheckGap = 12.0F;
@@ -71,15 +81,9 @@ namespace Horo::Editor
         } // namespace WizardLayout
 
 
+        // CopyDraftText was removed — callers now write into std::string directly.
 
-        void CopyDraftText(char *destination, const std::size_t capacity, const std::string &source)
-        {
-            const std::size_t count = std::min(capacity - 1, source.size());
-            std::memcpy(destination, source.data(), count);
-            destination[count] = '\0';
-        }
-
-        [[nodiscard]] int FindTemplateIndex(const std::string &templateId)
+        [[nodiscard]] int FindTemplateIndex(std::string_view templateId)
         {
             for (std::size_t i = 0; i < kTemplateIds.size(); ++i)
             {
@@ -91,13 +95,13 @@ namespace Horo::Editor
             return 1; // Default to 3D Starter
         }
 
-        void SynchronizePresentation(ProjectCreationController &controller, ProjectCreationScreenGuiState &state)
+        void SynchronizePresentation(const ProjectCreationController& controller, ProjectCreationScreenGuiState& state)
         {
             if (state.initialized)
             {
                 return;
             }
-            const ProjectCreationDraft &draft = controller.Draft();
+            const ProjectCreationDraft& draft = controller.Draft();
             state.projectName = draft.projectName;
             state.projectPath = draft.projectPath;
             state.projectVersion = draft.projectVersion;
@@ -158,9 +162,9 @@ namespace Horo::Editor
             state.initialized = true;
         }
 
-        [[nodiscard]] bool DrawFolderIconButton(const char *id,
+        [[nodiscard]] bool DrawFolderIconButton(const char* id,
                                                 const float width,
-                                                const Fonts &f,
+                                                const EditorGuiContext& /*ctx*/,
                                                 const bool error = false)
         {
             ImGui::PushID(id);
@@ -174,13 +178,19 @@ namespace Horo::Editor
             const bool hovered = ImGui::IsItemHovered();
             const bool active = ImGui::IsItemActive();
 
-            auto *dl = ImGui::GetWindowDrawList();
-            const ImU32 bgCol = Theme::U32(active ? Theme::AccentSoft() : (hovered ? Theme::Hover() : Theme::Bg3()));
-            const ImU32 borderCol = Theme::U32(error ? Theme::Err() : (active || hovered ? Theme::Accent() : Theme::Border()));
+            auto* dl = ImGui::GetWindowDrawList();
+            const ImVec4 bgColor = active ? Theme::AccentSoft() : Theme::Bg3();
+            const ImVec4 hoverBgColor = hovered ? Theme::Hover() : bgColor;
+            const ImU32 bgCol = Theme::U32(hoverBgColor);
+            const bool hasInteraction = active || hovered;
+            const ImVec4 borderColor = error ? Theme::Err() : Theme::Border();
+            const ImVec4 interactionBorderColor = hasInteraction ? Theme::Accent() : borderColor;
+            const ImU32 borderCol = Theme::U32(interactionBorderColor);
             const float rounding = WizardLayout::Radius;
 
             dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, bgCol, rounding);
-            dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, borderCol, rounding, 0, (active || hovered) ? 1.5F : 1.0F);
+            dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, borderCol, rounding, 0,
+                        (active || hovered) ? 1.5F : 1.0F);
 
             const float iconW = 18.0F;
             const float iconH = 14.0F;
@@ -197,7 +207,7 @@ namespace Horo::Editor
             return clicked;
         }
 
-        [[nodiscard]] std::optional<std::filesystem::path> OpenFolderSelectionDialog(const char *prompt)
+        [[nodiscard]] std::optional<std::filesystem::path> OpenFolderSelectionDialog(const char* prompt)
         {
 #if defined(__APPLE__)
             std::string cmd = "osascript -e 'POSIX path of (choose folder with prompt \"";
@@ -208,7 +218,7 @@ namespace Horo::Editor
                 cmd += c;
             }
             cmd += "\")' 2>/dev/null";
-            FILE *pipe = popen(cmd.c_str(), "r");
+            FILE* pipe = popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
             std::string buffer(1024, '\0');
@@ -217,8 +227,7 @@ namespace Horo::Editor
             {
                 result += buffer.c_str();
             }
-            int status = pclose(pipe);
-            if (status != 0 || result.empty())
+            if (const int status = pclose(pipe); status != 0 || result.empty())
                 return std::nullopt;
             while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
             {
@@ -236,7 +245,7 @@ namespace Horo::Editor
                 cmd += c;
             }
             cmd += "\" 2>/dev/null";
-            FILE *pipe = popen(cmd.c_str(), "r");
+            FILE* pipe = popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
             std::string buffer(1024, '\0');
@@ -245,8 +254,7 @@ namespace Horo::Editor
             {
                 result += buffer.c_str();
             }
-            int status = pclose(pipe);
-            if (status != 0 || result.empty())
+            if (const int status = pclose(pipe); status != 0 || result.empty())
                 return std::nullopt;
             while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
             {
@@ -256,7 +264,8 @@ namespace Horo::Editor
                 return std::nullopt;
             return std::filesystem::path(result);
 #elif defined(_WIN32)
-            std::string cmd = "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '";
+            std::string cmd =
+                "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '";
             for (char c : std::string_view(prompt ? prompt : "Select Folder"))
             {
                 if (c == '\'' || c == '"')
@@ -264,7 +273,7 @@ namespace Horo::Editor
                 cmd += c;
             }
             cmd += "'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }\" 2>nul";
-            FILE *pipe = _popen(cmd.c_str(), "r");
+            FILE* pipe = _popen(cmd.c_str(), "r");
             if (!pipe)
                 return std::nullopt;
             std::string buffer(1024, '\0');
@@ -273,8 +282,7 @@ namespace Horo::Editor
             {
                 result += buffer.c_str();
             }
-            int status = _pclose(pipe);
-            if (status != 0 || result.empty())
+            if (const int status = _pclose(pipe); status != 0 || result.empty())
                 return std::nullopt;
             while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
             {
@@ -289,94 +297,67 @@ namespace Horo::Editor
 #endif
         }
 
-        bool DrawInputField(const char *label,
-                            char *buffer,
-                            const size_t bufferSize,
-                            const float width,
-                            const Fonts &f,
-                            const char *hint = nullptr,
-                            const bool error = false,
-                            const char *errorText = nullptr)
-        {
-            ImGui::PushID(label);
-            ImGui::BeginGroup();
-            Ui::FieldLabel(label, f);
-            if (width != 0.0F)
-            {
-                ImGui::PushItemWidth(width);
-            }
-            bool changed = Ui::InputTextControl("##value", buffer, bufferSize, f, error);
-            if (width != 0.0F)
-            {
-                ImGui::PopItemWidth();
-            }
-            if (error && errorText)
-            {
-                Ui::ErrorText(errorText, f);
-            }
-            else if (hint)
-            {
-                Ui::Hint(hint, f);
-            }
-            ImGui::EndGroup();
-            ImGui::PopID();
-            return changed;
-        }
+        // DrawInputField (char* overload) was removed — unused.
 
-        bool DrawInputField(const char *label,
-                            std::string &value,
+        struct DrawInputFieldOptions
+        {
+            const char* hint = nullptr;
+            bool error = false;
+            const char* errorText = nullptr;
+        };
+
+        bool DrawInputField(const char* label,
+                            std::string& value,
                             const size_t maxSize,
                             const float width,
-                            const Fonts &f,
-                            const char *hint = nullptr,
-                            const bool error = false,
-                            const char *errorText = nullptr)
+                            const EditorGuiContext& ctx,
+                            const DrawInputFieldOptions& opts = {})
         {
             ImGui::PushID(label);
             ImGui::BeginGroup();
-            Ui::FieldLabel(label, f);
+            Ui::FieldLabel(label, ctx.theme.fonts);
             if (width != 0.0F) ImGui::PushItemWidth(width);
-            const bool changed = Ui::InputTextControl("##value", value, maxSize, f, error);
+            const bool changed = Ui::InputTextControl("##value", value, maxSize, ctx.theme.fonts, opts.error);
             if (width != 0.0F) ImGui::PopItemWidth();
-            if (error && errorText)
-                Ui::ErrorText(errorText, f);
-            else if (hint)
-                Ui::Hint(hint, f);
+            if (opts.error && opts.errorText)
+                Ui::ErrorText(opts.errorText, ctx.theme.fonts);
+            else if (opts.hint)
+                Ui::Hint(opts.hint, ctx.theme.fonts);
             ImGui::EndGroup();
             ImGui::PopID();
             return changed;
         }
 
-        bool DrawComboField(const char *label,
-                            int *value,
-                            const char *const items[],
+        bool DrawComboField(const char* label,
+                            int* value,
+                            const char* const items[],
                             const int itemCount,
                             const float width,
-                            const Fonts &f,
-                            const char *hint = nullptr)
+                            const EditorGuiContext& ctx,
+                            const char* hint = nullptr)
         {
             ImGui::PushID(label);
             ImGui::BeginGroup();
-            Ui::FieldLabel(label, f);
+            Ui::FieldLabel(label, ctx.theme.fonts);
             if (width != 0.0F)
             {
                 ImGui::PushItemWidth(width);
             }
-            bool changed = Ui::ComboControl("##value", value, items, itemCount, f);
+            bool changed = Ui::ComboControl("##value", value, items, itemCount, ctx.theme.fonts);
             if (width != 0.0F)
             {
                 ImGui::PopItemWidth();
             }
             if (hint)
             {
-                Ui::Hint(hint, f);
+                Ui::Hint(hint, ctx.theme.fonts);
             }
             ImGui::EndGroup();
             ImGui::PopID();
             return changed;
         }
 
-        void CheckboxCss(const char *label, bool *value, const Fonts &f)
+        void CheckboxCss(const char* label, bool* value, const EditorGuiContext& ctx)
         {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{0.0F, 0.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
@@ -389,16 +370,16 @@ namespace Horo::Editor
             ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             {
-                ScopedTextStyle ts(f.sans, 13.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, 13.0F, Theme::FontPx::Sans);
                 ImGui::Checkbox(label, value);
             }
             ImGui::PopStyleColor(6);
             ImGui::PopStyleVar(4);
         }
 
-        void DrawNewProjectBackdrop(const ImGuiViewport *vp, const ImVec2 modalPos, const ImVec2 modalSize)
+        void DrawNewProjectBackdrop(const ImGuiViewport* vp, const ImVec2 modalPos, const ImVec2 modalSize)
         {
-            auto *dl = ImGui::GetBackgroundDrawList();
+            auto* dl = ImGui::GetBackgroundDrawList();
 
             dl->AddRectFilled(vp->WorkPos,
                               {vp->WorkPos.x + vp->WorkSize.x, vp->WorkPos.y + vp->WorkSize.y},
@@ -418,11 +399,11 @@ namespace Horo::Editor
             }
         }
 
-        void DrawWizardHeader(ProjectCreationController &controller,
-                              ProjectCreationScreenGuiState &st,
-                              const Fonts &f,
+        void DrawWizardHeader(const ProjectCreationController& controller,
+                              ProjectCreationScreenGuiState& st,
+                              const EditorGuiContext& ctx,
                               const ImTextureID logo,
-                              ProjectCreationScreenGuiCommand &outCommand)
+                              ProjectCreationScreenGuiCommand& outCommand)
         {
             using namespace Theme;
             using namespace WizardLayout;
@@ -441,17 +422,19 @@ namespace Horo::Editor
                 ImGui::SameLine(0.0F, 9.0F);
             }
             {
-                ScopedTextStyle ts(f.monoSemiBold, 14.0F, FontPx::MonoSemiBold);
+                ScopedTextStyle ts(ctx.theme.fonts.monoSemiBold, 14.0F, FontPx::MonoSemiBold);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                ImGui::TextUnformatted("NEW PROJECT");
+                const std::string title = ctx.localization.Get("editor", "project_creation.title");
+                ImGui::TextUnformatted(title.c_str());
                 ImGui::PopStyleColor();
             }
 
             ImGui::SetCursorPos({HeaderPadX, 36.0F});
             {
-                ScopedTextStyle ts(f.mono, 12.0F, FontPx::Mono);
+                ScopedTextStyle ts(ctx.theme.fonts.mono, 12.0F, FontPx::Mono);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-                ImGui::TextUnformatted("Create portable .horo metadata and starter content");
+                const std::string subtitle = ctx.localization.Get("editor", "project_creation.subtitle");
+                ImGui::TextUnformatted(subtitle.c_str());
                 ImGui::PopStyleColor();
             }
 
@@ -469,7 +452,7 @@ namespace Horo::Editor
                 }
             }
 
-            auto *dl = ImGui::GetWindowDrawList();
+            auto* dl = ImGui::GetWindowDrawList();
             dl->AddLine({headerPos.x, headerPos.y + HeaderH - 1.0F},
                         {headerPos.x + headerW, headerPos.y + HeaderH - 1.0F},
                         Theme::U32(Theme::Border()),
@@ -479,7 +462,7 @@ namespace Horo::Editor
             ImGui::PopStyleColor();
         }
 
-        void DrawWizardSidebar(ProjectCreationScreenGuiState &st, const Fonts &f, const float sideH)
+        void DrawWizardSidebar(ProjectCreationScreenGuiState& st, const EditorGuiContext& ctx, const float sideH)
         {
             using namespace Theme;
             using namespace WizardLayout;
@@ -489,11 +472,26 @@ namespace Horo::Editor
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
             const ImVec2 sidePos = ImGui::GetWindowPos();
-            auto *dl = ImGui::GetWindowDrawList();
+            auto* dl = ImGui::GetWindowDrawList();
 
-            static constexpr std::array<const char *, 4> kStepLabels = {"Template", "Identity", "Settings", "Review"};
-            static constexpr std::array<const char *, 4> kStepDescs = {
-                "Choose starter", "Name & location", "Runtime defaults", "Validate & create"
+            const std::array<std::string, 4> stepLabelsStr = {
+                ctx.localization.Get("editor", "project_creation.step.template.title"),
+                ctx.localization.Get("editor", "project_creation.step.identity.title"),
+                ctx.localization.Get("editor", "project_creation.step.settings.title"),
+                ctx.localization.Get("editor", "project_creation.step.review.title")
+            };
+            const std::array<const char*, 4> kStepLabels = {
+                stepLabelsStr[0].c_str(), stepLabelsStr[1].c_str(), stepLabelsStr[2].c_str(), stepLabelsStr[3].c_str()
+            };
+
+            const std::array<std::string, 4> stepDescsStr = {
+                ctx.localization.Get("editor", "project_creation.step.template.desc"),
+                ctx.localization.Get("editor", "project_creation.step.identity.desc"),
+                ctx.localization.Get("editor", "project_creation.step.settings.desc"),
+                ctx.localization.Get("editor", "project_creation.step.review.desc")
+            };
+            const std::array<const char*, 4> kStepDescs = {
+                stepDescsStr[0].c_str(), stepDescsStr[1].c_str(), stepDescsStr[2].c_str(), stepDescsStr[3].c_str()
             };
 
             ImGui::SetCursorPos({SidebarPadX, SidebarPadY});
@@ -523,9 +521,9 @@ namespace Horo::Editor
                 dl->AddCircleFilled(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Bg3()), 24);
                 dl->AddCircle(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Border()), 24, 1.0F);
 
-                static constexpr std::array<const char *, 5> kStepNumbers = {"", "1", "2", "3", "4"};
-                const char *number = kStepNumbers[s];
-                ImFont *numberFont = f.mono ? f.mono : ImGui::GetFont();
+                static constexpr std::array<const char*, 5> kStepNumbers = {"", "1", "2", "3", "4"};
+                const char* number = kStepNumbers[s];
+                ImFont* numberFont = ctx.theme.fonts.mono ? ctx.theme.fonts.mono : ImGui::GetFont();
                 const float numberFontSize = 13.0F;
                 const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, number);
                 dl->AddText(numberFont,
@@ -536,7 +534,7 @@ namespace Horo::Editor
 
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
                 {
-                    ScopedTextStyle ts(f.sans, 17.0F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, 17.0F, FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
                     ImGui::TextUnformatted(kStepLabels[s - 1]);
                     ImGui::PopStyleColor();
@@ -544,7 +542,7 @@ namespace Horo::Editor
 
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
                 {
-                    ScopedTextStyle ts(f.mono, 14.0F, FontPx::Mono);
+                    ScopedTextStyle ts(ctx.theme.fonts.mono, 14.0F, FontPx::Mono);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                     ImGui::TextUnformatted(kStepDescs[s - 1]);
                     ImGui::PopStyleColor();
@@ -563,7 +561,7 @@ namespace Horo::Editor
             ImGui::PopStyleColor();
         }
 
-        void DrawTemplateIcon(ImDrawList *drawList, const int index, const ImVec2 iconPos, const ImU32 iconColor)
+        void DrawTemplateIcon(ImDrawList* drawList, const int index, const ImVec2 iconPos, const ImU32 iconColor)
         {
             if (index == 0)
             {
@@ -577,7 +575,8 @@ namespace Horo::Editor
             {
                 const float centerX = iconPos.x + 12.0F;
                 const float centerY = iconPos.y + 12.0F;
-                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
+                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F},
+                                  iconColor, 2.0F, 0, 1.5F);
                 drawList->AddLine({centerX, iconPos.y + 6.0F}, {centerX, iconPos.y + 18.0F}, iconColor, 1.5F);
                 drawList->AddLine({iconPos.x + 4.0F, centerY}, {iconPos.x + 20.0F, centerY}, iconColor, 1.5F);
                 return;
@@ -586,46 +585,155 @@ namespace Horo::Editor
             {
                 const float centerX = iconPos.x + 12.0F;
                 drawList->AddCircle({centerX, iconPos.y + 6.0F}, 3.5F, iconColor, 12, 1.5F);
-                drawList->AddRect({centerX - 7.0F, iconPos.y + 12.0F}, {centerX + 7.0F, iconPos.y + 20.0F}, iconColor, 4.0F, 0, 1.5F);
+                drawList->AddRect({centerX - 7.0F, iconPos.y + 12.0F}, {centerX + 7.0F, iconPos.y + 20.0F}, iconColor,
+                                  4.0F, 0, 1.5F);
                 return;
             }
             if (index == 3)
             {
-                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F}, iconColor, 2.0F, 0, 1.5F);
-                drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 10.0F}, {iconPos.x + 20.0F, iconPos.y + 10.0F}, iconColor, 1.5F);
-                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 10.0F}, {iconPos.x + 12.0F, iconPos.y + 18.0F}, iconColor, 1.5F);
+                drawList->AddRect({iconPos.x + 4.0F, iconPos.y + 6.0F}, {iconPos.x + 20.0F, iconPos.y + 18.0F},
+                                  iconColor, 2.0F, 0, 1.5F);
+                drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 10.0F}, {iconPos.x + 20.0F, iconPos.y + 10.0F},
+                                  iconColor, 1.5F);
+                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 10.0F}, {iconPos.x + 12.0F, iconPos.y + 18.0F},
+                                  iconColor, 1.5F);
                 return;
             }
             if (index == 4)
             {
-                drawList->AddRect({iconPos.x + 3.0F, iconPos.y + 5.0F}, {iconPos.x + 21.0F, iconPos.y + 17.0F}, iconColor, 2.0F, 0, 1.5F);
-                drawList->AddLine({iconPos.x + 8.0F, iconPos.y + 20.0F}, {iconPos.x + 16.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
-                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 17.0F}, {iconPos.x + 12.0F, iconPos.y + 20.0F}, iconColor, 1.5F);
+                drawList->AddRect({iconPos.x + 3.0F, iconPos.y + 5.0F}, {iconPos.x + 21.0F, iconPos.y + 17.0F},
+                                  iconColor, 2.0F, 0, 1.5F);
+                drawList->AddLine({iconPos.x + 8.0F, iconPos.y + 20.0F}, {iconPos.x + 16.0F, iconPos.y + 20.0F},
+                                  iconColor, 1.5F);
+                drawList->AddLine({iconPos.x + 12.0F, iconPos.y + 17.0F}, {iconPos.x + 12.0F, iconPos.y + 20.0F},
+                                  iconColor, 1.5F);
                 return;
             }
-            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 7.0F}, {iconPos.x + 20.0F, iconPos.y + 7.0F}, iconColor, 1.5F);
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 7.0F}, {iconPos.x + 20.0F, iconPos.y + 7.0F}, iconColor,
+                              1.5F);
             drawList->AddCircleFilled({iconPos.x + 9.0F, iconPos.y + 7.0F}, 2.0F, iconColor);
-            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 12.0F}, {iconPos.x + 20.0F, iconPos.y + 12.0F}, iconColor, 1.5F);
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 12.0F}, {iconPos.x + 20.0F, iconPos.y + 12.0F}, iconColor,
+                              1.5F);
             drawList->AddCircleFilled({iconPos.x + 15.0F, iconPos.y + 12.0F}, 2.0F, iconColor);
-            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 17.0F}, {iconPos.x + 20.0F, iconPos.y + 17.0F}, iconColor, 1.5F);
+            drawList->AddLine({iconPos.x + 4.0F, iconPos.y + 17.0F}, {iconPos.x + 20.0F, iconPos.y + 17.0F}, iconColor,
+                              1.5F);
             drawList->AddCircleFilled({iconPos.x + 11.0F, iconPos.y + 17.0F}, 2.0F, iconColor);
         }
 
-        void DrawStepTemplate(ProjectCreationController &controller, ProjectCreationScreenGuiState &st, const Fonts &f)
+        void DrawTemplateCardContent(const EditorGuiContext& ctx,
+                                     const int index,
+                                     const bool selected,
+                                     const float cardW,
+                                     const char* desc)
         {
             using namespace Theme;
             using namespace WizardLayout;
 
-            static constexpr std::array<const char *, 6> kDescs = {
-                "No starter scene. Minimal asset tree and project.json.",
-                "Scene, camera, directional light, floor, material defaults.",
-                "Character controller, input map, capsule, and test level.",
-                "Create from a verified template package and lockfile.",
-                "Rendering samples, observability overlays, benchmark scene.",
-                "Pick systems manually before project generation."
+            const ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            auto* drawList = ImGui::GetWindowDrawList();
+            const ImU32 iconColor = Theme::U32(selected ? Theme::Accent() : Theme::Text());
+
+            DrawTemplateIcon(drawList, index, iconPos, iconColor);
+
+            ImGui::Dummy({TemplateIconPx, TemplateIconPx});
+            ImGui::Dummy({0.0F, 8.0F});
+
+            {
+                ImFont* nameFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
+                const ImVec2 namePos = ImGui::GetCursorScreenPos();
+                const std::string templateName = GetTemplateName(index, ctx);
+                const char* name = templateName.c_str();
+                ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, Theme::U32(Theme::Text()), name);
+                const ImVec2 nameSize = nameFont->CalcTextSizeA(TemplateNamePx, FLT_MAX, 0.0F, name);
+                ImGui::Dummy({nameSize.x, nameSize.y});
+            }
+
+            ImGui::Dummy({0.0F, 4.0F});
+
+            {
+                ImFont* descFont = ctx.theme.fonts.mono ? ctx.theme.fonts.mono : ImGui::GetFont();
+                const ImVec2 descPos = ImGui::GetCursorScreenPos();
+                const float wrapW = cardW - TemplatePad * 2.0F;
+                ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, Theme::U32(Theme::Muted()), desc,
+                                                    nullptr, wrapW);
+                const ImVec2 descSize = descFont->CalcTextSizeA(TemplateDescPx, FLT_MAX, wrapW, desc);
+                ImGui::Dummy({wrapW, descSize.y});
+            }
+        }
+
+        void DrawTemplateCardBorder(const bool selected, const bool hovered)
+        {
+            using namespace WizardLayout;
+
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRect(
+                {min.x - (selected ? 1.0F : 0.0F), min.y - (selected ? 1.0F : 0.0F)},
+                {max.x + (selected ? 1.0F : 0.0F), max.y + (selected ? 1.0F : 0.0F)},
+                Theme::U32(hovered && !selected ? Theme::BorderStrong() : Theme::Accent()),
+                TemplateRadius,
+                0,
+                selected ? 1.5F : 1.0F);
+        }
+
+        void DrawTemplateCard(ProjectCreationController& controller,
+                              const EditorGuiContext& ctx,
+                              const int index,
+                              const int currentTemplateIndex,
+                              const float cardW,
+                              const char* desc)
+        {
+            using namespace WizardLayout;
+
+            ImGui::PushID(index);
+            const bool selected = (currentTemplateIndex == index);
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, TemplateRadius);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{TemplatePad, TemplatePad});
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0F);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, selected ? Theme::AccentSoft() : Theme::Bg2());
+            ImGui::PushStyleColor(ImGuiCol_Border, selected ? Theme::Accent() : Theme::Border());
+
+            ImGui::BeginChild("TemplateCard",
+                              {cardW, TemplateH},
+                              true,
+                              ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse |
+                              ImGuiWindowFlags_AlwaysUseWindowPadding);
+            DrawTemplateCardContent(ctx, index, selected, cardW, desc);
+            ImGui::EndChild();
+
+            if (const bool hovered = ImGui::IsItemHovered(); hovered || selected)
+                DrawTemplateCardBorder(selected, hovered);
+
+            if (ImGui::IsItemClicked())
+                controller.SetTemplateId(kTemplateIds[index]);
+
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(3);
+            ImGui::PopID();
+        }
+
+        void DrawStepTemplate(ProjectCreationController& controller, [[maybe_unused]] ProjectCreationScreenGuiState& st,
+                              const EditorGuiContext& ctx)
+        {
+            using namespace WizardLayout;
+
+            const std::array<std::string, 6> descsStr = {
+                ctx.localization.Get("editor", "project_creation.template.empty.desc"),
+                ctx.localization.Get("editor", "project_creation.template.3d_starter.desc"),
+                ctx.localization.Get("editor", "project_creation.template.first_person.desc"),
+                ctx.localization.Get("editor", "project_creation.template.package_based.desc"),
+                ctx.localization.Get("editor", "project_creation.template.tech_demo.desc"),
+                ctx.localization.Get("editor", "project_creation.template.custom.desc")
+            };
+            const std::array<const char*, 6> kDescs = {
+                descsStr[0].c_str(), descsStr[1].c_str(), descsStr[2].c_str(), descsStr[3].c_str(), descsStr[4].c_str(),
+                descsStr[5].c_str()
             };
 
-            Ui::SectionTitle("CHOOSE A TEMPLATE", f);
+            const std::string chooseTitle = ctx.localization.Get("editor", "project_creation.step.template.choose");
+            Ui::SectionTitle(chooseTitle.c_str(), ctx.theme.fonts);
             ImGui::Dummy({0.0F, 14.0F});
 
             const float cardW = (ImGui::GetContentRegionAvail().x - TemplateGap * 2.0F) / 3.0F;
@@ -642,85 +750,14 @@ namespace Horo::Editor
                     ImGui::SameLine(0.0F, TemplateGap);
                 }
 
-                ImGui::PushID(i);
-                const bool selected = (currentTemplateIndex == i);
-
-                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, TemplateRadius);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{TemplatePad, TemplatePad});
-                ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0F);
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, selected ? Theme::AccentSoft() : Theme::Bg2());
-                ImGui::PushStyleColor(ImGuiCol_Border, selected ? Theme::Accent() : Theme::Border());
-
-                ImGui::BeginChild("TemplateCard",
-                                  {cardW, TemplateH},
-                                  true,
-                                  ImGuiWindowFlags_NoScrollbar |
-                                      ImGuiWindowFlags_NoScrollWithMouse |
-                                      ImGuiWindowFlags_AlwaysUseWindowPadding);
-
-                const ImVec2 iconPos = ImGui::GetCursorScreenPos();
-                auto *dl = ImGui::GetWindowDrawList();
-                const ImU32 iconColor = Theme::U32(selected ? Theme::Accent() : Theme::Text());
-
-                DrawTemplateIcon(dl, i, iconPos, iconColor);
-
-                ImGui::Dummy({TemplateIconPx, TemplateIconPx});
-                ImGui::Dummy({0.0F, 8.0F});
-
-                {
-                    ImFont *nameFont = f.sans ? f.sans : ImGui::GetFont();
-                    const ImVec2 namePos = ImGui::GetCursorScreenPos();
-                    const char *name = kTemplateNames[i];
-                    ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, Theme::U32(Theme::Text()), name);
-                    const ImVec2 nameSize = nameFont->CalcTextSizeA(TemplateNamePx, FLT_MAX, 0.0F, name);
-                    ImGui::Dummy({nameSize.x, nameSize.y});
-                }
-
-                ImGui::Dummy({0.0F, 4.0F});
-
-                {
-                    ImFont *descFont = f.mono ? f.mono : ImGui::GetFont();
-                    const ImVec2 descPos = ImGui::GetCursorScreenPos();
-                    const float wrapW = cardW - TemplatePad * 2.0F;
-                    const char *desc = kDescs[i];
-                    ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, Theme::U32(Theme::Muted()), desc, nullptr, wrapW);
-                    const ImVec2 descSize = descFont->CalcTextSizeA(TemplateDescPx, FLT_MAX, wrapW, desc);
-                    ImGui::Dummy({wrapW, descSize.y});
-                }
-
-                ImGui::EndChild();
-
-                const bool hovered = ImGui::IsItemHovered();
-                if (hovered || selected)
-                {
-                    {
-                        const ImVec2 min = ImGui::GetItemRectMin();
-                        const ImVec2 max = ImGui::GetItemRectMax();
-                        ImGui::GetWindowDrawList()->AddRect(
-                            {min.x - (selected ? 1.0F : 0.0F), min.y - (selected ? 1.0F : 0.0F)},
-                            {max.x + (selected ? 1.0F : 0.0F), max.y + (selected ? 1.0F : 0.0F)},
-                            Theme::U32(hovered && !selected ? Theme::BorderStrong() : Theme::Accent()),
-                            TemplateRadius,
-                            0,
-                            selected ? 1.5F : 1.0F);
-                    }
-                }
-
-                if (ImGui::IsItemClicked())
-                {
-                    controller.SetTemplateId(kTemplateIds[i]);
-                }
-
-                ImGui::PopStyleColor(2);
-                ImGui::PopStyleVar(3);
-                ImGui::PopID();
+                DrawTemplateCard(controller, ctx, i, currentTemplateIndex, cardW, kDescs[i]);
             }
         }
 
-        const ProjectCreationDiagnostic *FindDiagnostic(const ProjectCreationValidation &validation,
+        const ProjectCreationDiagnostic* FindDiagnostic(const ProjectCreationValidation& validation,
                                                         const ProjectCreationDiagnosticCode code)
         {
-            for (const auto &diag : validation.diagnostics)
+            for (const auto& diag : validation.diagnostics)
             {
                 if (diag.code == code)
                     return &diag;
@@ -728,25 +765,28 @@ namespace Horo::Editor
             return nullptr;
         }
 
-        void DrawProjectLocationField(ProjectCreationController &controller,
-                                      ProjectCreationScreenGuiState &st,
-                                      const Fonts &f,
-                                      const ProjectCreationDiagnostic *pathErr)
+        void DrawProjectLocationField(ProjectCreationController& controller,
+                                      ProjectCreationScreenGuiState& st,
+                                      const EditorGuiContext& ctx,
+                                      const ProjectCreationDiagnostic* pathErr)
         {
-            ImGui::PushID("PROJECT LOCATION");
+            const std::string locationLabel = ctx.localization.Get("editor", "project_creation.identity.location");
+            ImGui::PushID(locationLabel.c_str());
             ImGui::BeginGroup();
-            Ui::FieldLabel("PROJECT LOCATION", f);
+            Ui::FieldLabel(locationLabel.c_str(), ctx.theme.fonts);
             constexpr float buttonWidth = 38.0F;
             constexpr float gapWidth = 8.0F;
             const float inputWidth = ImGui::GetContentRegionAvail().x - (buttonWidth + gapWidth);
             if (inputWidth > 0.0F) ImGui::PushItemWidth(inputWidth);
-            (void)Ui::InputTextControl("##value", st.projectPath, 512, f, pathErr != nullptr);
+            (void)Ui::InputTextControl("##value", st.projectPath, 512, ctx.theme.fonts, pathErr != nullptr);
             if (inputWidth > 0.0F) ImGui::PopItemWidth();
             controller.SetProjectPath(st.projectPath);
             ImGui::SameLine(0.0F, gapWidth);
-            if (DrawFolderIconButton("##browse_location", buttonWidth, f, pathErr != nullptr))
+            const std::string selectPrompt = ctx.localization.
+                                                 Get("editor", "project_creation.identity.location.select");
+            if (DrawFolderIconButton("##browse_location", buttonWidth, ctx, pathErr != nullptr))
             {
-                if (const auto selectedDir = OpenFolderSelectionDialog("Select Project Location"))
+                if (const auto selectedDir = OpenFolderSelectionDialog(selectPrompt.c_str()))
                 {
                     std::filesystem::path finalPath = *selectedDir;
                     if (!st.projectName.empty() && finalPath.filename().string() != st.projectName)
@@ -756,69 +796,90 @@ namespace Horo::Editor
                     controller.SetProjectPath(st.projectPath);
                 }
             }
-            if (pathErr) Ui::ErrorText(pathErr->message.c_str(), f);
-            else Ui::Hint("Choose an empty folder or a missing location with a writable parent.", f);
+            if (pathErr) Ui::ErrorText(pathErr->message.c_str(), ctx.theme.fonts);
+            else
+            {
+                const std::string locationHint = ctx.localization.Get(
+                    "editor", "project_creation.identity.location.hint");
+                Ui::Hint(locationHint.c_str(), ctx.theme.fonts);
+            }
             ImGui::EndGroup();
             ImGui::PopID();
         }
 
-        void DrawStepIdentity(ProjectCreationController &controller,
-                              ProjectCreationScreenGuiState &st,
-                              const Fonts &f,
-                              const ProjectCreationValidation &validation)
+        void DrawStepIdentity(ProjectCreationController& controller,
+                              ProjectCreationScreenGuiState& st,
+                              const EditorGuiContext& ctx,
+                              const ProjectCreationValidation& validation)
         {
             using namespace WizardLayout;
 
-            const auto *nameErrRequired = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectNameRequired);
-            const auto *nameErrSep = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator);
-            const auto *nameErr = nameErrRequired ? nameErrRequired : nameErrSep;
+            const auto* nameErrRequired =
+                FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectNameRequired);
+            const auto* nameErrSep = FindDiagnostic(
+                validation, ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator);
+            const auto* nameErr = nameErrRequired ? nameErrRequired : nameErrSep;
 
-            const auto *pathErrReq = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathRequired);
-            const auto *pathErrOcc = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathOccupied);
-            const auto *pathErrDir = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathNotDirectory);
-            const auto *pathErrAcc = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathInaccessible);
-            const auto *pathErrWrt = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectParentNotWritable);
-            const auto *pathErr = pathErrReq ? pathErrReq : (pathErrOcc ? pathErrOcc : (pathErrDir ? pathErrDir : (pathErrAcc ? pathErrAcc : pathErrWrt)));
+            const auto* pathErrReq = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathRequired);
+            const auto* pathErrOcc = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathOccupied);
+            const auto* pathErrDir = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathNotDirectory);
+            const auto* pathErrAcc = FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectPathInaccessible);
+            const auto* pathErrWrt =
+                FindDiagnostic(validation, ProjectCreationDiagnosticCode::ProjectParentNotWritable);
+            const auto* pathErrFirst = pathErrReq ? pathErrReq : pathErrOcc;
+            const auto* pathErrSecond = pathErrDir ? pathErrDir : pathErrAcc;
+            const auto* pathErr = pathErrFirst ? pathErrFirst : pathErrSecond;
+            if (pathErr == nullptr)
+                pathErr = pathErrWrt;
 
-            Ui::SectionTitle("PROJECT IDENTITY", f);
+            const std::string identityTitle = ctx.localization.Get("editor", "project_creation.step.identity.title");
+            Ui::SectionTitle(identityTitle.c_str(), ctx.theme.fonts);
             ImGui::Dummy({0.0F, 14.0F});
 
-            DrawInputField("PROJECT NAME",
+            const std::string nameLabel = ctx.localization.Get("editor", "project_creation.identity.name");
+            const std::string nameHint = ctx.localization.Get("editor", "project_creation.identity.name.hint");
+            DrawInputField(nameLabel.c_str(),
                            st.projectName,
                            128,
                            -1.0F,
-                           f,
-                           "Stored as project.json name; projectId is generated once.",
-                           nameErr != nullptr,
-                           nameErr ? nameErr->message.c_str() : nullptr);
+                           ctx,
+                           DrawInputFieldOptions{
+                               .hint = nameHint.c_str(),
+                               .error = nameErr != nullptr,
+                               .errorText = nameErr ? nameErr->message.c_str() : nullptr
+                           });
             controller.SetProjectName(st.projectName);
 
             ImGui::Dummy({0.0F, GridGap});
 
-            DrawProjectLocationField(controller, st, f, pathErr);
+            DrawProjectLocationField(controller, st, ctx, pathErr);
 
             ImGui::Dummy({0.0F, GridGap});
 
-            DrawInputField("PROJECT VERSION",
+            const std::string versionLabel = ctx.localization.Get("editor", "project_creation.identity.version");
+            const std::string versionHint = ctx.localization.Get("editor", "project_creation.identity.version.hint");
+            DrawInputField(versionLabel.c_str(),
                            st.projectVersion,
                            32,
                            -1.0F,
-                           f,
-                           "Game/product version. Does not select project-format migrations.");
+                           ctx,
+                           DrawInputFieldOptions{.hint = versionHint.c_str()});
             controller.SetProjectVersion(st.projectVersion);
 
             ImGui::Dummy({0.0F, GridGap});
 
-            DrawInputField("DEFAULT SCENE", st.defaultScene, 128, -1.0F, f);
+            const std::string sceneLabel = ctx.localization.Get("editor", "project_creation.identity.scene");
+            DrawInputField(sceneLabel.c_str(), st.defaultScene, 128, -1.0F, ctx);
             controller.SetDefaultScene(st.defaultScene);
 
             ImGui::Dummy({0.0F, CardGap});
 
             {
                 ScopedCard card("DirCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2());
-                Ui::SectionTitle("PROJECT DIRECTORY", f);
+                const std::string dirTitle = ctx.localization.Get("editor", "project_creation.identity.directory");
+                Ui::SectionTitle(dirTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 6.0F});
-                ScopedTextStyle ts(f.mono, 13.5F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(ctx.theme.fonts.mono, 13.5F, Theme::FontPx::Mono);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 ImGui::TextUnformatted(
                     "MyGame/\n"
@@ -836,103 +897,124 @@ namespace Horo::Editor
             }
         }
 
-        void DrawStepSettings(ProjectCreationController &controller, ProjectCreationScreenGuiState &st, const Fonts &f)
+        void DrawStepSettings(ProjectCreationController& controller, ProjectCreationScreenGuiState& st,
+                              const EditorGuiContext& ctx)
         {
             using namespace WizardLayout;
-            static constexpr std::array<const char *, 3> kRenderBackend = {"opengl", "vulkan", "auto detect"};
-            static constexpr std::array<const char *, 2> kPhysics = {"Enabled", "Disabled"};
-            static constexpr std::array<const char *, 3> kBuildProfile = {"desktop-debug", "desktop-profile", "desktop-release"};
-            static constexpr std::array<const char *, 3> kAssetCompression = {"lz4", "none", "zstd"};
-            static constexpr std::array<const char *, 4> kTextureCompression = {"bc7", "bc5", "astc", "none"};
-            static constexpr std::array<const char *, 4> kPlatform = {"host", "windows", "linux", "macos"};
-            static constexpr std::array<const char *, 4> kCompiler = {"default", "clang", "gcc", "msvc"};
-            static constexpr std::array<const char *, 2> kCppStd = {"C++20", "C++17"};
+            static constexpr std::array<const char*, 3> kRenderBackend = {"opengl", "vulkan", "auto detect"};
+            static constexpr std::array<const char*, 2> kPhysics = {"Enabled", "Disabled"};
+            static constexpr std::array<const char*, 3> kBuildProfile = {
+                "desktop-debug", "desktop-profile", "desktop-release"
+            };
+            static constexpr std::array<const char*, 3> kAssetCompression = {"lz4", "none", "zstd"};
+            static constexpr std::array<const char*, 4> kTextureCompression = {"bc7", "bc5", "astc", "none"};
+            static constexpr std::array<const char*, 4> kPlatform = {"host", "windows", "linux", "macos"};
+            static constexpr std::array<const char*, 4> kCompiler = {"default", "clang", "gcc", "msvc"};
+            static constexpr std::array<const char*, 2> kCppStd = {"C++20", "C++17"};
 
-            const std::string &templateId = controller.Draft().templateId;
+            const std::string& templateId = controller.Draft().templateId;
             if (templateId == "package-based")
             {
                 ScopedCard card("TcPkg", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("PACKAGE SOURCE CONFIGURATION", f);
+                const std::string pkgTitle = ctx.localization.Get("editor", "project_creation.settings.package");
+                Ui::SectionTitle(pkgTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
-                DrawInputField("TEMPLATE PACKAGE URL / REGISTRY", st.packageRegistryUrl, 256, colW, f);
+                DrawInputField("TEMPLATE PACKAGE URL / REGISTRY", st.packageRegistryUrl, 256, colW, ctx);
                 ImGui::SameLine(0.0F, GridGap);
-                DrawInputField("PACKAGE VERSION / TAG", st.packageVersion, 64, colW, f);
+                DrawInputField("PACKAGE VERSION / TAG", st.packageVersion, 64, colW, ctx);
                 ImGui::Dummy({0.0F, 8.0F});
-                Ui::Hint("Specify the remote registry package and version lockfile to scaffold this project.", f);
+                Ui::Hint("Specify the remote registry package and version lockfile to scaffold this project.",
+                         ctx.theme.fonts);
             }
             else if (templateId == "first-person")
             {
                 ScopedCard card("TcFp", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("FIRST PERSON CONTROLLER SETTINGS", f);
+                const std::string fpTitle = ctx.localization.Get("editor", "project_creation.settings.first_person");
+                Ui::SectionTitle(fpTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
-                static constexpr std::array<const char *, 3> kInputMaps = {"QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"};
-                DrawComboField("CHARACTER INPUT MAP", &st.firstPersonInputMapIndex, kInputMaps.data(), static_cast<int>(kInputMaps.size()), colW, f);
+                static constexpr std::array<const char*, 3> kInputMaps = {
+                    "QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"
+                };
+                DrawComboField("CHARACTER INPUT MAP", &st.firstPersonInputMapIndex, kInputMaps.data(),
+                               static_cast<int>(kInputMaps.size()), colW, ctx);
                 ImGui::Dummy({0.0F, 8.0F});
-                Ui::Hint("A first-person camera and kinematic character capsule will be generated in defaultScene.", f);
+                Ui::Hint("A first-person camera and kinematic character capsule will be generated in defaultScene.",
+                         ctx.theme.fonts);
             }
             else if (templateId == "tech-demo")
             {
                 ScopedCard card("TcDemo", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("TECH DEMO CONFIGURATION", f);
+                const std::string demoTitle = ctx.localization.Get("editor", "project_creation.settings.tech_demo");
+                Ui::SectionTitle(demoTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
-                CheckboxCss("Enable runtime observability and FPS overlays by default", &st.demoObservabilityOverlays, f);
+                CheckboxCss("Enable runtime observability and FPS overlays by default", &st.demoObservabilityOverlays,
+                            ctx);
                 ImGui::Dummy({0.0F, CheckGap});
-                CheckboxCss("Include high-detail benchmark scene and camera animation track", &st.demoBenchmarkScene, f);
+                CheckboxCss("Include high-detail benchmark scene and camera animation track", &st.demoBenchmarkScene,
+                            ctx);
             }
             else if (templateId == "custom")
             {
                 ScopedCard card("TcCustom", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("CUSTOM SUBSYSTEM SELECTION", f);
+                const std::string customTitle = ctx.localization.Get("editor", "project_creation.settings.custom");
+                Ui::SectionTitle(customTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
-                CheckboxCss("Rendering Subsystem (Vulkan/OpenGL core pipeline)", &st.customSubsystems[0], f);
+                CheckboxCss("Rendering Subsystem (Vulkan/OpenGL core pipeline)", &st.customSubsystems[0], ctx);
                 ImGui::Dummy({0.0F, CheckGap});
-                CheckboxCss("Physics Subsystem (Collision, Raycasting, Rigidbodies)", &st.customSubsystems[1], f);
+                CheckboxCss("Physics Subsystem (Collision, Raycasting, Rigidbodies)", &st.customSubsystems[1], ctx);
                 ImGui::Dummy({0.0F, CheckGap});
-                CheckboxCss("Audio Subsystem (3D Spatial Audio & Mixer)", &st.customSubsystems[2], f);
+                CheckboxCss("Audio Subsystem (3D Spatial Audio & Mixer)", &st.customSubsystems[2], ctx);
                 ImGui::Dummy({0.0F, CheckGap});
-                CheckboxCss("UI Subsystem (ImGui & Retained Scene UI)", &st.customSubsystems[3], f);
+                CheckboxCss("UI Subsystem (ImGui & Retained Scene UI)", &st.customSubsystems[3], ctx);
                 ImGui::Dummy({0.0F, CheckGap});
-                CheckboxCss("Networking Subsystem (Replication & Socket Transport)", &st.customSubsystems[4], f);
+                CheckboxCss("Networking Subsystem (Replication & Socket Transport)", &st.customSubsystems[4], ctx);
             }
 
-            if (templateId == "package-based" || templateId == "first-person" || templateId == "tech-demo" || templateId == "custom")
+            if (templateId == "package-based" || templateId == "first-person" || templateId == "tech-demo" || templateId
+                == "custom")
             {
                 ImGui::Dummy({0.0F, CardGap});
             }
 
             {
                 ScopedCard card("RtCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("RUNTIME DEFAULTS", f);
+                const std::string runtimeTitle = ctx.localization.Get("editor", "project_creation.settings.runtime");
+                Ui::SectionTitle(runtimeTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
 
-                DrawComboField("RENDER BACKEND", &st.renderBackendIndex, kRenderBackend.data(), static_cast<int>(kRenderBackend.size()), colW, f,
+                DrawComboField("RENDER BACKEND", &st.renderBackendIndex, kRenderBackend.data(),
+                               static_cast<int>(kRenderBackend.size()), colW, ctx,
                                "Default: opengl. Override per host profile.");
                 controller.SetRenderBackend(kRenderBackend[st.renderBackendIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
-                DrawInputField("TARGET FRAME RATE", st.targetFps, 16, colW, f);
+                DrawInputField("TARGET FRAME RATE", st.targetFps, 16, colW, ctx);
                 controller.SetTargetFrameRate(std::atoi(st.targetFps.c_str()));
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("PHYSICS", &st.physicsIndex, kPhysics.data(), static_cast<int>(kPhysics.size()), colW, f);
+                DrawComboField("PHYSICS", &st.physicsIndex, kPhysics.data(), static_cast<int>(kPhysics.size()), colW,
+                               ctx);
                 controller.SetPhysicsEnabled(st.physicsIndex == 0);
 
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("BUILD PROFILE", &st.buildProfileIndex, kBuildProfile.data(), static_cast<int>(kBuildProfile.size()), colW, f);
+                DrawComboField("BUILD PROFILE", &st.buildProfileIndex, kBuildProfile.data(),
+                               static_cast<int>(kBuildProfile.size()), colW, ctx);
                 controller.SetBuildProfile(kBuildProfile[st.buildProfileIndex]);
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("ASSET COMPRESSION", &st.assetCompressionIndex, kAssetCompression.data(), static_cast<int>(kAssetCompression.size()), colW, f);
+                DrawComboField("ASSET COMPRESSION", &st.assetCompressionIndex, kAssetCompression.data(),
+                               static_cast<int>(kAssetCompression.size()), colW, ctx);
                 controller.SetAssetCompression(kAssetCompression[st.assetCompressionIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("TEXTURE COMPRESSION", &st.textureCompressionIndex, kTextureCompression.data(), static_cast<int>(kTextureCompression.size()), colW, f);
+                DrawComboField("TEXTURE COMPRESSION", &st.textureCompressionIndex, kTextureCompression.data(),
+                               static_cast<int>(kTextureCompression.size()), colW, ctx);
                 controller.SetTextureCompression(kTextureCompression[st.textureCompressionIndex]);
             }
 
@@ -940,68 +1022,74 @@ namespace Horo::Editor
 
             {
                 ScopedCard card("TcCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("REQUIRED TOOLCHAIN", f);
+                const std::string toolchainTitle = ctx.localization.
+                                                       Get("editor", "project_creation.settings.toolchain");
+                Ui::SectionTitle(toolchainTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 8.0F});
 
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
 
-                DrawComboField("TARGET PLATFORM", &st.targetPlatformIndex, kPlatform.data(), static_cast<int>(kPlatform.size()), colW, f);
+                DrawComboField("TARGET PLATFORM", &st.targetPlatformIndex, kPlatform.data(),
+                               static_cast<int>(kPlatform.size()), colW, ctx);
                 controller.SetTargetPlatform(kPlatform[st.targetPlatformIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
-                DrawComboField("COMPILER FAMILY", &st.compilerFamilyIndex, kCompiler.data(), static_cast<int>(kCompiler.size()), colW, f);
+                DrawComboField("COMPILER FAMILY", &st.compilerFamilyIndex, kCompiler.data(),
+                               static_cast<int>(kCompiler.size()), colW, ctx);
                 controller.SetCompilerFamily(kCompiler[st.compilerFamilyIndex]);
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("MINIMUM C++ STANDARD", &st.cppStandardIndex, kCppStd.data(), static_cast<int>(kCppStd.size()), colW, f);
+                DrawComboField("MINIMUM C++ STANDARD", &st.cppStandardIndex, kCppStd.data(),
+                               static_cast<int>(kCppStd.size()), colW, ctx);
                 controller.SetMinimumCxxStandard(st.cppStandardIndex == 0 ? 20 : 17);
 
                 ImGui::Dummy({0.0F, 10.0F});
                 Ui::Hint("Portable project settings describe build intent. Machine-specific paths and SDK "
-                           "locations are resolved by user-level toolchain profiles, never stored in project.json.",
-                           f);
+                         "locations are resolved by user-level toolchain profiles, never stored in project.json.",
+                         ctx.theme.fonts);
             }
 
             ImGui::Dummy({0.0F, CardGap});
 
             {
                 ScopedCard card("OptCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("OPTIONAL", f);
+                const std::string optTitle = ctx.localization.Get("editor", "project_creation.settings.optional");
+                Ui::SectionTitle(optTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 10.0F});
 
                 bool initGit = controller.Draft().initializeGit;
-                CheckboxCss("Initialize git repository", &initGit, f);
+                CheckboxCss("Initialize git repository", &initGit, ctx);
                 controller.SetInitializeGit(initGit);
 
                 ImGui::Dummy({0.0F, CheckGap});
                 bool restorePkgs = controller.Draft().restorePackages;
-                CheckboxCss("Restore packages after creation", &restorePkgs, f);
+                CheckboxCss("Restore packages after creation", &restorePkgs, ctx);
                 controller.SetRestorePackages(restorePkgs);
 
                 ImGui::Dummy({0.0F, CheckGap});
                 bool inclStarter = controller.Draft().includeStarterContent;
-                CheckboxCss("Include starter content", &inclStarter, f);
+                CheckboxCss("Include starter content", &inclStarter, ctx);
                 controller.SetIncludeStarterContent(inclStarter);
 
                 ImGui::Dummy({0.0F, CheckGap});
                 bool genCMake = controller.Draft().generateCMakeProject;
-                CheckboxCss("Generate CMake project files", &genCMake, f);
+                CheckboxCss("Generate CMake project files", &genCMake, ctx);
                 controller.SetGenerateCMakeProject(genCMake);
             }
         }
 
-        void SummaryRow(const char *label, const std::string &value, const Fonts &f, const bool warn, const bool last = false)
+        void SummaryRow(const char* label, std::string_view value, const EditorGuiContext& ctx, const bool warn,
+                        const bool last = false)
         {
             const ImVec2 rowStart = ImGui::GetCursorScreenPos();
             const float rowW = ImGui::GetContentRegionAvail().x;
             constexpr float rowH = 26.0F;
             constexpr float textYOffset = 4.0F;
-
             ImGui::SetCursorScreenPos({rowStart.x, rowStart.y + textYOffset});
 
             {
-                ScopedTextStyle ts(f.sans, 13.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, 13.0F, Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 ImGui::TextUnformatted(label);
                 ImGui::PopStyleColor();
@@ -1009,79 +1097,85 @@ namespace Horo::Editor
 
             float valueW = 0.0F;
             {
-                ScopedTextStyle ts(f.mono, 12.0F, Theme::FontPx::Mono);
-                valueW = ImGui::CalcTextSize(value.c_str()).x;
+                ScopedTextStyle ts(ctx.theme.fonts.mono, 12.0F, Theme::FontPx::Mono);
+                valueW = ImGui::CalcTextSize(value.data(), value.data() + value.size()).x;
             }
 
             ImGui::SameLine(std::max(0.0F, rowW - valueW));
             {
-                ScopedTextStyle ts(f.mono, 12.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(ctx.theme.fonts.mono, 12.0F, Theme::FontPx::Mono);
                 if (warn)
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Warn());
                 else
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-                ImGui::TextUnformatted(value.c_str());
+                ImGui::TextUnformatted(value.data(), value.data() + value.size());
                 ImGui::PopStyleColor();
             }
 
             ImGui::SetCursorScreenPos({rowStart.x, rowStart.y + rowH});
             if (!last)
             {
-                auto *dl = ImGui::GetWindowDrawList();
+                auto* dl = ImGui::GetWindowDrawList();
                 constexpr float kDashStep = 7.0F;
                 constexpr float kDashLen = 4.0F;
-                const int steps = static_cast<int>(std::ceil(rowW / kDashStep));
+                const auto steps = static_cast<int>(std::ceil(rowW / kDashStep));
                 for (int i = 0; i < steps; ++i)
                 {
                     const float x0 = rowStart.x + static_cast<float>(i) * kDashStep;
                     const float x1 = std::min(rowStart.x + rowW, x0 + kDashLen);
-                    dl->AddLine({x0, rowStart.y + rowH - 1.0F}, {x1, rowStart.y + rowH - 1.0F}, Theme::U32(Theme::Border()), 1.0F);
+                    dl->AddLine({x0, rowStart.y + rowH - 1.0F}, {x1, rowStart.y + rowH - 1.0F},
+                                Theme::U32(Theme::Border()), 1.0F);
                 }
             }
         }
 
-        void DrawStepReview(ProjectCreationController &controller,
-                            const ProjectCreationValidation &validation,
-                            const Fonts &f,
-                            const ProjectCreationScreenGuiState &st)
+        void DrawStepReview(const ProjectCreationController& controller,
+                            const ProjectCreationValidation& validation,
+                            const EditorGuiContext& ctx,
+                            const ProjectCreationScreenGuiState& st)
         {
             using namespace WizardLayout;
-            const ProjectCreationDraft &draft = controller.Draft();
+            const ProjectCreationDraft& draft = controller.Draft();
 
             {
                 ScopedCard card("RevCard1", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("PROJECT SETTINGS", f);
+                const std::string pSettingsTitle = ctx.localization.Get("editor", "project_creation.review.settings");
+                Ui::SectionTitle(pSettingsTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 6.0F});
 
                 const int templateIdx = FindTemplateIndex(draft.templateId);
-                SummaryRow("Template", kTemplateNames[templateIdx], f, false);
-                SummaryRow("Project Name", draft.projectName, f, false);
-                SummaryRow("Project Path", draft.projectPath, f, !validation.IsValid());
-                SummaryRow("Version", draft.projectVersion, f, false);
-                SummaryRow("Default Scene", draft.defaultScene, f, false);
-                SummaryRow("Render Backend", draft.renderBackend, f, false);
-                SummaryRow("Physics", draft.physicsEnabled ? "Enabled" : "Disabled", f, false);
-                const bool hasExtraRows = (draft.templateId == "package-based" || draft.templateId == "first-person" || draft.templateId == "tech-demo" || draft.templateId == "custom");
-                SummaryRow("Build Profile", draft.buildProfile, f, false, !hasExtraRows);
+                const std::string tplName = GetTemplateName(templateIdx, ctx);
+                SummaryRow("Template", tplName, ctx, false);
+                SummaryRow("Project Name", draft.projectName, ctx, false);
+                SummaryRow("Project Path", draft.projectPath, ctx, !validation.IsValid());
+                SummaryRow("Version", draft.projectVersion, ctx, false);
+                SummaryRow("Default Scene", draft.defaultScene, ctx, false);
+                SummaryRow("Render Backend", draft.renderBackend, ctx, false);
+                SummaryRow("Physics", draft.physicsEnabled ? "Enabled" : "Disabled", ctx, false);
+                const bool hasExtraRows = (draft.templateId == "package-based" || draft.templateId == "first-person" ||
+                    draft.templateId == "tech-demo" || draft.templateId == "custom");
+                SummaryRow("Build Profile", draft.buildProfile, ctx, false, !hasExtraRows);
 
                 if (draft.templateId == "package-based")
                 {
-                    SummaryRow("Package Registry", st.packageRegistryUrl, f, false);
-                    SummaryRow("Package Version", st.packageVersion, f, false, true);
+                    SummaryRow("Package Registry", st.packageRegistryUrl, ctx, false);
+                    SummaryRow("Package Version", st.packageVersion, ctx, false, true);
                 }
                 else if (draft.templateId == "first-person")
                 {
-                    static constexpr std::array<const char *, 3> kInputMaps = {"QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"};
-                    SummaryRow("Input Map", kInputMaps[st.firstPersonInputMapIndex], f, false, true);
+                    static constexpr std::array<const char*, 3> kInputMaps = {
+                        "QWERTY / Mouse", "AZERTY / Mouse", "Gamepad (XInput/SDL)"
+                    };
+                    SummaryRow("Input Map", kInputMaps[st.firstPersonInputMapIndex], ctx, false, true);
                 }
                 else if (draft.templateId == "tech-demo")
                 {
-                    SummaryRow("Observability", st.demoObservabilityOverlays ? "Enabled" : "Disabled", f, false);
-                    SummaryRow("Benchmark Scene", st.demoBenchmarkScene ? "Included" : "Excluded", f, false, true);
+                    SummaryRow("Observability", st.demoObservabilityOverlays ? "Enabled" : "Disabled", ctx, false);
+                    SummaryRow("Benchmark Scene", st.demoBenchmarkScene ? "Included" : "Excluded", ctx, false, true);
                 }
                 else if (draft.templateId == "custom")
                 {
-                    SummaryRow("Subsystems", "Rendering, Physics, Audio", f, false, true);
+                    SummaryRow("Subsystems", "Rendering, Physics, Audio", ctx, false, true);
                 }
             }
 
@@ -1089,28 +1183,33 @@ namespace Horo::Editor
 
             {
                 ScopedCard card("RevCard2", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
-                Ui::SectionTitle("WHAT WILL BE CREATED", f);
+                const std::string createTitle = ctx.localization.Get(
+                    "editor", "project_creation.review.what_will_be_created");
+                Ui::SectionTitle(createTitle.c_str(), ctx.theme.fonts);
                 ImGui::Dummy({0.0F, 6.0F});
-                SummaryRow("Portable metadata (commit)", ".horo/project.json, .horo/plugins.json, asset sidecars", f, false);
-                SummaryRow("Local / derived (ignore)", ".horo/editor workspace.json, .horo/asset index.json, .horo/local/", f, false);
-                SummaryRow("Build output (ignore)", "build/", f, false);
-                SummaryRow("Project schema", "formatVersion 1 \xC2\xB7 projectId generated", f, false);
+                SummaryRow("Portable metadata (commit)", ".horo/project.json, .horo/plugins.json, asset sidecars", ctx,
+                           false);
+                SummaryRow("Local / derived (ignore)",
+                           ".horo/editor workspace.json, .horo/asset index.json, .horo/local/", ctx, false);
+                SummaryRow("Build output (ignore)", "build/", ctx, false);
+                SummaryRow("Project schema", "formatVersion 1 \xC2\xB7 projectId generated", ctx, false);
 
                 std::string validationText = "Ready to create";
                 if (!validation.IsValid() && !validation.diagnostics.empty())
                 {
                     validationText = "Edit \xE2\x80\x94 " + validation.diagnostics.front().message;
                 }
-                SummaryRow("Validation mode", validationText, f, !validation.IsValid());
-                SummaryRow("Recommended .gitignore", ".horo/{editor workspace,asset index}.json .horo/local/ build/", f, false, true);
+                SummaryRow("Validation mode", validationText, ctx, !validation.IsValid());
+                SummaryRow("Recommended .gitignore", ".horo/{editor workspace,asset index}.json .horo/local/ build/",
+                           ctx, false, true);
             }
         }
 
-        void DrawWizardFooter(ProjectCreationController &controller,
-                              ProjectCreationScreenGuiState &st,
-                              const Fonts &f,
-                              const ProjectCreationValidation &validation,
-                              ProjectCreationScreenGuiCommand &outCommand)
+        void DrawWizardFooter(const ProjectCreationController& controller,
+                              ProjectCreationScreenGuiState& st,
+                              const EditorGuiContext& ctx,
+                              const ProjectCreationValidation& validation,
+                              ProjectCreationScreenGuiCommand& outCommand)
         {
             using namespace WizardLayout;
 
@@ -1120,7 +1219,7 @@ namespace Horo::Editor
 
             const ImVec2 footerPos = ImGui::GetWindowPos();
             const float footerW = ImGui::GetWindowWidth();
-            auto *dl = ImGui::GetWindowDrawList();
+            auto* dl = ImGui::GetWindowDrawList();
 
             dl->AddLine({footerPos.x, footerPos.y},
                         {footerPos.x + footerW, footerPos.y},
@@ -1133,16 +1232,22 @@ namespace Horo::Editor
 
             ImGui::SetCursorPos({38.0F, 18.0F});
             {
-                ScopedTextStyle ts(f.mono, 13.0F, Theme::FontPx::Mono);
+                ScopedTextStyle ts(ctx.theme.fonts.mono, 13.0F, Theme::FontPx::Mono);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 const int templateIdx = FindTemplateIndex(controller.Draft().templateId);
-                if (!isValid && !validation.diagnostics.empty())
+                const std::string templateName = GetTemplateName(templateIdx, ctx);
+                if (validation.diagnostics.empty())
                 {
-                    ImGui::Text("Template: %s \xC2\xB7 %s", kTemplateNames[templateIdx], validation.diagnostics.front().message.c_str());
+                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+                    ImGui::Text("Template: %s", templateName.c_str());
+                    ImGui::PopStyleColor();
                 }
                 else
                 {
-                    ImGui::Text("Template: %s", kTemplateNames[templateIdx]);
+                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
+                    ImGui::Text("Template: %s \xC2\xB7 %s", templateName.c_str(),
+                                validation.diagnostics.front().message.c_str());
+                    ImGui::PopStyleColor();
                 }
                 ImGui::PopStyleColor();
             }
@@ -1156,7 +1261,13 @@ namespace Horo::Editor
             const float actionsW = isReview ? (backW + gap + createW) : (backW + gap + nextW);
             ImGui::SetCursorPos({footerW - 22.0F - actionsW, 10.0F});
 
-            if (Ui::Button({"\xE2\x86\x90 Back", {backW, btnH}, Ui::ButtonVariant::Secondary, st.step > 1, 13.0F, f.mono, Theme::FontPx::Mono}))
+            const std::string backLabel = ctx.localization.Get("editor", "project_creation.back");
+            const std::string nextLabel = ctx.localization.Get("editor", "project_creation.next");
+            const std::string createLabel = ctx.localization.Get("editor", "project_creation.create");
+            if (Ui::Button({
+                backLabel.c_str(), {backW, btnH}, Ui::ButtonVariant::Secondary, st.step > 1, 13.0F,
+                ctx.theme.fonts.mono, Theme::FontPx::Mono
+            }))
             {
                 st.step--;
             }
@@ -1165,14 +1276,20 @@ namespace Horo::Editor
 
             if (!isReview)
             {
-                if (Ui::Button({"Next \xE2\x86\x92", {nextW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, f.mono, Theme::FontPx::Mono}))
+                if (Ui::Button({
+                    nextLabel.c_str(), {nextW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, ctx.theme.fonts.mono,
+                    Theme::FontPx::Mono
+                }))
                 {
                     st.step++;
                 }
             }
             else
             {
-                if (Ui::Button({"Create Project", {createW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, f.mono, Theme::FontPx::Mono}))
+                if (Ui::Button({
+                    createLabel.c_str(), {createW, btnH}, Ui::ButtonVariant::Primary, true, 13.0F, ctx.theme.fonts.mono,
+                    Theme::FontPx::Mono
+                }))
                 {
                     if (isValid)
                     {
@@ -1181,7 +1298,8 @@ namespace Horo::Editor
                     }
                     else if (!validation.diagnostics.empty())
                     {
-                        LOG_ERROR("editor.project_creation", "Cannot create project: %s", validation.diagnostics.front().message.c_str());
+                        LOG_ERROR("editor.project_creation", "Cannot create project: %s",
+                                  validation.diagnostics.front().message.c_str());
                     }
                     else
                     {
@@ -1193,20 +1311,21 @@ namespace Horo::Editor
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }
-
     } // namespace
 
-    /** @copydoc DrawProjectCreationScreenGui */
-    ProjectCreationScreenGuiCommand DrawProjectCreationScreenGui(ProjectCreationController &controller,
-                                                                 ProjectCreationScreenGuiState &state,
-                                                                 const Fonts &fonts,
-                                                                 const ImTextureID logo)
+    ProjectCreationScreenGuiCommand DrawProjectCreationScreenGui(
+        ProjectCreationController& controller,
+        ProjectCreationScreenGuiState& state,
+        const EditorGuiContext& ctx,
+        const ImTextureID logo)
     {
         SynchronizePresentation(controller, state);
 
-        const ImGuiViewport *vp = ImGui::GetMainViewport();
-        const float modalW = std::min(WizardLayout::ModalW, std::max(320.0F, vp->WorkSize.x - WizardLayout::ViewportPad));
-        const float modalH = std::min(WizardLayout::ModalH, std::max(320.0F, vp->WorkSize.y - WizardLayout::ViewportPad));
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        const float modalW = std::min(WizardLayout::ModalW,
+                                      std::max(320.0F, vp->WorkSize.x - WizardLayout::ViewportPad));
+        const float modalH = std::min(WizardLayout::ModalH,
+                                      std::max(320.0F, vp->WorkSize.y - WizardLayout::ViewportPad));
         const ImVec2 modalSize{modalW, modalH};
         const ImVec2 modalPos{
             vp->WorkPos.x + (vp->WorkSize.x - modalW) * 0.5F,
@@ -1226,20 +1345,20 @@ namespace Horo::Editor
         ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
 
         constexpr ImGuiWindowFlags modalFlags = ImGuiWindowFlags_NoTitleBar |
-                                                ImGuiWindowFlags_NoResize |
-                                                ImGuiWindowFlags_NoMove |
-                                                ImGuiWindowFlags_NoSavedSettings |
-                                                ImGuiWindowFlags_NoScrollbar |
-                                                ImGuiWindowFlags_NoScrollWithMouse;
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse;
 
         ProjectCreationScreenGuiCommand command = ProjectCreationScreenGuiCommand::None;
         ImGui::Begin("ProjectCreationScreen", nullptr, modalFlags);
 
-        DrawWizardHeader(controller, state, fonts, logo, command);
+        DrawWizardHeader(controller, state, ctx, logo, command);
 
         const float bodyH = ImGui::GetWindowHeight() - WizardLayout::HeaderH - WizardLayout::FooterH;
 
-        DrawWizardSidebar(state, fonts, bodyH);
+        DrawWizardSidebar(state, ctx, bodyH);
         ImGui::SameLine(0.0F, 0.0F);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{WizardLayout::MainPadX, WizardLayout::MainPadY});
@@ -1250,19 +1369,25 @@ namespace Horo::Editor
         {
             ScopedCard confirmCard("DiscardConfirm", {0.0F, 74.0F}, 16.0F, 12.0F, Theme::ErrSoft());
             {
-                ScopedTextStyle ts(fonts.sans, 14.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
                 ImGui::TextUnformatted("Unsaved project draft: discard changes and return?");
                 ImGui::PopStyleColor();
             }
             ImGui::Dummy({0.0F, 6.0F});
 
-            if (Ui::Button({"Keep Editing", {110.0F, 28.0F}, Ui::ButtonVariant::Secondary, true, 13.0F, fonts.mono, Theme::FontPx::Mono}))
+            if (Ui::Button({
+                "Keep Editing", {110.0F, 28.0F}, Ui::ButtonVariant::Secondary, true, 13.0F, ctx.theme.fonts.mono,
+                Theme::FontPx::Mono
+            }))
             {
                 state.confirmingDiscard = false;
             }
             ImGui::SameLine(0.0F, 8.0F);
-            if (Ui::Button({"Discard & Return", {140.0F, 28.0F}, Ui::ButtonVariant::Primary, true, 13.0F, fonts.mono, Theme::FontPx::Mono}))
+            if (Ui::Button({
+                "Discard & Return", {140.0F, 28.0F}, Ui::ButtonVariant::Primary, true, 13.0F, ctx.theme.fonts.mono,
+                Theme::FontPx::Mono
+            }))
             {
                 controller.DiscardDraft();
                 command = ProjectCreationScreenGuiCommand::ReturnToWelcome;
@@ -1277,20 +1402,20 @@ namespace Horo::Editor
         switch (state.step)
         {
         case 1:
-            DrawStepTemplate(controller, state, fonts);
+            DrawStepTemplate(controller, state, ctx);
             break;
         case 2:
-            DrawStepIdentity(controller, state, fonts, validation);
+            DrawStepIdentity(controller, state, ctx, validation);
             break;
         case 3:
-            DrawStepSettings(controller, state, fonts);
+            DrawStepSettings(controller, state, ctx);
             break;
         case 4:
-            DrawStepReview(controller, validation, fonts, state);
+            DrawStepReview(controller, validation, ctx, state);
             break;
         default:
             state.step = 1;
-            DrawStepTemplate(controller, state, fonts);
+            DrawStepTemplate(controller, state, ctx);
             break;
         }
 
@@ -1298,7 +1423,7 @@ namespace Horo::Editor
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
 
-        DrawWizardFooter(controller, state, fonts, validation, command);
+        DrawWizardFooter(controller, state, ctx, validation, command);
 
         ImGui::End();
         ImGui::PopStyleColor(2);
@@ -1306,5 +1431,4 @@ namespace Horo::Editor
 
         return command;
     }
-
 } // namespace Horo::Editor

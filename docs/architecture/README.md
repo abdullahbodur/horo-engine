@@ -189,6 +189,10 @@ dependency direction in [System Design](./foundation/system-design.md).
   tokens, themes, and accessibility.
 - [Localization](./editor/localization.md): message resources, locale resolution,
   formatting, fallback, fonts, and layout verification.
+- [Localization Implementation Plan](./editor/localization-implementation-plan.md):
+  editor extractor, settings integration, runtime foundation, and migration phases.
+- [Localization Extractor Report](./editor/localization-extractor-report.json):
+  generated baseline of editor text candidates and technical exclusions.
 - [Editor Document Model](./editor/editor-document-model.md): scene documents,
   commands, transactions, history, save, autosave, and recovery.
 - [Editor Data Bus](./editor/editor-data-bus.md): session-local typed notifications,

@@ -1,21 +1,23 @@
 #include "ProjectLoadingScreenGui.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
+#include "Horo/Editor/Localization/ILocalizationService.h"
+
+#include <format>
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 namespace Horo::Editor
 {
-
     ProjectLoadingScreenGuiCommand DrawProjectLoadingScreenGui(
-        ProjectLoadingScreenGuiState &state,
-        const Theme::Fonts &fonts)
+        ProjectLoadingScreenGuiState& state,
+        const EditorGuiContext& ctx)
     {
         ProjectLoadingScreenGuiCommand cmd = ProjectLoadingScreenGuiCommand::None;
 
         // Cover the entire screen with the canvas background
-        const auto *viewport = ImGui::GetMainViewport();
+        const auto* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
         constexpr auto windowFlags =
@@ -28,8 +30,8 @@ namespace Horo::Editor
 
         // Center the modal box
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-        const ImVec2 modalSize = ImVec2(480.0f, 200.0f);
-        
+        constexpr auto modalSize = ImVec2(480.0f, 200.0f);
+
         ImGui::SetCursorPos({
             (canvasSize.x - modalSize.x) * 0.5f,
             (canvasSize.y - modalSize.y) * 0.5f
@@ -40,16 +42,17 @@ namespace Horo::Editor
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kModalPadding, kModalPadding));
-        
-        constexpr auto childFlags = ImGuiWindowFlags_AlwaysUseWindowPadding | 
-                                    ImGuiWindowFlags_NoScrollbar | 
-                                    ImGuiWindowFlags_NoScrollWithMouse;
+
+        constexpr auto childFlags = ImGuiWindowFlags_AlwaysUseWindowPadding |
+            ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse;
         ImGui::BeginChild("LoadingModal", modalSize, true, childFlags);
-        
+
         // Header
         {
-            Theme::ScopedTextStyle tsTitle(fonts.monoSemiBold, 18.0f, Theme::FontPx::MonoSemiBold);
-            std::string titleText = "Opening '" + state.projectName + "'";
+            Theme::ScopedTextStyle tsTitle(ctx.theme.fonts.monoSemiBold, 18.0f, Theme::FontPx::MonoSemiBold);
+            const std::string openingFmt = ctx.localization.Get("editor", "project_loading.title.opening");
+            std::string titleText = openingFmt + " '" + state.projectName + "'";
             ImGui::TextUnformatted(titleText.c_str());
         }
 
@@ -57,16 +60,16 @@ namespace Horo::Editor
 
         // Status Text & Percentage
         {
-            Theme::ScopedTextStyle tsStatus(fonts.sans, 13.0f, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle tsStatus(ctx.theme.fonts.sans, 13.0f, Theme::FontPx::Sans);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             ImGui::TextUnformatted(state.statusText.c_str());
             ImGui::PopStyleColor();
 
             // Percentage on the right, flush with the modal's right padding.
-            std::string pctText = std::to_string(static_cast<int>(state.progress)) + "%";
+            std::string pctText = std::format("{}%", static_cast<int>(state.progress));
             const float pctWidth = ImGui::CalcTextSize(pctText.c_str()).x;
             ImGui::SameLine(ImGui::GetWindowWidth() - pctWidth - kModalPadding);
-            
+
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Accent());
             ImGui::TextUnformatted(pctText.c_str());
             ImGui::PopStyleColor();
@@ -79,10 +82,10 @@ namespace Horo::Editor
             ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg2());
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, state.isCancelled ? Theme::Err() : Theme::Accent());
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            
+
             // Draw progress bar without overlay text
             ImGui::ProgressBar(state.progress / 100.0f, ImVec2(-1.0f, 6.0f), "");
-            
+
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(2);
         }
@@ -91,7 +94,7 @@ namespace Horo::Editor
 
         // Footer Actions
         {
-            constexpr ImVec2 kButtonSize = ImVec2(80.0f, 32.0f);
+            constexpr auto kButtonSize = ImVec2(80.0f, 32.0f);
 
             // Pin flush to the bottom-right, using the SAME right margin as the
             // percentage label above (kModalPadding) instead of a hardcoded
@@ -99,11 +102,16 @@ namespace Horo::Editor
             // consistent right edge, and stays correct if modalSize/padding
             // ever change.
             ImGui::SetCursorPosX(ImGui::GetWindowWidth() - kModalPadding - kButtonSize.x);
-            
-            if (Ui::Button({.label = "Cancel", .size = {kButtonSize.x, kButtonSize.y}, .variant = Ui::ButtonVariant::Secondary, .fontSize = 13.0F, .font = fonts.mono, .baseFontSize = Theme::FontPx::Mono}))
+
+            const auto cancelLabel = ctx.localization.Get("editor", "project_loading.action.cancel");
+            if (Ui::Button({
+                .label = cancelLabel.c_str(), .size = {kButtonSize.x, kButtonSize.y},
+                .variant = Ui::ButtonVariant::Secondary, .fontSize = 13.0F, .font = ctx.theme.fonts.mono,
+                .baseFontSize = Theme::FontPx::Mono
+            }))
             {
                 state.isCancelled = true;
-                state.statusText = "Cancelling...";
+                state.statusText = ctx.localization.Get("editor", "project_loading.status.cancelling");
                 cmd = ProjectLoadingScreenGuiCommand::Cancel;
             }
         }
@@ -117,5 +125,4 @@ namespace Horo::Editor
 
         return cmd;
     }
-
 } // namespace Horo::Editor

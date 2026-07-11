@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/ProjectCreationScreen.h"
+#include "Horo/Editor/EditorGuiContext.h"
 
 #include <string>
 
@@ -51,7 +52,7 @@ enum class ProjectCreationScreenGuiCommand {
 [[nodiscard]] ProjectCreationScreenGuiCommand DrawProjectCreationScreenGui(
     ProjectCreationController& controller,
     ProjectCreationScreenGuiState& state,
-    const Theme::Fonts& fonts,
+    const EditorGuiContext& ctx,
     ImTextureID logo = 0);
 
 } // namespace Horo::Editor

@@ -1,3 +1,4 @@
+#include <Horo/Editor/Localization/ILocalizationService.h>
 #include "editor/screens/welcome/WelcomeScreenGui.h"
 
 #include "Horo/Editor/EditorUiComponents.h"
@@ -13,7 +14,7 @@ namespace Horo::Editor
         /// @return true if the card was clicked this frame.
         [[nodiscard]] bool DrawProjectCard(const RecentProjectEntry &project,
                                            const int index,
-                                           const Theme::Fonts &fonts)
+                                           const EditorGuiContext &ctx)
         {
             using namespace Theme;
 
@@ -37,25 +38,25 @@ namespace Horo::Editor
 
                 ImGui::BeginGroup();
                 {
-                    ScopedTextStyle textStyle(fonts.sans, 14.0F, FontPx::Sans);
+                    ScopedTextStyle textStyle(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
                     ImGui::TextUnformatted(project.name.c_str());
                 }
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0F);
                 {
-                    ScopedTextStyle textStyle(fonts.mono, 12.0F, FontPx::Mono);
+                    ScopedTextStyle textStyle(ctx.theme.fonts.mono, 12.0F, FontPx::Mono);
                     ImGui::TextDisabled("%s", project.rootPath.c_str());
                 }
                 ImGui::EndGroup();
 
                 float metaWidth = 0.0F;
                 {
-                    ScopedTextStyle textStyle(fonts.mono, 11.0F, FontPx::Mono);
+                    ScopedTextStyle textStyle(ctx.theme.fonts.mono, 11.0F, FontPx::Mono);
                     metaWidth = ImGui::CalcTextSize(project.lastOpenedLabel.c_str()).x;
                 }
                 ImGui::SameLine(ImGui::GetWindowWidth() - metaWidth - 14.0F);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0F);
                 {
-                    ScopedTextStyle textStyle(fonts.mono, 11.0F, FontPx::Mono);
+                    ScopedTextStyle textStyle(ctx.theme.fonts.mono, 11.0F, FontPx::Mono);
                     ImGui::TextDisabled("%s", project.lastOpenedLabel.c_str());
                 }
 
@@ -76,24 +77,24 @@ namespace Horo::Editor
             return clicked;
         }
 
-        void DrawNewsCard(const char *tag, const char *title, const char *description, const ImVec2 size, const Theme::Fonts &fonts)
+        void DrawNewsCard(const char *tag, const char *title, const char *description, const ImVec2 size, const EditorGuiContext &ctx)
         {
             using namespace Theme;
 
             Ui::ScopedCard card(title, size, 14.0F, 14.0F, ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
             {
-                ScopedTextStyle textStyle(fonts.mono, 11.0F, FontPx::Mono);
+                ScopedTextStyle textStyle(ctx.theme.fonts.mono, 11.0F, FontPx::Mono);
                 ImGui::PushStyleColor(ImGuiCol_Text, Accent());
                 ImGui::TextUnformatted(tag);
                 ImGui::PopStyleColor();
             }
             {
-                ScopedTextStyle textStyle(fonts.sans, 14.0F, FontPx::Sans);
+                ScopedTextStyle textStyle(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
                 ImGui::TextUnformatted(title);
             }
             ImGui::Dummy({0.0F, 2.0F});
             {
-                ScopedTextStyle textStyle(fonts.sans, 12.5F, FontPx::Sans);
+                ScopedTextStyle textStyle(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + size.x - 28.0F);
                 ImGui::TextDisabled("%s", description);
                 ImGui::PopTextWrapPos();
@@ -102,21 +103,21 @@ namespace Horo::Editor
 
         [[nodiscard]] bool DrawWelcomeActionButton(const char *label,
                                                    const Ui::ButtonVariant variant,
-                                                   const Theme::Fonts &fonts)
+                                                   const EditorGuiContext &ctx)
         {
             return Ui::Button(Ui::ButtonProps{label,
                                               ImVec2{-1.0F, 42.0F},
                                               variant,
                                               true,
                                               14.0F,
-                                              fonts.sans,
+                                              ctx.theme.fonts.sans,
                                               Theme::FontPx::Sans});
         }
 
     } // namespace
 
     [[nodiscard]] WelcomeScreenGuiResult DrawWelcomeScreenGui(const WelcomeViewModel &viewModel,
-                                                               const Theme::Fonts &fonts,
+                                                               const EditorGuiContext &ctx,
                                                                const WelcomeScreenGuiAssets &assets)
     {
         using namespace Theme;
@@ -160,7 +161,7 @@ namespace Horo::Editor
         ImGui::Dummy({0.0F, 18.0F});
 
         {
-            ImFont *titleFont = fonts.monoSemiBold ? fonts.monoSemiBold : ImGui::GetFont();
+            ImFont *titleFont = ctx.theme.fonts.monoSemiBold ? ctx.theme.fonts.monoSemiBold : ImGui::GetFont();
             const ImVec2 titlePos = ImGui::GetCursorScreenPos();
             constexpr float titlePx = 24.0F;
             constexpr float titleSpacing = 2.0F;
@@ -179,25 +180,29 @@ namespace Horo::Editor
         }
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6.0F);
         {
-            ImFont *subtitleFont = fonts.sans ? fonts.sans : ImGui::GetFont();
+            ImFont *subtitleFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
             const ImVec2 subtitlePos = ImGui::GetCursorScreenPos();
             constexpr float subtitlePx = 12.0F;
-            const char *subtitle = "Game Engine";
+            const std::string subtitleText = ctx.localization.Get("editor", "welcome.subtitle");
+            const char *subtitle = subtitleText.c_str();
             ImGui::GetWindowDrawList()->AddText(subtitleFont, subtitlePx, subtitlePos, U32(Muted()), subtitle);
             const ImVec2 subtitleSize = subtitleFont->CalcTextSizeA(subtitlePx, FLT_MAX, 0.0F, subtitle);
             ImGui::Dummy({subtitleSize.x, subtitleSize.y});
         }
         ImGui::Dummy({0.0F, 28.0F});
 
-        if (DrawWelcomeActionButton("+  New Project", Ui::ButtonVariant::Primary, fonts))
+        const std::string newProject = ctx.localization.Get("editor", "welcome.new_project");
+        const std::string openProject = ctx.localization.Get("editor", "welcome.open_project");
+        const std::string openSettings = ctx.localization.Get("editor", "welcome.open_settings");
+        if (DrawWelcomeActionButton(newProject.c_str(), Ui::ButtonVariant::Primary, ctx))
         {
             result.command = WelcomeScreenGuiCommand::NewProject;
         }
-        if (DrawWelcomeActionButton("   Open Project", Ui::ButtonVariant::Secondary, fonts))
+        if (DrawWelcomeActionButton(openProject.c_str(), Ui::ButtonVariant::Secondary, ctx))
         {
             result.command = WelcomeScreenGuiCommand::OpenProject;
         }
-        if (DrawWelcomeActionButton("   Open Settings", Ui::ButtonVariant::Secondary, fonts))
+        if (DrawWelcomeActionButton(openSettings.c_str(), Ui::ButtonVariant::Secondary, ctx))
         {
             result.command = WelcomeScreenGuiCommand::OpenSettings;
         }
@@ -221,18 +226,20 @@ namespace Horo::Editor
                               ImGuiWindowFlags_AlwaysUseWindowPadding);
 
         {
-            ScopedTextStyle textStyle(fonts.monoSemiBold, 13.0F, FontPx::MonoSemiBold);
-            ImGui::TextDisabled("RECENT PROJECTS");
+            ScopedTextStyle textStyle(ctx.theme.fonts.monoSemiBold, 13.0F, FontPx::MonoSemiBold);
+            const std::string recentProjects = ctx.localization.Get("editor", "welcome.recent_projects");
+            ImGui::TextDisabled("%s", recentProjects.c_str());
             ImGui::SameLine(ImGui::GetWindowWidth() - 92.0F);
             ImGui::PushStyleColor(ImGuiCol_Text, Accent());
-            ImGui::TextUnformatted("BROWSE ALL");
+            const std::string browseAll = ctx.localization.Get("editor", "welcome.browse_all");
+            ImGui::TextUnformatted(browseAll.c_str());
             ImGui::PopStyleColor();
         }
         ImGui::Dummy({0.0F, 14.0F});
 
         for (std::size_t i = 0; i < viewModel.recentProjects.size(); ++i)
         {
-            if (DrawProjectCard(viewModel.recentProjects[i], static_cast<int>(i), fonts))
+            if (DrawProjectCard(viewModel.recentProjects[i], static_cast<int>(i), ctx))
             {
                 result.command = WelcomeScreenGuiCommand::OpenRecentProject;
                 result.openRecentIndex = static_cast<int>(i);
@@ -242,8 +249,9 @@ namespace Horo::Editor
         ImGui::Dummy({0.0F, 28.0F});
 
         {
-            ScopedTextStyle textStyle(fonts.monoSemiBold, 13.0F, FontPx::MonoSemiBold);
-            ImGui::TextDisabled("WHAT'S NEW");
+            ScopedTextStyle textStyle(ctx.theme.fonts.monoSemiBold, 13.0F, FontPx::MonoSemiBold);
+            const std::string whatsNewStr = ctx.localization.Get("editor", "welcome.whats_new");
+            ImGui::TextDisabled("%s", whatsNewStr.c_str());
         }
         ImGui::Dummy({0.0F, 14.0F});
 
@@ -251,7 +259,7 @@ namespace Horo::Editor
         for (int i = 0; i < static_cast<int>(viewModel.whatsNew.size()); ++i)
         {
             const auto &entry = viewModel.whatsNew[static_cast<std::size_t>(i)];
-            DrawNewsCard(entry.tag, entry.title, entry.body, {newsWidth, 104.0F}, fonts);
+            DrawNewsCard(entry.tag, entry.title, entry.body, {newsWidth, 104.0F}, ctx);
             if (i == 0)
             {
                 ImGui::SameLine(0.0F, 12.0F);

@@ -66,6 +66,7 @@ struct EditorSettings
     bool confirmExitWithUnsavedChanges = true;
     bool restoreWorkspaceLayout = true;
     std::string defaultSceneOnProjectOpen = "Assets/Scenes/Main";
+    std::string languageTag = "en-US";
 
     EditorThemePreset themePreset = EditorThemePreset::HoroDark;
     std::string accentColorHex = "#04A5FC";

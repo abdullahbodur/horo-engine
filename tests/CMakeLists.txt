@@ -34,6 +34,18 @@ target_link_libraries(HoroSettingsModalLifecycleTests
 
 add_test(NAME HoroSettingsModalLifecycleTests COMMAND HoroSettingsModalLifecycleTests)
 
+add_executable(HoroEditorLocalizationServiceTests
+    unit/editor/LocalizationServiceTests.cpp
+)
+
+target_compile_features(HoroEditorLocalizationServiceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorLocalizationServiceTests
+    PRIVATE
+        HoroEngine::EditorScreens
+)
+
+add_test(NAME HoroEditorLocalizationServiceTests COMMAND HoroEditorLocalizationServiceTests)
+
 add_executable(HoroProjectCreationScreenTests
     unit/editor/ProjectCreationScreenTests.cpp
 )

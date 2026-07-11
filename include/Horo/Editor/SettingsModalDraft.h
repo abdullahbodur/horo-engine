@@ -22,7 +22,7 @@ namespace Horo::Editor
         int activeTab = 0;
         std::uint64_t settingsRevision = 0;
 
-        struct GeneralTab { int startupAction = 0; int autoSaveInterval = 5; bool confirmExit = true; bool restoreWorkspace = true; std::string defaultScene = "Assets/Scenes/Main"; } general;
+        struct GeneralTab { int startupAction = 0; int autoSaveInterval = 5; bool confirmExit = true; bool restoreWorkspace = true; std::string defaultScene = "Assets/Scenes/Main"; std::string languageTag = "en-US"; } general;
         struct AppearanceTab { int themeIndex = 0; std::string customThemePath = "~/.horo/themes/my-theme.json"; int uiScale = 100; std::string editorFontSize = "15"; std::string accentHex = "#04A5FC"; int pendingThemeIndex = -1; } appearance;
         struct InputTab
         {
