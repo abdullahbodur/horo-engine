@@ -11,6 +11,9 @@ namespace Horo
 {
     using EventTypeId = std::uint64_t;
 
+    /** @brief Opaque transport view for a typed event payload owned by the bus operation. */
+    struct EventPayload;
+
     /** @brief Hashes an explicit, stable event name with FNV-1a. */
     constexpr EventTypeId HashEventTypeName(const std::string_view name) noexcept
     {
@@ -69,7 +72,9 @@ namespace Horo
         Subscription Subscribe(Handler &&handler)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto typed = [callback = std::forward<Handler>(handler)](const void *raw) { callback(*static_cast<const EventT *>(raw)); };
+            auto typed = [callback = std::forward<Handler>(handler)](const EventPayload *raw) {
+                callback(*reinterpret_cast<const EventT *>(raw));
+            };
             return SubscribeErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(typed));
         }
 
@@ -78,7 +83,7 @@ namespace Horo
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto replay = std::make_shared<EventT>(event);
-            const void *raw = replay.get();
+            const auto *raw = reinterpret_cast<const EventPayload *>(replay.get());
             PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
                           [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(*replay); });
         }
@@ -88,8 +93,11 @@ namespace Horo
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto payload = std::make_shared<EventT>(std::move(event));
-            QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
-                        [](EngineDataBus &bus, const void *raw) { bus.Publish(*static_cast<const EventT *>(raw)); });
+            std::shared_ptr<const EventPayload> opaquePayload(payload, reinterpret_cast<const EventPayload *>(payload.get()));
+            QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(opaquePayload),
+                        [](EngineDataBus &bus, const EventPayload *raw) {
+                            bus.Publish(*reinterpret_cast<const EventT *>(raw));
+                        });
         }
 
         /** @brief Delivers worker-thread notifications at the owner synchronization point. */
@@ -98,13 +106,13 @@ namespace Horo
         void Clear();
 
     private:
-        using Handler = std::function<void(const void *)>;
+        using Handler = std::function<void(const EventPayload *)>;
         using DeferredPublisher = std::function<void(EngineDataBus &)>;
-        using QueuedPublisher = std::function<void(EngineDataBus &, const void *)>;
+        using QueuedPublisher = std::function<void(EngineDataBus &, const EventPayload *)>;
         struct State;
         Subscription SubscribeErased(EventTypeId type, std::string_view name, Handler handler);
-        void PublishErased(EventTypeId type, std::string_view name, const void *raw, DeferredPublisher retry);
-        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<void> payload, QueuedPublisher publish);
+        void PublishErased(EventTypeId type, std::string_view name, const EventPayload *raw, DeferredPublisher retry);
+        void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<const EventPayload> payload, QueuedPublisher publish);
         std::shared_ptr<State> m_state;
     };
 } // namespace Horo
