@@ -154,7 +154,12 @@ struct ProjectCreationServiceState {
 
     explicit ProjectCreationServiceState(EngineDataBus& bus) : dataBus(bus) {}
 
+    [[nodiscard]] std::mutex& Mutex() const noexcept { return mutex; }
+
+private:
     mutable std::mutex mutex;
+
+public:
     EngineDataBus& dataBus;
     ProjectCreationOperationId nextOperationId = 1;
     ProjectCreationRevision revision = 0;
@@ -169,7 +174,7 @@ void UpdateProgress(const std::shared_ptr<ProjectCreationServiceState>& state,
                     const ProjectCreationOperationPhase phase,
                     const std::string_view progressPhase,
                     const float progress) {
-    std::lock_guard lock(state->mutex);
+    std::lock_guard lock(state->Mutex());
     if (IsTerminal(operation->snapshot.state)) return;
     if (operation->snapshot.state != ProjectCreationOperationState::Cancelling)
         operation->snapshot.state = operationState;
@@ -182,7 +187,7 @@ void SetFailure(const std::shared_ptr<ProjectCreationServiceState>& state,
                 const std::shared_ptr<ProjectCreationServiceState::Operation>& operation,
                 const ProjectCreationErrorCode code,
                 std::string message) {
-    std::lock_guard lock(state->mutex);
+    std::lock_guard lock(state->Mutex());
     if (IsTerminal(operation->snapshot.state)) return;
     operation->snapshot.state = ProjectCreationOperationState::Failed;
     operation->snapshot.phase = ProjectCreationOperationPhase::Failed;
@@ -191,7 +196,7 @@ void SetFailure(const std::shared_ptr<ProjectCreationServiceState>& state,
 
 void SetCancelled(const std::shared_ptr<ProjectCreationServiceState>& state,
                   const std::shared_ptr<ProjectCreationServiceState::Operation>& operation) {
-    std::lock_guard lock(state->mutex);
+    std::lock_guard lock(state->Mutex());
     if (IsTerminal(operation->snapshot.state)) return;
     operation->snapshot.state = ProjectCreationOperationState::Cancelled;
     operation->snapshot.phase = ProjectCreationOperationPhase::Cancelled;
@@ -334,7 +339,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
     ProjectCreatedEvent created;
     ProjectCreationRevisionChangedEvent changed;
     {
-        std::lock_guard lock(state->mutex);
+        std::lock_guard lock(state->Mutex());
         operation->snapshot.state = ProjectCreationOperationState::Succeeded;
         operation->snapshot.phase = ProjectCreationOperationPhase::Completed;
         static_cast<void>(operation->progress.Report("completed", 1.0F));
@@ -387,7 +392,7 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
 
     auto operation = std::make_shared<ProjectCreationServiceState::Operation>();
     {
-        std::lock_guard lock(state_->mutex);
+        std::lock_guard lock(state_->Mutex());
         operation->snapshot.id = state_->nextOperationId++;
         operation->snapshot.projectRoot = request.projectRoot;
         operation->snapshot.projectId = MakeProjectId(operation->snapshot.id);
@@ -397,13 +402,13 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
         RunCreate(state, operation, request, cancellation);
     });
     if (submitted.HasError()) {
-        std::lock_guard lock(state_->mutex);
+        std::lock_guard lock(state_->Mutex());
         state_->operations.erase(operation->snapshot.id);
         LOG_DEBUG("editor.project_creation", "StartCreate job submission failed: %s", submitted.ErrorValue().message.c_str());
         return Result<ProjectCreationOperationHandle>::Failure(MakeFoundationError("project_creation.job_submission_failed", submitted.ErrorValue().message.c_str()));
     }
     {
-        std::lock_guard lock(state_->mutex);
+        std::lock_guard lock(state_->Mutex());
         operation->jobId = submitted.Value().Id();
     }
     LOG_DEBUG("editor.project_creation", "Job %llu dispatched successfully for operation %llu (projectId=%s)", static_cast<unsigned long long>(operation->jobId), static_cast<unsigned long long>(operation->snapshot.id), operation->snapshot.projectId.c_str());
@@ -411,7 +416,7 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
 }
 
 std::optional<ProjectCreationSnapshot> ProjectCreationService::Query(const ProjectCreationOperationId id) const {
-    std::lock_guard lock(state_->mutex);
+    std::lock_guard lock(state_->Mutex());
     const auto found = state_->operations.find(id);
     if (found == state_->operations.end()) return std::nullopt;
     return found->second->snapshot;
@@ -421,7 +426,7 @@ Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperatio
     JobId jobId = 0;
     std::shared_ptr<ProjectCreationServiceState::Operation> operation;
     {
-        std::lock_guard lock(state_->mutex);
+        std::lock_guard lock(state_->Mutex());
         const auto found = state_->operations.find(id);
         if (found == state_->operations.end()) return Result<void>::Failure(MakeFoundationError("project_creation.not_found", "Project creation operation is not known."));
         operation = found->second;

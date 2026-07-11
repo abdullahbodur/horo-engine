@@ -89,9 +89,17 @@ namespace Horo::Log
                 if (home != nullptr)
                     resolved = std::string{home} + resolved.substr(1);
             }
+            const std::filesystem::path path{resolved};
+            if (path.empty() || path.is_relative())
+                return {};
+            for (const auto &component : path)
+            {
+                if (component == "..")
+                    return {};
+            }
             std::error_code ec;
-            std::filesystem::create_directories(resolved, ec);
-            return resolved;
+            std::filesystem::create_directories(path, ec);
+            return ec ? std::string{} : path.string();
         }
 
         /** @brief Formats a UTC timestamp as ISO-8601 with milliseconds. */
