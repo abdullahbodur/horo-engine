@@ -22,12 +22,16 @@ namespace Horo::Editor::Theme
         void ApplyLight(ImGuiStyle &style);      // forward — defined below
 
         // ── Active design tokens (runtime-switchable) ──────────────────
-        DesignTokens g_activeTokens = DefaultDesignTokens();
+        DesignTokens &ActiveTokens()
+        {
+            static DesignTokens tokens = DefaultDesignTokens();
+            return tokens;
+        }
 
         /** @brief Light theme design tokens — surface colors inverted, accents unchanged. */
         void ApplyLightDesignTokens()
         {
-            g_activeTokens = DesignTokens{
+            ActiveTokens() = DesignTokens{
                 ColorTokens{
                     ::ImVec4{0.941F, 0.937F, 0.929F, 1.0F},  // surfaceRoot
                     ::ImVec4{0.961F, 0.957F, 0.953F, 1.0F},  // surfaceWindow
@@ -58,7 +62,7 @@ namespace Horo::Editor::Theme
         /** @brief Midnight theme design tokens — dark surface with purple accents. */
         void ApplyMidnightDesignTokens()
         {
-            g_activeTokens = DesignTokens{
+            ActiveTokens() = DesignTokens{
                 ColorTokens{
                     ::ImVec4{0.027F, 0.039F, 0.063F, 1.0F},  // surfaceRoot
                     ::ImVec4{0.047F, 0.063F, 0.094F, 1.0F},  // surfaceWindow
@@ -127,8 +131,17 @@ namespace Horo::Editor::Theme
             c[ImGuiCol_TableBorderLight] = get("TableBorderLight", ImVec4{0.165F, 0.184F, 0.216F, 0.5F});
         }
 
-        std::vector<ThemeEntry> g_themeList;
-        int g_activeThemeIndex = 0;
+        std::vector<ThemeEntry> &ThemeList()
+        {
+            static std::vector<ThemeEntry> themes;
+            return themes;
+        }
+
+        int &ActiveThemeIndex()
+        {
+            static int index = 0;
+            return index;
+        }
 
         /** @brief Tiny JSON key-value reader — dependency free. */
         bool ReadJsonColors(const std::string &json, std::unordered_map<std::string, ImVec4> &out)
@@ -198,24 +211,24 @@ namespace Horo::Editor::Theme
 
     const std::vector<ThemeEntry> &GetThemeList()
     {
-        return g_themeList;
+        return ThemeList();
     }
 
     const DesignTokens &GetActiveTokens()
     {
-        return g_activeTokens;
+        return ActiveTokens();
     }
 
     void RefreshThemeList(const char *additionalPath)
     {
-        g_themeList.clear();
+        ThemeList().clear();
 
         // Built-in themes
         {
             ThemeEntry e;
             e.name = "Horo Dark";
             e.isBuiltIn = true;
-            g_themeList.push_back(std::move(e));
+            ThemeList().push_back(std::move(e));
         }
         {
             ThemeEntry e;
@@ -249,7 +262,7 @@ namespace Horo::Editor::Theme
             e.colors["PlotHistogram"]    = ImVec4{0.447F, 0.282F, 0.847F, 1.0F};
             e.colors["TableBorderStrong"] = ImVec4{0.149F, 0.169F, 0.216F, 1.0F};
             e.colors["TableBorderLight"]  = ImVec4{0.149F, 0.169F, 0.216F, 0.5F};
-            g_themeList.push_back(std::move(e));
+            ThemeList().push_back(std::move(e));
         }
         {
             ThemeEntry e;
@@ -283,7 +296,7 @@ namespace Horo::Editor::Theme
             e.colors["PlotHistogram"]    = ImVec4{0.016F, 0.647F, 0.988F, 1.0F};
             e.colors["TableBorderStrong"] = ImVec4{0.784F, 0.780F, 0.773F, 1.0F};
             e.colors["TableBorderLight"]  = ImVec4{0.784F, 0.780F, 0.773F, 0.5F};
-            g_themeList.push_back(std::move(e));
+            ThemeList().push_back(std::move(e));
         }
 
         // Scan custom themes
@@ -307,7 +320,7 @@ namespace Horo::Editor::Theme
 
                 ThemeEntry te;
                 if (LoadThemeFromJson(path.string().c_str(), te))
-                    g_themeList.push_back(std::move(te));
+                    ThemeList().push_back(std::move(te));
             }
         }
     }
@@ -346,11 +359,11 @@ namespace Horo::Editor::Theme
 
     void SelectThemeByIndex(const int index)
     {
-        if (index < 0 || static_cast<std::size_t>(index) >= g_themeList.size())
+        if (index < 0 || static_cast<std::size_t>(index) >= ThemeList().size())
             return;
 
-        g_activeThemeIndex = index;
-        const auto &entry = g_themeList[index];
+        ActiveThemeIndex() = index;
+        const auto &entry = ThemeList()[index];
 
         // Always apply ImGui style colors when the entry carries custom values.
         if (!entry.colors.empty())
@@ -366,7 +379,7 @@ namespace Horo::Editor::Theme
                 // Horo Dark — apply style fallback if no colors in entry
                 if (entry.colors.empty())
                     ApplyHoroDark(ImGui::GetStyle());
-                g_activeTokens = DefaultDesignTokens();
+                ActiveTokens() = DefaultDesignTokens();
             }
             else if (index == 1)
             {
@@ -385,36 +398,36 @@ namespace Horo::Editor::Theme
             else
             {
                 // Future built-in: fall back to Horo Dark tokens
-                g_activeTokens = DefaultDesignTokens();
+                ActiveTokens() = DefaultDesignTokens();
             }
         }
         else
         {
             // Custom JSON theme: ImGui style already applied above;
             // derive tokens from ImGui style colors.
-            g_activeTokens = DefaultDesignTokens();
+            ActiveTokens() = DefaultDesignTokens();
             auto *c = ImGui::GetStyle().Colors;
-            g_activeTokens.colors.surfaceRoot = c[ImGuiCol_WindowBg];
-            g_activeTokens.colors.surfaceWindow = c[ImGuiCol_ChildBg];
-            g_activeTokens.colors.surfacePanel = c[ImGuiCol_PopupBg];
-            g_activeTokens.colors.surfaceRaised = c[ImGuiCol_FrameBg];
-            g_activeTokens.colors.surfaceHover = c[ImGuiCol_FrameBgHovered];
-            g_activeTokens.colors.border = c[ImGuiCol_Border];
-            g_activeTokens.colors.borderStrong = c[ImGuiCol_TableBorderStrong];
-            g_activeTokens.colors.textPrimary = c[ImGuiCol_Text];
-            g_activeTokens.colors.textMuted = c[ImGuiCol_TextDisabled];
-            g_activeTokens.colors.textDim = c[ImGuiCol_TextDisabled];
-            g_activeTokens.colors.actionPrimary = c[ImGuiCol_CheckMark];
-            g_activeTokens.colors.actionPrimaryHover = c[ImGuiCol_SliderGrabActive];
-            g_activeTokens.colors.actionPrimaryActive = c[ImGuiCol_SliderGrabActive];
-            g_activeTokens.colors.actionPrimarySoft = c[ImGuiCol_Header];
-            g_activeTokens.colors.textOnActionPrimary = c[ImGuiCol_WindowBg];
+            ActiveTokens().colors.surfaceRoot = c[ImGuiCol_WindowBg];
+            ActiveTokens().colors.surfaceWindow = c[ImGuiCol_ChildBg];
+            ActiveTokens().colors.surfacePanel = c[ImGuiCol_PopupBg];
+            ActiveTokens().colors.surfaceRaised = c[ImGuiCol_FrameBg];
+            ActiveTokens().colors.surfaceHover = c[ImGuiCol_FrameBgHovered];
+            ActiveTokens().colors.border = c[ImGuiCol_Border];
+            ActiveTokens().colors.borderStrong = c[ImGuiCol_TableBorderStrong];
+            ActiveTokens().colors.textPrimary = c[ImGuiCol_Text];
+            ActiveTokens().colors.textMuted = c[ImGuiCol_TextDisabled];
+            ActiveTokens().colors.textDim = c[ImGuiCol_TextDisabled];
+            ActiveTokens().colors.actionPrimary = c[ImGuiCol_CheckMark];
+            ActiveTokens().colors.actionPrimaryHover = c[ImGuiCol_SliderGrabActive];
+            ActiveTokens().colors.actionPrimaryActive = c[ImGuiCol_SliderGrabActive];
+            ActiveTokens().colors.actionPrimarySoft = c[ImGuiCol_Header];
+            ActiveTokens().colors.textOnActionPrimary = c[ImGuiCol_WindowBg];
         }
     }
 
     int GetActiveThemeIndex()
     {
-        return g_activeThemeIndex;
+        return ActiveThemeIndex();
     }
 
     // ── Legacy preset API (for backward compat) ──────────────────────────
@@ -526,7 +539,11 @@ namespace Horo::Editor::Theme
             c[ImGuiCol_TableBorderLight] = {0.784F, 0.780F, 0.773F, 0.5F};
         }
 
-        Preset g_preset = Preset::HoroDark;
+        Preset &CurrentPreset()
+        {
+            static Preset preset = Preset::HoroDark;
+            return preset;
+        }
     } // namespace
 
     void Apply(ImGuiStyle &style)
@@ -551,12 +568,12 @@ namespace Horo::Editor::Theme
         SelectThemeByIndex(0);
     }
 
-    void SetThemePreset(const Preset preset) { g_preset = preset; }
-    Preset GetThemePreset() { return g_preset; }
+    void SetThemePreset(const Preset preset) { CurrentPreset() = preset; }
+    Preset GetThemePreset() { return CurrentPreset(); }
 
     void ApplyCurrentTheme()
     {
-        switch (g_preset)
+        switch (CurrentPreset())
         {
         case Preset::Midnight:
             ApplyMidnight(ImGui::GetStyle());
@@ -568,7 +585,7 @@ namespace Horo::Editor::Theme
             break;
         default:
             ApplyHoroDark(ImGui::GetStyle());
-            g_activeTokens = DefaultDesignTokens();
+            ActiveTokens() = DefaultDesignTokens();
             break;
         }
     }
