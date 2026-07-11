@@ -102,15 +102,31 @@ def render_header(entries: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _resolve_build_path(raw_path: str, label: str) -> Path:
+    """Resolve a build path and reject traversal or symlink redirection."""
+    path = Path(raw_path).expanduser()
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{label} path contains '..'")
+
+    candidate = path if path.is_absolute() else Path.cwd() / path
+    current = Path(candidate.anchor)
+    for index, part in enumerate(candidate.parts[1:]):
+        current /= part
+        if index > 0 and current.is_symlink():
+            raise ValueError(f"{label} path traverses symlink '{current}'")
+    return candidate.resolve(strict=False)
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(f"Usage: {sys.argv[0]} <changelog_path> <output_header_path>", file=sys.stderr)
         return 1
 
-    changelog_path = Path(sys.argv[1]).expanduser()
-    output_path = Path(sys.argv[2]).expanduser()
-    if any(part == ".." for part in changelog_path.parts + output_path.parts):
-        print("[parse_changelog] Refusing paths containing '..'.", file=sys.stderr)
+    try:
+        changelog_path = _resolve_build_path(sys.argv[1], "changelog")
+        output_path = _resolve_build_path(sys.argv[2], "output")
+    except ValueError as error:
+        print(f"[parse_changelog] Refusing unsafe path: {error}.", file=sys.stderr)
         return 1
 
     if changelog_path.is_file():

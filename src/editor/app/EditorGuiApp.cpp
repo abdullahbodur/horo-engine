@@ -317,6 +317,7 @@ namespace Horo::Editor
             ImGui_ImplSDL2_NewFrame();
             ImGui::NewFrame();
 
+            const auto drawWelcomeRoute = [&] {
             if (activeRoute.kind == GuiRouteKind::Welcome)
             {
                 const WelcomeScreenGuiResult guiResult = DrawWelcomeScreenGui(
@@ -395,7 +396,11 @@ namespace Horo::Editor
                 modalHost.OnUpdate(io.DeltaTime);
                 modalHost.Draw();
             }
-            else if (activeRoute.kind == GuiRouteKind::ProjectCreation)
+            };
+            drawWelcomeRoute();
+
+            const auto drawProjectCreationRoute = [&] {
+            if (activeRoute.kind == GuiRouteKind::ProjectCreation)
             {
                 const ProjectCreationScreenGuiCommand cmd = DrawProjectCreationScreenGui(projectCreation, projectCreationGuiState, fonts, textures.logo);
                 if (cmd == ProjectCreationScreenGuiCommand::ReturnToWelcome)
@@ -470,8 +475,11 @@ namespace Horo::Editor
                     }
                 }
             }
+            };
+            drawProjectCreationRoute();
 
-            else if (activeRoute.kind == GuiRouteKind::ProjectLoading)
+            const auto drawProjectLoadingRoute = [&] {
+            if (activeRoute.kind == GuiRouteKind::ProjectLoading)
             {
                 // Simulate loading process
                 if (!projectLoadingState.isCancelled)
@@ -501,8 +509,11 @@ namespace Horo::Editor
                     pendingRoute = GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
                 }
             }
+            };
+            drawProjectLoadingRoute();
 
-            else if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
+            const auto drawEditorWorkspaceRoute = [&] {
+            if (activeRoute.kind == GuiRouteKind::EditorWorkspace)
             {
                 // ── Editor Workspace Placeholder ─────────────────────────────────
                 // Full EditorWorkspaceScreen (EditorLayer, EditorPanelHost, etc.)
@@ -563,6 +574,8 @@ namespace Horo::Editor
                 ImGui::End();
                 ImGui::PopStyleColor();
             }
+            };
+            drawEditorWorkspaceRoute();
 
             if (pendingRoute.has_value())
             {
