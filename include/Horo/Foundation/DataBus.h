@@ -80,7 +80,7 @@ namespace Horo
         void Publish(const EventT &event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto replay = std::make_shared<std::any>(event);
+            auto replay = std::make_shared<std::any>(EventT(event));
             PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, *replay,
                           [replay = std::move(replay)](EngineDataBus &bus) {
                               bus.Publish(std::any_cast<const EventT &>(*replay));
@@ -91,7 +91,7 @@ namespace Horo
         void PublishAsync(EventT event)
         {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
-            auto payload = std::make_shared<std::any>(std::move(event));
+            auto payload = std::make_shared<std::any>(EventT(std::move(event)));
             QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
                         [](EngineDataBus &bus, const std::any &raw) {
                             bus.Publish(std::any_cast<const EventT &>(raw));
