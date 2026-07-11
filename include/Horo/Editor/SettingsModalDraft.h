@@ -22,8 +22,8 @@ namespace Horo::Editor
         int activeTab = 0;
         std::uint64_t settingsRevision = 0;
 
-        struct GeneralTab { int startupAction = 0; int autoSaveInterval = 5; bool confirmExit = true; bool restoreWorkspace = true; char defaultScene[64] = "Assets/Scenes/Main"; } general;
-        struct AppearanceTab { int themeIndex = 0; char customThemePath[128] = "~/.horo/themes/my-theme.json"; int uiScale = 100; char editorFontSize[8] = "15"; char accentHex[16] = "#04A5FC"; int pendingThemeIndex = -1; } appearance;
+        struct GeneralTab { int startupAction = 0; int autoSaveInterval = 5; bool confirmExit = true; bool restoreWorkspace = true; std::string defaultScene = "Assets/Scenes/Main"; } general;
+        struct AppearanceTab { int themeIndex = 0; std::string customThemePath = "~/.horo/themes/my-theme.json"; int uiScale = 100; std::string editorFontSize = "15"; std::string accentHex = "#04A5FC"; int pendingThemeIndex = -1; } appearance;
         struct InputTab
         {
             int orbitSensitivity = 100;
@@ -37,7 +37,7 @@ namespace Horo::Editor
             static constexpr const char *kShortcutActions[] = {"Save Scene", "Undo", "Build & Release", "Find", "Replace", "Duplicate", "Delete", "Select All"};
             static constexpr int kShortcutActionCount = static_cast<int>(std::size(kShortcutActions));
         } input;
-        struct RenderingTab { int viewportMode = 0; bool gridOverlay = true; int renderingTier = 0; char textureBudget[32] = "2048 MB"; int renderBackend = 0; } rendering;
+        struct RenderingTab { int viewportMode = 0; bool gridOverlay = true; int renderingTier = 0; std::string textureBudget = "2048 MB"; int renderBackend = 0; } rendering;
         struct AudioTab { int masterVolume = 80; int audioOutputDevice = 0; bool audioEnabled = true; } audio;
         struct NetworkTab { int maxPreviewClients = 4; int simulatedLatencyMs = 0; int packageDownloadThreads = 8; } network;
         struct DiagnosticsTab { int consoleLogLevel = 2; bool writeLogToFile = true; bool autoCaptureStutter = false; float stutterThresholdMs = 33.3F; bool showFps = false; bool anonymousTelemetry = false; } diagnostics;

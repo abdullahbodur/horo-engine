@@ -162,6 +162,7 @@ namespace Horo::Editor::Ui
      * @return True when a valid color value was committed into @p buffer by typing or the picker.
      */
     [[nodiscard]] bool ColorHexControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts);
+    [[nodiscard]] bool ColorHexControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts);
 
     enum class SliderValueFormat : std::uint8_t
     {

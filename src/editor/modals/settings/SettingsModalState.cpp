@@ -39,7 +39,7 @@ namespace Horo::Editor
         out.themePreset = static_cast<EditorThemePreset>(st.appearance.themeIndex);
         out.accentColorHex = st.appearance.accentHex;
         out.uiScalePercent = st.appearance.uiScale;
-        out.codeFontSizePx = std::atoi(st.appearance.editorFontSize);
+        out.codeFontSizePx = std::atoi(st.appearance.editorFontSize.c_str());
 
         out.orbitSensitivity = st.input.orbitSensitivity;
         out.panSensitivity = st.input.panSensitivity;
@@ -83,12 +83,12 @@ namespace Horo::Editor
         st.general.autoSaveInterval = settings.autoSaveIntervalMinutes;
         st.general.confirmExit = settings.confirmExitWithUnsavedChanges;
         st.general.restoreWorkspace = settings.restoreWorkspaceLayout;
-        CopyString(st.general.defaultScene, sizeof(st.general.defaultScene), settings.defaultSceneOnProjectOpen);
+        st.general.defaultScene = settings.defaultSceneOnProjectOpen;
 
         st.appearance.themeIndex = static_cast<int>(settings.themePreset);
         st.appearance.uiScale = settings.uiScalePercent;
-        std::snprintf(st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), "%d", settings.codeFontSizePx);
-        CopyString(st.appearance.accentHex, sizeof(st.appearance.accentHex), settings.accentColorHex);
+        st.appearance.editorFontSize = std::to_string(settings.codeFontSizePx);
+        st.appearance.accentHex = settings.accentColorHex;
 
         st.input.orbitSensitivity = settings.orbitSensitivity;
         st.input.panSensitivity = settings.panSensitivity;
@@ -97,7 +97,7 @@ namespace Horo::Editor
         st.rendering.viewportMode = static_cast<int>(settings.viewportMode);
         st.rendering.gridOverlay = settings.gridOverlay;
         st.rendering.renderingTier = static_cast<int>(settings.renderingTier);
-        CopyString(st.rendering.textureBudget, sizeof(st.rendering.textureBudget), settings.textureStreamingBudget);
+        st.rendering.textureBudget = settings.textureStreamingBudget;
 
         st.audio.masterVolume = settings.masterVolume;
         st.audio.audioOutputDevice = static_cast<int>(settings.audioOutputDevice);

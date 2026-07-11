@@ -211,7 +211,7 @@ namespace Horo::Editor
             SettingRow("Restore Workspace Layout", "Reopen tabs and panel layout from last session.", f,
                        [&st, &f]() { (void)ToggleControl("restore-workspace", &st.general.restoreWorkspace, f); });
             SettingRow("Default Scene On Project Open", "Scene file loaded automatically when opening a project.", f,
-                       [&st, &f]() { (void)InputTextControl("##default-scene", st.general.defaultScene, sizeof(st.general.defaultScene), f); });
+                       [&st, &f]() { (void)InputTextControl("##default-scene", st.general.defaultScene, 64, f); });
         }
 
         void DrawAppearance(SettingsState &st, const Fonts &f)
@@ -239,16 +239,16 @@ namespace Horo::Editor
                 }
             });
             SettingRow("Custom Theme", "Path to a JSON theme file. Leave empty to use built-in.", f, [&st, &f]() {
-                (void)InputTextControl("##custom-theme", st.appearance.customThemePath, sizeof(st.appearance.customThemePath), f);
+                (void)InputTextControl("##custom-theme", st.appearance.customThemePath, 128, f);
             });
             SettingRow("Accent Color", "Used for focus rings, active states, and primary actions.", f, [&st, &f]() {
-                (void)ColorHexControl("accent-color", st.appearance.accentHex, sizeof(st.appearance.accentHex), f);
+                (void)ColorHexControl("accent-color", st.appearance.accentHex, 16, f);
             });
             SettingGroup("TYPOGRAPHY & SCALE", f);
             SettingRow("UI Scale", "Scales all editor chrome uniformly.", f,
                        [&st, &f]() { SliderIntControl("##ui-scale", &st.appearance.uiScale, 75, 200, SliderValueFormat::Percent, f, 25); });
             SettingRow("Code Font Size", "Point size for the script editor and console output.", f,
-                       [&st, &f]() { (void)InputTextControl("##font-size", st.appearance.editorFontSize, sizeof(st.appearance.editorFontSize), f); });
+                       [&st, &f]() { (void)InputTextControl("##font-size", st.appearance.editorFontSize, 8, f); });
         }
 
         void ResolveShortcutConflicts(SettingsState::InputTab &input, const int editedIndex)
@@ -366,7 +366,7 @@ namespace Horo::Editor
             SettingRow("Editor Rendering Tier", "Maximum feature tier used in the editor viewport.", f,
                        [&st, &f]() { (void)ComboControl("##tier", &st.rendering.renderingTier, kTier.data(), static_cast<int>(kTier.size()), f); });
             SettingRow("Texture Streaming Budget", "Maximum texture memory pool used by the streaming system.", f,
-                       [&st, &f]() { (void)InputTextControl("##texture-budget", st.rendering.textureBudget, sizeof(st.rendering.textureBudget), f); });
+                       [&st, &f]() { (void)InputTextControl("##texture-budget", st.rendering.textureBudget, 32, f); });
         }
 
         void DrawAudio(SettingsState &st, const Fonts &f)
