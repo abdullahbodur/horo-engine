@@ -1,4 +1,4 @@
-#include "Horo/Editor/WelcomeScreen.h"
+#include "Horo/Editor/WelcomeController.h"
 
 #include <cassert>
 #include <string>

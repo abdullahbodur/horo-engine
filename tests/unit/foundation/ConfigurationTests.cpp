@@ -107,6 +107,42 @@ void CommitPublishesOnlyBoundedChangeMetadata()
     assert(observed.changedKeys.front().Value() == "editor.theme.active");
 }
 
+void JsonSerializationAndDeserialization()
+{
+    Horo::ConfigurationService service = BuildService();
+    const std::string json = R"json({
+  "revision": 0,
+  "values": {
+    "editor.theme.active": "solarized",
+    "editor.autosave.enabled": false
+  }
+})json";
+    assert(service.LoadJson(json).HasValue());
+    const auto snapshot = service.Snapshot();
+    assert(snapshot.Revision() == 1);
+    assert(std::get<std::string>(snapshot.Get(Horo::SettingKey{"editor.theme.active"})) == "solarized");
+    assert(!std::get<bool>(snapshot.Get(Horo::SettingKey{"editor.autosave.enabled"})));
+
+    const std::string exported = snapshot.ToJson();
+    assert(exported.find("\"editor.theme.active\": \"solarized\"") != std::string::npos);
+    assert(exported.find("\"editor.autosave.enabled\": false") != std::string::npos);
+}
+
+void FilePersistence()
+{
+    Horo::ConfigurationService service = BuildService();
+    const std::string testPath = "test_config_persistence.json";
+    Horo::ConfigurationDraft draft{.baseRevision = 0};
+    draft.proposedValues.emplace(Horo::SettingKey{"editor.theme.active"}, std::string{"dark_pro"});
+    assert(service.Commit(draft).HasValue());
+    assert(service.SaveFile(testPath).HasValue());
+
+    Horo::ConfigurationService loader = BuildService();
+    assert(loader.LoadFile(testPath).HasValue());
+    assert(std::get<std::string>(loader.Snapshot().Get(Horo::SettingKey{"editor.theme.active"})) == "dark_pro");
+    std::remove(testPath.c_str());
+}
+
 } // namespace
 
 int main()
@@ -117,5 +153,7 @@ int main()
     CommitRejectsStaleDraft();
     ValidationDoesNotMutateSnapshot();
     CommitPublishesOnlyBoundedChangeMetadata();
+    JsonSerializationAndDeserialization();
+    FilePersistence();
     return 0;
 }

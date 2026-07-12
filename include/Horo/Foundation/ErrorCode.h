@@ -12,6 +12,7 @@ namespace Horo
     class ErrorCode
     {
     public:
+        ErrorCode() = default;
         explicit ErrorCode(std::string value) : m_value(std::move(value)) {}
         [[nodiscard]] const std::string &Value() const noexcept { return m_value; }
     private:
@@ -22,6 +23,7 @@ namespace Horo
     class ErrorDomainId
     {
     public:
+        ErrorDomainId() = default;
         explicit ErrorDomainId(std::string value) : m_value(std::move(value)) {}
         [[nodiscard]] const std::string &Value() const noexcept { return m_value; }
     private:
@@ -38,5 +40,12 @@ namespace Horo
         ErrorSeverity severity = ErrorSeverity::Error;
         std::string message;
         std::vector<Diagnostic> diagnostics;
+    };
+
+    /** @brief Event published over DataBus whenever a new typed error is reported. */
+    struct ErrorPublishedEvent
+    {
+        static constexpr std::string_view HoroEventTypeName = "horo.foundation.ErrorPublishedEvent";
+        Error error;
     };
 } // namespace Horo

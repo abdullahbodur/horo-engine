@@ -8,8 +8,8 @@
 namespace Horo::Editor {
 
 /**
- * @file ProjectCreationScreen.h
- * @brief Headless workflow contract for the project-creation screen.
+ * @file ProjectCreationController.h
+ * @brief Headless workflow contract for the project-creation controller and validation logic.
  */
 
 /** @brief Filesystem state of a requested project destination. */

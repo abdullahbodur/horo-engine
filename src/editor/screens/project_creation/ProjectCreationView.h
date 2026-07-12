@@ -1,15 +1,15 @@
 #pragma once
 
 #include "Horo/Editor/EditorTheme.h"
-#include "Horo/Editor/ProjectCreationScreen.h"
+#include "Horo/Editor/ProjectCreationController.h"
 #include "Horo/Editor/EditorGuiContext.h"
 
 #include <string>
 
 namespace Horo::Editor {
 
-/** @brief Transient ImGui state retained by the ProjectCreation route presentation. */
-struct ProjectCreationScreenGuiState {
+/** @brief Transient ImGui state retained by the ProjectCreation route view presentation. */
+struct ProjectCreationViewState {
     bool initialized = false;
     int step = 1;
     bool confirmingDiscard = false;
@@ -34,8 +34,8 @@ struct ProjectCreationScreenGuiState {
     bool customSubsystems[5]{true, true, true, false, false};
 };
 
-/** @brief Command emitted by the ProjectCreation route presentation. */
-enum class ProjectCreationScreenGuiCommand {
+/** @brief Command emitted by the ProjectCreation route view presentation. */
+enum class ProjectCreationViewCommand {
     None,
     ReturnToWelcome,
     CreateProject,
@@ -45,13 +45,13 @@ enum class ProjectCreationScreenGuiCommand {
  * @brief Draws the ProjectCreation route as full application content.
  * @param controller Headless project-creation workflow state.
  * @param state Route-local presentation state.
- * @param fonts Loaded editor font handles.
- * @param logo Optional logo texture shown in the modal header.
+ * @param ctx Editor GUI context and fonts.
+ * @param logo Optional logo texture shown in the header.
  * @return Typed navigation command requested during this frame.
  */
-[[nodiscard]] ProjectCreationScreenGuiCommand DrawProjectCreationScreenGui(
+[[nodiscard]] ProjectCreationViewCommand DrawProjectCreationView(
     ProjectCreationController& controller,
-    ProjectCreationScreenGuiState& state,
+    ProjectCreationViewState& state,
     const EditorGuiContext& ctx,
     ImTextureID logo = 0);
 

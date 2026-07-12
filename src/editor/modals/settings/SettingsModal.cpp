@@ -108,6 +108,9 @@ namespace Horo::Editor
             ImGui::InvisibleButton("nav", {rowW, rowH});
             if (ImGui::IsItemClicked())
             {
+                if (st.activeTab != static_cast<int>(item.tab)) {
+                    LOG_DEBUG("editor.settings", "Settings tab changed to '%s'.", item.label);
+                }
                 st.activeTab = static_cast<int>(item.tab);
             }
             const bool hovered = ImGui::IsItemHovered();
@@ -1479,17 +1482,11 @@ namespace Horo::Editor
             ImGui::Dummy({0.0F, 10.0F});
 
             const bool contentChanged = s_lastSelectedPlugin != st.selectedPlugin || s_lastPluginTab != activeTab;
-            const float contentH = std::max(120.0F, ImGui::GetContentRegionAvail().y);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
-            ImGui::BeginChild("PluginDetailContent", {0.0F, contentH}, false,
-                              ImGuiWindowFlags_AlwaysUseWindowPadding);
-            if (contentChanged)
-                ImGui::SetScrollY(0.0F);
+            if (contentChanged && !embedded)
+                ImGui::SetScrollHereY(0.0F);
 
             DrawPluginDetailContentForSelection(st, ctx, activeTab);
 
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
             s_lastSelectedPlugin = st.selectedPlugin;
             s_lastPluginTab = activeTab;
 
@@ -1636,7 +1633,7 @@ namespace Horo::Editor
 
             case 1:
                 {
-                    static const std::array<PermissionRowSpec, 3> kPerms = {
+                    static const std::array<PermissionRowSpec, 2> kPerms = {
                         {
                             {
                                 "✓", "Read and write audio banks",
@@ -1726,7 +1723,7 @@ namespace Horo::Editor
 
             case 1:
                 {
-                    static const std::array<PermissionRowSpec, 3> kPerms = {
+                    static const std::array<PermissionRowSpec, 2> kPerms = {
                         {
                             {
                                 "✓", "Read platform config",
@@ -1781,12 +1778,6 @@ namespace Horo::Editor
         // ── Installed Plugins (split pane) ────────────────────────────
         void DrawInstalledPlugins(SettingsState& st, const EditorGuiContext& ctx)
         {
-            const float availH = ImGui::GetContentRegionAvail().y;
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
-            ImGui::BeginChild("PluginsWorkspace", {0.0F, availH}, true,
-                              ImGuiWindowFlags_AlwaysUseWindowPadding);
-
             {
                 ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
@@ -1805,9 +1796,6 @@ namespace Horo::Editor
             ImGui::Dummy({0.0F, 14.0F});
 
             DrawPluginDetailPanel(st, ctx, ImGui::GetContentRegionAvail().x, true);
-
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
         }
 
         // ── Runtime & Discovery ───────────────────────────────────────
@@ -1928,7 +1916,9 @@ namespace Horo::Editor
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{26.0F, 22.0F});
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
             ImGui::BeginChild("SettingsContent", {0.0F, bodyH}, false,
-                              ImGuiWindowFlags_AlwaysUseWindowPadding);
+                              ImGuiWindowFlags_AlwaysUseWindowPadding |
+                              ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse);
 
             switch (static_cast<SettingsTab>(st.activeTab))
             {
@@ -1960,6 +1950,8 @@ namespace Horo::Editor
             default:
                 break;
             }
+
+            st.targetBodyH = ImGui::GetCursorPosY() + 22.0F;
 
             ImGui::EndChild();
             ImGui::PopStyleColor();
@@ -2021,6 +2013,7 @@ namespace Horo::Editor
                     .baseFontSize = Theme::FontPx::Mono
                 }))
             {
+                LOG_INFO("editor.settings", "Restore Defaults clicked — draft reset to factory defaults.");
                 ApplySettingsToDraft(st, DefaultEditorSettings());
                 st.statusMessage = "Defaults loaded into draft. Apply to persist.";
                 st.statusIsError = false;
@@ -2032,6 +2025,8 @@ namespace Horo::Editor
                 .baseFontSize = Theme::FontPx::Mono
             }))
             {
+                LOG_INFO("editor.settings", "Settings cancelled by user (dirty=%s).",
+                         st.dirty ? "yes" : "no");
                 requestClose = true;
             }
             ImGui::SameLine(0.0F, gap);
@@ -2042,6 +2037,7 @@ namespace Horo::Editor
             }))
             {
                 (void)ApplySettings(st, settings);
+                LOG_INFO("editor.settings", "Settings applied via Apply button.");
             }
 
             ImGui::EndChild();
@@ -2064,7 +2060,20 @@ namespace Horo::Editor
 
             const ImGuiViewport* vp = ImGui::GetMainViewport();
             const float modalW = std::min(Layout::ModalW, std::max(360.0F, vp->WorkSize.x - Layout::ViewportPad));
-            const float modalH = std::min(Layout::ModalH, std::max(360.0F, vp->WorkSize.y - Layout::ViewportPad));
+            float desiredModalH = Layout::ModalH;
+            if (st.targetBodyH > 0.0F)
+            {
+                const float exactContentH = st.targetBodyH + Layout::HeaderH + Layout::FooterH;
+                if (st.activeTab == static_cast<int>(SettingsTab::Plugins))
+                {
+                    desiredModalH = exactContentH;
+                }
+                else
+                {
+                    desiredModalH = std::max(Layout::ModalH, exactContentH);
+                }
+            }
+            const float modalH = std::min(desiredModalH, std::max(360.0F, vp->WorkSize.y - Layout::ViewportPad));
             const ImVec2 modalPos{
                 vp->WorkPos.x + (vp->WorkSize.x - modalW) * 0.5F,
                 vp->WorkPos.y + (vp->WorkSize.y - modalH) * 0.5F

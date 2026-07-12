@@ -1,4 +1,4 @@
-#include "Horo/Editor/WelcomeScreen.h"
+#include "Horo/Editor/WelcomeController.h"
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "GeneratedBuildInfo.h"
@@ -163,6 +163,14 @@ namespace Horo::Editor
         }
 
         return false;
+    }
+
+    /** @copydoc AreRoutesIdentical */
+    bool AreRoutesIdentical(const GuiRoute& lhs, const GuiRoute& rhs) noexcept
+    {
+        if (lhs.kind != rhs.kind) return false;
+        if (lhs.parameters.index() != rhs.parameters.index()) return false;
+        return lhs.parameters == rhs.parameters;
     }
 
     /** @copydoc IsDisplayableRecentProject */

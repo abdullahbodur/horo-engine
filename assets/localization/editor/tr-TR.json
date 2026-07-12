@@ -352,6 +352,9 @@
     "settings.input.shortcut.build": {
       "text": "Derle ve Yayınla"
     },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Kaydetmek için tıkla"
+    },
     "settings.input.shortcut.delete": {
       "text": "Sil"
     },
@@ -360,6 +363,9 @@
     },
     "settings.input.shortcut.find": {
       "text": "Bul"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Tuşlara basın..."
     },
     "settings.input.shortcut.replace": {
       "text": "Değiştir"
@@ -628,11 +634,5 @@
     "welcome.whats_new": {
       "text": "YENİLİKLER"
     }
-  },
-  "settings.input.shortcut.click_to_record": {
-    "value": "Kaydetmek için tıkla"
-  },
-  "settings.input.shortcut.press_keys": {
-    "value": "Tuşlara basın..."
   }
 }

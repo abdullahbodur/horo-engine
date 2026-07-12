@@ -78,10 +78,10 @@ namespace Horo::Editor
                                                                const EditorSettings &settings)
     {
         ConfigurationDraft draft{.baseRevision = base.Revision()};
-        draft.proposedValues.emplace(SettingKey{kThemeKey}, std::string{ToConfigurationThemeValue(settings.themePreset)});
-        draft.proposedValues.emplace(SettingKey{kAccentColorKey}, settings.accentColorHex);
-        draft.proposedValues.emplace(SettingKey{kUiScaleKey}, static_cast<std::int64_t>(settings.uiScalePercent));
-        draft.proposedValues.emplace(SettingKey{kCodeFontSizeKey}, static_cast<std::int64_t>(settings.codeFontSizePx));
+        draft.proposedValues.try_emplace(SettingKey{kThemeKey}, std::string{ToConfigurationThemeValue(settings.themePreset)});
+        draft.proposedValues.try_emplace(SettingKey{kAccentColorKey}, settings.accentColorHex);
+        draft.proposedValues.try_emplace(SettingKey{kUiScaleKey}, static_cast<std::int64_t>(settings.uiScalePercent));
+        draft.proposedValues.try_emplace(SettingKey{kCodeFontSizeKey}, static_cast<std::int64_t>(settings.codeFontSizePx));
         return draft;
     }
 } // namespace Horo::Editor

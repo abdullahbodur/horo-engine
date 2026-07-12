@@ -352,6 +352,9 @@
     "settings.input.shortcut.build": {
       "text": "Build & Release"
     },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Click to record"
+    },
     "settings.input.shortcut.delete": {
       "text": "Delete"
     },
@@ -360,6 +363,9 @@
     },
     "settings.input.shortcut.find": {
       "text": "Find"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Press keys..."
     },
     "settings.input.shortcut.replace": {
       "text": "Replace"
@@ -628,11 +634,5 @@
     "welcome.whats_new": {
       "text": "WHAT'S NEW"
     }
-  },
-  "settings.input.shortcut.click_to_record": {
-    "value": "Click to record"
-  },
-  "settings.input.shortcut.press_keys": {
-    "value": "Press keys..."
   }
 }

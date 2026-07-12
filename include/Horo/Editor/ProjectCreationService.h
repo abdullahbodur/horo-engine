@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Horo/Editor/ProjectCreationScreen.h"
+#include "Horo/Editor/ProjectCreationController.h"
 #include "Horo/Foundation/Result.h"
 
 #include <cstdint>
@@ -88,6 +88,15 @@ struct ProjectCreatedEvent {
     static constexpr std::string_view HoroEventTypeName = "horo::editor::ProjectCreatedEvent";
     ProjectCreationOperationId operationId = 0;
     std::string projectId;
+    ProjectCreationRevision revision = 0;
+};
+
+/** @brief Lightweight notification emitted when operation phase or progress updates during asynchronous execution. */
+struct ProjectCreationProgressEvent {
+    static constexpr std::string_view HoroEventTypeName = "horo::editor::ProjectCreationProgressEvent";
+    ProjectCreationOperationId operationId = 0;
+    ProjectCreationOperationPhase phase = ProjectCreationOperationPhase::Validating;
+    float progress = 0.0F;
     ProjectCreationRevision revision = 0;
 };
 

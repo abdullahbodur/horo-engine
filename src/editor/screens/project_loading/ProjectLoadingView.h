@@ -8,16 +8,16 @@
 namespace Horo::Editor
 {
 
-    enum class ProjectLoadingScreenGuiCommand
+    enum class ProjectLoadingViewCommand
     {
         None,
         Cancel
     };
 
     /**
-     * @brief State for the project loading simulation/UI.
+     * @brief State for the project loading simulation/UI view.
      */
-    struct ProjectLoadingScreenGuiState
+    struct ProjectLoadingViewState
     {
         std::string projectName;
         std::string projectRoot;
@@ -27,13 +27,13 @@ namespace Horo::Editor
     };
 
     /**
-     * @brief Draws the project loading screen overlay/modal.
+     * @brief Draws the project loading screen overlay/view.
      * @param state The current loading state to visualize.
-     * @param fonts The loaded editor fonts.
+     * @param ctx Editor GUI context and fonts.
      * @return Command if the user interacts (e.g. Cancel).
      */
-    [[nodiscard]] ProjectLoadingScreenGuiCommand DrawProjectLoadingScreenGui(
-        ProjectLoadingScreenGuiState &state,
+    [[nodiscard]] ProjectLoadingViewCommand DrawProjectLoadingView(
+        ProjectLoadingViewState &state,
         const EditorGuiContext &ctx);
 
 } // namespace Horo::Editor

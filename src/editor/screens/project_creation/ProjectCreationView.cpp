@@ -1,5 +1,5 @@
 #include <Horo/Editor/Localization/ILocalizationService.h>
-#include "editor/screens/project_creation/ProjectCreationScreenGui.h"
+#include "editor/screens/project_creation/ProjectCreationView.h"
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
@@ -95,7 +95,7 @@ namespace Horo::Editor
             return 1; // Default to 3D Starter
         }
 
-        void SynchronizePresentation(const ProjectCreationController& controller, ProjectCreationScreenGuiState& state)
+        void SynchronizePresentation(const ProjectCreationController& controller, ProjectCreationViewState& state)
         {
             if (state.initialized)
             {
@@ -400,10 +400,10 @@ namespace Horo::Editor
         }
 
         void DrawWizardHeader(const ProjectCreationController& controller,
-                              ProjectCreationScreenGuiState& st,
+                              ProjectCreationViewState& st,
                               const EditorGuiContext& ctx,
                               const ImTextureID logo,
-                              ProjectCreationScreenGuiCommand& outCommand)
+                              ProjectCreationViewCommand& outCommand)
         {
             using namespace Theme;
             using namespace WizardLayout;
@@ -448,7 +448,7 @@ namespace Horo::Editor
                 }
                 else
                 {
-                    outCommand = ProjectCreationScreenGuiCommand::ReturnToWelcome;
+                    outCommand = ProjectCreationViewCommand::ReturnToWelcome;
                 }
             }
 
@@ -462,7 +462,7 @@ namespace Horo::Editor
             ImGui::PopStyleColor();
         }
 
-        void DrawWizardSidebar(ProjectCreationScreenGuiState& st, const EditorGuiContext& ctx, const float sideH)
+        void DrawWizardSidebar(ProjectCreationViewState& st, const EditorGuiContext& ctx, const float sideH)
         {
             using namespace Theme;
             using namespace WizardLayout;
@@ -714,7 +714,7 @@ namespace Horo::Editor
             ImGui::PopID();
         }
 
-        void DrawStepTemplate(ProjectCreationController& controller, [[maybe_unused]] ProjectCreationScreenGuiState& st,
+        void DrawStepTemplate(ProjectCreationController& controller, [[maybe_unused]] ProjectCreationViewState& st,
                               const EditorGuiContext& ctx)
         {
             using namespace WizardLayout;
@@ -766,7 +766,7 @@ namespace Horo::Editor
         }
 
         void DrawProjectLocationField(ProjectCreationController& controller,
-                                      ProjectCreationScreenGuiState& st,
+                                      ProjectCreationViewState& st,
                                       const EditorGuiContext& ctx,
                                       const ProjectCreationDiagnostic* pathErr)
         {
@@ -808,7 +808,7 @@ namespace Horo::Editor
         }
 
         void DrawStepIdentity(ProjectCreationController& controller,
-                              ProjectCreationScreenGuiState& st,
+                              ProjectCreationViewState& st,
                               const EditorGuiContext& ctx,
                               const ProjectCreationValidation& validation)
         {
@@ -897,7 +897,7 @@ namespace Horo::Editor
             }
         }
 
-        void DrawStepSettings(ProjectCreationController& controller, ProjectCreationScreenGuiState& st,
+        void DrawStepSettings(ProjectCreationController& controller, ProjectCreationViewState& st,
                               const EditorGuiContext& ctx)
         {
             using namespace WizardLayout;
@@ -1132,7 +1132,7 @@ namespace Horo::Editor
         void DrawStepReview(const ProjectCreationController& controller,
                             const ProjectCreationValidation& validation,
                             const EditorGuiContext& ctx,
-                            const ProjectCreationScreenGuiState& st)
+                            const ProjectCreationViewState& st)
         {
             using namespace WizardLayout;
             const ProjectCreationDraft& draft = controller.Draft();
@@ -1206,10 +1206,10 @@ namespace Horo::Editor
         }
 
         void DrawWizardFooter(const ProjectCreationController& controller,
-                              ProjectCreationScreenGuiState& st,
+                              ProjectCreationViewState& st,
                               const EditorGuiContext& ctx,
                               const ProjectCreationValidation& validation,
-                              ProjectCreationScreenGuiCommand& outCommand)
+                              ProjectCreationViewCommand& outCommand)
         {
             using namespace WizardLayout;
 
@@ -1294,7 +1294,7 @@ namespace Horo::Editor
                     if (isValid)
                     {
                         (void)controller.BuildCreationRequest();
-                        outCommand = ProjectCreationScreenGuiCommand::CreateProject;
+                        outCommand = ProjectCreationViewCommand::CreateProject;
                     }
                     else if (!validation.diagnostics.empty())
                     {
@@ -1313,9 +1313,9 @@ namespace Horo::Editor
         }
     } // namespace
 
-    ProjectCreationScreenGuiCommand DrawProjectCreationScreenGui(
+    ProjectCreationViewCommand DrawProjectCreationView(
         ProjectCreationController& controller,
-        ProjectCreationScreenGuiState& state,
+        ProjectCreationViewState& state,
         const EditorGuiContext& ctx,
         const ImTextureID logo)
     {
@@ -1351,7 +1351,7 @@ namespace Horo::Editor
             ImGuiWindowFlags_NoScrollbar |
             ImGuiWindowFlags_NoScrollWithMouse;
 
-        ProjectCreationScreenGuiCommand command = ProjectCreationScreenGuiCommand::None;
+        ProjectCreationViewCommand command = ProjectCreationViewCommand::None;
         ImGui::Begin("ProjectCreationScreen", nullptr, modalFlags);
 
         DrawWizardHeader(controller, state, ctx, logo, command);
@@ -1390,7 +1390,7 @@ namespace Horo::Editor
             }))
             {
                 controller.DiscardDraft();
-                command = ProjectCreationScreenGuiCommand::ReturnToWelcome;
+                command = ProjectCreationViewCommand::ReturnToWelcome;
                 state.confirmingDiscard = false;
             }
             ImGui::Dummy({0.0F, 12.0F});

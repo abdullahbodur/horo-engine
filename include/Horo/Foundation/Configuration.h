@@ -66,13 +66,10 @@ namespace Horo
     class ConfigurationSnapshot
     {
     public:
-        [[nodiscard]] ConfigurationRevision Revision() const noexcept { return m_data->revision; }
-        [[nodiscard]] const SettingValue &Get(const SettingKey &key) const
-        {
-            const auto found = m_data->values.find(key);
-            assert(found != m_data->values.end());
-            return found->second;
-        }
+        [[nodiscard]] ConfigurationRevision Revision() const noexcept;
+        [[nodiscard]] const SettingValue &Get(const SettingKey &key) const;
+        [[nodiscard]] std::optional<SettingValue> Find(const SettingKey &key) const;
+        [[nodiscard]] std::string ToJson() const;
     private:
         struct Data
         {
@@ -89,20 +86,12 @@ namespace Horo
     class ConfigurationSchema
     {
     public:
-        [[nodiscard]] Result<void> Register(const SettingDescriptor &descriptor)
-        {
-            if (m_sealed || m_descriptors.contains(descriptor.key) || !MatchesType(descriptor.type, descriptor.defaultValue)) return Result<void>::Failure(ErrorFor("configuration.schema_invalid"));
-            m_descriptors.try_emplace(descriptor.key, descriptor);
-            return Result<void>::Success();
-        }
-        [[nodiscard]] Result<void> Seal() { if (m_sealed) return Result<void>::Failure(ErrorFor("configuration.schema_sealed")); m_sealed = true; return Result<void>::Success(); }
+        [[nodiscard]] Result<void> Register(const SettingDescriptor &descriptor);
+        [[nodiscard]] Result<void> Seal();
     private:
         friend class ConfigurationService;
-        [[nodiscard]] static bool MatchesType(const SettingValueType type, const SettingValue &value)
-        {
-            return (type == SettingValueType::Boolean && std::holds_alternative<bool>(value)) || (type == SettingValueType::Integer && std::holds_alternative<std::int64_t>(value)) || (type == SettingValueType::String && std::holds_alternative<std::string>(value));
-        }
-        [[nodiscard]] static Error ErrorFor(const char *code) { return Error{ErrorCode{code}, ErrorDomainId{"horo.configuration"}, ErrorSeverity::Error, code}; }
+        [[nodiscard]] static bool MatchesType(const SettingValueType type, const SettingValue &value);
+        [[nodiscard]] static Error ErrorFor(const char *code);
         bool m_sealed = false;
         std::unordered_map<SettingKey, SettingDescriptor, SettingKeyHash> m_descriptors;
     };
@@ -111,51 +100,24 @@ namespace Horo
     class ConfigurationService
     {
     public:
-        explicit ConfigurationService(ConfigurationSchema schema, EngineDataBus *events = nullptr) : m_schema(std::move(schema)), m_events(events)
-        {
-            assert(m_schema.m_sealed);
-            auto initial = std::make_shared<ConfigurationSnapshot::Data>();
-            for (const auto &[key, descriptor] : m_schema.m_descriptors) initial->values.try_emplace(key, descriptor.defaultValue);
-            m_active = std::move(initial);
-        }
-        [[nodiscard]] ConfigurationSnapshot Snapshot() const { std::lock_guard lock(m_mutex); return ConfigurationSnapshot(m_active); }
+        explicit ConfigurationService(ConfigurationSchema schema, EngineDataBus *events = nullptr);
+        [[nodiscard]] ConfigurationSnapshot Snapshot() const;
+
         /** @brief Checks a draft against the current revision and schema without mutating the active snapshot. */
-        [[nodiscard]] Result<void> Validate(const ConfigurationDraft &draft) const
-        {
-            std::lock_guard lock(m_mutex);
-            if (draft.baseRevision != m_active->revision) return Result<void>::Failure(ConfigurationSchema::ErrorFor("configuration.draft_stale"));
-            for (const auto &[key, value] : draft.proposedValues)
-            {
-                const auto descriptor = m_schema.m_descriptors.find(key);
-                if (descriptor == m_schema.m_descriptors.end() || !ConfigurationSchema::MatchesType(descriptor->second.type, value))
-                    return Result<void>::Failure(ConfigurationSchema::ErrorFor("configuration.value_invalid"));
-            }
-            return Result<void>::Success();
-        }
-        [[nodiscard]] Result<void> Commit(const ConfigurationDraft &draft)
-        {
-            {
-                std::lock_guard lock(m_mutex);
-                if (draft.baseRevision != m_active->revision) return Result<void>::Failure(ConfigurationSchema::ErrorFor("configuration.draft_stale"));
-                auto candidate = std::make_shared<ConfigurationSnapshot::Data>(*m_active);
-                for (const auto &[key, value] : draft.proposedValues)
-                {
-                    const auto descriptor = m_schema.m_descriptors.find(key);
-                    if (descriptor == m_schema.m_descriptors.end() || !ConfigurationSchema::MatchesType(descriptor->second.type, value)) return Result<void>::Failure(ConfigurationSchema::ErrorFor("configuration.value_invalid"));
-                    candidate->values[key] = value;
-                }
-                candidate->revision = m_active->revision + 1;
-                m_active = std::move(candidate);
-            }
-            if (m_events != nullptr)
-            {
-                ConfigurationChangedEvent event{.revision = Snapshot().Revision()};
-                event.changedKeys.reserve(draft.proposedValues.size());
-                for (const auto &[key, _] : draft.proposedValues) event.changedKeys.push_back(key);
-                m_events->Publish(event);
-            }
-            return Result<void>::Success();
-        }
+        [[nodiscard]] Result<void> Validate(const ConfigurationDraft &draft) const;
+
+        /** @brief Atomically commits a draft if valid and matching baseRevision. */
+        [[nodiscard]] Result<void> Commit(const ConfigurationDraft &draft);
+
+        /** @brief Parses a JSON string into a new draft against current revision and commits it. */
+        [[nodiscard]] Result<void> LoadJson(const std::string &jsonString);
+
+        /** @brief Reads a JSON file from disk into a new draft against current revision and commits it. */
+        [[nodiscard]] Result<void> LoadFile(const std::string &path);
+
+        /** @brief Writes the current snapshot to disk as JSON atomically. */
+        [[nodiscard]] Result<void> SaveFile(const std::string &path) const;
+
     private:
         ConfigurationSchema m_schema;
         mutable std::mutex m_mutex;

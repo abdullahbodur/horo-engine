@@ -1,14 +1,14 @@
-add_executable(HoroEditorWelcomeScreenTests
-    unit/editor/WelcomeScreenTests.cpp
+add_executable(HoroEditorWelcomeControllerTests
+    unit/editor/WelcomeControllerTests.cpp
 )
 
-target_compile_features(HoroEditorWelcomeScreenTests PRIVATE cxx_std_20)
-target_link_libraries(HoroEditorWelcomeScreenTests
+target_compile_features(HoroEditorWelcomeControllerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorWelcomeControllerTests
     PRIVATE
         HoroEngine::EditorScreens
 )
 
-add_test(NAME HoroEditorWelcomeScreenTests COMMAND HoroEditorWelcomeScreenTests)
+add_test(NAME HoroEditorWelcomeControllerTests COMMAND HoroEditorWelcomeControllerTests)
 
 add_executable(HoroEditorModalHostTests
     unit/editor/EditorModalHostTests.cpp
@@ -46,17 +46,17 @@ target_link_libraries(HoroEditorLocalizationServiceTests
 
 add_test(NAME HoroEditorLocalizationServiceTests COMMAND HoroEditorLocalizationServiceTests)
 
-add_executable(HoroProjectCreationScreenTests
-    unit/editor/ProjectCreationScreenTests.cpp
+add_executable(HoroProjectCreationControllerTests
+    unit/editor/ProjectCreationControllerTests.cpp
 )
 
-target_compile_features(HoroProjectCreationScreenTests PRIVATE cxx_std_20)
-target_link_libraries(HoroProjectCreationScreenTests
+target_compile_features(HoroProjectCreationControllerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectCreationControllerTests
     PRIVATE
         HoroEngine::EditorScreens
 )
 
-add_test(NAME HoroProjectCreationScreenTests COMMAND HoroProjectCreationScreenTests)
+add_test(NAME HoroProjectCreationControllerTests COMMAND HoroProjectCreationControllerTests)
 
 add_executable(HoroProjectCreationServiceTests
     unit/editor/ProjectCreationServiceTests.cpp
@@ -130,6 +130,15 @@ target_compile_features(HoroFoundationConfigurationTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationConfigurationTests PRIVATE HoroEngine::Foundation)
 
 add_test(NAME HoroFoundationConfigurationTests COMMAND HoroFoundationConfigurationTests)
+
+add_executable(HoroFoundationDiagnosticsTests
+    unit/foundation/DiagnosticsTests.cpp
+)
+
+target_compile_features(HoroFoundationDiagnosticsTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationDiagnosticsTests PRIVATE HoroEngine::Foundation)
+
+add_test(NAME HoroFoundationDiagnosticsTests COMMAND HoroFoundationDiagnosticsTests)
 
 add_executable(HoroFoundationJobSystemTests
     unit/foundation/JobSystemTests.cpp

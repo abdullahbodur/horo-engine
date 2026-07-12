@@ -179,33 +179,57 @@ void UpdateProgress(const std::shared_ptr<ProjectCreationServiceState>& state,
                     const ProjectCreationOperationPhase phase,
                     const std::string_view progressPhase,
                     const float progress) {
-    std::lock_guard lock(state->synchronization.Mutex());
-    if (IsTerminal(operation->snapshot.state)) return;
-    if (operation->snapshot.state != ProjectCreationOperationState::Cancelling)
-        operation->snapshot.state = operationState;
-    operation->snapshot.phase = phase;
-    static_cast<void>(operation->progress.Report(progressPhase, progress));
-    operation->snapshot.progress = operation->progress.Snapshot().value;
+    ProjectCreationProgressEvent progressEvent;
+    {
+        std::lock_guard lock(state->synchronization.Mutex());
+        if (IsTerminal(operation->snapshot.state)) return;
+        if (operation->snapshot.state != ProjectCreationOperationState::Cancelling)
+            operation->snapshot.state = operationState;
+        operation->snapshot.phase = phase;
+        static_cast<void>(operation->progress.Report(progressPhase, progress));
+        operation->snapshot.progress = operation->progress.Snapshot().value;
+        progressEvent.operationId = operation->snapshot.id;
+        progressEvent.phase = phase;
+        progressEvent.progress = operation->snapshot.progress;
+        progressEvent.revision = ++state->revision;
+    }
+    state->dataBus.PublishAsync(progressEvent);
 }
 
 void SetFailure(const std::shared_ptr<ProjectCreationServiceState>& state,
                 const std::shared_ptr<ProjectCreationServiceState::Operation>& operation,
                 const ProjectCreationErrorCode code,
                 std::string message) {
-    std::lock_guard lock(state->synchronization.Mutex());
-    if (IsTerminal(operation->snapshot.state)) return;
-    operation->snapshot.state = ProjectCreationOperationState::Failed;
-    operation->snapshot.phase = ProjectCreationOperationPhase::Failed;
-    operation->snapshot.error = ProjectCreationError{code, std::move(message)};
+    ProjectCreationRevisionChangedEvent revisionEvent;
+    {
+        std::lock_guard lock(state->synchronization.Mutex());
+        if (IsTerminal(operation->snapshot.state)) return;
+        operation->snapshot.state = ProjectCreationOperationState::Failed;
+        operation->snapshot.phase = ProjectCreationOperationPhase::Failed;
+        operation->snapshot.error = ProjectCreationError{code, std::move(message)};
+        revisionEvent.revision = ++state->revision;
+    }
+    LOG_ERROR("editor.project_creation", "Operation %llu failed [code=%d]: %s",
+              static_cast<unsigned long long>(operation->snapshot.id),
+              static_cast<int>(code),
+              operation->snapshot.error->message.c_str());
+    state->dataBus.PublishAsync(revisionEvent);
 }
 
 void SetCancelled(const std::shared_ptr<ProjectCreationServiceState>& state,
                   const std::shared_ptr<ProjectCreationServiceState::Operation>& operation) {
-    std::lock_guard lock(state->synchronization.Mutex());
-    if (IsTerminal(operation->snapshot.state)) return;
-    operation->snapshot.state = ProjectCreationOperationState::Cancelled;
-    operation->snapshot.phase = ProjectCreationOperationPhase::Cancelled;
-    operation->snapshot.error = ProjectCreationError{ProjectCreationErrorCode::Cancelled, "Project creation was cancelled."};
+    ProjectCreationRevisionChangedEvent revisionEvent;
+    {
+        std::lock_guard lock(state->synchronization.Mutex());
+        if (IsTerminal(operation->snapshot.state)) return;
+        operation->snapshot.state = ProjectCreationOperationState::Cancelled;
+        operation->snapshot.phase = ProjectCreationOperationPhase::Cancelled;
+        operation->snapshot.error = ProjectCreationError{ProjectCreationErrorCode::Cancelled, "Project creation was cancelled."};
+        revisionEvent.revision = ++state->revision;
+    }
+    LOG_INFO("editor.project_creation", "Operation %llu cancelled.",
+             static_cast<unsigned long long>(operation->snapshot.id));
+    state->dataBus.PublishAsync(revisionEvent);
 }
 
 [[nodiscard]] bool IsCancelled(const CancellationToken& cancellation,
@@ -281,6 +305,20 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
 
     LOG_DEBUG("editor.project_creation", "Starting worker execution for operation %llu. Destination: '%s'", static_cast<unsigned long long>(operation->snapshot.id), destination.string().c_str());
     LOG_DEBUG("editor.project_creation", "Resolved parent directory: '%s', staging directory: '%s'", parent.string().c_str(), staging.string().c_str());
+
+    UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::Validating, "validating", 0.02F);
+    if (IsCancelled(cancellation, state, operation)) return;
+
+    if (std::filesystem::exists(destination, error)) {
+        if (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error)) {
+            SetFailure(state, operation, ProjectCreationErrorCode::DestinationOccupied, "Project destination already exists and will not be overwritten.");
+            return;
+        }
+    }
+    if (error) {
+        SetFailure(state, operation, ProjectCreationErrorCode::InvalidRequest, "Project destination cannot be inspected.");
+        return;
+    }
 
     UpdateProgress(state, operation, ProjectCreationOperationState::Running, ProjectCreationOperationPhase::Staging, "staging", 0.05F);
     if (IsCancelled(cancellation, state, operation)) return;
@@ -368,7 +406,7 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState>& state,
     state->dataBus.PublishAsync(changed);
 }
 
-[[nodiscard]] std::optional<Error> ValidateRequest(const ProjectCreationRequest& request) {
+[[nodiscard]] std::optional<Error> ValidateRequestSync(const ProjectCreationRequest& request) {
     if (IsBlank(request.templateId) || IsBlank(request.projectName) || request.projectName.find('/') != std::string::npos || request.projectName.find('\\') != std::string::npos)
         return MakeFoundationError("project_creation.invalid_request", "Project name is required and must not contain path separators.");
     if (request.projectRoot.empty() || request.projectRoot.filename().empty())
@@ -395,7 +433,7 @@ ProjectCreationService::ProjectCreationService(JobSystem& jobs, EngineDataBus& d
 
 Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(ProjectCreationRequest request) {
     LOG_DEBUG("editor.project_creation", "StartCreate requested for project '%s' at path '%s', template '%s'", request.projectName.c_str(), request.projectRoot.string().c_str(), request.templateId.c_str());
-    if (const auto validation = ValidateRequest(request)) {
+    if (const auto validation = ValidateRequestSync(request)) {
         LOG_DEBUG("editor.project_creation", "StartCreate validation failed: %s", validation->message.c_str());
         return Result<ProjectCreationOperationHandle>::Failure(*validation);
     }
@@ -421,7 +459,11 @@ Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(Proje
         std::lock_guard lock(state_->synchronization.Mutex());
         operation->jobId = submitted.Value().Id();
     }
-    LOG_DEBUG("editor.project_creation", "Job %llu dispatched successfully for operation %llu (projectId=%s)", static_cast<unsigned long long>(operation->jobId), static_cast<unsigned long long>(operation->snapshot.id), operation->snapshot.projectId.c_str());
+    LOG_INFO("editor.project_creation", "Project creation started: '%s' path='%s' (op=%llu job=%llu).",
+             operation->snapshot.projectId.c_str(),
+             operation->snapshot.projectRoot.string().c_str(),
+             static_cast<unsigned long long>(operation->snapshot.id),
+             static_cast<unsigned long long>(operation->jobId));
     return Result<ProjectCreationOperationHandle>::Success(ProjectCreationOperationHandle{operation->snapshot.id});
 }
 
@@ -438,9 +480,17 @@ Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperatio
     {
         std::lock_guard lock(state_->synchronization.Mutex());
         const auto found = state_->operations.find(id);
-        if (found == state_->operations.end()) return Result<void>::Failure(MakeFoundationError("project_creation.not_found", "Project creation operation is not known."));
+        if (found == state_->operations.end()) {
+            LOG_WARN("editor.project_creation", "RequestCancel: operation %llu not found.",
+                     static_cast<unsigned long long>(id));
+            return Result<void>::Failure(MakeFoundationError("project_creation.not_found", "Project creation operation is not known."));
+        }
         operation = found->second;
-        if (IsTerminal(operation->snapshot.state)) return Result<void>::Success();
+        if (IsTerminal(operation->snapshot.state)) {
+            LOG_DEBUG("editor.project_creation", "RequestCancel: operation %llu already in terminal state.",
+                      static_cast<unsigned long long>(id));
+            return Result<void>::Success();
+        }
         jobId = operation->jobId;
         operation->snapshot.state = ProjectCreationOperationState::Cancelling;
     }
@@ -448,6 +498,9 @@ Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperatio
     const auto cancelled = jobs_.get().RequestCancel(jobId);
     if (cancelled.HasError()) return cancelled;
     if (jobs_.get().Query(jobId).state == JobState::Cancelled) SetCancelled(state_, operation);
+    LOG_INFO("editor.project_creation", "Cancellation requested for operation %llu (job=%llu).",
+             static_cast<unsigned long long>(id),
+             static_cast<unsigned long long>(jobId));
     return Result<void>::Success();
 }
 

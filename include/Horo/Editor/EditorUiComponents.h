@@ -249,4 +249,12 @@ namespace Horo::Editor::Ui
     /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */
     [[nodiscard]] bool ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);
 
+    // ── Dock UI ───────────────────────────────────────────────────────────
+
+    int DrawDockTabs(const std::vector<const char*>& tabs, int activeTab, const Theme::Fonts& fonts);
+
+    void DrawObjTitle(const char* title, const char* badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts& fonts);
+    void DrawPropSection(const char* label, const Theme::Fonts& fonts);
+    void DrawPropRow(const char* label, const char* value, const Theme::Fonts& fonts);
+
 } // namespace Horo::Editor::Ui

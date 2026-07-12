@@ -76,6 +76,28 @@ void CatalogFileLoaderParsesResourceFormat()
     assert(service.Get("editor", "settings.title") == "Ayarlar");
     std::filesystem::remove(path);
 }
+
+void AssetLocalizationCatalogsContainShortcutMessages()
+{
+    const std::filesystem::path enPath = "assets/localization/editor/en-US.json";
+    const std::filesystem::path trPath = "assets/localization/editor/tr-TR.json";
+    if (!std::filesystem::exists(enPath) || !std::filesystem::exists(trPath)) return;
+
+    Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
+    Horo::Editor::LocalizationError error;
+    assert(service.LoadCatalogFile(enPath, &error));
+    assert(service.LoadCatalogFile(trPath, &error));
+
+    assert(service.Prepare(Horo::Editor::LocaleTag{"en-US"}, &error));
+    assert(service.ActivatePrepared(&error));
+    assert(service.Get("editor", "settings.input.shortcut.click_to_record") == "Click to record");
+    assert(service.Get("editor", "settings.input.shortcut.press_keys") == "Press keys...");
+
+    assert(service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error));
+    assert(service.ActivatePrepared(&error));
+    assert(service.Get("editor", "settings.input.shortcut.click_to_record") == "Kaydetmek için tıkla");
+    assert(service.Get("editor", "settings.input.shortcut.press_keys") == "Tuşlara basın...");
+}
 } // namespace
 
 int main()
@@ -85,5 +107,6 @@ int main()
     FailedPreparationLeavesActiveLocaleUnchanged();
     MissingMessageDoesNotUseSourceFallback();
     CatalogFileLoaderParsesResourceFormat();
+    AssetLocalizationCatalogsContainShortcutMessages();
     return 0;
 }

@@ -1,5 +1,5 @@
 #include <Horo/Editor/Localization/ILocalizationService.h>
-#include "editor/screens/welcome/WelcomeScreenGui.h"
+#include "editor/screens/welcome/WelcomeView.h"
 
 #include "Horo/Editor/EditorUiComponents.h"
 
@@ -116,9 +116,9 @@ namespace Horo::Editor
 
     } // namespace
 
-    [[nodiscard]] WelcomeScreenGuiResult DrawWelcomeScreenGui(const WelcomeViewModel &viewModel,
-                                                               const EditorGuiContext &ctx,
-                                                               const WelcomeScreenGuiAssets &assets)
+    [[nodiscard]] WelcomeViewResult DrawWelcomeView(const WelcomeViewModel &viewModel,
+                                                    const EditorGuiContext &ctx,
+                                                    const WelcomeViewAssets &assets)
     {
         using namespace Theme;
 
@@ -130,7 +130,7 @@ namespace Horo::Editor
                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
-        WelcomeScreenGuiResult result;
+        WelcomeViewResult result;
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, Bg1());
         ImGui::Begin("Welcome", nullptr, flags);
@@ -196,15 +196,15 @@ namespace Horo::Editor
         const std::string openSettings = ctx.localization.Get("editor", "welcome.open_settings");
         if (DrawWelcomeActionButton(newProject.c_str(), Ui::ButtonVariant::Primary, ctx))
         {
-            result.command = WelcomeScreenGuiCommand::NewProject;
+            result.command = WelcomeViewCommand::NewProject;
         }
         if (DrawWelcomeActionButton(openProject.c_str(), Ui::ButtonVariant::Secondary, ctx))
         {
-            result.command = WelcomeScreenGuiCommand::OpenProject;
+            result.command = WelcomeViewCommand::OpenProject;
         }
         if (DrawWelcomeActionButton(openSettings.c_str(), Ui::ButtonVariant::Secondary, ctx))
         {
-            result.command = WelcomeScreenGuiCommand::OpenSettings;
+            result.command = WelcomeViewCommand::OpenSettings;
         }
 
         ImGui::EndChild();
@@ -241,7 +241,7 @@ namespace Horo::Editor
         {
             if (DrawProjectCard(viewModel.recentProjects[i], static_cast<int>(i), ctx))
             {
-                result.command = WelcomeScreenGuiCommand::OpenRecentProject;
+                result.command = WelcomeViewCommand::OpenRecentProject;
                 result.openRecentIndex = static_cast<int>(i);
             }
         }

@@ -48,6 +48,15 @@ All components live in `Horo::Editor::Ui`.
 | `ShortcutDisplay` | `void ShortcutDisplay(a, b, c, fonts)` | Keyboard shortcut keycaps |
 | `ThemeChip` | `bool ThemeChip(label, swatch, active, fonts)` | Color theme chip button |
 
+### Dock & Workspace
+
+| Component | Signature | Description |
+|---|---|---|
+| `DrawDockTabs` | `int DrawDockTabs(tabs, activeTab, fonts)` | Draws the tab bar for a dock and returns clicked index |
+| `DrawObjTitle` | `void DrawObjTitle(title, badgeText, badgeBg, badgeFg, fonts)` | Inspector object title header |
+| `DrawPropSection` | `void DrawPropSection(label, fonts)` | Inspector property section header |
+| `DrawPropRow` | `void DrawPropRow(label, value, fonts)` | Inspector property key-value row |
+
 ## Usage
 
 Modals and screens import via `#include "Horo/Editor/EditorUiComponents.h"`

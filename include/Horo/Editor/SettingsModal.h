@@ -4,8 +4,10 @@
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/SettingsModalDraft.h"
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Foundation/Logging/LogContext.h"
 
 #include <cstdint>
+#include <memory>
 
 namespace Horo::Editor
 {
@@ -40,5 +42,7 @@ namespace Horo::Editor
         EditorDataBus *m_events = nullptr;
         SettingsState m_draft;
         bool m_revertedPublished = false;
+        /// @brief RAII MDC frame active for the lifetime of this modal.
+        std::unique_ptr<Horo::Log::LogContext> m_logCtx;
     };
 } // namespace Horo::Editor

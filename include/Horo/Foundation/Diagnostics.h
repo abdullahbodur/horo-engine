@@ -9,6 +9,7 @@ namespace Horo
     class DiagnosticCode
     {
     public:
+        DiagnosticCode() = default;
         explicit DiagnosticCode(std::string value) : m_value(std::move(value)) {}
         [[nodiscard]] const std::string &Value() const noexcept { return m_value; }
     private:
@@ -32,5 +33,12 @@ namespace Horo
         DiagnosticSeverity severity = DiagnosticSeverity::Error;
         std::string message;
         SourceLocation location;
+    };
+
+    /** @brief Event published over DataBus whenever a new diagnostic finding is reported. */
+    struct DiagnosticPublishedEvent
+    {
+        static constexpr std::string_view HoroEventTypeName = "horo.foundation.DiagnosticPublishedEvent";
+        Diagnostic diagnostic;
     };
 } // namespace Horo

@@ -12,8 +12,8 @@
 namespace Horo::Editor {
 
 /**
- * @file WelcomeScreen.h
- * @brief View-model and command contract for the HoroEditor welcome screen.
+ * @file WelcomeController.h
+ * @brief View-model and command contract for the HoroEditor welcome screen controller.
  */
 
 /**

@@ -1,4 +1,4 @@
-#include "ProjectLoadingScreenGui.h"
+#include "ProjectLoadingView.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
@@ -10,11 +10,11 @@
 
 namespace Horo::Editor
 {
-    ProjectLoadingScreenGuiCommand DrawProjectLoadingScreenGui(
-        ProjectLoadingScreenGuiState& state,
+    ProjectLoadingViewCommand DrawProjectLoadingView(
+        ProjectLoadingViewState& state,
         const EditorGuiContext& ctx)
     {
-        ProjectLoadingScreenGuiCommand cmd = ProjectLoadingScreenGuiCommand::None;
+        ProjectLoadingViewCommand cmd = ProjectLoadingViewCommand::None;
 
         // Cover the entire screen with the canvas background
         const auto* viewport = ImGui::GetMainViewport();
@@ -112,7 +112,7 @@ namespace Horo::Editor
             {
                 state.isCancelled = true;
                 state.statusText = ctx.localization.Get("editor", "project_loading.status.cancelling");
-                cmd = ProjectLoadingScreenGuiCommand::Cancel;
+                cmd = ProjectLoadingViewCommand::Cancel;
             }
         }
 

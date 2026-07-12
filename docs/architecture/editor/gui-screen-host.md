@@ -53,6 +53,33 @@ HoroEditorApp
 `GuiScreenHost` owns the active screen object and navigation state.
 `EditorWorkspaceScreen` composes `EditorLayer`, which owns panel and modal hosts.
 
+## Screen Registration and Service Provisioning (Registry Architecture)
+
+To avoid compiling every concrete screen header inside a single application
+file or passing a monolithic context object with dozens of service references
+through every constructor, `GuiScreenHost` utilizes explicit composition-time
+service provisioning (`EditorServiceRegistry`) and factory registration
+(`ScreenRegistry`).
+
+```text
+Composition Root (EditorLayer / App)
+  |-- Populates -> EditorServiceRegistry (type-indexed typed service lookup)
+  |-- Registers -> ScreenRegistry (map<GuiRouteKind, ScreenFactory>)
+  +-- Passes to -> GuiScreenHost
+```
+
+```cpp
+using ScreenFactory = std::function<std::unique_ptr<IGuiScreen>(
+    const EditorServiceRegistry& services,
+    const RouteParameters& parameters)>;
+```
+
+### Core Provisioning Rules
+
+- **No Global Statics or Ambient Lookups:** Following [System Design](../foundation/system-design.md), screens and panels must not query process-global service locators (`ServiceLoader::Get()`) or mutate global registries during static initialization. All registrations happen explicitly at composition time.
+- **Narrow Dependency Injection:** Each screen factory pulls from `EditorServiceRegistry` only the exact subset of services it requires. For example, `WelcomeScreen` pulls `LocalizationService&` and `WelcomeScreenController&`, while `ProjectCreationScreen` pulls `ProjectCreationService&` and `JobSystem&`.
+- **Decoupled Route Construction:** `GuiScreenHost::Navigate()` does not contain hard-coded `switch/case` constructor blocks for every route. It queries `ScreenRegistry::CreateScreen(route.kind, m_services, route.parameters)`. If an extension package or future workspace workflow registers a new `GuiRouteKind` or custom panel, `GuiScreenHost` instantiates it transparently without modifying core navigation code or including external headers.
+
 ## Startup Flow
 
 `WelcomeScreen` is the first active route of `HoroEditor`. It is not

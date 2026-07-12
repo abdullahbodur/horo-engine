@@ -3,6 +3,8 @@ add_library(HoroFoundation STATIC
         foundation/logging/LogContext.cpp
         foundation/data_bus/DataBus.cpp
         foundation/jobs/JobSystem.cpp
+        foundation/config/Configuration.cpp
+        foundation/diagnostics/DiagnosticsEngine.cpp
 )
 
 add_library(HoroEngine::Foundation ALIAS HoroFoundation)
@@ -27,8 +29,8 @@ target_include_directories(HoroPlatform
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroEditorScreens STATIC
-        editor/screens/WelcomeScreen.cpp
-        editor/screens/project_creation/ProjectCreationScreen.cpp
+        editor/screens/welcome/WelcomeController.cpp
+        editor/screens/project_creation/ProjectCreationController.cpp
         editor/project_model/ProjectCreationService.cpp
         editor/settings/EditorConfiguration.cpp
         editor/settings/EditorSettingsService.cpp
@@ -63,9 +65,22 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/app/EditorGuiApp.cpp
             editor/app/EditorTheme.cpp
             editor/modals/settings/SettingsModal.cpp
-            editor/screens/welcome/WelcomeScreenGui.cpp
-            editor/screens/project_creation/ProjectCreationScreenGui.cpp
-            editor/screens/project_loading/ProjectLoadingScreenGui.cpp
+            editor/screens/welcome/WelcomeView.cpp
+            editor/screens/welcome/WelcomeScreen.cpp
+            editor/screens/project_creation/ProjectCreationView.cpp
+            editor/screens/project_creation/ProjectCreationScreen.cpp
+            editor/screens/project_loading/ProjectLoadingView.cpp
+            editor/screens/project_loading/ProjectLoadingScreen.cpp
+            editor/screens/workspace/HierarchyPanel.cpp
+            editor/screens/workspace/InspectorPanel.cpp
+            editor/screens/workspace/ViewportPanel.cpp
+            editor/screens/workspace/WorkspacePanelRegistry.cpp
+            editor/screens/workspace/DefaultWorkspacePanels.cpp
+            editor/screens/workspace/ContentBrowserPanel.cpp
+            editor/screens/workspace/EditorWorkspaceController.cpp
+            editor/screens/workspace/EditorWorkspaceView.cpp
+            editor/screens/workspace/EditorWorkspaceScreen.cpp
+            editor/screens/GuiScreenHost.cpp
     )
 
     add_library(HoroEngine::EditorGuiBackend ALIAS HoroEditorGuiBackend)
