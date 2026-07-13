@@ -119,6 +119,18 @@ See [Editor Modal Host](./editor-modal-host.md).
 
 ## Panel Host
 
+> [!NOTE]
+> **Phase 1 Implementation Status:** 
+> The architecture described below (with dynamic Layout Trees, `EditorPanelHost`, and `EditorTab` virtual interfaces) outlines the long-term target architecture. 
+> 
+> Currently, the editor uses a simplified **Phase 1** implementation:
+> - Layout regions are defined by a fixed enum: `WorkspaceDockArea` (Left, Right, Bottom, Document).
+> - Panels are registered via `WorkspacePanelRegistry` using the `WorkspacePanelInfo` struct, which relies on `std::function` callbacks (`drawPanel`, `drawIcon`) for immediate-mode rendering rather than full object-oriented interfaces.
+> - The `EditorWorkspaceView` acts as the Layout Manager (`EditorPanelHost` equivalent), automatically querying the registry, drawing `Ui::DrawDockTabs`, and managing child windows for the active panel content.
+> - Active tab state per dock area is stored in `EditorWorkspaceViewModel` and mutated via `EditorWorkspaceViewCommand::ChangeActivePanel`.
+>
+> The advanced node tree layout below will be introduced when custom draggable window layouts are implemented.
+
 `EditorPanelHost` is a thin layout and tab-lifecycle manager. It knows:
 
 - the workspace layout tree
@@ -289,6 +301,24 @@ tab, `MoveTab()` changes its stack and index, and `CloseTab()` removes it from
 the visible layout without unregistering or destroying it. `UnregisterTab()` and
 `UnregisterPanel()` detach and destroy the registered surface after removing all
 layout references.
+
+### Panel and Tab Service Provisioning (Registry Architecture)
+
+To support modular addition of workspace panels (such as `HierarchyPanel`,
+`InspectorPanel`, `ConsoleTab`, or third-party package dashboards) without
+passing a monolithic context object or modifying `EditorWorkspaceController`
+for each new surface, panel construction uses composition-time service
+provisioning (`EditorServiceRegistry`).
+
+```cpp
+using TabFactory = std::function<std::unique_ptr<EditorTab>(
+    const EditorServiceRegistry& services)>;
+using PanelFactory = std::function<std::unique_ptr<EditorPanel>(
+    const EditorServiceRegistry& services)>;
+```
+
+- **Scoped Dependency Injection:** When `EditorLayer` activates the workspace, `EditorWorkspaceController` populates the session `EditorServiceRegistry` with narrow capabilities (`EditorDataBus&`, `SceneDocument&`, `EditorSelectionModel&`).
+- **Dynamic Surface Instantiation:** Each panel or tab descriptor registers its factory function with `PanelRegistry`. `EditorPanelHost` constructs registered surfaces by supplying only the required services, avoiding tight coupling between panels and preventing header bloat at the workspace composition root.
 
 ## Surface Contracts
 

@@ -1,0 +1,638 @@
+{
+  "schemaVersion": 1,
+  "messageFormat": "plain-text-1",
+  "locale": "tr-TR",
+  "namespace": "editor",
+  "messages": {
+    "editor_workspace.action.return_to_welcome": {
+      "text": "← Karşılama Ekranına Dön"
+    },
+    "editor_workspace.title": {
+      "text": "Editör Çalışma Alanı"
+    },
+    "project_creation.back": {
+      "text": "← Geri"
+    },
+    "project_creation.create": {
+      "text": "Proje Oluştur"
+    },
+    "project_creation.identity.directory": {
+      "text": "PROJE DİZİNİ"
+    },
+    "project_creation.identity.location": {
+      "text": "PROJE KONUMU"
+    },
+    "project_creation.identity.location.hint": {
+      "text": "Boş bir klasör veya yazılabilir bir üst dizine sahip eksik bir konum seçin."
+    },
+    "project_creation.identity.location.select": {
+      "text": "Proje Konumunu Seçin"
+    },
+    "project_creation.identity.name": {
+      "text": "PROJE İSMİ"
+    },
+    "project_creation.identity.name.hint": {
+      "text": "project.json ismi olarak saklanır; projectId bir kez oluşturulur."
+    },
+    "project_creation.identity.scene": {
+      "text": "VARSAYILAN SAHNE"
+    },
+    "project_creation.identity.version": {
+      "text": "PROJE SÜRÜMÜ"
+    },
+    "project_creation.identity.version.hint": {
+      "text": "Oyun/ürün sürümü. Proje format geçişlerini seçmez."
+    },
+    "project_creation.next": {
+      "text": "İleri →"
+    },
+    "project_creation.review.settings": {
+      "text": "PROJE AYARLARI"
+    },
+    "project_creation.review.what_will_be_created": {
+      "text": "NELER OLUŞTURULACAK"
+    },
+    "project_creation.settings.custom": {
+      "text": "ÖZEL ALTSİSTEM SEÇİMİ"
+    },
+    "project_creation.settings.first_person": {
+      "text": "BİRİNCİ ŞAHIS KONTROLCÜ AYARLARI"
+    },
+    "project_creation.settings.optional": {
+      "text": "İSTEĞE BAĞLI"
+    },
+    "project_creation.settings.package": {
+      "text": "PAKET KAYNAK YAPILANDIRMASI"
+    },
+    "project_creation.settings.runtime": {
+      "text": "ÇALIŞMA ZAMANI VARSAYILANLARI"
+    },
+    "project_creation.settings.tech_demo": {
+      "text": "TEKNOLOJİ DEMOSU YAPILANDIRMASI"
+    },
+    "project_creation.settings.toolchain": {
+      "text": "GEREKLİ ARAÇ ZİNCİRİ"
+    },
+    "project_creation.step.identity.desc": {
+      "text": "İsim & konum"
+    },
+    "project_creation.step.identity.title": {
+      "text": "Kimlik"
+    },
+    "project_creation.step.review.desc": {
+      "text": "Doğrula & oluştur"
+    },
+    "project_creation.step.review.title": {
+      "text": "Gözden Geçir"
+    },
+    "project_creation.step.settings.desc": {
+      "text": "Varsayılan ayarlar"
+    },
+    "project_creation.step.settings.title": {
+      "text": "Ayarlar"
+    },
+    "project_creation.step.template.choose": {
+      "text": "BİR ŞABLON SEÇİN"
+    },
+    "project_creation.step.template.desc": {
+      "text": "Başlangıç seç"
+    },
+    "project_creation.step.template.title": {
+      "text": "Şablon"
+    },
+    "project_creation.subtitle": {
+      "text": "Taşınabilir .horo metadata ve başlangıç içeriği oluştur"
+    },
+    "project_creation.template.3d_starter": {
+      "text": "3B Başlangıç"
+    },
+    "project_creation.template.3d_starter.desc": {
+      "text": "Sahne, kamera, yönlü ışık, zemin, materyal varsayılanları."
+    },
+    "project_creation.template.custom": {
+      "text": "Özel"
+    },
+    "project_creation.template.custom.desc": {
+      "text": "Proje oluşturulmadan önce sistemleri manuel olarak seçin."
+    },
+    "project_creation.template.empty": {
+      "text": "Boş"
+    },
+    "project_creation.template.empty.desc": {
+      "text": "Başlangıç sahnesi yok. Minimal varlık ağacı ve project.json."
+    },
+    "project_creation.template.first_person": {
+      "text": "Birinci Şahıs"
+    },
+    "project_creation.template.first_person.desc": {
+      "text": "Karakter kontrolcüsü, girdi haritası, kapsül ve test seviyesi."
+    },
+    "project_creation.template.package_based": {
+      "text": "Paket Tabanlı"
+    },
+    "project_creation.template.package_based.desc": {
+      "text": "Doğrulanmış bir şablon paketinden ve kilit dosyasından oluşturun."
+    },
+    "project_creation.template.tech_demo": {
+      "text": "Teknoloji Demosu"
+    },
+    "project_creation.template.tech_demo.desc": {
+      "text": "Görüntüleme örnekleri, gözlemlenebilirlik arayüzleri, test sahnesi."
+    },
+    "project_creation.title": {
+      "text": "YENİ PROJE"
+    },
+    "project_loading.action.cancel": {
+      "text": "İptal"
+    },
+    "project_loading.status.cancelling": {
+      "text": "İptal ediliyor..."
+    },
+    "project_loading.status.finalizing": {
+      "text": "Çalışma alanı tamamlanıyor..."
+    },
+    "project_loading.status.init_db": {
+      "text": "Varlık veritabanı başlatılıyor..."
+    },
+    "project_loading.status.loading_scene": {
+      "text": "Varsayılan sahne yükleniyor..."
+    },
+    "project_loading.status.parsing": {
+      "text": "Proje manifestleri ayrıştırılıyor..."
+    },
+    "project_loading.title.opening": {
+      "text": "Açılıyor:"
+    },
+    "settings.appearance.accent_color": {
+      "text": "Vurgu Rengi"
+    },
+    "settings.appearance.accent_color.description": {
+      "text": "Odak halkaları, aktif durumlar ve birincil eylemler için kullanılır."
+    },
+    "settings.appearance.code_font_size": {
+      "text": "Kod Yazı Boyutu"
+    },
+    "settings.appearance.code_font_size.description": {
+      "text": "Script editörü ve konsol çıktısı için punto boyutu."
+    },
+    "settings.appearance.color_theme": {
+      "text": "Renk Teması"
+    },
+    "settings.appearance.color_theme.description": {
+      "text": "Yerleşik temalar veya özel JSON tema dosyası."
+    },
+    "settings.appearance.custom_theme": {
+      "text": "Özel Tema"
+    },
+    "settings.appearance.custom_theme.description": {
+      "text": "JSON tema dosyasının yolu. Yerleşik tema için boş bırakın."
+    },
+    "settings.appearance.theme_group": {
+      "text": "TEMA"
+    },
+    "settings.appearance.typography_group": {
+      "text": "TİPOGRAFİ & ÖLÇEK"
+    },
+    "settings.appearance.ui_scale": {
+      "text": "Arayüz Ölçeği"
+    },
+    "settings.appearance.ui_scale.description": {
+      "text": "Editör arayüzünün tamamını aynı oranda ölçekler."
+    },
+    "settings.apply": {
+      "text": "Uygula"
+    },
+    "settings.audio.enable_in_editor": {
+      "text": "Editörde Sesi Etkinleştir"
+    },
+    "settings.audio.enable_in_editor.description": {
+      "text": "Editör içi sesleri ve ses varlığı önizlemelerini oynat."
+    },
+    "settings.audio.headphones": {
+      "text": "Kulaklıklar"
+    },
+    "settings.audio.master_volume": {
+      "text": "Ana Ses"
+    },
+    "settings.audio.master_volume.description": {
+      "text": "Editörün genel ses çıkış seviyesi (0–100)."
+    },
+    "settings.audio.output_device": {
+      "text": "Ses Çıkış Aygıtı"
+    },
+    "settings.audio.output_device.description": {
+      "text": "Editör sesi için tercih edilen oynatma aygıtı."
+    },
+    "settings.audio.output_group": {
+      "text": "ÇIKIŞ"
+    },
+    "settings.audio.speakers": {
+      "text": "Hoparlörler"
+    },
+    "settings.audio.system_default": {
+      "text": "Sistem Varsayılanı"
+    },
+    "settings.cancel": {
+      "text": "İptal"
+    },
+    "settings.diagnostics.auto_capture": {
+      "text": "Takılmada Otomatik Yakala"
+    },
+    "settings.diagnostics.auto_capture.description": {
+      "text": "Kare sıçraması algılandığında profiler yakalamasını başlat."
+    },
+    "settings.diagnostics.debug": {
+      "text": "Hata Ayıklama"
+    },
+    "settings.diagnostics.error": {
+      "text": "Hata"
+    },
+    "settings.diagnostics.info": {
+      "text": "Bilgi"
+    },
+    "settings.diagnostics.log_level": {
+      "text": "Konsol Günlük Seviyesi"
+    },
+    "settings.diagnostics.log_level.description": {
+      "text": "Editör konsol çıktısında gösterilecek minimum önem seviyesi."
+    },
+    "settings.diagnostics.logging_group": {
+      "text": "LOGLAMA"
+    },
+    "settings.diagnostics.profiler_group": {
+      "text": "PROFİLEYİCİ"
+    },
+    "settings.diagnostics.stutter_threshold": {
+      "text": "Takılma Eşiği (ms)"
+    },
+    "settings.diagnostics.stutter_threshold.description": {
+      "text": "Bu değerin üzerindeki kare süresi otomatik yakalamayı tetikler."
+    },
+    "settings.diagnostics.warning": {
+      "text": "Uyarı"
+    },
+    "settings.diagnostics.write_log": {
+      "text": "Günlüğü Dosyaya Yaz"
+    },
+    "settings.diagnostics.write_log.description": {
+      "text": "Konsol günlüğünü zaman damgalı bir dosyaya kaydet."
+    },
+    "settings.general.autosave_interval": {
+      "text": "Otomatik Kayıt Aralığı"
+    },
+    "settings.general.autosave_interval.description": {
+      "text": "Otomatik sahne kayıtları arasındaki dakika. Sıfır otomatik kaydı kapatır."
+    },
+    "settings.general.confirm_exit": {
+      "text": "Kaydedilmemiş Değişikliklerde Çıkışı Onayla"
+    },
+    "settings.general.confirm_exit.description": {
+      "text": "Kaydedilmemiş değişiklikler varken kapatmadan önce sor."
+    },
+    "settings.general.default_scene": {
+      "text": "Proje Açılışında Varsayılan Sahne"
+    },
+    "settings.general.default_scene.description": {
+      "text": "Proje açılırken otomatik yüklenen sahne dosyası."
+    },
+    "settings.general.restore_workspace": {
+      "text": "Çalışma Alanı Düzenini Geri Yükle"
+    },
+    "settings.general.restore_workspace.description": {
+      "text": "Son oturumdaki sekmeleri ve panel düzenini yeniden aç."
+    },
+    "settings.general.session_group": {
+      "text": "EDİTÖR OTURUMU"
+    },
+    "settings.general.startup_behavior": {
+      "text": "Başlangıç Davranışı"
+    },
+    "settings.general.startup_behavior.description": {
+      "text": "Editör açıldığında gösterilecek görünüm."
+    },
+    "settings.general.startup_browser": {
+      "text": "Proje tarayıcı"
+    },
+    "settings.general.startup_group": {
+      "text": "BAŞLANGIÇ & PROJE"
+    },
+    "settings.general.startup_last": {
+      "text": "Son proje"
+    },
+    "settings.general.startup_welcome": {
+      "text": "Karşılama Ekranı"
+    },
+    "settings.input.action": {
+      "text": "Eylem"
+    },
+    "settings.input.invert_orbit_y": {
+      "text": "Yörünge Y Ekseni Ters"
+    },
+    "settings.input.invert_orbit_y.description": {
+      "text": "Dikey yörünge yönünü tersine çevirir."
+    },
+    "settings.input.navigation_group": {
+      "text": "NAVİGASYON"
+    },
+    "settings.input.orbit_sensitivity": {
+      "text": "Yörünge Hassasiyeti"
+    },
+    "settings.input.orbit_sensitivity.description": {
+      "text": "Viewport kamerasını döndürmek için fare sürükleme çarpanı."
+    },
+    "settings.input.pan_sensitivity": {
+      "text": "Kaydırma Hassasiyeti"
+    },
+    "settings.input.pan_sensitivity.description": {
+      "text": "Viewport kamerasını kaydırmak için fare sürükleme çarpanı."
+    },
+    "settings.input.shortcut": {
+      "text": "Kısayol"
+    },
+    "settings.input.shortcut.build": {
+      "text": "Derle ve Yayınla"
+    },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Kaydetmek için tıkla"
+    },
+    "settings.input.shortcut.delete": {
+      "text": "Sil"
+    },
+    "settings.input.shortcut.duplicate": {
+      "text": "Çoğalt"
+    },
+    "settings.input.shortcut.find": {
+      "text": "Bul"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Tuşlara basın..."
+    },
+    "settings.input.shortcut.replace": {
+      "text": "Değiştir"
+    },
+    "settings.input.shortcut.save_scene": {
+      "text": "Sahneyi Kaydet"
+    },
+    "settings.input.shortcut.select_all": {
+      "text": "Tümünü Seç"
+    },
+    "settings.input.shortcut.undo": {
+      "text": "Geri Al"
+    },
+    "settings.input.shortcut_conflict": {
+      "text": "⚠ Başka bir kısayolla çakışıyor"
+    },
+    "settings.input.shortcuts_group": {
+      "text": "KISAYOLLAR"
+    },
+    "settings.language": {
+      "text": "Dil"
+    },
+    "settings.language.description": {
+      "text": "Editör arayüzünde kullanılan dil."
+    },
+    "settings.language.english": {
+      "text": "İngilizce"
+    },
+    "settings.language.turkish": {
+      "text": "Türkçe"
+    },
+    "settings.nav.appearance": {
+      "text": "Görünüm"
+    },
+    "settings.nav.audio": {
+      "text": "Ses"
+    },
+    "settings.nav.diagnostics": {
+      "text": "Tanılama"
+    },
+    "settings.nav.editor": {
+      "text": "Editör"
+    },
+    "settings.nav.engine": {
+      "text": "Motor"
+    },
+    "settings.nav.general": {
+      "text": "Genel"
+    },
+    "settings.nav.input": {
+      "text": "Girdi"
+    },
+    "settings.nav.network": {
+      "text": "Ağ"
+    },
+    "settings.nav.plugins": {
+      "text": "Eklentiler"
+    },
+    "settings.nav.rendering": {
+      "text": "Render"
+    },
+    "settings.nav.tools": {
+      "text": "Araçlar"
+    },
+    "settings.network.download_threads": {
+      "text": "Paket İndirme İş Parçacıkları"
+    },
+    "settings.network.download_threads.description": {
+      "text": "Şablon ve varlık paketleri için paralel indirme işçileri."
+    },
+    "settings.network.max_preview_clients": {
+      "text": "Maksimum Önizleme İstemcisi"
+    },
+    "settings.network.max_preview_clients.description": {
+      "text": "Maksimum eşzamanlı PIE (Editörde Oynat) istemci bağlantısı."
+    },
+    "settings.network.multiplayer_group": {
+      "text": "ÇOK OYUNCULU ÖNİZLEME"
+    },
+    "settings.network.simulate_latency": {
+      "text": "Gecikmeyi Simüle Et"
+    },
+    "settings.network.simulate_latency.description": {
+      "text": "Loopback üzerine eklenen yapay tek yönlü gecikme (ms)."
+    },
+    "settings.plugins.action.disable": {
+      "text": "Devre Dışı Bırak"
+    },
+    "settings.plugins.action.enable": {
+      "text": "Etkinleştir"
+    },
+    "settings.plugins.action.install": {
+      "text": "Yükle..."
+    },
+    "settings.plugins.action.open_docs": {
+      "text": "Dökümanları Aç"
+    },
+    "settings.plugins.action.open_logs": {
+      "text": "Logları Aç"
+    },
+    "settings.plugins.action.reload": {
+      "text": "Yenile"
+    },
+    "settings.plugins.action.validate": {
+      "text": "Doğrula"
+    },
+    "settings.plugins.category.audio": {
+      "text": "Ses"
+    },
+    "settings.plugins.category.editor": {
+      "text": "Editör Aracı"
+    },
+    "settings.plugins.category.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.description": {
+      "text": "Kurulu eklentiler ayarları, izinleri, tanılamayı ve manifest metadata’sını sunar. Proje eklentileri yalnızca güvenilirse editör eklentilerini geçersiz kılar."
+    },
+    "settings.plugins.feedback.install_not_implemented": {
+      "text": "Eklenti yükleme penceresi henüz uygulanmadı."
+    },
+    "settings.plugins.feedback.reloaded": {
+      "text": "Eklentiler başarıyla yenilendi."
+    },
+    "settings.plugins.fmod.desc": {
+      "text": "FMOD Studio yazarlığı, canlı güncelleme, banka içe aktarımı ve çalışma zamanı bağlama."
+    },
+    "settings.plugins.fmod.detail_desc": {
+      "text": "Horo ses varlıklarını FMOD Studio bankaları, olay referansları, canlı güncelleme ve derleme doğrulaması ile bağlar."
+    },
+    "settings.plugins.installed": {
+      "text": "Yüklü"
+    },
+    "settings.plugins.mcp.desc": {
+      "text": "Sahne, varlık ve editör operasyonları için yerel otomasyon köprüsü."
+    },
+    "settings.plugins.mcp.detail_desc": {
+      "text": "Harici araçların proje durumunu inceleyebilmesi, varlıklar oluşturabilmesi, editör komutlarını çalıştırabilmesi ve teşhis sorgulayabilmesi için yerel bir MCP uç noktası sunar."
+    },
+    "settings.plugins.restart.needs_sdk": {
+      "text": "SDK yolu gerekiyor"
+    },
+    "settings.plugins.restart.not_required": {
+      "text": "Yeniden başlatma gerekmez"
+    },
+    "settings.plugins.restart.on_enable": {
+      "text": "Etkinleştirmede yeniden başlat"
+    },
+    "settings.plugins.runtime": {
+      "text": "Çalışma Zamanı & Keşif"
+    },
+    "settings.plugins.scope.editor": {
+      "text": "Editör geneli"
+    },
+    "settings.plugins.scope.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.scope.project": {
+      "text": "Proje kapsamlı"
+    },
+    "settings.plugins.signed.disabled": {
+      "text": "Devre Dışı"
+    },
+    "settings.plugins.signed.signed": {
+      "text": "İmzalı"
+    },
+    "settings.plugins.signed.vendor": {
+      "text": "Doğrulanmış Sağlayıcı"
+    },
+    "settings.plugins.status.disabled": {
+      "text": "Devre Dışı"
+    },
+    "settings.plugins.status.enabled": {
+      "text": "Etkinleştirildi"
+    },
+    "settings.plugins.status.trusted": {
+      "text": "Güvenilir"
+    },
+    "settings.plugins.status.vendor": {
+      "text": "Doğrulanmış Sağlayıcı"
+    },
+    "settings.plugins.steam.desc": {
+      "text": "Steam başarımları, arayüzü, ağ soketleri ve derleme meta verileri."
+    },
+    "settings.plugins.steam.detail_desc": {
+      "text": "Arayüz, başarımlar, ağ soketleri ve App ID meta verileri gibi Steam platform hizmetlerini ekler."
+    },
+    "settings.rendering.dx11": {
+      "text": "DX11"
+    },
+    "settings.rendering.dx12_vulkan": {
+      "text": "DX12 / Vulkan"
+    },
+    "settings.rendering.es3": {
+      "text": "ES3"
+    },
+    "settings.rendering.grid_overlay": {
+      "text": "Izgara Katmanı"
+    },
+    "settings.rendering.grid_overlay.description": {
+      "text": "Editör viewport’unda referans ızgarasını göster."
+    },
+    "settings.rendering.high_end": {
+      "text": "Yüksek Seviye"
+    },
+    "settings.rendering.lit": {
+      "text": "Aydınlatılmış"
+    },
+    "settings.rendering.quality_group": {
+      "text": "KALİTE"
+    },
+    "settings.rendering.shaded": {
+      "text": "Gölgelendirilmiş"
+    },
+    "settings.rendering.texture_budget": {
+      "text": "Texture Streaming Bütçesi"
+    },
+    "settings.rendering.texture_budget.description": {
+      "text": "Streaming sistemi tarafından kullanılan maksimum texture bellek havuzu."
+    },
+    "settings.rendering.tier": {
+      "text": "Editör Render Seviyesi"
+    },
+    "settings.rendering.tier.description": {
+      "text": "Editör viewport’unda kullanılan en yüksek özellik seviyesi."
+    },
+    "settings.rendering.unlit": {
+      "text": "Aydınlatmasız"
+    },
+    "settings.rendering.viewport_group": {
+      "text": "GÖRÜNÜM ALANI"
+    },
+    "settings.rendering.viewport_mode": {
+      "text": "Varsayılan Viewport Modu"
+    },
+    "settings.rendering.viewport_mode.description": {
+      "text": "Yeni viewport panellerinde kullanılan gölgelendirme modu."
+    },
+    "settings.rendering.wireframe": {
+      "text": "Tel Kafes"
+    },
+    "settings.restore_defaults": {
+      "text": "Varsayılanları Geri Yükle"
+    },
+    "settings.title": {
+      "text": "Editör Ayarları"
+    },
+    "welcome.browse_all": {
+      "text": "TÜMÜNE GÖZ AT"
+    },
+    "welcome.new_project": {
+      "text": "+  Yeni Proje"
+    },
+    "welcome.open_project": {
+      "text": "   Proje Aç"
+    },
+    "welcome.open_settings": {
+      "text": "   Ayarları Aç"
+    },
+    "welcome.recent_projects": {
+      "text": "SON PROJELER"
+    },
+    "welcome.subtitle": {
+      "text": "Oyun Motoru"
+    },
+    "welcome.whats_new": {
+      "text": "YENİLİKLER"
+    }
+  }
+}

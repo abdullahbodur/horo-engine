@@ -18,6 +18,7 @@ compile_commands.json
 # Generated release and analysis artifacts
 sbom.spdx.json
 .scannerwork/
+generated/
 
 # Generated test and editor artifacts
 ui_test_output/
@@ -50,3 +51,4 @@ __pycache__/
 # OS metadata
 .DS_Store
 Thumbs.db
+.horo/

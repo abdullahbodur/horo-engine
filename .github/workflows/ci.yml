@@ -193,12 +193,6 @@ jobs:
           key: fetchcontent-sonar-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
           restore-keys: fetchcontent-sonar-
 
-      - name: Install Build Wrapper
-        run: |
-          curl -sSL --proto '=https' --tlsv1.2 -o /tmp/bw.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
-          unzip -qo /tmp/bw.zip -d /tmp/bw
-          chmod +x /tmp/bw/build-wrapper-linux-x86/build-wrapper-linux-x86-64
-          echo "/tmp/bw/build-wrapper-linux-x86" >> $GITHUB_PATH
 
       - name: Configure
         run: |
@@ -208,15 +202,14 @@ jobs:
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
-      - name: Build (wrapped)
+      - name: Build
         run: |
-          build-wrapper-linux-x86-64 \
-            --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} \
-            cmake --build build/sonar --parallel
+          cmake --build build/sonar --parallel
 
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@299e4b793aaa83bf2aba7c9c14bedbb485688ec4
@@ -226,4 +219,7 @@ jobs:
           args: >
             -Dsonar.organization=docktail
             -Dsonar.projectKey=abdullahbodur_horo-engine
-            -Dsonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300

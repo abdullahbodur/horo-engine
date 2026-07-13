@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace Horo::Editor {
 
@@ -25,5 +26,18 @@ struct RecentProjectEntry {
  * @return True when name and root path are non-empty.
  */
 [[nodiscard]] bool IsDisplayableRecentProject(const RecentProjectEntry& entry) noexcept;
+
+/**
+ * @brief Loads the recent project entries from user local storage (~/.horo/recent_projects.json).
+ * @return Vector of valid recent project entries.
+ */
+[[nodiscard]] std::vector<RecentProjectEntry> LoadRecentProjectsFromDisk();
+
+/**
+ * @brief Saves the given recent projects vector to user local storage (~/.horo/recent_projects.json).
+ * @param projects List of recent project entries to persist.
+ * @return True on success, false if writing fails.
+ */
+bool SaveRecentProjectsToDisk(const std::vector<RecentProjectEntry>& projects);
 
 } // namespace Horo::Editor

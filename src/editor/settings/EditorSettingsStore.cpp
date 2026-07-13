@@ -1,4 +1,6 @@
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/Localization/LocalizationTypes.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
 #include <charconv>
@@ -14,7 +16,7 @@ namespace Horo::Editor
 {
     namespace
     {
-        [[nodiscard]] std::string GetEnvVar(const char *name)
+        [[nodiscard]] std::string GetEnvVar(const char* name)
         {
             if (!name || !*name)
             {
@@ -34,12 +36,12 @@ namespace Horo::Editor
             value.resize(len - 1);
             return value;
 #else
-            const char *value = std::getenv(name);
+            const char* value = std::getenv(name);
             return value ? std::string(value) : std::string();
 #endif
         }
 
-        [[nodiscard]] std::string ReadWholeFile(const std::filesystem::path &path, std::string *outError)
+        [[nodiscard]] std::string ReadWholeFile(const std::filesystem::path& path, std::string* outError)
         {
             std::ifstream in(path, std::ios::binary);
             if (!in.is_open())
@@ -123,9 +125,9 @@ namespace Horo::Editor
             return out;
         }
 
-        [[nodiscard]] std::optional<std::string> FindStringValue(const std::string &json, const char *key)
+        [[nodiscard]] std::optional<std::string> FindStringValue(const std::string& json, const char* key)
         {
-            const std::regex re(std::string{"\""} + key + "\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"");
+            const std::regex re(std::string{R"(")"} + key + R"re("\s*:\s*"((?:\\.|[^"])*)")re");
             std::smatch match;
             if (!std::regex_search(json, match, re) || match.size() < 2)
             {
@@ -134,7 +136,7 @@ namespace Horo::Editor
             return UnescapeJsonString(match[1].str());
         }
 
-        [[nodiscard]] std::optional<bool> FindBoolValue(const std::string &json, const char *key)
+        [[nodiscard]] std::optional<bool> FindBoolValue(const std::string& json, const char* key)
         {
             const std::regex re(std::string{"\""} + key + R"("\s*:\s*(true|false))");
             std::smatch match;
@@ -145,7 +147,7 @@ namespace Horo::Editor
             return match[1].str() == "true";
         }
 
-        [[nodiscard]] std::optional<int> FindIntValue(const std::string &json, const char *key)
+        [[nodiscard]] std::optional<int> FindIntValue(const std::string& json, const char* key)
         {
             const std::regex re(std::string{"\""} + key + R"("\s*:\s*(-?\d+))");
             std::smatch match;
@@ -155,8 +157,8 @@ namespace Horo::Editor
             }
             int value = 0;
             const std::string text = match[1].str();
-            const auto *begin = text.data();
-            if (const auto *end = begin + text.size();
+            const auto* begin = text.data();
+            if (const auto* end = begin + text.size();
                 std::from_chars(begin, end, value).ec != std::errc{})
             {
                 return std::nullopt;
@@ -164,7 +166,7 @@ namespace Horo::Editor
             return value;
         }
 
-        [[nodiscard]] std::optional<float> FindFloatValue(const std::string &json, const char *key)
+        [[nodiscard]] std::optional<float> FindFloatValue(const std::string& json, const char* key)
         {
             const std::regex re(std::string{"\""} + key + R"("\s*:\s*(-?\d+(?:\.\d+)?))");
             std::smatch match;
@@ -176,11 +178,11 @@ namespace Horo::Editor
             {
                 return std::stof(match[1].str());
             }
-            catch (const std::invalid_argument &)
+            catch (const std::invalid_argument&)
             {
                 return std::nullopt;
             }
-            catch (const std::out_of_range &)
+            catch (const std::out_of_range&)
             {
                 return std::nullopt;
             }
@@ -192,7 +194,8 @@ namespace Horo::Editor
             {
                 return false;
             }
-            return std::all_of(value.begin() + 1, value.end(), [](const char c) {
+            return std::all_of(value.begin() + 1, value.end(), [](const char c)
+            {
                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
             });
         }
@@ -207,7 +210,7 @@ namespace Horo::Editor
             return WelcomeScreen;
         }
 
-        [[nodiscard]] const char *ToString(const EditorStartupBehavior value)
+        [[nodiscard]] const char* ToString(const EditorStartupBehavior value)
         {
             using enum EditorStartupBehavior;
             switch (value)
@@ -232,7 +235,7 @@ namespace Horo::Editor
             return HoroDark;
         }
 
-        [[nodiscard]] const char *ToString(const EditorThemePreset value)
+        [[nodiscard]] const char* ToString(const EditorThemePreset value)
         {
             using enum EditorThemePreset;
             switch (value)
@@ -259,7 +262,7 @@ namespace Horo::Editor
             return Shaded;
         }
 
-        [[nodiscard]] const char *ToString(const EditorViewportMode value)
+        [[nodiscard]] const char* ToString(const EditorViewportMode value)
         {
             using enum EditorViewportMode;
             switch (value)
@@ -288,7 +291,7 @@ namespace Horo::Editor
             return HighEnd;
         }
 
-        [[nodiscard]] const char *ToString(const EditorRenderingTier value)
+        [[nodiscard]] const char* ToString(const EditorRenderingTier value)
         {
             using enum EditorRenderingTier;
             switch (value)
@@ -315,7 +318,7 @@ namespace Horo::Editor
             return SystemDefault;
         }
 
-        [[nodiscard]] const char *ToString(const EditorAudioOutputDevice value)
+        [[nodiscard]] const char* ToString(const EditorAudioOutputDevice value)
         {
             using enum EditorAudioOutputDevice;
             switch (value)
@@ -342,7 +345,7 @@ namespace Horo::Editor
             return Warning;
         }
 
-        [[nodiscard]] const char *ToString(const EditorConsoleLogLevel value)
+        [[nodiscard]] const char* ToString(const EditorConsoleLogLevel value)
         {
             using enum EditorConsoleLogLevel;
             switch (value)
@@ -359,45 +362,132 @@ namespace Horo::Editor
             }
         }
 
-        void ApplyJsonValues(const std::string &json, EditorSettings &s)
+        void ApplyEditorGroup(const std::string& json, EditorSettings& s)
         {
             if (auto v = FindStringValue(json, "startupBehavior"); v.has_value()) s.startupBehavior = ParseStartup(*v);
             if (auto v = FindIntValue(json, "autoSaveIntervalMinutes"); v.has_value()) s.autoSaveIntervalMinutes = *v;
-            if (auto v = FindBoolValue(json, "confirmExitWithUnsavedChanges"); v.has_value()) s.confirmExitWithUnsavedChanges = *v;
+            if (auto v = FindBoolValue(json, "confirmExitWithUnsavedChanges"); v.has_value()) s.
+                confirmExitWithUnsavedChanges = *v;
             if (auto v = FindBoolValue(json, "restoreWorkspaceLayout"); v.has_value()) s.restoreWorkspaceLayout = *v;
-            if (auto v = FindStringValue(json, "defaultSceneOnProjectOpen"); v.has_value()) s.defaultSceneOnProjectOpen = *v;
+            if (auto v = FindStringValue(json, "defaultSceneOnProjectOpen"); v.has_value()) s.defaultSceneOnProjectOpen
+                = *v;
+            if (auto v = FindStringValue(json, "languageTag"); v.has_value()) s.languageTag = *v;
+        }
 
+        void ApplyAppearanceGroup(const std::string& json, EditorSettings& s)
+        {
             if (auto v = FindStringValue(json, "themePreset"); v.has_value()) s.themePreset = ParseThemePreset(*v);
             if (auto v = FindStringValue(json, "accentColorHex"); v.has_value()) s.accentColorHex = *v;
             if (auto v = FindIntValue(json, "uiScalePercent"); v.has_value()) s.uiScalePercent = *v;
             if (auto v = FindIntValue(json, "codeFontSizePx"); v.has_value()) s.codeFontSizePx = *v;
+            if (auto v = FindStringValue(json, "uiFontFamily"); v.has_value()) s.uiFontFamily = *v;
+            if (auto v = FindStringValue(json, "codeFontFamily"); v.has_value()) s.codeFontFamily = *v;
+        }
 
+        void ApplyInputGroup(const std::string& json, EditorSettings& s)
+        {
             if (auto v = FindIntValue(json, "orbitSensitivity"); v.has_value()) s.orbitSensitivity = *v;
             if (auto v = FindIntValue(json, "panSensitivity"); v.has_value()) s.panSensitivity = *v;
             if (auto v = FindBoolValue(json, "invertOrbitY"); v.has_value()) s.invertOrbitY = *v;
+        }
 
+        void ApplyRenderingGroup(const std::string& json, EditorSettings& s)
+        {
             if (auto v = FindStringValue(json, "viewportMode"); v.has_value()) s.viewportMode = ParseViewportMode(*v);
             if (auto v = FindBoolValue(json, "gridOverlay"); v.has_value()) s.gridOverlay = *v;
-            if (auto v = FindStringValue(json, "renderingTier"); v.has_value()) s.renderingTier = ParseRenderingTier(*v);
+            if (auto v = FindStringValue(json, "renderingTier"); v.has_value()) s.renderingTier =
+                ParseRenderingTier(*v);
             if (auto v = FindStringValue(json, "textureStreamingBudget"); v.has_value()) s.textureStreamingBudget = *v;
+        }
 
+        void ApplyAudioNetworkGroups(const std::string& json, EditorSettings& s)
+        {
             if (auto v = FindIntValue(json, "masterVolume"); v.has_value()) s.masterVolume = *v;
-            if (auto v = FindStringValue(json, "audioOutputDevice"); v.has_value()) s.audioOutputDevice = ParseAudioDevice(*v);
+            if (auto v = FindStringValue(json, "audioOutputDevice"); v.has_value()) s.audioOutputDevice =
+                ParseAudioDevice(*v);
             if (auto v = FindBoolValue(json, "audioEnabled"); v.has_value()) s.audioEnabled = *v;
-
             if (auto v = FindIntValue(json, "maxPreviewClients"); v.has_value()) s.maxPreviewClients = *v;
             if (auto v = FindIntValue(json, "simulatedLatencyMs"); v.has_value()) s.simulatedLatencyMs = *v;
             if (auto v = FindIntValue(json, "packageDownloadThreads"); v.has_value()) s.packageDownloadThreads = *v;
+        }
 
+        void ApplyDiagnosticsPluginsGroups(const std::string& json, EditorSettings& s)
+        {
             if (auto v = FindStringValue(json, "consoleLogLevel"); v.has_value()) s.consoleLogLevel = ParseLogLevel(*v);
             if (auto v = FindBoolValue(json, "writeLogToFile"); v.has_value()) s.writeLogToFile = *v;
             if (auto v = FindBoolValue(json, "autoCaptureOnStutter"); v.has_value()) s.autoCaptureOnStutter = *v;
             if (auto v = FindFloatValue(json, "stutterThresholdMs"); v.has_value()) s.stutterThresholdMs = *v;
-
             if (auto v = FindBoolValue(json, "horoMcpBridgeEnabled"); v.has_value()) s.horoMcpBridgeEnabled = *v;
             if (auto v = FindBoolValue(json, "fmodIntegrationEnabled"); v.has_value()) s.fmodIntegrationEnabled = *v;
             if (auto v = FindBoolValue(json, "steamworksSdkEnabled"); v.has_value()) s.steamworksSdkEnabled = *v;
             if (auto v = FindStringValue(json, "pluginDiscoveryPath"); v.has_value()) s.pluginDiscoveryPath = *v;
+        }
+
+        void ApplyJsonValues(const std::string& json, EditorSettings& s)
+        {
+            ApplyEditorGroup(json, s);
+            ApplyAppearanceGroup(json, s);
+            ApplyInputGroup(json, s);
+            ApplyRenderingGroup(json, s);
+            ApplyAudioNetworkGroups(json, s);
+            ApplyDiagnosticsPluginsGroups(json, s);
+        }
+
+        void WriteSettings(std::ofstream& out, const EditorSettings& s)
+        {
+            const auto boolStr = [](const bool v) { return v ? "true" : "false"; };
+            out << "{\n";
+            out << "  \"editor\": {\n";
+            out << R"(    "startupBehavior": ")" << ToString(s.startupBehavior) << "\",\n";
+            out << R"(    "autoSaveIntervalMinutes": )" << s.autoSaveIntervalMinutes << ",\n";
+            out << R"(    "confirmExitWithUnsavedChanges": )" << boolStr(s.confirmExitWithUnsavedChanges) << ",\n";
+            out << R"(    "restoreWorkspaceLayout": )" << boolStr(s.restoreWorkspaceLayout) << ",\n";
+            out << R"(    "defaultSceneOnProjectOpen": ")" << EscapeJsonString(s.defaultSceneOnProjectOpen) << "\",\n";
+            out << R"(    "languageTag": ")" << EscapeJsonString(s.languageTag) << "\",\n";
+            out << "  },\n";
+            out << "  \"appearance\": {\n";
+            out << R"(    "themePreset": ")" << ToString(s.themePreset) << "\",\n";
+            out << R"(    "accentColorHex": ")" << EscapeJsonString(s.accentColorHex) << "\",\n";
+            out << R"(    "uiScalePercent": )" << s.uiScalePercent << ",\n";
+            out << R"(    "codeFontSizePx": )" << s.codeFontSizePx << ",\n";
+            out << R"(    "uiFontFamily": ")" << EscapeJsonString(s.uiFontFamily) << "\",\n";
+            out << R"(    "codeFontFamily": ")" << EscapeJsonString(s.codeFontFamily) << "\"\n";
+            out << "  },\n";
+            out << "  \"input\": {\n";
+            out << R"(    "orbitSensitivity": )" << s.orbitSensitivity << ",\n";
+            out << R"(    "panSensitivity": )" << s.panSensitivity << ",\n";
+            out << R"(    "invertOrbitY": )" << boolStr(s.invertOrbitY) << "\n";
+            out << "  },\n";
+            out << "  \"rendering\": {\n";
+            out << R"(    "viewportMode": ")" << ToString(s.viewportMode) << "\",\n";
+            out << R"(    "gridOverlay": )" << boolStr(s.gridOverlay) << ",\n";
+            out << R"(    "renderingTier": ")" << ToString(s.renderingTier) << "\",\n";
+            out << R"(    "textureStreamingBudget": ")" << EscapeJsonString(s.textureStreamingBudget) << "\"\n";
+            out << "  },\n";
+            out << "  \"audio\": {\n";
+            out << R"(    "masterVolume": )" << s.masterVolume << ",\n";
+            out << R"(    "audioOutputDevice": ")" << ToString(s.audioOutputDevice) << "\",\n";
+            out << R"(    "audioEnabled": )" << boolStr(s.audioEnabled) << "\n";
+            out << "  },\n";
+            out << "  \"network\": {\n";
+            out << R"(    "maxPreviewClients": )" << s.maxPreviewClients << ",\n";
+            out << R"(    "simulatedLatencyMs": )" << s.simulatedLatencyMs << ",\n";
+            out << R"(    "packageDownloadThreads": )" << s.packageDownloadThreads << "\n";
+            out << "  },\n";
+            out << "  \"diagnostics\": {\n";
+            out << R"(    "consoleLogLevel": ")" << ToString(s.consoleLogLevel) << "\",\n";
+            out << R"(    "writeLogToFile": )" << boolStr(s.writeLogToFile) << ",\n";
+            out << R"(    "autoCaptureOnStutter": )" << boolStr(s.autoCaptureOnStutter) << ",\n";
+            out << std::format(R"(    "stutterThresholdMs": {:.1f}
+)", s.stutterThresholdMs);
+            out << "  },\n";
+            out << "  \"plugins\": {\n";
+            out << R"(    "horoMcpBridgeEnabled": )" << boolStr(s.horoMcpBridgeEnabled) << ",\n";
+            out << R"(    "fmodIntegrationEnabled": )" << boolStr(s.fmodIntegrationEnabled) << ",\n";
+            out << R"(    "steamworksSdkEnabled": )" << boolStr(s.steamworksSdkEnabled) << ",\n";
+            out << R"(    "pluginDiscoveryPath": ")" << EscapeJsonString(s.pluginDiscoveryPath) << "\"\n";
+            out << "  }\n";
+            out << "}\n";
         }
     } // namespace
 
@@ -440,14 +530,15 @@ namespace Horo::Editor
     }
 
     /** @copydoc ValidateEditorSettings */
-    bool ValidateEditorSettings(EditorSettings &settings, std::string *outError)
+    bool ValidateEditorSettings(EditorSettings& settings, std::string* outError)
     {
         if (outError)
         {
             outError->clear();
         }
         bool valid = true;
-        auto markInvalid = [&](const char *message) {
+        auto markInvalid = [&](const char* message)
+        {
             valid = false;
             if (outError && outError->empty())
             {
@@ -455,7 +546,8 @@ namespace Horo::Editor
             }
         };
 
-        auto clampInt = [&](int &value, const int minValue, const int maxValue, const char *message) {
+        auto clampInt = [&](int& value, const int minValue, const int maxValue, const char* message)
+        {
             if (value < minValue || value > maxValue)
             {
                 markInvalid(message);
@@ -464,6 +556,11 @@ namespace Horo::Editor
         };
 
         clampInt(settings.autoSaveIntervalMinutes, 0, 30, "Auto-save interval must be between 0 and 30 minutes.");
+        if (!LocaleTag::Parse(settings.languageTag).has_value())
+        {
+            markInvalid("Language must be a valid BCP 47 locale tag.");
+            settings.languageTag = "en-US";
+        }
         clampInt(settings.uiScalePercent, 75, 200, "UI scale must be between 75 and 200 percent.");
         clampInt(settings.codeFontSizePx, 8, 24, "Code font size must be between 8 and 24 px.");
         clampInt(settings.orbitSensitivity, 10, 300, "Orbit sensitivity must be between 10 and 300.");
@@ -513,6 +610,8 @@ namespace Horo::Editor
 
         if (std::error_code ec; !std::filesystem::exists(out.path, ec))
         {
+            LOG_DEBUG("editor.settings", "editor_settings.json not found at '%s' — using defaults.",
+                      out.path.string().c_str());
             return out;
         }
 
@@ -521,6 +620,8 @@ namespace Horo::Editor
         const std::string json = ReadWholeFile(out.path, &readError);
         if (!readError.empty())
         {
+            LOG_ERROR("editor.settings", "Failed to read editor_settings.json at '%s': %s",
+                      out.path.string().c_str(), readError.c_str());
             out.parseError = true;
             out.error = readError;
             return out;
@@ -528,6 +629,8 @@ namespace Horo::Editor
 
         if (json.find('{') == std::string::npos || json.find('}') == std::string::npos)
         {
+            LOG_ERROR("editor.settings", "editor_settings.json at '%s' is not a valid JSON object.",
+                      out.path.string().c_str());
             out.parseError = true;
             out.error = "Editor settings file must contain a JSON object.";
             return out;
@@ -536,13 +639,20 @@ namespace Horo::Editor
         ApplyJsonValues(json, out.settings);
         if (std::string validationError; !ValidateEditorSettings(out.settings, &validationError))
         {
+            LOG_WARN("editor.settings", "editor_settings.json loaded but failed validation: %s",
+                     validationError.c_str());
             out.error = validationError;
+        }
+        else
+        {
+            LOG_DEBUG("editor.settings", "editor_settings.json loaded successfully from '%s'.",
+                      out.path.string().c_str());
         }
         return out;
     }
 
     /** @copydoc SaveEditorSettingsDocument */
-    bool SaveEditorSettingsDocument(EditorSettingsDocument *doc, std::string *outError)
+    bool SaveEditorSettingsDocument(EditorSettingsDocument* doc, std::string* outError)
     {
         if (outError)
         {
@@ -589,57 +699,13 @@ namespace Horo::Editor
             return false;
         }
 
-        out << "{\n";
-        out << "  \"editor\": {\n";
-        out << "    \"startupBehavior\": \"" << ToString(doc->settings.startupBehavior) << "\",\n";
-        out << "    \"autoSaveIntervalMinutes\": " << doc->settings.autoSaveIntervalMinutes << ",\n";
-        out << "    \"confirmExitWithUnsavedChanges\": " << (doc->settings.confirmExitWithUnsavedChanges ? "true" : "false") << ",\n";
-        out << "    \"restoreWorkspaceLayout\": " << (doc->settings.restoreWorkspaceLayout ? "true" : "false") << ",\n";
-        out << "    \"defaultSceneOnProjectOpen\": \"" << EscapeJsonString(doc->settings.defaultSceneOnProjectOpen) << "\"\n";
-        out << "  },\n";
-        out << "  \"appearance\": {\n";
-        out << "    \"themePreset\": \"" << ToString(doc->settings.themePreset) << "\",\n";
-        out << "    \"accentColorHex\": \"" << EscapeJsonString(doc->settings.accentColorHex) << "\",\n";
-        out << "    \"uiScalePercent\": " << doc->settings.uiScalePercent << ",\n";
-        out << "    \"codeFontSizePx\": " << doc->settings.codeFontSizePx << "\n";
-        out << "  },\n";
-        out << "  \"input\": {\n";
-        out << "    \"orbitSensitivity\": " << doc->settings.orbitSensitivity << ",\n";
-        out << "    \"panSensitivity\": " << doc->settings.panSensitivity << ",\n";
-        out << "    \"invertOrbitY\": " << (doc->settings.invertOrbitY ? "true" : "false") << "\n";
-        out << "  },\n";
-        out << "  \"rendering\": {\n";
-        out << "    \"viewportMode\": \"" << ToString(doc->settings.viewportMode) << "\",\n";
-        out << "    \"gridOverlay\": " << (doc->settings.gridOverlay ? "true" : "false") << ",\n";
-        out << "    \"renderingTier\": \"" << ToString(doc->settings.renderingTier) << "\",\n";
-        out << "    \"textureStreamingBudget\": \"" << EscapeJsonString(doc->settings.textureStreamingBudget) << "\"\n";
-        out << "  },\n";
-        out << "  \"audio\": {\n";
-        out << "    \"masterVolume\": " << doc->settings.masterVolume << ",\n";
-        out << "    \"audioOutputDevice\": \"" << ToString(doc->settings.audioOutputDevice) << "\",\n";
-        out << "    \"audioEnabled\": " << (doc->settings.audioEnabled ? "true" : "false") << "\n";
-        out << "  },\n";
-        out << "  \"network\": {\n";
-        out << "    \"maxPreviewClients\": " << doc->settings.maxPreviewClients << ",\n";
-        out << "    \"simulatedLatencyMs\": " << doc->settings.simulatedLatencyMs << ",\n";
-        out << "    \"packageDownloadThreads\": " << doc->settings.packageDownloadThreads << "\n";
-        out << "  },\n";
-        out << "  \"diagnostics\": {\n";
-        out << "    \"consoleLogLevel\": \"" << ToString(doc->settings.consoleLogLevel) << "\",\n";
-        out << "    \"writeLogToFile\": " << (doc->settings.writeLogToFile ? "true" : "false") << ",\n";
-        out << "    \"autoCaptureOnStutter\": " << (doc->settings.autoCaptureOnStutter ? "true" : "false") << ",\n";
-        out << "    \"stutterThresholdMs\": " << std::fixed << std::setprecision(1) << doc->settings.stutterThresholdMs << "\n";
-        out << "  },\n";
-        out << "  \"plugins\": {\n";
-        out << "    \"horoMcpBridgeEnabled\": " << (doc->settings.horoMcpBridgeEnabled ? "true" : "false") << ",\n";
-        out << "    \"fmodIntegrationEnabled\": " << (doc->settings.fmodIntegrationEnabled ? "true" : "false") << ",\n";
-        out << "    \"steamworksSdkEnabled\": " << (doc->settings.steamworksSdkEnabled ? "true" : "false") << ",\n";
-        out << "    \"pluginDiscoveryPath\": \"" << EscapeJsonString(doc->settings.pluginDiscoveryPath) << "\"\n";
-        out << "  }\n";
-        out << "}\n";
+        const auto& s = doc->settings;
+        WriteSettings(out, s);
 
         if (!out.good())
         {
+            LOG_ERROR("editor.settings", "I/O error while writing editor_settings.json to '%s'.",
+                      doc->path.string().c_str());
             if (outError)
             {
                 *outError = "Failed while writing editor settings file.";
@@ -650,7 +716,7 @@ namespace Horo::Editor
         doc->loadedFromDisk = true;
         doc->parseError = false;
         doc->error.clear();
+        LOG_DEBUG("editor.settings", "editor_settings.json saved to '%s'.", doc->path.string().c_str());
         return true;
     }
-
 } // namespace Horo::Editor

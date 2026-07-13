@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <string>
 
@@ -65,11 +66,14 @@ struct EditorSettings
     bool confirmExitWithUnsavedChanges = true;
     bool restoreWorkspaceLayout = true;
     std::string defaultSceneOnProjectOpen = "Assets/Scenes/Main";
+    std::string languageTag = "en-US";
 
     EditorThemePreset themePreset = EditorThemePreset::HoroDark;
     std::string accentColorHex = "#04A5FC";
     int uiScalePercent = 100;
     int codeFontSizePx = 13;
+    std::string uiFontFamily = "Inter";       /**< Preferred system sans family; bundled Inter remains fallback. */
+    std::string codeFontFamily = "IBM Plex Mono"; /**< Preferred system monospace family; bundled font remains fallback. */
 
     int orbitSensitivity = 100;
     int panSensitivity = 100;
@@ -97,6 +101,8 @@ struct EditorSettings
     bool fmodIntegrationEnabled = true;
     bool steamworksSdkEnabled = false;
     std::string pluginDiscoveryPath = "{project}/plugins";
+
+    std::array<std::string, 8> shortcutKeys{}; // Per-action key binding strings
 
     bool operator==(const EditorSettings &) const = default;
 };

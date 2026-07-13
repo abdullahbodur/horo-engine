@@ -481,23 +481,41 @@ Theme presets use a versioned data format:
 Theme sources are:
 
 - packaged presets in the application's read-only `themes/` resources
-- custom presets in
-  `Platform::UserConfigDirectory()/horo/themes/*.theme.json`
+- custom presets in `~/.horo/themes/*.json` (current implementation; target:
+  `Platform::UserConfigDirectory()/horo/themes/*.theme.json`)
 - an optional project override at `<project>/.horo/theme.json`
 - an explicit external preset selected through `HORO_THEME_FILE`
 
-Packaged presets and the packaged base theme are data resources, not styling
-literals embedded in GUI source. A desktop build discovers custom preset files
-at runtime, so users can add, import, export, or edit a preset without rebuilding
-the application.
+Current theme file format (flat, for rapid iteration):
 
-Preset IDs are stable and unique. Custom presets use a namespaced ID such as
-`user.midnight`; they cannot silently replace a packaged preset with the same
-ID. The registry rejects duplicate IDs, inheritance cycles, invalid token types,
-and presets whose required values cannot be resolved through inheritance.
-Unknown tokens produce diagnostics so misspellings do not appear to succeed.
+```json
+{
+    "name": "Monokai",
+    "WindowBg": "#272822",
+    "ChildBg": "#1e1f1c",
+    "Text": "#f8f8f2",
+    "Border": "#49483e"
+}
+```
 
-The registry scans packaged and user theme locations during GUI startup and on
+Target format (versioned, with inheritance):
+
+```json
+{
+    "schemaVersion": 1,
+    "id": "user.midnight",
+    "displayName": "Midnight",
+    "extends": "horo.base-dark",
+    "tokens": {
+        "colors": {
+            "surfacePanel": "#101722"
+        }
+    }
+}
+```
+
+Migration from flat to versioned format is planned. Custom presets discovered
+at runtime are added to the theme selector alongside built-in presets.
 an explicit rescan requested by Settings. Development builds may watch the
 active external or custom preset file. Reload follows this contract:
 
