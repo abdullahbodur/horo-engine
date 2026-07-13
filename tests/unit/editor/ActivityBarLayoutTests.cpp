@@ -77,6 +77,23 @@ void MovingAcrossGroupsCompactsTheSourceAndInsertsAtTheTargetIndex()
     assert(layout.ItemAt(ActivityBarRail::Left, 1, 3) == "source-4");
     assert(layout.ItemAt(ActivityBarRail::Left, 1, 4) == "source-5");
 }
+void SupportsADedicatedDocumentTopRail()
+{
+    ActivityBarLayout layout;
+
+    assert(layout.Groups(ActivityBarRail::DocumentTop).size() == 1);
+    assert(layout.Insert("horo.viewport",
+                         ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}).Succeeded());
+    assert((layout.FindSlot("horo.viewport") ==
+            ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
+    assert(layout.Insert("hidden", ActivityBarSlot{ActivityBarRail::DocumentTop, 1, 0}).code ==
+           ActivityBarLayoutOperationCode::InvalidGroup);
+    assert(layout.Move("horo.viewport", ActivityBarSlot{ActivityBarRail::DocumentTop, 1, 0}).code ==
+           ActivityBarLayoutOperationCode::InvalidGroup);
+    assert((layout.FindSlot("horo.viewport") ==
+            ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
+    assert(layout.ItemAt(ActivityBarRail::Left, 1, 0).empty());
+}
 } // namespace
 
 int main()
@@ -86,5 +103,6 @@ int main()
     RejectsUnknownItemAndInvalidInsertionWithoutMutation();
     DroppingTheOnlyItemBackIntoItsGroupIsANoOp();
     MovingAcrossGroupsCompactsTheSourceAndInsertsAtTheTargetIndex();
+    SupportsADedicatedDocumentTopRail();
     return 0;
 }

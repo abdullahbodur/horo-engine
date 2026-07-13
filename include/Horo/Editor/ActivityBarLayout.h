@@ -15,6 +15,7 @@ enum class ActivityBarRail : std::uint8_t
     Left,
     Right,
     Bottom,
+    DocumentTop,
 };
 
 struct ActivityBarSlot
@@ -53,7 +54,7 @@ struct ActivityBarLayoutOperationResult
 
 class ActivityBarLayout
 {
-public:
+  public:
     static constexpr std::size_t kDefaultGroupCount = 3;
 
     ActivityBarLayout();
@@ -63,11 +64,11 @@ public:
 
     [[nodiscard]] std::optional<ActivityBarSlot> FindSlot(std::string_view panelId) const;
     [[nodiscard]] std::string_view ItemAt(ActivityBarRail rail, std::size_t groupIndex,
-                                           std::size_t itemIndex) const noexcept;
+                                          std::size_t itemIndex) const noexcept;
     [[nodiscard]] const std::vector<ActivityBarGroup> &Groups(ActivityBarRail rail) const noexcept;
 
-private:
-    using RailGroups = std::array<std::vector<ActivityBarGroup>, 3>;
+  private:
+    using RailGroups = std::array<std::vector<ActivityBarGroup>, 4>;
 
     [[nodiscard]] static std::size_t RailIndex(ActivityBarRail rail) noexcept;
     [[nodiscard]] ActivityBarGroup *GetGroup(ActivityBarSlot slot) noexcept;

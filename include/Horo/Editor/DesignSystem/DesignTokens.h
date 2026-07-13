@@ -2,7 +2,8 @@
 
 #include <imgui.h>
 
-namespace Horo::Editor::DesignSystem {
+namespace Horo::Editor::DesignSystem
+{
 
 /**
  * @brief Semantic color tokens consumed by editor GUI components.
@@ -11,7 +12,8 @@ namespace Horo::Editor::DesignSystem {
  * intentionally live outside feature screens so screens compose tokens instead
  * of embedding visual literals in screen code.
  */
-struct ColorTokens {
+struct ColorTokens
+{
     ::ImVec4 surfaceRoot;
     ::ImVec4 surfaceWindow;
     ::ImVec4 surfacePanel;
@@ -33,21 +35,24 @@ struct ColorTokens {
 };
 
 /** @brief Semantic typography sizes for the bootstrap GUI. */
-struct TypographyTokens {
+struct TypographyTokens
+{
     float sansBase;
-    float monoBase;
-    float monoSemiBoldBase;
+    float sansCompactBase;
+    float sansEmphasisBase;
 };
 
 /** @brief Shared shape tokens for editor GUI components. */
-struct RadiusTokens {
+struct RadiusTokens
+{
     float control;
     float card;
     float modal;
 };
 
 /** @brief Shared layout and control dimensions for editor GUI components. */
-struct SizeTokens {
+struct SizeTokens
+{
     float welcomeSideWidth;
     float welcomePadding;
     float modalWidth;
@@ -60,7 +65,8 @@ struct SizeTokens {
 };
 
 /** @brief Shared spacing tokens for editor GUI components. */
-struct SpacingTokens {
+struct SpacingTokens
+{
     float cardPadding;
     float gridGap;
     float bodyPaddingX;
@@ -70,7 +76,8 @@ struct SpacingTokens {
 };
 
 /** @brief Resolved immutable editor design tokens for one rendered frame. */
-struct DesignTokens {
+struct DesignTokens
+{
     ColorTokens colors;
     TypographyTokens typography;
     RadiusTokens radii;

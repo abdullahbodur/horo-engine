@@ -121,6 +121,61 @@ target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Edi
 
 add_test(NAME HoroEditorWorkspaceControllerTests COMMAND HoroEditorWorkspaceControllerTests)
 
+add_executable(HoroWorkspaceSplitterInteractionTests
+    unit/editor/WorkspaceSplitterInteractionTests.cpp
+)
+
+target_compile_features(HoroWorkspaceSplitterInteractionTests PRIVATE cxx_std_20)
+target_include_directories(HoroWorkspaceSplitterInteractionTests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+)
+target_link_libraries(HoroWorkspaceSplitterInteractionTests PRIVATE HoroEngine::EditorGuiBackend)
+
+add_test(NAME HoroWorkspaceSplitterInteractionTests COMMAND HoroWorkspaceSplitterInteractionTests)
+
+add_executable(HoroEditorMenuModelTests
+    unit/editor/EditorMenuModelTests.cpp
+)
+
+target_compile_features(HoroEditorMenuModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorMenuModelTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroEditorMenuModelTests COMMAND HoroEditorMenuModelTests)
+
+add_executable(HoroEditorStatusBarModelTests
+    unit/editor/EditorStatusBarModelTests.cpp
+)
+
+target_compile_features(HoroEditorStatusBarModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorStatusBarModelTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroEditorStatusBarModelTests COMMAND HoroEditorStatusBarModelTests)
+
+add_executable(HoroHierarchyModelTests
+    unit/editor/HierarchyModelTests.cpp
+)
+
+target_compile_features(HoroHierarchyModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroHierarchyModelTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroHierarchyModelTests COMMAND HoroHierarchyModelTests)
+
+add_executable(HoroHierarchyPanelRenderTests
+    unit/editor/HierarchyPanelRenderTests.cpp
+)
+
+target_compile_features(HoroHierarchyPanelRenderTests PRIVATE cxx_std_20)
+target_include_directories(HoroHierarchyPanelRenderTests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+)
+target_link_libraries(HoroHierarchyPanelRenderTests
+    PRIVATE
+        HoroEngine::EditorGuiBackend
+        HoroThirdParty::ImGui
+)
+
+add_test(NAME HoroHierarchyPanelRenderTests COMMAND HoroHierarchyPanelRenderTests)
+
 add_executable(HoroDataBusTests
     unit/foundation/DataBusTests.cpp
 )

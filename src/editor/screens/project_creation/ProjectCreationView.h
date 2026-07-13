@@ -7,6 +7,7 @@
 #include <string>
 
 namespace Horo::Editor {
+struct GuiContentRegion;
 
 /** @brief Transient ImGui state retained by the ProjectCreation route view presentation. */
 struct ProjectCreationViewState {
@@ -53,6 +54,7 @@ enum class ProjectCreationViewCommand {
     ProjectCreationController& controller,
     ProjectCreationViewState& state,
     const EditorGuiContext& ctx,
+    const GuiContentRegion &contentRegion,
     ImTextureID logo = 0);
 
 } // namespace Horo::Editor

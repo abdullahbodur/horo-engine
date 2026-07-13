@@ -9,7 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-namespace Horo::Editor::Theme {
+namespace Horo::Editor::Theme
+{
 
 // ─────────────────────────────────────────────────────────────────────────
 // Palette — exact match for the CSS custom properties in the HTML mockups:
@@ -25,97 +26,192 @@ namespace Horo::Editor::Theme {
 /** @brief Returns the active (theme-aware) design token set. */
 [[nodiscard]] const DesignSystem::DesignTokens &GetActiveTokens();
 
-[[nodiscard]] inline ::ImVec4 Bg0()          { return GetActiveTokens().colors.surfaceRoot; }
-[[nodiscard]] inline ::ImVec4 Bg1()          { return GetActiveTokens().colors.surfaceWindow; }
-[[nodiscard]] inline ::ImVec4 Bg2()          { return GetActiveTokens().colors.surfacePanel; }
-[[nodiscard]] inline ::ImVec4 Bg3()          { return GetActiveTokens().colors.surfaceRaised; }
-[[nodiscard]] inline ::ImVec4 Hover()        { return GetActiveTokens().colors.surfaceHover; }
-[[nodiscard]] inline ::ImVec4 Border()       { return GetActiveTokens().colors.border; }
-[[nodiscard]] inline ::ImVec4 BorderStrong() { return GetActiveTokens().colors.borderStrong; }
-[[nodiscard]] inline ::ImVec4 Text()         { return GetActiveTokens().colors.textPrimary; }
-[[nodiscard]] inline ::ImVec4 Muted()        { return GetActiveTokens().colors.textMuted; }
-[[nodiscard]] inline ::ImVec4 Dim()          { return GetActiveTokens().colors.textDim; }
-[[nodiscard]] inline ::ImVec4 Accent()       { return GetActiveTokens().colors.actionPrimary; }
-[[nodiscard]] inline ::ImVec4 AccentHover()  { return GetActiveTokens().colors.actionPrimaryHover; }
-[[nodiscard]] inline ::ImVec4 AccentActive() { return GetActiveTokens().colors.actionPrimaryActive; }
-[[nodiscard]] inline ::ImVec4 AccentSoft()   { return GetActiveTokens().colors.actionPrimarySoft; }
-[[nodiscard]] inline ::ImVec4 Ok()           { return GetActiveTokens().colors.statusOk; }
-[[nodiscard]] inline ::ImVec4 Warn()         { return GetActiveTokens().colors.statusWarn; }
-[[nodiscard]] inline ::ImVec4 Err()          { return GetActiveTokens().colors.statusError; }
-[[nodiscard]] inline ::ImVec4 ErrSoft()      { ::ImVec4 c = GetActiveTokens().colors.statusError; c.w = 0.12F; return c; }
-[[nodiscard]] inline ::ImVec4 DarkText()     { return GetActiveTokens().colors.textOnActionPrimary; }
-[[nodiscard]] inline ::ImVec4 Shadow()       { return {0.0F, 0.0F, 0.0F, 0.55F}; }
+[[nodiscard]] inline ::ImVec4 Bg0()
+{
+    return GetActiveTokens().colors.surfaceRoot;
+}
+[[nodiscard]] inline ::ImVec4 Bg1()
+{
+    return GetActiveTokens().colors.surfaceWindow;
+}
+[[nodiscard]] inline ::ImVec4 Bg2()
+{
+    return GetActiveTokens().colors.surfacePanel;
+}
+[[nodiscard]] inline ::ImVec4 Bg3()
+{
+    return GetActiveTokens().colors.surfaceRaised;
+}
+[[nodiscard]] inline ::ImVec4 Hover()
+{
+    return GetActiveTokens().colors.surfaceHover;
+}
+[[nodiscard]] inline ::ImVec4 Border()
+{
+    return GetActiveTokens().colors.border;
+}
+[[nodiscard]] inline ::ImVec4 BorderStrong()
+{
+    return GetActiveTokens().colors.borderStrong;
+}
+[[nodiscard]] inline ::ImVec4 Text()
+{
+    return GetActiveTokens().colors.textPrimary;
+}
+[[nodiscard]] inline ::ImVec4 Muted()
+{
+    return GetActiveTokens().colors.textMuted;
+}
+[[nodiscard]] inline ::ImVec4 Dim()
+{
+    return GetActiveTokens().colors.textDim;
+}
+[[nodiscard]] inline ::ImVec4 Accent()
+{
+    return GetActiveTokens().colors.actionPrimary;
+}
+[[nodiscard]] inline ::ImVec4 AccentHover()
+{
+    return GetActiveTokens().colors.actionPrimaryHover;
+}
+[[nodiscard]] inline ::ImVec4 AccentActive()
+{
+    return GetActiveTokens().colors.actionPrimaryActive;
+}
+[[nodiscard]] inline ::ImVec4 AccentSoft()
+{
+    return GetActiveTokens().colors.actionPrimarySoft;
+}
+[[nodiscard]] inline ::ImVec4 Ok()
+{
+    return GetActiveTokens().colors.statusOk;
+}
+[[nodiscard]] inline ::ImVec4 Warn()
+{
+    return GetActiveTokens().colors.statusWarn;
+}
+[[nodiscard]] inline ::ImVec4 Err()
+{
+    return GetActiveTokens().colors.statusError;
+}
+[[nodiscard]] inline ::ImVec4 ErrSoft()
+{
+    ::ImVec4 c = GetActiveTokens().colors.statusError;
+    c.w = 0.12F;
+    return c;
+}
+[[nodiscard]] inline ::ImVec4 DarkText()
+{
+    return GetActiveTokens().colors.textOnActionPrimary;
+}
+[[nodiscard]] inline ::ImVec4 Shadow()
+{
+    return {0.0F, 0.0F, 0.0F, 0.55F};
+}
 
-[[nodiscard]] inline ::ImU32 U32(const ::ImVec4& c) { return ImGui::GetColorU32(c); }
+[[nodiscard]] inline ::ImU32 U32(const ::ImVec4 &c)
+{
+    return ImGui::GetColorU32(c);
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fonts — the three font atlas entries loaded by the application
 // ─────────────────────────────────────────────────────────────────────────
-struct Fonts {
-    ::ImFont* sans         = nullptr;
-    ::ImFont* mono         = nullptr;
-    ::ImFont* monoSemiBold = nullptr;
+struct Fonts
+{
+    ::ImFont *sans = nullptr;
+    ::ImFont *sansCompact = nullptr;
+    ::ImFont *sansEmphasis = nullptr;
 };
 
-namespace FontPx {
-    constexpr float Sans         = DesignSystem::DefaultDesignTokens().typography.sansBase;
-    constexpr float Mono         = DesignSystem::DefaultDesignTokens().typography.monoBase;
-    constexpr float MonoSemiBold = DesignSystem::DefaultDesignTokens().typography.monoSemiBoldBase;
+namespace FontPx
+{
+constexpr float Sans = DesignSystem::DefaultDesignTokens().typography.sansBase;
+constexpr float SansCompact = DesignSystem::DefaultDesignTokens().typography.sansCompactBase;
+constexpr float SansEmphasis = DesignSystem::DefaultDesignTokens().typography.sansEmphasisBase;
+} // namespace FontPx
+
+[[nodiscard]] constexpr float Scale(float targetPx, float basePx)
+{
+    return targetPx / basePx;
 }
 
-[[nodiscard]] constexpr float Scale(float targetPx, float basePx) { return targetPx / basePx; }
+inline void PushFont(::ImFont *f)
+{
+    if (f)
+        ImGui::PushFont(f);
+}
+inline void PopFont(::ImFont *f)
+{
+    if (f)
+        ImGui::PopFont();
+}
 
-inline void PushFont(::ImFont* f) { if (f) ImGui::PushFont(f); }
-inline void PopFont(::ImFont* f)  { if (f) ImGui::PopFont(); }
-
-struct ScopedFont {
-    ::ImFont* font;
-    explicit ScopedFont(::ImFont* f) : font(f) { PushFont(font); }
-    ~ScopedFont() { PopFont(font); }
-    ScopedFont(const ScopedFont&) = delete;
-    ScopedFont& operator=(const ScopedFont&) = delete;
+struct ScopedFont
+{
+    ::ImFont *font;
+    explicit ScopedFont(::ImFont *f) : font(f)
+    {
+        PushFont(font);
+    }
+    ~ScopedFont()
+    {
+        PopFont(font);
+    }
+    ScopedFont(const ScopedFont &) = delete;
+    ScopedFont &operator=(const ScopedFont &) = delete;
 };
 
-struct ScopedFontScale {
-    explicit ScopedFontScale(float scale) { ImGui::SetWindowFontScale(scale); }
-    ~ScopedFontScale() { ImGui::SetWindowFontScale(1.0F); }
-    ScopedFontScale(const ScopedFontScale&) = delete;
-    ScopedFontScale& operator=(const ScopedFontScale&) = delete;
+struct ScopedFontScale
+{
+    explicit ScopedFontScale(float scale)
+    {
+        ImGui::SetWindowFontScale(scale);
+    }
+    ~ScopedFontScale()
+    {
+        ImGui::SetWindowFontScale(1.0F);
+    }
+    ScopedFontScale(const ScopedFontScale &) = delete;
+    ScopedFontScale &operator=(const ScopedFontScale &) = delete;
 };
 
-struct ScopedTextStyle {
+struct ScopedTextStyle
+{
     [[no_unique_address]] ScopedFont font;
     [[no_unique_address]] ScopedFontScale scale;
-    ScopedTextStyle(::ImFont* f, float targetPx, float basePx)
-        : font(f), scale(Scale(targetPx, basePx)) {}
+    ScopedTextStyle(::ImFont *f, float targetPx, float basePx) : font(f), scale(Scale(targetPx, basePx))
+    {
+    }
 };
 
 // ─────────────────────────────────────────────────────────────────────────
 // Layout metrics
 // ─────────────────────────────────────────────────────────────────────────
-namespace Layout {
-    constexpr float Radius      = DesignSystem::DefaultDesignTokens().radii.control;
-    constexpr float RadiusCard  = DesignSystem::DefaultDesignTokens().radii.card;
-    constexpr float RadiusModal = DesignSystem::DefaultDesignTokens().radii.modal;
-    constexpr float WelcomeOuterPad = 40.0F;
-    constexpr float WelcomeCardW    = 900.0F;
-    constexpr float WelcomeSideW    = DesignSystem::DefaultDesignTokens().sizes.welcomeSideWidth;
-    constexpr float WelcomePad      = DesignSystem::DefaultDesignTokens().sizes.welcomePadding;
-    constexpr float ModalW      = DesignSystem::DefaultDesignTokens().sizes.modalWidth;
-    constexpr float ModalH      = DesignSystem::DefaultDesignTokens().sizes.modalHeight;
-    constexpr float HeaderH     = DesignSystem::DefaultDesignTokens().sizes.modalHeaderHeight;
-    constexpr float FooterH     = DesignSystem::DefaultDesignTokens().sizes.modalFooterHeight;
-    constexpr float SidebarW    = DesignSystem::DefaultDesignTokens().sizes.modalSidebarWidth;
-    constexpr float SidebarPadX = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingX;
-    constexpr float SidebarPadY = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingY;
-    constexpr float BodyPadX    = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingX;
-    constexpr float BodyPadY    = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingY;
-    constexpr float CardPad     = DesignSystem::DefaultDesignTokens().spacing.cardPadding;
-    constexpr float GridGap     = DesignSystem::DefaultDesignTokens().spacing.gridGap;
-    constexpr float SettingsW   = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
-    constexpr float SettingsH   = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
-    constexpr float ControlW    = 260.0F;
-}
+namespace Layout
+{
+constexpr float Radius = DesignSystem::DefaultDesignTokens().radii.control;
+constexpr float RadiusCard = DesignSystem::DefaultDesignTokens().radii.card;
+constexpr float RadiusModal = DesignSystem::DefaultDesignTokens().radii.modal;
+constexpr float WelcomeOuterPad = 40.0F;
+constexpr float WelcomeCardW = 900.0F;
+constexpr float WelcomeSideW = DesignSystem::DefaultDesignTokens().sizes.welcomeSideWidth;
+constexpr float WelcomePad = DesignSystem::DefaultDesignTokens().sizes.welcomePadding;
+constexpr float ModalW = DesignSystem::DefaultDesignTokens().sizes.modalWidth;
+constexpr float ModalH = DesignSystem::DefaultDesignTokens().sizes.modalHeight;
+constexpr float HeaderH = DesignSystem::DefaultDesignTokens().sizes.modalHeaderHeight;
+constexpr float FooterH = DesignSystem::DefaultDesignTokens().sizes.modalFooterHeight;
+constexpr float SidebarW = DesignSystem::DefaultDesignTokens().sizes.modalSidebarWidth;
+constexpr float SidebarPadX = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingX;
+constexpr float SidebarPadY = DesignSystem::DefaultDesignTokens().spacing.sidebarPaddingY;
+constexpr float BodyPadX = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingX;
+constexpr float BodyPadY = DesignSystem::DefaultDesignTokens().spacing.bodyPaddingY;
+constexpr float CardPad = DesignSystem::DefaultDesignTokens().spacing.cardPadding;
+constexpr float GridGap = DesignSystem::DefaultDesignTokens().spacing.gridGap;
+constexpr float SettingsW = DesignSystem::DefaultDesignTokens().sizes.settingsWidth;
+constexpr float SettingsH = DesignSystem::DefaultDesignTokens().sizes.settingsHeight;
+constexpr float ControlW = 260.0F;
+} // namespace Layout
 
 // ─────────────────────────────────────────────────────────────────────────
 // Theme preset & runtime switching
@@ -124,16 +220,25 @@ enum class Preset
 {
     HoroDark = 0,
     Midnight = 1,
-    Light    = 2,
+    Light = 2,
     // Custom themes start at index 3+
 };
 
 struct ThemeStringHash
 {
     using is_transparent = void;
-    [[nodiscard]] std::size_t operator()(std::string_view value) const noexcept { return std::hash<std::string_view>{}(value); }
-    [[nodiscard]] std::size_t operator()(const std::string &value) const noexcept { return (*this)(std::string_view{value}); }
-    [[nodiscard]] std::size_t operator()(const char *value) const noexcept { return (*this)(std::string_view{value}); }
+    [[nodiscard]] std::size_t operator()(std::string_view value) const noexcept
+    {
+        return std::hash<std::string_view>{}(value);
+    }
+    [[nodiscard]] std::size_t operator()(const std::string &value) const noexcept
+    {
+        return (*this)(std::string_view{value});
+    }
+    [[nodiscard]] std::size_t operator()(const char *value) const noexcept
+    {
+        return (*this)(std::string_view{value});
+    }
 };
 
 /**
@@ -141,8 +246,8 @@ struct ThemeStringHash
  */
 struct ThemeEntry
 {
-    std::string name;           // display name (e.g. "Monokai")
-    std::string sourcePath;     // empty for built-in, file path for custom
+    std::string name;       // display name (e.g. "Monokai")
+    std::string sourcePath; // empty for built-in, file path for custom
     std::unordered_map<std::string, ::ImVec4, ThemeStringHash, std::equal_to<>> colors; // key → RGBA
     bool isBuiltIn = true;
 };

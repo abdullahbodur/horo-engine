@@ -3,7 +3,8 @@
 #include <string>
 #include <vector>
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
 
 /**
  * @file RecentProject.h
@@ -13,7 +14,8 @@ namespace Horo::Editor {
 /**
  * @brief Recent project entry shown by Welcome and Project Browser screens.
  */
-struct RecentProjectEntry {
+struct RecentProjectEntry
+{
     std::string name;
     std::string rootPath;
     std::string lastOpenedLabel;
@@ -25,7 +27,7 @@ struct RecentProjectEntry {
  * @param entry Entry to validate.
  * @return True when name and root path are non-empty.
  */
-[[nodiscard]] bool IsDisplayableRecentProject(const RecentProjectEntry& entry) noexcept;
+[[nodiscard]] bool IsDisplayableRecentProject(const RecentProjectEntry &entry) noexcept;
 
 /**
  * @brief Loads the recent project entries from user local storage (~/.horo/recent_projects.json).
@@ -38,6 +40,6 @@ struct RecentProjectEntry {
  * @param projects List of recent project entries to persist.
  * @return True on success, false if writing fails.
  */
-bool SaveRecentProjectsToDisk(const std::vector<RecentProjectEntry>& projects);
+bool SaveRecentProjectsToDisk(const std::vector<RecentProjectEntry> &projects);
 
 } // namespace Horo::Editor

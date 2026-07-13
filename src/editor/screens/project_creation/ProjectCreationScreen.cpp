@@ -15,14 +15,16 @@
 #include <memory>
 #include <vector>
 
-namespace Horo::Editor {
-namespace {
+namespace Horo::Editor
+{
+namespace
+{
 
-class ProjectCreationScreen final : public GuiScreen {
-public:
+class ProjectCreationScreen final : public GuiScreen
+{
+  public:
     explicit ProjectCreationScreen(const EditorServiceRegistry &services)
-        : host_(services.Get<GuiScreenHost>()),
-          context_(services.GetConst<EditorGuiContext>()),
+        : host_(services.Get<GuiScreenHost>()), context_(services.GetConst<EditorGuiContext>()),
           creationService_(services.Get<ProjectCreationService>()),
           logoTexture_(services.TryGet<std::uintptr_t>() ? *services.TryGet<std::uintptr_t>() : 0)
     {
@@ -37,9 +39,11 @@ public:
     {
         controller_ = ProjectCreationController{};
         state_ = ProjectCreationViewState{};
-        if (std::holds_alternative<ProjectCreationRouteParameters>(route.parameters)) {
+        if (std::holds_alternative<ProjectCreationRouteParameters>(route.parameters))
+        {
             const auto &params = std::get<ProjectCreationRouteParameters>(route.parameters);
-            if (params.initialTemplate.has_value()) {
+            if (params.initialTemplate.has_value())
+            {
                 controller_.SetTemplateId(*params.initialTemplate);
             }
         }
@@ -53,22 +57,29 @@ public:
         // No continuous simulation needed during manual project creation configuration.
     }
 
-    void Draw() override
+    void Draw(const GuiContentRegion &contentRegion) override
     {
-        const auto command = DrawProjectCreationView(controller_, state_, context_, (ImTextureID)logoTexture_);
-        if (command == ProjectCreationViewCommand::ReturnToWelcome) {
+        const auto command =
+            DrawProjectCreationView(controller_, state_, context_, contentRegion, (ImTextureID)logoTexture_);
+        if (command == ProjectCreationViewCommand::ReturnToWelcome)
+        {
             static_cast<void>(host_.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
-        } else if (command == ProjectCreationViewCommand::CreateProject) {
+        }
+        else if (command == ProjectCreationViewCommand::CreateProject)
+        {
             const auto request = controller_.BuildCreationRequest();
-            if (!request) {
+            if (!request)
+            {
                 LOG_ERROR("editor.project_creation", "BuildCreationRequest failed due to validation errors.");
-                for (const auto &diagnostic : controller_.Validate().diagnostics) {
+                for (const auto &diagnostic : controller_.Validate().diagnostics)
+                {
                     LOG_ERROR("editor.project_creation", " - %s", diagnostic.message.c_str());
                 }
                 return;
             }
             auto handle = creationService_.StartCreate(*request);
-            if (!handle.HasValue()) {
+            if (!handle.HasValue())
+            {
                 LOG_ERROR("editor.project_creation", "StartCreate failed: [%s] %s",
                           handle.ErrorValue().code.Value().c_str(), handle.ErrorValue().message.c_str());
                 return;
@@ -98,13 +109,15 @@ public:
         using enum LeaveDisposition;
         using enum LeaveAction;
 
-        if (leaveResolved_) {
+        if (leaveResolved_)
+        {
             return LeaveDecision{.disposition = Allow, .requirement = std::nullopt};
         }
         if (const bool hasDraftChanges = !state_.projectName.empty() || !state_.projectPath.empty() || state_.step > 1;
             hasDraftChanges && (std::holds_alternative<ApplicationCloseTarget>(target.value) ||
                                 (std::holds_alternative<GuiRoute>(target.value) &&
-                                 std::get<GuiRoute>(target.value).kind == GuiRouteKind::Welcome))) {
+                                 std::get<GuiRoute>(target.value).kind == GuiRouteKind::Welcome)))
+        {
             LeaveRequirement req{.kind = LeaveRequirementKind::UnsavedDraft,
                                  .subject = 1,
                                  .revision = 1,
@@ -119,13 +132,26 @@ public:
         using enum LeaveDisposition;
         using enum LeaveAction;
 
-        if (resolution.action == Discard) {
-            leaveResolved_ = true;
-            return Result<LeaveDecision>::Success(
-                LeaveDecision{.disposition = Allow, .requirement = std::nullopt});
+        if (resolution.subject != 1 || resolution.revision != 1)
+        {
+            return Result<LeaveDecision>::Failure(Error{.code = ErrorCode{"navigation.stale_leave_subject"},
+                                                        .domain = ErrorDomainId{"horo.editor.project_creation"},
+                                                        .severity = ErrorSeverity::Error,
+                                                        .message = "Project creation leave requirement is stale."});
         }
-        return Result<LeaveDecision>::Success(
-            LeaveDecision{.disposition = Deny, .requirement = std::nullopt});
+        if (resolution.action == Discard)
+        {
+            leaveResolved_ = true;
+            return Result<LeaveDecision>::Success(LeaveDecision{.disposition = Allow, .requirement = std::nullopt});
+        }
+        if (resolution.action == Stay)
+        {
+            return Result<LeaveDecision>::Success(LeaveDecision{.disposition = Deny, .requirement = std::nullopt});
+        }
+        return Result<LeaveDecision>::Failure(Error{.code = ErrorCode{"navigation.leave_action_not_allowed"},
+                                                    .domain = ErrorDomainId{"horo.editor.project_creation"},
+                                                    .severity = ErrorSeverity::Error,
+                                                    .message = "Project creation leave action is not allowed."});
     }
 
     void OnLeave() override
@@ -133,7 +159,7 @@ public:
         LOG_DEBUG("editor.screens", "ProjectCreationScreen leaving.");
     }
 
-private:
+  private:
     GuiScreenHost &host_;
     const EditorGuiContext &context_;
     ProjectCreationService &creationService_;

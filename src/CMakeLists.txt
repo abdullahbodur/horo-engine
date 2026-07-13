@@ -36,6 +36,9 @@ add_library(HoroEditorScreens STATIC
         editor/settings/EditorSettingsService.cpp
         editor/settings/EditorSettingsStore.cpp
         editor/localization/LocalizationService.cpp
+        editor/menu/EditorMenuModel.cpp
+        editor/status_bar/EditorStatusBarModel.cpp
+        editor/hierarchy/HierarchyModel.cpp
         editor/data_bus/EditorDataBus.cpp
         editor/modals/EditorModalHost.cpp
         editor/modals/settings/SettingsModalLifecycle.cpp
@@ -64,6 +67,8 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/design_system/components/EditorUiComponents.cpp
             editor/app/EditorGuiApp.cpp
             editor/app/EditorTheme.cpp
+            editor/menu/EditorMenuPlatform.cpp
+            editor/status_bar/EditorStatusBar.cpp
             editor/modals/settings/SettingsModal.cpp
             editor/screens/welcome/WelcomeView.cpp
             editor/screens/welcome/WelcomeScreen.cpp
@@ -82,6 +87,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/WorkspacePanelHost.cpp
             editor/screens/workspace/WorkspaceLayoutPersistence.cpp
             editor/screens/workspace/ActivityBarLayout.cpp
+            editor/screens/workspace/WorkspaceSplitterInteraction.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
             editor/screens/GuiScreenHost.cpp
@@ -103,6 +109,7 @@ if (HORO_BUILD_EDITOR_GUI)
             PRIVATE
             GL_SILENCE_DEPRECATION
             HORO_EDITOR_ASSET_ROOT="${PROJECT_SOURCE_DIR}/assets"
+            HORO_ENGINE_VERSION_STRING="${PROJECT_VERSION}"
     )
     target_link_libraries(HoroEditorGuiBackend
             PUBLIC
@@ -111,6 +118,16 @@ if (HORO_BUILD_EDITOR_GUI)
             PRIVATE
             HoroThirdParty::ImGui
     )
+
+    if (APPLE)
+        set(_HORO_EDITOR_MENU_MAC_SOURCE editor/menu/macos/EditorMenuPlatformMac.mm)
+        set_source_files_properties(${_HORO_EDITOR_MENU_MAC_SOURCE} PROPERTIES
+                LANGUAGE CXX
+                COMPILE_OPTIONS "-x;objective-c++"
+        )
+        target_sources(HoroEditorGuiBackend PRIVATE ${_HORO_EDITOR_MENU_MAC_SOURCE})
+        target_link_libraries(HoroEditorGuiBackend PRIVATE "-framework AppKit")
+    endif ()
 endif ()
 
 if (HORO_BUILD_EDITOR_GUI)

@@ -9,11 +9,18 @@
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Editor/ProjectCreationService.h"
+#include "Horo/Editor/SettingsModal.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "editor/status_bar/EditorStatusBar.h"
 
-namespace Horo::Editor {
-namespace {
+#include <algorithm>
+#include <cstdio>
+
+namespace Horo::Editor
+{
+namespace
+{
 
 [[nodiscard]] Error MakeScreenError(const char *code, const char *message)
 {
@@ -26,7 +33,8 @@ namespace {
 [[nodiscard]] const char *GetLeaveActionLabel(LeaveAction action) noexcept
 {
     using enum LeaveAction;
-    switch (action) {
+    switch (action)
+    {
     case Discard:
         return "Discard & Leave";
     case CancelOperation:
@@ -60,6 +68,54 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
     services_.Register(logoTexture_);
     services_.Register<ScreenRegistry>(screenRegistry_);
     services_.Register<WorkspacePanelRegistry>(workspacePanelRegistry_);
+    services_.Register<EditorStatusItemRegistry>(statusItemRegistry_);
+    statusBar_ = std::make_unique<EditorStatusBar>(context, statusItemRegistry_);
+    activeStatusPanelIds_.reserve(16);
+
+    static_cast<void>(statusItemRegistry_.Register(
+        EditorStatusItemDescriptor{.id = "horo.status.navigation",
+                                   .labelKey = "status.navigation.label",
+                                   .alignment = EditorStatusBarAlignment::Left,
+                                   .priority = 70,
+                                   .order = 30,
+                                   .maxWidth = 96.0F},
+        EditorStatusItemContent{.value = localization.Get("editor", "status.navigation.idle")}));
+    static_cast<void>(
+        statusItemRegistry_.Register(EditorStatusItemDescriptor{.id = "horo.status.backend",
+                                                                .labelKey = "status.backend.opengl",
+                                                                .alignment = EditorStatusBarAlignment::Right,
+                                                                .priority = 100,
+                                                                .order = 10,
+                                                                .maxWidth = 96.0F,
+                                                                .presentation = EditorStatusItemPresentation::Plain},
+                                     EditorStatusItemContent{}));
+    static_cast<void>(
+        statusItemRegistry_.Register(EditorStatusItemDescriptor{.id = "horo.status.cpu",
+                                                                .labelKey = "status.cpu.label",
+                                                                .alignment = EditorStatusBarAlignment::Right,
+                                                                .priority = 90,
+                                                                .order = 20,
+                                                                .maxWidth = 112.0F},
+                                     EditorStatusItemContent{.value = "0.0 ms"}));
+    static_cast<void>(statusItemRegistry_.Register(
+        EditorStatusItemDescriptor{.id = "horo.status.document",
+                                   .alignment = EditorStatusBarAlignment::Left,
+                                   .priority = 100,
+                                   .order = 0,
+                                   .maxWidth = 140.0F,
+                                   .presentation = EditorStatusItemPresentation::Pill},
+        EditorStatusItemContent{.iconResourceId = "horo.status.document",
+                                .label = localization.Get("editor", "status.document.saved"),
+                                .tone = EditorStatusItemTone::Success,
+                                .available = false}));
+    static_cast<void>(statusItemRegistry_.Register(
+        EditorStatusItemDescriptor{.id = "horo.status.selection",
+                                   .labelKey = "status.selection.label",
+                                   .alignment = EditorStatusBarAlignment::Left,
+                                   .priority = 80,
+                                   .order = 10,
+                                   .maxWidth = 112.0F},
+        EditorStatusItemContent{.value = localization.Get("editor", "status.selection.none"), .available = false}));
 
     RegisterWelcomeScreen(screenRegistry_);
     RegisterProjectCreationScreen(screenRegistry_);
@@ -68,14 +124,16 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
     RegisterDefaultWorkspacePanels(workspacePanelRegistry_);
 
     activeScreen_ = CreateScreen(activeRoute_);
-    if (activeScreen_) {
+    if (activeScreen_)
+    {
         static_cast<void>(activeScreen_->OnEnter(activeRoute_));
     }
 }
 
 GuiScreenHost::~GuiScreenHost()
 {
-    if (activeScreen_) {
+    if (activeScreen_)
+    {
         activeScreen_->OnLeave();
         activeScreen_.reset();
     }
@@ -101,6 +159,18 @@ const ScreenRegistry &GuiScreenHost::Screens() const noexcept
     return screenRegistry_;
 }
 
+/** @copydoc GuiScreenHost::StatusItems */
+EditorStatusItemRegistry &GuiScreenHost::StatusItems() noexcept
+{
+    return statusItemRegistry_;
+}
+
+/** @copydoc GuiScreenHost::StatusItems */
+const EditorStatusItemRegistry &GuiScreenHost::StatusItems() const noexcept
+{
+    return statusItemRegistry_;
+}
+
 const GuiRoute &GuiScreenHost::ActiveRoute() const noexcept
 {
     return activeRoute_;
@@ -123,14 +193,30 @@ std::optional<ProjectCreationOperationId> GuiScreenHost::GetActiveCreationId() c
 
 Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 {
-    if (!IsRoutePayloadValid(destination)) {
+    if (!IsRoutePayloadValid(destination))
+    {
         return Result<void>::Failure(
             MakeScreenError("navigation.invalid_route_parameters", "Invalid route payload for requested route kind."));
     }
-    if (navigationBusy_) {
+    if (navigationBusy_)
+    {
         return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already in progress."));
     }
-    if (AreRoutesIdentical(activeRoute_, destination)) {
+    if (pendingRequirement_.has_value() || pendingTarget_.has_value())
+    {
+        return Result<void>::Failure(MakeScreenError("navigation.busy", "Leave resolution already pending."));
+    }
+    if (AreRoutesIdentical(activeRoute_, destination))
+    {
+        return Result<void>::Success();
+    }
+    if (isScreenCallbackActive_)
+    {
+        if (pendingNavigation_.has_value())
+        {
+            return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already queued this frame."));
+        }
+        pendingNavigation_ = std::move(destination);
         return Result<void>::Success();
     }
     return ExecuteLeaveCheckAndCommit(LeaveTarget{destination});
@@ -138,7 +224,8 @@ Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 
 Result<void> GuiScreenHost::RequestCloseApplication()
 {
-    if (navigationBusy_) {
+    if (navigationBusy_ || pendingRequirement_.has_value() || pendingTarget_.has_value())
+    {
         return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already in progress."));
     }
     return ExecuteLeaveCheckAndCommit(LeaveTarget{ApplicationCloseTarget{}});
@@ -146,22 +233,34 @@ Result<void> GuiScreenHost::RequestCloseApplication()
 
 Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target)
 {
-    if (!activeScreen_) {
-        if (std::holds_alternative<GuiRoute>(target.value)) {
+    if (!activeScreen_)
+    {
+        if (std::holds_alternative<GuiRoute>(target.value))
+        {
             CommitRoute(std::get<GuiRoute>(target.value));
-        } else {
+        }
+        else
+        {
             closeRequested_ = true;
         }
         return Result<void>::Success();
     }
 
     const auto decision = activeScreen_->CanLeave(target);
-    if (decision.disposition == LeaveDisposition::Deny) {
+    if (decision.disposition == LeaveDisposition::Deny)
+    {
         return Result<void>::Failure(
             MakeScreenError("navigation.leave_denied", "Active screen denied leave transition."));
     }
-    if (decision.disposition == LeaveDisposition::RequireResolution && decision.requirement.has_value()) {
-        if (resolutionAttemptCount_ >= 5) {
+    if (decision.disposition == LeaveDisposition::RequireResolution)
+    {
+        if (!decision.requirement.has_value())
+        {
+            return Result<void>::Failure(MakeScreenError("navigation.invalid_leave_requirement",
+                                                         "Screen requested leave resolution without a requirement."));
+        }
+        if (resolutionAttemptCount_ >= 5)
+        {
             return Result<void>::Failure(
                 MakeScreenError("navigation.leave_resolution_limit_exceeded", "Exceeded resolution attempts."));
         }
@@ -171,9 +270,12 @@ Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target
         return Result<void>::Success();
     }
 
-    if (std::holds_alternative<GuiRoute>(target.value)) {
+    if (std::holds_alternative<GuiRoute>(target.value))
+    {
         CommitRoute(std::get<GuiRoute>(target.value));
-    } else {
+    }
+    else
+    {
         closeRequested_ = true;
     }
     return Result<void>::Success();
@@ -187,19 +289,32 @@ void GuiScreenHost::CommitRoute(GuiRoute destination)
     pendingTarget_.reset();
 
     std::unique_ptr<GuiScreen> candidate = CreateScreen(destination);
-    if (!candidate) {
+    if (!candidate)
+    {
         navigationBusy_ = false;
         return;
     }
 
-    if (const auto enterRes = candidate->OnEnter(destination); enterRes.HasError()) {
-        LOG_ERROR("editor.screens", "Destination OnEnter failed: %s", enterRes.ErrorValue().message.c_str());
-        navigationBusy_ = false;
-        return;
-    }
-
-    if (activeScreen_) {
+    if (activeScreen_)
+    {
         activeScreen_->OnLeave();
+    }
+
+    if (const auto enterRes = candidate->OnEnter(destination); enterRes.HasError())
+    {
+        LOG_ERROR("editor.screens", "Destination OnEnter failed: %s", enterRes.ErrorValue().message.c_str());
+        if (activeScreen_)
+        {
+            if (const auto rollback = activeScreen_->OnEnter(activeRoute_); rollback.HasError())
+            {
+                LOG_ERROR("editor.screens", "Active screen rollback OnEnter failed: %s",
+                          rollback.ErrorValue().message.c_str());
+                activeScreen_.reset();
+                closeRequested_ = true;
+            }
+        }
+        navigationBusy_ = false;
+        return;
     }
 
     const GuiRouteKind prevKind = activeRoute_.kind;
@@ -212,7 +327,8 @@ void GuiScreenHost::CommitRoute(GuiRoute destination)
     LOG_DEBUG("editor.routing", "Route committed: kind=%d revision=%llu", static_cast<int>(activeRoute_.kind),
               static_cast<unsigned long long>(activeRevision_));
 
-    if (engineEvents_) {
+    if (engineEvents_)
+    {
         GuiRouteChangedEvent ev{prevKind, activeRoute_.kind, prevRev, activeRevision_};
         engineEvents_->Publish(ev);
     }
@@ -225,40 +341,182 @@ std::unique_ptr<GuiScreen> GuiScreenHost::CreateScreen(const GuiRoute &route)
 
 void GuiScreenHost::OnUpdate(float dt)
 {
-    if (activeScreen_) {
+    if (localization_ != nullptr)
+    {
+        static_cast<void>(statusItemRegistry_.Update(
+            "horo.status.navigation",
+            EditorStatusItemContent{.value =
+                                        localization_->Get("editor", navigationBusy_ ? "status.navigation.busy"
+                                                                                     : "status.navigation.idle")}));
+    }
+    char cpuFrameTime[32]{};
+    std::snprintf(cpuFrameTime, sizeof(cpuFrameTime), "%.1f ms", static_cast<double>(dt * 1000.0F));
+    static_cast<void>(statusItemRegistry_.Update("horo.status.cpu", EditorStatusItemContent{.value = cpuFrameTime}));
+
+    if (activeScreen_)
+    {
+        isScreenCallbackActive_ = true;
         activeScreen_->OnUpdate(dt);
+        isScreenCallbackActive_ = false;
+    }
+    FlushPendingNavigation();
+}
+
+void GuiScreenHost::FlushPendingNavigation()
+{
+    if (!pendingNavigation_.has_value())
+    {
+        return;
+    }
+    GuiRoute destination = std::move(*pendingNavigation_);
+    pendingNavigation_.reset();
+    if (const Result<void> result = Navigate(std::move(destination)); result.HasError())
+    {
+        LOG_ERROR("editor.screens", "Deferred navigation failed: %s", result.ErrorValue().message.c_str());
     }
 }
 
 void GuiScreenHost::Draw()
 {
-    if (activeScreen_) {
-        activeScreen_->Draw();
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const float contentHeight = std::max(0.0F, viewport->WorkSize.y - EditorStatusBar::Height);
+    const GuiContentRegion contentRegion{viewport->WorkPos.x, viewport->WorkPos.y, viewport->WorkSize.x, contentHeight};
+
+    if (activeScreen_)
+    {
+        isScreenCallbackActive_ = true;
+        activeScreen_->Draw(contentRegion);
+        isScreenCallbackActive_ = false;
     }
-    if (pendingRequirement_.has_value() && pendingTarget_.has_value()) {
+
+    FlushPendingNavigation();
+
+    activeStatusPanelIds_.clear();
+    if (activeScreen_)
+    {
+        activeScreen_->CollectActivePanelIds(activeStatusPanelIds_);
+    }
+
+    if (statusBar_)
+    {
+        const bool interactionEnabled =
+            modalHost_ != nullptr && !modalHost_->HasOpenModal() && !pendingRequirement_.has_value();
+        const auto invocation = statusBar_->Draw(ImVec2{contentRegion.x, contentRegion.y + contentRegion.height},
+                                                 ImVec2{contentRegion.width, EditorStatusBar::Height},
+                                                 EditorStatusBarContext{activeStatusPanelIds_}, interactionEnabled);
+        if (invocation.has_value() && engineEvents_ != nullptr)
+        {
+            engineEvents_->Publish(*invocation);
+        }
+    }
+    if (pendingRequirement_.has_value() && pendingTarget_.has_value())
+    {
         PresentLeaveDialog(*pendingRequirement_, *pendingTarget_);
     }
 }
 
-void GuiScreenHost::ExecuteLeaveResolution(LeaveAction action, const LeaveRequirement &requirement,
-                                           const LeaveTarget &target)
+/** @copydoc GuiScreenHost::DispatchMenuAction */
+void GuiScreenHost::DispatchMenuAction(const EditorMenuAction action)
 {
-    if (action == LeaveAction::Stay) {
+    switch (action)
+    {
+    case EditorMenuAction::NewProject:
+        static_cast<void>(Navigate(GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}}));
+        return;
+    case EditorMenuAction::OpenProject:
+        static_cast<void>(Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
+        return;
+    case EditorMenuAction::OpenEditorSettings:
+        if (context_ && settingsService_ && modalHost_)
+        {
+            auto modal = std::make_unique<SettingsModal>(*context_, *settingsService_, logoTexture_);
+            static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
+        }
+        return;
+    case EditorMenuAction::ExitApplication:
+        static_cast<void>(RequestCloseApplication());
+        return;
+    case EditorMenuAction::SaveScene:
+        if (activeScreen_)
+        {
+            static_cast<void>(activeScreen_->HandleMenuAction(action));
+        }
+        return;
+    case EditorMenuAction::None:
+        return;
+    }
+}
+
+void GuiScreenHost::ExecuteLeaveResolution(LeaveAction action, LeaveRequirement requirement, LeaveTarget target)
+{
+    if (action == LeaveAction::Stay)
+    {
         pendingRequirement_.reset();
         pendingTarget_.reset();
+        resolutionAttemptCount_ = 0;
         return;
     }
-    if (!activeScreen_) {
+    if (!activeScreen_ || !pendingRequirement_.has_value() || !pendingTarget_.has_value())
+    {
         return;
     }
-    const auto res =
+
+    const LeaveRequirement current = *pendingRequirement_;
+    const bool staleRequirement = current.subject != requirement.subject || current.revision != requirement.revision;
+    const bool actionAllowed = std::ranges::find(current.allowedActions, action) != current.allowedActions.end();
+    if (staleRequirement || !actionAllowed)
+    {
+        LOG_ERROR("editor.screens", "Rejected stale or disallowed leave resolution.");
+        return;
+    }
+
+    const auto result =
         activeScreen_->ResolveLeave(target, LeaveResolution{requirement.subject, requirement.revision, action});
-    if (res.HasValue() && res.Value().disposition == LeaveDisposition::Allow) {
-        if (std::holds_alternative<GuiRoute>(target.value)) {
-            CommitRoute(std::get<GuiRoute>(target.value));
-        } else {
-            closeRequested_ = true;
+    if (result.HasError())
+    {
+        LOG_ERROR("editor.screens", "Leave resolution failed: %s", result.ErrorValue().message.c_str());
+        return;
+    }
+
+    const LeaveDecision &decision = result.Value();
+    if (decision.disposition == LeaveDisposition::Deny)
+    {
+        pendingRequirement_.reset();
+        pendingTarget_.reset();
+        resolutionAttemptCount_ = 0;
+        return;
+    }
+    if (decision.disposition == LeaveDisposition::RequireResolution)
+    {
+        if (!decision.requirement.has_value())
+        {
+            LOG_ERROR("editor.screens", "Leave resolution requested without a requirement.");
+            return;
         }
+        const LeaveRequirement &next = *decision.requirement;
+        const bool progressed = next.subject != current.subject || next.revision > current.revision;
+        if (!progressed || ++resolutionAttemptCount_ >= 5)
+        {
+            LOG_ERROR("editor.screens", "Leave resolution chain made no progress or exceeded its limit.");
+            pendingRequirement_.reset();
+            pendingTarget_.reset();
+            resolutionAttemptCount_ = 0;
+            return;
+        }
+        pendingRequirement_ = next;
+        return;
+    }
+
+    pendingRequirement_.reset();
+    pendingTarget_.reset();
+    resolutionAttemptCount_ = 0;
+    if (std::holds_alternative<GuiRoute>(target.value))
+    {
+        CommitRoute(std::get<GuiRoute>(target.value));
+    }
+    else
+    {
+        closeRequested_ = true;
     }
 }
 
@@ -267,28 +525,41 @@ void GuiScreenHost::PresentLeaveDialog(const LeaveRequirement &requirement, cons
     ImGui::OpenPopup("Unsaved Changes");
     const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5F, 0.5F));
-    if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
         return;
     }
 
-    if (requirement.kind == LeaveRequirementKind::UnsavedDraft) {
+    if (requirement.kind == LeaveRequirementKind::UnsavedDraft)
+    {
         ImGui::Text("You have unsaved project creation changes.\nDo you want to discard them and leave?");
-    } else if (requirement.kind == LeaveRequirementKind::RunningOperation) {
+    }
+    else if (requirement.kind == LeaveRequirementKind::RunningOperation)
+    {
         ImGui::Text("A background operation is running.\nDo you want to cancel the operation and leave?");
-    } else {
+    }
+    else
+    {
         ImGui::Text("This screen requires confirmation before leaving.");
     }
     ImGui::Separator();
 
-    for (const auto action : requirement.allowedActions) {
-        if (ImGui::Button(GetLeaveActionLabel(action), ImVec2(140, 0))) {
+    std::optional<LeaveAction> selectedAction;
+    for (const auto action : requirement.allowedActions)
+    {
+        if (ImGui::Button(GetLeaveActionLabel(action), ImVec2(140, 0)))
+        {
             ImGui::CloseCurrentPopup();
-            ExecuteLeaveResolution(action, requirement, target);
+            selectedAction = action;
         }
         ImGui::SameLine();
     }
     ImGui::NewLine();
     ImGui::EndPopup();
+    if (selectedAction.has_value())
+    {
+        ExecuteLeaveResolution(*selectedAction, requirement, target);
+    }
 }
 
 } // namespace Horo::Editor

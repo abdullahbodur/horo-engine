@@ -1,6 +1,7 @@
 #pragma once
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
 
 /**
  * @file EditorGuiApp.h
@@ -13,6 +14,6 @@ namespace Horo::Editor {
  * @param argv Process argument values.
  * @return Process exit code.
  */
-int RunEditorGuiApp(int argc, char** argv);
+int RunEditorGuiApp(int argc, char **argv);
 
 } // namespace Horo::Editor

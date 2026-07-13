@@ -11,145 +11,196 @@
 
 namespace Horo::Editor
 {
-    class EditorModalHost;
+class EditorModalHost;
 
-    /** @brief Validated stable identity for an editor modal in the active stack. */
-    class ModalId
+/** @brief Validated stable identity for an editor modal in the active stack. */
+class ModalId
+{
+  public:
+    constexpr explicit ModalId(std::uint64_t value) noexcept : m_value(value)
     {
-    public:
-        constexpr explicit ModalId(std::uint64_t value) noexcept : m_value(value) {}
-        [[nodiscard]] constexpr bool IsValid() const noexcept { return m_value != 0; }
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept { return m_value; }
-        [[nodiscard]] friend constexpr bool operator==(ModalId, ModalId) noexcept = default;
-    private:
-        std::uint64_t m_value = 0;
-    };
-
-    /** @brief Source of an editor modal close request. */
-    enum class ModalCloseReason : std::uint8_t { Cancelled, Completed, ApplicationShutdown };
-    /** @brief Decision supplied by a modal before the host removes it. */
-    enum class CloseDecision : std::uint8_t { Allow, Deny, RequireChildConfirmation };
-    /** @brief Machine-readable modal-host operation failures. */
-    enum class ModalHostError : std::uint8_t { Busy, InvalidModal, DuplicateId, ParentNotTop, ModalNotTop, StackLimitReached, CloseDenied };
-    /** @brief Top-level interaction owner while the editor GUI is active. */
-    enum class EditorInteractionScopeKind : std::uint8_t { Workspace, Modal, NativeDialog };
-    /** @brief Token-driven layout size for a modal workflow surface. */
-    enum class ModalSizePolicy : std::uint8_t { Compact, Medium, Large, Workspace };
-
-    /** @brief Current exclusive interaction owner. */
-    struct EditorInteractionScope
+    }
+    [[nodiscard]] constexpr bool IsValid() const noexcept
     {
-        EditorInteractionScopeKind kind = EditorInteractionScopeKind::Workspace;
-        std::optional<ModalId> modalId;
-    };
-
-    /** @brief Window-level presentation requested by a modal. */
-    struct ModalPresentation
+        return m_value != 0;
+    }
+    [[nodiscard]] constexpr std::uint64_t Value() const noexcept
     {
-        ModalSizePolicy size = ModalSizePolicy::Large;
-        bool dimWorkspace = true;
-    };
+        return m_value;
+    }
+    [[nodiscard]] friend constexpr bool operator==(ModalId, ModalId) noexcept = default;
 
-    /** @brief Modal close-source policy; enforcement is provided by GUI composition in later phases. */
-    struct ModalClosePolicy
+  private:
+    std::uint64_t m_value = 0;
+};
+
+/** @brief Source of an editor modal close request. */
+enum class ModalCloseReason : std::uint8_t
+{
+    Cancelled,
+    Completed,
+    ApplicationShutdown
+};
+/** @brief Decision supplied by a modal before the host removes it. */
+enum class CloseDecision : std::uint8_t
+{
+    Allow,
+    Deny,
+    RequireChildConfirmation
+};
+/** @brief Machine-readable modal-host operation failures. */
+enum class ModalHostError : std::uint8_t
+{
+    Busy,
+    InvalidModal,
+    DuplicateId,
+    ParentNotTop,
+    ModalNotTop,
+    StackLimitReached,
+    CloseDenied
+};
+/** @brief Top-level interaction owner while the editor GUI is active. */
+enum class EditorInteractionScopeKind : std::uint8_t
+{
+    Workspace,
+    Modal,
+    NativeDialog
+};
+/** @brief Token-driven layout size for a modal workflow surface. */
+enum class ModalSizePolicy : std::uint8_t
+{
+    Compact,
+    Medium,
+    Large,
+    Workspace
+};
+
+/** @brief Current exclusive interaction owner. */
+struct EditorInteractionScope
+{
+    EditorInteractionScopeKind kind = EditorInteractionScopeKind::Workspace;
+    std::optional<ModalId> modalId;
+};
+
+/** @brief Window-level presentation requested by a modal. */
+struct ModalPresentation
+{
+    ModalSizePolicy size = ModalSizePolicy::Large;
+    bool dimWorkspace = true;
+};
+
+/** @brief Modal close-source policy; enforcement is provided by GUI composition in later phases. */
+struct ModalClosePolicy
+{
+    bool allowCloseButton = true;
+    bool allowEscape = true;
+    bool allowOutsideClick = false;
+    bool allowApplicationShutdown = true;
+};
+
+/** @brief Action requested by a modal's draw pass. */
+class ModalFrameResult
+{
+  public:
+    constexpr ModalFrameResult() noexcept = default;
+    [[nodiscard]] static constexpr ModalFrameResult None() noexcept
     {
-        bool allowCloseButton = true;
-        bool allowEscape = true;
-        bool allowOutsideClick = false;
-        bool allowApplicationShutdown = true;
-    };
-
-    /** @brief Action requested by a modal's draw pass. */
-    class ModalFrameResult
+        return {};
+    }
+    [[nodiscard]] static constexpr ModalFrameResult RequestClose(ModalCloseReason reason) noexcept
     {
-    public:
-        constexpr ModalFrameResult() noexcept = default;
-        [[nodiscard]] static constexpr ModalFrameResult None() noexcept { return {}; }
-        [[nodiscard]] static constexpr ModalFrameResult RequestClose(ModalCloseReason reason) noexcept { return ModalFrameResult(reason); }
-        [[nodiscard]] constexpr std::optional<ModalCloseReason> CloseRequest() const noexcept { return m_closeReason; }
-    private:
-        constexpr explicit ModalFrameResult(ModalCloseReason reason) noexcept : m_closeReason(reason) {}
-        std::optional<ModalCloseReason> m_closeReason;
-    };
-
-    /** @brief Narrow modal lifecycle context; it intentionally exposes no general service locator. */
-    struct EditorModalContext
+        return ModalFrameResult(reason);
+    }
+    [[nodiscard]] constexpr std::optional<ModalCloseReason> CloseRequest() const noexcept
     {
-        EditorDataBus &events;
-        EditorModalHost &modals;
-    };
+        return m_closeReason;
+    }
 
-    /** @brief Headless-capable contract for one editor modal workflow surface. */
-    class EditorModal
+  private:
+    constexpr explicit ModalFrameResult(ModalCloseReason reason) noexcept : m_closeReason(reason)
     {
-    public:
-        virtual ~EditorModal() = default;
-        [[nodiscard]] virtual ModalId Id() const = 0;
-        [[nodiscard]] virtual ModalPresentation Presentation() const = 0;
-        [[nodiscard]] virtual ModalClosePolicy ClosePolicy() const = 0;
-        [[nodiscard]] virtual Result<void> OnOpen(EditorModalContext &context) = 0;
-        virtual void OnUpdate(float /*dt*/)
-        {
-            // Most headless modals have no per-frame update work.
-        }
-        [[nodiscard]] virtual ModalFrameResult Draw() = 0;
-        [[nodiscard]] virtual CloseDecision CanClose(ModalCloseReason reason) = 0;
-        virtual void OnClose(ModalCloseReason /*reason*/)
-        {
-            // The host owns removal; subclasses opt in only when cleanup is required.
-        }
-    };
+    }
+    std::optional<ModalCloseReason> m_closeReason;
+};
 
-    /** @brief Owns the exclusive editor modal stack and commits lifecycle changes only at host frame boundaries. */
-    class EditorModalHost
+/** @brief Narrow modal lifecycle context; it intentionally exposes no general service locator. */
+struct EditorModalContext
+{
+    EditorDataBus &events;
+    EditorModalHost &modals;
+};
+
+/** @brief Headless-capable contract for one editor modal workflow surface. */
+class EditorModal
+{
+  public:
+    virtual ~EditorModal() = default;
+    [[nodiscard]] virtual ModalId Id() const = 0;
+    [[nodiscard]] virtual ModalPresentation Presentation() const = 0;
+    [[nodiscard]] virtual ModalClosePolicy ClosePolicy() const = 0;
+    [[nodiscard]] virtual Result<void> OnOpen(EditorModalContext &context) = 0;
+    virtual void OnUpdate(float /*dt*/)
     {
-    public:
-        /** @brief Creates a headless modal host bound to one editor-session event bus. */
-        explicit EditorModalHost(EditorDataBus &events, std::size_t maximumDepth = 8);
-        ~EditorModalHost();
+        // Most headless modals have no per-frame update work.
+    }
+    [[nodiscard]] virtual ModalFrameResult Draw() = 0;
+    [[nodiscard]] virtual CloseDecision CanClose(ModalCloseReason reason) = 0;
+    virtual void OnClose(ModalCloseReason /*reason*/)
+    {
+        // The host owns removal; subclasses opt in only when cleanup is required.
+    }
+};
 
-        EditorModalHost(const EditorModalHost &) = delete;
-        EditorModalHost &operator=(const EditorModalHost &) = delete;
+/** @brief Owns the exclusive editor modal stack and commits lifecycle changes only at host frame boundaries. */
+class EditorModalHost
+{
+  public:
+    /** @brief Creates a headless modal host bound to one editor-session event bus. */
+    explicit EditorModalHost(EditorDataBus &events, std::size_t maximumDepth = 8);
+    ~EditorModalHost();
 
-        /** @brief Schedules the only root workflow modal and immediately gates workspace interaction. */
-        [[nodiscard]] Result<void> OpenRoot(std::unique_ptr<EditorModal> modal);
-        /** @brief Schedules a child owned by the current top modal. */
-        [[nodiscard]] Result<void> PushChild(ModalId parentId, std::unique_ptr<EditorModal> modal);
-        /** @brief Defers removal of the current top modal until the current host-frame boundary. */
-        [[nodiscard]] Result<void> RequestClose(ModalId modalId, ModalCloseReason reason);
-        /** @brief Returns whether the host logically owns an active or pending modal. */
-        [[nodiscard]] bool HasOpenModal() const noexcept;
-        /** @brief Returns the active stack top, including a pending accepted modal. */
-        [[nodiscard]] std::optional<ModalId> TopModalId() const;
-        /** @brief Returns the current input-routing scope; accepted pending roots are already modal-scoped. */
-        [[nodiscard]] EditorInteractionScope InteractionScope() const noexcept;
-        /** @brief Performs modal updates and commits any deferred lifecycle transition at its boundary. */
-        void OnUpdate(float dt);
-        /** @brief Draws the top modal and commits any draw-requested close at its boundary. */
-        void Draw();
-        /** @brief Requests orderly shutdown closes after every modal accepts the shutdown reason. */
-        [[nodiscard]] Result<void> RequestCloseAllForShutdown();
-        /** @brief Immediately invokes close callbacks once and releases every modal during forced shutdown. */
-        void ForceDetachAllForShutdown();
+    EditorModalHost(const EditorModalHost &) = delete;
+    EditorModalHost &operator=(const EditorModalHost &) = delete;
 
-    private:
-        struct Entry
-        {
-            std::unique_ptr<EditorModal> modal;
-            bool opened = false;
-        };
-        [[nodiscard]] Result<void> ValidateModalForPush(const EditorModal &modal) const;
-        [[nodiscard]] Result<void> ErrorFor(ModalHostError error) const;
-        void CommitPendingOpens();
-        void CommitPendingCloses();
-        void RemoveTop(ModalCloseReason reason);
-        [[nodiscard]] bool ContainsId(ModalId id) const noexcept;
+    /** @brief Schedules the only root workflow modal and immediately gates workspace interaction. */
+    [[nodiscard]] Result<void> OpenRoot(std::unique_ptr<EditorModal> modal);
+    /** @brief Schedules a child owned by the current top modal. */
+    [[nodiscard]] Result<void> PushChild(ModalId parentId, std::unique_ptr<EditorModal> modal);
+    /** @brief Defers removal of the current top modal until the current host-frame boundary. */
+    [[nodiscard]] Result<void> RequestClose(ModalId modalId, ModalCloseReason reason);
+    /** @brief Returns whether the host logically owns an active or pending modal. */
+    [[nodiscard]] bool HasOpenModal() const noexcept;
+    /** @brief Returns the active stack top, including a pending accepted modal. */
+    [[nodiscard]] std::optional<ModalId> TopModalId() const;
+    /** @brief Returns the current input-routing scope; accepted pending roots are already modal-scoped. */
+    [[nodiscard]] EditorInteractionScope InteractionScope() const noexcept;
+    /** @brief Performs modal updates and commits any deferred lifecycle transition at its boundary. */
+    void OnUpdate(float dt);
+    /** @brief Draws the top modal and commits any draw-requested close at its boundary. */
+    void Draw();
+    /** @brief Requests orderly shutdown closes after every modal accepts the shutdown reason. */
+    [[nodiscard]] Result<void> RequestCloseAllForShutdown();
+    /** @brief Immediately invokes close callbacks once and releases every modal during forced shutdown. */
+    void ForceDetachAllForShutdown();
 
-        EditorDataBus &m_events;
-        EditorModalContext m_context;
-        std::size_t m_maximumDepth;
-        std::vector<Entry> m_stack;
-        std::vector<Entry> m_pendingChildOpens;
-        std::vector<ModalCloseReason> m_pendingCloseReasons;
+  private:
+    struct Entry
+    {
+        std::unique_ptr<EditorModal> modal;
+        bool opened = false;
     };
+    [[nodiscard]] Result<void> ValidateModalForPush(const EditorModal &modal) const;
+    [[nodiscard]] Result<void> ErrorFor(ModalHostError error) const;
+    void CommitPendingOpens();
+    void CommitPendingCloses();
+    void RemoveTop(ModalCloseReason reason);
+    [[nodiscard]] bool ContainsId(ModalId id) const noexcept;
+
+    EditorDataBus &m_events;
+    EditorModalContext m_context;
+    std::size_t m_maximumDepth;
+    std::vector<Entry> m_stack;
+    std::vector<Entry> m_pendingChildOpens;
+    std::vector<ModalCloseReason> m_pendingCloseReasons;
+};
 } // namespace Horo::Editor

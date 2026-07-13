@@ -72,8 +72,9 @@ struct EditorSettings
     std::string accentColorHex = "#04A5FC";
     int uiScalePercent = 100;
     int codeFontSizePx = 13;
-    std::string uiFontFamily = "Inter";       /**< Preferred system sans family; bundled Inter remains fallback. */
-    std::string codeFontFamily = "IBM Plex Mono"; /**< Preferred system monospace family; bundled font remains fallback. */
+    std::string uiFontFamily = "Inter"; /**< Preferred system sans family; bundled Inter remains fallback. */
+    std::string codeFontFamily =
+        "IBM Plex Mono"; /**< Preferred system monospace family; bundled font remains fallback. */
 
     int orbitSensitivity = 100;
     int panSensitivity = 100;
@@ -110,11 +111,11 @@ struct EditorSettings
 /** @brief Load/save document for user-level editor settings. */
 struct EditorSettingsDocument
 {
-    EditorSettings settings{};             /**< Parsed settings with defaults for missing keys. */
-    bool loadedFromDisk = false;           /**< True when a settings file existed and was read. */
-    bool parseError = false;               /**< True when the file was unreadable or malformed. */
-    std::string error;                     /**< Human-readable load/save diagnostic. */
-    std::filesystem::path path;            /**< Absolute settings path used by the store. */
+    EditorSettings settings{};   /**< Parsed settings with defaults for missing keys. */
+    bool loadedFromDisk = false; /**< True when a settings file existed and was read. */
+    bool parseError = false;     /**< True when the file was unreadable or malformed. */
+    std::string error;           /**< Human-readable load/save diagnostic. */
+    std::filesystem::path path;  /**< Absolute settings path used by the store. */
 };
 
 /** @brief Returns the user home directory used by the settings store. */

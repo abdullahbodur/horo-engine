@@ -7,6 +7,7 @@
 
 namespace Horo::Editor
 {
+struct GuiContentRegion;
 
 /** @brief Texture handles required by the welcome view renderer. */
 struct WelcomeViewAssets
@@ -48,6 +49,7 @@ struct WelcomeViewResult
  */
 [[nodiscard]] WelcomeViewResult DrawWelcomeView(const WelcomeViewModel &viewModel,
                                                 const EditorGuiContext &ctx,
-                                                const WelcomeViewAssets &assets);
+                                                const WelcomeViewAssets &assets,
+                                                const GuiContentRegion &contentRegion);
 
 } // namespace Horo::Editor

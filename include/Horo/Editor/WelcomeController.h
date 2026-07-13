@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
 
 /**
  * @file WelcomeController.h
@@ -19,7 +20,8 @@ namespace Horo::Editor {
 /**
  * @brief User-facing action exposed by the welcome screen.
  */
-enum class WelcomeActionKind {
+enum class WelcomeActionKind
+{
     CreateProject,
     OpenProject,
     OpenRecentProject,
@@ -29,7 +31,8 @@ enum class WelcomeActionKind {
 /**
  * @brief Navigation-producing welcome screen action.
  */
-struct WelcomeAction {
+struct WelcomeAction
+{
     WelcomeActionKind kind;
     GuiRoute route;
 };
@@ -41,16 +44,18 @@ struct WelcomeAction {
  * Defined here (not in the generated header) so public consumers do not need
  * the generated include path.
  */
-struct WhatsNewEntry {
-    const char* tag   = ""; ///< Card category label, e.g. "Release Notes"
-    const char* title = ""; ///< Card headline
-    const char* body  = ""; ///< Short description (≤120 chars)
+struct WhatsNewEntry
+{
+    const char *tag = "";   ///< Card category label, e.g. "Release Notes"
+    const char *title = ""; ///< Card headline
+    const char *body = "";  ///< Short description (≤120 chars)
 };
 
 /**
  * @brief Immutable data required by the welcome screen renderer.
  */
-struct WelcomeViewModel {
+struct WelcomeViewModel
+{
     std::string productName;
     std::string statusLabel;
     std::vector<RecentProjectEntry> recentProjects;
@@ -65,8 +70,9 @@ struct WelcomeViewModel {
  * `GuiScreenHost` can validate and execute. This keeps the startup project
  * selection experience inside HoroEditor instead of introducing a separate app.
  */
-class WelcomeScreenController {
-public:
+class WelcomeScreenController
+{
+  public:
     /**
      * @brief Creates a controller from already-loaded recent project entries.
      * @param recentProjects Recent project entries from user state.
@@ -98,7 +104,7 @@ public:
      */
     [[nodiscard]] std::optional<WelcomeAction> RequestOpenRecentProject(std::size_t index) const;
 
-private:
+  private:
     std::vector<RecentProjectEntry> recentProjects_;
 };
 
@@ -107,6 +113,6 @@ private:
  * @param viewModel View model to render.
  * @return Multi-line text intended for the temporary console host.
  */
-[[nodiscard]] std::string RenderWelcomeScreenText(const WelcomeViewModel& viewModel);
+[[nodiscard]] std::string RenderWelcomeScreenText(const WelcomeViewModel &viewModel);
 
 } // namespace Horo::Editor

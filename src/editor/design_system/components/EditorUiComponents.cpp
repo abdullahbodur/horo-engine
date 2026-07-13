@@ -125,7 +125,7 @@ ScopedCard::~ScopedCard()
 
 void SectionTitle(const char *upperCaseLabel, const Theme::Fonts &fonts)
 {
-    Theme::ScopedTextStyle ts(fonts.monoSemiBold, 18.0F, Theme::FontPx::MonoSemiBold);
+    Theme::ScopedTextStyle ts(fonts.sansEmphasis, 18.0F, Theme::FontPx::SansEmphasis);
     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
     ImGui::TextUnformatted(upperCaseLabel);
     ImGui::PopStyleColor();
@@ -135,7 +135,7 @@ void SectionTitle(const char *upperCaseLabel, const Theme::Fonts &fonts)
 
 void FieldLabel(const char *upperCaseLabel, const Theme::Fonts &fonts)
 {
-    Theme::ScopedTextStyle ts(fonts.monoSemiBold, 12.0F, Theme::FontPx::MonoSemiBold);
+    Theme::ScopedTextStyle ts(fonts.sansEmphasis, 12.0F, Theme::FontPx::SansEmphasis);
     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
     ImGui::TextUnformatted(upperCaseLabel);
     ImGui::PopStyleColor();
@@ -157,7 +157,7 @@ void Hint(const char *text, const Theme::Fonts &fonts)
 
 void ErrorText(const char *text, const Theme::Fonts &fonts)
 {
-    Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
+    Theme::ScopedTextStyle ts(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
     ImGui::TextWrapped("%s", text);
@@ -191,7 +191,7 @@ void SettingGroup(const char *label, const Theme::Fonts &fonts, const bool first
         ImGui::Dummy({0.0F, 18.0F});
     }
 
-    Theme::ScopedTextStyle ts(fonts.monoSemiBold, 13.0F, Theme::FontPx::MonoSemiBold);
+    Theme::ScopedTextStyle ts(fonts.sansEmphasis, 13.0F, Theme::FontPx::SansEmphasis);
     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
@@ -222,7 +222,7 @@ bool DrawComboRow(const int index, int *value, const char *const items[], const 
     auto *drawList = ImGui::GetWindowDrawList();
     if (rowHovered || isSelected)
         drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
-    drawList->AddText(fonts.mono ? fonts.mono : ImGui::GetFont(), 14.0F,
+    drawList->AddText(fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont(), 14.0F,
                       {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
                       Theme::U32(isSelected ? Theme::Text() : Theme::Muted()), items[index]);
     ImGui::PopID();
@@ -258,7 +258,7 @@ bool ComboControl(const char *id, int *value, const char *const items[], const i
 
     // Selected value label
     {
-        ImFont *font = fonts.mono ? fonts.mono : ImGui::GetFont();
+        ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
         const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
         dl->AddText(font, 15.0F, {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F}, Theme::U32(Theme::Text()),
                     label);
@@ -329,7 +329,7 @@ bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, con
     bool changed = false;
     ImGui::PushItemWidth(-1.0F);
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         changed = ImGui::InputText(id, buffer, bufferSize);
     }
     ImGui::PopItemWidth();
@@ -458,7 +458,7 @@ bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, cons
     ImGui::PushItemWidth(-1.0F);
     bool validChange = false;
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         if (ImGui::InputText("hex", buffer, bufferSize) && ParseHexColor(buffer, current))
         {
             storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
@@ -491,7 +491,7 @@ void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts)
     PushControlStyle();
     ImGui::PushItemWidth(-1.0F);
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         ImGui::InputInt(id, value, 1, 4);
     }
     ImGui::PopItemWidth();
@@ -505,7 +505,7 @@ void InputFloatControl(const char *id, float *value, const Theme::Fonts &fonts)
     PushControlStyle();
     ImGui::PushItemWidth(-1.0F);
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         ImGui::InputFloat(id, value, 0.1F, 1.0F, "%.1f");
     }
     ImGui::PopItemWidth();
@@ -574,7 +574,7 @@ void SliderIntControl(const char *id, int *value, const int minValue, const int 
         break;
     }
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 14.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (HitH - textSize.y) * 0.5F);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
@@ -656,7 +656,7 @@ void DrawPluginRowContent(const char *version, const char *description, bool *en
     const float cursorY = ImGui::GetCursorPosY();
     ImGui::SetCursorPosY(cursorY + 4.0F);
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 10.5F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(version);
         ImGui::PopStyleColor();
@@ -694,7 +694,7 @@ void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::F
         {
             ImGui::SameLine(0.0F, 4.0F);
             {
-                Theme::ScopedTextStyle plus(fonts.mono, 12.0F, Theme::FontPx::Mono);
+                Theme::ScopedTextStyle plus(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                 ImGui::TextUnformatted("+");
                 ImGui::PopStyleColor();
@@ -708,7 +708,7 @@ void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::F
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Bg3());
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
         {
-            Theme::ScopedTextStyle keyText(fonts.mono, 12.0F, Theme::FontPx::Mono);
+            Theme::ScopedTextStyle keyText(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
             ImGui::Button(keys[i], ImVec2{0.0F, 24.0F});
         }
         ImGui::PopStyleColor(4);
@@ -778,7 +778,7 @@ void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const 
     if (listening)
     {
         const ImVec2 textSize = ImGui::CalcTextSize(text.listening);
-        drawList->AddText(fonts.mono, 11.0F,
+        drawList->AddText(fonts.sansCompact, 11.0F,
                           {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
                           U32(Accent()), text.listening);
         return;
@@ -786,7 +786,7 @@ void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const 
     if (keysLabel == nullptr || keysLabel[0] == '\0')
     {
         const ImVec2 textSize = ImGui::CalcTextSize(text.placeholder);
-        drawList->AddText(fonts.mono, 11.0F,
+        drawList->AddText(fonts.sansCompact, 11.0F,
                           {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
                           U32(Dim()), text.placeholder);
         return;
@@ -821,11 +821,11 @@ void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const 
         const ImVec2 chipMax{x + textSize.x + 10.0F, y + 18.0F};
         drawList->AddRectFilled(chipMin, chipMax, U32(Bg3()), 3.0F);
         drawList->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
-        drawList->AddText(fonts.mono, 10.5F, {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
+        drawList->AddText(fonts.sansCompact, 10.5F, {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
         x += textSize.x + 10.0F;
         if (index + 1 < parts.size())
         {
-            drawList->AddText(fonts.mono, 10.0F, {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
+            drawList->AddText(fonts.sansCompact, 10.0F, {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
             x += 12.0F;
         }
     }
@@ -898,7 +898,7 @@ void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const 
 
     bool clicked = false;
     {
-        Theme::ScopedTextStyle ts(fonts.mono, 12.0F, Theme::FontPx::Mono);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
         clicked = ImGui::Button(label, ImVec2{82.0F, 32.0F});
     }
     const ImVec2 min = ImGui::GetItemRectMin();
@@ -910,7 +910,7 @@ void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const 
 }
 // ── Dock UI ───────────────────────────────────────────────────────────
 
-int DrawDockTabs(const std::vector<const char *> &tabs, int activeTab, const Theme::Fonts &fonts)
+int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts)
 {
     ImDrawList *dl = ImGui::GetWindowDrawList();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -950,8 +950,8 @@ int DrawDockTabs(const std::vector<const char *> &tabs, int activeTab, const The
             textColor = Theme::Dim(); // hover color
 
         // Draw text
-        dl->AddText(fonts.mono, fonts.mono->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f), ImGui::GetColorU32(textColor),
-                    tabs[i]);
+        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f),
+                    ImGui::GetColorU32(textColor), tabs[i]);
 
         // Active underline
         if (isActive)
@@ -991,7 +991,7 @@ void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVe
     const auto badgePos = ImVec2(pos.x + w - 14.0f - badgeSize.x, pos.y + 10.0f);
     dl->AddRectFilled(badgePos, ImVec2(badgePos.x + badgeSize.x, badgePos.y + badgeSize.y), ImGui::GetColorU32(badgeBg),
                       4.0f);
-    dl->AddText(fonts.mono, fonts.mono->FontSize, ImVec2(badgePos.x + 6.0f, badgePos.y + 3.0f),
+    dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(badgePos.x + 6.0f, badgePos.y + 3.0f),
                 ImGui::GetColorU32(badgeFg), badgeText);
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
@@ -1009,8 +1009,8 @@ void DrawPropSection(const char *label, const Theme::Fonts &fonts)
     dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()),
                 1.0f);
 
-    dl->AddText(fonts.mono, fonts.mono->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f), Theme::U32(Theme::Muted()),
-                label);
+    dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f),
+                Theme::U32(Theme::Muted()), label);
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
 }
@@ -1039,7 +1039,7 @@ void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts
     dl->AddRect(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Border()),
                 4.0f);
 
-    dl->AddText(fonts.mono, fonts.mono->FontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + 2.0f),
+    dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + 2.0f),
                 Theme::U32(Theme::Text()), value);
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));

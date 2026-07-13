@@ -41,6 +41,7 @@ ConfigurationService CreateEditorConfigurationService(const EditorSettings &sett
  * @param settings Persisted editor settings to map.
  * @return Draft containing all editor appearance keys atomically.
  */
-ConfigurationDraft MakeEditorAppearanceConfigurationDraft(const ConfigurationSnapshot &base, const EditorSettings &settings);
+ConfigurationDraft MakeEditorAppearanceConfigurationDraft(const ConfigurationSnapshot &base,
+                                                          const EditorSettings &settings);
 
 } // namespace Horo::Editor

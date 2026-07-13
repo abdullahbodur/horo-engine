@@ -39,7 +39,7 @@
   user-select: none;
 }
 .ai-chat-title {
-  font: 700 11.5px var(--font-mono, monospace);
+  font: 700 11.5px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-primary, #e8e4d9);
   letter-spacing: .4px;
   text-transform: uppercase;
@@ -92,7 +92,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted, #5e5b54);
-  font: 10.5px var(--font-mono, monospace);
+  font: 10.5px var(--font-ui-compact, Inter, sans-serif);
   padding: 2px;
   cursor: pointer;
   max-width: 132px;
@@ -149,7 +149,7 @@
   display: block;
 }
 .select-group-label {
-  font: 600 9px var(--font-mono, monospace);
+  font: 600 9px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-muted, #5e5b54);
   text-transform: uppercase;
   letter-spacing: .5px;
@@ -182,7 +182,7 @@
 }
 .select-item-desc {
   display: block;
-  font: 9.5px var(--font-mono, monospace);
+  font: 9.5px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-muted, #5e5b54);
   margin-top: 1px;
   white-space: nowrap;
@@ -239,14 +239,14 @@
   background: transparent;
   border: none;
   color: var(--text-muted, #5e5b54);
-  font: 9.5px var(--font-mono, monospace);
+  font: 9.5px var(--font-ui-compact, Inter, sans-serif);
   text-transform: uppercase;
   letter-spacing: .4px;
   padding: 2px 4px;
   text-align: center;
 }
 .ai-chat-role {
-  font: 600 9.5px var(--font-mono, monospace);
+  font: 600 9.5px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-muted, #5e5b54);
   text-transform: uppercase;
   letter-spacing: .5px;
@@ -255,7 +255,7 @@
 .ai-chat-msg.user .ai-chat-role { display: none; }
 .ai-chat-text { word-break: break-word; }
 .ai-chat-text code {
-  font: 10.5px var(--font-mono, monospace);
+  font: 10.5px var(--font-ui-compact, Inter, sans-serif);
   background: rgba(0, 0, 0, .28);
   padding: 1px 5px;
   border-radius: 3px;
@@ -304,7 +304,7 @@
   border: 1px solid var(--accent, #04a5fc);
   background: transparent;
   color: var(--accent, #04a5fc);
-  font: 600 10.5px var(--font-mono, monospace);
+  font: 600 10.5px var(--font-ui-compact, Inter, sans-serif);
   padding: 0 10px;
   border-radius: 6px;
   cursor: pointer;
@@ -325,7 +325,7 @@
   scrollbar-color: var(--border-strong, #3a4049) transparent;
 }
 .history-group-label {
-  font: 600 9.5px var(--font-mono, monospace);
+  font: 600 9.5px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-muted, #5e5b54);
   text-transform: uppercase;
   letter-spacing: .5px;
@@ -371,7 +371,7 @@
   margin-top: 2px;
 }
 .history-item-time {
-  font: 9.5px var(--font-mono, monospace);
+  font: 9.5px var(--font-ui-compact, Inter, sans-serif);
   color: var(--text-muted, #5e5b54);
   flex-shrink: 0;
   margin-top: 1px;
@@ -536,7 +536,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font: 10.5px var(--font-mono, monospace);
+  font: 10.5px var(--font-ui-compact, Inter, sans-serif);
 }
 .mode-text-btn {
   border: none;
@@ -588,7 +588,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted, #5e5b54);
-  font: 10px var(--font-mono, monospace);
+  font: 10px var(--font-ui-compact, Inter, sans-serif);
   cursor: pointer;
   padding: 0;
   transition: color .12s;

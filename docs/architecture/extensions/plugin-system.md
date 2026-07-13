@@ -234,6 +234,13 @@ Initial editor and tool extension points:
 | `project.browser_action` | Add project-browser actions. | Host owns selected project context and confirmation UI. |
 | `mcp.tool` | Add MCP tools subject to permission policy. | MCP host owns transport, schema, and authorization. |
 
+`editor.status_item` contributions are declarative bounded snapshots; they do
+not receive ImGui callbacks. The shell owns validation, active-panel visibility,
+width admission, overflow, localization, modal input exclusion, and typed
+invocation routing. Phase 1 renders any non-empty icon resource ID as a semantic
+dot; a host icon registry is a future extension. See
+[Editor Status Bar](../editor/editor-status-bar.md).
+
 Runtime-facing extension points are stricter and must also satisfy gameplay and
 runtime lifecycle contracts:
 

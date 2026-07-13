@@ -7,6 +7,7 @@
 
 namespace Horo::Editor
 {
+    struct GuiContentRegion;
 
     enum class ProjectLoadingViewCommand
     {
@@ -34,6 +35,7 @@ namespace Horo::Editor
      */
     [[nodiscard]] ProjectLoadingViewCommand DrawProjectLoadingView(
         ProjectLoadingViewState &state,
-        const EditorGuiContext &ctx);
+        const EditorGuiContext &ctx,
+        const GuiContentRegion &contentRegion);
 
 } // namespace Horo::Editor

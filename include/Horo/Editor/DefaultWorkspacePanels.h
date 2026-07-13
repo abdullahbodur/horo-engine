@@ -8,6 +8,6 @@ class WorkspacePanelRegistry;
  * @brief Registers the default panels (Hierarchy, Inspector, Content Browser, Viewport)
  *        into the provided WorkspacePanelRegistry.
  */
-void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry& registry);
+void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry &registry);
 
 } // namespace Horo::Editor

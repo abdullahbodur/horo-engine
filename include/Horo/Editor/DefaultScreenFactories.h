@@ -1,6 +1,7 @@
 #pragma once
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
 
 class ScreenRegistry;
 

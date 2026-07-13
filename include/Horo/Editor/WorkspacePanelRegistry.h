@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Horo/Editor/EditorWorkspaceViewModel.h"
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/EditorWorkspaceViewModel.h"
 
 #include <imgui.h>
 
@@ -21,7 +21,7 @@ namespace Horo::Editor
  */
 class WorkspacePanelRegistry
 {
-public:
+  public:
     WorkspacePanelRegistry() = default;
     ~WorkspacePanelRegistry() = default;
 
@@ -38,14 +38,14 @@ public:
     /**
      * @brief Retrieves all registered panels.
      */
-    [[nodiscard]] const std::vector<std::shared_ptr<IWorkspacePanel>>& GetAllPanels() const;
+    [[nodiscard]] const std::vector<std::shared_ptr<IWorkspacePanel>> &GetAllPanels() const;
 
     /**
      * @brief Attaches all registered panels using the given context.
      *
      * Repeated calls while the registry is attached are ignored.
      */
-    void AttachAll(PanelContext& ctx);
+    void AttachAll(PanelContext &ctx);
 
     /**
      * @brief Detaches all registered panels.
@@ -59,7 +59,7 @@ public:
      */
     void Clear();
 
-private:
+  private:
     void RebuildAreaIndex();
 
     std::vector<std::shared_ptr<IWorkspacePanel>> m_panels;

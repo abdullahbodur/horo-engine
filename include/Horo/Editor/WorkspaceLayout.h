@@ -94,9 +94,15 @@ struct LayoutNode
     std::variant<SplitNode, TabStackNode, PanelNode> value;
 
     LayoutNode() = default;
-    LayoutNode(SplitNode node) : value(std::move(node)) {}
-    LayoutNode(TabStackNode node) : value(std::move(node)) {}
-    LayoutNode(PanelNode node) : value(std::move(node)) {}
+    LayoutNode(SplitNode node) : value(std::move(node))
+    {
+    }
+    LayoutNode(TabStackNode node) : value(std::move(node))
+    {
+    }
+    LayoutNode(PanelNode node) : value(std::move(node))
+    {
+    }
 
     LayoutNode(const LayoutNode &other);
     LayoutNode &operator=(const LayoutNode &other);

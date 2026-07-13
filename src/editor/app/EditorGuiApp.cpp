@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/EditorSettingsEvents.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
@@ -19,6 +20,7 @@
 
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/SettingsModal.h"
+#include "editor/menu/EditorMenuPlatform.h"
 #include "editor/screens/project_creation/ProjectCreationView.h"
 #include "editor/screens/project_loading/ProjectLoadingView.h"
 #include "editor/screens/welcome/WelcomeView.h"
@@ -147,20 +149,20 @@ struct EditorTextures
     sansCfg.OversampleH = 3;
     sansCfg.OversampleV = 2;
     sansCfg.RasterizerDensity = rasterizerDensity;
-    ImFontConfig monoCfg{};
-    monoCfg.OversampleH = 3;
-    monoCfg.OversampleV = 2;
-    monoCfg.RasterizerDensity = rasterizerDensity;
-    ImFontConfig monoSemiBoldCfg{};
-    monoSemiBoldCfg.OversampleH = 3;
-    monoSemiBoldCfg.OversampleV = 2;
-    monoSemiBoldCfg.RasterizerDensity = rasterizerDensity;
+    ImFontConfig compactCfg{};
+    compactCfg.OversampleH = 3;
+    compactCfg.OversampleV = 2;
+    compactCfg.RasterizerDensity = rasterizerDensity;
+    ImFontConfig emphasisCfg{};
+    emphasisCfg.OversampleH = 3;
+    emphasisCfg.OversampleV = 2;
+    emphasisCfg.RasterizerDensity = rasterizerDensity;
     f.sans = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/inter/InterVariable.ttf").c_str(), Theme::FontPx::Sans,
                                           &sansCfg, ranges);
-    f.mono = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf").c_str(),
-                                          Theme::FontPx::Mono, &monoCfg, ranges);
-    f.monoSemiBold = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/ibm-plex-mono/IBMPlexMono-SemiBold.ttf").c_str(),
-                                                  Theme::FontPx::MonoSemiBold, &monoSemiBoldCfg, ranges);
+    f.sansCompact = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/inter/InterVariable.ttf").c_str(),
+                                                 Theme::FontPx::SansCompact, &compactCfg, ranges);
+    f.sansEmphasis = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/inter/InterVariable.ttf").c_str(),
+                                                  Theme::FontPx::SansEmphasis, &emphasisCfg, ranges);
     if (f.sans)
         io.FontDefault = f.sans;
     return f;
@@ -328,9 +330,14 @@ void RunEditorMainLoop(RunEditorMainLoopParams &p)
                              p.projectCreationService,
                              (std::uintptr_t)(void *)(intptr_t)p.textures.logo};
     static_cast<void>(screenHost.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
+    bool nativeMenuInstalled = false;
 
     while (!screenHost.IsApplicationCloseRequested())
     {
+        while (const std::optional<EditorMenuAction> action = PollNativeEditorMenuAction())
+        {
+            screenHost.DispatchMenuAction(*action);
+        }
         p.projectCreationService.PumpMainThread();
         p.engineEvents.DispatchQueued();
         SDL_Event ev;
@@ -342,6 +349,14 @@ void RunEditorMainLoop(RunEditorMainLoopParams &p)
             {
                 static_cast<void>(screenHost.RequestCloseApplication());
             }
+        }
+
+        // SDL's Cocoa backend creates its default application menu during the first event pump.
+        // Install Horo's model afterwards so SDL cannot overwrite the native menu hierarchy.
+        if (!nativeMenuInstalled)
+        {
+            InstallNativeEditorMenuBar(GetEditorMenuModel(), p.localization);
+            nativeMenuInstalled = true;
         }
 
         if (screenHost.IsApplicationCloseRequested())
@@ -445,6 +460,7 @@ int RunEditorGuiApp(const int argc, char **argv)
                     loc.has_value() && localization.ActiveLocale() != *loc && localization.Prepare(*loc))
                 {
                     (void)localization.ActivatePrepared();
+                    InstallNativeEditorMenuBar(GetEditorMenuModel(), localization);
                 }
             }
         });

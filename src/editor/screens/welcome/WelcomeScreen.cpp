@@ -51,13 +51,13 @@ public:
         // No time-dependent simulation required for the welcome screen.
     }
 
-    void Draw() override
+    void Draw(const GuiContentRegion &contentRegion) override
     {
         if (!controller_) {
             return;
         }
         const WelcomeViewResult result =
-            DrawWelcomeView(viewModel_, context_, WelcomeViewAssets{(ImTextureID)logoTexture_});
+            DrawWelcomeView(viewModel_, context_, WelcomeViewAssets{(ImTextureID)logoTexture_}, contentRegion);
         if (modalHost_.HasOpenModal()) {
             // A modal owns interaction — ignore any commands the view emits this frame.
             return;

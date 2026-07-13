@@ -11,12 +11,14 @@
 #include <string>
 #include <string_view>
 
-namespace Horo {
+namespace Horo
+{
 class EngineDataBus;
 class JobSystem;
-}
+} // namespace Horo
 
-namespace Horo::Editor {
+namespace Horo::Editor
+{
 
 struct ProjectCreationServiceState;
 
@@ -28,7 +30,8 @@ using ProjectCreationOperationId = std::uint64_t;
 using ProjectCreationRevision = std::uint64_t;
 
 /** @brief User-facing lifecycle state of one project creation operation. */
-enum class ProjectCreationOperationState : std::uint8_t {
+enum class ProjectCreationOperationState : std::uint8_t
+{
     Queued,
     Running,
     Cancelling,
@@ -38,7 +41,8 @@ enum class ProjectCreationOperationState : std::uint8_t {
 };
 
 /** @brief Named creation phase reported by the authoritative operation snapshot. */
-enum class ProjectCreationOperationPhase : std::uint8_t {
+enum class ProjectCreationOperationPhase : std::uint8_t
+{
     Validating,
     Staging,
     WritingMetadata,
@@ -50,7 +54,8 @@ enum class ProjectCreationOperationPhase : std::uint8_t {
 };
 
 /** @brief Stable project-creation failure classification. */
-enum class ProjectCreationErrorCode : std::uint8_t {
+enum class ProjectCreationErrorCode : std::uint8_t
+{
     InvalidRequest,
     DestinationOccupied,
     ParentUnavailable,
@@ -62,13 +67,15 @@ enum class ProjectCreationErrorCode : std::uint8_t {
 };
 
 /** @brief Typed terminal diagnostic retained in a project creation snapshot. */
-struct ProjectCreationError {
+struct ProjectCreationError
+{
     ProjectCreationErrorCode code = ProjectCreationErrorCode::InvalidRequest;
     std::string message;
 };
 
 /** @brief Immutable view of one project creation operation held by ProjectCreationService. */
-struct ProjectCreationSnapshot {
+struct ProjectCreationSnapshot
+{
     ProjectCreationOperationId id = 0;
     ProjectCreationOperationState state = ProjectCreationOperationState::Queued;
     ProjectCreationOperationPhase phase = ProjectCreationOperationPhase::Validating;
@@ -79,12 +86,14 @@ struct ProjectCreationSnapshot {
 };
 
 /** @brief Handle returned after a project-creation operation was accepted by JobSystem. */
-struct ProjectCreationOperationHandle {
+struct ProjectCreationOperationHandle
+{
     ProjectCreationOperationId id = 0;
 };
 
 /** @brief Lightweight notification emitted only after a project directory is promoted. */
-struct ProjectCreatedEvent {
+struct ProjectCreatedEvent
+{
     static constexpr std::string_view HoroEventTypeName = "horo::editor::ProjectCreatedEvent";
     ProjectCreationOperationId operationId = 0;
     std::string projectId;
@@ -92,7 +101,8 @@ struct ProjectCreatedEvent {
 };
 
 /** @brief Lightweight notification emitted when operation phase or progress updates during asynchronous execution. */
-struct ProjectCreationProgressEvent {
+struct ProjectCreationProgressEvent
+{
     static constexpr std::string_view HoroEventTypeName = "horo::editor::ProjectCreationProgressEvent";
     ProjectCreationOperationId operationId = 0;
     ProjectCreationOperationPhase phase = ProjectCreationOperationPhase::Validating;
@@ -101,24 +111,25 @@ struct ProjectCreationProgressEvent {
 };
 
 /** @brief Lightweight invalidation notification for committed project creation state. */
-struct ProjectCreationRevisionChangedEvent {
+struct ProjectCreationRevisionChangedEvent
+{
     static constexpr std::string_view HoroEventTypeName = "horo::editor::ProjectCreationRevisionChangedEvent";
     ProjectCreationRevision revision = 0;
 };
 
 /** @brief Creates a project through a staged, cancellable JobSystem operation. */
-class ProjectCreationService {
-public:
+class ProjectCreationService
+{
+  public:
     /**
      * @brief Constructs the service with process-owned execution and notification dependencies.
      * @param jobs Process job system, which must outlive this service and its accepted work.
      * @param dataBus Process data bus, which must outlive this service and its accepted work.
      */
-    ProjectCreationService(JobSystem& jobs, EngineDataBus& dataBus);
+    ProjectCreationService(JobSystem &jobs, EngineDataBus &dataBus);
 
-    ProjectCreationService(const ProjectCreationService&) = delete;
-    ProjectCreationService& operator=(const ProjectCreationService&) = delete;
-
+    ProjectCreationService(const ProjectCreationService &) = delete;
+    ProjectCreationService &operator=(const ProjectCreationService &) = delete;
 
     /**
      * @brief Validates and submits a project creation operation without writing from the caller thread.
@@ -148,7 +159,7 @@ public:
      */
     void PumpMainThread();
 
-private:
+  private:
     std::shared_ptr<ProjectCreationServiceState> state_;
     std::reference_wrapper<JobSystem> jobs_;
 };

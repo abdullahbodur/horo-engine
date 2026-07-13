@@ -69,13 +69,17 @@ EditorLayer
     |                       +-- PerformanceTab
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
-    |
-    +-- EditorStatusBar          bottom status line
 ```
 
 `EditorLayer` is the GUI composition root. It creates the workspace controller,
-panel host, modal host, menu bar, toolbar, status bar, and viewport render
+panel host, modal host, menu bar, toolbar, and viewport render
 integration, then forwards frame lifecycle calls.
+
+The persistent status bar is shell chrome owned by `GuiScreenHost`, not by
+`EditorLayer` or `EditorPanelHost`. Panels may publish bounded status
+contributions through the host registry, including an
+`OnlyWhenPanelActive` visibility policy. See
+[Editor Status Bar](./editor-status-bar.md).
 
 `EditorLayer` is also the GUI coordinator for top-level presentation actions. It
 consumes typed results from the menu bar and toolbar, opens GUI-only surfaces
@@ -291,6 +295,12 @@ layouts fall back to the versioned default layout while preserving recoverable
 surface state. References to temporarily unavailable optional surfaces are
 reported in `LayoutLoadReport` and skipped without making the remaining layout
 invalid.
+
+Runtime splitter input uses screen-space seam rectangles and explicit pointer
+capture rather than transparent ImGui overlay windows. This keeps hit testing
+independent of platform window z-order and preserves an active resize while the
+pointer moves outside the narrow seam. Activity-panel drag/drop and modal popup
+ownership suppress new splitter capture.
 
 Registration makes a surface available and attaches its lifecycle; placement is
 a separate layout operation. `TabRegistration` and `PanelRegistration` provide
@@ -730,11 +740,12 @@ command dispatch.
 
 ### Status Bar
 
-Bottom line with `Sel: 0`, `Dirty: no`, `Nav: idle`, `Reload: idle`, `Render: OpenGL`.
+Persistent shell-owned bottom line rendered by `GuiScreenHost`.
 
-- Owner: `EditorStatusBar`
-- Subscribes to: `SelectionChangedEvent`, `SceneDocumentChangedEvent`,
-  `EditorOperationEvent`
+- Owner: `GuiScreenHost`
+- Workspace bridge: `EditorWorkspaceScreen`
+- Inputs: bounded `EditorStatusItemContent` snapshots in the host registry
+- Does not call panel/plugin providers or query document models during draw
 
 ## Data Flow Example: Selecting an Object
 
@@ -744,7 +755,8 @@ Bottom line with `Sel: 0`, `Dirty: no`, `Nav: idle`, `Reload: idle`, `Render: Op
 4. The selection model publishes `SelectionChangedEvent` on `EditorDataBus`.
 5. `PropertiesTab` queries the selection model and refreshes inspected fields.
 6. `ViewportPanel` queries the selection model and syncs the gizmo.
-7. `StatusBar` queries the selection model and updates `Sel: 1`.
+7. `EditorWorkspaceScreen` publishes the committed selection snapshot to the
+   host status registry; the next status draw presents `Sel: 1`.
 
 No tab knows the others exist. The event producer does not know which panel
 will consume the event, and tabs attaching later can query the current selection
@@ -759,7 +771,8 @@ without replaying old events.
 4. After the transaction commits, `SceneDocument` increments its revision and
    publishes one `SceneDocumentChangedEvent` through the editor bus.
 5. `HierarchyTab` receives it and refreshes dirty indicators.
-6. `StatusBar` receives it and shows `Dirty: yes`.
+6. `EditorWorkspaceScreen` publishes the committed dirty-state snapshot and the
+   shell status bar presents `Unsaved`.
 7. The viewport renders the updated object on the next frame through the
    existing runtime binding.
 
@@ -891,6 +904,9 @@ src/editor/document/
     EditorWorkspaceController.h/cpp
 src/editor/data_bus/
     EditorDataBus.h/cpp
+src/editor/status_bar/
+    EditorStatusBar.h/cpp
+    EditorStatusBarModel.cpp
 src/editor/panels/
     EditorPanelHost.h/cpp
     EditorTab.h
@@ -899,7 +915,6 @@ src/editor/panels/
     EditorViewportModel.h/cpp
     EditorMenuBar.h/cpp
     EditorToolbar.h/cpp
-    EditorStatusBar.h/cpp
     tabs/
         HierarchyTab.h/cpp
         ProjectTab.h/cpp

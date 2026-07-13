@@ -13,6 +13,9 @@ popups.
 
 - `HoroEditor` is one process and one GUI application.
 - A screen owns the application content area for one route.
+- Persistent shell chrome such as the status bar is owned by `GuiScreenHost`,
+  not by the active screen. The screen receives the remaining bounded content
+  region.
 - Screen navigation is direct typed host coordination, not a data-bus command.
 - Only the active screen receives interactive input.
 - Screens receive narrow application capabilities and do not own business
@@ -40,6 +43,8 @@ the application route.
 ```text
 HoroEditorApp
   +-- GuiScreenHost
+  |     +-- EditorStatusBar
+  |     +-- EditorStatusItemRegistry
   |     +-- WelcomeScreen
   |     +-- ProjectBrowserScreen
   |     +-- ProjectCreationScreen
@@ -52,6 +57,8 @@ HoroEditorApp
 
 `GuiScreenHost` owns the active screen object and navigation state.
 `EditorWorkspaceScreen` composes `EditorLayer`, which owns panel and modal hosts.
+The host-owned status bar persists across route replacement; see
+[Editor Status Bar](./editor-status-bar.md).
 
 ## Screen Registration and Service Provisioning (Registry Architecture)
 
@@ -218,9 +225,11 @@ public:
     virtual ScreenId Id() const = 0;
     virtual Result<void> OnEnter(const GuiRoute&) = 0;
     virtual void OnUpdate(float dt) = 0;
-    virtual void Draw() = 0;
+    virtual void Draw(const GuiContentRegion& contentRegion) = 0;
+    virtual void CollectActivePanelIds(
+        std::vector<std::string_view>& output) const;
     virtual LeaveDecision CanLeave(const LeaveTarget& target) const = 0;
-    virtual Result<LeaveDecision, LeaveError>
+    virtual Result<LeaveDecision>
     ResolveLeave(const LeaveTarget& target,
                  const LeaveResolution& resolution) = 0;
     virtual void OnLeave() = 0;
@@ -235,19 +244,21 @@ screen. The requirement contains stable identities, not owning pointers or
 presentation callbacks.
 
 `OnEnter()` succeeds before the route becomes active. Destination construction
-and entry are staged while the current screen remains active. A candidate
-screen owns all partially initialized resources through RAII and must not
-invalidate the current screen during entry. Application operations that require
-exclusive state return prepared handles whose commit occurs only at route
-commit.
+is staged while the current screen remains active. Before destination entry,
+the old screen receives `OnLeave()` so process-wide panel/status registrations
+cannot be torn down after the candidate has claimed them. If destination entry
+fails, the host re-enters the old route; rollback failure is fatal to the GUI
+session. Candidate-owned partial resources remain protected by RAII.
 
-If construction or `OnEnter()` fails, the candidate is destroyed, prepared work
-is rolled back or abandoned through its owning service, `OnLeave()` is not
-called on the current screen, and the active route remains unchanged. A failure
-that invalidates process-wide window or renderer operation uses the fatal host
-path rather than ordinary navigation recovery.
+If construction fails, the current screen remains untouched. If `OnEnter()`
+fails after old-screen teardown, the candidate is destroyed and the old screen
+is re-entered with the unchanged active route. A rollback failure invalidates
+the GUI session and requests shutdown rather than continuing with ambiguous
+shared ownership.
 
 `OnLeave()` executes once after leave permission and before destruction.
+Navigation requested from `Draw()` is queued and committed only after that
+screen callback returns; an active screen is never destroyed on its own stack.
 
 ## Navigation
 
@@ -278,14 +289,12 @@ struct NavigationError {
 `LeaveSubjectId` is a validated opaque identity that correlates the requirement
 with the document, draft, job, recovery flow, or native dialog that produced it.
 It is stable only while that blocker exists within one screen instance; it is
-not a process-global or persistent identity. The host binds each requirement to
-the current `ScreenInstanceId`, `NavigationAttemptId`, and
-`LeaveRequirementRevision`, then passes the subject and revision back to the
-owning screen without interpreting them.
+not a process-global or persistent identity. The host verifies that the displayed
+subject, revision, and action still match its current pending requirement before
+calling the owning screen, which performs its own domain-state validation.
 
-`ScreenInstanceId` is unique for one constructed screen lifetime.
-`NavigationAttemptId` is unique for one accepted navigation or application-close
-request and expires when that request commits, fails, or is cancelled.
+The current host keeps one pending requirement/target pair and rejects a second
+navigation request as busy until it commits or is cancelled.
 `LeaveRequirementRevision` increases when the state or allowed actions of the
 same blocker change.
 
@@ -294,8 +303,8 @@ same blocker change.
 host calls `ResolveLeave()`. The screen verifies the subject and action, commits
 the corresponding save, discard, cancellation, detach, or recovery operation
 through its owning service, and returns `Allow`, `Deny`, or a new requirement.
-Failed resolution returns a typed `LeaveError` and keeps the current route
-active.
+Failed resolution returns the foundation `Error` carried by `Result` and keeps
+the current route active.
 
 A resolution chain is allowed because one blocker may reveal another, such as
 saving a dirty document before resolving a running operation. Each successful
@@ -324,20 +333,19 @@ A successful route commit is ordered:
 
 1. validate that the pending request and active route are still current
 2. obtain final leave permission
-3. construct the candidate and complete staged `OnEnter()`
+3. construct the candidate without claiming shared panel/status registrations
 4. call `OnLeave()` on the previous screen
-5. commit prepared exclusive application state
-6. replace the active route and establish destination focus
-7. destroy the previous screen
-8. publish `GuiRouteChangedEvent`
+5. call candidate `OnEnter()` and claim shared registrations
+6. if entry fails, destroy the candidate and re-enter the previous route
+7. replace the active route and establish destination focus
+8. destroy the previous screen
+9. publish `GuiRouteChangedEvent`
 
-No observer sees the destination route before its entry and required application
-state commit succeed.
-
-All fallible preparation and validation completes before step 4. A prepared
-exclusive-state commit is no-fail by contract. If a destination cannot provide
-that guarantee, preparation fails and the transition is rejected before
-`OnLeave()` runs.
+No observer sees the destination route before its entry succeeds. Candidate
+entry remains fallible after old-screen teardown because current workspace
+registrations are process-wide. The host therefore treats re-entering the
+previous route as the rollback operation. Rollback failure invalidates the GUI
+session and requests shutdown.
 
 Navigation is not published as a command on `EngineDataBus` or
 `EditorDataBus`. After commit, the host publishes one bounded route-changed
