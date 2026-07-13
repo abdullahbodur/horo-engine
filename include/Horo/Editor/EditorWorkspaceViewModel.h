@@ -1,11 +1,14 @@
 #pragma once
 
+#include "Horo/Editor/ActivityBarLayout.h"
 #include "Horo/Editor/EditorWorkspaceEvents.h"
+#include "Horo/Editor/WorkspacePanelHost.h"
 
 #include <string>
 #include <vector>
 #include <array>
 #include <optional>
+#include <unordered_map>
 
 namespace Horo::Editor
 {
@@ -31,7 +34,27 @@ namespace Horo::Editor
         UpdateObjectTransform,
         UpdateObjectName,
         ChangeActivePanel,
+        ReorderActivityBarItem,
+        DockWorkspacePanel,
         ResizePanel,
+    };
+
+    enum class BottomDockMode
+    {
+        Full,
+        Split,
+    };
+
+    enum class BottomDockSlot
+    {
+        Left,
+        Right,
+    };
+
+    struct WorkspacePanelDropTarget
+    {
+        std::string targetNodeId;
+        WorkspacePanelHost::DropKind kind = WorkspacePanelHost::DropKind::TabCenter;
     };
 
     struct EditorWorkspaceViewCommandData
@@ -41,6 +64,9 @@ namespace Horo::Editor
         std::optional<std::string> stringPayload = std::nullopt;
         std::optional<float> floatPayload = std::nullopt;
         std::optional<WorkspaceLayoutSize> layoutPayload = std::nullopt;
+        std::optional<ActivityBarSlot> activityBarSlot = std::nullopt;
+        std::optional<BottomDockSlot> bottomDockSlot = std::nullopt;
+        std::optional<WorkspacePanelDropTarget> workspaceDropTarget = std::nullopt;
     };
 
     struct EditorWorkspaceViewModel
@@ -54,10 +80,18 @@ namespace Horo::Editor
         std::string activeLeftPanelId = "horo.hierarchy";
         std::string activeRightPanelId = "horo.inspector";
         std::string activeBottomPanelId = "horo.content_browser";
+        std::string activeBottomLeftPanelId;
+        std::string activeBottomRightPanelId;
+        BottomDockMode bottomDockMode = BottomDockMode::Full;
         std::string activeDocumentPanelId = "horo.viewport";
 
         float leftPanelWidth = 230.0F;
         float rightPanelWidth = 260.0F;
         float bottomPanelHeight = 238.0F;
+
+        std::unordered_map<PanelId, WorkspaceDockArea> panelDockAreas;
+
+        ActivityBarLayout activityBarLayout;
+        WorkspacePanelHost workspacePanelHost;
     };
 } // namespace Horo::Editor

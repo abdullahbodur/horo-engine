@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Horo/Editor/WorkspaceDockArea.h"
+#include "Horo/Editor/ActivityBarLayout.h"
+#include "Horo/Editor/WorkspacePanelHost.h"
 #include <string>
 
 namespace Horo::Editor
@@ -39,5 +41,22 @@ namespace Horo::Editor
         static constexpr auto HoroEventTypeName = "WorkspaceLayoutChangedEvent";
         WorkspaceDockArea triggerArea; // The area that was actively resized
         WorkspaceLayoutSize layout;
+    };
+    /** @brief Emitted after a workspace panel is docked into a tab stack or split. */
+    struct WorkspacePanelDockedEvent
+    {
+        static constexpr auto HoroEventTypeName = "WorkspacePanelDockedEvent";
+        std::string panelId;
+        std::string targetNodeId;
+        WorkspacePanelHost::DropKind kind;
+    };
+
+    /** @brief Emitted after an Activity Bar icon is moved to a new group slot. */
+    struct ActivityBarItemReorderedEvent
+    {
+        static constexpr auto HoroEventTypeName = "ActivityBarItemReorderedEvent";
+        std::string panelId;
+        ActivityBarSlot previousSlot;
+        ActivityBarSlot newSlot;
     };
 } // namespace Horo::Editor

@@ -82,6 +82,45 @@ target_link_libraries(HoroEditorSettingsStoreTests
 
 add_test(NAME HoroEditorSettingsStoreTests COMMAND HoroEditorSettingsStoreTests)
 
+add_executable(HoroWorkspaceLayoutTests
+    unit/editor/WorkspaceLayoutTests.cpp
+)
+
+target_compile_features(HoroWorkspaceLayoutTests PRIVATE cxx_std_20)
+target_link_libraries(HoroWorkspaceLayoutTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroWorkspaceLayoutTests COMMAND HoroWorkspaceLayoutTests)
+
+add_executable(HoroWorkspacePanelHostTests
+    unit/editor/WorkspacePanelHostTests.cpp
+)
+target_link_libraries(HoroWorkspacePanelHostTests PRIVATE HoroEditorScreens)
+add_test(NAME HoroWorkspacePanelHostTests COMMAND HoroWorkspacePanelHostTests)
+
+add_executable(HoroWorkspaceLayoutPersistenceTests
+    unit/editor/WorkspaceLayoutPersistenceTests.cpp
+)
+target_link_libraries(HoroWorkspaceLayoutPersistenceTests PRIVATE HoroEditorScreens)
+add_test(NAME HoroWorkspaceLayoutPersistenceTests COMMAND HoroWorkspaceLayoutPersistenceTests)
+
+add_executable(HoroActivityBarLayoutTests
+    unit/editor/ActivityBarLayoutTests.cpp
+)
+
+target_compile_features(HoroActivityBarLayoutTests PRIVATE cxx_std_20)
+target_link_libraries(HoroActivityBarLayoutTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroActivityBarLayoutTests COMMAND HoroActivityBarLayoutTests)
+
+add_executable(HoroEditorWorkspaceControllerTests
+    unit/editor/EditorWorkspaceControllerTests.cpp
+)
+
+target_compile_features(HoroEditorWorkspaceControllerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::EditorScreens)
+
+add_test(NAME HoroEditorWorkspaceControllerTests COMMAND HoroEditorWorkspaceControllerTests)
+
 add_executable(HoroDataBusTests
     unit/foundation/DataBusTests.cpp
 )

@@ -37,10 +37,10 @@ namespace Horo::Editor
         /** @brief Returns a list of event types this panel wants to observe via the DataBus. */
         [[nodiscard]] virtual std::vector<std::string> GetObservedEventTypes() const = 0;
 
-        /** @brief Called exactly once when the panel is registered and mounted. */
+        /** @brief Called once when the registry mounts the panel. */
         virtual void OnAttach(PanelContext& ctx) = 0;
 
-        /** @brief Called exactly once before the panel is unregistered or destroyed. */
+        /** @brief Called once before the registry unmounts the panel. */
         virtual void OnDetach() = 0;
 
         /** @brief Draws the 24x24 icon for the Activity Bar. */

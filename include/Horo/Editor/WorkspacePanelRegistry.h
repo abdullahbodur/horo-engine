@@ -5,12 +5,13 @@
 
 #include <imgui.h>
 
+#include <array>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "Horo/Editor/IWorkspacePanel.h"
-#include <memory>
 
 namespace Horo::Editor
 {
@@ -32,7 +33,7 @@ public:
     /**
      * @brief Retrieves all panels assigned to a specific dock area.
      */
-    [[nodiscard]] std::vector<std::shared_ptr<IWorkspacePanel>> GetPanelsForArea(WorkspaceDockArea area) const;
+    [[nodiscard]] const std::vector<std::shared_ptr<IWorkspacePanel>> &GetPanelsForArea(WorkspaceDockArea area) const;
 
     /**
      * @brief Retrieves all registered panels.
@@ -41,11 +42,15 @@ public:
 
     /**
      * @brief Attaches all registered panels using the given context.
+     *
+     * Repeated calls while the registry is attached are ignored.
      */
     void AttachAll(PanelContext& ctx);
 
     /**
      * @brief Detaches all registered panels.
+     *
+     * Repeated calls while the registry is detached are ignored.
      */
     void DetachAll();
 
@@ -55,7 +60,11 @@ public:
     void Clear();
 
 private:
+    void RebuildAreaIndex();
+
     std::vector<std::shared_ptr<IWorkspacePanel>> m_panels;
+    std::array<std::vector<std::shared_ptr<IWorkspacePanel>>, 4> m_panelsByArea;
+    bool m_attached = false;
 };
 
 } // namespace Horo::Editor

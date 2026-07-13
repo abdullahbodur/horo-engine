@@ -78,6 +78,10 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/DefaultWorkspacePanels.cpp
             editor/screens/workspace/ContentBrowserPanel.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
+            editor/screens/workspace/WorkspaceLayout.cpp
+            editor/screens/workspace/WorkspacePanelHost.cpp
+            editor/screens/workspace/WorkspaceLayoutPersistence.cpp
+            editor/screens/workspace/ActivityBarLayout.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
             editor/screens/GuiScreenHost.cpp
