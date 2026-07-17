@@ -55,6 +55,15 @@ int main()
                                    .theme = theme,
                                    .settings = settings};
     EditorWorkspaceViewModel viewModel;
+    viewModel.documentRevision = DocumentRevision{1};
+    viewModel.objects = {
+        SceneObject{.id = SceneObjectId{1}, .name = "Root"},
+        SceneObject{.id = SceneObjectId{2},
+                    .parent = SceneObjectId{1},
+                    .name = "Box",
+                    .kind = SceneObjectKind::Mesh},
+    };
+    viewModel.primarySelection = SceneObjectId{2};
     EditorWorkspaceViewCommandData command;
     HierarchyPanel panel;
 

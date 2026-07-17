@@ -1,22 +1,30 @@
 #pragma once
 
 #include "Horo/Editor/EditorGuiContext.h"
-#include "Horo/Editor/EditorWorkspaceViewModel.h"
 #include "Horo/Editor/WorkspaceDockArea.h"
+#include "Horo/Runtime/Input.h"
 
-#include <imgui.h>
 #include <string>
 #include <vector>
+
+struct ImDrawList;
+struct ImVec2;
+using ImU32 = unsigned int;
 
 namespace Horo::Editor
 {
 class EditorDataBus;
+class IEditorViewportRenderer;
+struct EditorWorkspaceViewCommandData;
+struct EditorWorkspaceViewModel;
 
 /** @brief Context injected when a panel is attached to the workspace. */
 struct PanelContext
 {
     EditorDataBus &dataBus;
-    // Extend later with other services (SceneDocument, etc.)
+    IEditorViewportRenderer *viewportRenderer{nullptr};
+    Input::InputRouter *inputRouter{nullptr};
+    Input::InputContextToken *workspaceInputContext{nullptr};
 };
 
 /** @brief Base interface for a modular Workspace Panel (e.g. Hierarchy, Inspector) */

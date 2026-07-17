@@ -34,8 +34,10 @@ EditorWorkspaceController
 The workspace controller owns the active document session. Tabs and panels
 receive command, query, and subscription capabilities through their context.
 
-One document session has a stable `DocumentSessionId` and a monotonic
-`DocumentRevision`.
+One document session has a stable `DocumentSessionId`, a monotonic
+`DocumentRevision`, and an immutable `DocumentStateId` for each committed
+content state. Undo and redo create a new revision notification while restoring
+the state ID of the semantic history entry they apply.
 
 ## Document Model
 
@@ -165,8 +167,8 @@ the appropriate final revision notification.
 struct HistoryEntry {
     HistoryEntryId id;
     CommandLabel label;
-    DocumentRevision before;
-    DocumentRevision after;
+    DocumentStateId beforeState;
+    DocumentStateId afterState;
     std::vector<CommittedCommand> commands;
 };
 ```
@@ -192,18 +194,21 @@ Save is not an undoable document command.
 The document tracks:
 
 ```text
-current_revision
-saved_revision
+current_revision             monotonic committed-state notification sequence
+current_state_id             identity of the currently visible authored state
+saved_revision               revision captured by the last successful save
+saved_state_id               identity written by the last successful save
 autosaved_revision
 runtime_preview_revision
 interaction_preview_revision
 ```
 
-The document is dirty when `current_revision != saved_revision`.
+The document is dirty when `current_state_id != saved_state_id`.
 
-Undoing back to the saved state clears dirty status even if history still
-contains entries. Saving updates `saved_revision` only after the atomic file
-replacement succeeds.
+Undoing back to the saved state restores its `DocumentStateId` and clears dirty
+status even though the monotonic `DocumentRevision` advances and history still
+contains entries. Saving updates `saved_revision` and `saved_state_id` only
+after the atomic file replacement succeeds.
 
 ## Save
 

@@ -103,8 +103,6 @@ struct EditorSettings
     bool steamworksSdkEnabled = false;
     std::string pluginDiscoveryPath = "{project}/plugins";
 
-    std::array<std::string, 8> shortcutKeys{}; // Per-action key binding strings
-
     bool operator==(const EditorSettings &) const = default;
 };
 

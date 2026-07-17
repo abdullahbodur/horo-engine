@@ -148,6 +148,7 @@ manifest and checksum file.
 Release profiles define signing requirements for:
 
 - executable binaries
+- independently installable native renderer components
 - platform packages
 - release manifests
 - checksum metadata
@@ -168,6 +169,8 @@ Release profiles may require:
 - Windows Authenticode signing with trusted timestamping
 - macOS code signing with hardened runtime
 - macOS notarization and stapling where applicable
+- renderer-module compatibility with the host application's native library
+  validation and signing identity policy
 - platform-specific entitlements
 - Linux package signing where a package manager or repository requires it
 - store-specific signing or upload credentials

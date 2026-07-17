@@ -16,6 +16,7 @@ MyGame/
     .horo/
         project.json           # project identity and settings
         plugins.json           # portable requested plugin dependencies
+        input.json             # portable project input defaults
         editor_workspace.json  # last editor layout and UI state
         asset_index.json       # derived asset lookup registry
         local/                 # optional machine-local overrides, ignored
@@ -36,7 +37,7 @@ paths are resolved from this root.
 Durable portable metadata, machine-local state, and derived output remain
 separate:
 
-- `.horo/project.json`, `.horo/plugins.json`, and asset sidecars are portable
+- `.horo/project.json`, `.horo/plugins.json`, `.horo/input.json`, and asset sidecars are portable
   source-controlled inputs
 - `.horo/editor_workspace.json`, `.horo/local/`, and `.horo/asset_index.json`
   are local or derived state
@@ -247,6 +248,12 @@ persisted on editor close or explicit save. Ownership of its runtime slices is:
 - `EditorViewportModel`: editor camera and navigation state
 - individual tabs: project-scoped presentation state under their stable tab ID
 
+`EditorViewportModel` owns a backend-neutral `EditorViewportCamera`, advances a
+monotonic viewport revision after committed navigation or explicit preview
+invalidation, and publishes `ViewportChangedEvent`. Camera navigation and gizmo
+preview state are workspace state; neither is serialized into the scene document
+or added to scene undo history.
+
 The controller gathers these slices into one versioned document and restores
 them in dependency order. Workspace state is not part of the scene document and
 is not versioned with scene changes.
@@ -426,6 +433,12 @@ up by cache key, normally derived from `projectId`, a canonical-root hash, and
 thumbnail revision. The recent-projects file does not persist arbitrary
 absolute thumbnail paths.
 
+Renderer component health is not copied into `recent_projects.json`. The project
+model reads the project's stable renderer ID and joins it with a current
+machine-local renderer component snapshot to produce transient card preflight
+state. Removing or repairing a renderer therefore updates card state without
+rewriting the recent-project list or the project.
+
 ## Project Browser Screen
 
 The project-browser screen inside `HoroEditor` uses the project model to:
@@ -434,10 +447,23 @@ The project-browser screen inside `HoroEditor` uses the project model to:
 - create new projects from templates
 - open existing projects
 - validate project before opening
+- resolve missing, unhealthy, or incompatible requested renderer components
+  before workspace navigation
 
 It does not load scene data or editor workspace state until the editor workspace
 is activated. It is a screen in the graphical host, not a separate launcher
 module or lifecycle.
+
+If the requested renderer is unavailable, opening the card remains in the
+Welcome/Project Browser route and starts the renderer-resolution dialog. The
+normal GUI offers installation of the requested renderer or one explicit
+persistent change to a compatible available renderer. It does not offer a second
+session-only renderer action. Persistent changes use the same revision-checked,
+transactional project settings operation as other adapters.
+
+See
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md#recent-project-renderer-preflight)
+for the state and capability-validation contract.
 
 ## CLI Commands
 
@@ -497,7 +523,7 @@ never mutates GUI route state directly. Stateful open requests return typed
   CI credential provider.
 - Workspace state is user-specific and should not be committed to version
   control.
-- `.horo/project.json`, `.horo/plugins.json`, and asset metadata sidecars are
+- `.horo/project.json`, `.horo/plugins.json`, `.horo/input.json`, and asset metadata sidecars are
   portable and may be committed. `.horo/editor_workspace.json`,
   `.horo/asset_index.json`, `.horo/local/`, and generated build/cache output
   should be ignored.

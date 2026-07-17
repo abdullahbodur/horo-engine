@@ -5,10 +5,12 @@
 #include "Horo/Editor/Localization/ILocalizationService.h"
 
 #include <optional>
+#include <vector>
 
 namespace
 {
-std::optional<Horo::Editor::EditorMenuAction> g_pendingAction;
+std::optional<Horo::Editor::EditorMenuInvocation> g_pendingInvocation;
+std::vector<Horo::Editor::EditorMenuInvocation> g_invocations;
 
 NSString *ToNSString(const std::string_view value)
 {
@@ -29,7 +31,10 @@ NSString *LocalizedTitle(const Horo::Editor::ILocalizationService &localization,
 + (void)performEditorMenuAction:(id)sender
 {
     const NSInteger tag = [(NSMenuItem *)sender tag];
-    g_pendingAction = static_cast<Horo::Editor::EditorMenuAction>(tag);
+    if (tag > 0 && static_cast<std::size_t>(tag) <= g_invocations.size())
+    {
+        g_pendingInvocation = g_invocations[static_cast<std::size_t>(tag) - 1];
+    }
 }
 @end
 
@@ -37,6 +42,12 @@ namespace Horo::Editor
 {
 namespace
 {
+NSInteger RegisterInvocation(const EditorMenuInvocation &invocation)
+{
+    g_invocations.push_back(invocation);
+    return static_cast<NSInteger>(g_invocations.size());
+}
+
 void AppendModelItem(NSMenu *menu, const EditorMenuItem &modelItem, const ILocalizationService &localization)
 {
     if (modelItem.kind == EditorMenuItemKind::Separator)
@@ -71,7 +82,7 @@ void AppendModelItem(NSMenu *menu, const EditorMenuItem &modelItem, const ILocal
     else
     {
         [nativeItem setTarget:actionable ? [HoroEditorMenuTarget class] : nil];
-        [nativeItem setTag:static_cast<NSInteger>(modelItem.action)];
+        [nativeItem setTag:RegisterInvocation(EditorMenuInvocation{modelItem.action, modelItem.primitive})];
         [nativeItem setEnabled:actionable];
     }
 
@@ -122,7 +133,7 @@ void AppendApplicationMenu(NSMenu *mainMenu)
                                                   action:@selector(performEditorMenuAction:)
                                            keyEquivalent:@"q"];
     [quit setTarget:[HoroEditorMenuTarget class]];
-    [quit setTag:static_cast<NSInteger>(EditorMenuAction::ExitApplication)];
+    [quit setTag:RegisterInvocation(EditorMenuInvocation{EditorMenuAction::ExitApplication, std::nullopt})];
     [appMenu addItem:quit];
     [quit release];
 
@@ -142,6 +153,8 @@ bool UsesNativeEditorMenuBar() noexcept
 /** @copydoc InstallNativeEditorMenuBar */
 void InstallNativeEditorMenuBar(const EditorMenuModel &model, const ILocalizationService &localization)
 {
+    g_invocations.clear();
+    g_pendingInvocation.reset();
     [NSApplication sharedApplication];
     NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"Horo Editor"];
     [mainMenu setAutoenablesItems:NO];
@@ -155,10 +168,10 @@ void InstallNativeEditorMenuBar(const EditorMenuModel &model, const ILocalizatio
 }
 
 /** @copydoc PollNativeEditorMenuAction */
-std::optional<EditorMenuAction> PollNativeEditorMenuAction() noexcept
+std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept
 {
-    std::optional<EditorMenuAction> action = g_pendingAction;
-    g_pendingAction.reset();
-    return action;
+    std::optional<EditorMenuInvocation> invocation = g_pendingInvocation;
+    g_pendingInvocation.reset();
+    return invocation;
 }
 } // namespace Horo::Editor

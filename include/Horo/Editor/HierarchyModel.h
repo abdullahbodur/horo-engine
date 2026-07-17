@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,7 +11,7 @@
 namespace Horo::Editor
 {
 /** @file HierarchyModel.h
- *  @brief Typed, scene-independent hierarchy tree model used by the editor mock hierarchy panel.
+ *  @brief Typed hierarchy presentation model projected from stable scene-object identities.
  */
 
 using HierarchyNodeId = std::uint64_t;
@@ -23,6 +24,8 @@ enum class HierarchyNodeType : std::uint8_t
     Empty,
     Light,
     Camera,
+    TriggerVolume,
+    AudioSource,
 };
 
 /** @brief Result of a hierarchy mutation that can be rejected without changing the tree. */
@@ -49,6 +52,15 @@ struct HierarchyVisibleRow
 {
     const HierarchyNode *node{nullptr};
     std::uint32_t depth{0};
+};
+
+/** @brief Flat authoritative input used to rebuild hierarchy presentation without owning scene state. */
+struct HierarchyNodeInput
+{
+    HierarchyNodeId id{0};
+    std::optional<HierarchyNodeId> parent;
+    std::string_view name;
+    HierarchyNodeType type{HierarchyNodeType::Empty};
 };
 
 /**
@@ -91,6 +103,15 @@ class HierarchyModel
     /** @brief Returns the selected stable ID, if any. */
     [[nodiscard]] std::optional<HierarchyNodeId> SelectedId() const noexcept;
 
+    /**
+     * @brief Rebuilds nodes from authoritative flat input while preserving expansion for surviving IDs.
+     * @param nodes Stable-ID hierarchy nodes in sibling presentation order.
+     */
+    void Replace(std::span<const HierarchyNodeInput> nodes);
+
+    /** @brief Clears presentation selection without mutating hierarchy nodes. */
+    void ClearSelection() noexcept;
+
     /** @brief Updates one node's expanded state. */
     [[nodiscard]] HierarchyMutationResult SetExpanded(HierarchyNodeId id, bool expanded) noexcept;
 
@@ -126,6 +147,6 @@ class HierarchyModel
     HierarchyNodeId nextId_{1};
 };
 
-/** @brief Creates the temporary Room/Lighting/Cameras tree shown by the editor until scene integration lands. */
+/** @brief Creates a deterministic Room/Lighting/Cameras hierarchy fixture for model tests. */
 [[nodiscard]] HierarchyModel CreateMockHierarchyModel();
 } // namespace Horo::Editor

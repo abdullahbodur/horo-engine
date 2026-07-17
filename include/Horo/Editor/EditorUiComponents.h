@@ -9,6 +9,7 @@
 #include <functional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace Horo::Editor::Ui
@@ -142,15 +143,58 @@ void SettingRow(const char *label, const char *description, const Theme::Fonts &
 
 // ── Form controls ────────────────────────────────────────────────────
 
+/** @brief Non-owning callbacks used by a combo whose entries come from a typed model. */
+struct ComboItemSource
+{
+    const void *context = nullptr; /**< Model passed unchanged to each callback. */
+    const char *(*label)(const void *context, int index) = nullptr; /**< Required display-label callback. */
+    bool (*enabled)(const void *context, int index) = nullptr; /**< Optional selection predicate; null enables all. */
+    const char *(*disabledTooltip)(const void *context, int index) =
+        nullptr; /**< Optional diagnostic for disabled rows. */
+};
+
 /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
 [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount,
                                 const Theme::Fonts &fonts, bool error = false);
 
-/** @brief Input text field with shared frame styling and optional error state. Returns true if the text changed. */
+/**
+ * @brief Renders the shared dropdown design for entries projected from a typed model.
+ * @param id Stable UI identity.
+ * @param value Selected entry index.
+ * @param itemCount Number of entries exposed by @p source.
+ * @param source Non-owning entry callbacks valid for the duration of this call.
+ * @param fonts Editor typography handles.
+ * @param error Whether to render the field in its error state.
+ * @return True when an enabled entry changed the selection.
+ */
+[[nodiscard]] bool ComboControl(const char *id, int *value, int itemCount, const ComboItemSource &source,
+                                const Theme::Fonts &fonts, bool error = false);
+
+/**
+ * @brief Renders an input text field with shared frame styling and optional error state.
+ * @param id Stable UI identity.
+ * @param buffer Mutable null-terminated text buffer.
+ * @param bufferSize Capacity of @p buffer, including the null terminator.
+ * @param fonts Editor typography handles.
+ * @param error Whether to render the field in its error state.
+ * @param width Requested control width; negative values fill the remaining content width.
+ * @return True when the text changed.
+ */
 [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts,
-                                    bool error = false);
+                                    bool error = false, float width = -1.0F);
+
+/**
+ * @brief Renders the string-backed overload of the shared input text field.
+ * @param id Stable UI identity.
+ * @param value Mutable text value.
+ * @param maxSize Maximum storage size, including the null terminator.
+ * @param fonts Editor typography handles.
+ * @param error Whether to render the field in its error state.
+ * @param width Requested control width; negative values fill the remaining content width.
+ * @return True when the text changed.
+ */
 [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts,
-                                    bool error = false);
+                                    bool error = false, float width = -1.0F);
 
 /**
  * @brief Draws a hex color input paired with a clickable swatch and anchored picker popup.
@@ -244,5 +288,70 @@ int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::
 void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts);
 void DrawPropSection(const char *label, const Theme::Fonts &fonts);
 void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts);
+
+/** @brief Semantic text tone for shared context-menu actions. */
+enum class ContextMenuItemTone
+{
+    Normal,
+    Danger,
+};
+
+/**
+ * @brief Opens a styled context popup for the preceding ImGui item when requested.
+ * @param id Stable popup identity scoped by the caller.
+ * @return True while the popup is open; pair with @ref EndContextMenu.
+ */
+[[nodiscard]] bool BeginContextMenu(const char *id);
+
+/** @brief Opens a styled context popup for empty space in the current window. */
+[[nodiscard]] bool BeginContextWindowMenu(const char *id);
+
+/** @brief Ends a context popup opened by @ref BeginContextMenu. */
+void EndContextMenu();
+
+/**
+ * @brief Draws one shared context-menu action row.
+ * @param label Localized action label.
+ * @param shortcut Optional platform shortcut label.
+ * @param fonts Editor typography handles.
+ * @param tone Semantic action tone.
+ * @return True when the action was activated.
+ */
+[[nodiscard]] bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts,
+                                   ContextMenuItemTone tone = ContextMenuItemTone::Normal,
+                                   std::string_view iconToken = {});
+
+/** @brief Opens one shared nested context-menu category row. */
+[[nodiscard]] bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts,
+                                       std::string_view iconToken = {});
+
+/** @brief Ends a nested context-menu category opened by @ref BeginContextSubmenu. */
+void EndContextSubmenu();
+
+/** @brief Draws one centralized editor icon token into the supplied bounds. */
+void DrawEditorIcon(ImDrawList *drawList, std::string_view iconToken, ImVec2 position, ImVec2 size, ImU32 color);
+
+/** @brief Draws a shared inset context-menu separator. */
+void ContextMenuSeparator();
+
+/** @brief Interaction result returned by an editable inspector property row. */
+struct Float3PropertyEditResult
+{
+    bool changed{false}; /**< Value changed during the current frame. */
+    bool committed{false}; /**< The current edit interaction completed with a changed value. */
+};
+
+/**
+ * @brief Draws a shared inspector row for editing three floating-point axis values.
+ * @param label Localized property label.
+ * @param id Stable UI identity scoped by the caller.
+ * @param value Mutable X, Y, and Z values.
+ * @param fonts Editor typography handles.
+ * @param speed Mouse-drag increment.
+ * @return Per-frame change and interaction-commit state.
+ */
+[[nodiscard]] Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id,
+                                                         std::array<float, 3> &value, const Theme::Fonts &fonts,
+                                                         float speed = 0.05F);
 
 } // namespace Horo::Editor::Ui

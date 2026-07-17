@@ -66,6 +66,19 @@ class EditorServiceRegistry
         return nullptr;
     }
 
+    /** @brief Removes every borrowed service registration without destroying the services. */
+    void Clear() noexcept
+    {
+        services_.clear();
+        constServices_.clear();
+    }
+
+    /** @brief Reports whether all borrowed registrations have been revoked. */
+    [[nodiscard]] bool Empty() const noexcept
+    {
+        return services_.empty() && constServices_.empty();
+    }
+
   private:
     std::unordered_map<std::type_index, void *> services_;
     std::unordered_map<std::type_index, const void *> constServices_;

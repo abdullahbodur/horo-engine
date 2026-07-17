@@ -4,15 +4,17 @@
 #include "ContentBrowserPanel.h"
 #include "HierarchyPanel.h"
 #include "InspectorPanel.h"
+#include "InputMappingPanel.h"
 #include "ViewportPanel.h"
 
 namespace Horo::Editor
 {
-void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry &registry)
-{
-    registry.RegisterPanel(std::make_shared<HierarchyPanel>());
-    registry.RegisterPanel(std::make_shared<InspectorPanel>());
-    registry.RegisterPanel(std::make_shared<ContentBrowserPanel>());
-    registry.RegisterPanel(std::make_shared<ViewportPanel>());
-}
+    void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry& registry)
+    {
+        registry.RegisterPanel(std::make_shared<HierarchyPanel>());
+        registry.RegisterPanel(std::make_shared<InspectorPanel>());
+        registry.RegisterPanel(std::make_shared<InputMappingPanel>());
+        registry.RegisterPanel(std::make_shared<ContentBrowserPanel>());
+        registry.RegisterPanel(std::make_shared<ViewportPanel>());
+    }
 } // namespace Horo::Editor

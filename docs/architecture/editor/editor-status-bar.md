@@ -183,9 +183,10 @@ Static labels should use `localizationNamespace` plus `labelKey`. Dynamic labels
 or values must already be localized when the snapshot is published. Plugin keys
 must remain namespaced according to the plugin-system localization contract.
 
-`iconResourceId` is a declarative resource identity. In Phase 1, every non-empty
-ID renders as the same host-tinted semantic dot; no resource lookup is claimed.
-A future icon registry may resolve known IDs while preserving the dot fallback.
+`iconResourceId` is a declarative resource identity. The current host renders
+every unresolved non-empty ID as the same host-tinted semantic dot; no resource
+lookup is claimed. An icon registry may resolve known IDs while preserving the
+dot fallback.
 Contributions never pass `ImTextureID`, draw lists, native handles, or file
 paths.
 

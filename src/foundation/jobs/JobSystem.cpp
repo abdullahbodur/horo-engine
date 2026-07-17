@@ -139,7 +139,7 @@ namespace Horo
             return Result<JobHandle>::Failure(MakeJobError("job.queue_full", "Job queue is at capacity."));
 
         auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work));
-        m_state->jobs.emplace(record->id, record);
+        m_state->jobs.try_emplace(record->id, record);
         m_state->queue.push_back(record);
         m_state->workAvailable.notify_one();
         return Result<JobHandle>::Success(JobHandle(std::move(record)));

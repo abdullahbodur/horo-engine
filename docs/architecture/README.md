@@ -11,10 +11,11 @@ For a first architecture review, read:
 1. [System Design](./foundation/system-design.md)
 2. [Architecture Glossary](./foundation/glossary.md)
 3. [Error And Diagnostics](./foundation/error-and-diagnostics.md)
-4. [Configuration System](./foundation/configuration-system.md)
-5. [Concurrency And Job System](./foundation/concurrency-and-jobs.md)
-6. [Runtime Lifecycle](./runtime/runtime-lifecycle.md)
-7. [Scene Runtime](./runtime/scene-runtime.md)
+4. [Scene Math](./foundation/scene-math.md)
+5. [Configuration System](./foundation/configuration-system.md)
+6. [Concurrency And Job System](./foundation/concurrency-and-jobs.md)
+7. [Runtime Lifecycle](./runtime/runtime-lifecycle.md)
+8. [Scene Runtime](./runtime/scene-runtime.md)
 8. the host or subsystem documents relevant to the change
 
 `system-design.md` defines the map and dependency direction. Detailed documents
@@ -52,6 +53,8 @@ dependency direction in [System Design](./foundation/system-design.md).
   terminology.
 - [Error And Diagnostics](./foundation/error-and-diagnostics.md): results,
   stable errors, diagnostics, assertions, and host translation.
+- [Scene Math](./foundation/scene-math.md): coordinate, transform, projection,
+  bounds, ray, and fallible-math contracts shared across runtime and editor.
 - [Configuration System](./foundation/configuration-system.md): typed settings,
   precedence, immutable snapshots, dynamic reload, and secret references.
 - [Concurrency And Job System](./foundation/concurrency-and-jobs.md): workers,
@@ -73,6 +76,15 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Rendering Architecture](./runtime/rendering-architecture.md): render
   extraction, frontend/backend boundaries, render graph, GPU resources, and
   null rendering.
+- [Render Backend Parity Contract](./runtime/render-backend-parity-contract.md):
+  equal lifecycle, presentation, editor integration, and verification obligations
+  for interactive renderer backends.
+- [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
+  optional renderer components, install/repair/probe states, launcher recovery,
+  and selection policy.
+- [Renderer Module Package Manifest](./runtime/renderer-module-package-manifest.md):
+  signed component metadata, private module ABI, variants, validation, and load
+  policy.
 - [Material And Shader Model](./runtime/material-and-shader-model.md): standard
   PBR material model, shader variants, material instances, feature tiers, and
   pipeline cache.

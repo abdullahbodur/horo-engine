@@ -22,6 +22,11 @@ namespace Horo
 class EngineDataBus;
 } // namespace Horo
 
+namespace Horo::Input
+{
+class InputRouter;
+} // namespace Horo::Input
+
 namespace Horo::Editor
 {
 
@@ -30,6 +35,7 @@ class EditorModalHost;
 class EditorSettingsService;
 class LocalizationService;
 class ProjectCreationService;
+class RendererAvailabilitySnapshot;
 class EditorStatusBar;
 
 /**
@@ -72,6 +78,14 @@ struct GuiContentRegion
     float y = 0.0F;
     float width = 0.0F;
     float height = 0.0F;
+};
+
+/** @brief Controlled process-level request to rebuild the editor with a project's renderer composition. */
+struct EditorRendererRestartRequest
+{
+    std::string backendId;
+    std::string projectRoot;
+    std::string projectName;
 };
 
 /** @brief Description of a pending leave blocker requiring resolution. */
@@ -179,13 +193,13 @@ class GuiScreen
     }
 
     /**
-     * @brief Gives the active screen an opportunity to handle an application menu action.
-     * @param action Stable action emitted by a native or in-window menu renderer.
+     * @brief Gives the active screen an opportunity to handle an application menu invocation.
+     * @param invocation Typed invocation emitted by a native or in-window menu renderer.
      * @return True when the screen consumed the action.
      */
-    virtual bool HandleMenuAction(EditorMenuAction action)
+    virtual bool HandleMenuInvocation(const EditorMenuInvocation &invocation)
     {
-        static_cast<void>(action);
+        static_cast<void>(invocation);
         return false;
     }
 
@@ -212,7 +226,9 @@ class GuiScreenHost
     explicit GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,
                            EditorSettingsService &settingsService, LocalizationService &localization,
                            EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                           std::uintptr_t logoTexture = 0);
+                           Input::InputRouter &inputRouter,
+                           const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
+                           WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture = 0);
 
     ~GuiScreenHost();
 
@@ -220,6 +236,12 @@ class GuiScreenHost
     GuiScreenHost &operator=(const GuiScreenHost &) = delete;
     GuiScreenHost(GuiScreenHost &&) = delete;
     GuiScreenHost &operator=(GuiScreenHost &&) = delete;
+
+    /** @brief Leaves and destroys the active screen exactly once, then revokes borrowed services. */
+    void Shutdown() noexcept;
+
+    /** @brief Reports whether deterministic shutdown already revoked the host. */
+    [[nodiscard]] bool IsShutdown() const noexcept;
 
     /**
      * @brief Requests navigation to a new top-level route.
@@ -240,6 +262,15 @@ class GuiScreenHost
     /** @brief Reports whether application exit has been approved and requested. */
     [[nodiscard]] bool IsApplicationCloseRequested() const noexcept;
 
+    /** @brief Requests a controlled renderer-session restart before opening a project. */
+    [[nodiscard]] Result<void> RequestRendererRestart(EditorRendererRestartRequest request);
+
+    /** @brief Forces process shutdown after an unrecoverable renderer or platform failure. */
+    void RequestFatalShutdown() noexcept;
+
+    /** @brief Returns the pending renderer-session restart, if any. */
+    [[nodiscard]] const std::optional<EditorRendererRestartRequest> &RendererRestartRequest() const noexcept;
+
     /** @brief Sets active project creation operation ID being tracked across route transitions. */
     void SetActiveCreationId(std::optional<ProjectCreationOperationId> id) noexcept;
 
@@ -253,10 +284,10 @@ class GuiScreenHost
     void Draw();
 
     /**
-     * @brief Routes a platform-neutral application menu action through host navigation and the active screen.
-     * @param action Action selected by the user.
+     * @brief Routes a platform-neutral application menu invocation through host navigation and the active screen.
+     * @param invocation Invocation selected by the user.
      */
-    void DispatchMenuAction(EditorMenuAction action);
+    void DispatchMenuInvocation(const EditorMenuInvocation &invocation);
 
     /** @brief Returns mutable service registry used for dependency injection. */
     [[nodiscard]] EditorServiceRegistry &Services() noexcept;
@@ -278,6 +309,7 @@ class GuiScreenHost
 
   private:
     Result<void> ExecuteLeaveCheckAndCommit(const LeaveTarget &target);
+    Result<void> CommitApplicationClose();
     void FlushPendingNavigation();
     void CommitRoute(GuiRoute destination);
     void PresentLeaveDialog(const LeaveRequirement &requirement, const LeaveTarget &target);
@@ -307,9 +339,11 @@ class GuiScreenHost
     std::unique_ptr<GuiScreen> activeScreen_;
     std::optional<GuiRoute> pendingNavigation_;
     std::optional<ProjectCreationOperationId> activeCreationId_;
+    std::optional<EditorRendererRestartRequest> rendererRestartRequest_;
     bool closeRequested_{false};
     bool navigationBusy_{false};
     bool isScreenCallbackActive_{false};
+    bool shutdown_{false};
 
     std::optional<LeaveRequirement> pendingRequirement_;
     std::optional<LeaveTarget> pendingTarget_;

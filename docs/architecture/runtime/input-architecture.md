@@ -90,8 +90,9 @@ struct ActionDescriptor {
 };
 ```
 
-Actions may be digital, one-dimensional, two-dimensional, or text-like where
-explicitly supported.
+Actions may be digital, one-dimensional, or two-dimensional. Text and IME
+composition remain snapshot data for the focused text surface; they are not
+encoded as semantic action bindings.
 
 Examples:
 
@@ -137,11 +138,16 @@ Capture:
 
 - has one owner
 - records the initiating button/pointer
-- ends on release, cancellation, focus loss, modal opening, or owner destruction
+- ends on release, Escape/cancellation, focus loss, modal/native-dialog opening,
+  pointer-device loss, owner destruction, context removal, or token destruction
 - prevents competing viewport and GUI gestures
 
 Opening a root modal cancels workspace capture, gizmo drag, drag/drop, and
 incomplete editor gestures before activating modal scope.
+
+The editor wraps its synchronous project and location folder pickers in
+`NativeDialog` RAII contexts. Their destruction restores the preceding context
+stack without leaving ambient dialog state behind.
 
 ## Modal Exclusivity
 
@@ -377,6 +383,34 @@ Low-frequency committed changes may publish notifications:
 - active device changed
 - input capability changed
 
+## Implemented Module And Persistence Topology
+
+The backend-neutral implementation is the `HoroInput` CMake target, exported as
+`HoroEngine::Input`, with its public contract in `include/Horo/Runtime/Input.h`.
+It depends only on Foundation plus the private JSON parser used by profile
+persistence. SDL collection and rumble live in the separate `HoroInputSdl`
+target; SDL types do not cross the public runtime boundary. Headless consumers
+compose `RawInputCollector` and `VirtualGamepad` without SDL or a window.
+
+Profiles use schema version 1 and are replaced atomically. The active project
+layers profiles in this order:
+
+1. action descriptor defaults
+2. `.horo/input.json` project defaults
+3. editor-global user profile under `.horo/input/editor.json` in the platform
+   user configuration home
+4. project-user override under `.horo/input/projects/<projectId>.json` in that
+   same user configuration home
+
+Parsing, schema, or binding validation failure preserves the last valid router
+profile and emits a diagnostic; profiles are never partially applied. New
+projects create a valid `.horo/input.json` during atomic project staging.
+
+The editor registers real action descriptors and exposes them through the
+`Input Mapping` workspace panel. Settings retains viewport sensitivity and
+inversion only, and directs binding edits to this panel so there is no second
+string-based shortcut authority.
+
 ## Testing
 
 Required tests cover:
@@ -407,4 +441,3 @@ Required tests cover:
 - [GUI Screen Host](../editor/gui-screen-host.md)
 - [Configuration System](../foundation/configuration-system.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
-

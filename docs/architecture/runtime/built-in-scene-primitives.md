@@ -81,14 +81,45 @@ stores a `PrimitiveMeshDescriptor`:
 ```cpp
 struct PrimitiveMeshDescriptor {
     PrimitiveMeshType type;
-    PrimitiveMeshParameters parameters;  // radius, height, stacks, slices, etc.
     PrimitiveMeshVersion version;        // generation schema version for migration
+    PrimitiveMeshParameters parameters;  // typed variant matching type
 };
 ```
+
+Version one uses these exact parameter payloads and defaults:
+
+| Type | Parameters | Defaults |
+|---|---|---|
+| Box | `Vec3 size` | `(1, 1, 1)` |
+| Sphere | `radius`, `slices`, `stacks` | `0.5`, `32`, `16` |
+| Capsule | `radius`, `totalHeight`, `radialSegments`, `hemisphereRings` | `0.5`, `2`, `32`, `8` |
+| Cylinder | `radius`, `height`, `radialSegments` | `0.5`, `1`, `32` |
+| Cone | `radius`, `height`, `radialSegments` | `0.5`, `1`, `32` |
+| Plane | `Vec2 size` | `(10, 10)` |
+| Quad | `Vec2 size` | `(1, 1)` |
+
+The generator uses right-handed Y-up scene space and outward CCW triangle
+winding. Plane lies on XZ and faces `+Y`; Quad lies on XY and faces `+Z`.
+Sphere, capsule, cylinder, box, plane, and quad use a centered pivot. Cone uses
+the documented base-center pivot and spans `y=0..height`.
+
+`PrimitiveMeshGenerator::Generate` validates the complete type/version/parameter
+combination and returns `Result<MeshData>`. Its stable error domain is
+`horo.runtime.scene.primitives`; invalid dimensions, invalid tessellation,
+type/parameter mismatch, unsupported version, and capacity overflow remain
+distinct machine-readable failures. It never substitutes a Box or silently
+skips a descriptor.
 
 At cook time, the descriptor may be baked into a runtime mesh asset if the
 release pipeline chooses to pre-generate geometry. At edit time, the mesh is
 generated on demand and cached by `PrimitiveMeshCache`.
+
+`PrimitiveMeshCache` keys the complete descriptor, including version and every
+parameter. It is bounded by item and CPU-byte budgets. A cache lease pins its
+immutable `MeshData` against eviction; unleased least-recently-used entries may
+be evicted. Concurrent requests are serialized through the cache boundary, so
+one key cannot publish duplicate resources. A hit performs no mesh generation
+or new geometry allocation.
 
 ## Core Collider Shape Primitives
 
@@ -165,11 +196,12 @@ must each go through the package or feature approval process.
 
 ## Default Material And Shader Policy
 
-Every renderable mesh primitive is created with a default material that uses the
-engine's standard shader. The primitive catalog does not store shader or
-material state; it only identifies the mesh. The default material is an engine
-core asset (for example, `core.materials.default`) shipped in the `core` asset
-bundle described in [Asset Pipeline](./asset-pipeline.md).
+Every renderable mesh primitive is extracted with the typed binding
+`core.materials.default`. The primitive catalog does not store shader or
+material state; it only identifies the mesh. Until the general material system
+is connected, editor viewport adapters resolve this binding through their
+narrow neutral preview shader. This seam must not grow into a second material
+system.
 
 ```text
 Default material:
@@ -180,15 +212,17 @@ Default material:
   - normal map: none
 ```
 
-A primitive mesh instance is rendered through the same pipeline as an imported
-mesh instance: `Mesh` + `Material` binding + transform. The renderer does not
-treat primitive meshes specially after extraction.
+A primitive mesh instance is rendered as `MeshResourceId` + material binding +
+transform. Extraction emits a deduplicated immutable resource table, and draw
+instances reference that table only by mesh ID. OpenGL and Metal adapters upload
+generic position/normal/UV plus `uint32_t` index data and do not branch on
+`PrimitiveMeshType`. Imported meshes will become a second producer of this same
+contract when the asset pipeline is implemented.
 
-Primitive meshes must provide the vertex attributes required by the standard
-shader: position, normal, UV. Tangents and bitangents are generated if the
-material/normal map requires them. If a project overrides the material with a
-custom shader, the primitive mesh must either support the required vertex layout
-or the material system must report a validation error.
+Primitive meshes provide the current required layout: position, normal, and UV.
+Tangents and bitangents are deliberately deferred until the material/normal-map
+pipeline exists. At that boundary they must be generated or the material system
+must report a typed layout validation error.
 
 ## Default Transform Conventions
 
@@ -212,17 +246,35 @@ component still allows arbitrary scaling.
 
 ### Hierarchy Menu
 
-The editor hierarchy "Create" menu is generated from the `PrimitiveCatalog`.
-It must not hardcode primitive names independently of the catalog. Menu
-sections are derived from `PrimitiveCategory`:
+The editor hierarchy context menu and the application `Game Object -> Create`
+menu are generated from the same `PrimitiveCatalog` metadata and dispatch the
+same `CreateSceneObjectUseCase`. They must not hardcode primitive names or
+membership independently of the catalog.
+
+`PrimitiveCategory` retains runtime meaning (`Mesh`, `Collider`, or
+`SceneObject`). The separate typed `PrimitiveCreationGroup` controls creation
+presentation without weakening that runtime classification:
 
 ```text
-3D Objects
-  Box, Sphere, Capsule, Cylinder, Cone, Plane, Quad
-Scene Objects
-  Empty, Camera, Directional Light, Point Light, Spot Light, Trigger Volume,
-  Audio Source
+Create
+  Empty Object
+  3D Objects
+    Box, Sphere, Capsule, Cylinder, Cone, Plane, Quad
+  Cameras
+    Camera
+  Lights
+    Directional Light, Point Light, Spot Light
+  Volumes
+    Trigger Volume
+  Audio
+    Audio Source
 ```
+
+Right-clicking a hierarchy row creates below that row. The empty hierarchy area
+creates at the document root. The application menu creates below the current
+selection, or at the root when there is no selection. A successful operation is
+one undoable document command and selects the created object. Collider-only
+descriptors use `NotCreatable` and do not appear in either menu.
 
 Environment, text, terrain, ragdoll, and similar higher-level features must not
 appear in the primitive menu unless they are registered as core primitive
@@ -262,14 +314,12 @@ versus
 
 ## Runtime Conversion
 
-`BuildRuntimeSceneDefinition` resolves primitive descriptors to runtime data:
-
-- A primitive mesh descriptor becomes a cached `Mesh` via `PrimitiveMeshCache`.
-- A primitive collider becomes the corresponding physics shape.
-- A primitive scene object becomes the typed ECS component set.
-
-The runtime does not store primitive IDs; it stores resolved runtime values.
-Primitive IDs are an authoring concept.
+The implemented editor extraction path resolves a primitive mesh descriptor to
+a cached generic `MeshData` lease. A future `BuildRuntimeSceneDefinition` will
+use the same cache contract for gameplay runtime conversion. Physics shapes and
+imported meshes are not implemented by this slice. Process-local mesh resource
+IDs never enter the scene document; versioned descriptors remain the authored
+source of truth.
 
 ## CLI And MCP Integration
 

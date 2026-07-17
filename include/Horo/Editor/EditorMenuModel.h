@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Horo/Runtime/Scene/PrimitiveCatalog.h"
+
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -17,8 +20,18 @@ enum class EditorMenuAction
     NewProject,
     OpenProject,
     SaveScene,
+    Undo,
+    Redo,
     OpenEditorSettings,
     ExitApplication,
+    CreatePrimitive,
+};
+
+/** @brief Typed command emitted by every platform menu adapter. */
+struct EditorMenuInvocation
+{
+    EditorMenuAction action{EditorMenuAction::None};
+    std::optional<Runtime::PrimitiveId> primitive;
 };
 
 /** @brief Structural kind of one menu model entry. */
@@ -37,6 +50,8 @@ struct EditorMenuItem
     EditorMenuAction action{EditorMenuAction::None};
     std::string_view shortcut;
     std::string_view macKeyEquivalent;
+    std::string_view iconToken;
+    std::optional<Runtime::PrimitiveId> primitive;
     bool enabledByDefault{false};
     std::vector<EditorMenuItem> children;
 };
@@ -52,4 +67,10 @@ struct EditorMenuModel
  * @return Process-lifetime menu model whose string views reference static storage.
  */
 [[nodiscard]] const EditorMenuModel &GetEditorMenuModel();
+
+/**
+ * @brief Returns the catalog-generated children of the shared Create submenu.
+ * @return Process-lifetime menu items shared by menu bar and hierarchy adapters.
+ */
+[[nodiscard]] const std::vector<EditorMenuItem> &GetPrimitiveCreateMenuItems();
 } // namespace Horo::Editor

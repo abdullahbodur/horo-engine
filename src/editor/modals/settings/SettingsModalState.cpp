@@ -51,10 +51,6 @@ namespace Horo::Editor
     out.steamworksSdkEnabled = st.plugins.steamworksSdk;
     out.pluginDiscoveryPath = st.runtime.discoveryPaths;
 
-    // Serialise shortcut key bindings
-    for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
-        out.shortcutKeys[static_cast<std::size_t>(i)] = st.input.shortcuts[i].keys;
-
     return out;
 }
 
@@ -100,9 +96,6 @@ void ApplySettingsToDraft(SettingsState &st, const EditorSettings &settings)
     st.plugins.steamworksSdk = settings.steamworksSdkEnabled;
     st.runtime.discoveryPaths = settings.pluginDiscoveryPath;
 
-    // Restore shortcut key bindings
-    for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
-        st.input.shortcuts[i].keys = settings.shortcutKeys[static_cast<std::size_t>(i)];
 }
 
 /** @copydoc SettingsModal.h */
@@ -117,7 +110,6 @@ void LoadSettingsForModal(SettingsState &state, const EditorSettingsService &set
     state.statusIsError = false;
     state.statusMessage = "Loaded committed editor settings.";
 
-    state.input.shortcutCount = SettingsState::InputTab::kShortcutActionCount;
 }
 
 /** @copydoc SettingsModal.h */

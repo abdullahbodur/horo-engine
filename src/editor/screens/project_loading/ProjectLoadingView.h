@@ -34,8 +34,7 @@ namespace Horo::Editor
      * @return Command if the user interacts (e.g. Cancel).
      */
     [[nodiscard]] ProjectLoadingViewCommand DrawProjectLoadingView(
-        ProjectLoadingViewState &state,
-        const EditorGuiContext &ctx,
-        const GuiContentRegion &contentRegion);
-
+        ProjectLoadingViewState& state,
+        const EditorGuiContext& ctx,
+        const GuiContentRegion& contentRegion);
 } // namespace Horo::Editor

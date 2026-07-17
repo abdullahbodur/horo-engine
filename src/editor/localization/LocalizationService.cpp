@@ -135,7 +135,7 @@ bool LocalizationService::LoadCatalogFile(const std::filesystem::path &path, Loc
         SetError(error, "editor.localization.file_missing", "Localization catalog could not be opened.");
         return false;
     }
-    const std::string json{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    const std::string json{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
     std::smatch localeMatch;
     std::smatch namespaceMatch;
     const std::regex localePattern{R"re("locale"\s*:\s*"([^"]+)")re"};

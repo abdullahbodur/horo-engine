@@ -34,8 +34,8 @@ Result<void> SettingsModal::OnOpen(EditorModalContext &context)
     m_revertedPublished = false;
     LoadSettingsForModal(m_draft, m_settings);
     const auto rev = m_settings.Snapshot().revision;
-    m_logCtx = std::make_unique<Log::LogContext>("modal", "settings", "modal_id", std::to_string(kModalId),
-                                                       "revision", std::to_string(rev));
+    m_logCtx = std::make_unique<Log::LogContext>("modal", "settings", "modal_id", std::to_string(kModalId), "revision",
+                                                 std::to_string(rev));
     LOG_INFO("editor.settings", "SettingsModal opened (revision=%llu).", rev);
     return Result<void>::Success();
 }

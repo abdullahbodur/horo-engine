@@ -175,7 +175,7 @@ Use stable error codes, not error-message parsing.
 - Modify: `src/editor/screens/workspace/DefaultWorkspacePanels.cpp`
 - Create or modify: `src/editor/screens/workspace/DefaultWorkspaceLayout.cpp`
 - Modify: `include/Horo/Editor/DefaultWorkspacePanels.h`
-- Modify: `include/Horo/Editor/EditorWorkspaceViewModel.h`
+- Modify: `src/editor/screens/workspace/EditorWorkspaceViewModel.h`
 - Test: `tests/unit/editor/DefaultWorkspaceLayoutTests.cpp`
 
 Replace the four independent active-panel strings as the authoritative layout state. Construct a default tree such as:
@@ -232,8 +232,8 @@ Do not expose ImGui window IDs or raw panel pointers in this API.
 ## Task 5: Replace fixed view-model placement state
 
 **Files:**
-- Modify: `include/Horo/Editor/EditorWorkspaceViewModel.h`
-- Modify: `include/Horo/Editor/EditorWorkspaceController.h`
+- Modify: `src/editor/screens/workspace/EditorWorkspaceViewModel.h`
+- Modify: `src/editor/screens/workspace/EditorWorkspaceController.h`
 - Modify: `src/editor/screens/workspace/EditorWorkspaceController.cpp`
 - Modify: `src/editor/screens/workspace/EditorWorkspaceScreen.cpp`
 - Test: `tests/unit/editor/EditorWorkspaceControllerTests.cpp`

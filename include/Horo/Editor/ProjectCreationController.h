@@ -7,6 +7,7 @@
 
 namespace Horo::Editor
 {
+class RendererAvailabilitySnapshot;
 
 /**
  * @file ProjectCreationController.h
@@ -41,6 +42,7 @@ enum class ProjectCreationDiagnosticCode
     ProjectPathNotDirectory,
     ProjectPathInaccessible,
     ProjectParentNotWritable,
+    RendererBackendUnavailable,
 };
 
 /** @brief Validation diagnostic presented by the project-creation screen. */
@@ -128,8 +130,11 @@ enum class ProjectCreationLeaveIntent
 class ProjectCreationController
 {
   public:
-    /** @brief Creates the controller with document-defined project defaults. */
-    ProjectCreationController();
+    /**
+     * @brief Creates the controller with the active machine renderer as its backend default.
+     * @param availability Machine-local renderer availability used for defaulting and validation.
+     */
+    explicit ProjectCreationController(const RendererAvailabilitySnapshot &availability);
 
     /** @brief Returns the current typed draft. */
     [[nodiscard]] const ProjectCreationDraft &Draft() const noexcept;
@@ -209,6 +214,7 @@ class ProjectCreationController
   private:
     ProjectCreationDraft initialDraft_;
     ProjectCreationDraft draft_;
+    const RendererAvailabilitySnapshot *rendererAvailability_{nullptr};
 };
 
 } // namespace Horo::Editor

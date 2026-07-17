@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Runtime/Input.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -89,7 +90,7 @@ struct ModalPresentation
     bool dimWorkspace = true;
 };
 
-/** @brief Modal close-source policy; enforcement is provided by GUI composition in later phases. */
+/** @brief Modal close-source policy enforced jointly by the modal presentation and host lifecycle boundary. */
 struct ModalClosePolicy
 {
     bool allowCloseButton = true;
@@ -156,7 +157,7 @@ class EditorModalHost
 {
   public:
     /** @brief Creates a headless modal host bound to one editor-session event bus. */
-    explicit EditorModalHost(EditorDataBus &events, std::size_t maximumDepth = 8);
+    explicit EditorModalHost(EditorDataBus &events, Input::InputRouter &inputRouter, std::size_t maximumDepth = 8);
     ~EditorModalHost();
 
     EditorModalHost(const EditorModalHost &) = delete;
@@ -188,6 +189,7 @@ class EditorModalHost
     {
         std::unique_ptr<EditorModal> modal;
         bool opened = false;
+        Input::InputContextToken inputContext;
     };
     [[nodiscard]] Result<void> ValidateModalForPush(const EditorModal &modal) const;
     [[nodiscard]] Result<void> ErrorFor(ModalHostError error) const;
@@ -197,10 +199,13 @@ class EditorModalHost
     [[nodiscard]] bool ContainsId(ModalId id) const noexcept;
 
     EditorDataBus &m_events;
+    Input::InputRouter &m_inputRouter;
     EditorModalContext m_context;
     std::size_t m_maximumDepth;
     std::vector<Entry> m_stack;
     std::vector<Entry> m_pendingChildOpens;
     std::vector<ModalCloseReason> m_pendingCloseReasons;
+    bool m_acceptingRequests{true};
+    bool m_shutdown{false};
 };
 } // namespace Horo::Editor

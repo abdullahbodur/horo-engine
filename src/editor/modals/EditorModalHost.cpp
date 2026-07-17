@@ -49,8 +49,8 @@ namespace
 } // namespace
 
 /** @copydoc EditorModalHost::EditorModalHost */
-EditorModalHost::EditorModalHost(EditorDataBus &events, std::size_t maximumDepth)
-    : m_events(events), m_context{.events = m_events, .modals = *this},
+EditorModalHost::EditorModalHost(EditorDataBus &events, Input::InputRouter &inputRouter, std::size_t maximumDepth)
+    : m_events(events), m_inputRouter(inputRouter), m_context{.events = m_events, .modals = *this},
       m_maximumDepth(std::max<std::size_t>(maximumDepth, 1))
 {
 }
@@ -63,6 +63,8 @@ EditorModalHost::~EditorModalHost()
 /** @copydoc EditorModalHost::OpenRoot */
 Result<void> EditorModalHost::OpenRoot(std::unique_ptr<EditorModal> modal)
 {
+    if (!m_acceptingRequests)
+        return ErrorFor(Busy);
     if (HasOpenModal())
     {
         LOG_WARN("editor.modal_host", "OpenRoot rejected: host is busy (top modal: %llu).",
@@ -81,20 +83,30 @@ Result<void> EditorModalHost::OpenRoot(std::unique_ptr<EditorModal> modal)
         return validation;
     }
     LOG_INFO("editor.modal_host", "Opening root modal %llu.", modal->Id().Value());
-    m_stack.push_back(Entry{.modal = std::move(modal)});
+    const ModalId id = modal->Id();
+    m_stack.push_back(Entry{.modal = std::move(modal),
+                            .inputContext = m_inputRouter.PushContext(
+                                Input::InputContextId{"editor.modal." + std::to_string(id.Value())},
+                                Input::InputContextKind::ModalRoot)});
     return Result<void>::Success();
 }
 
 /** @copydoc EditorModalHost::PushChild */
 Result<void> EditorModalHost::PushChild(ModalId parentId, std::unique_ptr<EditorModal> modal)
 {
+    if (!m_acceptingRequests)
+        return ErrorFor(Busy);
     if (!modal)
         return ErrorFor(InvalidModal);
     if (m_stack.empty() || m_stack.back().modal->Id() != parentId)
         return ErrorFor(ParentNotTop);
     if (const Result<void> validation = ValidateModalForPush(*modal); validation.HasError())
         return validation;
-    m_pendingChildOpens.push_back(Entry{.modal = std::move(modal)});
+    const ModalId id = modal->Id();
+    m_pendingChildOpens.push_back(Entry{
+        .modal = std::move(modal),
+        .inputContext = m_inputRouter.PushContext(Input::InputContextId{"editor.modal." + std::to_string(id.Value())},
+                                                  Input::InputContextKind::ModalChild)});
     return Result<void>::Success();
 }
 
@@ -106,6 +118,9 @@ Result<void> EditorModalHost::RequestClose(ModalId modalId, ModalCloseReason rea
         LOG_WARN("editor.modal_host", "RequestClose rejected: modal %llu is not the top of stack.", modalId.Value());
         return ErrorFor(ModalNotTop);
     }
+    if (reason == ModalCloseReason::ApplicationShutdown &&
+        !m_stack.back().modal->ClosePolicy().allowApplicationShutdown)
+        return ErrorFor(CloseDenied);
     if (m_stack.back().opened && m_stack.back().modal->CanClose(reason) != CloseDecision::Allow)
     {
         LOG_DEBUG("editor.modal_host", "RequestClose for modal %llu denied by CanClose (reason %d).", modalId.Value(),
@@ -169,24 +184,37 @@ void EditorModalHost::Draw()
 Result<void> EditorModalHost::RequestCloseAllForShutdown()
 {
     using enum ModalHostError;
+    if (m_shutdown)
+        return Result<void>::Success();
+    CommitPendingOpens();
     for (auto it = m_stack.rbegin(); it != m_stack.rend(); ++it)
     {
-        if (it->opened && it->modal->CanClose(ModalCloseReason::ApplicationShutdown) != CloseDecision::Allow)
+        if (!it->modal->ClosePolicy().allowApplicationShutdown ||
+            (it->opened && it->modal->CanClose(ModalCloseReason::ApplicationShutdown) != CloseDecision::Allow))
             return ErrorFor(CloseDenied);
     }
-    m_pendingCloseReasons.assign(m_stack.size(), ModalCloseReason::ApplicationShutdown);
+    m_acceptingRequests = false;
+    m_pendingCloseReasons.clear();
+    m_pendingChildOpens.clear();
+    while (!m_stack.empty())
+        RemoveTop(ModalCloseReason::ApplicationShutdown);
+    m_shutdown = true;
     return Result<void>::Success();
 }
 
 /** @copydoc EditorModalHost::ForceDetachAllForShutdown */
 void EditorModalHost::ForceDetachAllForShutdown()
 {
+    if (m_shutdown)
+        return;
+    m_acceptingRequests = false;
     m_pendingCloseReasons.clear();
     m_pendingChildOpens.clear();
     while (!m_stack.empty())
     {
         RemoveTop(ModalCloseReason::ApplicationShutdown);
     }
+    m_shutdown = true;
 }
 
 Result<void> EditorModalHost::ValidateModalForPush(const EditorModal &modal) const

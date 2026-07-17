@@ -9,9 +9,11 @@ namespace
 {
 EditorMenuItem Command(const std::string_view labelKey, const EditorMenuAction action = EditorMenuAction::None,
                        const bool enabled = false, const std::string_view shortcut = {},
-                       const std::string_view macKeyEquivalent = {})
+                       const std::string_view macKeyEquivalent = {}, const std::string_view iconToken = {},
+                       const std::optional<Runtime::PrimitiveId> primitive = std::nullopt)
 {
-    return EditorMenuItem{EditorMenuItemKind::Command, labelKey, action, shortcut, macKeyEquivalent, enabled, {}};
+    return EditorMenuItem{EditorMenuItemKind::Command, labelKey, action, shortcut, macKeyEquivalent, iconToken,
+                          primitive, enabled, {}};
 }
 
 EditorMenuItem Separator()
@@ -19,16 +21,99 @@ EditorMenuItem Separator()
     return EditorMenuItem{.kind = EditorMenuItemKind::Separator};
 }
 
-EditorMenuItem Submenu(const std::string_view labelKey, std::initializer_list<EditorMenuItem> children)
+EditorMenuItem Submenu(const std::string_view labelKey, std::initializer_list<EditorMenuItem> children,
+                       const std::string_view iconToken = {})
 {
     EditorMenuItem item;
     item.kind = EditorMenuItemKind::Submenu;
     item.labelKey = labelKey;
+    item.iconToken = iconToken;
     item.enabledByDefault = true;
     item.children.assign(children);
     return item;
 }
+
+EditorMenuItem Submenu(const std::string_view labelKey, const std::vector<EditorMenuItem> &children,
+                       const std::string_view iconToken = {})
+{
+    EditorMenuItem item;
+    item.kind = EditorMenuItemKind::Submenu;
+    item.labelKey = labelKey;
+    item.iconToken = iconToken;
+    item.enabledByDefault = !children.empty();
+    item.children = children;
+    return item;
+}
+
+[[nodiscard]] std::string_view GroupLabelKey(const Runtime::PrimitiveCreationGroup group) noexcept
+{
+    switch (group)
+    {
+    case Runtime::PrimitiveCreationGroup::Objects3D: return "workspace.create.group.objects_3d";
+    case Runtime::PrimitiveCreationGroup::Cameras: return "workspace.create.group.cameras";
+    case Runtime::PrimitiveCreationGroup::Lights: return "workspace.create.group.lights";
+    case Runtime::PrimitiveCreationGroup::Volumes: return "workspace.create.group.volumes";
+    case Runtime::PrimitiveCreationGroup::Audio: return "workspace.create.group.audio";
+    case Runtime::PrimitiveCreationGroup::Root:
+    case Runtime::PrimitiveCreationGroup::NotCreatable: return {};
+    }
+    return {};
+}
+
+[[nodiscard]] std::string_view GroupIconToken(const Runtime::PrimitiveCreationGroup group) noexcept
+{
+    switch (group)
+    {
+    case Runtime::PrimitiveCreationGroup::Objects3D: return "create.group.objects_3d";
+    case Runtime::PrimitiveCreationGroup::Cameras: return "primitive.camera";
+    case Runtime::PrimitiveCreationGroup::Lights: return "create.group.lights";
+    case Runtime::PrimitiveCreationGroup::Volumes: return "primitive.trigger_volume";
+    case Runtime::PrimitiveCreationGroup::Audio: return "primitive.audio_source";
+    case Runtime::PrimitiveCreationGroup::Root:
+    case Runtime::PrimitiveCreationGroup::NotCreatable: return {};
+    }
+    return {};
+}
 } // namespace
+
+/** @copydoc GetPrimitiveCreateMenuItems */
+const std::vector<EditorMenuItem> &GetPrimitiveCreateMenuItems()
+{
+    static const std::vector<EditorMenuItem> items = [] {
+        std::vector<EditorMenuItem> result;
+        for (const Runtime::PrimitiveDescriptor &descriptor : Runtime::PrimitiveCatalog::All())
+        {
+            if (descriptor.creationGroup == Runtime::PrimitiveCreationGroup::Root)
+            {
+                result.push_back(Command(descriptor.id.value, EditorMenuAction::CreatePrimitive, true, {}, {},
+                                         descriptor.iconToken, descriptor.id));
+            }
+        }
+        constexpr Runtime::PrimitiveCreationGroup kGroups[]{Runtime::PrimitiveCreationGroup::Objects3D,
+                                                             Runtime::PrimitiveCreationGroup::Cameras,
+                                                             Runtime::PrimitiveCreationGroup::Lights,
+                                                             Runtime::PrimitiveCreationGroup::Volumes,
+                                                             Runtime::PrimitiveCreationGroup::Audio};
+        for (const Runtime::PrimitiveCreationGroup group : kGroups)
+        {
+            std::vector<EditorMenuItem> children;
+            for (const Runtime::PrimitiveDescriptor &descriptor : Runtime::PrimitiveCatalog::All())
+            {
+                if (descriptor.creationGroup == group)
+                {
+                    children.push_back(Command(descriptor.id.value, EditorMenuAction::CreatePrimitive, true, {}, {},
+                                               descriptor.iconToken, descriptor.id));
+                }
+            }
+            if (!children.empty())
+            {
+                result.push_back(Submenu(GroupLabelKey(group), children, GroupIconToken(group)));
+            }
+        }
+        return result;
+    }();
+    return items;
+}
 
 /** @copydoc GetEditorMenuModel */
 const EditorMenuModel &GetEditorMenuModel()
@@ -49,8 +134,8 @@ const EditorMenuModel &GetEditorMenuModel()
                 }),
         Submenu("web_workspace.menu.edit",
                 {
-                    Command("web_workspace.menu.undo"),
-                    Command("web_workspace.menu.redo"),
+                    Command("web_workspace.menu.undo", EditorMenuAction::Undo, true, "Ctrl+Z", "z"),
+                    Command("web_workspace.menu.redo", EditorMenuAction::Redo, true, "Ctrl+Shift+Z", "Z"),
                     Separator(),
                     Command("web_workspace.menu.cut"),
                     Command("web_workspace.menu.copy"),
@@ -66,9 +151,7 @@ const EditorMenuModel &GetEditorMenuModel()
                 }),
         Submenu("web_workspace.menu.game_object",
                 {
-                    Command("web_workspace.menu.create_empty"),
-                    Command("web_workspace.menu.create_primitive"),
-                    Command("web_workspace.menu.create_light"),
+                    Submenu("workspace.create", GetPrimitiveCreateMenuItems(), "action.create"),
                     Separator(),
                     Command("web_workspace.menu.character_setup"),
                 }),

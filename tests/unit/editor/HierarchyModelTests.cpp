@@ -102,6 +102,34 @@ void TestReparentPreservesSubtreeAndRejectsCycles()
     Expect(model.ParentId(child) == std::nullopt, "root move should clear the parent");
     Expect(model.ParentId(grandchild) == child, "root move should still preserve descendants");
 }
+
+void TestReplaceProjectsStableHierarchyAndPreservesPresentationState()
+{
+    using namespace Horo::Editor;
+    HierarchyModel model;
+    const std::vector initial{
+        HierarchyNodeInput{.id = 10, .parent = std::nullopt, .name = "Root", .type = HierarchyNodeType::Empty},
+        HierarchyNodeInput{.id = 20, .parent = 10, .name = "Mesh", .type = HierarchyNodeType::Mesh},
+    };
+    model.Replace(initial);
+
+    Expect(model.Roots().size() == 1, "projected hierarchy should expose one root");
+    Expect(model.Roots().front()->children.size() == 1, "projected child should attach by stable parent ID");
+    Expect(model.SetExpanded(10, false) == HierarchyMutationResult::Success, "projected root should collapse");
+    Expect(model.Select(20) == HierarchyMutationResult::Success, "projected child should be selectable");
+
+    const std::vector updated{
+        HierarchyNodeInput{.id = 10, .parent = std::nullopt, .name = "Renamed Root", .type = HierarchyNodeType::Empty},
+        HierarchyNodeInput{.id = 30, .parent = 10, .name = "Replacement", .type = HierarchyNodeType::Mesh},
+    };
+    model.Replace(updated);
+
+    Expect(model.Find(10) != nullptr && !model.Find(10)->expanded,
+           "replacement should preserve expansion state for surviving stable IDs");
+    Expect(model.Find(10)->name == "Renamed Root", "replacement should refresh document-owned names");
+    Expect(model.Find(20) == nullptr, "replacement should remove stale document objects");
+    Expect(!model.SelectedId().has_value(), "replacement should clear stale presentation selection");
+}
 } // namespace
 
 int main()
@@ -111,5 +139,6 @@ int main()
     TestRenameValidatesAndUpdatesNode();
     TestDeleteRemovesWholeSubtreeAndSelection();
     TestReparentPreservesSubtreeAndRejectsCycles();
+    TestReplaceProjectsStableHierarchyAndPreservesPresentationState();
     return 0;
 }

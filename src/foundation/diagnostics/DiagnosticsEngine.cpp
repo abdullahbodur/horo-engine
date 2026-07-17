@@ -4,7 +4,9 @@
 namespace Horo
 {
     /** @copydoc DiagnosticsEngine::DiagnosticsEngine */
-    DiagnosticsEngine::DiagnosticsEngine(EngineDataBus *dataBus) : m_dataBus(dataBus) {}
+    DiagnosticsEngine::DiagnosticsEngine(EngineDataBus* dataBus) : m_dataBus(dataBus)
+    {
+    }
 
     /** @copydoc DiagnosticsEngine::Report(Diagnostic) */
     void DiagnosticsEngine::Report(Diagnostic diagnostic)
@@ -27,7 +29,7 @@ namespace Horo
     void DiagnosticsEngine::Report(Error error)
     {
         // First report any nested diagnostics
-        for (const auto &diag : error.diagnostics)
+        for (const auto& diag : error.diagnostics)
         {
             Report(diag);
         }

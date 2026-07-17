@@ -2,16 +2,16 @@
 
 #include <imgui.h>
 
-#include "Horo/Editor/DefaultScreenFactories.h"
-#include "Horo/Editor/DefaultWorkspacePanels.h"
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Editor/ProjectCreationService.h"
+#include "editor/project_model/RendererAvailability.h"
 #include "Horo/Editor/SettingsModal.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Runtime/Input.h"
 #include "editor/status_bar/EditorStatusBar.h"
 
 #include <algorithm>
@@ -53,9 +53,12 @@ namespace
 GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,
                              EditorSettingsService &settingsService, LocalizationService &localization,
                              EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                             std::uintptr_t logoTexture)
+                             Input::InputRouter &inputRouter,
+                             const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
+                             WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture)
     : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
       engineEvents_(&engineEvents), creationService_(&creationService), logoTexture_(logoTexture),
+      screenRegistry_(std::move(screenRegistry)), workspacePanelRegistry_(std::move(workspacePanelRegistry)),
       activeRoute_{GuiRouteKind::Welcome, WelcomeRouteParameters{}}
 {
     services_.Register(*this);
@@ -65,6 +68,8 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
     services_.Register(localization);
     services_.Register(engineEvents);
     services_.Register(creationService);
+    services_.Register(inputRouter);
+    services_.RegisterConst(rendererAvailability);
     services_.Register(logoTexture_);
     services_.Register<ScreenRegistry>(screenRegistry_);
     services_.Register<WorkspacePanelRegistry>(workspacePanelRegistry_);
@@ -80,15 +85,17 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
                                    .order = 30,
                                    .maxWidth = 96.0F},
         EditorStatusItemContent{.value = localization.Get("editor", "status.navigation.idle")}));
-    static_cast<void>(
-        statusItemRegistry_.Register(EditorStatusItemDescriptor{.id = "horo.status.backend",
-                                                                .labelKey = "status.backend.opengl",
-                                                                .alignment = EditorStatusBarAlignment::Right,
-                                                                .priority = 100,
-                                                                .order = 10,
-                                                                .maxWidth = 96.0F,
-                                                                .presentation = EditorStatusItemPresentation::Plain},
-                                     EditorStatusItemContent{}));
+    static_cast<void>(statusItemRegistry_.Register(
+        EditorStatusItemDescriptor{.id = "horo.status.backend",
+                                   .alignment = EditorStatusBarAlignment::Right,
+                                   .priority = 100,
+                                   .order = 10,
+                                   .maxWidth = 96.0F,
+                                   .presentation = EditorStatusItemPresentation::Plain},
+        EditorStatusItemContent{.label =
+                                    rendererAvailability.Find(rendererAvailability.ActiveBackendId()) != nullptr
+                                        ? rendererAvailability.Find(rendererAvailability.ActiveBackendId())->displayName
+                                        : std::string{rendererAvailability.ActiveBackendId()}}));
     static_cast<void>(
         statusItemRegistry_.Register(EditorStatusItemDescriptor{.id = "horo.status.cpu",
                                                                 .labelKey = "status.cpu.label",
@@ -117,12 +124,6 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
                                    .maxWidth = 112.0F},
         EditorStatusItemContent{.value = localization.Get("editor", "status.selection.none"), .available = false}));
 
-    RegisterWelcomeScreen(screenRegistry_);
-    RegisterProjectCreationScreen(screenRegistry_);
-    RegisterProjectLoadingScreen(screenRegistry_);
-    RegisterEditorWorkspaceScreen(screenRegistry_);
-    RegisterDefaultWorkspacePanels(workspacePanelRegistry_);
-
     activeScreen_ = CreateScreen(activeRoute_);
     if (activeScreen_)
     {
@@ -132,11 +133,28 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
 
 GuiScreenHost::~GuiScreenHost()
 {
+    Shutdown();
+}
+
+/** @copydoc GuiScreenHost::Shutdown */
+void GuiScreenHost::Shutdown() noexcept
+{
+    if (shutdown_)
+    {
+        return;
+    }
+    shutdown_ = true;
     if (activeScreen_)
     {
         activeScreen_->OnLeave();
         activeScreen_.reset();
     }
+    services_.Clear();
+}
+
+bool GuiScreenHost::IsShutdown() const noexcept
+{
+    return shutdown_;
 }
 
 EditorServiceRegistry &GuiScreenHost::Services() noexcept
@@ -181,6 +199,30 @@ bool GuiScreenHost::IsApplicationCloseRequested() const noexcept
     return closeRequested_;
 }
 
+/** @copydoc GuiScreenHost::RequestRendererRestart */
+Result<void> GuiScreenHost::RequestRendererRestart(EditorRendererRestartRequest request)
+{
+    if (shutdown_)
+        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
+    rendererRestartRequest_ = std::move(request);
+    const Result<void> close = RequestCloseApplication();
+    if (close.HasError())
+        rendererRestartRequest_.reset();
+    return close;
+}
+
+void GuiScreenHost::RequestFatalShutdown() noexcept
+{
+    modalHost_->ForceDetachAllForShutdown();
+    closeRequested_ = true;
+}
+
+/** @copydoc GuiScreenHost::RendererRestartRequest */
+const std::optional<EditorRendererRestartRequest> &GuiScreenHost::RendererRestartRequest() const noexcept
+{
+    return rendererRestartRequest_;
+}
+
 void GuiScreenHost::SetActiveCreationId(std::optional<ProjectCreationOperationId> id) noexcept
 {
     activeCreationId_ = id;
@@ -193,6 +235,8 @@ std::optional<ProjectCreationOperationId> GuiScreenHost::GetActiveCreationId() c
 
 Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 {
+    if (shutdown_)
+        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
     if (!IsRoutePayloadValid(destination))
     {
         return Result<void>::Failure(
@@ -224,6 +268,8 @@ Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 
 Result<void> GuiScreenHost::RequestCloseApplication()
 {
+    if (shutdown_)
+        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
     if (navigationBusy_ || pendingRequirement_.has_value() || pendingTarget_.has_value())
     {
         return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already in progress."));
@@ -241,7 +287,7 @@ Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target
         }
         else
         {
-            closeRequested_ = true;
+            return CommitApplicationClose();
         }
         return Result<void>::Success();
     }
@@ -276,7 +322,7 @@ Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target
     }
     else
     {
-        closeRequested_ = true;
+        return CommitApplicationClose();
     }
     return Result<void>::Success();
 }
@@ -415,9 +461,10 @@ void GuiScreenHost::Draw()
     }
 }
 
-/** @copydoc GuiScreenHost::DispatchMenuAction */
-void GuiScreenHost::DispatchMenuAction(const EditorMenuAction action)
+/** @copydoc GuiScreenHost::DispatchMenuInvocation */
+void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocation)
 {
+    const EditorMenuAction action = invocation.action;
     switch (action)
     {
     case EditorMenuAction::NewProject:
@@ -437,9 +484,12 @@ void GuiScreenHost::DispatchMenuAction(const EditorMenuAction action)
         static_cast<void>(RequestCloseApplication());
         return;
     case EditorMenuAction::SaveScene:
+    case EditorMenuAction::Undo:
+    case EditorMenuAction::Redo:
+    case EditorMenuAction::CreatePrimitive:
         if (activeScreen_)
         {
-            static_cast<void>(activeScreen_->HandleMenuAction(action));
+            static_cast<void>(activeScreen_->HandleMenuInvocation(invocation));
         }
         return;
     case EditorMenuAction::None:
@@ -516,8 +566,26 @@ void GuiScreenHost::ExecuteLeaveResolution(LeaveAction action, LeaveRequirement 
     }
     else
     {
-        closeRequested_ = true;
+        const Result<void> closed = CommitApplicationClose();
+        if (closed.HasError())
+            LOG_WARN("editor.screens", "Application close was rejected: %s", closed.ErrorValue().message.c_str());
     }
+}
+
+Result<void> GuiScreenHost::CommitApplicationClose()
+{
+    if (modalHost_->HasOpenModal())
+    {
+        const Result<void> modalClosed = modalHost_->RequestCloseAllForShutdown();
+        if (modalClosed.HasError())
+        {
+            rendererRestartRequest_.reset();
+            closeRequested_ = false;
+            return modalClosed;
+        }
+    }
+    closeRequested_ = true;
+    return Result<void>::Success();
 }
 
 void GuiScreenHost::PresentLeaveDialog(const LeaveRequirement &requirement, const LeaveTarget &target)

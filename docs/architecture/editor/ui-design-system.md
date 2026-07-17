@@ -70,48 +70,48 @@ ImGui wrapper must define its typed props/result contract, token usage,
 accessibility behavior, and component-gallery coverage before feature code
 depends on it.
 
-## Initial Backend And Renderer
+## Editor Platform And Renderer Boundary
 
-The first graphical editor bootstrap uses SDL2 for platform windowing and
-multimedia integration, and Dear ImGui's OpenGL backend for GUI rendering. Both
-are implementation details hidden behind Horo-owned editor adapters.
+The graphical editor uses SDL3 for platform windowing and multimedia
+integration. Dear ImGui renderer integration is selected with the active Horo
+renderer backend. SDL3 and concrete ImGui renderer backends are implementation
+details hidden behind Horo-owned editor adapters.
 
 Reasons:
 
-- SDL2 gives Horo one stable platform surface for windowing, input,
-  controllers, clipboard, timers, and future multimedia-oriented host work.
-- Dear ImGui has a maintained SDL2 backend.
-- OpenGL is sufficient to validate editor chrome, input, DPI, modal policy, and
-  screen routing before the production render frontend is ready.
-- The adapter boundary lets the editor replace the bootstrap renderer with a
-  Vulkan, Metal, or DirectX-backed implementation later without changing screen,
-  modal, project-model, CLI, MCP, or runtime code.
+- SDL3 gives Horo one stable platform surface for windowing, input, gamepads,
+  clipboard, timers, and future multimedia-oriented host work.
+- Dear ImGui has a maintained SDL3 backend.
+- OpenGL and Metal are equal first-class renderer implementations behind the
+  same Horo-owned editor rendering contract.
+- Renderer selection does not change screen, modal, project-model, CLI, MCP, or
+  runtime feature code.
 
 Constraints:
 
 - No public Horo header, screen, panel, modal, project-model, CLI, MCP, or
-  runtime subsystem includes SDL2, OpenGL, or raw Dear ImGui backend headers.
+  runtime subsystem includes SDL3, OpenGL, or raw Dear ImGui backend headers.
 - Screens and panels depend on design-system interfaces, not backend objects.
-- The OpenGL GUI backend is not the engine renderer and must not become an RHI
-  shortcut.
+- No concrete GUI backend may become an RHI shortcut or a compatibility layer
+  used by another renderer backend.
 - A null GUI backend exists for deterministic non-window tests.
 
-Rejected for the first bootstrap: GLFW, SDL3, native platform APIs first,
-Vulkan first, Metal first, software rendering first, and web/Electron shells.
-GLFW is too narrow for Horo's multimedia targets. SDL3 is not selected yet
-because SDL2 has the more mature integration surface for the initial engine and
-editor bootstrap. These may be revisited only with an architecture update.
+GLFW and web/Electron shells remain rejected for the native editor host. SDL3 is
+isolated behind the editor platform adapter so renderer or host changes do not
+affect editor-facing contracts. Backend implementation order is not an
+architectural priority; every interactive backend must satisfy the shared
+[Render Backend Parity Contract](../runtime/render-backend-parity-contract.md).
 
 ## DPI, Docking, And Viewports
 
 Initial DPI policy:
 
-- Use per-monitor content scale from the SDL2-backed window adapter where
+- Use per-monitor content scale from the SDL3-backed window adapter where
   available.
 - Store current scale in editor GUI state.
 - Rebuild font resources when the scale bucket changes.
 - Express component sizes in design tokens, not raw pixels.
-- Screens consume scaled design tokens; they do not query SDL2 or native monitor
+- Screens consume scaled design tokens; they do not query SDL3 or native monitor
   state directly.
 
 Docking policy:
@@ -559,7 +559,8 @@ integration may be added per platform without changing component props.
 The design system supports:
 
 - global UI scaling
-- minimum readable font and control sizes
+- minimum readable font and control sizes; the workspace global dock uses the
+  compact typography token from its tab labels as its text-size floor
 - contrast validation for semantic color pairs
 - keyboard navigation
 - modal focus trapping and deterministic focus restoration

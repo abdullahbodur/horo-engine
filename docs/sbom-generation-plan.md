@@ -29,7 +29,7 @@ categories. This inventory was extracted from `CMakeLists.txt`,
 
 | Component | Version | License | Origin | Notes |
 |-----------|---------|---------|--------|-------|
-| glad | (generated) | MIT / Khronos | `vendor/glad/` | OpenGL 4.1 Core loader, pre-generated. No upstream tag; pin generation date. |
+| glad | v2.0.8 (`73db193`) | MIT / Khronos | `vendor/glad/` | OpenGL 4.1 Core loader, generated without extensions; provenance and regeneration command are recorded in `vendor/glad/README.md`. |
 | glm | (header snapshot) | MIT / Happy Bunny | `vendor/glm/glm.hpp` | Header-only math. No version macro; pin commit hash via `git subtree` or manual record. |
 | stb_image | (header snapshot) | MIT / Public Domain | `vendor/stb/` | Header-only image decode (`stb_image.h`, `stb_dxt.h`). No version macro; track commit hash. |
 | ufbx | v0.21.3 | MIT / Public Domain | `vendor/ufbx/` | FBX parser amalgamation. Version recorded in `vendor/README.md` and inline comment. |

@@ -237,8 +237,9 @@ Initial editor and tool extension points:
 `editor.status_item` contributions are declarative bounded snapshots; they do
 not receive ImGui callbacks. The shell owns validation, active-panel visibility,
 width admission, overflow, localization, modal input exclusion, and typed
-invocation routing. Phase 1 renders any non-empty icon resource ID as a semantic
-dot; a host icon registry is a future extension. See
+invocation routing. The current host renders any unresolved non-empty icon
+resource ID as a semantic dot; a host icon registry may replace known IDs while
+preserving that fallback. See
 [Editor Status Bar](../editor/editor-status-bar.md).
 
 Runtime-facing extension points are stricter and must also satisfy gameplay and

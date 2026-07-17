@@ -3,6 +3,7 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 #include <cassert>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -31,15 +32,14 @@ namespace Horo
     class Result<void>
     {
     public:
-        [[nodiscard]] static Result Success() { return Result(true); }
+        [[nodiscard]] static Result Success() noexcept { return Result(); }
         [[nodiscard]] static Result Failure(Error error) { return Result(std::move(error)); }
-        [[nodiscard]] bool HasValue() const noexcept { return m_success; }
-        [[nodiscard]] bool HasError() const noexcept { return !m_success; }
-        [[nodiscard]] const Error &ErrorValue() const { assert(HasError()); return m_error; }
+        [[nodiscard]] bool HasValue() const noexcept { return !m_error.has_value(); }
+        [[nodiscard]] bool HasError() const noexcept { return !HasValue(); }
+        [[nodiscard]] const Error &ErrorValue() const { assert(HasError()); return *m_error; }
     private:
-        explicit Result(bool success) : m_success(success) {}
+        Result() noexcept = default;
         explicit Result(Error error) : m_error(std::move(error)) {}
-        bool m_success = false;
-        Error m_error{ErrorCode{"foundation.result.no_error"}, ErrorDomainId{"horo.foundation"}, ErrorSeverity::Info, ""};
+        std::optional<Error> m_error;
     };
 } // namespace Horo

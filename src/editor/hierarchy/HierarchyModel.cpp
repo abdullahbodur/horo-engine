@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <unordered_map>
 #include <utility>
 
 namespace Horo::Editor
@@ -226,6 +227,70 @@ HierarchyMutationResult HierarchyModel::Select(const HierarchyNodeId id) noexcep
 std::optional<HierarchyNodeId> HierarchyModel::SelectedId() const noexcept
 {
     return selectedId_;
+}
+
+/** @copydoc HierarchyModel::Replace */
+void HierarchyModel::Replace(const std::span<const HierarchyNodeInput> nodes)
+{
+    std::vector<HierarchyNodeId> collapsed;
+    for (const HierarchyNodeInput &input : nodes)
+    {
+        if (const HierarchyNode *existing = Find(input.id); existing != nullptr && !existing->expanded)
+        {
+            collapsed.push_back(input.id);
+        }
+    }
+
+    std::vector<std::unique_ptr<HierarchyNode>> owned;
+    owned.reserve(nodes.size());
+    std::unordered_map<HierarchyNodeId, HierarchyNode *> byId;
+    byId.reserve(nodes.size());
+    for (const HierarchyNodeInput &input : nodes)
+    {
+        if (input.id == 0 || byId.contains(input.id))
+        {
+            owned.push_back(nullptr);
+            continue;
+        }
+        auto node = std::make_unique<HierarchyNode>(HierarchyNode{
+            .id = input.id,
+            .name = std::string(input.name),
+            .type = input.type,
+            .expanded = std::ranges::find(collapsed, input.id) == collapsed.end(),
+            .children = {},
+        });
+        byId.emplace(input.id, node.get());
+        owned.push_back(std::move(node));
+    }
+
+    roots_.clear();
+    for (std::size_t index = 0; index < nodes.size() && index < owned.size(); ++index)
+    {
+        if (!owned[index])
+        {
+            continue;
+        }
+        const std::optional<HierarchyNodeId> parent = nodes[index].parent;
+        const auto foundParent = parent.has_value() ? byId.find(*parent) : byId.end();
+        if (foundParent == byId.end() || foundParent->second == owned[index].get())
+        {
+            roots_.push_back(std::move(owned[index]));
+        }
+        else
+        {
+            foundParent->second->children.push_back(std::move(owned[index]));
+        }
+    }
+    if (selectedId_.has_value() && Find(*selectedId_) == nullptr)
+    {
+        selectedId_.reset();
+    }
+}
+
+/** @copydoc HierarchyModel::ClearSelection */
+void HierarchyModel::ClearSelection() noexcept
+{
+    selectedId_.reset();
 }
 
 /** @copydoc HierarchyModel::SetExpanded */

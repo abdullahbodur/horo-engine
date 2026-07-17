@@ -76,8 +76,8 @@ namespace Horo::Log
         {
             for (const auto& field : frame)
             {
-                const auto it = std::find_if(merged.begin(), merged.end(),
-                                             [&](const MdcField& f) { return f.first == field.first; });
+                const auto it = std::ranges::find_if(merged,
+                                                     [&](const MdcField& f) { return f.first == field.first; });
                 if (it == merged.end())
                     merged.push_back(field);
                 else

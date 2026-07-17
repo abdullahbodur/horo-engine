@@ -1,9 +1,6 @@
 #pragma once
 
 #include "Horo/Editor/EditorGuiContext.h"
-#include "Horo/Editor/EditorWorkspaceViewModel.h"
-
-#include <imgui.h>
 
 #include <array>
 #include <functional>
@@ -24,6 +21,10 @@ class WorkspacePanelRegistry
   public:
     WorkspacePanelRegistry() = default;
     ~WorkspacePanelRegistry() = default;
+    WorkspacePanelRegistry(WorkspacePanelRegistry &&) noexcept = default;
+    WorkspacePanelRegistry &operator=(WorkspacePanelRegistry &&) noexcept = default;
+    WorkspacePanelRegistry(const WorkspacePanelRegistry &) = delete;
+    WorkspacePanelRegistry &operator=(const WorkspacePanelRegistry &) = delete;
 
     /**
      * @brief Registers a new panel.

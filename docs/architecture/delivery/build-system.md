@@ -135,10 +135,10 @@ extension/
 editor/
     HoroEngine::EditorModel
     HoroEngine::EditorServices
-    HoroEngine::EditorPlatform
-    HoroEngine::EditorGuiBackend
-    HoroEngine::EditorDesignSystem
-    HoroEngine::EditorScreens
+    HoroEngine::EditorRenderExtraction
+    HoroEngine::EditorViewportScene
+    HoroEngine::EditorViewportOpenGL
+    HoroEngine::EditorViewportMetal
     HoroEngine::Gui
 
 application/
@@ -150,6 +150,9 @@ pipeline/
 render/
     HoroEngine::RenderApi
     HoroEngine::RenderFrontend
+    HoroEngine::RenderBackendRegistry
+    HoroEngine::RenderModuleAbi
+    HoroEngine::RenderModuleHost
     HoroEngine::RenderOpenGL
     HoroEngine::RenderNull
     HoroEngine::RenderVulkan
@@ -184,6 +187,14 @@ platform/
 foundation/
     HoroEngine::Foundation
 ```
+
+Concrete renderer targets are equal sibling build products. Release profiles may
+package each concrete renderer independently; building the editor core does not
+require one installed product artifact to contain every renderer. Product
+discovery and loading follow
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md),
+while development/test profiles may link concrete targets directly for fast
+contract coverage.
 
 Each target is declared in its own `CMakeLists.txt` with an explicit source
 list. Globbing source files is forbidden.
@@ -228,10 +239,13 @@ The first graphical editor bootstrap is split across narrow targets rather than
 one monolithic GUI library:
 
 ```text
-HoroEngine::EditorPlatform      window/events/clipboard/cursor adapter
-HoroEngine::EditorGuiBackend    Dear ImGui context and renderer backend adapter
-HoroEngine::EditorDesignSystem  UI tokens and reusable primitives
-HoroEngine::EditorScreens       Welcome, project browser, workspace route screens
+HoroEngine::EditorModel         scene document, selection, and viewport state
+HoroEngine::EditorServices      project/settings/localization/input orchestration
+HoroEngine::EditorRenderExtraction generic mesh snapshot and picking extraction
+HoroEngine::EditorViewportScene shared camera and scene-view conversion
+HoroEngine::Gui                 ImGui screens, modals, panels, and shared controls
+HoroEngine::EditorViewportOpenGL matching app-private OpenGL GUI/texture bridge
+HoroEngine::EditorViewportMetal matching app-private Metal GUI/texture bridge
 HoroEngine::EditorSourceEditor  embedded source editor adapter, LSP/AI presentation hooks
 HoroEngine::EditorGraphEditor   embedded node graph editor adapter
 HoroEditor                      executable composition root
@@ -240,15 +254,15 @@ HoroEditor                      executable composition root
 `apps/HoroEditor/main.cpp` owns process entry only and delegates to
 `src/editor/app`. It must not accumulate editor architecture.
 
-The initial backend dependencies are SDL2, Dear ImGui, and an OpenGL loader only
+The initial backend dependencies are SDL3, Dear ImGui, and an OpenGL loader only
 if the selected platform/toolchain path requires one. These dependencies are
-private to the smallest Horo-owned adapter target. No SDL2, OpenGL, or raw Dear
+private to the smallest Horo-owned adapter target. No SDL3, OpenGL, or raw Dear
 ImGui backend type may appear in public Horo headers.
 
-The current temporary `HoroEngine::EditorScreens` target may exist while the
-bootstrap is sliced. When backend code is introduced, split platform, GUI
-backend, design-system, and screen code into the targets above instead of
-expanding one library indefinitely.
+Screen, modal, panel, and design-system code is owned by `HoroEngine::Gui`.
+Model and services targets do not link Dear ImGui, SDL, OpenGL, or Metal.
+Backend-specific GUI texture resolution remains inside the matching app-private
+viewport bridge and is selected only by `HoroEditor` composition.
 
 Embedded editor-widget dependencies are private to their adapter targets:
 
@@ -313,16 +327,16 @@ across developer machines and CI.
 ```cmake
 # Wrong — mutable tag
 FetchContent_Declare(
-    SDL2
+    SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG release-2.30.10
+    GIT_TAG release-3.4.12
 )
 
 # Correct — immutable SHA
 FetchContent_Declare(
-    SDL2
+    SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9
+    GIT_TAG f87239e71e42da91ca317a12eefb82cfbf3393eb
 )
 ```
 
@@ -334,8 +348,8 @@ archive with `URL` and `URL_HASH SHA256` instead of weakening the pin:
 
 ```cmake
 FetchContent_Declare(
-    SDL2
-    URL https://github.com/libsdl-org/SDL/archive/a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9.tar.gz
+    SDL3
+    URL https://github.com/libsdl-org/SDL/archive/f87239e71e42da91ca317a12eefb82cfbf3393eb.tar.gz
     URL_HASH SHA256=<reviewed-archive-sha256>
 )
 ```
@@ -366,17 +380,17 @@ available:
 ```cmake
 include(FetchContent)
 
-set(HORO_SDL2_REVISION
-    "a9e4b3f1c2d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9"
+set(HORO_SDL3_REVISION
+    "f87239e71e42da91ca317a12eefb82cfbf3393eb"
 )
 set(HORO_NLOHMANN_JSON_REVISION
     "a123b456c789d012e345f678a901b234c567d890"
 )
 
 FetchContent_Declare(
-    SDL2
+    SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG "${HORO_SDL2_REVISION}"
+    GIT_TAG "${HORO_SDL3_REVISION}"
 )
 
 FetchContent_Declare(
@@ -385,12 +399,12 @@ FetchContent_Declare(
     GIT_TAG "${HORO_NLOHMANN_JSON_REVISION}"
 )
 
-FetchContent_MakeAvailable(SDL2)
+FetchContent_MakeAvailable(SDL3)
 horo_register_resolved_dependency(
-    NAME SDL2
+    NAME SDL3
     KIND GIT
-    EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
-    SOURCE_DIR "${sdl2_SOURCE_DIR}"
+    EXPECTED_IDENTITY "${HORO_SDL3_REVISION}"
+    SOURCE_DIR "${sdl3_SOURCE_DIR}"
 )
 
 FetchContent_MakeAvailable(nlohmann_json)
@@ -444,7 +458,7 @@ Targets link against the imported target directly:
 ```cmake
 target_link_libraries(HoroEngine::Gui
     PRIVATE
-        SDL2::SDL2
+        SDL3::SDL3
         nlohmann_json::nlohmann_json
 )
 
@@ -569,8 +583,12 @@ slow, GUI-only, or platform-specific.
 
 ## Adding A New App
 
-Application executables live in `apps/<name>/`. They depend only on higher-level
-libraries and select concrete backends at the composition root.
+Application executables live in `apps/<name>/`. Installed product hosts depend on
+higher-level libraries plus the renderer component/module host; they do not link
+every concrete renderer. The component service resolves one exact verified
+module and the module host adapts it into the host-owned
+`RenderBackendRegistry`. `RenderFrontend` does not discover modules or select
+concrete graphics APIs.
 
 ```cmake
 add_executable(HoroEditor
@@ -583,10 +601,20 @@ target_link_libraries(HoroEditor
         HoroEngine::Gui
         HoroEngine::Mcp
         HoroEngine::Application
-        HoroEngine::RenderOpenGL
+        HoroEngine::RenderFrontend
+        HoroEngine::RenderBackendRegistry
+        HoroEngine::RenderModuleHost
         HoroEngine::Platform
 )
 ```
+
+Development, unit-test, and dedicated-server profiles may explicitly link a
+concrete backend and call its registration function to avoid product packaging
+overhead. Linking still does not activate a backend through static
+initialization. Product editor profiles exercise component manifest, signature,
+ABI, probe, and controlled-load behavior before registry registration. CLI and
+dedicated-server profiles can retain direct `RenderNull` registration without
+fetching or linking desktop GPU dependencies.
 
 ## Build Outputs
 
@@ -863,31 +891,31 @@ primary development workflow.
 When implemented, each dependency declaration will follow this pattern:
 
 ```cmake
-find_package(SDL2 2.30 CONFIG QUIET)
+find_package(SDL3 3.4 CONFIG QUIET)
 
-if(SDL2_FOUND AND NOT TARGET SDL2::SDL2)
-    message(FATAL_ERROR "SDL2 package was found but did not provide target 'SDL2::SDL2'")
+if(SDL3_FOUND AND NOT TARGET SDL3::SDL3)
+    message(FATAL_ERROR "SDL3 package was found but did not provide target 'SDL3::SDL3'")
 endif()
 
-if(DEFINED SDL2_VERSION AND NOT SDL2_VERSION VERSION_LESS 3.0)
-    message(FATAL_ERROR "Unsupported SDL major version for SDL2 dependency: ${SDL2_VERSION}")
+if(DEFINED SDL3_VERSION AND NOT SDL3_VERSION VERSION_LESS 4.0)
+    message(FATAL_ERROR "Unsupported SDL major version for SDL3 dependency: ${SDL3_VERSION}")
 endif()
 
-if(NOT TARGET SDL2::SDL2)
+if(NOT TARGET SDL3::SDL3)
     message(STATUS
-        "SDL2 config package not found or incompatible; using pinned FetchContent source"
+        "SDL3 config package not found or incompatible; using pinned FetchContent source"
     )
     FetchContent_Declare(
-        SDL2
+        SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG "${HORO_SDL2_REVISION}"
+        GIT_TAG "${HORO_SDL3_REVISION}"
     )
-    FetchContent_MakeAvailable(SDL2)
+    FetchContent_MakeAvailable(SDL3)
     horo_register_resolved_dependency(
-        NAME SDL2
+        NAME SDL3
         KIND GIT
-        EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
-        SOURCE_DIR "${sdl2_SOURCE_DIR}"
+        EXPECTED_IDENTITY "${HORO_SDL3_REVISION}"
+        SOURCE_DIR "${sdl3_SOURCE_DIR}"
     )
 endif()
 ```
@@ -956,16 +984,16 @@ capabilities:
 ```cmake
 if(HORO_TARGET_HAS_PLATFORM_MEDIA)
     FetchContent_Declare(
-        SDL2
+        SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG "${HORO_SDL2_REVISION}"
+        GIT_TAG "${HORO_SDL3_REVISION}"
     )
-    FetchContent_MakeAvailable(SDL2)
+    FetchContent_MakeAvailable(SDL3)
     horo_register_resolved_dependency(
-        NAME SDL2
+        NAME SDL3
         KIND GIT
-        EXPECTED_IDENTITY "${HORO_SDL2_REVISION}"
-        SOURCE_DIR "${sdl2_SOURCE_DIR}"
+        EXPECTED_IDENTITY "${HORO_SDL3_REVISION}"
+        SOURCE_DIR "${sdl3_SOURCE_DIR}"
     )
 endif()
 ```

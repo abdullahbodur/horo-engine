@@ -123,17 +123,19 @@ See [Editor Modal Host](./editor-modal-host.md).
 
 ## Panel Host
 
-> [!NOTE]
-> **Phase 1 Implementation Status:** 
-> The architecture described below (with dynamic Layout Trees, `EditorPanelHost`, and `EditorTab` virtual interfaces) outlines the long-term target architecture. 
-> 
-> Currently, the editor uses a simplified **Phase 1** implementation:
-> - Layout regions are defined by a fixed enum: `WorkspaceDockArea` (Left, Right, Bottom, Document).
-> - Panels are registered via `WorkspacePanelRegistry` using the `WorkspacePanelInfo` struct, which relies on `std::function` callbacks (`drawPanel`, `drawIcon`) for immediate-mode rendering rather than full object-oriented interfaces.
-> - The `EditorWorkspaceView` acts as the Layout Manager (`EditorPanelHost` equivalent), automatically querying the registry, drawing `Ui::DrawDockTabs`, and managing child windows for the active panel content.
-> - Active tab state per dock area is stored in `EditorWorkspaceViewModel` and mutated via `EditorWorkspaceViewCommand::ChangeActivePanel`.
->
-> The advanced node tree layout below will be introduced when custom draggable window layouts are implemented.
+The implemented workspace uses `WorkspacePanelHost` and a validated
+`WorkspaceLayout` tree containing `SplitNode`, `TabStackNode`, and `PanelNode`
+values. `WorkspacePanelRegistry` owns `IWorkspacePanel` instances and injects a
+scoped `PanelContext`; it is not a callback-only registry. `EditorWorkspaceView`
+is the ImGui presentation adapter for that model and emits typed workspace
+commands for tab activation, panel docking, activity-bar reordering, and seam
+resizing. `WorkspaceDockArea` remains placement metadata and a command boundary;
+it is not the authoritative layout representation.
+
+Layout persistence validates the node tree before activation and falls back to
+the versioned default layout on structural failure. Splitter and panel drag
+gestures acquire central input-router capture, so modal opening, focus loss, or
+owner destruction cancels them before any dock mutation is committed.
 
 `EditorPanelHost` is a thin layout and tab-lifecycle manager. It knows:
 
@@ -300,7 +302,9 @@ Runtime splitter input uses screen-space seam rectangles and explicit pointer
 capture rather than transparent ImGui overlay windows. This keeps hit testing
 independent of platform window z-order and preserves an active resize while the
 pointer moves outside the narrow seam. Activity-panel drag/drop and modal popup
-ownership suppress new splitter capture.
+ownership suppress new splitter capture. Conversely, an active splitter owns the
+primary pointer before dock rendering and suppresses competing panel-header and
+activity-item drag sources; overlapping hit regions must never start both operations.
 
 Registration makes a surface available and attaches its lifecycle; placement is
 a separate layout operation. `TabRegistration` and `PanelRegistration` provide
@@ -508,7 +512,7 @@ sections:
   etc.) and the search filter.
   - Owner: `HierarchyTab`
   - Writes selection through: `EditorSelectionModel`
-  - Subscribes to: `SceneDocumentChangedEvent`
+  - Subscribes to: selection and document notifications
 
 - **Project tab**: shows the project file tree (`assets`, `shaders`, `src`,
   `CMakeLists.txt`).
@@ -657,6 +661,36 @@ the center and does not participate in tab stacking.
 backend resources and render-target lifetime belong to the editor render
 integration and renderer services. The panel receives a typed render-target
 handle or view and never stores backend-specific renderer objects directly.
+
+The current navigation mapping is:
+
+- right mouse drag: fly-camera look;
+- right mouse capture plus `W/A/S/D` and `Q/E`: forward/side/vertical movement;
+- `Shift` during fly capture: accelerated movement;
+- middle mouse drag: camera-relative pan;
+- `Alt` plus left mouse drag: orbit around the current target;
+- mouse wheel: camera-relative dolly.
+
+The top-left projection control switches between `Perspective · Shaded` and
+`Orthographic · Shaded` through an `EditorViewportModel` command. Switching
+projection preserves approximate apparent scale at the orbit target and remains
+editor-session state; it does not dirty the authored scene or mutate a Camera
+component. Perspective pan derives world units per pixel from target distance,
+vertical field of view, and viewport height. Orthographic pan derives it from
+orthographic height and viewport height. Wheel input scales target distance or
+orthographic height exponentially.
+
+The routed `editor.viewport.focus_selected` action (`F` by default) is eligible
+only while the viewport is hovered or focused. It frames bounds from the selected
+instance in the current render snapshot. Missing selection or renderable bounds
+is a no-op. Projection changes and focus update viewport revision only and never
+create document history.
+
+Move-gizmo drags update only an explicit viewport preview snapshot while the
+pointer is captured. Releasing the pointer submits one transform command through
+`EditorHistory`; cancelling restores the committed document snapshot. Preview
+frames increment viewport revision but do not increment document revision,
+publish document-change events, dirty the scene, or create undo entries.
 
 ### Right Dock
 

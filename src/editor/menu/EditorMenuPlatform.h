@@ -19,8 +19,8 @@ class ILocalizationService;
 void InstallNativeEditorMenuBar(const EditorMenuModel &model, const ILocalizationService &localization);
 
 /**
- * @brief Takes the next native menu action queued by the platform callback.
- * @return Pending action, or empty when no native menu command is waiting.
+ * @brief Takes the next native menu invocation queued by the platform callback.
+ * @return Pending invocation, or empty when no native menu command is waiting.
  */
-[[nodiscard]] std::optional<EditorMenuAction> PollNativeEditorMenuAction() noexcept;
+[[nodiscard]] std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept;
 } // namespace Horo::Editor

@@ -108,9 +108,7 @@ namespace Horo::Log
         {
             const auto now = std::chrono::system_clock::now();
             const auto timeT = std::chrono::system_clock::to_time_t(now);
-            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now.time_since_epoch()) %
-                1000;
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
             std::tm tm{};
 #if defined(_WIN32)
@@ -119,10 +117,8 @@ namespace Horo::Log
             gmtime_r(&timeT, &tm);
 #endif
 
-            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z",
-                               tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                               tm.tm_hour, tm.tm_min, tm.tm_sec,
-                               static_cast<long long>(ms.count()));
+            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z", tm.tm_year + 1900, tm.tm_mon + 1,
+                               tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<long long>(ms.count()));
         }
 
         /** @brief JSON-escapes a string value, including control characters outside \\n \\r \\t. */
@@ -136,19 +132,26 @@ namespace Horo::Log
             {
                 switch (c)
                 {
-                case '"': out += R"(\")";
+                case '"':
+                    out += R"(\")";
                     break;
-                case '\\': out += R"(\\)";
+                case '\\':
+                    out += R"(\\)";
                     break;
-                case '\n': out += "\\n";
+                case '\n':
+                    out += "\\n";
                     break;
-                case '\r': out += "\\r";
+                case '\r':
+                    out += "\\r";
                     break;
-                case '\t': out += "\\t";
+                case '\t':
+                    out += "\\t";
                     break;
-                case '\b': out += "\\b";
+                case '\b':
+                    out += "\\b";
                     break;
-                case '\f': out += "\\f";
+                case '\f':
+                    out += "\\f";
                     break;
                 default:
                     if (c < 0x20)
@@ -197,9 +200,9 @@ namespace Horo::Log
             // Don't fail silently: a logger that can't write should still
             // tell someone. Every subsequent Write() call is a no-op until
             // this is fixed.
-            std::fprintf(stderr,
-                         "[Logger] failed to open log file \"%s\" for append (errno=%d): %s\n",
-                         path.c_str(), errno, std::strerror(errno));
+            std::fprintf(stderr, "[Logger] failed to open log file \"%s\" for append (errno=%d): %s\n", path.c_str(),
+                         errno,
+                         std::strerror(errno));
         }
 
         // Respect HORO_LOG_LEVEL env var
@@ -207,22 +210,30 @@ namespace Horo::Log
         {
             using enum Level;
             const std::string_view sv{env};
-            if (sv == "trace") self.m_level = Trace;
-            else if (sv == "debug") self.m_level = Debug;
-            else if (sv == "info") self.m_level = Info;
-            else if (sv == "warn") self.m_level = Warn;
-            else if (sv == "error") self.m_level = Error;
-            else if (sv == "critical") self.m_level = Critical;
-            else if (sv == "off") self.m_level = Off;
+            if (sv == "trace")
+                self.m_level = Trace;
+            else if (sv == "debug")
+                self.m_level = Debug;
+            else if (sv == "info")
+                self.m_level = Info;
+            else if (sv == "warn")
+                self.m_level = Warn;
+            else if (sv == "error")
+                self.m_level = Error;
+            else if (sv == "critical")
+                self.m_level = Critical;
+            else if (sv == "off")
+                self.m_level = Off;
         }
 
         // Bootstrap log — goes to stderr if file not yet open
         if (self.m_file != nullptr)
         {
-            std::fprintf(self.m_file,
-                         R"({"schemaVersion":1,"level":"info","category":"observability.startup","message":"Logger initialised","path":"%s"})"
-                         "\n",
-                         JsonEscape(path.string()).c_str());
+            std::fprintf(
+                self.m_file,
+                R"({"schemaVersion":1,"level":"info","category":"observability.startup","message":"Logger initialised","path":"%s"})"
+                "\n",
+                JsonEscape(path.string()).c_str());
             std::fflush(self.m_file);
         }
     }
@@ -234,15 +245,16 @@ namespace Horo::Log
 
         if (self.m_file != nullptr)
         {
-            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            const auto elapsed =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - self.m_startTime)
                 .count();
 
-            std::fprintf(self.m_file,
-                         R"({"schemaVersion":1,"level":"info","category":"observability.shutdown","message":"Logger shut down cleanly","elapsedMs":%lld,"sequence":%llu})"
-                         "\n",
-                         static_cast<long long>(elapsed),
-                         static_cast<unsigned long long>(self.m_sequence));
+            std::fprintf(
+                self.m_file,
+                R"({"schemaVersion":1,"level":"info","category":"observability.shutdown","message":"Logger shut down cleanly","elapsedMs":%lld,"sequence":%llu})"
+                "\n",
+                static_cast<long long>(elapsed), static_cast<unsigned long long>(self.m_sequence));
             std::fflush(self.m_file);
             std::fclose(self.m_file);
             self.m_file = nullptr;
@@ -303,8 +315,8 @@ namespace Horo::Log
         std::lock_guard lock(LoggerMutex());
 
         const auto seq = ++self.m_sequence;
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - self.m_startTime)
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - self.m_startTime)
             .count();
 
         const auto pid =
@@ -317,17 +329,14 @@ namespace Horo::Log
         // Write JSONL record
         if (self.m_file != nullptr)
         {
-            std::fprintf(self.m_file,
-                         R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld%s})"
-                         "\n",
-                         NowUtc().c_str(),
-                         static_cast<long long>(elapsed),
-                         static_cast<unsigned long long>(seq),
-                         ToString(level),
-                         JsonEscape(category).c_str(),
-                         JsonEscape(message).c_str(),
-                         static_cast<long long>(pid),
-                         mdcJson.c_str());
+            std::fprintf(
+                self.m_file,
+                R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld%s})"
+                "\n",
+                NowUtc().c_str(), static_cast<long long>(elapsed), static_cast<unsigned long long>(seq),
+                ToString(level),
+                JsonEscape(category).c_str(), JsonEscape(message).c_str(), static_cast<long long>(pid),
+                mdcJson.c_str());
             std::fflush(self.m_file);
         }
 
@@ -335,10 +344,9 @@ namespace Horo::Log
         // NOTE: string_view is not guaranteed null-terminated, so it must never
         // be passed to a bare "%s" — use "%.*s" with an explicit length instead.
 #ifndef NDEBUG
-        std::fprintf(stderr, "[%s]%s %.*s: %.*s\n",
-                     ToString(level), mdcPrefix.c_str(),
-                     static_cast<int>(category.size()), category.data(),
-                     static_cast<int>(message.size()), message.data());
+        std::fprintf(stderr, "[%s]%s %.*s: %.*s\n", ToString(level), mdcPrefix.c_str(),
+                     static_cast<int>(category.size()),
+                     category.data(), static_cast<int>(message.size()), message.data());
 #endif
     }
 
@@ -361,11 +369,10 @@ namespace Horo::Log
 
         // Compiler
 #if defined(__clang__)
-        LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d",
-                 __clang_major__, __clang_minor__, __clang_patchlevel__);
+        LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d", __clang_major__, __clang_minor__,
+                 __clang_patchlevel__);
 #elif defined(__GNUC__)
-        LOG_INFO("observability.startup", "Compiler: GCC %d.%d",
-                 __GNUC__, __GNUC_MINOR__);
+        LOG_INFO("observability.startup", "Compiler: GCC %d.%d", __GNUC__, __GNUC_MINOR__);
 #elif defined(_MSC_VER)
         LOG_INFO("observability.startup", "Compiler: MSVC %d", _MSC_VER);
 #endif

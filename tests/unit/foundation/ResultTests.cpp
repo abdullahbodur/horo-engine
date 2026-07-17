@@ -7,6 +7,8 @@
 
 namespace
 {
+static_assert(noexcept(Horo::Result<void>::Success()),
+              "A successful void Result must not allocate or throw on renderer hot paths.");
 
 void ResultPreservesSuccessfulValue()
 {

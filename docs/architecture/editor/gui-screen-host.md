@@ -25,6 +25,10 @@ popups.
 - The startup project-selection experience is the `WelcomeScreen` route inside
   `GuiScreenHost`; it is not a separate launcher executable, module, lifecycle,
   or component set.
+- Welcome and renderer-component repair remain reachable through a minimal
+  product bootstrap presentation path that does not require a RenderApi backend.
+  The editor workspace still requires one verified and available interactive
+  renderer.
 
 ## Surface Taxonomy
 
@@ -94,18 +98,59 @@ special-cased outside the route system.
 
 Startup order:
 
-1. `HoroEditor` creates the SDL2-backed editor platform/media adapter.
-2. The platform adapter creates one main window.
-3. The GUI backend creates the Dear ImGui context and renderer resources.
-4. `GuiScreenHost` starts on `GuiRouteKind::Welcome`.
-5. `WelcomeScreen` requests recent projects from project-model services.
-6. Create/open actions return typed navigation requests.
-7. `GuiScreenHost` validates route payloads and leave guards before changing
-   screens.
+1. `HoroEditor` creates the platform adapter and minimal bootstrap presentation
+   required for Welcome/component repair.
+2. The renderer component service discovers and validates machine-local
+   component records without loading a project renderer.
+3. `GuiScreenHost` starts on `GuiRouteKind::Welcome`.
+4. `WelcomeScreen` requests recent projects and renderer preflight snapshots from
+   application/project-model services.
+5. Create/open actions resolve renderer requirements before requesting project
+   loading.
+6. After one selected interactive renderer is `Available`, the composition root
+   creates its presentation-capable window attachment, RenderApi backend, and
+   editor GUI resources.
+7. `GuiScreenHost` validates route payloads and leave guards before entering
+   `ProjectLoading` or `EditorWorkspace`.
 
 The welcome screen reads recent projects through project-model services. It does
 not parse `<user-state>/horo/recent_projects.json` directly and does not persist
 arbitrary thumbnail paths.
+
+The bootstrap presentation path is not an engine renderer, cannot enter the
+workspace or draw a project viewport, and must not register as OpenGL, Metal,
+Vulkan, or Null. It exists only to keep the single HoroEditor application capable
+of renderer install/repair when no interactive component is available.
+
+## Recent Project Renderer Resolution
+
+Recent-project cards include the requested renderer's local preflight state. A
+card click does not navigate to `ProjectLoading` while its renderer requirement
+is unresolved.
+
+For a project requesting missing OpenGL while compatible Metal is available, the
+Welcome screen owns a blocking resolution dialog with exactly these project-level
+choices:
+
+```text
+[Install OpenGL]
+[Use Metal for This Project]
+[Cancel]
+```
+
+The product GUI does not offer a duplicate session-only `Open Once with Metal`
+choice. `Use Metal for This Project` is an explicit persistent project-setting
+change, capability-validated and committed transactionally through an
+application use case. The Welcome screen does not edit project files directly.
+
+If no compatible alternative is available, replacement is omitted and the
+dialog offers install, repair, diagnostics, offline-package, and cancel actions
+as applicable. Cancelling keeps the Welcome route active and leaves project state
+unchanged.
+
+Detailed component states, mutation ordering, cache invalidation, and required
+tests are defined by
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md#recent-project-renderer-preflight).
 
 ## Route Model
 
@@ -426,6 +471,16 @@ Leaving:
 4. destroy GUI surfaces and subscriptions
 5. close the editor session
 6. close or retain the project according to destination requirements
+
+Process shutdown uses the same explicit lifecycle boundary. `GuiScreenHost::Shutdown()`
+is idempotent: it calls the active screen's `OnLeave()` at most once, destroys
+the screen, and clears borrowed service registrations while their owners still
+exist. The input router is registered before the initial screen is constructed,
+so screens can create native-dialog and widget contexts during their entire
+lifecycle. The application first cancels input capture and resolves or force-detaches the
+modal stack, then calls `Shutdown()` before composition-owned viewport, ImGui, renderer,
+window, input, and project services begin destruction; the host destructor delegates
+to `Shutdown()` only as a safety net.
 
 The screen does not duplicate project-open or scene-save business logic.
 Job ownership, cancellation, detach behavior, and shutdown joins follow

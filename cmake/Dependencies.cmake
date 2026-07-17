@@ -2,13 +2,29 @@ include(FetchContent)
 
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "" FORCE)
 
+set(HORO_NLOHMANN_JSON_REVISION "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03")
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG "${HORO_NLOHMANN_JSON_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+if(HORO_BUILD_RENDER_OPENGL)
+    find_package(OpenGL REQUIRED)
+endif()
+
 if(HORO_BUILD_EDITOR_GUI)
-    set(HORO_SDL2_REVISION
-        "9c821dc21ccbd69b2bda421fdb35cb4ae2da8f5e"
+    set(HORO_SDL3_REVISION
+        "f87239e71e42da91ca317a12eefb82cfbf3393eb"
     )
     set(HORO_IMGUI_REVISION
         "993fa347495860ed44b83574254ef2a317d0c14f"
     )
+
 
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -16,22 +32,22 @@ if(HORO_BUILD_EDITOR_GUI)
     set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 
     FetchContent_Declare(
-        SDL2
+        SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG "${HORO_SDL2_REVISION}"
+        GIT_TAG "${HORO_SDL3_REVISION}"
     )
-    FetchContent_MakeAvailable(SDL2)
+    FetchContent_MakeAvailable(SDL3)
 
-    if(TARGET SDL2::SDL2-static)
-        set(HORO_SDL2_TARGET SDL2::SDL2-static)
-    elseif(TARGET SDL2::SDL2)
-        set(HORO_SDL2_TARGET SDL2::SDL2)
-    elseif(TARGET SDL2-static)
-        set(HORO_SDL2_TARGET SDL2-static)
-    elseif(TARGET SDL2)
-        set(HORO_SDL2_TARGET SDL2)
+    if(TARGET SDL3::SDL3-static)
+        set(HORO_SDL3_TARGET SDL3::SDL3-static)
+    elseif(TARGET SDL3::SDL3)
+        set(HORO_SDL3_TARGET SDL3::SDL3)
+    elseif(TARGET SDL3-static)
+        set(HORO_SDL3_TARGET SDL3-static)
+    elseif(TARGET SDL3)
+        set(HORO_SDL3_TARGET SDL3)
     else()
-        message(FATAL_ERROR "SDL2 dependency did not provide a usable CMake target")
+        message(FATAL_ERROR "SDL3 dependency did not provide a usable CMake target")
     endif()
 
     FetchContent_Declare(
@@ -41,15 +57,23 @@ if(HORO_BUILD_EDITOR_GUI)
     )
     FetchContent_MakeAvailable(imgui)
 
-    find_package(OpenGL REQUIRED)
+    if(HORO_BUILD_RENDER_OPENGL)
+        add_library(HoroThirdPartyGlad STATIC
+            ${CMAKE_CURRENT_LIST_DIR}/../vendor/glad/src/gl.c
+        )
+        add_library(HoroThirdParty::Glad ALIAS HoroThirdPartyGlad)
+        target_include_directories(HoroThirdPartyGlad
+            PUBLIC
+                ${CMAKE_CURRENT_LIST_DIR}/../vendor/glad/include
+        )
+    endif()
 
     add_library(HoroThirdPartyImGui STATIC
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_tables.cpp
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     )
     add_library(HoroThirdParty::ImGui ALIAS HoroThirdPartyImGui)
 
@@ -65,7 +89,38 @@ if(HORO_BUILD_EDITOR_GUI)
     )
     target_link_libraries(HoroThirdPartyImGui
         PUBLIC
-            ${HORO_SDL2_TARGET}
-            OpenGL::GL
+            ${HORO_SDL3_TARGET}
     )
+
+    if(HORO_BUILD_RENDER_OPENGL)
+        add_library(HoroThirdPartyImGuiOpenGL STATIC
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+        )
+        add_library(HoroThirdParty::ImGuiOpenGL ALIAS HoroThirdPartyImGuiOpenGL)
+        target_compile_features(HoroThirdPartyImGuiOpenGL PUBLIC cxx_std_20)
+        target_include_directories(HoroThirdPartyImGuiOpenGL PUBLIC
+            ${imgui_SOURCE_DIR}
+            ${imgui_SOURCE_DIR}/backends
+        )
+        target_compile_definitions(HoroThirdPartyImGuiOpenGL PUBLIC GL_SILENCE_DEPRECATION)
+        target_link_libraries(HoroThirdPartyImGuiOpenGL PUBLIC HoroThirdPartyImGui OpenGL::GL)
+    endif()
+
+    if(HORO_BUILD_RENDER_METAL)
+        add_library(HoroThirdPartyImGuiMetal STATIC
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_metal.mm
+        )
+        add_library(HoroThirdParty::ImGuiMetal ALIAS HoroThirdPartyImGuiMetal)
+        target_compile_features(HoroThirdPartyImGuiMetal PUBLIC cxx_std_20)
+        target_compile_options(HoroThirdPartyImGuiMetal PRIVATE -fobjc-arc)
+        target_include_directories(HoroThirdPartyImGuiMetal PUBLIC
+            ${imgui_SOURCE_DIR}
+            ${imgui_SOURCE_DIR}/backends
+        )
+        target_link_libraries(HoroThirdPartyImGuiMetal PUBLIC
+            HoroThirdPartyImGui
+            "-framework Metal"
+            "-framework QuartzCore"
+        )
+    endif()
 endif()

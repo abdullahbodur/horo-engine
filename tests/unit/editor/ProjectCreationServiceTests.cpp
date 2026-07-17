@@ -99,6 +99,8 @@ void CreatesPortableProjectInAnAtomicPromotion() {
     assert(project.find("\"defaultScene\": \"assets/scenes/main.horo\"") != std::string::npos);
     assert(project.find("\"minimumCxxStandard\": 20") != std::string::npos);
     assert(Read(root / ".horo/plugins.json") == "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n");
+    assert(Read(root / ".horo/input.json") ==
+           "{\n  \"schemaVersion\": 1,\n  \"profileId\": \"project-default\",\n  \"overrides\": []\n}\n");
     jobs.Shutdown(Horo::ShutdownPolicy::Drain);
 }
 

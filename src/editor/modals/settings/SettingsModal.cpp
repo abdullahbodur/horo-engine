@@ -250,8 +250,7 @@ void DrawGeneral(SettingsState &st, const EditorGuiContext &ctx)
     const std::string defaultSceneDescription =
         ctx.localization.Get("editor", "settings.general.default_scene.description");
     SettingRow(startupLabel.c_str(), startupDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kStartup]() {
-        (void)ComboControl("##startup", &st.general.startupAction, kStartup.data(), kStartup.size(),
-                           ctx.theme.fonts);
+        (void)ComboControl("##startup", &st.general.startupAction, kStartup.data(), kStartup.size(), ctx.theme.fonts);
     });
     SettingRow(autosaveLabel.c_str(), autosaveDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
         SliderIntControl("##autosave", &st.general.autoSaveInterval, 0, 30, SliderValueFormat::Minutes,
@@ -274,8 +273,7 @@ void DrawGeneral(SettingsState &st, const EditorGuiContext &ctx)
     const std::string languageDescription = ctx.localization.Get("editor", "settings.language.description");
     SettingRow(languageLabel.c_str(), languageDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kLanguages]() {
         int languageIndex = st.general.languageTag == "tr-TR" ? 1 : 0;
-        if (ComboControl("##language", &languageIndex, kLanguages.data(), kLanguages.size(),
-                         ctx.theme.fonts))
+        if (ComboControl("##language", &languageIndex, kLanguages.data(), kLanguages.size(), ctx.theme.fonts))
         {
             st.general.languageTag = languageIndex == 1 ? "tr-TR" : "en-US";
             st.dirty = true;
@@ -339,24 +337,6 @@ void DrawAppearance(SettingsState &st, const EditorGuiContext &ctx)
     });
 }
 
-void ResolveShortcutConflicts(SettingsState::InputTab &input, const int editedIndex)
-{
-    for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
-        input.shortcuts[index].conflict = false;
-    if (input.shortcuts[editedIndex].keys.empty())
-        return;
-    for (int index = 0; index < SettingsState::InputTab::kShortcutActionCount; ++index)
-    {
-        if (index == editedIndex || input.shortcuts[index].keys.empty())
-            continue;
-        if (input.shortcuts[editedIndex].keys == input.shortcuts[index].keys)
-        {
-            input.shortcuts[editedIndex].conflict = true;
-            input.shortcuts[index].conflict = true;
-        }
-    }
-}
-
 void DrawInput(SettingsState &st, const EditorGuiContext &ctx)
 {
     const std::string sectionTitle = ctx.localization.Get("editor", "settings.nav.input");
@@ -369,9 +349,6 @@ void DrawInput(SettingsState &st, const EditorGuiContext &ctx)
     const std::string panDescription = ctx.localization.Get("editor", "settings.input.pan_sensitivity.description");
     const std::string invertLabel = ctx.localization.Get("editor", "settings.input.invert_orbit_y");
     const std::string invertDescription = ctx.localization.Get("editor", "settings.input.invert_orbit_y.description");
-    const std::string actionHeader = ctx.localization.Get("editor", "settings.input.action");
-    const std::string shortcutHeader = ctx.localization.Get("editor", "settings.input.shortcut");
-    const std::string conflictText = ctx.localization.Get("editor", "settings.input.shortcut_conflict");
     SettingRow(orbitLabel.c_str(), orbitDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
         SliderIntControl("##orbit", &st.input.orbitSensitivity, 10, 300, SliderValueFormat::Integer, ctx.theme.fonts);
     });
@@ -381,86 +358,12 @@ void DrawInput(SettingsState &st, const EditorGuiContext &ctx)
     SettingRow(invertLabel.c_str(), invertDescription.c_str(), ctx.theme.fonts,
                [&st, &ctx]() { (void)ToggleControl("invert-y", &st.input.invertOrbitY, ctx.theme.fonts); });
 
-    const std::string shortcutsGroup = ctx.localization.Get("editor", "settings.input.shortcuts_group");
-    SettingGroup(shortcutsGroup.c_str(), ctx.theme.fonts);
-
-    // ── Shortcut table ────────────────────────────────────────
-    // Draw as a bordered table with action label | key recorder
-    const float tableWidth = ImGui::GetContentRegionAvail().x;
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2{12.0F, 9.0F});
-    ImGui::PushStyleColor(ImGuiCol_TableBorderStrong, Theme::Border());
-    if (ImGui::BeginTable("##shortcut-table", 2,
-                          ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoSavedSettings,
-                          {tableWidth, 0.0F}))
-    {
-        ImGui::TableSetupColumn(actionHeader.c_str(), ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn(shortcutHeader.c_str(), ImGuiTableColumnFlags_WidthFixed,
-                                Theme::Layout::ControlW + 24.0F);
-
-        for (int i = 0; i < SettingsState::InputTab::kShortcutActionCount; ++i)
-        {
-            ImGui::PushID(i);
-            ImGui::TableNextRow();
-
-            // Action label
-            ImGui::TableSetColumnIndex(0);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6.0F);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-            static constexpr std::array<const char *, 8> kShortcutLocKeys = {
-                "settings.input.shortcut.save_scene", "settings.input.shortcut.undo",
-                "settings.input.shortcut.build",      "settings.input.shortcut.find",
-                "settings.input.shortcut.replace",    "settings.input.shortcut.duplicate",
-                "settings.input.shortcut.delete",     "settings.input.shortcut.select_all"};
-            const std::string actionName = ctx.localization.Get("editor", kShortcutLocKeys[i]);
-            ImGui::TextUnformatted(actionName.empty() ? SettingsState::InputTab::kShortcutActions[i]
-                                                      : actionName.c_str());
-            ImGui::PopStyleColor();
-
-            // Key recorder
-            ImGui::TableSetColumnIndex(1);
-            const bool isListening = (st.input.listeningShortcut == i);
-
-            const std::string clickToRecord = ctx.localization.Get("editor", "settings.input.shortcut.click_to_record");
-            const std::string pressKeys = ctx.localization.Get("editor", "settings.input.shortcut.press_keys");
-
-            if (bool localListening = isListening; Ui::ShortcutRecorder(
-                    "recorder", st.input.shortcuts[i].keys.c_str(), &localListening, st.input.shortcuts[i].keys,
-                    ctx.theme.fonts, clickToRecord.empty() ? "Click to record" : clickToRecord.c_str(),
-                    pressKeys.empty() ? "Press keys..." : pressKeys.c_str()))
-            {
-                ResolveShortcutConflicts(st.input, i);
-                st.input.listeningShortcut = -1;
-                st.dirty = true;
-            }
-            else if (localListening && !isListening)
-            {
-                st.input.listeningShortcut = i;
-            }
-            else if (!localListening && isListening)
-            {
-                st.input.listeningShortcut = -1;
-            }
-
-            // Show conflict indicator
-            if (st.input.shortcuts[i].conflict)
-            {
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
-                {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
-                    ImGui::TextUnformatted(conflictText.c_str());
-                }
-                ImGui::PopStyleColor();
-            }
-
-            ImGui::PopID();
-        }
-        ImGui::EndTable();
-    }
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar();
+    const std::string mappingsGroup = ctx.localization.Get("editor", "settings.input.mappings_group");
+    const std::string mappingsLabel = ctx.localization.Get("editor", "settings.input.mappings_label");
+    const std::string mappingsDescription =
+        ctx.localization.Get("editor", "settings.input.mappings_description");
+    SettingGroup(mappingsGroup.c_str(), ctx.theme.fonts);
+    SettingRow(mappingsLabel.c_str(), mappingsDescription.c_str(), ctx.theme.fonts, []() {});
 }
 
 void DrawRendering(SettingsState &st, const EditorGuiContext &ctx)
@@ -492,16 +395,15 @@ void DrawRendering(SettingsState &st, const EditorGuiContext &ctx)
     const std::string budgetDescription =
         ctx.localization.Get("editor", "settings.rendering.texture_budget.description");
     SettingRow(viewportLabel.c_str(), viewportDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kViewport]() {
-        (void)ComboControl("##viewport", &st.rendering.viewportMode, kViewport.data(),
-                           kViewport.size(), ctx.theme.fonts);
+        (void)ComboControl("##viewport", &st.rendering.viewportMode, kViewport.data(), kViewport.size(),
+                           ctx.theme.fonts);
     });
     SettingRow(gridLabel.c_str(), gridDescription.c_str(), ctx.theme.fonts,
                [&st, &ctx]() { (void)ToggleControl("grid", &st.rendering.gridOverlay, ctx.theme.fonts); });
     const std::string qualityGroup = ctx.localization.Get("editor", "settings.rendering.quality_group");
     SettingGroup(qualityGroup.c_str(), ctx.theme.fonts);
     SettingRow(tierLabel.c_str(), tierDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kTier]() {
-        (void)ComboControl("##tier", &st.rendering.renderingTier, kTier.data(), kTier.size(),
-                           ctx.theme.fonts);
+        (void)ComboControl("##tier", &st.rendering.renderingTier, kTier.data(), kTier.size(), ctx.theme.fonts);
     });
     SettingRow(budgetLabel.c_str(), budgetDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
         (void)InputTextControl("##texture-budget", st.rendering.textureBudget, 32, ctx.theme.fonts);
@@ -529,8 +431,8 @@ void DrawAudio(SettingsState &st, const EditorGuiContext &ctx)
         SliderIntControl("##volume", &st.audio.masterVolume, 0, 100, SliderValueFormat::Integer, ctx.theme.fonts);
     });
     SettingRow(deviceLabel.c_str(), deviceDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kDevices]() {
-        (void)ComboControl("##audio-device", &st.audio.audioOutputDevice, kDevices.data(),
-                           kDevices.size(), ctx.theme.fonts);
+        (void)ComboControl("##audio-device", &st.audio.audioOutputDevice, kDevices.data(), kDevices.size(),
+                           ctx.theme.fonts);
     });
     SettingRow(enabledLabel.c_str(), enabledDescription.c_str(), ctx.theme.fonts,
                [&st, &ctx]() { (void)ToggleControl("audio-enabled", &st.audio.audioEnabled, ctx.theme.fonts); });
@@ -587,8 +489,8 @@ void DrawDiagnostics(SettingsState &st, const EditorGuiContext &ctx)
     const std::string thresholdDescription =
         ctx.localization.Get("editor", "settings.diagnostics.stutter_threshold.description");
     SettingRow(logLevelLabel.c_str(), logLevelDescription.c_str(), ctx.theme.fonts, [&st, &ctx, kLogLevels]() {
-        (void)ComboControl("##log-level", &st.diagnostics.consoleLogLevel, kLogLevels.data(),
-                           kLogLevels.size(), ctx.theme.fonts);
+        (void)ComboControl("##log-level", &st.diagnostics.consoleLogLevel, kLogLevels.data(), kLogLevels.size(),
+                           ctx.theme.fonts);
     });
     SettingRow(writeLogLabel.c_str(), writeLogDescription.c_str(), ctx.theme.fonts,
                [&st, &ctx]() { (void)ToggleControl("write-log", &st.diagnostics.writeLogToFile, ctx.theme.fonts); });

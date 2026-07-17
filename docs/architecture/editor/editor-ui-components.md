@@ -56,6 +56,11 @@ All components live in `Horo::Editor::Ui`.
 | `DrawObjTitle` | `void DrawObjTitle(title, badgeText, badgeBg, badgeFg, fonts)` | Inspector object title header |
 | `DrawPropSection` | `void DrawPropSection(label, fonts)` | Inspector property section header |
 | `DrawPropRow` | `void DrawPropRow(label, value, fonts)` | Inspector property key-value row |
+| `BeginContextMenu` / `EndContextMenu` | popup scope | Shared styled context-menu surface |
+| `BeginContextWindowMenu` | popup scope | Empty-window-space context surface |
+| `BeginContextSubmenu` / `EndContextSubmenu` | nested popup scope | Standard ImGui nested-menu measurement, placement, and arrow behavior |
+| `ContextMenuItem` | `bool ContextMenuItem(label, shortcut, fonts, tone, iconToken)` | Standard menu action with optional semantic danger tone; layout is not manually offset |
+| `DrawFloat3PropRow` | `Float3PropertyEditResult DrawFloat3PropRow(label, id, value, fonts, speed)` | Inspector X/Y/Z editor with explicit interaction commit state |
 
 ## Usage
 

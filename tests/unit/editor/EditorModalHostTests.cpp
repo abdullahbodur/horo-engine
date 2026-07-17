@@ -20,6 +20,7 @@ struct ModalStats
     bool requestCloseOnUpdate = false;
     bool requestCloseOnDraw = false;
     bool remainedOpenAfterUpdateCloseRequest = false;
+    bool allowShutdown = true;
     ModalCloseReason closeReason = ModalCloseReason::Cancelled;
 };
 
@@ -56,7 +57,11 @@ public:
         return m_stats.requestCloseOnDraw ? ModalFrameResult::RequestClose(ModalCloseReason::Cancelled) : ModalFrameResult::None();
     }
 
-    [[nodiscard]] CloseDecision CanClose(ModalCloseReason) override { return CloseDecision::Allow; }
+    [[nodiscard]] CloseDecision CanClose(ModalCloseReason reason) override
+    {
+        return reason == ModalCloseReason::ApplicationShutdown && !m_stats.allowShutdown ? CloseDecision::Deny
+                                                                                          : CloseDecision::Allow;
+    }
 
     void OnClose(ModalCloseReason reason) override
     {
@@ -72,8 +77,9 @@ private:
 void AcceptedRootGatesInteractionBeforeItsFirstOpenBoundary()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats stats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     assert(host.InteractionScope().kind == EditorInteractionScopeKind::Modal);
@@ -90,9 +96,10 @@ void AcceptedRootGatesInteractionBeforeItsFirstOpenBoundary()
 void SecondRootIsRejectedAsBusy()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats firstStats;
     ModalStats secondStats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, firstStats)).HasValue());
 
     const Result<void> result = host.OpenRoot(std::make_unique<RecordingModal>(2, secondStats));
@@ -103,8 +110,9 @@ void SecondRootIsRejectedAsBusy()
 void CloseRequestedDuringUpdateIsDeferredUntilTheFrameBoundary()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats stats{.requestCloseOnUpdate = true};
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
@@ -118,8 +126,9 @@ void CloseRequestedDuringUpdateIsDeferredUntilTheFrameBoundary()
 void CloseRequestedDuringDrawIsDeferredUntilTheDrawBoundary()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats stats{.requestCloseOnDraw = true};
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
@@ -133,8 +142,9 @@ void CloseRequestedDuringDrawIsDeferredUntilTheDrawBoundary()
 void TopAndScopeRestoreOnlyAfterDeferredCloseBoundary()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats stats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
     host.OnUpdate(0.0F);
 
@@ -150,10 +160,11 @@ void TopAndScopeRestoreOnlyAfterDeferredCloseBoundary()
 void OnlyCurrentTopModalMayPushAChild()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats rootStats;
     ModalStats rejectedStats;
     ModalStats childStats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
 
@@ -169,9 +180,10 @@ void OnlyCurrentTopModalMayPushAChild()
 void ChildPushCommitsAtTheNextHostFrameBoundary()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats rootStats;
     ModalStats childStats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
@@ -190,9 +202,10 @@ void ChildPushCommitsAtTheNextHostFrameBoundary()
 void ForceDetachClosesEachModalOnceAndDoesNotRepeatCallbacks()
 {
     EditorDataBus events;
+    Input::InputRouter input;
     ModalStats rootStats;
     ModalStats childStats;
-    EditorModalHost host(events);
+    EditorModalHost host(events, input);
 
     assert(host.OpenRoot(std::make_unique<RecordingModal>(1, rootStats)).HasValue());
     host.OnUpdate(0.0F);
@@ -210,6 +223,47 @@ void ForceDetachClosesEachModalOnceAndDoesNotRepeatCallbacks()
     assert(childStats.closeCalls == 1);
 }
 
+void OrderlyShutdownIsSynchronousIdempotentAndStopsNewRequests()
+{
+    EditorDataBus events;
+    Input::InputRouter input;
+    ModalStats stats;
+    ModalStats rejected;
+    EditorModalHost host(events, input);
+    assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
+    host.OnUpdate(0.0F);
+
+    assert(host.RequestCloseAllForShutdown().HasValue());
+    assert(stats.closeCalls == 1);
+    assert(stats.closeReason == ModalCloseReason::ApplicationShutdown);
+    assert(!host.HasOpenModal());
+    assert(host.RequestCloseAllForShutdown().HasValue());
+    assert(stats.closeCalls == 1);
+
+    const Result<void> openAfterShutdown = host.OpenRoot(std::make_unique<RecordingModal>(2, rejected));
+    assert(openAfterShutdown.HasError());
+    assert(openAfterShutdown.ErrorValue().code.Value() == "editor.modal_host.busy");
+}
+
+void DeniedShutdownKeepsTheModalAndHostUsable()
+{
+    EditorDataBus events;
+    Input::InputRouter input;
+    ModalStats stats{.allowShutdown = false};
+    EditorModalHost host(events, input);
+    assert(host.OpenRoot(std::make_unique<RecordingModal>(1, stats)).HasValue());
+    host.OnUpdate(0.0F);
+
+    const Result<void> shutdown = host.RequestCloseAllForShutdown();
+    assert(shutdown.HasError());
+    assert(shutdown.ErrorValue().code.Value() == "editor.modal_host.close_denied");
+    assert(host.HasOpenModal());
+    assert(stats.closeCalls == 0);
+    assert(host.RequestClose(ModalId{1}, ModalCloseReason::Cancelled).HasValue());
+    host.OnUpdate(0.0F);
+    assert(stats.closeCalls == 1);
+}
+
 } // namespace
 
 int main()
@@ -222,5 +276,7 @@ int main()
     OnlyCurrentTopModalMayPushAChild();
     ChildPushCommitsAtTheNextHostFrameBoundary();
     ForceDetachClosesEachModalOnceAndDoesNotRepeatCallbacks();
+    OrderlyShutdownIsSynchronousIdempotentAndStopsNewRequests();
+    DeniedShutdownKeepsTheModalAndHostUsable();
     return 0;
 }

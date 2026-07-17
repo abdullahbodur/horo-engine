@@ -15,7 +15,7 @@ void InstallNativeEditorMenuBar(const EditorMenuModel &, const ILocalizationServ
 }
 
 /** @copydoc PollNativeEditorMenuAction */
-std::optional<EditorMenuAction> PollNativeEditorMenuAction() noexcept
+std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept
 {
     return std::nullopt;
 }

@@ -70,15 +70,22 @@ See:
 
 ## Documentation
 
-| Area | Document |
-|---|---|
-| Architecture index | [docs/architecture/README.md](./docs/architecture/README.md) |
-| Desired repository layout | [docs/architecture/desired-project-tree.md](./docs/architecture/desired-project-tree.md) |
+| Area                         | Document                                                                                                               |
+|------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| Architecture index           | [docs/architecture/README.md](./docs/architecture/README.md)                                                           |
+| Desired repository layout    | [docs/architecture/desired-project-tree.md](./docs/architecture/desired-project-tree.md)                               |
 | Editor AI agent architecture | [docs/architecture/editor/editor-ai-agent-architecture.md](./docs/architecture/editor/editor-ai-agent-architecture.md) |
-| Release architecture | [docs/architecture/release/release.md](./docs/architecture/release/release.md) |
-| CLI architecture | [docs/architecture/interfaces/cli-architecture.md](./docs/architecture/interfaces/cli-architecture.md) |
-| MCP architecture | [docs/architecture/interfaces/mcp-architecture.md](./docs/architecture/interfaces/mcp-architecture.md) |
-| ADRs | [docs/adr/README.md](./docs/adr/README.md) |
+| Release architecture         | [docs/architecture/release/release.md](./docs/architecture/release/release.md)                                         |
+| CLI architecture             | [docs/architecture/interfaces/cli-architecture.md](./docs/architecture/interfaces/cli-architecture.md)                 |
+| MCP architecture             | [docs/architecture/interfaces/mcp-architecture.md](./docs/architecture/interfaces/mcp-architecture.md)                 |
+| ADRs                         | [docs/adr/README.md](./docs/adr/README.md)                                                                             |
+
+### Topics needs to be covered
+
+| Topics                                                                                | Notes |
+|---------------------------------------------------------------------------------------|-------|
+| We need to create an example module with a panel                                      |       |
+| We should prepare an agent mode with vierport that shows real agents as camera on gui |       |
 
 ## License
 

@@ -34,6 +34,7 @@ struct SettingsFixture
 {
     EngineDataBus engineEvents;
     EditorDataBus events;
+    Input::InputRouter input;
     ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
     LocalizationService localization{LocaleTag{"en-US"}};
     EditorSettingsService settings{DefaultEditorSettings(), configuration, events, localization};
@@ -41,7 +42,7 @@ struct SettingsFixture
     ThemeContext theme{fonts};
     EditorSettingsSnapshot snapshot = settings.Snapshot();
     EditorGuiContext ctx{engineEvents, events, localization, theme, snapshot};
-    EditorModalHost host{events};
+    EditorModalHost host{events, input};
 };
 
 SettingsModal *Open(SettingsFixture &fixture)

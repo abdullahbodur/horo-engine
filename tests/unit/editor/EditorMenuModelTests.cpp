@@ -71,15 +71,49 @@ void DistinguishesImplementedAndPlaceholderCommands()
     const EditorMenuItem *exit = FindAction(model.menus[0], EditorMenuAction::ExitApplication);
     const EditorMenuItem *newProject = FindAction(model.menus[0], EditorMenuAction::NewProject);
     const EditorMenuItem *openProject = FindAction(model.menus[0], EditorMenuAction::OpenProject);
+    const EditorMenuItem *undo = FindAction(model.menus[1], EditorMenuAction::Undo);
+    const EditorMenuItem *redo = FindAction(model.menus[1], EditorMenuAction::Redo);
     assert(save != nullptr && save->enabledByDefault);
     assert(exit != nullptr && exit->enabledByDefault);
     assert(newProject != nullptr && newProject->enabledByDefault);
     assert(openProject != nullptr && openProject->enabledByDefault);
+    assert(undo != nullptr && undo->enabledByDefault);
+    assert(redo != nullptr && redo->enabledByDefault);
 
     const EditorMenuItem *reimport = FindChild(model.menus[2], "web_workspace.menu.reimport_all");
     assert(reimport != nullptr);
     assert(reimport->action == EditorMenuAction::None);
     assert(!reimport->enabledByDefault);
+}
+
+void BuildsTheSharedCatalogCreateTree()
+{
+    const std::vector<EditorMenuItem> &items = GetPrimitiveCreateMenuItems();
+    assert(items.size() == 6);
+    assert(items[0].labelKey == "primitive.object.empty");
+    constexpr std::array expectedGroups = {"workspace.create.group.objects_3d", "workspace.create.group.cameras",
+                                           "workspace.create.group.lights", "workspace.create.group.volumes",
+                                           "workspace.create.group.audio"};
+    std::size_t primitiveCount = 1;
+    for (std::size_t index = 0; index < expectedGroups.size(); ++index)
+    {
+        assert(items[index + 1].kind == EditorMenuItemKind::Submenu);
+        assert(items[index + 1].labelKey == expectedGroups[index]);
+        primitiveCount += items[index + 1].children.size();
+        for (const EditorMenuItem &primitive : items[index + 1].children)
+        {
+            assert(primitive.action == EditorMenuAction::CreatePrimitive);
+            assert(primitive.primitive.has_value());
+            assert(primitive.enabledByDefault);
+            assert(!primitive.iconToken.empty());
+            assert(primitive.primitive->value.find("primitive.collider.") == std::string_view::npos);
+        }
+    }
+    assert(primitiveCount == 14);
+
+    const EditorMenuItem *create = FindChild(GetEditorMenuModel().menus[3], "workspace.create");
+    assert(create != nullptr && create->kind == EditorMenuItemKind::Submenu);
+    assert(create->children.size() == items.size());
 }
 } // namespace
 
@@ -87,5 +121,6 @@ int main()
 {
     MirrorsTheWorkspaceDesignMenuHierarchy();
     DistinguishesImplementedAndPlaceholderCommands();
+    BuildsTheSharedCatalogCreateTree();
     return 0;
 }

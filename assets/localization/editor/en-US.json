@@ -322,9 +322,6 @@
     "settings.general.startup_welcome": {
       "text": "Welcome screen"
     },
-    "settings.input.action": {
-      "text": "Action"
-    },
     "settings.input.invert_orbit_y": {
       "text": "Invert Orbit Y"
     },
@@ -346,44 +343,14 @@
     "settings.input.pan_sensitivity.description": {
       "text": "Mouse drag multiplier for panning the viewport camera."
     },
-    "settings.input.shortcut": {
-      "text": "Shortcut"
+    "settings.input.mappings_description": {
+      "text": "Open Input Mapping from the right activity bar to edit shortcuts, gamepad bindings, profiles, and player assignments."
     },
-    "settings.input.shortcut.build": {
-      "text": "Build & Release"
+    "settings.input.mappings_group": {
+      "text": "INPUT MAPPINGS"
     },
-    "settings.input.shortcut.click_to_record": {
-      "text": "Click to record"
-    },
-    "settings.input.shortcut.delete": {
-      "text": "Delete"
-    },
-    "settings.input.shortcut.duplicate": {
-      "text": "Duplicate"
-    },
-    "settings.input.shortcut.find": {
-      "text": "Find"
-    },
-    "settings.input.shortcut.press_keys": {
-      "text": "Press keys..."
-    },
-    "settings.input.shortcut.replace": {
-      "text": "Replace"
-    },
-    "settings.input.shortcut.save_scene": {
-      "text": "Save Scene"
-    },
-    "settings.input.shortcut.select_all": {
-      "text": "Select All"
-    },
-    "settings.input.shortcut.undo": {
-      "text": "Undo"
-    },
-    "settings.input.shortcut_conflict": {
-      "text": "⚠ Conflicts with another shortcut"
-    },
-    "settings.input.shortcuts_group": {
-      "text": "SHORTCUTS"
+    "settings.input.mappings_label": {
+      "text": "Central Input Mapping"
     },
     "settings.language": {
       "text": "Language"
@@ -643,11 +610,72 @@
     "workspace.panel.inspector": {"text": "Inspector"},
     "workspace.panel.viewport": {"text": "Viewport"},
     "workspace.panel.content_browser": {"text": "Content Browser"},
+    "workspace.input_mapping.title": {"text": "Input Mapping"},
+    "workspace.input_mapping.binding": {"text": "Binding"},
+    "workspace.input_mapping.binding_updated": {"text": "Binding updated."},
+    "workspace.input_mapping.deadzone": {"text": "Deadzone"},
+    "workspace.input_mapping.generation": {"text": "generation"},
+    "workspace.input_mapping.player": {"text": "Player"},
+    "workspace.input_mapping.slot": {"text": "slot"},
+    "workspace.input_mapping.unassigned": {"text": "Unassigned"},
+    "workspace.input_mapping.type.digital": {"text": "Digital"},
+    "workspace.input_mapping.type.axis_1d": {"text": "1D Axis"},
+    "workspace.input_mapping.type.axis_2d": {"text": "2D Axis"},
+    "workspace.input_mapping.type.unknown": {"text": "Unknown"},
+    "workspace.input_mapping.actions": {"text": "Action Maps"},
+    "workspace.input_mapping.devices": {"text": "Devices"},
+    "workspace.input_mapping.profiles": {"text": "Profiles"},
+    "workspace.input_mapping.no_actions": {"text": "No input actions are registered."},
+    "workspace.input_mapping.action": {"text": "Action"},
+    "workspace.input_mapping.type": {"text": "Type"},
+    "workspace.input_mapping.bindings": {"text": "Bindings"},
+    "workspace.input_mapping.status": {"text": "Status"},
+    "workspace.input_mapping.required": {"text": "Required"},
+    "workspace.input_mapping.optional": {"text": "Optional"},
+    "workspace.input_mapping.rebind": {"text": "Rebind"},
+    "workspace.input_mapping.press_key": {"text": "Press a key; Escape cancels."},
+    "workspace.input_mapping.no_devices": {"text": "No gamepads are connected."},
+    "workspace.input_mapping.assign_player_one": {"text": "Assign Player 1"},
+    "workspace.input_mapping.unassign": {"text": "Unassign"},
+    "workspace.input_mapping.active_profile": {"text": "Active profile"},
+    "workspace.input_mapping.save_profile": {"text": "Save Profile"},
+    "workspace.input_mapping.save_project_profile": {"text": "Save Project Override"},
+    "workspace.input_mapping.project_profile_saved": {"text": "Project input override saved."},
+    "workspace.input_mapping.reload_profile": {"text": "Reload Profile"},
+    "workspace.input_mapping.profile_saved": {"text": "Input profile saved."},
+    "workspace.input_mapping.profile_loaded": {"text": "Input profile loaded."},
     "workspace.hierarchy.add_object": {"text": "+ Add Object"},
+    "workspace.create": {"text": "Create"},
+    "workspace.create.group.objects_3d": {"text": "3D Objects"},
+    "workspace.create.group.cameras": {"text": "Cameras"},
+    "workspace.create.group.lights": {"text": "Lights"},
+    "workspace.create.group.volumes": {"text": "Volumes"},
+    "workspace.create.group.audio": {"text": "Audio"},
+    "primitive.mesh.box": {"text": "Box"},
+    "primitive.mesh.sphere": {"text": "Sphere"},
+    "primitive.mesh.capsule": {"text": "Capsule"},
+    "primitive.mesh.cylinder": {"text": "Cylinder"},
+    "primitive.mesh.cone": {"text": "Cone"},
+    "primitive.mesh.plane": {"text": "Plane"},
+    "primitive.mesh.quad": {"text": "Quad"},
+    "primitive.object.empty": {"text": "Empty Object"},
+    "primitive.object.camera": {"text": "Camera"},
+    "primitive.object.light_directional": {"text": "Directional Light"},
+    "primitive.object.light_point": {"text": "Point Light"},
+    "primitive.object.light_spot": {"text": "Spot Light"},
+    "primitive.object.trigger_volume": {"text": "Trigger Volume"},
+    "primitive.object.audio_source": {"text": "Audio Source"},
+    "workspace.hierarchy.type.mesh": {"text": "Mesh"},
+    "workspace.hierarchy.type.empty": {"text": "Empty"},
+    "workspace.hierarchy.type.light": {"text": "Light"},
+    "workspace.hierarchy.type.camera": {"text": "Camera"},
+    "workspace.hierarchy.type.volume": {"text": "Volume"},
+    "workspace.hierarchy.type.audio": {"text": "Audio"},
     "workspace.hierarchy.empty": {"text": "Scene is empty"},
     "workspace.hierarchy.search": {"text": "Search objects..."},
     "workspace.hierarchy.no_matches": {"text": "No matching objects"},
     "workspace.hierarchy.rename": {"text": "Rename"},
+    "workspace.hierarchy.duplicate": {"text": "Duplicate"},
     "workspace.hierarchy.delete": {"text": "Delete"},
     "workspace.hierarchy.move_to_root": {"text": "Move to Root"},
     "workspace.inspector.mesh_type": {"text": "Mesh"},
@@ -666,7 +694,49 @@
     "workspace.value.on": {"text": "On"},
     "workspace.value.static": {"text": "✓ Static"},
     "workspace.viewport.object_count": {"text": "{} object(s)"},
+    "workspace.viewport.perspective_shaded": {"text": "Perspective · Shaded"},
+    "workspace.viewport.orthographic_shaded": {"text": "Orthographic · Shaded"},
     "workspace.viewport.renderer_missing": {"text": "Renderer not attached"},
+    "workspace.content_browser.embedded": {"text": "EMBEDDED"},
+    "workspace.content_browser.project_asset_dock": {"text": "Project asset dock"},
+    "workspace.global_dock.tab.assets": {"text": "Assets"},
+    "workspace.global_dock.tab.console": {"text": "Console"},
+    "workspace.global_dock.tab.mcp": {"text": "MCP"},
+    "workspace.global_dock.tab.performance": {"text": "Perf"},
+    "workspace.global_dock.tab.physics": {"text": "Physics"},
+    "workspace.global_dock.tab.audio": {"text": "Audio"},
+    "workspace.global_dock.tab.network": {"text": "Net"},
+    "workspace.global_dock.tab.localization": {"text": "L10n"},
+    "workspace.global_dock.preview.console": {"text": "Console preview"},
+    "workspace.global_dock.preview.mcp": {"text": "MCP preview"},
+    "workspace.global_dock.preview.performance": {"text": "Performance preview"},
+    "workspace.global_dock.preview.physics": {"text": "Physics debug preview"},
+    "workspace.global_dock.preview.audio": {"text": "Audio mixer preview"},
+    "workspace.global_dock.preview.network": {"text": "Network debug preview"},
+    "workspace.global_dock.preview.localization": {"text": "Localization preview"},
+    "workspace.global_dock.console.session_started": {"text": "Editor session started. Revision r112."},
+    "workspace.global_dock.console.texture_converted": {"text": "T Wall Old: texture format deprecated, auto-converted."},
+    "workspace.global_dock.console.scene_loaded": {"text": "Scene loaded: Room (11 objects, 4 components)."},
+    "workspace.global_dock.console.missing_animation": {"text": "PF Enemy: missing animation state machine reference."},
+    "workspace.global_dock.console.selection": {"text": "floor 000 selected."},
+    "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — active"},
+    "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
+    "workspace.global_dock.mcp.awaiting": {"text": "Awaiting tool call…"},
+    "workspace.global_dock.performance.gpu": {"text": "16.7 ms · Draw calls: 84 · Tris: 124k"},
+    "workspace.global_dock.performance.cpu": {"text": "4.1 ms · Batches: 22 · Shadow casters: 8"},
+    "workspace.global_dock.performance.memory": {"text": "VRAM 214 MB / 4096 MB"},
+    "workspace.global_dock.physics.solver": {"text": "Steps: 3 · Bodies: 28 · Contacts: 14"},
+    "workspace.global_dock.physics.layers": {"text": "Default, Player, Enemy, Projectile, Terrain"},
+    "workspace.global_dock.physics.memory": {"text": "Collision meshes: 6.8 MB · Broadphase: BVH"},
+    "workspace.global_dock.audio.master": {"text": "−3.2 dB · Voices: 12 / 64"},
+    "workspace.global_dock.audio.busses": {"text": "Master, Music, SFX, Ambient, Voice"},
+    "workspace.global_dock.audio.device": {"text": "Stereo 48 kHz · Latency: 10.7 ms"},
+    "workspace.global_dock.network.ping": {"text": "42 ms · Bandwidth: 12.3 kb/s ↓ · 3.1 kb/s ↑"},
+    "workspace.global_dock.network.replication": {"text": "176 objects replicating · RPC queue: 0"},
+    "workspace.global_dock.network.connection": {"text": "1 peer · Server-authoritative · tick 64 Hz"},
+    "workspace.global_dock.localization.locale": {"text": "tr-TR · Fallback: en-US · 3 loaded"},
+    "workspace.global_dock.localization.strings": {"text": "1,247 translated · 0 missing · 18 fuzzy"},
+    "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
     "workspace.content_browser.assets_root": {"text": "assets/"},
     "workspace.content_browser.scenes": {"text": "scenes"},
     "workspace.content_browser.models": {"text": "models"},

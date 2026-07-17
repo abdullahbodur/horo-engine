@@ -322,9 +322,6 @@
     "settings.general.startup_welcome": {
       "text": "Karşılama Ekranı"
     },
-    "settings.input.action": {
-      "text": "Eylem"
-    },
     "settings.input.invert_orbit_y": {
       "text": "Yörünge Y Ekseni Ters"
     },
@@ -346,44 +343,14 @@
     "settings.input.pan_sensitivity.description": {
       "text": "Viewport kamerasını kaydırmak için fare sürükleme çarpanı."
     },
-    "settings.input.shortcut": {
-      "text": "Kısayol"
+    "settings.input.mappings_description": {
+      "text": "Kısayolları, gamepad bağlarını, profilleri ve oyuncu atamalarını düzenlemek için sağ etkinlik çubuğundan Giriş Eşleme panelini açın."
     },
-    "settings.input.shortcut.build": {
-      "text": "Derle ve Yayınla"
+    "settings.input.mappings_group": {
+      "text": "GİRİŞ EŞLEMELERİ"
     },
-    "settings.input.shortcut.click_to_record": {
-      "text": "Kaydetmek için tıkla"
-    },
-    "settings.input.shortcut.delete": {
-      "text": "Sil"
-    },
-    "settings.input.shortcut.duplicate": {
-      "text": "Çoğalt"
-    },
-    "settings.input.shortcut.find": {
-      "text": "Bul"
-    },
-    "settings.input.shortcut.press_keys": {
-      "text": "Tuşlara basın..."
-    },
-    "settings.input.shortcut.replace": {
-      "text": "Değiştir"
-    },
-    "settings.input.shortcut.save_scene": {
-      "text": "Sahneyi Kaydet"
-    },
-    "settings.input.shortcut.select_all": {
-      "text": "Tümünü Seç"
-    },
-    "settings.input.shortcut.undo": {
-      "text": "Geri Al"
-    },
-    "settings.input.shortcut_conflict": {
-      "text": "⚠ Başka bir kısayolla çakışıyor"
-    },
-    "settings.input.shortcuts_group": {
-      "text": "KISAYOLLAR"
+    "settings.input.mappings_label": {
+      "text": "Merkezi Giriş Eşleme"
     },
     "settings.language": {
       "text": "Dil"
@@ -643,11 +610,72 @@
     "workspace.panel.inspector": {"text": "Denetçi"},
     "workspace.panel.viewport": {"text": "Görünüm"},
     "workspace.panel.content_browser": {"text": "İçerik Tarayıcısı"},
+    "workspace.input_mapping.title": {"text": "Girdi Eşleme"},
+    "workspace.input_mapping.binding": {"text": "Bağ"},
+    "workspace.input_mapping.binding_updated": {"text": "Bağ güncellendi."},
+    "workspace.input_mapping.deadzone": {"text": "Ölü bölge"},
+    "workspace.input_mapping.generation": {"text": "nesil"},
+    "workspace.input_mapping.player": {"text": "Oyuncu"},
+    "workspace.input_mapping.slot": {"text": "yuva"},
+    "workspace.input_mapping.unassigned": {"text": "Atanmamış"},
+    "workspace.input_mapping.type.digital": {"text": "Dijital"},
+    "workspace.input_mapping.type.axis_1d": {"text": "1B Eksen"},
+    "workspace.input_mapping.type.axis_2d": {"text": "2B Eksen"},
+    "workspace.input_mapping.type.unknown": {"text": "Bilinmiyor"},
+    "workspace.input_mapping.actions": {"text": "Aksiyon Haritaları"},
+    "workspace.input_mapping.devices": {"text": "Cihazlar"},
+    "workspace.input_mapping.profiles": {"text": "Profiller"},
+    "workspace.input_mapping.no_actions": {"text": "Kayıtlı bir girdi aksiyonu yok."},
+    "workspace.input_mapping.action": {"text": "Aksiyon"},
+    "workspace.input_mapping.type": {"text": "Tür"},
+    "workspace.input_mapping.bindings": {"text": "Atamalar"},
+    "workspace.input_mapping.status": {"text": "Durum"},
+    "workspace.input_mapping.required": {"text": "Zorunlu"},
+    "workspace.input_mapping.optional": {"text": "İsteğe bağlı"},
+    "workspace.input_mapping.rebind": {"text": "Yeniden Ata"},
+    "workspace.input_mapping.press_key": {"text": "Bir tuşa basın; Escape iptal eder."},
+    "workspace.input_mapping.no_devices": {"text": "Bağlı bir gamepad yok."},
+    "workspace.input_mapping.assign_player_one": {"text": "Oyuncu 1'e Ata"},
+    "workspace.input_mapping.unassign": {"text": "Atamayı Kaldır"},
+    "workspace.input_mapping.active_profile": {"text": "Aktif profil"},
+    "workspace.input_mapping.save_profile": {"text": "Profili Kaydet"},
+    "workspace.input_mapping.save_project_profile": {"text": "Proje Geçersiz Kılmasını Kaydet"},
+    "workspace.input_mapping.project_profile_saved": {"text": "Proje girdi geçersiz kılması kaydedildi."},
+    "workspace.input_mapping.reload_profile": {"text": "Profili Yeniden Yükle"},
+    "workspace.input_mapping.profile_saved": {"text": "Girdi profili kaydedildi."},
+    "workspace.input_mapping.profile_loaded": {"text": "Girdi profili yüklendi."},
     "workspace.hierarchy.add_object": {"text": "+ Nesne Ekle"},
+    "workspace.create": {"text": "Oluştur"},
+    "workspace.create.group.objects_3d": {"text": "3B Nesneler"},
+    "workspace.create.group.cameras": {"text": "Kameralar"},
+    "workspace.create.group.lights": {"text": "Işıklar"},
+    "workspace.create.group.volumes": {"text": "Hacimler"},
+    "workspace.create.group.audio": {"text": "Ses"},
+    "primitive.mesh.box": {"text": "Kutu"},
+    "primitive.mesh.sphere": {"text": "Küre"},
+    "primitive.mesh.capsule": {"text": "Kapsül"},
+    "primitive.mesh.cylinder": {"text": "Silindir"},
+    "primitive.mesh.cone": {"text": "Koni"},
+    "primitive.mesh.plane": {"text": "Düzlem"},
+    "primitive.mesh.quad": {"text": "Dörtgen"},
+    "primitive.object.empty": {"text": "Boş Nesne"},
+    "primitive.object.camera": {"text": "Kamera"},
+    "primitive.object.light_directional": {"text": "Yönlü Işık"},
+    "primitive.object.light_point": {"text": "Noktasal Işık"},
+    "primitive.object.light_spot": {"text": "Spot Işık"},
+    "primitive.object.trigger_volume": {"text": "Tetikleyici Hacim"},
+    "primitive.object.audio_source": {"text": "Ses Kaynağı"},
+    "workspace.hierarchy.type.mesh": {"text": "Mesh"},
+    "workspace.hierarchy.type.empty": {"text": "Boş"},
+    "workspace.hierarchy.type.light": {"text": "Işık"},
+    "workspace.hierarchy.type.camera": {"text": "Kamera"},
+    "workspace.hierarchy.type.volume": {"text": "Hacim"},
+    "workspace.hierarchy.type.audio": {"text": "Ses"},
     "workspace.hierarchy.empty": {"text": "Sahne boş"},
     "workspace.hierarchy.search": {"text": "Nesnelerde ara..."},
     "workspace.hierarchy.no_matches": {"text": "Eşleşen nesne yok"},
     "workspace.hierarchy.rename": {"text": "Yeniden Adlandır"},
+    "workspace.hierarchy.duplicate": {"text": "Çoğalt"},
     "workspace.hierarchy.delete": {"text": "Sil"},
     "workspace.hierarchy.move_to_root": {"text": "Kök Seviyesine Taşı"},
     "workspace.inspector.mesh_type": {"text": "Mesh"},
@@ -666,7 +694,49 @@
     "workspace.value.on": {"text": "Açık"},
     "workspace.value.static": {"text": "✓ Statik"},
     "workspace.viewport.object_count": {"text": "{} nesne"},
+    "workspace.viewport.perspective_shaded": {"text": "Perspektif · Gölgeli"},
+    "workspace.viewport.orthographic_shaded": {"text": "Ortografik · Gölgeli"},
     "workspace.viewport.renderer_missing": {"text": "Görüntüleyici bağlı değil"},
+    "workspace.content_browser.embedded": {"text": "YERLEŞİK"},
+    "workspace.content_browser.project_asset_dock": {"text": "Proje varlık paneli"},
+    "workspace.global_dock.tab.assets": {"text": "Varlıklar"},
+    "workspace.global_dock.tab.console": {"text": "Konsol"},
+    "workspace.global_dock.tab.mcp": {"text": "MCP"},
+    "workspace.global_dock.tab.performance": {"text": "Perf"},
+    "workspace.global_dock.tab.physics": {"text": "Fizik"},
+    "workspace.global_dock.tab.audio": {"text": "Ses"},
+    "workspace.global_dock.tab.network": {"text": "Net"},
+    "workspace.global_dock.tab.localization": {"text": "L10n"},
+    "workspace.global_dock.preview.console": {"text": "Konsol önizlemesi"},
+    "workspace.global_dock.preview.mcp": {"text": "MCP önizlemesi"},
+    "workspace.global_dock.preview.performance": {"text": "Performans önizlemesi"},
+    "workspace.global_dock.preview.physics": {"text": "Fizik hata ayıklama önizlemesi"},
+    "workspace.global_dock.preview.audio": {"text": "Ses mikseri önizlemesi"},
+    "workspace.global_dock.preview.network": {"text": "Ağ hata ayıklama önizlemesi"},
+    "workspace.global_dock.preview.localization": {"text": "Yerelleştirme önizlemesi"},
+    "workspace.global_dock.console.session_started": {"text": "Editör oturumu başladı. Revizyon r112."},
+    "workspace.global_dock.console.texture_converted": {"text": "T Wall Old: doku biçimi kullanımdan kaldırıldı, otomatik dönüştürüldü."},
+    "workspace.global_dock.console.scene_loaded": {"text": "Sahne yüklendi: Room (11 nesne, 4 bileşen)."},
+    "workspace.global_dock.console.missing_animation": {"text": "PF Enemy: animasyon durum makinesi referansı eksik."},
+    "workspace.global_dock.console.selection": {"text": "floor 000 seçildi."},
+    "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — etkin"},
+    "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
+    "workspace.global_dock.mcp.awaiting": {"text": "Araç çağrısı bekleniyor…"},
+    "workspace.global_dock.performance.gpu": {"text": "16.7 ms · Çizim çağrıları: 84 · Üçgen: 124k"},
+    "workspace.global_dock.performance.cpu": {"text": "4.1 ms · Gruplar: 22 · Gölge oluşturanlar: 8"},
+    "workspace.global_dock.performance.memory": {"text": "VRAM 214 MB / 4096 MB"},
+    "workspace.global_dock.physics.solver": {"text": "Adımlar: 3 · Gövdeler: 28 · Temaslar: 14"},
+    "workspace.global_dock.physics.layers": {"text": "Varsayılan, Oyuncu, Düşman, Mermi, Arazi"},
+    "workspace.global_dock.physics.memory": {"text": "Çarpışma meshleri: 6.8 MB · Geniş faz: BVH"},
+    "workspace.global_dock.audio.master": {"text": "−3.2 dB · Sesler: 12 / 64"},
+    "workspace.global_dock.audio.busses": {"text": "Ana, Müzik, SFX, Ortam, Ses"},
+    "workspace.global_dock.audio.device": {"text": "Stereo 48 kHz · Gecikme: 10.7 ms"},
+    "workspace.global_dock.network.ping": {"text": "42 ms · Bant genişliği: 12.3 kb/s ↓ · 3.1 kb/s ↑"},
+    "workspace.global_dock.network.replication": {"text": "176 nesne çoğaltılıyor · RPC kuyruğu: 0"},
+    "workspace.global_dock.network.connection": {"text": "1 eş · Sunucu yetkili · tik 64 Hz"},
+    "workspace.global_dock.localization.locale": {"text": "tr-TR · Geri dönüş: en-US · 3 yüklü"},
+    "workspace.global_dock.localization.strings": {"text": "1.247 çevrildi · 0 eksik · 18 belirsiz"},
+    "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
     "workspace.content_browser.assets_root": {"text": "varlıklar/"},
     "workspace.content_browser.scenes": {"text": "sahneler"},
     "workspace.content_browser.models": {"text": "modeller"},

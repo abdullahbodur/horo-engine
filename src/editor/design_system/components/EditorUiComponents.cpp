@@ -7,6 +7,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -33,6 +34,34 @@ void PopControlStyle()
 {
     ImGui::PopStyleColor(5);
     ImGui::PopStyleVar(3);
+}
+
+void PushContextPopupWindowStyle()
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8.0F, 8.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::Layout::Radius);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::Bg2());
+    ImGui::PushStyleColor(ImGuiCol_Border, Theme::BorderStrong());
+}
+
+void PopContextPopupWindowStyle()
+{
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(3);
+}
+
+void PushContextMenuRowStyle()
+{
+    // Context menus can be opened from tightly packed lists whose ItemSpacing is
+    // intentionally zero. Keep that presentation detail from collapsing menu
+    // rows and their hover/selection bounds down to the text height.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 6.0F});
+}
+
+void PopContextMenuRowStyle()
+{
+    ImGui::PopStyleVar();
 }
 } // namespace
 
@@ -204,16 +233,22 @@ void SettingGroup(const char *label, const Theme::Fonts &fonts, const bool first
 
 // ── ComboControl ─────────────────────────────────────────────────────
 
-bool DrawComboRow(const int index, int *value, const char *const items[], const Theme::Fonts &fonts)
+[[nodiscard]] const char *ComboArrayLabel(const void *context, const int index)
+{
+    return static_cast<const char *const *>(context)[index];
+}
+
+bool DrawComboRow(const int index, int *value, const ComboItemSource &source, const Theme::Fonts &fonts)
 {
     ImGui::PushID(index);
     const bool isSelected = (*value == index);
+    const bool isEnabled = source.enabled == nullptr || source.enabled(source.context, index);
     const ImVec2 rowMin = ImGui::GetCursorScreenPos();
     constexpr float rowH = 28.0F;
     const float rowW = ImGui::GetContentRegionAvail().x;
     ImGui::InvisibleButton("##row", {rowW, rowH});
     const bool rowHovered = ImGui::IsItemHovered();
-    const bool clicked = ImGui::IsItemClicked();
+    const bool clicked = isEnabled && ImGui::IsItemClicked();
     if (clicked)
     {
         *value = index;
@@ -224,7 +259,16 @@ bool DrawComboRow(const int index, int *value, const char *const items[], const 
         drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
     drawList->AddText(fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont(), 14.0F,
                       {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
-                      Theme::U32(isSelected ? Theme::Text() : Theme::Muted()), items[index]);
+                      Theme::U32(isEnabled ? (isSelected ? Theme::Text() : Theme::Muted()) : Theme::Dim()),
+                      source.label(source.context, index));
+    if (!isEnabled && rowHovered && source.disabledTooltip != nullptr)
+    {
+        const char *const tooltip = source.disabledTooltip(source.context, index);
+        if (tooltip != nullptr && tooltip[0] != '\0')
+        {
+            ImGui::SetTooltip("%s", tooltip);
+        }
+    }
     ImGui::PopID();
     return clicked;
 }
@@ -232,6 +276,14 @@ bool DrawComboRow(const int index, int *value, const char *const items[], const 
 bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts,
                   bool error)
 {
+    const ComboItemSource source{.context = items, .label = ComboArrayLabel};
+    return ComboControl(id, value, itemCount, source, fonts, error);
+}
+
+bool ComboControl(const char *id, int *value, const int itemCount, const ComboItemSource &source,
+                  const Theme::Fonts &fonts, bool error)
+{
+    IM_ASSERT(source.label != nullptr);
     bool changed = false;
     ImGui::PushID(id);
 
@@ -259,7 +311,7 @@ bool ComboControl(const char *id, int *value, const char *const items[], const i
     // Selected value label
     {
         ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
-        const char *label = (*value >= 0 && *value < itemCount) ? items[*value] : "";
+        const char *label = (*value >= 0 && *value < itemCount) ? source.label(source.context, *value) : "";
         dl->AddText(font, 15.0F, {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F}, Theme::U32(Theme::Text()),
                     label);
     }
@@ -303,7 +355,7 @@ bool ComboControl(const char *id, int *value, const char *const items[], const i
         }
 
         for (int i = 0; i < itemCount; ++i)
-            changed = DrawComboRow(i, value, items, fonts) || changed;
+            changed = DrawComboRow(i, value, source, fonts) || changed;
         ImGui::EndPopup();
     }
 
@@ -315,7 +367,9 @@ bool ComboControl(const char *id, int *value, const char *const items[], const i
 
 // ── InputTextControl ─────────────────────────────────────────────────
 
-bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts, bool error)
+/** @copydoc InputTextControl(const char *, char *, size_t, const Theme::Fonts &, bool, float) */
+bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts, bool error,
+                      const float width)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
@@ -327,7 +381,7 @@ bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, con
     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
 
     bool changed = false;
-    ImGui::PushItemWidth(-1.0F);
+    ImGui::PushItemWidth(width);
     {
         Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
         changed = ImGui::InputText(id, buffer, bufferSize);
@@ -354,13 +408,15 @@ bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, con
     return changed;
 }
 
-bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts, bool error)
+/** @copydoc InputTextControl(const char *, std::string &, size_t, const Theme::Fonts &, bool, float) */
+bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts, bool error,
+                      const float width)
 {
     if (maxSize == 0)
         return false;
     value.resize(std::min(value.size(), maxSize - 1));
     value.resize(maxSize - 1, '\0');
-    const bool changed = InputTextControl(id, value.data(), value.size() + 1, fonts, error);
+    const bool changed = InputTextControl(id, value.data(), value.size() + 1, fonts, error, width);
     const auto nullPos = value.find('\0');
     value.resize(nullPos == std::string::npos ? value.size() : nullPos);
     return changed;
@@ -1043,5 +1099,224 @@ void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts
                 Theme::U32(Theme::Text()), value);
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
+}
+
+/** @copydoc BeginContextMenu */
+bool BeginContextMenu(const char *id)
+{
+    ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+    PushContextPopupWindowStyle();
+    const bool open = ImGui::BeginPopupContextItem(id, ImGuiPopupFlags_MouseButtonRight);
+    PopContextPopupWindowStyle();
+    return open;
+}
+
+/** @copydoc BeginContextWindowMenu */
+bool BeginContextWindowMenu(const char *id)
+{
+    ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+    PushContextPopupWindowStyle();
+    const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight |
+                                                             ImGuiPopupFlags_NoOpenOverItems);
+    PopContextPopupWindowStyle();
+    return open;
+}
+
+/** @copydoc EndContextMenu */
+void EndContextMenu()
+{
+    ImGui::EndPopup();
+}
+
+/** @copydoc ContextMenuItem */
+bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts,
+                     const ContextMenuItemTone tone, const std::string_view iconToken)
+{
+    static_cast<void>(fonts);
+    static_cast<void>(iconToken);
+    ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
+    if (tone == ContextMenuItemTone::Danger)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
+    }
+    PushContextMenuRowStyle();
+    const bool activated = ImGui::MenuItem(label, shortcut);
+    PopContextMenuRowStyle();
+    if (tone == ContextMenuItemTone::Danger)
+    {
+        ImGui::PopStyleColor();
+    }
+    ImGui::PopStyleColor(3);
+    return activated;
+}
+
+/** @copydoc BeginContextSubmenu */
+bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken)
+{
+    static_cast<void>(fonts);
+    static_cast<void>(iconToken);
+    ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
+    PushContextPopupWindowStyle();
+    PushContextMenuRowStyle();
+    const float itemInnerSpacingY = ImGui::GetStyle().ItemInnerSpacing.y;
+    // ImGui intentionally overlaps child menus by ItemInnerSpacing.x. The
+    // editor popup treatment uses visible borders, so align those borders
+    // edge-to-edge instead of stacking one popup over the previous one.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {0.0F, itemInnerSpacingY});
+    const bool open = ImGui::BeginMenu(label);
+    ImGui::PopStyleVar();
+    PopContextMenuRowStyle();
+    PopContextPopupWindowStyle();
+    ImGui::PopStyleColor(3);
+    return open;
+}
+
+/** @copydoc EndContextSubmenu */
+void EndContextSubmenu()
+{
+    ImGui::EndMenu();
+}
+
+/** @copydoc DrawEditorIcon */
+void DrawEditorIcon(ImDrawList *drawList, const std::string_view iconToken, const ImVec2 position, const ImVec2 size,
+                    const ImU32 color)
+{
+    if (drawList == nullptr || iconToken.empty())
+    {
+        return;
+    }
+    const float x = position.x;
+    const float y = position.y;
+    const float w = size.x;
+    const float h = size.y;
+    const ImVec2 center{x + w * 0.5F, y + h * 0.5F};
+    if (iconToken == "action.create")
+    {
+        drawList->AddLine({center.x, y + 2.0F}, {center.x, y + h - 2.0F}, color, 1.5F);
+        drawList->AddLine({x + 2.0F, center.y}, {x + w - 2.0F, center.y}, color, 1.5F);
+    }
+    else if (iconToken == "action.rename")
+    {
+        drawList->AddLine({x + 3.0F, y + h - 3.0F}, {x + w - 3.0F, y + 3.0F}, color, 2.0F);
+        drawList->AddTriangleFilled({x + 1.0F, y + h - 1.0F}, {x + 5.0F, y + h - 3.0F},
+                                    {x + 3.0F, y + h - 5.0F}, color);
+    }
+    else if (iconToken == "action.duplicate")
+    {
+        drawList->AddRect({x + 1.0F, y + 1.0F}, {x + w - 5.0F, y + h - 5.0F}, color, 1.0F, 0, 1.2F);
+        drawList->AddRect({x + 5.0F, y + 5.0F}, {x + w - 1.0F, y + h - 1.0F}, color, 1.0F, 0, 1.2F);
+    }
+    else if (iconToken == "action.delete")
+    {
+        drawList->AddRect({x + 4.0F, y + 5.0F}, {x + w - 4.0F, y + h - 1.0F}, color, 1.0F, 0, 1.3F);
+        drawList->AddLine({x + 2.0F, y + 4.0F}, {x + w - 2.0F, y + 4.0F}, color, 1.3F);
+        drawList->AddLine({x + 6.0F, y + 1.0F}, {x + w - 6.0F, y + 1.0F}, color, 1.3F);
+    }
+    else if (iconToken == "primitive.camera")
+    {
+        drawList->AddRect({x + 1.0F, y + 4.0F}, {x + w * 0.68F, y + h - 3.0F}, color, 2.0F, 0, 1.4F);
+        drawList->AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F},
+                              {x + w - 1.0F, y + h - 2.0F}, color, 1.4F);
+    }
+    else if (iconToken == "primitive.audio_source")
+    {
+        drawList->AddTriangleFilled({x + 1.0F, center.y}, {x + 6.0F, y + 4.0F}, {x + 6.0F, y + h - 4.0F}, color);
+        drawList->AddCircle(center, w * 0.30F, color, 16, 1.3F);
+        drawList->AddCircle(center, w * 0.48F, color, 16, 1.3F);
+    }
+    else if (iconToken.starts_with("primitive.light") || iconToken == "create.group.lights")
+    {
+        drawList->AddCircle(center, w * 0.27F, color, 16, 1.4F);
+        drawList->AddLine({center.x, y}, {center.x, y + 3.0F}, color, 1.2F);
+        drawList->AddLine({center.x, y + h - 3.0F}, {center.x, y + h}, color, 1.2F);
+        drawList->AddLine({x, center.y}, {x + 3.0F, center.y}, color, 1.2F);
+        drawList->AddLine({x + w - 3.0F, center.y}, {x + w, center.y}, color, 1.2F);
+    }
+    else if (iconToken == "primitive.sphere")
+    {
+        drawList->AddCircle(center, w * 0.43F, color, 18, 1.4F);
+        drawList->AddEllipse(center, {w * 0.18F, h * 0.43F}, color, 0.0F, 18, 1.0F);
+    }
+    else if (iconToken == "primitive.capsule")
+    {
+        drawList->AddRect({x + w * 0.25F, y + 1.0F}, {x + w * 0.75F, y + h - 1.0F}, color, w * 0.25F, 0, 1.4F);
+    }
+    else if (iconToken == "primitive.cylinder")
+    {
+        drawList->AddEllipse({center.x, y + 3.5F}, {w * 0.38F, 2.5F}, color, 0.0F, 16, 1.2F);
+        drawList->AddEllipse({center.x, y + h - 3.5F}, {w * 0.38F, 2.5F}, color, 0.0F, 16, 1.2F);
+        drawList->AddLine({x + w * 0.12F, y + 3.5F}, {x + w * 0.12F, y + h - 3.5F}, color, 1.2F);
+        drawList->AddLine({x + w * 0.88F, y + 3.5F}, {x + w * 0.88F, y + h - 3.5F}, color, 1.2F);
+    }
+    else if (iconToken == "primitive.cone")
+    {
+        drawList->AddTriangle({center.x, y + 1.0F}, {x + 2.0F, y + h - 3.0F}, {x + w - 2.0F, y + h - 3.0F}, color,
+                              1.4F);
+        drawList->AddEllipse({center.x, y + h - 3.0F}, {w * 0.38F, 2.0F}, color, 0.0F, 16, 1.0F);
+    }
+    else if (iconToken == "primitive.plane")
+    {
+        drawList->AddQuad({center.x, y + 2.0F}, {x + w - 1.0F, center.y}, {center.x, y + h - 2.0F},
+                          {x + 1.0F, center.y}, color, 1.4F);
+    }
+    else if (iconToken == "primitive.quad" || iconToken == "primitive.trigger_volume")
+    {
+        drawList->AddRect({x + 2.0F, y + 2.0F}, {x + w - 2.0F, y + h - 2.0F}, color, 1.0F, 0, 1.4F);
+    }
+    else
+    {
+        drawList->AddRect({x + 2.0F, y + 3.0F}, {x + w - 3.0F, y + h - 2.0F}, color, 1.0F, 0, 1.3F);
+        drawList->AddLine({x + 2.0F, y + 3.0F}, {center.x, y}, color, 1.1F);
+        drawList->AddLine({x + w - 3.0F, y + 3.0F}, {center.x, y}, color, 1.1F);
+    }
+}
+
+/** @copydoc ContextMenuSeparator */
+void ContextMenuSeparator()
+{
+    ImGui::Separator();
+}
+
+/** @copydoc DrawFloat3PropRow */
+Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id, std::array<float, 3> &value,
+                                           const Theme::Fonts &fonts, const float speed)
+{
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    constexpr float height = 32.0F;
+    constexpr float horizontalPadding = 14.0F;
+    const float labelWidth = std::clamp(width * 0.38F, 56.0F, 80.0F);
+
+    ImVec4 borderLight = Theme::Border();
+    borderLight.w = 0.5F;
+    ImGui::GetWindowDrawList()->AddLine({pos.x, pos.y + height - 1.0F}, {pos.x + width, pos.y + height - 1.0F},
+                                        ImGui::GetColorU32(borderLight), 1.0F);
+    ImDrawList *drawList = ImGui::GetWindowDrawList();
+    drawList->PushClipRect({pos.x + horizontalPadding, pos.y},
+                           {pos.x + horizontalPadding + labelWidth - 4.0F, pos.y + height}, true);
+    drawList->AddText(fonts.sans, fonts.sans->FontSize, {pos.x + horizontalPadding, pos.y + 8.0F},
+                      Theme::U32(Theme::Muted()), label);
+    drawList->PopClipRect();
+
+    const float controlWidth = std::max(1.0F, width - horizontalPadding * 2.0F - labelWidth);
+    ImGui::SetCursorScreenPos({pos.x + horizontalPadding + labelWidth, pos.y + 3.0F});
+    ImGui::PushID(id);
+    ImGui::PushItemWidth(controlWidth);
+    PushControlStyle();
+    Float3PropertyEditResult result;
+    {
+        Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+        result.changed = ImGui::DragFloat3("##value", value.data(), speed, 0.0F, 0.0F, "%.2f");
+        result.committed = ImGui::IsItemDeactivatedAfterEdit();
+    }
+    PopControlStyle();
+    ImGui::PopItemWidth();
+    ImGui::PopID();
+    ImGui::SetCursorScreenPos({pos.x, pos.y + height});
+    return result;
 }
 } // namespace Horo::Editor::Ui

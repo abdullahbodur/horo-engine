@@ -42,13 +42,13 @@ GUI actions, CLI commands, and MCP tools must use the same application-level
 operations. A capability must not be implemented independently in an ImGui
 callback, CLI handler, or MCP handler.
 
-Inside the graphical host, `EditorLayer` is the GUI composition root and
+Inside the graphical host, the application-owned `GuiScreenHost` is the GUI composition root and
 `EditorWorkspaceController` owns the active editor session. The controller
 coordinates the scene document, selection, viewport state, undo/redo commands,
 workspace persistence, and editor-local notifications. GUI panels and tabs do
 not become application-layer state authorities.
 
-`EditorModalHost`, also owned by `EditorLayer`, composes transient screen-like
+`EditorModalHost`, owned by application composition and borrowed by `GuiScreenHost`, composes transient screen-like
 workflows above the editor workspace. It owns modal focus and interaction
 exclusivity but not editor, project, build, or release state.
 
@@ -293,6 +293,8 @@ HoroEngine::NetworkRuntime
 HoroEngine::NetworkSockets
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
+HoroEngine::RenderModuleAbi
+HoroEngine::RenderModuleHost
 HoroEngine::RenderOpenGL
 HoroEngine::RenderNull
 HoroEngine::RenderVulkan
@@ -506,18 +508,28 @@ scene-runtime -----------+
                          |
 render-frontend ---------+---> render-api
                          |
+render-module-host ------+
+                         |
 render-opengl -----------+
 render-null -------------+
 render-vulkan -----------+
 
-apps ---> render-frontend + one selected renderer backend
+apps ---> render-frontend + render-module-host
 ```
 
 Backend selection occurs during host startup. Backend-specific handles,
 resources, headers, and system libraries remain private to the owning backend.
 Renderer backends implement `RenderApi` contracts and do not depend on
-`RenderFrontend`. The application composition root constructs the selected
-backend and supplies its API capability to the frontend.
+`RenderFrontend`. Installed product composition resolves one independently
+installed, verified, ABI-compatible, successfully probed renderer component;
+`RenderModuleHost` loads its exact path and adapts it into the in-process render
+registry. Development and test hosts may link a backend directly without making
+that static path the installed-product architecture.
+
+Renderer component lifecycle follows
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md).
+Equal backend behavior follows
+[Render Backend Parity Contract](../runtime/render-backend-parity-contract.md).
 
 The null renderer is a supported implementation for headless execution and
 tests.
@@ -532,7 +544,7 @@ credential storage, and graphics-context bootstrapping are platform-owned
 responsibilities.
 
 Foundation, assets, pipeline, and headless application use cases remain usable
-without SDL2, OpenGL, or ImGui unless their explicit operation contract requires
+without SDL3, OpenGL, or ImGui unless their explicit operation contract requires
 one of those capabilities.
 
 Filesystem, process, window, event, clock, dialog, credential, and crash-service

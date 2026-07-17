@@ -410,13 +410,15 @@ void RunCreate(const std::shared_ptr<ProjectCreationServiceState> &state,
         return;
     }
     LOG_DEBUG("editor.project_creation",
-              "Writing metadata files (.horo/project.json, .horo/plugins.json). ProjectId: '%s'",
+              "Writing metadata files (.horo/project.json, .horo/plugins.json, .horo/input.json). ProjectId: '%s'",
               operation->snapshot.projectId.c_str());
     std::filesystem::create_directories(staging / ".horo", error);
     if (error ||
         !WriteDurableFile(staging / ".horo/project.json", ProjectJson(request, operation->snapshot.projectId)) ||
         !WriteDurableFile(staging / ".horo/plugins.json",
-                          "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n"))
+                          "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n") ||
+        !WriteDurableFile(staging / ".horo/input.json",
+                          "{\n  \"schemaVersion\": 1,\n  \"profileId\": \"project-default\",\n  \"overrides\": []\n}\n"))
     {
         cleanup();
         SetFailure(state, operation, ProjectCreationErrorCode::WriteFailed,

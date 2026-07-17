@@ -46,18 +46,6 @@ struct SettingsState
         int orbitSensitivity = 100;
         int panSensitivity = 100;
         bool invertOrbitY = false;
-        static constexpr int kMaxShortcuts = 16;
-        struct ShortcutBinding
-        {
-            std::string keys;
-            bool conflict = false;
-        };
-        ShortcutBinding shortcuts[kMaxShortcuts];
-        int shortcutCount = 0;
-        int listeningShortcut = -1;
-        static constexpr const char *kShortcutActions[] = {"Save Scene", "Undo",      "Build & Release", "Find",
-                                                           "Replace",    "Duplicate", "Delete",          "Select All"};
-        static constexpr int kShortcutActionCount = static_cast<int>(std::size(kShortcutActions));
     } input;
     struct RenderingTab
     {

@@ -2,21 +2,10 @@
 
 ## Status
 
-The Hierarchy panel currently owns an in-memory mock tree. It deliberately does
-not create scene entities or mutate the project document. This phase validates
-the component contract and editor interaction model before scene integration.
-
-The initial mock tree mirrors `editor-workspace.html`:
-
-- Room
-  - floor 000 (`Mesh`)
-  - wall north (`Mesh`)
-  - wall south (`Mesh`)
-  - player spawn (`Empty`)
-- Lighting
-  - sun directional (`Light`)
-- Cameras
-  - main camera (`Camera`)
+The Hierarchy panel is a read-only projection of the authoritative
+`SceneDocument`. Selection and mutations route through typed editor models and
+document commands. `HierarchyModel` retains only presentation ownership,
+expansion, filtering, and deterministic model-test fixtures.
 
 ## Data and Ownership
 
@@ -49,7 +38,8 @@ The panel is a single Hierarchy tab. The tree content contains:
 2. rows with 14 px indentation per depth;
 3. branch guides and expand/collapse chevrons;
 4. a selection fill with a 2 px accent edge;
-5. right-aligned category pills for `Mesh`, `Empty`, `Light`, and `Camera`;
+5. localized right-aligned category pills for `Mesh`, `Empty`, `Light`,
+   `Camera`, `Volume`, and `Audio`;
 6. a scrollable root drop area below the visible rows.
 
 Search is ASCII case-insensitive. A match keeps its complete ancestor path
@@ -64,7 +54,12 @@ mesh uses success, light warning, camera accent, and empty muted.
 
 - Left click selects a node.
 - Clicking a node's chevron toggles its expanded state.
-- Right click opens Rename, Move to Root, and Delete actions.
+- Right click selects the row and opens Create, Rename, Duplicate, and Delete.
+- `Create` is catalog-generated with Empty Object, 3D Objects, Cameras, Lights,
+  Volumes, and Audio groups. It creates below the clicked row.
+- Right click in empty hierarchy space exposes Create at the document root.
+- `Game Object -> Create` uses the same catalog tree and creates below the
+  current selection, or at the document root when selection is empty.
 - `F2` renames the selected node.
 - `Delete`, or `Cmd+Backspace` on macOS, deletes the selected subtree.
 - `Enter` commits inline rename; `Escape` cancels it.
@@ -82,29 +77,30 @@ providing exact between-sibling ordering. Exact ordering belongs to the future
 scene command/undo integration and must not be represented as an index-only UI
 mutation.
 
-## Scene Integration Plan
+## Scene Integration Status
 
-The mock model is a temporary composition root. Scene integration should retain
-the visual and mutation contracts while replacing direct panel-owned mutation:
+`HierarchyPanel` rebuilds its read-only presentation model from the active
+`SceneDocument` projection using stable `SceneObjectId` values. Rename, duplicate,
+and delete are typed document commands; committed changes publish document
+notifications and participate in semantic undo/redo. Hierarchy and viewport
+picking both write through `EditorSelectionModel`, while Inspector reads the same
+authoritative selection. Catalog creation commits through
+`CreateSceneObjectUseCase`, produces one semantic undo entry, selects the new
+object, and expands its ancestor path. The former Room/Lighting/Cameras mock
+remains only as a deterministic model-test fixture.
 
-1. Introduce a read-only hierarchy snapshot/adapter sourced from the active
-   `SceneDocument`, using authoritative scene object IDs.
-2. Convert rename, delete, and reparent into typed editor commands handled by
-   the document controller.
-3. Make delete and reparent commands undoable transactions. Delete must capture
-   the serialized subtree needed for restoration.
-4. Validate scene-specific constraints in the controller: protected roots,
-   prefab boundaries, locked objects, cross-scene references, and transform
-   preservation policy.
-5. Decide reparent transform semantics explicitly. The default editor behavior
-   should preserve world transform unless the command requests local-transform
-   preservation.
-6. Publish document-change events and rebuild/incrementally update the snapshot;
-   the panel must not mutate scene storage directly.
-7. Synchronize hierarchy selection with the viewport and Inspector through the
-   authoritative editor selection service.
-8. Add exact sibling insertion/reordering with stable order keys or typed
+The remaining hierarchy integration work is:
+
+1. Convert reparent into a typed, undoable document command instead of restoring
+   panel-local tree mutation.
+2. Validate protected roots, prefab boundaries, locked objects, cross-scene
+   references, and transform preservation policy in the controller.
+3. Preserve world transform by default when reparenting unless the command
+   explicitly requests local-transform preservation.
+4. Add exact sibling insertion/reordering with stable order keys or typed
    indices resolved by the document controller.
+5. Profile large scenes before replacing full revision-based projection rebuilds
+   with incremental invalidation or row virtualization.
 
 Public scene APIs should not depend on ImGui, badge colors, search buffers, or
 panel-local expansion state. Expansion and search remain presentation state;
