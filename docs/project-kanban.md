@@ -11,7 +11,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor | İncelenecek                                                                                                                                                                                                                                                                                                                          | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Bağımlı                                                                                                                                                                                                                | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| —         | [FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001) | [RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
+| —         | [FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001) | [AST-001 · Asset pipeline temeli](#ast-001)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
 
 ## Durum Sözleşmesi
 
@@ -37,20 +37,22 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 ## Genel Durum Özeti
 
-17 Temmuz 2026 repository denetiminde aktif CMake yüzeyi Foundation, Platform,
+18 Temmuz 2026 itibarıyla aktif CMake yüzeyi Foundation, Platform, Runtime,
 Input, Scene Model, Render API/Frontend, OpenGL, Metal, Editor Model ve Editor
-GUI ağırlıklıdır. Skeleton doğrulamasındaki 47 testin tamamı geçmiştir. Buna
-karşılık runtime lifecycle, frame, assets, physics, audio, networking, game UI,
-CLI/MCP, gameplay, extensions, packages, observability, release ve security
-klasörlerinin çoğu şu an boş placeholder dosyalardır. Bu nedenle proje güçlü bir
-editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değildir.
+GUI katmanlarını kapsar. Runtime lifecycle ve frame scheduler artık graphical
+HoroEditor ile null-renderer headless test hostunun ortak kontratıdır. Runtime
+scene Phase 1; immutable definition, ownership ve editor viewport tüketimini ekler.
+Assets, tam ECS, physics, audio, networking, game UI, CLI/MCP, gameplay,
+extensions, packages, observability, release ve security alanlarının çoğu hâlâ
+placeholder veya sonraki ticket kapsamındadır.
 
 Önerilen temel ilerleme sırası:
 
 1. [ARC-001](#arc-001), [EDT-001](#edt-001) ve [RND-001](#rnd-001) ile mevcut
    local dilimi stabilize et.
-2. [RUN-001](#run-001) ve [SCN-001](#scn-001) ile gerçek runtime omurgasını kur.
-3. [AST-001](#ast-001) ve [MAT-001](#mat-001) ile editor viewport verisini gerçek
+2. [SCN-001](#scn-001) canonical doğrulamasını kapatırken [AST-001](#ast-001)
+   provider ve registry temelini başlat.
+3. [AST-001](#ast-001) entegrasyonu ve [MAT-001](#mat-001) ile editor viewport verisini gerçek
    asset/resource akışına bağla.
 4. Editor authoring ve persistence ticketlarını kapat.
 5. Gameplay, physics ve audio gibi bağımlı sistemleri ancak bu omurgadan sonra aç.
@@ -229,15 +231,22 @@ editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değild
 
 ### RUN-001 — Runtime lifecycle ve frame scheduler
 
-- **Durum:** Hazır
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Startup, fixed update, variable update, render extraction,
   presentation, suspend/resume ve ters sırada shutdown için gerçek runtime
   omurgasını oluştur.
 - **Kabul:** Headless ve graphical host aynı lifecycle kontratını compose eder;
-  cancellation ve partial initialization normal yollar olarak test edilir.
+  cancellation, partial initialization, bounded catch-up, suspend/resume,
+  presentation gate ve allocation-free scheduler success path test edilir.
 - **Mimari:** [Runtime Lifecycle](./architecture/runtime/runtime-lifecycle.md).
-- **Mevcut boşluk:** `src/runtime/lifecycle/` ve `src/runtime/frame/` placeholder.
+- **Alt işler:** RUN-001A zaman/phase kontratları; RUN-001B lifecycle/rollback;
+  RUN-001C scheduler invariant'ları; RUN-001D graphical/headless entegrasyon —
+  tamamı kapandı.
+- **Kanıt:** `HoroEngine::Runtime`, HoroEditor runtime participant'ı,
+  null-renderer test hostu ve `HoroRuntimeLifecycleTests`.
+- **Son doğrulama:** 2026-07-18 — canonical Windows Debug 44/44 ve GUI-off
+  37/37 geçti; `HoroEditor --exit-after-first-frame` OpenGL smoke geçti.
 
 [↑ Kanbana dön](#kanban)
 
@@ -245,15 +254,28 @@ editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değild
 
 ### SCN-001 — Scene runtime ve ECS temeli
 
-- **Durum:** Hazır
+- **Durum:** İncelenecek
 - **Öncelik:** P0
-- **Özet:** Authored scene document'ten bağımsız entity/component/system runtime,
-  structural command buffer, stable references ve scene transition sözleşmesini
-  hayata geçir.
-- **Kabul:** Runtime scene ownership açık; editor snapshot doğrudan runtime mutable
-  storage değildir; load/unload ve invalid reference testleri vardır.
+- **Özet:** Authored scene document'ten bağımsız immutable definition, runtime
+  ownership, generation-checked identity, transactional transition ve dar
+  structural command sınırını hayata geçir.
+- **Kabul:** Runtime scene ownership açık; editor viewport aktif
+  `RuntimeSceneView` değerini gerçek kaynak olarak tüketir; load/unload,
+  replacement, atomic structural mutation, stale reference ve allocation-free
+  steady-state testleri vardır.
+- **Alt işler:** SCN-001A immutable definition/conversion; SCN-001B identity,
+  storage ve retirement; SCN-001C lifecycle/structural boundary; SCN-001D editor
+  viewport migration — tamamı uygulanmıştır.
+- **Kanıt:** `HoroEngine::RuntimeScene`, `RuntimeSceneService`,
+  `HoroRuntimeSceneTests` ve runtime-backed editor extraction/picking/controller
+  testleri.
 - **Mimari:** [Scene Runtime](./architecture/runtime/scene-runtime.md).
-- **Bağımlılık:** [RUN-001](#run-001) ile paralel dar kontrat tasarlanabilir.
+- **Bağımlılık:** [RUN-001](#run-001). AST-001A identity kontratları üzerinden
+  başlayabilir; AST-001B bu ticket'ın kapanmasını bekler.
+- **Son doğrulama:** 2026-07-18 — Windows Debug'ta RuntimeScene ve
+  runtime-backed editor testleri 5/5, GUI-off kontrat matrisi 4/4 ve OpenGL
+  first-frame smoke geçti. Canonical tam build, çalışma ağacındaki kapsam dışı
+  Foundation constexpr test derleme hataları nedeniyle henüz kapanmadı.
 
 [↑ Kanbana dön](#kanban)
 
@@ -268,6 +290,10 @@ editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değild
 - **Kabul:** Source path runtime identity değildir; malformed input, cache miss,
   cancellation ve atomic publish test edilir; headless cook mümkündür.
 - **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md).
+- **Alt işler:** AST-001A stable asset ID/provider/registry kontratı SCN-001 ile
+  paralel başlayabilir; AST-001B runtime-scene resolution için SCN-001'i bekler.
+- **Bağımlılık:** AST-001A için [RUN-001](#run-001); AST-001B için
+  [SCN-001](#scn-001) ve AST-001A.
 - **Mevcut boşluk:** `src/runtime/assets/` placeholder.
 
 [↑ Kanbana dön](#kanban)
@@ -283,7 +309,7 @@ editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değild
 - **Kabul:** Primitive enum'u shader/pipeline seçimine sızmaz; OpenGL ve Metal
   aynı material parametrelerini çözer; invalid binding typed diagnostic üretir.
 - **Mimari:** [Material and Shader Model](./architecture/runtime/material-and-shader-model.md).
-- **Bağımlılık:** [AST-001](#ast-001), [RND-001](#rnd-001).
+- **Bağımlılık:** AST-001B, [RND-001](#rnd-001).
 
 [↑ Kanbana dön](#kanban)
 
@@ -428,7 +454,8 @@ editor/rendering dikey dilimine sahip olsa da henüz bütün bir runtime değild
 - **Kabul:** Play sırasında authored document istemeden değişmez; stop temiz
   rollback yapar; behavior callbacks ve structural changes deterministiktir.
 - **Mimari:** [Gameplay Runtime Integration](./architecture/extensions/gameplay-runtime-integration.md).
-- **Bağımlılık:** [RUN-001](#run-001), [SCN-001](#scn-001), [PRJ-001](#prj-001).
+- **Bağımlılık:** [RUN-001](#run-001), [SCN-001](#scn-001), AST-001B,
+  [MAT-001](#mat-001), [PRJ-001](#prj-001).
 
 [↑ Kanbana dön](#kanban)
 

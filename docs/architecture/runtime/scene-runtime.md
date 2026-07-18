@@ -18,6 +18,41 @@ serialization boundaries, and runtime references.
 - Persistent files store stable logical IDs, never runtime addresses or handles.
 - Scene transitions are transactional and generation-aware.
 
+## SCN-001 Phase 1 Contract
+
+The implemented Phase 1 surface is the backend-neutral
+`HoroEngine::RuntimeScene` target. It depends only on Foundation and Runtime;
+it does not depend on editor documents, renderer backends, assets, physics, or
+GUI types.
+
+Phase 1 deliberately stops short of a complete ECS. It provides:
+
+- immutable, validated `RuntimeSceneDefinition` values
+- owner-thread `RuntimeScene` storage and allocation-free borrowed views
+- `EntityRef { SceneRuntimeId, EntityId }` stale-reference validation
+- transactional activation, replacement, unload, and structural command batches
+- deferred `Create(RuntimeEntityCreateInfo)` and `Destroy(EntityRef)`
+- editor preview extraction from the active runtime scene.
+
+Every create command supplies the complete initial transform, optional existing
+parent, optional authored identity, primitive descriptor, and initial typed
+component set. Component add/remove, reparent, system scheduling, and parallel
+iteration remain future ECS work.
+
+Scene activation and structural batches commit only during
+`CommitDeferredLifecycleChanges`. A candidate is prepared without touching the
+active scene; a failed preparation or structural batch preserves the active
+scene. Only one transition or structural batch may be pending at a time.
+
+Entity generations start at one. Destroyed slots are reused in deterministic
+LIFO order after incrementing the generation. A slot at the configured maximum
+generation is retired permanently; generations never wrap and therefore cannot
+make an ancient reference valid again.
+
+The steady-state path with no pending transition or structural batch performs no
+scene-owned heap allocation. Definition building, candidate preparation,
+activation, and structural mutation are load/mutation paths and may allocate.
+
 ## Model Boundary
 
 ```text
@@ -101,26 +136,25 @@ activation and are driven by declared scene phases.
 
 ## Structural Changes
 
-Entity creation, destruction, and component topology changes requested while
-systems iterate are recorded in a command buffer:
+Phase 1 records entity creation and destruction in an owner-thread command
+buffer:
 
 ```cpp
 class SceneCommandBuffer {
 public:
-    DeferredEntity Create();
-    void Destroy(EntityId entity);
-
-    template<typename ComponentT>
-    void Add(EntityId entity, ComponentT value);
-
-    template<typename ComponentT>
-    void Remove(EntityId entity);
+    DeferredEntity Create(RuntimeEntityCreateInfo initialState);
+    void Destroy(EntityRef entity);
 };
 ```
 
-The runtime commits structural changes at declared synchronization points.
-Systems may update existing component values directly only when their access
-declaration permits it.
+The runtime applies the full batch transactionally at
+`CommitDeferredLifecycleChanges`. A create token resolves to an `EntityRef`
+only through a successful `StructuralCommitResult`. References to another
+deferred entity in the same batch are not supported in Phase 1.
+
+Component add/remove, reparent, and direct system-owned component writes require
+the later ECS access/scheduling contract. They are not silently emulated by the
+Phase 1 storage API.
 
 ## System Contract
 
@@ -239,6 +273,19 @@ sessions consume converted definitions.
 Runtime notifications may update editor presentation through the explicit
 engine-to-editor bridge. They do not mutate the authoring document unless an
 editor command explicitly applies a change.
+
+In Phase 1 each committed editor document revision is converted to a new
+definition and fully reactivated. Gizmo drag state is an editor-owned render
+overlay; cancel removes the overlay and commit first updates the document. The
+new transform becomes authoritative only when the replacement scene reaches the
+lifecycle commit boundary, so the viewport observes it on the following frame.
+
+Render extraction and picking finish against the old active scene before a
+replacement commit. Picking results carry their source `SceneRuntimeId` and are
+discarded when that ID no longer matches the active runtime. Editor selection is
+owned as logical `SceneObjectId`: it resolves to the replacement scene when the
+object remains and is cleared when the authored object was deleted. Editor state
+does not retain an old runtime's `EntityRef`.
 
 ## Data Bus Relationship
 

@@ -19,7 +19,7 @@ void StringsContainingVisibleCharactersAreNotBlank()
 
 void CharactersWithNegativePlainCharValuesAreHandledSafely()
 {
-    const std::string value(1, static_cast<char>(0xFF));
+    constexpr std::string value(1, static_cast<char>(0xFF));
     assert(!Horo::Text::IsBlank(value));
 }
 }

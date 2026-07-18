@@ -110,7 +110,7 @@ void CommitPublishesOnlyBoundedChangeMetadata()
 void JsonSerializationAndDeserialization()
 {
     Horo::ConfigurationService service = BuildService();
-    const std::string json = R"json({
+    constexpr std::string json = R"json({
   "revision": 0,
   "values": {
     "editor.theme.active": "solarized",
@@ -131,7 +131,7 @@ void JsonSerializationAndDeserialization()
 void FilePersistence()
 {
     Horo::ConfigurationService service = BuildService();
-    const std::string testPath = "test_config_persistence.json";
+    constexpr std::string testPath = "test_config_persistence.json";
     Horo::ConfigurationDraft draft{.baseRevision = 0};
     draft.proposedValues.emplace(Horo::SettingKey{"editor.theme.active"}, std::string{"dark_pro"});
     assert(service.Commit(draft).HasValue());

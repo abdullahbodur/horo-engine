@@ -26,8 +26,8 @@ void ProjectPathRejectsRootEscape()
 
 void TypedHandlesRejectDifferentResourceTags()
 {
-    const Horo::Handle<TextureTag> texture{.index = 4, .generation = 9};
-    const Horo::Handle<MeshTag> mesh{.index = 4, .generation = 9};
+    constexpr Horo::Handle<TextureTag> texture{.index = 4, .generation = 9};
+    constexpr Horo::Handle<MeshTag> mesh{.index = 4, .generation = 9};
     assert(texture.IsValid());
     assert(mesh.IsValid());
     static_assert(!std::is_same_v<decltype(texture), decltype(mesh)>);
@@ -35,16 +35,20 @@ void TypedHandlesRejectDifferentResourceTags()
 
 void DefaultHandleIsInvalid()
 {
-    const Horo::Handle<TextureTag> handle{};
+    constexpr Horo::Handle<TextureTag> handle{};
     assert(!handle.IsValid());
 }
 
 void MonotonicDurationUsesSteadyClockDuration()
 {
-    const Horo::Duration duration = Horo::Duration::FromMilliseconds(25);
+    constexpr Horo::Duration duration = Horo::Duration::FromMilliseconds(25);
     assert(duration.ToMilliseconds() == 25);
-    const Horo::Duration sum = duration + Horo::Duration::FromMilliseconds(5);
+    constexpr Horo::Duration sum = duration + Horo::Duration::FromMilliseconds(5);
     assert(sum.ToMilliseconds() == 30);
+    constexpr Horo::Duration precise = Horo::Duration::FromNanoseconds(16'666'667);
+    assert(precise.ToNanoseconds() == 16'666'667);
+    assert((sum - duration).ToMilliseconds() == 5);
+    assert(precise > Horo::Duration{});
 }
 
 } // namespace

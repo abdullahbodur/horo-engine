@@ -158,6 +158,14 @@ namespace Horo
         Duration m_now;
     };
 
+    /** @brief Production monotonic clock backed by std::chrono::steady_clock. */
+    class SteadyClock final : public Clock
+    {
+    public:
+        /** @copydoc Clock::MonotonicNow */
+        [[nodiscard]] Duration MonotonicNow() const override;
+    };
+
     /** @brief Headless process adapter that exposes no process identity or environment variables. */
     class NullProcessService final : public ProcessService
     {

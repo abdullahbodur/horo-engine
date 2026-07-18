@@ -7,7 +7,7 @@
 
 #include "Horo/Foundation/Result.h"
 #include "Horo/Math/SceneMath.h"
-#include "Horo/Runtime/Scene/PrimitiveMesh.h"
+#include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 
 #include <cstdint>
 #include <memory>

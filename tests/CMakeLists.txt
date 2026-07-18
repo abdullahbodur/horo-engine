@@ -415,6 +415,26 @@ target_link_libraries(HoroRenderFrontendTests
 
 add_test(NAME HoroRenderFrontendTests COMMAND HoroRenderFrontendTests)
 
+add_executable(HoroRuntimeLifecycleTests
+    unit/runtime/lifecycle/RuntimeLifecycleTests.cpp
+)
+target_compile_features(HoroRuntimeLifecycleTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeLifecycleTests
+    PRIVATE
+        HoroEngine::Runtime
+        HoroEngine::Platform
+        HoroEngine::RenderFrontend
+        HoroEngine::RenderNull
+)
+add_test(NAME HoroRuntimeLifecycleTests COMMAND HoroRuntimeLifecycleTests)
+
+add_executable(HoroRuntimeSceneTests
+    unit/runtime/scene/RuntimeSceneTests.cpp
+)
+target_compile_features(HoroRuntimeSceneTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSceneTests PRIVATE HoroEngine::RuntimeScene)
+add_test(NAME HoroRuntimeSceneTests COMMAND HoroRuntimeSceneTests)
+
 if(HORO_BUILD_RENDER_OPENGL)
     add_executable(HoroRenderOpenGLTests
         unit/runtime/renderer/OpenGLRenderBackendTests.cpp

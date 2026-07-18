@@ -82,7 +82,7 @@ constexpr std::size_t kMaximumBackendIdBytes = 64;
             MakeMetadataError(ProjectMetadataErrors::NotFound, "Unable to open " + metadataPath.string() + '.'));
     }
 
-    std::string contents(static_cast<std::size_t>(byteCount), '\0');
+    std::string contents(byteCount, '\0');
     input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
     if (input.gcount() != static_cast<std::streamsize>(contents.size()) || input.bad())
     {

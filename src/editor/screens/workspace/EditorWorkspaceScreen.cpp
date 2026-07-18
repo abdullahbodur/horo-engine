@@ -38,7 +38,8 @@ namespace Horo::Editor
                                                                   Input::InputContextKind::EditorWorkspace)),
                   view_(context_, registry_, services.Get<std::uintptr_t>(), inputRouter_, workspaceInputContext_),
                   viewportRenderer_(services.TryGet<IEditorViewportRenderer>()),
-                  viewportSceneState_(services.Get<EditorViewportSceneState>())
+                  viewportSceneState_(services.Get<EditorViewportSceneState>()),
+                  runtimeScene_(services.Get<Runtime::RuntimeSceneService>())
             {
             }
 
@@ -56,7 +57,7 @@ namespace Horo::Editor
                     projectRoot = params.projectRoot;
                 }
 
-                controller_ = std::make_unique<EditorWorkspaceController>(std::move(projectRoot));
+                controller_ = std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
                 viewportSceneState_.Replace(controller_->ViewportScene());
                 publishedSceneRevision_ = controller_->ViewportScene().documentRevision;
@@ -77,6 +78,7 @@ namespace Horo::Editor
             {
                 if (controller_)
                 {
+                    controller_->SynchronizeRuntimeScenePreview();
                     controller_->UpdateFps(ImGui::GetIO().Framerate);
                 }
             }
@@ -395,6 +397,7 @@ namespace Horo::Editor
             EditorWorkspaceView view_;
             IEditorViewportRenderer* viewportRenderer_{nullptr};
             EditorViewportSceneState& viewportSceneState_;
+            Runtime::RuntimeSceneService& runtimeScene_;
             DocumentRevision publishedSceneRevision_{};
             SelectionRevision publishedSelectionRevision_{};
             ViewportRevision publishedViewportRevision_{};

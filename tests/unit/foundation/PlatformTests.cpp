@@ -67,7 +67,7 @@ void PlatformCapabilitiesReportOptionalServiceAvailability()
     Horo::DeterministicClock clock;
     Horo::NullProcessService processes;
     Horo::StaticUserDirectories directories({});
-    const Horo::PlatformCapabilities capabilities{
+    constexpr Horo::PlatformCapabilities capabilities{
         .supportsProcessExecution = false,
         .hasCredentialStore = false,
         .hasNativeDialogs = false,
@@ -95,6 +95,14 @@ void DeterministicAdaptersProvideStableClockAndPaths()
     assert(!files.Exists("/test/missing"));
 }
 
+void SteadyClockIsMonotonic()
+{
+    const Horo::SteadyClock clock;
+    const Horo::Duration first = clock.MonotonicNow();
+    const Horo::Duration second = clock.MonotonicNow();
+    assert(second >= first);
+}
+
 } // namespace
 
 int main()
@@ -102,5 +110,6 @@ int main()
     PlatformServicesUseExplicitlyInjectedBaselineServices();
     PlatformCapabilitiesReportOptionalServiceAvailability();
     DeterministicAdaptersProvideStableClockAndPaths();
+    SteadyClockIsMonotonic();
     return 0;
 }

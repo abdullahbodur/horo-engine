@@ -1,4 +1,5 @@
 #include "editor/document/SceneDocument.h"
+#include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "editor/project_model/EditorModelErrors.h"
 
 #include <algorithm>

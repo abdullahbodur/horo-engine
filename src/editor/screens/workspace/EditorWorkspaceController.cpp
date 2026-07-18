@@ -3,6 +3,7 @@
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "editor/document/EditorViewportPicking.h"
+#include "editor/document/RuntimeSceneConversion.h"
 
 namespace Horo::Editor
 {
@@ -211,7 +212,8 @@ namespace Horo::Editor
         }
     } // namespace
 
-    EditorWorkspaceController::EditorWorkspaceController(std::string projectRoot)
+    EditorWorkspaceController::EditorWorkspaceController(std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene)
+        : m_runtimeScene(runtimeScene)
     {
         m_viewModel.projectRoot = std::move(projectRoot);
         m_viewModel.panelDockAreas = {
@@ -307,7 +309,7 @@ namespace Horo::Editor
             if (cmd.viewportPickPayload.has_value())
             {
                 const ViewportPickRequest& request = *cmd.viewportPickPayload;
-                const Result<std::optional<SceneObjectId>> picked = PickEditorViewportScene(
+                const Result<EditorViewportPickResult> picked = PickEditorViewportScene(
                     m_viewportScene, EditorViewportPickQuery{request.normalizedX, request.normalizedY, request.aspect});
                 if (picked.HasError())
                 {
@@ -315,19 +317,22 @@ namespace Horo::Editor
                               picked.ErrorValue().message.c_str());
                     break;
                 }
-                if (picked.Value().has_value())
+                const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+                if (!active || picked.Value().runtimeScene != active->RuntimeId())
                 {
-                    const Result<void> selected = m_selection.SetObjects({*picked.Value()}, *picked.Value());
+                    LOG_WARN("editor.viewport_picking", "Discarded a stale runtime-scene pick result.");
+                    break;
+                }
+                if (picked.Value().object)
+                {
+                    const SceneObjectId object = *picked.Value().object;
+                    const Result<void> selected = m_selection.SetObjects({object}, object);
                     if (selected.HasError())
-                    {
                         LOG_ERROR("editor.selection", "Viewport selection failed: %s",
                                   selected.ErrorValue().message.c_str());
-                    }
                 }
                 else
-                {
                     m_selection.Clear();
-                }
                 RefreshSelectionProjection();
             }
             break;
@@ -774,9 +779,11 @@ namespace Horo::Editor
 
     void EditorWorkspaceController::PreviewObjectTransform(const SceneObjectId object, const Math::Transform& transform)
     {
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId()) return;
         const SceneObjectTransformPreview preview{object, transform};
         const std::optional<SceneObjectTransformPreview> previousPreview = m_viewport.Current().transformPreview;
-        Result<void> applied = ApplyEditorViewportTransformPreview(m_document.Objects(), preview, m_viewportScene);
+        Result<void> applied = ApplyEditorViewportTransformPreview(*active, preview, m_viewportScene);
         if (applied.HasError())
         {
             LOG_ERROR("editor.viewport", "Transform preview failed: %s", applied.ErrorValue().message.c_str());
@@ -786,7 +793,7 @@ namespace Horo::Editor
         if (committed.HasError())
         {
             const Result<void> restored =
-                ApplyEditorViewportTransformPreview(m_document.Objects(), previousPreview, m_viewportScene);
+                ApplyEditorViewportTransformPreview(*active, previousPreview, m_viewportScene);
             if (restored.HasError())
             {
                 LOG_ERROR("editor.viewport", "Transform preview rollback failed: %s",
@@ -803,7 +810,9 @@ namespace Horo::Editor
         {
             return;
         }
-        const Result<void> restored = ApplyEditorViewportTransformPreview(m_document.Objects(), {}, m_viewportScene);
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId()) return;
+        const Result<void> restored = ApplyEditorViewportTransformPreview(*active, {}, m_viewportScene);
         if (restored.HasError())
         {
             LOG_ERROR("editor.viewport", "Transform preview cancellation failed: %s",
@@ -853,16 +862,76 @@ namespace Horo::Editor
         m_viewModel.isDirty = m_document.IsDirty();
         m_viewModel.canUndo = m_history.CanUndo();
         m_viewModel.canRedo = m_history.CanRedo();
+        QueueRuntimeScene(documentSnapshot);
+        RefreshSelectionProjection();
+    }
+
+    void EditorWorkspaceController::QueueRuntimeScene(SceneDocumentSnapshot snapshot)
+    {
+        if (snapshot.state.value == m_activeRuntimeRevision.value ||
+            snapshot.state.value == m_queuedDefinitionRevision.value ||
+            (m_deferredRuntimeSnapshot && m_deferredRuntimeSnapshot->state == snapshot.state))
+            return;
+
+        Result<Runtime::RuntimeSceneDefinition> definition =
+            ConvertSceneDocumentToRuntime(snapshot, m_previewSceneId);
+        if (definition.HasError())
+        {
+            LOG_ERROR("editor.runtime_scene", "Scene conversion failed: %s",
+                      definition.ErrorValue().message.c_str());
+            return;
+        }
+        Result<std::unique_ptr<Runtime::RuntimeScene>> candidate =
+            m_runtimeScene.Prepare(definition.Value());
+        if (candidate.HasError())
+        {
+            LOG_ERROR("editor.runtime_scene", "Scene preparation failed: %s",
+                      candidate.ErrorValue().message.c_str());
+            return;
+        }
+        const Result<void> queued = m_runtimeScene.QueueActivation(std::move(candidate).Value());
+        if (queued.HasError())
+        {
+            m_deferredRuntimeSnapshot = std::move(snapshot);
+            return;
+        }
+        m_queuedRuntimeRevision = snapshot.revision;
+        m_queuedDefinitionRevision = Runtime::SceneDefinitionRevision{snapshot.state.value};
+    }
+
+    void EditorWorkspaceController::SynchronizeRuntimeScenePreview()
+    {
+        if (std::optional<Error> operationError = m_runtimeScene.TakeOperationError())
+            LOG_ERROR("editor.runtime_scene", "Runtime scene operation failed: %s",
+                      operationError->message.c_str());
+
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active || active->DefinitionRevision() == m_activeRuntimeRevision)
+            return;
+
         Result<EditorViewportSceneSnapshot> extracted =
-            ExtractEditorViewportScene(documentSnapshot, m_viewport.Current().camera, m_primitiveMeshCache);
+            ExtractEditorViewportScene(*active, m_queuedRuntimeRevision,
+                                       m_viewport.Current().camera, m_primitiveMeshCache);
         if (extracted.HasError())
         {
-            LOG_ERROR("editor.viewport", "Scene extraction failed: %s", extracted.ErrorValue().message.c_str());
-            RefreshSelectionProjection();
+            LOG_ERROR("editor.viewport", "Runtime scene extraction failed: %s",
+                      extracted.ErrorValue().message.c_str());
             return;
         }
         m_viewportScene = std::move(extracted).Value();
+        m_activeRuntimeRevision = active->DefinitionRevision();
+        if (m_queuedDefinitionRevision == m_activeRuntimeRevision)
+            m_queuedDefinitionRevision = {};
+        m_selection.Reconcile();
         RefreshSelectionProjection();
+
+        if (m_deferredRuntimeSnapshot &&
+            m_deferredRuntimeSnapshot->state.value != m_activeRuntimeRevision.value)
+        {
+            SceneDocumentSnapshot deferred = std::move(*m_deferredRuntimeSnapshot);
+            m_deferredRuntimeSnapshot.reset();
+            QueueRuntimeScene(std::move(deferred));
+        }
     }
 
     void EditorWorkspaceController::RefreshSelectionProjection()
@@ -873,10 +942,11 @@ namespace Horo::Editor
         m_viewModel.primarySelectionWorldTransform.reset();
         m_viewModel.primarySelectionParentWorldTransform.reset();
         m_viewModel.primarySelectionWorldBounds.reset();
-        if (selection.primary.has_value())
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (selection.primary && active && m_viewportScene.runtimeSceneId == active->RuntimeId())
         {
             const Result<SceneObjectWorldTransforms> transforms =
-                ResolveSceneObjectWorldTransforms(m_document.Snapshot(), *selection.primary);
+                ResolveSceneObjectWorldTransforms(*active, *selection.primary);
             if (transforms.HasValue())
             {
                 m_viewModel.primarySelectionWorldTransform = transforms.Value().localToWorld;

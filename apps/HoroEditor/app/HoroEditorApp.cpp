@@ -25,6 +25,8 @@
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Platform.h"
+#include "Horo/Runtime/RuntimeHost.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/Input.h"
 #include "runtime/input/sdl/SdlInputBackend.h"
@@ -86,14 +88,11 @@
 #include <unistd.h>
 #endif
 
-namespace Horo::Editor
-{
-    namespace
-    {
+namespace Horo::Editor {
+    namespace {
         using Theme::Fonts;
 
-        struct EditorGuiOptions
-        {
+        struct EditorGuiOptions {
             bool textPreview = false;
             bool exitAfterFirstFrame = false;
             std::uint64_t exitAfterFrames = 0;
@@ -101,26 +100,22 @@ namespace Horo::Editor
             std::string projectRoot;
         };
 
-        struct EditorTextures
-        {
+        struct EditorTextures {
             std::uintptr_t logo{0};
         };
 
-        [[nodiscard]] std::string AssetPath(const char* rel)
-        {
+        [[nodiscard]] std::string AssetPath(const char *rel) {
             return std::string{HORO_EDITOR_ASSET_ROOT} + "/" + rel;
         }
 
-        [[nodiscard]] bool LoadEditorCatalogResources(LocalizationService& localization)
-        {
+        [[nodiscard]] bool LoadEditorCatalogResources(LocalizationService &localization) {
             const std::filesystem::path root = std::filesystem::path{HORO_EDITOR_ASSET_ROOT} / "localization" /
-                "editor";
+                                               "editor";
             bool loadedAny = false;
             std::error_code error;
             if (!std::filesystem::exists(root, error))
                 return false;
-            for (const auto& entry : std::filesystem::directory_iterator(root, error))
-            {
+            for (const auto &entry: std::filesystem::directory_iterator(root, error)) {
                 if (error || !entry.is_regular_file() || entry.path().extension() != ".json")
                     continue;
                 LocalizationError loadError;
@@ -129,14 +124,12 @@ namespace Horo::Editor
             return loadedAny;
         }
 
-        [[nodiscard]] const ImWchar* BuildEditorGlyphRanges(ImGuiIO& io)
-        {
+        [[nodiscard]] const ImWchar *BuildEditorGlyphRanges(ImGuiIO &io) {
             // ImGui default ranges do not always include the small UI glyphs used
             // by the HTML mockups (arrows, multiplication sign, square icon,
             // middle dot). Without these, they render as '?' in the editor.
             static ImVector<ImWchar> ranges;
-            if (ranges.empty())
-            {
+            if (ranges.empty()) {
                 ImFontGlyphRangesBuilder builder;
                 builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
                 // Add Latin Extended-A for Turkish and other European characters
@@ -161,16 +154,14 @@ namespace Horo::Editor
             return ranges.Data;
         }
 
-        [[nodiscard]] float QueryRasterizerDensity(SDL_Window* window)
-        {
+        [[nodiscard]] float QueryRasterizerDensity(SDL_Window *window) {
             int windowW = 0;
             int windowH = 0;
             int drawableW = 0;
             int drawableH = 0;
             SDL_GetWindowSize(window, &windowW, &windowH);
             SDL_GetWindowSizeInPixels(window, &drawableW, &drawableH);
-            if (windowW <= 0 || windowH <= 0)
-            {
+            if (windowW <= 0 || windowH <= 0) {
                 return 1.0F;
             }
             const float scaleX = static_cast<float>(drawableW) / static_cast<float>(windowW);
@@ -179,10 +170,9 @@ namespace Horo::Editor
             return (scale > 1.0F) ? scale : 1.0F;
         }
 
-        [[nodiscard]] Fonts LoadEditorFonts(ImGuiIO& io, const float rasterizerDensity)
-        {
+        [[nodiscard]] Fonts LoadEditorFonts(ImGuiIO &io, const float rasterizerDensity) {
             Fonts f;
-            const ImWchar* ranges = BuildEditorGlyphRanges(io);
+            const ImWchar *ranges = BuildEditorGlyphRanges(io);
             ImFontConfig sansCfg{};
             sansCfg.OversampleH = 3;
             sansCfg.OversampleV = 2;
@@ -207,22 +197,19 @@ namespace Horo::Editor
             return f;
         }
 
-        [[nodiscard]] EditorTextures LoadEditorTextures(IEditorGuiRenderer& guiRenderer)
-        {
+        [[nodiscard]] EditorTextures LoadEditorTextures(IEditorGuiRenderer &guiRenderer) {
             EditorTextures t;
             auto path = AssetPath("launcher/logo.png");
             int w = 0;
             int h = 0;
             int c = 0;
-            auto* px = stbi_load(path.c_str(), &w, &h, &c, 4);
-            if (!px)
-            {
+            auto *px = stbi_load(path.c_str(), &w, &h, &c, 4);
+            if (!px) {
                 LOG_WARN("platform.assets", "Logo texture not found at '%s' — sidebar will render without image.",
                          path.c_str());
                 return t;
             }
-            if (w <= 0 || h <= 0)
-            {
+            if (w <= 0 || h <= 0) {
                 stbi_image_free(px);
                 LOG_WARN("platform.assets", "Logo texture at '%s' has invalid dimensions.", path.c_str());
                 return t;
@@ -234,8 +221,7 @@ namespace Horo::Editor
                 .pixels = pixels,
             });
             stbi_image_free(px);
-            if (uploaded.HasError())
-            {
+            if (uploaded.HasError()) {
                 LOG_WARN("platform.assets", "Logo texture upload failed: %s", uploaded.ErrorValue().message.c_str());
                 return t;
             }
@@ -243,10 +229,8 @@ namespace Horo::Editor
             return t;
         }
 
-        void DestroyEditorTextures(EditorTextures& textures, IEditorGuiRenderer& guiRenderer) noexcept
-        {
-            if (textures.logo == 0)
-            {
+        void DestroyEditorTextures(EditorTextures &textures, IEditorGuiRenderer &guiRenderer) noexcept {
+            if (textures.logo == 0) {
                 return;
             }
             guiRenderer.DestroyTexture(textures.logo);
@@ -257,24 +241,20 @@ namespace Horo::Editor
         // Modal implementations live under src/editor/modals.
     } // namespace
 
-    [[nodiscard]] static EditorGuiOptions ParseOptions(const std::span<char*> args) noexcept
-    {
+    [[nodiscard]] static EditorGuiOptions ParseOptions(const std::span<char *> args) noexcept {
         EditorGuiOptions opts;
-        for (std::size_t i = 1; i < args.size(); ++i)
-        {
+        for (std::size_t i = 1; i < args.size(); ++i) {
             std::string_view a{args[i]};
             if (a == "--text-preview")
                 opts.textPreview = true;
             else if (a == "--exit-after-first-frame")
                 opts.exitAfterFirstFrame = true;
-            else if (a == "--exit-after-frames" && i + 1 < args.size())
-            {
+            else if (a == "--exit-after-frames" && i + 1 < args.size()) {
                 const std::string_view value{args[++i]};
                 const auto parsed = std::from_chars(value.data(), value.data() + value.size(), opts.exitAfterFrames);
                 if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
                     opts.exitAfterFrames = 0;
-            }
-            else if (a.starts_with("--renderer="))
+            } else if (a.starts_with("--renderer="))
                 opts.rendererBackend = std::string{a.substr(std::string_view{"--renderer="}.size())};
             else if (args[i] == std::string_view{"--renderer"} && i + 1 < args.size())
                 opts.rendererBackend = args[++i];
@@ -284,8 +264,7 @@ namespace Horo::Editor
         return opts;
     }
 
-    [[nodiscard]] static std::vector<RecentProjectEntry> BuildBootstrapRecentProjects()
-    {
+    [[nodiscard]] static std::vector<RecentProjectEntry> BuildBootstrapRecentProjects() {
         return {
             {
                 {"Desert Run", "~/projects/desert-run", "2h ago", "desert-run"},
@@ -295,11 +274,9 @@ namespace Horo::Editor
         };
     }
 
-    namespace
-    {
-        [[nodiscard]] const Render::RenderBackendModuleInfo* ResolveCompiledBackendModuleInfo(
-            const std::string_view requestedBackend) noexcept
-        {
+    namespace {
+        [[nodiscard]] const Render::RenderBackendModuleInfo *ResolveCompiledBackendModuleInfo(
+            const std::string_view requestedBackend) noexcept {
 #if defined(HORO_HAS_RENDER_OPENGL)
             if (requestedBackend.empty() || requestedBackend == "opengl")
                 return &Render::GetOpenGLRenderBackendModuleInfo();
@@ -312,8 +289,7 @@ namespace Horo::Editor
         }
 
         [[nodiscard]] RendererAvailabilitySnapshot BuildRendererAvailabilitySnapshot(
-            const std::string_view activeBackendId)
-        {
+            const std::string_view activeBackendId) {
             std::vector<RendererBackendAvailability> entries;
             entries.reserve(3);
 #if defined(HORO_HAS_RENDER_OPENGL)
@@ -353,15 +329,14 @@ namespace Horo::Editor
             return RendererAvailabilitySnapshot{std::move(entries), std::string{activeBackendId}};
         }
 
-        [[nodiscard]] int RelaunchEditorForProject(const char* executable, const EditorRendererRestartRequest& request)
-        {
+        [[nodiscard]] int
+        RelaunchEditorForProject(const char *executable, const EditorRendererRestartRequest &request) {
             std::vector<std::string> arguments{
                 executable, "--renderer", request.backendId, "--project", request.projectRoot
             };
-            std::vector<char*> nativeArguments;
+            std::vector<char *> nativeArguments;
             nativeArguments.reserve(arguments.size() + 1);
-            for (std::string& argument : arguments)
-            {
+            for (std::string &argument: arguments) {
                 nativeArguments.push_back(argument.data());
             }
             nativeArguments.push_back(nullptr);
@@ -376,33 +351,30 @@ namespace Horo::Editor
             return 1;
         }
 
-        [[nodiscard]] bool InitializeSdlAndCreateWindow(SDL_Window*& window,
-                                                        const Render::RenderHostWindowRequirements& windowRequirements)
-        {
+        [[nodiscard]] bool InitializeSdlAndCreateWindow(SDL_Window *&window,
+                                                        const Render::RenderHostWindowRequirements &
+                                                        windowRequirements) {
             SDL_WindowFlags rendererWindowFlag = 0;
-            switch (windowRequirements.presentation)
-            {
-            case Render::RenderPresentationKind::OpenGL:
-                rendererWindowFlag = SDL_WINDOW_OPENGL;
-                break;
-            case Render::RenderPresentationKind::Metal:
-                rendererWindowFlag = SDL_WINDOW_METAL;
-                break;
-            default:
-                LOG_CRITICAL("editor.renderer", "Selected renderer does not describe an interactive host window.");
-                return false;
+            switch (windowRequirements.presentation) {
+                case Render::RenderPresentationKind::OpenGL:
+                    rendererWindowFlag = SDL_WINDOW_OPENGL;
+                    break;
+                case Render::RenderPresentationKind::Metal:
+                    rendererWindowFlag = SDL_WINDOW_METAL;
+                    break;
+                default:
+                    LOG_CRITICAL("editor.renderer", "Selected renderer does not describe an interactive host window.");
+                    return false;
             }
 
-            if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
-            {
-                const char* err = SDL_GetError();
+            if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+                const char *err = SDL_GetError();
                 LOG_CRITICAL("platform.sdl", "SDL_Init failed: %s", err);
                 std::fprintf(stderr, "SDL_Init: %s\n", err);
                 Log::Logger::Shutdown();
                 return false;
             }
-            if (windowRequirements.presentation == Render::RenderPresentationKind::OpenGL)
-            {
+            if (windowRequirements.presentation == Render::RenderPresentationKind::OpenGL) {
                 SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
                 SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
                 SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -414,8 +386,7 @@ namespace Horo::Editor
             if (windowRequirements.highPixelDensity)
                 windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
             window = SDL_CreateWindow("Horo Editor", 1000, 760, windowFlags);
-            if (!window)
-            {
+            if (!window) {
                 LOG_CRITICAL("platform.sdl", "SDL_CreateWindow failed: %s", SDL_GetError());
                 SDL_Quit();
                 return false;
@@ -424,49 +395,35 @@ namespace Horo::Editor
             return true;
         }
 
-        void ApplySavedThemePreference()
-        {
+        void ApplySavedThemePreference() {
             auto doc = LoadEditorSettingsDocument();
-            if (doc.loadedFromDisk && !doc.parseError)
-            {
+            if (doc.loadedFromDisk && !doc.parseError) {
                 const auto savedIndex = static_cast<int>(doc.settings.themePreset);
                 Theme::SelectThemeByIndex(savedIndex);
                 LOG_DEBUG("editor.settings", "Restored theme preset index %d from disk.", savedIndex);
-            }
-            else if (doc.loadedFromDisk && doc.parseError)
-            {
+            } else if (doc.loadedFromDisk && doc.parseError) {
                 LOG_WARN("editor.settings", "editor_settings.json exists but failed to parse — using defaults.");
-            }
-            else
-            {
+            } else {
                 LOG_DEBUG("editor.settings", "No editor_settings.json on disk — using defaults.");
             }
         }
 
-        void ActivateInitialLocale(const EditorSettings& initialSettings, LocalizationService& localization)
-        {
+        void ActivateInitialLocale(const EditorSettings &initialSettings, LocalizationService &localization) {
             LocalizationError localizationError;
-            if (const auto locale = LocaleTag::Parse(initialSettings.languageTag); locale.has_value())
-            {
-                if (localization.Prepare(*locale, &localizationError))
-                {
-                    (void)localization.ActivatePrepared(&localizationError);
+            if (const auto locale = LocaleTag::Parse(initialSettings.languageTag); locale.has_value()) {
+                if (localization.Prepare(*locale, &localizationError)) {
+                    (void) localization.ActivatePrepared(&localizationError);
                     LOG_INFO("editor.startup", "Activated language tag: '%s'", locale->value.c_str());
-                }
-                else
-                {
+                } else {
                     LOG_WARN("editor.startup", "Failed to prepare language tag '%s': %s", locale->value.c_str(),
                              localizationError.message.c_str());
                 }
-            }
-            else
-            {
+            } else {
                 LOG_WARN("editor.startup", "Failed to parse language tag: '%s'", initialSettings.languageTag.c_str());
             }
         }
 
-        struct EditorRenderComposition
-        {
+        struct EditorRenderComposition {
 #if defined(HORO_HAS_RENDER_OPENGL)
             std::unique_ptr<Render::IOpenGLPresentationPort> openGlPresentationPort;
 #endif
@@ -480,8 +437,7 @@ namespace Horo::Editor
             Render::RenderTargetHandle viewportTarget;
         };
 
-        [[nodiscard]] Error MakeEditorRendererError(const char* code, std::string message)
-        {
+        [[nodiscard]] Error MakeEditorRendererError(const char *code, std::string message) {
             return Error{
                 .code = ErrorCode{code},
                 .domain = ErrorDomainId{"horo.editor.renderer"},
@@ -490,19 +446,16 @@ namespace Horo::Editor
             };
         }
 
-        [[nodiscard]] Result<EditorRenderComposition> CreateEditorRenderComposition(SDL_Window& window,
-            const EditorGuiOptions& options)
-        {
+        [[nodiscard]] Result<EditorRenderComposition> CreateEditorRenderComposition(SDL_Window &window,
+            const EditorGuiOptions &options) {
             EditorRenderComposition composition;
             Render::RenderBackendRegistry registry;
 
-            if (options.rendererBackend == "opengl")
-            {
+            if (options.rendererBackend == "opengl") {
 #if defined(HORO_HAS_RENDER_OPENGL)
                 auto port = std::make_unique<SdlOpenGLPresentationPort>(window);
                 if (const Result<void> registered = Render::RegisterOpenGLRenderBackend(registry, *port); registered.
-                    HasError())
-                {
+                    HasError()) {
                     return Result<EditorRenderComposition>::Failure(registered.ErrorValue());
                 }
                 composition.openGlPresentationPort = std::move(port);
@@ -510,16 +463,13 @@ namespace Horo::Editor
                 return Result<EditorRenderComposition>::Failure(MakeEditorRendererError(
                     "editor.renderer.component_missing", "OpenGL renderer component is not present in this build."));
 #endif
-            }
-            else if (options.rendererBackend == "metal")
-            {
+            } else if (options.rendererBackend == "metal") {
 #if defined(HORO_HAS_RENDER_METAL)
                 auto port = std::make_unique<SdlMetalPresentationPort>(window);
                 auto graphicsBridge = std::make_unique<Render::MetalEditorGraphicsBridge>();
                 if (const Result<void> registered = Render::RegisterMetalRenderBackend(registry, *port, *graphicsBridge)
                     ;
-                    registered.HasError())
-                {
+                    registered.HasError()) {
                     return Result<EditorRenderComposition>::Failure(registered.ErrorValue());
                 }
                 composition.metalPresentationPort = std::move(port);
@@ -528,15 +478,12 @@ namespace Horo::Editor
                 return Result<EditorRenderComposition>::Failure(MakeEditorRendererError(
                     "editor.renderer.component_missing", "Metal renderer component is not present in this build."));
 #endif
-            }
-            else
-            {
+            } else {
                 return Result<EditorRenderComposition>::Failure(MakeEditorRendererError(
                     "editor.renderer.unsupported_backend", "Requested renderer backend is unsupported."));
             }
 
-            if (const Result<void> sealed = registry.Seal(); sealed.HasError())
-            {
+            if (const Result<void> sealed = registry.Seal(); sealed.HasError()) {
                 return Result<EditorRenderComposition>::Failure(sealed.ErrorValue());
             }
             auto frontendResult = Render::RenderFrontend::Create(
@@ -549,42 +496,34 @@ namespace Horo::Editor
                                        ? Render::PresentMode::Immediate
                                        : Render::PresentMode::Fifo
                 });
-            if (frontendResult.HasError())
-            {
+            if (frontendResult.HasError()) {
                 return Result<EditorRenderComposition>::Failure(frontendResult.ErrorValue());
             }
             composition.frontend = std::move(frontendResult).Value();
 
-            if (options.rendererBackend == "opengl")
-            {
+            if (options.rendererBackend == "opengl") {
 #if defined(HORO_HAS_RENDER_OPENGL)
-                auto& port = static_cast<SdlOpenGLPresentationPort&>(*composition.openGlPresentationPort);
+                auto &port = static_cast<SdlOpenGLPresentationPort &>(*composition.openGlPresentationPort);
                 auto guiRenderer = std::make_unique<EditorGuiRendererOpenGL>(window, port.Context());
-                if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError())
-                {
+                if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
                 auto viewportRenderer = std::make_unique<EditorViewportRendererOpenGL>();
-                if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError())
-                {
+                if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
                 composition.guiRenderer = std::move(guiRenderer);
                 composition.viewportRenderer = std::move(viewportRenderer);
 #endif
-            }
-            else
-            {
+            } else {
 #if defined(HORO_HAS_RENDER_METAL)
-                auto& graphicsBridge = *composition.metalGraphicsBridge;
+                auto &graphicsBridge = *composition.metalGraphicsBridge;
                 auto guiRenderer = std::make_unique<EditorGuiRendererMetal>(window, graphicsBridge);
-                if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError())
-                {
+                if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
                 auto viewportRenderer = std::make_unique<EditorViewportRendererMetal>(graphicsBridge);
-                if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError())
-                {
+                if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
                 composition.guiRenderer = std::move(guiRenderer);
@@ -593,14 +532,12 @@ namespace Horo::Editor
             }
 
             if (const Result<void> attached =
-                    composition.frontend->AttachStaticMeshPassExecutor(*composition.viewportRenderer);
-                attached.HasError())
-            {
+                        composition.frontend->AttachStaticMeshPassExecutor(*composition.viewportRenderer);
+                attached.HasError()) {
                 return Result<EditorRenderComposition>::Failure(attached.ErrorValue());
             }
             auto viewportTarget = composition.frontend->CreateOffscreenTarget({1, 1});
-            if (viewportTarget.HasError())
-            {
+            if (viewportTarget.HasError()) {
                 return Result<EditorRenderComposition>::Failure(viewportTarget.ErrorValue());
             }
             composition.viewportTarget = viewportTarget.Value();
@@ -608,38 +545,229 @@ namespace Horo::Editor
             return Result<EditorRenderComposition>::Success(std::move(composition));
         }
 
-        struct RunEditorMainLoopParams
-        {
+        struct RunEditorMainLoopParams {
             bool exitAfterFirstFrame;
             std::uint64_t exitAfterFrames;
-            SDL_Window* window;
-            ImGuiIO& io;
-            const Fonts& fonts;
-            const EditorTextures& textures;
-            ProjectCreationService& projectCreationService;
-            EditorSettingsService& settings;
-            EngineDataBus& engineEvents;
-            EditorDataBus& editorEvents;
-            LocalizationService& localization;
-            const RendererAvailabilitySnapshot& rendererAvailability;
+            SDL_Window *window;
+            ImGuiIO &io;
+            const Fonts &fonts;
+            const EditorTextures &textures;
+            ProjectCreationService &projectCreationService;
+            EditorSettingsService &settings;
+            EngineDataBus &engineEvents;
+            EditorDataBus &editorEvents;
+            LocalizationService &localization;
+            const RendererAvailabilitySnapshot &rendererAvailability;
             GuiRoute initialRoute;
-            EditorModalHost& modalHost;
-            Input::SdlInputBackend& inputBackend;
-            Input::InputRouter& inputRouter;
-            Render::RenderFrontend& renderFrontend;
-            IEditorGuiRenderer& guiRenderer;
-            IEditorViewportRenderer& viewportRenderer;
+            EditorModalHost &modalHost;
+            Input::SdlInputBackend &inputBackend;
+            Input::InputRouter &inputRouter;
+            Render::RenderFrontend &renderFrontend;
+            IEditorGuiRenderer &guiRenderer;
+            IEditorViewportRenderer &viewportRenderer;
             Render::RenderTargetHandle viewportTarget;
         };
 
-        std::optional<EditorRendererRestartRequest> RunEditorMainLoop(RunEditorMainLoopParams& p)
-        {
+        class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipant {
+        public:
+            EditorRuntimeParticipant(RunEditorMainLoopParams &params, GuiScreenHost &screenHost,
+                                     EditorViewportSceneState &viewportSceneState,
+                                     EditorSettingsSnapshot &settingsSnapshot,
+                                     std::optional<EditorRendererRestartRequest> &rendererRestart) noexcept
+                : p_(&params), screenHost_(&screenHost), viewportSceneState_(&viewportSceneState),
+                  settingsSnapshot_(&settingsSnapshot), rendererRestart_(&rendererRestart) {
+            }
+
+            void BindHost(Runtime::RuntimeHost &host) noexcept { host_ = &host; }
+
+            Result<void> Startup(const CancellationToken &) override { return Result<void>::Success(); }
+
+            Result<void> OnPhase(const Runtime::RuntimePhase phase, const Runtime::FrameContext &context) override {
+                switch (phase) {
+                    case Runtime::RuntimePhase::BeginFrame:
+                        p_->inputBackend.BeginFrame(inputFrameNumber_++);
+                        return Result<void>::Success();
+                    case Runtime::RuntimePhase::PollPlatformEvents:
+                        return PollPlatformEvents();
+                    case Runtime::RuntimePhase::BuildInputSnapshot:
+                        p_->inputRouter.BeginFrame(p_->inputBackend.Commit());
+                        return Result<void>::Success();
+                    case Runtime::RuntimePhase::ApplyQueuedOwnerThreadCommands:
+                        return Result<void>::Success();
+                    case Runtime::RuntimePhase::VariableUpdate:
+                        return UpdatePresentation(context);
+                    case Runtime::RuntimePhase::RenderExtraction:
+                        return ExtractFrame();
+                    case Runtime::RuntimePhase::RenderExecution:
+                        return ExecuteFrame(context);
+                    case Runtime::RuntimePhase::RenderGui:
+                        if (!frame_.has_value()) return Result<void>::Success();
+                        return p_->guiRenderer.RenderDrawData();
+                    case Runtime::RuntimePhase::Presentation:
+                        return PresentFrame();
+                    case Runtime::RuntimePhase::CommitDeferredLifecycleChanges:
+                        return Result<void>::Success();
+                    case Runtime::RuntimePhase::EndFrame:
+                        if (p_->exitAfterFirstFrame ||
+                            (p_->exitAfterFrames > 0 && context.frameNumber >= p_->exitAfterFrames)) {
+                            static_cast<void>(screenHost_->RequestCloseApplication());
+                        }
+                        return Result<void>::Success();
+                    case Runtime::RuntimePhase::FixedUpdate:
+                        break;
+                }
+                return Result<void>::Success();
+            }
+
+            Result<void> OnFixedUpdate(const Runtime::FixedStepContext &) override {
+                return Result<void>::Success();
+            }
+
+            void Shutdown() noexcept override {
+                frame_.reset();
+                *rendererRestart_ = screenHost_->RendererRestartRequest();
+                p_->inputRouter.CancelCapture(Input::CaptureCancellationReason::OwnerDestroyed);
+                p_->modalHost.ForceDetachAllForShutdown();
+                screenHost_->Shutdown();
+            }
+
+        private:
+            Result<void> PollPlatformEvents() {
+                while (const std::optional<EditorMenuInvocation> invocation = PollNativeEditorMenuAction()) {
+                    screenHost_->DispatchMenuInvocation(*invocation);
+                }
+                p_->projectCreationService.PumpMainThread();
+                p_->engineEvents.DispatchQueued();
+                SDL_Event event;
+                while (SDL_PollEvent(&event)) {
+                    ImGui_ImplSDL3_ProcessEvent(&event);
+                    p_->inputBackend.ProcessEvent(event);
+                    if (event.type == SDL_EVENT_QUIT ||
+                        (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                         event.window.windowID == SDL_GetWindowID(p_->window))) {
+                        static_cast<void>(screenHost_->RequestCloseApplication());
+                        host_->RequestShutdown();
+                    }
+                }
+
+                if (!nativeMenuInstalled_) {
+                    InstallNativeEditorMenuBar(GetEditorMenuModel(), p_->localization);
+                    nativeMenuInstalled_ = true;
+                }
+                return Result<void>::Success();
+            }
+
+            Result<void> UpdatePresentation(const Runtime::FrameContext &context) {
+                const Result<void> guiBegun = p_->guiRenderer.BeginFrame();
+                if (guiBegun.HasError()) return guiBegun;
+                ImGui::NewFrame();
+
+                focusedWidgetInputContext_.Reset();
+                if (p_->io.WantTextInput) {
+                    focusedWidgetInputContext_ = p_->inputRouter.PushContext(
+                        Input::InputContextId{"editor.focused_widget"}, Input::InputContextKind::FocusedGuiWidget);
+                }
+
+                *settingsSnapshot_ = p_->settings.Snapshot();
+                const float deltaSeconds = static_cast<float>(context.variableDelta.ToNanoseconds()) / 1'000'000'000.0F;
+                p_->modalHost.OnUpdate(deltaSeconds);
+                screenHost_->OnUpdate(deltaSeconds);
+                return Result<void>::Success();
+            }
+
+            Result<void> ExtractFrame() {
+                screenHost_->Draw();
+                p_->modalHost.Draw();
+                ImGui::Render();
+
+                passCount_ = 0;
+                const EditorViewportSceneView viewportScene = viewportSceneState_->View();
+                const EditorViewportExtent viewportExtent = p_->viewportRenderer.RequestedExtent();
+                if (viewportExtent.IsValid()) {
+                    const Result<void> resized = p_->renderFrontend.ResizeOffscreenTarget(
+                        p_->viewportTarget, {viewportExtent.width, viewportExtent.height});
+                    if (resized.HasError()) return resized;
+                    passes_[passCount_++] = Render::RenderPassDescriptor{
+                        .id = Render::RenderPassId{1},
+                        .kind = Render::RenderPassKind::Graphics,
+                        .staticMesh = Render::StaticMeshPassDescriptor{
+                            .target = p_->viewportTarget,
+                            .extent = {viewportExtent.width, viewportExtent.height},
+                            .scene = Render::RenderSceneView{
+                                .camera = ToRenderCamera(viewportScene.camera),
+                                .meshResources = viewportScene.meshResources,
+                                .instances = viewportScene.instances
+                            }
+                        }
+                    };
+                }
+                passes_[passCount_++] = Render::RenderPassDescriptor{
+                    .id = Render::RenderPassId{2},
+                    .kind = Render::RenderPassKind::Graphics,
+                    .primaryOutput = Render::PrimaryOutputAttachment{
+                        .loadOperation = Render::AttachmentLoadOperation::Clear,
+                        .storeOperation = Render::AttachmentStoreOperation::Store,
+                        .clearColor = Render::ClearColor{Theme::Bg0().x, Theme::Bg0().y, Theme::Bg0().z, 1.0F}
+                    }
+                };
+                return Result<void>::Success();
+            }
+
+            Result<void> ExecuteFrame(const Runtime::FrameContext &context) {
+                int drawableWidth = 0;
+                int drawableHeight = 0;
+                SDL_GetWindowSizeInPixels(p_->window, &drawableWidth, &drawableHeight);
+                if (drawableWidth <= 0 || drawableHeight <= 0) return Result<void>::Success();
+
+                const Render::FramebufferExtent outputExtent{
+                    static_cast<std::uint32_t>(drawableWidth),
+                    static_cast<std::uint32_t>(drawableHeight)
+                };
+                if (outputExtent.width != committedOutputExtent_.width ||
+                    outputExtent.height != committedOutputExtent_.height) {
+                    const Result<void> resized = p_->renderFrontend.Resize(outputExtent);
+                    if (resized.HasError()) return resized;
+                    committedOutputExtent_ = outputExtent;
+                }
+
+                auto begun = p_->renderFrontend.BeginFrame(
+                    Render::FrameDescriptor{.frameNumber = context.frameNumber, .outputExtent = outputExtent});
+                if (begun.HasError()) return Result<void>::Failure(begun.ErrorValue());
+                frame_.emplace(std::move(begun).Value());
+                return frame_->Execute(std::span<const Render::RenderPassDescriptor>{passes_.data(), passCount_});
+            }
+
+            Result<void> PresentFrame() {
+                if (!frame_.has_value()) return Result<void>::Success();
+                Result<void> result = frame_->Present();
+                frame_.reset();
+                return result;
+            }
+
+            RunEditorMainLoopParams *p_{};
+            GuiScreenHost *screenHost_{};
+            EditorViewportSceneState *viewportSceneState_{};
+            EditorSettingsSnapshot *settingsSnapshot_{};
+            std::optional<EditorRendererRestartRequest> *rendererRestart_{};
+            Runtime::RuntimeHost *host_{};
+            Input::FrameNumber inputFrameNumber_{1};
+            Input::InputContextToken focusedWidgetInputContext_;
+            Render::FramebufferExtent committedOutputExtent_{};
+            std::array<Render::RenderPassDescriptor, 2> passes_{};
+            std::size_t passCount_{};
+            std::optional<Render::RenderFrameScope> frame_;
+            bool nativeMenuInstalled_{false};
+        };
+
+        std::optional<EditorRendererRestartRequest> RunEditorMainLoop(RunEditorMainLoopParams &p) {
             ThemeContext themeContext{p.fonts};
             EditorSettingsSnapshot settingsSnapshot = p.settings.Snapshot();
             EditorGuiContext guiContext{p.engineEvents, p.editorEvents, p.localization, themeContext, settingsSnapshot};
 
             // Borrowed screen services must outlive the host that invokes screen OnLeave().
             EditorViewportSceneState viewportSceneState;
+            auto runtimeScene = std::make_unique<Runtime::RuntimeSceneService>();
+            Runtime::RuntimeSceneService *runtimeSceneService = runtimeScene.get();
             ScreenRegistry screenRegistry;
             RegisterWelcomeScreen(screenRegistry);
             RegisterProjectCreationScreen(screenRegistry);
@@ -658,182 +786,55 @@ namespace Horo::Editor
                 p.rendererAvailability,
                 std::move(screenRegistry),
                 std::move(workspacePanelRegistry),
-                (std::uintptr_t)(void*)(intptr_t)p.textures.logo
+                (std::uintptr_t) (void *) (intptr_t) p.textures.logo
             };
             screenHost.Services().Register<IEditorViewportRenderer>(p.viewportRenderer);
             screenHost.Services().Register<EditorViewportSceneState>(viewportSceneState);
+            screenHost.Services().Register<Runtime::RuntimeSceneService>(*runtimeSceneService);
             static_cast<void>(screenHost.Navigate(std::move(p.initialRoute)));
-            bool nativeMenuInstalled = false;
-            Render::FramebufferExtent committedOutputExtent{};
-            std::uint64_t frameNumber = 1;
-            Input::FrameNumber inputFrameNumber = 1;
-            Input::InputContextToken focusedWidgetInputContext;
+            std::optional<EditorRendererRestartRequest> rendererRestart;
+            SteadyClock clock;
+            auto createdRuntime = Runtime::RuntimeHost::Create(clock);
+            if (createdRuntime.HasError()) {
+                LOG_ERROR("editor.runtime", "Runtime host creation failed: %s",
+                          createdRuntime.ErrorValue().message.c_str());
+                screenHost.RequestFatalShutdown();
+                screenHost.Shutdown();
+                return std::nullopt;
+            }
+            std::unique_ptr<Runtime::RuntimeHost> runtime = std::move(createdRuntime).Value();
+            if (const Result<void> addedScene = runtime->AddParticipant(std::move(runtimeScene));
+                addedScene.HasError()) {
+                LOG_ERROR("editor.runtime", "Runtime scene service registration failed: %s",
+                          addedScene.ErrorValue().message.c_str());
+                screenHost.RequestFatalShutdown();
+                screenHost.Shutdown();
+                return std::nullopt;
+            }
+            auto participant = std::make_unique<EditorRuntimeParticipant>(p, screenHost, viewportSceneState,
+                                                                          settingsSnapshot, rendererRestart);
+            participant->BindHost(*runtime);
+            if (const Result<void> added = runtime->AddParticipant(std::move(participant)); added.HasError() ||
+                runtime->Startup().HasError()) {
+                LOG_ERROR("editor.runtime", "Runtime host startup failed.");
+                screenHost.RequestFatalShutdown();
+                runtime->Shutdown();
+                return std::nullopt;
+            }
 
-            while (!screenHost.IsApplicationCloseRequested())
-            {
-                p.inputBackend.BeginFrame(inputFrameNumber++);
-                while (const std::optional<EditorMenuInvocation> invocation = PollNativeEditorMenuAction())
-                {
-                    screenHost.DispatchMenuInvocation(*invocation);
-                }
-                p.projectCreationService.PumpMainThread();
-                p.engineEvents.DispatchQueued();
-                SDL_Event ev;
-                while (SDL_PollEvent(&ev))
-                {
-                    ImGui_ImplSDL3_ProcessEvent(&ev);
-                    p.inputBackend.ProcessEvent(ev);
-                    if (ev.type == SDL_EVENT_QUIT ||
-                        (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && ev.window.windowID ==
-                            SDL_GetWindowID(p.window)))
-                    {
-                        static_cast<void>(screenHost.RequestCloseApplication());
-                    }
-                }
-                p.inputRouter.BeginFrame(p.inputBackend.Commit());
-
-                // SDL's Cocoa backend creates its default application menu during the first event pump.
-                // Install Horo's model afterwards so SDL cannot overwrite the native menu hierarchy.
-                if (!nativeMenuInstalled)
-                {
-                    InstallNativeEditorMenuBar(GetEditorMenuModel(), p.localization);
-                    nativeMenuInstalled = true;
-                }
-
-                if (screenHost.IsApplicationCloseRequested())
-                {
-                    break;
-                }
-
-                int drawableW = 0;
-                int drawableH = 0;
-                SDL_GetWindowSizeInPixels(p.window, &drawableW, &drawableH);
-                if (drawableW > 0 && drawableH > 0)
-                {
-                    const Render::FramebufferExtent outputExtent{
-                        static_cast<std::uint32_t>(drawableW),
-                        static_cast<std::uint32_t>(drawableH)
-                    };
-                    if (outputExtent.width != committedOutputExtent.width ||
-                        outputExtent.height != committedOutputExtent.height)
-                    {
-                        const Result<void> resized = p.renderFrontend.Resize(outputExtent);
-                        if (resized.HasError())
-                        {
-                            LOG_ERROR("editor.renderer", "Renderer resize failed: %s",
-                                      resized.ErrorValue().message.c_str());
-                            screenHost.RequestFatalShutdown();
-                            continue;
-                        }
-                        committedOutputExtent = outputExtent;
-                    }
-
-                    auto begun = p.renderFrontend.BeginFrame(
-                        Render::FrameDescriptor{.frameNumber = frameNumber++, .outputExtent = outputExtent});
-                    if (begun.HasError())
-                    {
-                        LOG_ERROR("editor.renderer", "Renderer begin failed: %s", begun.ErrorValue().message.c_str());
+            while (!screenHost.IsApplicationCloseRequested() &&
+                   (runtime->State() == Runtime::RuntimeLifecycleState::Running ||
+                    runtime->State() == Runtime::RuntimeLifecycleState::Suspended)) {
+                const Result<void> frame = runtime->RunFrame();
+                if (frame.HasError()) {
+                    if (frame.ErrorValue().code.Value() != "runtime.host.cancelled") {
+                        LOG_ERROR("editor.runtime", "Runtime frame failed: %s", frame.ErrorValue().message.c_str());
                         screenHost.RequestFatalShutdown();
-                        continue;
                     }
-                    Render::RenderFrameScope frame = std::move(begun).Value();
-
-                    if (const Result<void> guiBegun = p.guiRenderer.BeginFrame(); guiBegun.HasError())
-                    {
-                        LOG_ERROR("editor.renderer", "GUI frame begin failed: %s",
-                                  guiBegun.ErrorValue().message.c_str());
-                        screenHost.RequestFatalShutdown();
-                        continue;
-                    }
-                    ImGui::NewFrame();
-
-                    focusedWidgetInputContext.Reset();
-                    if (p.io.WantTextInput)
-                    {
-                        focusedWidgetInputContext = p.inputRouter.PushContext(
-                            Input::InputContextId{"editor.focused_widget"}, Input::InputContextKind::FocusedGuiWidget);
-                    }
-
-                    settingsSnapshot = p.settings.Snapshot();
-                    p.modalHost.OnUpdate(p.io.DeltaTime);
-                    screenHost.OnUpdate(p.io.DeltaTime);
-                    screenHost.Draw();
-                    p.modalHost.Draw();
-                    ImGui::Render();
-
-                    const EditorViewportSceneView viewportScene = viewportSceneState.View();
-                    const EditorViewportExtent viewportExtent = p.viewportRenderer.RequestedExtent();
-                    std::array<Render::RenderPassDescriptor, 2> passes{};
-                    std::size_t passCount = 0;
-                    if (viewportExtent.IsValid())
-                    {
-                        if (const Result<void> resized = p.renderFrontend.ResizeOffscreenTarget(
-                                p.viewportTarget, {viewportExtent.width, viewportExtent.height});
-                            resized.HasError())
-                        {
-                            LOG_ERROR("editor.renderer", "Viewport target resize failed: %s",
-                                      resized.ErrorValue().message.c_str());
-                            screenHost.RequestFatalShutdown();
-                            continue;
-                        }
-                        passes[passCount++] = Render::RenderPassDescriptor{
-                            .id = Render::RenderPassId{1},
-                            .kind = Render::RenderPassKind::Graphics,
-                            .staticMesh = Render::StaticMeshPassDescriptor{
-                                .target = p.viewportTarget,
-                                .extent = {viewportExtent.width, viewportExtent.height},
-                                .scene = Render::RenderSceneView{
-                                    .camera = ToRenderCamera(viewportScene.camera),
-                                    .meshResources = viewportScene.meshResources,
-                                    .instances = viewportScene.instances,
-                                },
-                            },
-                        };
-                    }
-                    passes[passCount++] = Render::RenderPassDescriptor{
-                            .id = Render::RenderPassId{2},
-                            .kind = Render::RenderPassKind::Graphics,
-                            .primaryOutput =
-                            Render::PrimaryOutputAttachment{
-                                .loadOperation = Render::AttachmentLoadOperation::Clear,
-                                .storeOperation = Render::AttachmentStoreOperation::Store,
-                                .clearColor = Render::ClearColor{Theme::Bg0().x, Theme::Bg0().y, Theme::Bg0().z, 1.0F},
-                            },
-                        };
-                    if (const Result<void> executed =
-                            frame.Execute(std::span<const Render::RenderPassDescriptor>{passes.data(), passCount});
-                        executed.HasError())
-                    {
-                        LOG_ERROR("editor.renderer", "Renderer execute failed: %s",
-                                  executed.ErrorValue().message.c_str());
-                        screenHost.RequestFatalShutdown();
-                        continue;
-                    }
-                    if (const Result<void> guiRendered = p.guiRenderer.RenderDrawData(); guiRendered.HasError())
-                    {
-                        LOG_ERROR("editor.renderer", "GUI render failed: %s", guiRendered.ErrorValue().message.c_str());
-                        screenHost.RequestFatalShutdown();
-                        continue;
-                    }
-                    if (const Result<void> presented = frame.Present(); presented.HasError())
-                    {
-                        LOG_ERROR("editor.renderer", "Renderer present failed: %s",
-                                  presented.ErrorValue().message.c_str());
-                        screenHost.RequestFatalShutdown();
-                        continue;
-                    }
-                }
-
-                if (p.exitAfterFirstFrame || (p.exitAfterFrames > 0 && frameNumber > p.exitAfterFrames))
-                {
-                    static_cast<void>(screenHost.RequestCloseApplication());
                     break;
                 }
             }
-            const std::optional<EditorRendererRestartRequest> rendererRestart = screenHost.RendererRestartRequest();
-            p.inputRouter.CancelCapture(Input::CaptureCancellationReason::OwnerDestroyed);
-            p.modalHost.ForceDetachAllForShutdown();
-            screenHost.Shutdown();
+            runtime->Shutdown();
             return rendererRestart;
         }
     } // namespace
@@ -841,8 +842,7 @@ namespace Horo::Editor
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
-    int RunEditorGuiApp(const int argc, char** argv)
-    {
+    int RunEditorGuiApp(const int argc, char **argv) {
         // ── Bootstrap logging before any subsystem ───────────────────────
         Log::Logger::Init("~/.horo/logs", "horo-editor");
 
@@ -851,23 +851,20 @@ namespace Horo::Editor
 
         Log::Logger::DumpStartupInfo();
 
-        auto opts = ParseOptions(std::span<char*>{argv, static_cast<std::size_t>(argc)});
+        auto opts = ParseOptions(std::span<char *>{argv, static_cast<std::size_t>(argc)});
         std::vector<RecentProjectEntry> recentProjects = LoadRecentProjectsFromDisk();
         WelcomeScreenController ctrl{recentProjects};
         auto vm = ctrl.BuildViewModel();
 
-        if (opts.textPreview)
-        {
+        if (opts.textPreview) {
             std::fputs(RenderWelcomeScreenText(vm).c_str(), stdout);
             return 0;
         }
 
         std::string startupProjectName;
-        if (!opts.projectRoot.empty())
-        {
+        if (!opts.projectRoot.empty()) {
             const Result<ProjectMetadata> metadata = LoadProjectMetadata(opts.projectRoot);
-            if (metadata.HasError())
-            {
+            if (metadata.HasError()) {
                 LOG_CRITICAL("editor.project", "Project startup preflight failed for '%s': %s",
                              opts.projectRoot.c_str(),
                              metadata.ErrorValue().message.c_str());
@@ -878,9 +875,8 @@ namespace Horo::Editor
             startupProjectName = metadata.Value().name;
         }
 
-        const Render::RenderBackendModuleInfo* moduleInfo = ResolveCompiledBackendModuleInfo(opts.rendererBackend);
-        if (moduleInfo == nullptr || !moduleInfo->supportsInteractivePresentation)
-        {
+        const Render::RenderBackendModuleInfo *moduleInfo = ResolveCompiledBackendModuleInfo(opts.rendererBackend);
+        if (moduleInfo == nullptr || !moduleInfo->supportsInteractivePresentation) {
             LOG_CRITICAL("editor.renderer", "Requested renderer component '%s' is unavailable.",
                          opts.rendererBackend.c_str());
             Log::Logger::Shutdown();
@@ -890,21 +886,20 @@ namespace Horo::Editor
         const RendererAvailabilitySnapshot rendererAvailability = BuildRendererAvailabilitySnapshot(
             opts.rendererBackend);
 
-        SDL_Window* w = nullptr;
+        SDL_Window *w = nullptr;
         if (!InitializeSdlAndCreateWindow(w, moduleInfo->windowRequirements))
             return 1;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        auto& io = ImGui::GetIO();
+        auto &io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         auto fonts = LoadEditorFonts(io, QueryRasterizerDensity(w));
         Theme::Apply(ImGui::GetStyle());
         ApplySavedThemePreference();
 
         auto compositionResult = CreateEditorRenderComposition(*w, opts);
-        if (compositionResult.HasError())
-        {
+        if (compositionResult.HasError()) {
             LOG_CRITICAL("editor.renderer", "Renderer startup failed for '%s': %s", opts.rendererBackend.c_str(),
                          compositionResult.ErrorValue().message.c_str());
             ImGui::DestroyContext();
@@ -934,14 +929,11 @@ namespace Horo::Editor
         EditorSettingsService settings{initialSettings, configuration, editorEvents, localization};
 
         const Subscription localizationSub = editorEvents.Subscribe<EditorSettingsChangedEvent>(
-            [&settings, &localization](const EditorSettingsChangedEvent& event)
-            {
-                if (event.phase == SettingsChangePhase::Committed)
-                {
+            [&settings, &localization](const EditorSettingsChangedEvent &event) {
+                if (event.phase == SettingsChangePhase::Committed) {
                     if (const auto loc = LocaleTag::Parse(settings.Snapshot().settings.languageTag);
-                        loc.has_value() && localization.ActiveLocale() != *loc && localization.Prepare(*loc))
-                    {
-                        (void)localization.ActivatePrepared();
+                        loc.has_value() && localization.ActiveLocale() != *loc && localization.Prepare(*loc)) {
+                        (void) localization.ActivatePrepared();
                         InstallNativeEditorMenuBar(GetEditorMenuModel(), localization);
                     }
                 }
@@ -954,10 +946,9 @@ namespace Horo::Editor
         LOG_CRITICAL("editor.input", "Built-in input action map is invalid: %s",
                      installedInputActions.ErrorValue().message.c_str());
         const std::filesystem::path editorInputProfile =
-            ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "editor.json";
+                ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "editor.json";
         std::error_code inputProfileError;
-        if (std::filesystem::exists(editorInputProfile, inputProfileError) && !inputProfileError)
-        {
+        if (std::filesystem::exists(editorInputProfile, inputProfileError) && !inputProfileError) {
             const Result<Input::InputBindingProfile> loaded = Input::LoadBindingProfile(editorInputProfile);
             if (loaded.HasError())
             LOG_ERROR("editor.input", "Keeping default input bindings; unable to load '%s': %s",
@@ -999,7 +990,7 @@ namespace Horo::Editor
 
         DestroyEditorTextures(textures, *composition.guiRenderer);
         composition.frontend->DetachStaticMeshPassExecutor(*composition.viewportRenderer);
-        (void)composition.frontend->ReleaseOffscreenTarget(composition.viewportTarget);
+        (void) composition.frontend->ReleaseOffscreenTarget(composition.viewportTarget);
         composition.viewportRenderer.reset();
         composition.guiRenderer.reset();
         ImGui::DestroyContext();
@@ -1013,8 +1004,7 @@ namespace Horo::Editor
         SDL_DestroyWindow(w);
         SDL_Quit();
 
-        if (rendererRestart.has_value())
-        {
+        if (rendererRestart.has_value()) {
             LOG_INFO("editor.renderer", "Restarting editor with project renderer '%s' for '%s'.",
                      rendererRestart->backendId.c_str(), rendererRestart->projectRoot.c_str());
             Log::Logger::Shutdown();

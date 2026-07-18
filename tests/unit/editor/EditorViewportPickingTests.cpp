@@ -1,11 +1,23 @@
 #include "editor/document/EditorViewportPicking.h"
+#include "editor/document/RuntimeSceneConversion.h"
 
 #include <cassert>
+#include <memory>
 
 namespace
 {
 using namespace Horo;
 using namespace Horo::Editor;
+
+std::unique_ptr<Runtime::RuntimeScene> MakeRuntimeScene(const SceneDocument &document,
+                                                        Runtime::SceneRuntimeId runtimeId = {1})
+{
+    auto definition = ConvertSceneDocumentToRuntime(document.Snapshot(), Runtime::SceneDefinitionId{1});
+    assert(definition.HasValue());
+    auto scene = Runtime::RuntimeScene::Create(definition.Value(), runtimeId);
+    assert(scene.HasValue());
+    return std::move(scene).Value();
+}
 
 void CenterRayReturnsNearestStableObjectIdentity()
 {
@@ -23,13 +35,15 @@ void CenterRayReturnsNearestStableObjectIdentity()
         .primitiveMesh = PrimitiveMeshDescriptor{},
     });
     assert(farObject.HasValue() && nearObject.HasValue());
-    const auto scene = ExtractEditorViewportScene(document.Snapshot(), {}, meshCache);
+    const auto runtimeScene = MakeRuntimeScene(document);
+    const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache);
     assert(scene.HasValue());
 
     const auto picked = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F});
     assert(picked.HasValue());
-    assert(picked.Value() == nearObject.Value().object);
+    assert(picked.Value().runtimeScene == Runtime::SceneRuntimeId{1});
+    assert(picked.Value().object == nearObject.Value().object);
 }
 
 void MissAndInvalidQueryRemainExplicitResults()
@@ -44,13 +58,14 @@ void MissAndInvalidQueryRemainExplicitResults()
                    .primitiveMesh = PrimitiveMeshDescriptor{},
                })
                .HasValue());
-    const auto scene = ExtractEditorViewportScene(document.Snapshot(), {}, meshCache);
+    const auto runtimeScene = MakeRuntimeScene(document);
+    const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache);
     assert(scene.HasValue());
 
     const auto missed = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.0F, .normalizedY = 0.0F, .aspect = 1.0F});
     assert(missed.HasValue());
-    assert(!missed.Value().has_value());
+    assert(!missed.Value().object.has_value());
 
     const auto invalid = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = -0.1F, .normalizedY = 0.5F, .aspect = 1.0F});
@@ -67,12 +82,15 @@ void IdentityMappingMismatchIsRejected()
     const Render::MeshData &mesh = lease.Data();
     EditorViewportSceneSnapshot scene{
         .documentRevision = {},
+        .runtimeSceneId = Runtime::SceneRuntimeId{8},
         .camera = {},
         .meshLeases = {lease},
-        .meshResources = {
-            {Render::RenderMeshHandle{lease.Id(), 1}, mesh.vertices, mesh.indices, mesh.localBounds}},
-        .instances = {EditorViewportInstance{Render::RenderMeshHandle{lease.Id(), 1}, Math::Mat4::Identity(),
-                                              mesh.localBounds, Render::CoreDefaultMaterial, {}}},
+        .meshResources = {{Render::RenderMeshHandle{lease.Id(), 1}, mesh.vertices, mesh.indices, mesh.localBounds}},
+        .instances = {EditorViewportInstance{Render::RenderMeshHandle{lease.Id(), 1},
+                                             Math::Mat4::Identity(),
+                                             mesh.localBounds,
+                                             Render::CoreDefaultMaterial,
+                                             {}}},
     };
     const auto picked = PickEditorViewportScene(
         scene, EditorViewportPickQuery{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F});
@@ -106,11 +124,12 @@ void OrthographicRayPicksTransformedBounds()
     EditorViewportCamera camera;
     camera.projection = Runtime::CameraProjection::Orthographic;
     camera.orthographicHeight = 4.0F;
-    const auto scene = ExtractEditorViewportScene(document.Snapshot(), camera, meshCache);
+    const auto runtimeScene = MakeRuntimeScene(document);
+    const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), camera, meshCache);
     assert(scene.HasValue());
     const auto picked = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.75F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(picked.HasValue() && picked.Value() == object.Value().object);
+    assert(picked.HasValue() && picked.Value().object == object.Value().object);
 }
 } // namespace
 

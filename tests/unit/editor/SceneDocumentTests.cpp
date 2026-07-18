@@ -1,14 +1,28 @@
 #include "Horo/Runtime/Scene/PrimitiveCatalog.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
+#include "editor/document/RuntimeSceneConversion.h"
 #include "editor/document/SceneDocument.h"
 
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <memory>
 
 namespace
 {
+[[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(
+    const Horo::Editor::SceneDocument &document)
+{
+    auto definition = Horo::Editor::ConvertSceneDocumentToRuntime(
+        document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
+    assert(definition.HasValue());
+    auto scene = Horo::Runtime::RuntimeScene::Create(
+        definition.Value(), Horo::Runtime::SceneRuntimeId{1});
+    assert(scene.HasValue());
+    return std::move(scene).Value();
+}
+
 [[nodiscard]] bool NearlyEqual(const float lhs, const float rhs) noexcept
 {
     return std::fabs(lhs - rhs) < 0.0001F;
@@ -224,7 +238,9 @@ void ExtractionResolvesHierarchyIntoWorldMatrices()
     });
     assert(child.HasValue());
 
-    const auto extracted = ExtractEditorViewportScene(document.Snapshot(), EditorViewportCamera{}, meshCache);
+    const auto runtimeScene = MakeRuntimeScene(document);
+    const auto extracted = ExtractEditorViewportScene(
+        runtimeScene->View(), document.Revision(), EditorViewportCamera{}, meshCache);
     assert(extracted.HasValue());
     assert(extracted.Value().documentRevision == document.Revision());
     assert(extracted.Value().instances.size() == 1);
@@ -233,7 +249,7 @@ void ExtractionResolvesHierarchyIntoWorldMatrices()
     assert(NearlyEqual(worldOrigin.x, 2.0F));
     assert(NearlyEqual(worldOrigin.y, 3.0F));
     assert(NearlyEqual(worldOrigin.z, 0.0F));
-    const auto resolved = ResolveSceneObjectWorldTransforms(document.Snapshot(), child.Value().object);
+    const auto resolved = ResolveSceneObjectWorldTransforms(runtimeScene->View(), child.Value().object);
     assert(resolved.HasValue());
     const Math::Vec3 resolvedOrigin = Math::TransformPoint(resolved.Value().localToWorld, {});
     const Math::Vec3 resolvedParentOrigin = Math::TransformPoint(resolved.Value().parentToWorld, {});
@@ -245,12 +261,12 @@ void ExtractionResolvesHierarchyIntoWorldMatrices()
         .object = parent.Value().object,
         .localTransform = Math::Transform{.translation = {5.0F, 0.0F, 0.0F}},
     };
-    assert(ApplyEditorViewportTransformPreview(document.Objects(), preview, previewScene).HasValue());
+    assert(ApplyEditorViewportTransformPreview(runtimeScene->View(), preview, previewScene).HasValue());
     const Math::Vec3 previewOrigin = Math::TransformPoint(previewScene.instances.front().localToWorld, {});
     assert(NearlyEqual(previewOrigin.x, 5.0F) && NearlyEqual(previewOrigin.y, 3.0F));
     assert(document.Revision() == extracted.Value().documentRevision);
 
-    assert(ApplyEditorViewportTransformPreview(document.Objects(), {}, previewScene).HasValue());
+    assert(ApplyEditorViewportTransformPreview(runtimeScene->View(), {}, previewScene).HasValue());
     const Math::Vec3 restoredOrigin = Math::TransformPoint(previewScene.instances.front().localToWorld, {});
     assert(NearlyEqual(restoredOrigin.x, 2.0F) && NearlyEqual(restoredOrigin.y, 3.0F));
 }
@@ -353,7 +369,9 @@ void ExtractionUsesAllPrimitiveMeshesAndDeduplicatesDescriptors()
                })
                .HasValue());
     Runtime::PrimitiveMeshCache meshCache;
-    const auto extracted = ExtractEditorViewportScene(document.Snapshot(), {}, meshCache);
+    const auto runtimeScene = MakeRuntimeScene(document);
+    const auto extracted = ExtractEditorViewportScene(
+        runtimeScene->View(), document.Revision(), {}, meshCache);
     assert(extracted.HasValue());
     assert(extracted.Value().instances.size() == 8);
     assert(extracted.Value().meshResources.size() == 7);

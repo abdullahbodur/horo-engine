@@ -57,7 +57,7 @@ void MatricesComposeInvertAndDecomposeAffineTrs()
     const Horo::Result<Mat4> affineInverse = TryInverseAffine(matrix);
     const Horo::Result<Mat4> generalInverse = TryInverse(matrix);
     assert(affineInverse.HasValue() && generalInverse.HasValue());
-    const Vec3 point{0.7F, -1.2F, 2.4F};
+    constexpr Vec3 point{0.7F, -1.2F, 2.4F};
     assert(
         NearlyEqual(TransformAffinePoint(affineInverse.Value(), TransformAffinePoint(matrix, point)), point, 0.0002F));
     assert(NearlyEqual(TransformPoint(generalInverse.Value(), TransformPoint(matrix, point)), point, 0.0002F));
@@ -88,7 +88,7 @@ void ProjectionsRespectDepthConventionsAndRoundTrip()
         assert(Near(TransformPoint(orthographic, {0.0F, 0.0F, -11.0F}).z, 1.0F));
 
         const Mat4 viewProjection = Multiply(perspective, view);
-        const Vec3 worldPoint{0.25F, -0.5F, 0.0F};
+        constexpr Vec3 worldPoint{0.25F, -0.5F, 0.0F};
         const Horo::Result<Vec3> projected = TryProject(viewProjection, worldPoint);
         const Horo::Result<Mat4> inverse = TryInverse(viewProjection);
         assert(projected.HasValue() && inverse.HasValue());
@@ -110,7 +110,7 @@ void RaysBoundsAndPlanesDistinguishMissFromInvalidInput()
     assert(planeHit.HasValue() && planeHit.Value().has_value());
     assert(Near(planeHit.Value()->distance, 5.0F));
 
-    const Aabb box{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
+    constexpr Aabb box{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const auto hit = IntersectRayAabb(ray.Value(), box);
     assert(hit.HasValue() && hit.Value().has_value() && Near(hit.Value()->distance, 4.0F));
     const auto inside = IntersectRayAabb(TryMakeRay({}, {1.0F, 0.0F, 0.0F}, 0.0F, 20.0F).Value(), box);

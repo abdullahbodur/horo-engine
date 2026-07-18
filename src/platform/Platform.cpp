@@ -51,6 +51,14 @@ namespace Horo
         m_now = m_now + elapsed;
     }
 
+    /** @copydoc SteadyClock::MonotonicNow */
+    Duration SteadyClock::MonotonicNow() const
+    {
+        return Duration::FromNanoseconds(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count());
+    }
+
     /** @copydoc ProcessService::CurrentProcess */
     ProcessMetadata NullProcessService::CurrentProcess() const
     {

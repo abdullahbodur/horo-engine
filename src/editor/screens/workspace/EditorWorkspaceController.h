@@ -13,7 +13,7 @@ namespace Horo::Editor
     class EditorWorkspaceController
     {
     public:
-        EditorWorkspaceController(std::string projectRoot);
+        EditorWorkspaceController(std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene);
         ~EditorWorkspaceController() = default;
 
         [[nodiscard]] const EditorWorkspaceViewModel& ViewModel() const noexcept
@@ -46,8 +46,11 @@ namespace Horo::Editor
 
         void ProcessCommand(const EditorWorkspaceViewCommandData& cmd);
         void UpdateFps(float fps);
+        /** @brief Publishes a newly activated runtime scene to the cached viewport snapshot. */
+        void SynchronizeRuntimeScenePreview();
 
     private:
+        Runtime::RuntimeSceneService &m_runtimeScene;
         EditorWorkspaceViewModel m_viewModel;
         EditorDataBus m_dataBus;
         SceneDocument m_document;
@@ -58,8 +61,14 @@ namespace Horo::Editor
         EditorViewportModel m_viewport{m_dataBus};
         Runtime::PrimitiveMeshCache m_primitiveMeshCache;
         EditorViewportSceneSnapshot m_viewportScene;
+        std::optional<SceneDocumentSnapshot> m_deferredRuntimeSnapshot;
+        DocumentRevision m_queuedRuntimeRevision{};
+        Runtime::SceneDefinitionRevision m_activeRuntimeRevision{};
+        Runtime::SceneDefinitionRevision m_queuedDefinitionRevision{};
+        Runtime::SceneDefinitionId m_previewSceneId{1};
 
         void RefreshSceneProjections();
+        void QueueRuntimeScene(SceneDocumentSnapshot snapshot);
         void HandleCreatePrimitive(Runtime::PrimitiveId primitive, std::optional<SceneObjectId> parent);
         void HandleDuplicateObject(SceneObjectId object);
         void HandleDeleteObject(SceneObjectId object);

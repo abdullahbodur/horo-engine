@@ -32,6 +32,27 @@ target_include_directories(HoroPlatform
 )
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
+add_library(HoroRuntime STATIC
+        runtime/frame/FrameScheduler.cpp
+        runtime/lifecycle/RuntimeLifecycle.cpp
+        runtime/lifecycle/RuntimeHost.cpp
+        runtime/lifecycle/RuntimeErrors.cpp
+)
+add_library(HoroEngine::Runtime ALIAS HoroRuntime)
+target_compile_features(HoroRuntime PUBLIC cxx_std_20)
+target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
+
+add_library(HoroRuntimeScene STATIC
+        runtime/scene/RuntimeSceneDefinition.cpp
+        runtime/scene/RuntimeScene.cpp
+        runtime/scene/RuntimeSceneErrors.cpp
+)
+add_library(HoroEngine::RuntimeScene ALIAS HoroRuntimeScene)
+target_compile_features(HoroRuntimeScene PUBLIC cxx_std_20)
+target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp
@@ -159,6 +180,7 @@ endif ()
 
 add_library(HoroEditorModel STATIC
         editor/document/SceneDocument.cpp
+        editor/document/RuntimeSceneConversion.cpp
         editor/project_model/EditorModelErrors.cpp
         editor/project_model/EditorSelectionModel.cpp
         editor/project_model/EditorViewportCamera.cpp
@@ -176,6 +198,7 @@ target_link_libraries(HoroEditorModel
         PUBLIC
         HoroEngine::Foundation
         HoroEngine::SceneModel
+        HoroEngine::RuntimeScene
 )
 
 add_library(HoroEditorViewportScene STATIC

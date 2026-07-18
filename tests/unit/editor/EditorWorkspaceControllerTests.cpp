@@ -4,12 +4,60 @@
 
 namespace
 {
+using namespace Horo;
 using namespace Horo::Editor;
 namespace Math = Horo::Math;
 
+class TestWorkspaceController final
+{
+  public:
+    TestWorkspaceController() : controller_("test-project", runtimeScene_)
+    {
+        assert(runtimeScene_.Startup(cancellation_.Token()).HasValue());
+        PumpLifecycleCommit();
+    }
+
+    void ProcessCommand(const EditorWorkspaceViewCommandData &command)
+    {
+        controller_.ProcessCommand(command);
+        PumpLifecycleCommit();
+    }
+
+    [[nodiscard]] const EditorWorkspaceViewModel &ViewModel() const noexcept
+    {
+        return controller_.ViewModel();
+    }
+
+    [[nodiscard]] EditorDataBus &DataBus() noexcept { return controller_.DataBus(); }
+
+    [[nodiscard]] ViewportRevision CurrentViewportRevision() const noexcept
+    {
+        return controller_.CurrentViewportRevision();
+    }
+
+    [[nodiscard]] const EditorViewportSceneSnapshot &ViewportScene() const noexcept
+    {
+        return controller_.ViewportScene();
+    }
+
+  private:
+    void PumpLifecycleCommit()
+    {
+        const Runtime::FrameContext context{1, {}, 0.0, 0, {}, false, cancellation_.Token()};
+        assert(runtimeScene_
+                   .OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context)
+                   .HasValue());
+        controller_.SynchronizeRuntimeScenePreview();
+    }
+
+    Runtime::RuntimeSceneService runtimeScene_;
+    CancellationSource cancellation_;
+    EditorWorkspaceController controller_;
+};
+
 void MovingAnActivePanelAcrossAreasUpdatesItsRuntimePlacement()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -30,7 +78,7 @@ void MovingAnActivePanelAcrossAreasUpdatesItsRuntimePlacement()
 
 void ReplacingATargetAreaPreservesTheDisplacedPanelsPlacement()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -45,7 +93,7 @@ void ReplacingATargetAreaPreservesTheDisplacedPanelsPlacement()
 
 void DroppingIntoBottomRightSplitsTheFullBottomDock()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -66,7 +114,7 @@ void DroppingIntoBottomRightSplitsTheFullBottomDock()
 
 void ClickingASplitPanelExpandsItToTheFullBottomDock()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData splitCommand;
     splitCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -91,7 +139,7 @@ void ClickingASplitPanelExpandsItToTheFullBottomDock()
 
 void DroppingALeftRailIconIntoBottomRightMovesItToTheRightRail()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData fullCommand;
     fullCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -117,7 +165,7 @@ void DroppingALeftRailIconIntoBottomRightMovesItToTheRightRail()
 
 void PlacesTheViewportInTheDocumentTopRailByDefault()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     assert((controller.ViewModel().activityBarLayout.FindSlot("horo.viewport") ==
             ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
@@ -125,7 +173,7 @@ void PlacesTheViewportInTheDocumentTopRailByDefault()
 
 void DroppingIntoTheLowerHalfSplitsTheLeftDock()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -147,7 +195,7 @@ void DroppingIntoTheLowerHalfSplitsTheLeftDock()
 
 void DroppingIntoTheLowerHalfSplitsTheRightDock()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -169,7 +217,7 @@ void DroppingIntoTheLowerHalfSplitsTheRightDock()
 
 void ClickingASplitSidePanelExpandsItToTheFullDock()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData splitCommand;
     splitCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -194,7 +242,7 @@ void ClickingASplitSidePanelExpandsItToTheFullDock()
 
 void MovingOneHalfAwayExpandsTheRemainingSidePanel()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData splitCommand;
     splitCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -220,7 +268,7 @@ void MovingOneHalfAwayExpandsTheRemainingSidePanel()
 
 void ReorderingAnActiveIconMovesItsPanelAndActivatesASourceFallback()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData closeFallback;
     closeFallback.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -261,7 +309,7 @@ void ReorderingAnActiveIconMovesItsPanelAndActivatesASourceFallback()
 
 void ReorderingTheOnlyBottomIconDoesNotLeaveAHalfEmptySplit()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ReorderActivityBarItem;
@@ -278,7 +326,7 @@ void ReorderingTheOnlyBottomIconDoesNotLeaveAHalfEmptySplit()
 
 void DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData splitCommand;
     splitCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -318,7 +366,7 @@ void DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon()
 
 void DroppingOnTheBottomMergeTargetPreservesItsActivityGroup()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData splitCommand;
     splitCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -347,7 +395,7 @@ void DroppingOnTheBottomMergeTargetPreservesItsActivityGroup()
 
 void ReorderingAnActiveBottomPanelToTheLeftDoesNotRenderItTwice()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
 
     EditorWorkspaceViewCommandData command;
     command.command = EditorWorkspaceViewCommand::ReorderActivityBarItem;
@@ -366,7 +414,7 @@ void ReorderingAnActiveBottomPanelToTheLeftDoesNotRenderItTwice()
 
 void SceneCommandsPublishCommittedEventsAndDriveUndoRedoState()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     std::vector<SceneDocumentChangedEvent> events;
     auto subscription = controller.DataBus().Subscribe<SceneDocumentChangedEvent>(
         [&events](const SceneDocumentChangedEvent &event) { events.push_back(event); });
@@ -401,7 +449,7 @@ void SceneCommandsPublishCommittedEventsAndDriveUndoRedoState()
 
 void CatalogCreationSelectsTheResultAndHonorsTheRequestedParent()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     EditorWorkspaceViewCommandData createRoot;
     createRoot.command = EditorWorkspaceViewCommand::CreatePrimitive;
     createRoot.primitivePayload = Horo::Runtime::PrimitiveId{"primitive.object.empty"};
@@ -425,7 +473,7 @@ void CatalogCreationSelectsTheResultAndHonorsTheRequestedParent()
 
 void StableSelectionDrivesInspectorProjectionAndReconcilesAfterDelete()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     std::vector<SelectionChangedEvent> events;
     auto subscription = controller.DataBus().Subscribe<SelectionChangedEvent>(
@@ -459,7 +507,7 @@ void StableSelectionDrivesInspectorProjectionAndReconcilesAfterDelete()
 
 void ViewportPickingUsesTheAuthoritativeSelectionModel()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     std::vector<SelectionChangedEvent> events;
     auto subscription = controller.DataBus().Subscribe<SelectionChangedEvent>(
@@ -485,7 +533,7 @@ void ViewportPickingUsesTheAuthoritativeSelectionModel()
 
 void TransformCommandsUpdateTheDocumentProjectionViewportAndHistory()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     const Math::Transform original = controller.ViewModel().objects.front().localTransform;
     std::vector<SceneDocumentChangedEvent> events;
@@ -524,7 +572,7 @@ void TransformCommandsUpdateTheDocumentProjectionViewportAndHistory()
 
 void ViewportNavigationUpdatesOnlyTheEditorCameraAuthority()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const EditorViewportCamera before = controller.ViewportScene().camera;
     const DocumentRevision documentRevision = controller.ViewModel().documentRevision;
     std::vector<ViewportChangedEvent> events;
@@ -549,7 +597,7 @@ void ViewportNavigationUpdatesOnlyTheEditorCameraAuthority()
 
 void GizmoPreviewIsTransientAndCommitCreatesOneUndoableDocumentChange()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     const DocumentRevision initialRevision = controller.ViewModel().documentRevision;
     Math::Transform edited = controller.ViewModel().objects.front().localTransform;
@@ -597,7 +645,7 @@ void GizmoPreviewIsTransientAndCommitCreatesOneUndoableDocumentChange()
 
 void CancellingGizmoPreviewRestoresTheExactCommittedProjection()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     const Math::Transform committedTransform = controller.ViewModel().objects.front().localTransform;
     const Math::Mat4 committedMatrix = controller.ViewportScene().instances.front().localToWorld;
@@ -634,7 +682,7 @@ void CancellingGizmoPreviewRestoresTheExactCommittedProjection()
 
 void NoOpGizmoCommitClearsPreviewWithoutCreatingHistory()
 {
-    EditorWorkspaceController controller("test-project");
+    TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
     const Math::Transform committedTransform = controller.ViewModel().objects.front().localTransform;
     Math::Transform movedTransform = committedTransform;

@@ -280,9 +280,10 @@ src/
 ```text
 HoroEngine::Foundation
 HoroEngine::Platform
+HoroEngine::Runtime
 HoroEngine::Assets
 HoroEngine::SceneModel
-HoroEngine::SceneRuntime
+HoroEngine::RuntimeScene
 HoroEngine::Physics
 HoroEngine::AudioApi
 HoroEngine::AudioRuntime
@@ -344,11 +345,13 @@ Arrows point from the dependent target to the target that defines the contract:
 ```text
 platform -----------------------------------------------> foundation
 
+runtime -----------------------------------------------> foundation
+
 assets / scene-model / render-api / audio-api /
 network-api / gameplay-api / extension-api -------------> foundation
 
 physics / audio-runtime / network-runtime /
-scene-runtime / render-frontend / pipeline -------------> neutral APIs and models
+runtime-scene / render-frontend / pipeline -------------> neutral APIs and models
 
 audio-platform / audio-null / network-sockets /
 render-opengl / render-null / render-vulkan ------------> platform + owning API
@@ -359,7 +362,7 @@ application / editor-model / editor-services -----------> neutral APIs,
 gui / mcp / extension-host -----------------------------> application, editor,
                                                           and extension APIs
 
-apps ---------------------------------------------------> adapters + platform
+apps ---------------------------------------------------> runtime + adapters + platform
                                                           + selected backends
 ```
 
@@ -504,7 +507,7 @@ The arrows below mean compile-time `depends on`; they do not represent runtime
 callback direction:
 
 ```text
-scene-runtime -----------+
+runtime-scene -----------+
                          |
 render-frontend ---------+---> render-api
                          |
