@@ -12,6 +12,7 @@
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Runtime/Input.h"
+#include "NavigationErrors.h"
 #include "editor/status_bar/EditorStatusBar.h"
 
 #include <algorithm>
@@ -21,15 +22,6 @@ namespace Horo::Editor
 {
 namespace
 {
-
-[[nodiscard]] Error MakeScreenError(const char *code, const char *message)
-{
-    return Error{.code = ErrorCode{code},
-                 .domain = ErrorDomainId{"horo.editor.screens"},
-                 .severity = ErrorSeverity::Error,
-                 .message = message};
-}
-
 [[nodiscard]] const char *GetLeaveActionLabel(LeaveAction action) noexcept
 {
     using enum LeaveAction;
@@ -203,7 +195,7 @@ bool GuiScreenHost::IsApplicationCloseRequested() const noexcept
 Result<void> GuiScreenHost::RequestRendererRestart(EditorRendererRestartRequest request)
 {
     if (shutdown_)
-        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
+        return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
     rendererRestartRequest_ = std::move(request);
     const Result<void> close = RequestCloseApplication();
     if (close.HasError())
@@ -236,19 +228,19 @@ std::optional<ProjectCreationOperationId> GuiScreenHost::GetActiveCreationId() c
 Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 {
     if (shutdown_)
-        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
+        return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
     if (!IsRoutePayloadValid(destination))
     {
         return Result<void>::Failure(
-            MakeScreenError("navigation.invalid_route_parameters", "Invalid route payload for requested route kind."));
+            MakeError(NavigationErrors::InvalidRouteParameters, "Invalid route payload for requested route kind."));
     }
     if (navigationBusy_)
     {
-        return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already in progress."));
+        return Result<void>::Failure(MakeError(NavigationErrors::Busy, "Navigation already in progress."));
     }
     if (pendingRequirement_.has_value() || pendingTarget_.has_value())
     {
-        return Result<void>::Failure(MakeScreenError("navigation.busy", "Leave resolution already pending."));
+        return Result<void>::Failure(MakeError(NavigationErrors::Busy, "Leave resolution already pending."));
     }
     if (AreRoutesIdentical(activeRoute_, destination))
     {
@@ -258,7 +250,7 @@ Result<void> GuiScreenHost::Navigate(GuiRoute destination)
     {
         if (pendingNavigation_.has_value())
         {
-            return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already queued this frame."));
+            return Result<void>::Failure(MakeError(NavigationErrors::Busy, "Navigation already queued this frame."));
         }
         pendingNavigation_ = std::move(destination);
         return Result<void>::Success();
@@ -269,10 +261,10 @@ Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 Result<void> GuiScreenHost::RequestCloseApplication()
 {
     if (shutdown_)
-        return Result<void>::Failure(MakeScreenError("navigation.host_shutdown", "Screen host is shut down."));
+        return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
     if (navigationBusy_ || pendingRequirement_.has_value() || pendingTarget_.has_value())
     {
-        return Result<void>::Failure(MakeScreenError("navigation.busy", "Navigation already in progress."));
+        return Result<void>::Failure(MakeError(NavigationErrors::Busy, "Navigation already in progress."));
     }
     return ExecuteLeaveCheckAndCommit(LeaveTarget{ApplicationCloseTarget{}});
 }
@@ -296,19 +288,20 @@ Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target
     if (decision.disposition == LeaveDisposition::Deny)
     {
         return Result<void>::Failure(
-            MakeScreenError("navigation.leave_denied", "Active screen denied leave transition."));
+            MakeError(NavigationErrors::LeaveDenied, "Active screen denied leave transition."));
     }
     if (decision.disposition == LeaveDisposition::RequireResolution)
     {
         if (!decision.requirement.has_value())
         {
-            return Result<void>::Failure(MakeScreenError("navigation.invalid_leave_requirement",
-                                                         "Screen requested leave resolution without a requirement."));
+            return Result<void>::Failure(
+                MakeError(NavigationErrors::InvalidLeaveRequirement,
+                          "Screen requested leave resolution without a requirement."));
         }
         if (resolutionAttemptCount_ >= 5)
         {
             return Result<void>::Failure(
-                MakeScreenError("navigation.leave_resolution_limit_exceeded", "Exceeded resolution attempts."));
+                MakeError(NavigationErrors::LeaveResolutionLimitExceeded, "Exceeded resolution attempts."));
         }
         pendingRequirement_ = decision.requirement;
         pendingTarget_ = target;

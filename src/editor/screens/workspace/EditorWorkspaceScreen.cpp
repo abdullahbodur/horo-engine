@@ -10,6 +10,7 @@
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
 
+#include "editor/screens/NavigationErrors.h"
 #include "EditorWorkspaceView.h"
 #include "editor/screens/workspace/EditorWorkspaceController.h"
 #include "editor/input/EditorInputActions.h"
@@ -191,12 +192,8 @@ namespace Horo::Editor
                 using enum LeaveDisposition;
                 if (resolution.subject != 1 || resolution.revision != 1)
                 {
-                    return Result<LeaveDecision>::Failure(Error{
-                        .code = ErrorCode{"navigation.stale_leave_subject"},
-                        .domain = ErrorDomainId{"horo.editor.workspace"},
-                        .severity = ErrorSeverity::Error,
-                        .message = "Workspace leave requirement is stale."
-                    });
+                    return Result<LeaveDecision>::Failure(
+                        MakeError(NavigationErrors::WorkspaceStaleLeaveSubject));
                 }
                 if (resolution.action == Save)
                 {
@@ -222,12 +219,8 @@ namespace Horo::Editor
                         .disposition = Deny, .requirement = std::nullopt
                     });
                 }
-                return Result<LeaveDecision>::Failure(Error{
-                    .code = ErrorCode{"navigation.leave_action_not_allowed"},
-                    .domain = ErrorDomainId{"horo.editor.workspace"},
-                    .severity = ErrorSeverity::Error,
-                    .message = "Workspace leave action is not allowed."
-                });
+                return Result<LeaveDecision>::Failure(
+                    MakeError(NavigationErrors::WorkspaceLeaveActionNotAllowed));
             }
 
             void OnLeave() override

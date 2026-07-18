@@ -1,4 +1,5 @@
 #include "EditorGuiRendererOpenGL.h"
+#include "editor/renderer/EditorRendererErrors.h"
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -18,12 +19,9 @@ namespace Horo::Editor
 {
 namespace
 {
-[[nodiscard]] Error MakeGuiRendererError(const char *code, std::string message)
+[[nodiscard]] Error MakeGuiRendererError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{.code = ErrorCode{code},
-                 .domain = ErrorDomainId{"horo.editor.gui.opengl"},
-                 .severity = ErrorSeverity::Error,
-                 .message = std::move(message)};
+    return MakeError(descriptor, std::move(message));
 }
 } // namespace
 
@@ -44,7 +42,7 @@ Result<void> EditorGuiRendererOpenGL::Initialize()
 {
     if (platformInitialized_ || rendererInitialized_ || context_ == nullptr)
     {
-        return Result<void>::Failure(MakeGuiRendererError("editor.gui.opengl.invalid_state",
+        return Result<void>::Failure(MakeGuiRendererError(RendererErrors::GuiInvalidState,
                                                           "OpenGL GUI renderer state or context is invalid."));
     }
     platformInitialized_ = ImGui_ImplSDL3_InitForOpenGL(window_, context_);
@@ -52,7 +50,7 @@ Result<void> EditorGuiRendererOpenGL::Initialize()
     if (!rendererInitialized_)
     {
         Shutdown();
-        return Result<void>::Failure(MakeGuiRendererError("editor.gui.opengl.initialization_failed",
+        return Result<void>::Failure(MakeGuiRendererError(RendererErrors::GuiInitializationFailed,
                                                           "Failed to initialize Dear ImGui SDL3/OpenGL bridges."));
     }
     return Result<void>::Success();
@@ -64,7 +62,7 @@ Result<void> EditorGuiRendererOpenGL::BeginFrame()
     if (!rendererInitialized_)
     {
         return Result<void>::Failure(
-            MakeGuiRendererError("editor.gui.opengl.not_initialized", "OpenGL GUI renderer is not initialized."));
+            MakeGuiRendererError(RendererErrors::GuiNotInitialized, "OpenGL GUI renderer is not initialized."));
     }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
@@ -77,7 +75,7 @@ Result<void> EditorGuiRendererOpenGL::RenderDrawData()
     if (!rendererInitialized_)
     {
         return Result<void>::Failure(
-            MakeGuiRendererError("editor.gui.opengl.not_initialized", "OpenGL GUI renderer is not initialized."));
+            MakeGuiRendererError(RendererErrors::GuiNotInitialized, "OpenGL GUI renderer is not initialized."));
     }
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     return Result<void>::Success();
@@ -91,7 +89,7 @@ Result<std::uintptr_t> EditorGuiRendererOpenGL::CreateTexture(const EditorRgba8I
         image.height > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()))
     {
         return Result<std::uintptr_t>::Failure(
-            MakeGuiRendererError("editor.gui.opengl.invalid_texture", "OpenGL GUI texture upload is invalid."));
+            MakeGuiRendererError(RendererErrors::GuiInvalidTexture, "OpenGL GUI texture upload is invalid."));
     }
     GLuint texture = 0;
     GLint previousTexture = 0;
@@ -106,7 +104,7 @@ Result<std::uintptr_t> EditorGuiRendererOpenGL::CreateTexture(const EditorRgba8I
     if (texture == 0)
     {
         return Result<std::uintptr_t>::Failure(
-            MakeGuiRendererError("editor.gui.opengl.texture_creation_failed", "Failed to create OpenGL GUI texture."));
+            MakeGuiRendererError(RendererErrors::GuiTextureCreationFailed, "Failed to create OpenGL GUI texture."));
     }
     textures_.push_back(texture);
     return Result<std::uintptr_t>::Success(static_cast<std::uintptr_t>(texture));
@@ -115,7 +113,7 @@ Result<std::uintptr_t> EditorGuiRendererOpenGL::CreateTexture(const EditorRgba8I
 /** @copydoc EditorGuiRendererOpenGL::DestroyTexture */
 void EditorGuiRendererOpenGL::DestroyTexture(const std::uintptr_t textureId) noexcept
 {
-    const auto found = std::find(textures_.begin(), textures_.end(), static_cast<std::uint32_t>(textureId));
+    const auto found = std::ranges::find(textures_, static_cast<std::uint32_t>(textureId));
     if (found != textures_.end())
     {
         const GLuint texture = *found;

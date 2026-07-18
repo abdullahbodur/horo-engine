@@ -1,4 +1,5 @@
 #include "editor/project_model/EditorSelectionModel.h"
+#include "EditorModelErrors.h"
 
 #include <algorithm>
 #include <string>
@@ -9,10 +10,9 @@ namespace Horo::Editor
 namespace
 {
 /** @brief Creates a typed editor-selection validation error. */
-[[nodiscard]] Error MakeSelectionError(std::string code, std::string message)
+[[nodiscard]] Error MakeSelectionError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{ErrorCode{std::move(code)}, ErrorDomainId{"horo.editor.selection"}, ErrorSeverity::Error,
-                 std::move(message), {}};
+    return MakeError(descriptor, std::move(message));
 }
 } // namespace
 
@@ -39,7 +39,7 @@ Result<void> EditorSelectionModel::SetObjects(std::vector<SceneObjectId> objects
         if (!object.IsValid() || !document_->Contains(object))
         {
             return Result<void>::Failure(MakeSelectionError(
-                "editor.selection.object_not_found", "Selected scene object does not exist in the active document."));
+                SelectionErrors::ObjectNotFound, "Selected scene object does not exist in the active document."));
         }
         if (std::ranges::find(uniqueObjects, object) == uniqueObjects.end())
         {
@@ -49,7 +49,7 @@ Result<void> EditorSelectionModel::SetObjects(std::vector<SceneObjectId> objects
     if (primary.has_value() && std::ranges::find(uniqueObjects, *primary) == uniqueObjects.end())
     {
         return Result<void>::Failure(MakeSelectionError(
-            "editor.selection.invalid_primary", "Primary scene object must be part of the selected object set."));
+            SelectionErrors::InvalidPrimary, "Primary scene object must be part of the selected object set."));
     }
     if (uniqueObjects == current_.objects && primary == current_.primary)
     {

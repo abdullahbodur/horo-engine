@@ -10,6 +10,7 @@
 #include "Horo/Editor/WelcomeController.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Runtime/Input.h"
+#include "editor/screens/NavigationErrors.h"
 #include "ProjectCreationView.h"
 
 #include <imgui.h>
@@ -145,12 +146,8 @@ namespace Horo::Editor
 
                 if (resolution.subject != 1 || resolution.revision != 1)
                 {
-                    return Result<LeaveDecision>::Failure(Error{
-                        .code = ErrorCode{"navigation.stale_leave_subject"},
-                        .domain = ErrorDomainId{"horo.editor.project_creation"},
-                        .severity = ErrorSeverity::Error,
-                        .message = "Project creation leave requirement is stale."
-                    });
+                    return Result<LeaveDecision>::Failure(
+                        MakeError(NavigationErrors::ProjectCreationStaleLeaveSubject));
                 }
                 if (resolution.action == Discard)
                 {
@@ -165,12 +162,8 @@ namespace Horo::Editor
                         .disposition = Deny, .requirement = std::nullopt
                     });
                 }
-                return Result<LeaveDecision>::Failure(Error{
-                    .code = ErrorCode{"navigation.leave_action_not_allowed"},
-                    .domain = ErrorDomainId{"horo.editor.project_creation"},
-                    .severity = ErrorSeverity::Error,
-                    .message = "Project creation leave action is not allowed."
-                });
+                return Result<LeaveDecision>::Failure(
+                    MakeError(NavigationErrors::ProjectCreationLeaveActionNotAllowed));
             }
 
             void OnLeave() override

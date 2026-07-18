@@ -1,4 +1,5 @@
 #include "EditorViewportRendererOpenGL.h"
+#include "editor/renderer/EditorRendererErrors.h"
 
 #include <SDL3/SDL_video.h>
 #include <glad/gl.h>
@@ -13,12 +14,9 @@ namespace
 {
 constexpr std::uint32_t maxViewportDimension = 8192;
 
-[[nodiscard]] Error MakeViewportError(const char *code, std::string message)
+[[nodiscard]] Error MakeViewportError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{.code = ErrorCode{code},
-                 .domain = ErrorDomainId{"horo.editor.viewport.opengl"},
-                 .severity = ErrorSeverity::Error,
-                 .message = std::move(message)};
+    return MakeError(descriptor, std::move(message));
 }
 
 [[nodiscard]] Result<std::uint32_t> CompileShader(const std::uint32_t type, const char *source)
@@ -40,7 +38,7 @@ constexpr std::uint32_t maxViewportDimension = 8192;
     glGetShaderInfoLog(shader, logLength, nullptr, log.data());
     glDeleteShader(shader);
     return Result<std::uint32_t>::Failure(
-        MakeViewportError("editor.viewport.shader_compile_failed", "Viewport shader compilation failed: " + log));
+        MakeViewportError(RendererErrors::ViewportShaderCompileFailed, "Viewport shader compilation failed: " + log));
 }
 } // namespace
 
@@ -55,13 +53,13 @@ Result<void> EditorViewportRendererOpenGL::Initialize()
 {
     if (initialized_)
     {
-        return Result<void>::Failure(MakeViewportError("editor.viewport.already_initialized",
+        return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportAlreadyInitialized,
                                                        "Editor viewport renderer is already initialized."));
     }
     if (gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress)) == 0)
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.opengl_dispatch_failed", "Failed to load OpenGL entry points."));
+            MakeViewportError(RendererErrors::ViewportOpenGLDispatchFailed, "Failed to load OpenGL entry points."));
     }
     if (const Result<void> program = CreateProgram(); program.HasError())
     {
@@ -111,7 +109,7 @@ Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(const Render::S
     if (!initialized_)
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.not_initialized", "Viewport renderer is not initialized."));
+            MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport renderer is not initialized."));
     }
     // A panel must request an extent every UI frame. Consuming the request keeps
     // hidden/inactive viewport tabs from spending GPU time in the background.
@@ -124,12 +122,12 @@ Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(const Render::S
         descriptor.extent.height != requestedExtent.height)
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_scene", "Editor viewport scene data is invalid."));
+            MakeViewportError(RendererErrors::ViewportInvalidScene, "Editor viewport scene data is invalid."));
     }
     if (targetHandle_.IsValid() && targetHandle_ != descriptor.target)
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.stale_target", "Viewport pass references a stale render target."));
+            MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport pass references a stale render target."));
     }
     targetHandle_ = descriptor.target;
     if (requestedExtent.width != allocatedExtent_.width || requestedExtent.height != allocatedExtent_.height)
@@ -184,7 +182,7 @@ Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(const Render::S
     {
         const auto mesh = meshes_.find(instance.mesh.id.value);
         if (mesh == meshes_.end())
-            return Result<void>::Failure(MakeViewportError("editor.viewport.stale_mesh_resource",
+            return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportStaleMeshResource,
                                                            "Viewport instance references a stale mesh resource."));
         glBindVertexArray(mesh->second.vertexArray);
         const Result<Math::Mat4> mvp = BuildRenderMvp(descriptor.scene.camera, instance.localToWorld, aspect,
@@ -317,14 +315,14 @@ void main()
         std::string log(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
         glGetProgramInfoLog(program_, logLength, nullptr, log.data());
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.shader_link_failed", "Viewport shader linking failed: " + log));
+            MakeViewportError(RendererErrors::ViewportShaderLinkFailed, "Viewport shader linking failed: " + log));
     }
     mvpLocation_ = glGetUniformLocation(program_, "uMvp");
     selectionColorLocation_ = glGetUniformLocation(program_, "uSelectionColor");
     selectionStrengthLocation_ = glGetUniformLocation(program_, "uSelectionStrength");
     if (mvpLocation_ < 0 || selectionColorLocation_ < 0 || selectionStrengthLocation_ < 0)
     {
-        return Result<void>::Failure(MakeViewportError("editor.viewport.shader_contract_invalid",
+        return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportShaderContractInvalid,
                                                        "Viewport shader is missing a required frame uniform."));
     }
     return Result<void>::Success();
@@ -372,7 +370,7 @@ Result<void> EditorViewportRendererOpenGL::SynchronizeMeshes(
             DestroyMesh(mesh);
             glBindVertexArray(static_cast<GLuint>(previousVertexArray));
             glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousArrayBuffer));
-            return Result<void>::Failure(MakeViewportError("editor.viewport.geometry_creation_failed",
+            return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportGeometryCreationFailed,
                                                            "Failed to upload a viewport mesh resource."));
         }
         meshes_.emplace(resource.handle.id.value, mesh);
@@ -456,7 +454,8 @@ Result<void> EditorViewportRendererOpenGL::RecreateTarget(const EditorViewportEx
     {
         DestroyTarget();
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.framebuffer_incomplete", "OpenGL viewport framebuffer is incomplete."));
+            MakeViewportError(RendererErrors::ViewportFramebufferIncomplete,
+                              "OpenGL viewport framebuffer is incomplete."));
     }
     allocatedExtent_ = extent;
     return Result<void>::Success();

@@ -1,6 +1,7 @@
 /** @copydoc SceneMath.h */
 
 #include "Horo/Math/SceneMath.h"
+#include "../FoundationErrors.h"
 
 #include <algorithm>
 #include <array>
@@ -15,9 +16,9 @@ namespace Horo::Math
 {
     namespace
     {
-        [[nodiscard]] Error MakeMathError(const char* code, const char* message)
+        [[nodiscard]] Error MakeMathError(const ErrorCodeDescriptor &descriptor, const char* message)
         {
-            return Error{ErrorCode{code}, ErrorDomainId{"horo.foundation.math"}, ErrorSeverity::Error, message, {}};
+            return MakeError(descriptor, message);
         }
 
         [[nodiscard]] bool IsValidEpsilon(const float epsilon) noexcept
@@ -96,27 +97,27 @@ namespace Horo::Math
     Result<Vec2> TryNormalize(const Vec2 value) noexcept
     {
         if (!IsFinite(value))
-            return Result<Vec2>::Failure(MakeMathError("math.non_finite_input", "Vector must be finite."));
+            return Result<Vec2>::Failure(MakeMathError(Errors::NonFiniteInput, "Vector must be finite."));
         if (LengthSquared(value) <= DefaultEpsilon * DefaultEpsilon)
-            return Result<Vec2>::Failure(MakeMathError("math.zero_length", "Vector length is too small to normalize."));
+            return Result<Vec2>::Failure(MakeMathError(Errors::ZeroLength, "Vector length is too small to normalize."));
         return Result<Vec2>::Success(Normalize(value));
     }
 
     Result<Vec3> TryNormalize(const Vec3 value) noexcept
     {
         if (!IsFinite(value))
-            return Result<Vec3>::Failure(MakeMathError("math.non_finite_input", "Vector must be finite."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::NonFiniteInput, "Vector must be finite."));
         if (LengthSquared(value) <= DefaultEpsilon * DefaultEpsilon)
-            return Result<Vec3>::Failure(MakeMathError("math.zero_length", "Vector length is too small to normalize."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::ZeroLength, "Vector length is too small to normalize."));
         return Result<Vec3>::Success(Normalize(value));
     }
 
     Result<Vec4> TryNormalize(const Vec4 value) noexcept
     {
         if (!IsFinite(value))
-            return Result<Vec4>::Failure(MakeMathError("math.non_finite_input", "Vector must be finite."));
+            return Result<Vec4>::Failure(MakeMathError(Errors::NonFiniteInput, "Vector must be finite."));
         if (LengthSquared(value) <= DefaultEpsilon * DefaultEpsilon)
-            return Result<Vec4>::Failure(MakeMathError("math.zero_length", "Vector length is too small to normalize."));
+            return Result<Vec4>::Failure(MakeMathError(Errors::ZeroLength, "Vector length is too small to normalize."));
         return Result<Vec4>::Success(Normalize(value));
     }
 
@@ -153,7 +154,7 @@ namespace Horo::Math
     {
         if (!std::isfinite(radians))
             return Result<
-                Quaternion>::Failure(MakeMathError("math.non_finite_input", "Rotation angle must be finite."));
+                Quaternion>::Failure(MakeMathError(Errors::NonFiniteInput, "Rotation angle must be finite."));
         auto normalized = TryNormalize(axis);
         if (normalized.HasError())
             return Result<Quaternion>::Failure(normalized.ErrorValue());
@@ -174,7 +175,7 @@ namespace Horo::Math
     Result<Quaternion> Quaternion::TryFromEulerRadians(const Vec3 radians) noexcept
     {
         if (!IsFinite(radians))
-            return Result<Quaternion>::Failure(MakeMathError("math.non_finite_input", "Euler angles must be finite."));
+            return Result<Quaternion>::Failure(MakeMathError(Errors::NonFiniteInput, "Euler angles must be finite."));
         const Quaternion xRotation = FromAxisAngle({1.0F, 0.0F, 0.0F}, radians.x);
         const Quaternion yRotation = FromAxisAngle({0.0F, 1.0F, 0.0F}, radians.y);
         const Quaternion zRotation = FromAxisAngle({0.0F, 0.0F, 1.0F}, radians.z);
@@ -202,9 +203,9 @@ namespace Horo::Math
     Result<Quaternion> Quaternion::TryNormalized() const noexcept
     {
         if (!IsFinite(*this))
-            return Result<Quaternion>::Failure(MakeMathError("math.non_finite_input", "Quaternion must be finite."));
+            return Result<Quaternion>::Failure(MakeMathError(Errors::NonFiniteInput, "Quaternion must be finite."));
         if (!IsValidQuaternion(*this))
-            return Result<Quaternion>::Failure(MakeMathError("math.zero_length", "Quaternion length is too small."));
+            return Result<Quaternion>::Failure(MakeMathError(Errors::ZeroLength, "Quaternion length is too small."));
         return Result<Quaternion>::Success(Normalized());
     }
 
@@ -220,9 +221,9 @@ namespace Horo::Math
     Result<Quaternion> Quaternion::TryInverse() const noexcept
     {
         if (!IsFinite(*this))
-            return Result<Quaternion>::Failure(MakeMathError("math.non_finite_input", "Quaternion must be finite."));
+            return Result<Quaternion>::Failure(MakeMathError(Errors::NonFiniteInput, "Quaternion must be finite."));
         if (!IsValidQuaternion(*this))
-            return Result<Quaternion>::Failure(MakeMathError("math.zero_length", "Quaternion length is too small."));
+            return Result<Quaternion>::Failure(MakeMathError(Errors::ZeroLength, "Quaternion length is too small."));
         return Result<Quaternion>::Success(Inverse());
     }
 
@@ -238,9 +239,9 @@ namespace Horo::Math
     Result<Vec3> Quaternion::TryRotate(const Vec3 value) const noexcept
     {
         if (!IsFinite(value) || !IsFinite(*this))
-            return Result<Vec3>::Failure(MakeMathError("math.non_finite_input", "Rotation inputs must be finite."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::NonFiniteInput, "Rotation inputs must be finite."));
         if (!IsValidQuaternion(*this))
-            return Result<Vec3>::Failure(MakeMathError("math.zero_length", "Quaternion length is too small."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::ZeroLength, "Quaternion length is too small."));
         return Result<Vec3>::Success(Rotate(value));
     }
 
@@ -298,10 +299,10 @@ namespace Horo::Math
     {
         if (!std::isfinite(alpha) || !IsFinite(from) || !IsFinite(to))
             return Result<Quaternion>::Failure(
-                MakeMathError("math.non_finite_input", "Interpolation inputs must be finite."));
+                MakeMathError(Errors::NonFiniteInput, "Interpolation inputs must be finite."));
         if (!IsValidQuaternion(from) || !IsValidQuaternion(to))
             return Result<Quaternion>::Failure(
-                MakeMathError("math.zero_length", "Interpolation quaternion is invalid."));
+                MakeMathError(Errors::ZeroLength, "Interpolation quaternion is invalid."));
         return Result<Quaternion>::Success(Nlerp(from, to, alpha));
     }
 
@@ -309,10 +310,10 @@ namespace Horo::Math
     {
         if (!std::isfinite(alpha) || !IsFinite(from) || !IsFinite(to))
             return Result<Quaternion>::Failure(
-                MakeMathError("math.non_finite_input", "Interpolation inputs must be finite."));
+                MakeMathError(Errors::NonFiniteInput, "Interpolation inputs must be finite."));
         if (!IsValidQuaternion(from) || !IsValidQuaternion(to))
             return Result<Quaternion>::Failure(
-                MakeMathError("math.zero_length", "Interpolation quaternion is invalid."));
+                MakeMathError(Errors::ZeroLength, "Interpolation quaternion is invalid."));
         return Result<Quaternion>::Success(Slerp(from, to, alpha));
     }
 
@@ -326,7 +327,7 @@ namespace Horo::Math
     Result<Mat4> Transform::TryToMatrix() const noexcept
     {
         if (!IsFinite(translation) || !IsFinite(scale) || !IsValidQuaternion(rotation))
-            return Result<Mat4>::Failure(MakeMathError("math.non_finite_input", "Transform values are invalid."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Transform values are invalid."));
         return Result<Mat4>::Success(
             Multiply(TranslationMatrix(translation), Multiply(RotationMatrix(rotation), ScaleMatrix(scale))));
     }
@@ -384,7 +385,7 @@ namespace Horo::Math
     Result<Mat4> TryInverse(const Mat4& matrix) noexcept
     {
         if (!IsFinite(matrix))
-            return Result<Mat4>::Failure(MakeMathError("math.non_finite_input", "Matrix must be finite."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Matrix must be finite."));
         std::array<std::array<float, 8>, 4> augmented{};
         for (int row = 0; row < 4; ++row)
         {
@@ -399,7 +400,7 @@ namespace Horo::Math
                 if (std::fabs(augmented[row][pivot]) > std::fabs(augmented[best][pivot]))
                     best = row;
             if (std::fabs(augmented[best][pivot]) <= DefaultEpsilon)
-                return Result<Mat4>::Failure(MakeMathError("math.singular_matrix", "Matrix is singular."));
+                return Result<Mat4>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix is singular."));
             if (best != pivot)
                 std::swap(augmented[best], augmented[pivot]);
             const float divisor = augmented[pivot][pivot];
@@ -424,7 +425,7 @@ namespace Horo::Math
     Result<Mat4> TryInverseAffine(const Mat4& matrix) noexcept
     {
         if (!IsAffine(matrix))
-            return Result<Mat4>::Failure(MakeMathError("math.invalid_affine_matrix",
+            return Result<Mat4>::Failure(MakeMathError(Errors::InvalidAffineMatrix,
                                                        "Matrix must be finite and affine."));
         const float a00 = matrix.At(0, 0), a01 = matrix.At(0, 1), a02 = matrix.At(0, 2);
         const float a10 = matrix.At(1, 0), a11 = matrix.At(1, 1), a12 = matrix.At(1, 2);
@@ -432,7 +433,7 @@ namespace Horo::Math
         const float determinant =
             a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
         if (!std::isfinite(determinant) || std::fabs(determinant) <= DefaultEpsilon)
-            return Result<Mat4>::Failure(MakeMathError("math.singular_matrix", "Affine matrix is singular."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::SingularMatrix, "Affine matrix is singular."));
         const float inverseDeterminant = 1.0F / determinant;
         Mat4 inverse = Mat4::Identity();
         inverse.values[0] = (a11 * a22 - a12 * a21) * inverseDeterminant;
@@ -456,23 +457,23 @@ namespace Horo::Math
     {
         if (!IsAffine(matrix))
             return Result<Transform>::Failure(
-                MakeMathError("math.invalid_affine_matrix", "Matrix must be finite and affine."));
+                MakeMathError(Errors::InvalidAffineMatrix, "Matrix must be finite and affine."));
         Vec3 xAxis{matrix.At(0, 0), matrix.At(1, 0), matrix.At(2, 0)};
         Vec3 yAxis{matrix.At(0, 1), matrix.At(1, 1), matrix.At(2, 1)};
         const Vec3 zOriginal{matrix.At(0, 2), matrix.At(1, 2), matrix.At(2, 2)};
         float scaleX = Length(xAxis);
         if (!std::isfinite(scaleX) || scaleX <= DefaultEpsilon)
-            return Result<Transform>::Failure(MakeMathError("math.singular_matrix", "Matrix has a singular X basis."));
+            return Result<Transform>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix has a singular X basis."));
         xAxis = Normalize(xAxis);
         yAxis -= xAxis * Dot(xAxis, yAxis);
         const float scaleY = Length(yAxis);
         if (!std::isfinite(scaleY) || scaleY <= DefaultEpsilon)
-            return Result<Transform>::Failure(MakeMathError("math.singular_matrix", "Matrix has a singular Y basis."));
+            return Result<Transform>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix has a singular Y basis."));
         yAxis = Normalize(yAxis);
         Vec3 zAxis = Normalize(Cross(xAxis, yAxis));
         float scaleZ = Dot(zOriginal, zAxis);
         if (!std::isfinite(scaleZ) || std::fabs(scaleZ) <= DefaultEpsilon)
-            return Result<Transform>::Failure(MakeMathError("math.singular_matrix", "Matrix has a singular Z basis."));
+            return Result<Transform>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix has a singular Z basis."));
         if (scaleZ < 0.0F)
         {
             scaleX = -scaleX;
@@ -519,14 +520,14 @@ namespace Horo::Math
     Result<Mat4> TryLookAt(const Vec3 eye, const Vec3 target, const Vec3 up) noexcept
     {
         if (!IsFinite(eye) || !IsFinite(target) || !IsFinite(up))
-            return Result<Mat4>::Failure(MakeMathError("math.non_finite_input", "View inputs must be finite."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "View inputs must be finite."));
         auto forwardResult = TryNormalize(target - eye);
         if (forwardResult.HasError())
-            return Result<Mat4>::Failure(MakeMathError("math.invalid_view", "View eye and target must differ."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::InvalidView, "View eye and target must differ."));
         auto sideResult = TryNormalize(Cross(forwardResult.Value(), up));
         if (sideResult.HasError())
             return Result<
-                Mat4>::Failure(MakeMathError("math.invalid_view", "View up must not be parallel to forward."));
+                Mat4>::Failure(MakeMathError(Errors::InvalidView, "View up must not be parallel to forward."));
         const Vec3 forward = forwardResult.Value();
         const Vec3 side = sideResult.Value();
         const Vec3 correctedUp = Cross(side, forward);
@@ -553,11 +554,11 @@ namespace Horo::Math
     {
         if (!std::isfinite(verticalFovRadians) || !std::isfinite(aspect) || !std::isfinite(nearPlane) ||
             !std::isfinite(farPlane))
-            return Result<Mat4>::Failure(MakeMathError("math.non_finite_input", "Projection inputs must be finite."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Projection inputs must be finite."));
         if (verticalFovRadians <= 0.0F || verticalFovRadians >= Pi || aspect <= 0.0F || nearPlane <= 0.0F ||
             farPlane <= nearPlane)
             return Result<Mat4>::Failure(
-                MakeMathError("math.invalid_projection", "Perspective parameters are invalid."));
+                MakeMathError(Errors::InvalidProjection, "Perspective parameters are invalid."));
         const float focal = 1.0F / std::tan(verticalFovRadians * 0.5F);
         Mat4 result{};
         result.values[0] = focal / aspect;
@@ -589,9 +590,9 @@ namespace Horo::Math
     {
         if (!std::isfinite(verticalHeight) || !std::isfinite(aspect) || !std::isfinite(nearPlane) ||
             !std::isfinite(farPlane))
-            return Result<Mat4>::Failure(MakeMathError("math.non_finite_input", "Projection inputs must be finite."));
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Projection inputs must be finite."));
         if (verticalHeight <= 0.0F || aspect <= 0.0F || nearPlane <= 0.0F || farPlane <= nearPlane)
-            return Result<Mat4>::Failure(MakeMathError("math.invalid_projection",
+            return Result<Mat4>::Failure(MakeMathError(Errors::InvalidProjection,
                                                        "Orthographic parameters are invalid."));
         const float width = verticalHeight * aspect;
         Mat4 result = Mat4::Identity();
@@ -648,22 +649,22 @@ namespace Horo::Math
     Result<Vec3> TryTransformPoint(const Mat4& matrix, const Vec3 point) noexcept
     {
         if (!IsFinite(matrix) || !IsFinite(point))
-            return Result<Vec3>::Failure(MakeMathError("math.non_finite_input", "Transform inputs must be finite."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::NonFiniteInput, "Transform inputs must be finite."));
         const Vec4 result = TransformHomogeneous(matrix, {point.x, point.y, point.z, 1.0F});
         if (!IsFinite(result) || std::fabs(result.w) <= DefaultEpsilon)
             return Result<Vec3>::Failure(
-                MakeMathError("math.invalid_homogeneous_point", "Homogeneous point has invalid W."));
+                MakeMathError(Errors::InvalidHomogeneousPoint, "Homogeneous point has invalid W."));
         return Result<Vec3>::Success({result.x / result.w, result.y / result.w, result.z / result.w});
     }
 
     Result<Vec3> TryProject(const Mat4& viewProjection, const Vec3 worldPoint) noexcept
     {
         if (!IsFinite(viewProjection) || !IsFinite(worldPoint))
-            return Result<Vec3>::Failure(MakeMathError("math.non_finite_input", "Projection inputs must be finite."));
+            return Result<Vec3>::Failure(MakeMathError(Errors::NonFiniteInput, "Projection inputs must be finite."));
         const Vec4 clip = TransformHomogeneous(viewProjection, {worldPoint.x, worldPoint.y, worldPoint.z, 1.0F});
         if (!IsFinite(clip) || clip.w <= DefaultEpsilon)
             return Result<Vec3>::Failure(
-                MakeMathError("math.invalid_projection", "Projected point must be in front of the view origin."));
+                MakeMathError(Errors::InvalidProjection, "Projected point must be in front of the view origin."));
         return Result<Vec3>::Success({clip.x / clip.w, clip.y / clip.w, clip.z / clip.w});
     }
 
@@ -678,20 +679,20 @@ namespace Horo::Math
         if (!IsFinite(origin) || !IsFinite(direction) || !std::isfinite(minimumDistance) ||
             !std::isfinite(maximumDistance) || minimumDistance < 0.0F || maximumDistance < minimumDistance)
             return Result<Ray>::Failure(
-                MakeMathError("math.invalid_ray", "Ray range and values must be finite and ordered."));
+                MakeMathError(Errors::InvalidRay, "Ray range and values must be finite and ordered."));
         auto normalized = TryNormalize(direction);
         if (normalized.HasError())
-            return Result<Ray>::Failure(MakeMathError("math.invalid_ray", "Ray direction must be non-zero."));
+            return Result<Ray>::Failure(MakeMathError(Errors::InvalidRay, "Ray direction must be non-zero."));
         return Result<Ray>::Success({origin, normalized.Value(), minimumDistance, maximumDistance});
     }
 
     Result<Plane> TryMakePlane(const Vec3 point, const Vec3 normal) noexcept
     {
         if (!IsFinite(point) || !IsFinite(normal))
-            return Result<Plane>::Failure(MakeMathError("math.non_finite_input", "Plane inputs must be finite."));
+            return Result<Plane>::Failure(MakeMathError(Errors::NonFiniteInput, "Plane inputs must be finite."));
         auto normalized = TryNormalize(normal);
         if (normalized.HasError())
-            return Result<Plane>::Failure(MakeMathError("math.invalid_plane", "Plane normal must be non-zero."));
+            return Result<Plane>::Failure(MakeMathError(Errors::InvalidPlane, "Plane normal must be non-zero."));
         return Result<Plane>::Success({normalized.Value(), -Dot(normalized.Value(), point)});
     }
 
@@ -709,9 +710,9 @@ namespace Horo::Math
     Result<Aabb> TransformAabb(const Aabb& bounds, const Mat4& localToWorld) noexcept
     {
         if (!bounds.IsValid())
-            return Result<Aabb>::Failure(MakeMathError("math.invalid_bounds", "AABB minimum and maximum are invalid."));
+            return Result<Aabb>::Failure(MakeMathError(Errors::InvalidBounds, "AABB minimum and maximum are invalid."));
         if (!IsAffine(localToWorld))
-            return Result<Aabb>::Failure(MakeMathError("math.invalid_affine_matrix", "AABB transform must be affine."));
+            return Result<Aabb>::Failure(MakeMathError(Errors::InvalidAffineMatrix, "AABB transform must be affine."));
         const std::array corners{
             Vec3{bounds.minimum.x, bounds.minimum.y, bounds.minimum.z},
             Vec3{bounds.maximum.x, bounds.minimum.y, bounds.minimum.z},
@@ -750,7 +751,7 @@ namespace Horo::Math
     Result<BoundingSphere> SphereFromAabb(const Aabb& bounds) noexcept
     {
         if (!bounds.IsValid())
-            return Result<BoundingSphere>::Failure(MakeMathError("math.invalid_bounds", "AABB is invalid."));
+            return Result<BoundingSphere>::Failure(MakeMathError(Errors::InvalidBounds, "AABB is invalid."));
         const Vec3 center = bounds.Center();
         return Result<BoundingSphere>::Success({center, Length(bounds.maximum - center)});
     }
@@ -758,10 +759,10 @@ namespace Horo::Math
     Result<std::optional<RayHit>> IntersectRayPlane(const Ray& ray, const Plane& plane) noexcept
     {
         if (!IsValidRay(ray))
-            return Result<std::optional<RayHit>>::Failure(MakeMathError("math.invalid_ray", "Ray is invalid."));
+            return Result<std::optional<RayHit>>::Failure(MakeMathError(Errors::InvalidRay, "Ray is invalid."));
         if (!IsFinite(plane.normal) || !std::isfinite(plane.distance) ||
             !NearlyEqual(LengthSquared(plane.normal), 1.0F, 0.0001F))
-            return Result<std::optional<RayHit>>::Failure(MakeMathError("math.invalid_plane", "Plane is invalid."));
+            return Result<std::optional<RayHit>>::Failure(MakeMathError(Errors::InvalidPlane, "Plane is invalid."));
         const float denominator = Dot(plane.normal, ray.direction);
         if (std::fabs(denominator) <= DefaultEpsilon)
             return Result<std::optional<RayHit>>::Success(std::nullopt);
@@ -775,9 +776,9 @@ namespace Horo::Math
     Result<std::optional<RayHit>> IntersectRayAabb(const Ray& ray, const Aabb& bounds) noexcept
     {
         if (!IsValidRay(ray))
-            return Result<std::optional<RayHit>>::Failure(MakeMathError("math.invalid_ray", "Ray is invalid."));
+            return Result<std::optional<RayHit>>::Failure(MakeMathError(Errors::InvalidRay, "Ray is invalid."));
         if (!bounds.IsValid())
-            return Result<std::optional<RayHit>>::Failure(MakeMathError("math.invalid_bounds", "AABB is invalid."));
+            return Result<std::optional<RayHit>>::Failure(MakeMathError(Errors::InvalidBounds, "AABB is invalid."));
         const std::array origins{ray.origin.x, ray.origin.y, ray.origin.z};
         const std::array directions{ray.direction.x, ray.direction.y, ray.direction.z};
         const std::array minimums{bounds.minimum.x, bounds.minimum.y, bounds.minimum.z};

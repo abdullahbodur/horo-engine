@@ -1,4 +1,5 @@
 #include "OpenGLBackendInternal.h"
+#include "OpenGLRenderBackendErrors.h"
 
 #if defined(__APPLE__)
 #include <OpenGL/gl3.h>
@@ -24,12 +25,9 @@ namespace Horo::Render
     {
         constexpr std::uint32_t colorBufferBit = 0x00004000U;
 
-        [[nodiscard]] Error MakeOpenGLError(std::string code, std::string message)
+        [[nodiscard]] Error MakeOpenGLError(const ErrorCodeDescriptor &descriptor, std::string message)
         {
-            return Error{
-                ErrorCode{std::move(code)}, ErrorDomainId{"horo.render.opengl"}, ErrorSeverity::Error,
-                std::move(message), {}
-            };
+            return MakeError(descriptor, std::move(message));
         }
 
         /** @brief Dispatches a viewport update through the linked production OpenGL API. */
@@ -91,18 +89,18 @@ namespace Horo::Render
                 if (initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.already_initialized",
+                        MakeOpenGLError(OpenGLBackendErrors::AlreadyInitialized,
                                         "Renderer backend is already initialized."));
                 }
                 if (!functions_.IsValid() || options_.majorVersion == 0 || !config.IsValid())
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.invalid_config", "OpenGL backend configuration is invalid."));
+                        MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL backend configuration is invalid."));
                 }
                 if (contextLease_->claimed)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.opengl.presentation_in_use",
+                        MakeOpenGLError(OpenGLBackendErrors::PresentationInUse,
                                         "OpenGL presentation attachment is already owned by another backend."));
                 }
                 contextLease_->claimed = true;
@@ -153,25 +151,25 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeOpenGLError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeOpenGLError(OpenGLBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (frameActive_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeOpenGLError("render.backend.frame_already_active", "A renderer frame is already active."));
+                        MakeOpenGLError(OpenGLBackendErrors::FrameAlreadyActive, "A renderer frame is already active."));
                 }
                 constexpr auto maxViewportExtent = static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
                 if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid() ||
                     descriptor.outputExtent.width > maxViewportExtent || descriptor.outputExtent.height >
                     maxViewportExtent)
                 {
-                    return Result<FrameToken>::Failure(MakeOpenGLError("render.backend.invalid_frame_descriptor",
+                    return Result<FrameToken>::Failure(MakeOpenGLError(OpenGLBackendErrors::InvalidFrameDescriptor,
                                                                        "Frame number and output extent must be valid."));
                 }
                 if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max())
                 {
                     return Result<FrameToken>::Failure(
-                        MakeOpenGLError("render.backend.frame_token_exhausted", "Frame token space is exhausted."));
+                        MakeOpenGLError(OpenGLBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));
                 }
 
                 const Result<void> current = presentationPort_->MakeCurrent();
@@ -254,16 +252,16 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeOpenGLError(OpenGLBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!extent.IsValid())
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.invalid_extent", "Renderer output extent must be non-zero."));
+                        MakeOpenGLError(OpenGLBackendErrors::InvalidExtent, "Renderer output extent must be non-zero."));
                 }
                 if (frameActive_)
                 {
-                    return Result<void>::Failure(MakeOpenGLError("render.backend.frame_active",
+                    return Result<void>::Failure(MakeOpenGLError(OpenGLBackendErrors::FrameActive,
                                                                  "Renderer output cannot resize while a frame is active."));
                 }
 
@@ -284,17 +282,17 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeOpenGLError(OpenGLBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!frameActive_)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.no_active_frame", "No renderer frame is active."));
+                        MakeOpenGLError(OpenGLBackendErrors::NoActiveFrame, "No renderer frame is active."));
                 }
                 if (frame != activeFrame_)
                 {
                     return Result<void>::Failure(
-                        MakeOpenGLError("render.backend.frame_token_mismatch",
+                        MakeOpenGLError(OpenGLBackendErrors::FrameTokenMismatch,
                                         "Frame token does not match the active frame."));
                 }
                 return Result<void>::Success();
@@ -313,19 +311,19 @@ namespace Horo::Render
                     const RenderPassDescriptor& pass = plan.orderedPasses[index];
                     if (!pass.id.IsValid())
                     {
-                        return Result<void>::Failure(MakeOpenGLError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeOpenGLError(OpenGLBackendErrors::InvalidExecutionPlan,
                                                                      "Execution plan contains an invalid render pass ID."));
                     }
                     if (pass.kind != RenderPassKind::Graphics)
                     {
-                        return Result<void>::Failure(MakeOpenGLError("render.opengl.unsupported_pass_kind",
+                        return Result<void>::Failure(MakeOpenGLError(OpenGLBackendErrors::UnsupportedPassKind,
                                                                      "Initial OpenGL backend supports graphics passes only."));
                     }
                     for (std::size_t previous = 0; previous < index; ++previous)
                     {
                         if (pass.id == plan.orderedPasses[previous].id)
                         {
-                            return Result<void>::Failure(MakeOpenGLError("render.backend.invalid_execution_plan",
+                            return Result<void>::Failure(MakeOpenGLError(OpenGLBackendErrors::InvalidExecutionPlan,
                                                                          "Execution plan contains duplicate render pass IDs."));
                         }
                     }
@@ -336,7 +334,7 @@ namespace Horo::Render
 
                     if (!pass.primaryOutput->IsValid())
                     {
-                        return Result<void>::Failure(MakeOpenGLError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeOpenGLError(OpenGLBackendErrors::InvalidExecutionPlan,
                                                                      "Primary output attachment operations are invalid."));
                     }
                 }
@@ -419,7 +417,7 @@ namespace Horo::Render
             if (!functions.IsValid() || options.majorVersion == 0)
             {
                 return Result<void>::Failure(
-                    MakeOpenGLError("render.opengl.invalid_registration",
+                    MakeOpenGLError(OpenGLBackendErrors::InvalidRegistration,
                                     "OpenGL backend registration options are invalid."));
             }
             return registry.Register(RenderBackendDescriptor{

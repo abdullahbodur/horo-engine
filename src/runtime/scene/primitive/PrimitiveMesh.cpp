@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
+#include "PrimitiveMeshErrors.h"
 
 #include <algorithm>
 #include <bit>
@@ -17,13 +18,9 @@ constexpr std::uint32_t kMaximumSegments = 4096;
 constexpr std::size_t kMaximumVertices = 4U * 1024U * 1024U;
 constexpr std::size_t kMaximumIndices = 24U * 1024U * 1024U;
 
-[[nodiscard]] Error MakePrimitiveError(std::string code, std::string message)
+[[nodiscard]] Error MakePrimitiveError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{ErrorCode{std::move(code)},
-                 ErrorDomainId{"horo.runtime.scene.primitives"},
-                 ErrorSeverity::Error,
-                 std::move(message),
-                 {}};
+    return MakeError(descriptor, std::move(message));
 }
 
 [[nodiscard]] bool PositiveFinite(const float value) noexcept
@@ -354,11 +351,11 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
 {
     if (descriptor.version.value != 1)
         return Result<MeshData>::Failure(
-            MakePrimitiveError("primitive.unsupported_version", "Primitive mesh version is unsupported."));
+            MakePrimitiveError(PrimitiveErrors::UnsupportedVersion, "Primitive mesh version is unsupported."));
     MeshData mesh;
     const auto mismatch = [&] {
         return Result<MeshData>::Failure(
-            MakePrimitiveError("primitive.parameter_mismatch", "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
     };
     switch (descriptor.type)
     {
@@ -368,7 +365,7 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y) || !PositiveFinite(p->size.z))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_size", "Box size must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Box size must be finite and positive."));
         mesh = GenerateBox(*p);
         break;
     }
@@ -378,13 +375,13 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->radius))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_radius", "Sphere radius must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidRadius, "Sphere radius must be finite and positive."));
         if (p->slices < 3 || p->stacks < 2)
-            return Result<MeshData>::Failure(MakePrimitiveError("primitive.invalid_tessellation",
+            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
                                                                 "Sphere tessellation is below the supported minimum."));
         if (p->slices > kMaximumSegments || p->stacks > kMaximumSegments)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.capacity_exceeded", "Sphere tessellation exceeds the generation capacity."));
+                PrimitiveErrors::CapacityExceeded, "Sphere tessellation exceeds the generation capacity."));
         mesh = GenerateSphere(*p);
         break;
     }
@@ -394,16 +391,16 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->radius) || !PositiveFinite(p->totalHeight))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_dimensions", "Capsule dimensions must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Capsule dimensions must be finite and positive."));
         if (p->totalHeight < 2.0F * p->radius)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.invalid_capsule_height", "Capsule total height cannot be smaller than its diameter."));
+                PrimitiveErrors::InvalidCapsuleHeight, "Capsule total height cannot be smaller than its diameter."));
         if (p->radialSegments < 3 || p->hemisphereRings < 1)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.invalid_tessellation", "Capsule tessellation is below the supported minimum."));
+                PrimitiveErrors::InvalidTessellation, "Capsule tessellation is below the supported minimum."));
         if (p->radialSegments > kMaximumSegments || p->hemisphereRings > kMaximumSegments)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.capacity_exceeded", "Capsule tessellation exceeds the generation capacity."));
+                PrimitiveErrors::CapacityExceeded, "Capsule tessellation exceeds the generation capacity."));
         mesh = GenerateCapsule(*p);
         break;
     }
@@ -413,13 +410,13 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_dimensions", "Cylinder dimensions must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cylinder dimensions must be finite and positive."));
         if (p->radialSegments < 3)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.invalid_tessellation", "Cylinder tessellation is below the supported minimum."));
+                PrimitiveErrors::InvalidTessellation, "Cylinder tessellation is below the supported minimum."));
         if (p->radialSegments > kMaximumSegments)
             return Result<MeshData>::Failure(MakePrimitiveError(
-                "primitive.capacity_exceeded", "Cylinder tessellation exceeds the generation capacity."));
+                PrimitiveErrors::CapacityExceeded, "Cylinder tessellation exceeds the generation capacity."));
         mesh = GenerateCylinder(*p);
         break;
     }
@@ -429,12 +426,12 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_dimensions", "Cone dimensions must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cone dimensions must be finite and positive."));
         if (p->radialSegments < 3)
-            return Result<MeshData>::Failure(MakePrimitiveError("primitive.invalid_tessellation",
+            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
                                                                 "Cone tessellation is below the supported minimum."));
         if (p->radialSegments > kMaximumSegments)
-            return Result<MeshData>::Failure(MakePrimitiveError("primitive.capacity_exceeded",
+            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::CapacityExceeded,
                                                                 "Cone tessellation exceeds the generation capacity."));
         mesh = GenerateCone(*p);
         break;
@@ -445,7 +442,7 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_size", "Plane size must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Plane size must be finite and positive."));
         mesh = GeneratePlanar(p->size, false);
         break;
     }
@@ -455,17 +452,17 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
             return mismatch();
         if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
             return Result<MeshData>::Failure(
-                MakePrimitiveError("primitive.invalid_size", "Quad size must be finite and positive."));
+                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Quad size must be finite and positive."));
         mesh = GeneratePlanar(p->size, true);
         break;
     }
     }
     if (mesh.vertices.size() > kMaximumVertices || mesh.indices.size() > kMaximumIndices)
         return Result<MeshData>::Failure(
-            MakePrimitiveError("primitive.capacity_exceeded", "Generated mesh exceeds the supported capacity."));
+            MakePrimitiveError(PrimitiveErrors::CapacityExceeded, "Generated mesh exceeds the supported capacity."));
     if (!mesh.IsValid())
         return Result<MeshData>::Failure(
-            MakePrimitiveError("primitive.invalid_generated_mesh", "Primitive generation produced invalid mesh data."));
+            MakePrimitiveError(PrimitiveErrors::InvalidGeneratedMesh, "Primitive generation produced invalid mesh data."));
     return Result<MeshData>::Success(std::move(mesh));
 }
 
@@ -511,7 +508,7 @@ Result<PrimitiveMeshLease> PrimitiveMeshCache::Acquire(const PrimitiveMeshDescri
     const std::size_t bytes = data->ByteSize();
     if (m_impl->limits.maximumItems == 0 || bytes > m_impl->limits.maximumBytes)
         return Result<PrimitiveMeshLease>::Failure(MakePrimitiveError(
-            "primitive.cache_capacity_exceeded", "Mesh cannot fit within the configured cache budget."));
+            PrimitiveErrors::CacheCapacityExceeded, "Mesh cannot fit within the configured cache budget."));
     while (m_impl->entries.size() >= m_impl->limits.maximumItems || m_impl->bytes + bytes > m_impl->limits.maximumBytes)
     {
         auto victim = m_impl->entries.end();
@@ -521,7 +518,7 @@ Result<PrimitiveMeshLease> PrimitiveMeshCache::Acquire(const PrimitiveMeshDescri
                 victim = candidate;
         if (victim == m_impl->entries.end())
             return Result<PrimitiveMeshLease>::Failure(
-                MakePrimitiveError("primitive.cache_capacity_exceeded", "Active mesh leases prevent cache eviction."));
+                MakePrimitiveError(PrimitiveErrors::CacheCapacityExceeded, "Active mesh leases prevent cache eviction."));
         m_impl->bytes -= victim->data->ByteSize();
         m_impl->byDescriptor.erase(victim->descriptor);
         m_impl->entries.erase(victim);

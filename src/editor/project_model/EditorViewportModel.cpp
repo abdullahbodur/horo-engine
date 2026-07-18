@@ -1,6 +1,7 @@
 /** @copydoc EditorViewportModel.h */
 
 #include "editor/project_model/EditorViewportModel.h"
+#include "EditorModelErrors.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,6 +12,7 @@ namespace Horo::Editor
 {
 namespace
 {
+
 [[nodiscard]] Math::Vec3 RotateAroundAxis(const Math::Vec3 value, const Math::Vec3 axis, const float radians) noexcept
 {
     const Math::Vec3 normalizedAxis = Math::Normalize(axis);
@@ -43,13 +45,9 @@ namespace
            std::isfinite(rotation.z) && std::isfinite(rotation.w) && rotationLengthSquared > 0.0F;
 }
 
-[[nodiscard]] Error MakeViewportError(std::string code, std::string message)
+[[nodiscard]] Error MakeViewportError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{ErrorCode{std::move(code)},
-                 ErrorDomainId{"horo.editor.viewport"},
-                 ErrorSeverity::Error,
-                 std::move(message),
-                 {}};
+    return MakeError(descriptor, std::move(message));
 }
 } // namespace
 
@@ -70,7 +68,7 @@ Result<void> EditorViewportModel::Navigate(const EditorViewportNavigationDelta &
     if (!IsFinite(delta))
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_navigation", "Viewport navigation delta must be finite."));
+            MakeViewportError(ViewportModelErrors::InvalidNavigation, "Viewport navigation delta must be finite."));
     }
     if (IsEmpty(delta))
     {
@@ -120,7 +118,7 @@ Result<void> EditorViewportModel::Navigate(const EditorViewportNavigationDelta &
     if (!camera.IsValid())
     {
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_camera", "Viewport navigation produced an invalid camera."));
+            MakeViewportError(ViewportModelErrors::InvalidCamera, "Viewport navigation produced an invalid camera."));
     }
 
     current_.camera = camera;
@@ -134,7 +132,7 @@ Result<void> EditorViewportModel::SetProjection(const Runtime::CameraProjection 
 {
     if (projection != Runtime::CameraProjection::Perspective && projection != Runtime::CameraProjection::Orthographic)
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_projection", "Viewport projection is invalid."));
+            MakeViewportError(ViewportModelErrors::InvalidProjection, "Viewport projection is invalid."));
     if (current_.camera.projection == projection)
         return Result<void>::Success();
     EditorViewportCamera camera = current_.camera;
@@ -151,7 +149,7 @@ Result<void> EditorViewportModel::SetProjection(const Runtime::CameraProjection 
     camera.projection = projection;
     if (!camera.IsValid())
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_camera", "Projection change produced an invalid camera."));
+            MakeViewportError(ViewportModelErrors::InvalidCamera, "Projection change produced an invalid camera."));
     current_.camera = camera;
     ++current_.revision.value;
     events_->Publish(ViewportChangedEvent{current_.revision, ViewportChangeKind::CameraProjectionChanged});
@@ -163,7 +161,7 @@ Result<void> EditorViewportModel::Focus(const Math::Aabb &worldBounds, const flo
 {
     if (!worldBounds.IsValid() || !std::isfinite(aspect) || aspect <= 0.0F)
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_focus_bounds", "Focus bounds and aspect must be valid."));
+            MakeViewportError(ViewportModelErrors::InvalidFocusBounds, "Focus bounds and aspect must be valid."));
     const Result<Math::BoundingSphere> sphereResult = Math::SphereFromAabb(worldBounds);
     if (sphereResult.HasError())
         return Result<void>::Failure(sphereResult.ErrorValue());
@@ -187,7 +185,7 @@ Result<void> EditorViewportModel::Focus(const Math::Aabb &worldBounds, const flo
     }
     if (!camera.IsValid())
         return Result<void>::Failure(
-            MakeViewportError("editor.viewport.invalid_camera", "Focus operation produced an invalid camera."));
+            MakeViewportError(ViewportModelErrors::InvalidCamera, "Focus operation produced an invalid camera."));
     current_.camera = camera;
     ++current_.revision.value;
     events_->Publish(ViewportChangedEvent{current_.revision, ViewportChangeKind::CameraFocused});
@@ -199,7 +197,7 @@ Result<void> EditorViewportModel::SetTransformPreview(const SceneObjectTransform
 {
     if (!IsValid(preview))
     {
-        return Result<void>::Failure(MakeViewportError("editor.viewport.invalid_transform_preview",
+        return Result<void>::Failure(MakeViewportError(ViewportModelErrors::InvalidTransformPreview,
                                                        "Viewport transform preview must be finite."));
     }
     if (current_.transformPreview == preview)

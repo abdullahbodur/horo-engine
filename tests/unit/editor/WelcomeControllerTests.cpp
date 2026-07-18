@@ -1,6 +1,7 @@
 #include "Horo/Editor/WelcomeController.h"
 
 #include <cassert>
+#include <filesystem>
 #include <string>
 #include <variant>
 #include <vector>
@@ -22,10 +23,13 @@ void ValidateRoutePayloads() {
 void FiltersInvalidRecentProjects() {
     using namespace Horo::Editor;
 
+    const std::string validRoot = (std::filesystem::temp_directory_path() / "horo-valid-project").string();
+
     WelcomeScreenController controller{{
-        RecentProjectEntry{"Valid", "/tmp/valid", "today", "valid"},
+        RecentProjectEntry{"Valid", validRoot, "today", "valid"},
         RecentProjectEntry{"Missing Path", "", "today", "missing"},
         RecentProjectEntry{"", "/tmp/missing-name", "today", "missing-name"},
+        RecentProjectEntry{"Relative Path", "~/projects/example", "today", "relative"},
     }};
 
     const WelcomeViewModel model = controller.BuildViewModel();
@@ -40,7 +44,7 @@ void FiltersInvalidRecentProjects() {
 
     const auto* parameters = std::get_if<EditorWorkspaceRouteParameters>(&openRecent->route.parameters);
     assert(parameters != nullptr);
-    assert(parameters->projectRoot == "/tmp/valid");
+    assert(parameters->projectRoot == validRoot);
 
     assert(!controller.RequestOpenRecentProject(1).has_value());
 }
@@ -48,14 +52,15 @@ void FiltersInvalidRecentProjects() {
 void RendersDeterministicPreviewText() {
     using namespace Horo::Editor;
 
-    WelcomeScreenController controller{{RecentProjectEntry{"Project", "/tmp/project", "today", "project"}}};
+    const std::string projectRoot = (std::filesystem::temp_directory_path() / "horo-preview-project").string();
+    WelcomeScreenController controller{{RecentProjectEntry{"Project", projectRoot, "today", "project"}}};
     const WelcomeViewModel viewModel = controller.BuildViewModel();
     const std::string text = RenderWelcomeScreenText(viewModel);
 
     assert(text.find("Horo Editor") != std::string::npos);
     assert(text.find(viewModel.statusLabel) != std::string::npos);
     assert(text.find("Project") != std::string::npos);
-    assert(text.find("/tmp/project") != std::string::npos);
+    assert(text.find(projectRoot) != std::string::npos);
 }
 
 } // namespace

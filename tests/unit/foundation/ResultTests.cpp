@@ -48,6 +48,29 @@ void ResultVoidModelsSuccessAndFailure()
     assert(failure.ErrorValue().severity == Horo::ErrorSeverity::Warning);
 }
 
+void ErrorFactoryUsesDeclaredDescriptorIdentity()
+{
+    const Horo::ErrorCodeDescriptor descriptor{
+        .domain = Horo::ErrorDomainId{"horo.foundation.test"},
+        .code = Horo::ErrorCode{"foundation.test.declared_failure"},
+        .defaultSeverity = Horo::ErrorSeverity::Warning,
+        .summary = "Declared failure",
+        .remediationHint = "Use a valid test input.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const Horo::Error error = Horo::MakeError(descriptor, "Specific failure context");
+    assert(error.domain.Value() == "horo.foundation.test");
+    assert(error.code.Value() == "foundation.test.declared_failure");
+    assert(error.severity == Horo::ErrorSeverity::Warning);
+    assert(error.message == "Specific failure context");
+
+    const Horo::Error fallback = Horo::MakeError(descriptor);
+    assert(fallback.message == "Declared failure");
+}
+
+
 void DiagnosticCarriesStableIdentityAndLocation()
 {
     const Horo::Diagnostic diagnostic{
@@ -68,6 +91,7 @@ int main()
     ResultPreservesSuccessfulValue();
     ResultPreservesTypedFailure();
     ResultVoidModelsSuccessAndFailure();
+    ErrorFactoryUsesDeclaredDescriptorIdentity();
     DiagnosticCarriesStableIdentityAndLocation();
     return 0;
 }

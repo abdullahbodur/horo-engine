@@ -181,10 +181,15 @@ void ProfilesRoundTripAndValidate()
     const std::array actions{ActionDescriptor{ActionId{"editor.save"}, ActionValueType::Digital,
                                                InputContextId{"workspace"}, true, {KeyBinding(Key::S)}}};
     assert(ValidateBindingProfile(actions, parsed.Value()).IsValid());
-    assert(ParseBindingProfile("{broken").HasError());
-    assert(ParseBindingProfile(
-               R"({"schemaVersion":1,"schemaVersion":1,"profileId":"bad","overrides":[]})")
-               .HasError());
+    const Horo::Result<InputBindingProfile> malformed = ParseBindingProfile("{broken");
+    assert(malformed.HasError());
+    assert(malformed.ErrorValue().domain.Value() == "horo.input");
+    assert(malformed.ErrorValue().code.Value() == "input.profile.malformed");
+    const Horo::Result<InputBindingProfile> duplicate = ParseBindingProfile(
+        R"({"schemaVersion":1,"schemaVersion":1,"profileId":"bad","overrides":[]})");
+    assert(duplicate.HasError());
+    assert(duplicate.ErrorValue().domain.Value() == "horo.input");
+    assert(duplicate.ErrorValue().code.Value() == "input.profile.malformed");
 }
 
 void ProfilesWriteAtomicallyToNonAsciiPaths()

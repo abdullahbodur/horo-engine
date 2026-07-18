@@ -4,23 +4,22 @@
 
 #include <optional>
 
-namespace Horo::Editor
-{
-class ILocalizationService;
+namespace Horo::Editor {
+    class ILocalizationService;
 
-/** @brief Reports whether this host uses the operating system's global application menu bar. */
-[[nodiscard]] bool UsesNativeEditorMenuBar() noexcept;
+    /** @brief Reports whether this host uses the operating system's global application menu bar. */
+    [[nodiscard]] bool UsesNativeEditorMenuBar() noexcept;
 
-/**
- * @brief Installs or refreshes the native application menu from the shared model.
- * @param model Platform-neutral menu hierarchy.
- * @param localization Active editor localization service.
- */
-void InstallNativeEditorMenuBar(const EditorMenuModel &model, const ILocalizationService &localization);
+    /**
+     * @brief Installs or refreshes the native application menu from the shared model.
+     * @param model Platform-neutral menu hierarchy.
+     * @param localization Active editor localization service.
+     */
+    void InstallNativeEditorMenuBar(const EditorMenuModel &model, const ILocalizationService &localization);
 
-/**
- * @brief Takes the next native menu invocation queued by the platform callback.
- * @return Pending invocation, or empty when no native menu command is waiting.
- */
-[[nodiscard]] std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept;
+    /**
+     * @brief Takes the next native menu invocation queued by the platform callback.
+     * @return Pending invocation, or empty when no native menu command is waiting.
+     */
+    [[nodiscard]] std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept;
 } // namespace Horo::Editor

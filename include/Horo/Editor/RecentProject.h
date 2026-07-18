@@ -25,7 +25,7 @@ struct RecentProjectEntry
 /**
  * @brief Returns true when an entry has the minimum data needed for display and navigation.
  * @param entry Entry to validate.
- * @return True when name and root path are non-empty.
+ * @return True when the name is non-empty and the root path is absolute.
  */
 [[nodiscard]] bool IsDisplayableRecentProject(const RecentProjectEntry &entry) noexcept;
 

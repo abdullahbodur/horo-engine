@@ -1,4 +1,5 @@
 #include "Horo/Foundation/JobSystem.h"
+#include "../FoundationErrors.h"
 
 #include <condition_variable>
 #include <deque>
@@ -14,14 +15,9 @@ namespace Horo
 {
     namespace
     {
-        [[nodiscard]] Error MakeJobError(const char *code, const char *message)
+        [[nodiscard]] Error MakeJobError(const ErrorCodeDescriptor &descriptor, const char *message)
         {
-            return Error{
-                .code = ErrorCode{code},
-                .domain = ErrorDomainId{"horo.foundation.jobs"},
-                .severity = ErrorSeverity::Error,
-                .message = message,
-            };
+            return MakeError(descriptor, message);
         }
 
         [[nodiscard]] bool IsTerminal(const JobState state) noexcept
@@ -104,17 +100,19 @@ namespace Horo
             {
                 record->work(record->cancellation.Token());
                 if (record->cancellation.Token().IsCancellationRequested())
-                    SetTerminalState(record, JobState::Cancelled, MakeJobError("job.cancelled", "Job cancellation was requested."));
+                    SetTerminalState(record, JobState::Cancelled,
+                                     MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
                 else
                     SetTerminalState(record, JobState::Succeeded);
             }
             catch (const std::exception &exception)
             {
-                SetTerminalState(record, JobState::Failed, MakeJobError("job.failed", exception.what()));
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
             }
             catch (...)
             {
-                SetTerminalState(record, JobState::Failed, MakeJobError("job.failed", "Job callback threw an unknown exception."));
+                SetTerminalState(record, JobState::Failed,
+                                 MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
             }
         }
     }
@@ -134,9 +132,10 @@ namespace Horo
     {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
-            return Result<JobHandle>::Failure(MakeJobError("job.shutdown", "Job system is no longer accepting work."));
+            return Result<JobHandle>::Failure(
+                MakeJobError(JobErrors::Shutdown, "Job system is no longer accepting work."));
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
-            return Result<JobHandle>::Failure(MakeJobError("job.queue_full", "Job queue is at capacity."));
+            return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
         auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work));
         m_state->jobs.try_emplace(record->id, record);
@@ -152,7 +151,8 @@ namespace Horo
             std::lock_guard lock(m_state->mutex);
             const auto found = m_state->jobs.find(id);
             if (found == m_state->jobs.end())
-                return Result<void>::Failure(MakeJobError("job.not_found", "Job identifier is not known by this job system."));
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::NotFound, "Job identifier is not known by this job system."));
             record = found->second;
         }
         record->cancellation.RequestCancellation();
@@ -161,7 +161,7 @@ namespace Horo
             if (record->state == JobState::Queued)
             {
                 record->state = JobState::Cancelled;
-                record->error = MakeJobError("job.cancelled", "Job was cancelled before execution.");
+                record->error = MakeJobError(JobErrors::Cancelled, "Job was cancelled before execution.");
                 record->completed.notify_all();
             }
         }
@@ -194,7 +194,8 @@ namespace Horo
                 for (const auto &record : m_state->queue)
                 {
                     record->cancellation.RequestCancellation();
-                    SetTerminalState(record, JobState::Cancelled, MakeJobError("job.cancelled", "Job was cancelled during shutdown."));
+                    SetTerminalState(record, JobState::Cancelled,
+                                     MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown."));
                 }
                 m_state->queue.clear();
                 for (const auto &[id, record] : m_state->jobs)
@@ -212,7 +213,8 @@ namespace Horo
     Result<void> JobHandle::Wait() const
     {
         if (!m_record)
-            return Result<void>::Failure(MakeJobError("job.invalid_handle", "Cannot wait on an invalid job handle."));
+            return Result<void>::Failure(
+                MakeJobError(JobErrors::InvalidHandle, "Cannot wait on an invalid job handle."));
 
         const auto record = m_record;
         std::unique_lock lock(record->Mutex());

@@ -2,6 +2,7 @@
 #include "editor/project_model/RendererAvailability.h"
 
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/String.h"
 
 #include <system_error>
 #include <utility>
@@ -15,23 +16,6 @@ namespace Horo::Editor
 {
     namespace
     {
-        /**
-         * @brief Checks if a string is empty or contains only whitespace.
-         * @param value String to inspect.
-         * @return True if blank.
-         */
-        [[nodiscard]] bool IsBlank(const std::string& value)
-        {
-            for (const unsigned char character : value)
-            {
-                if (!std::isspace(character))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         /**
          * @brief Checks if a string contains file path separators.
          * @param value String to inspect.
@@ -344,7 +328,7 @@ namespace Horo::Editor
                     });
             }
         }
-        if (IsBlank(draft_.projectName))
+        if (Text::IsBlank(draft_.projectName))
         {
             validation.diagnostics.push_back(
                 {ProjectCreationDiagnosticCode::ProjectNameRequired, "Project name is required."});
@@ -357,7 +341,7 @@ namespace Horo::Editor
             });
         }
 
-        if (IsBlank(draft_.projectPath))
+        if (Text::IsBlank(draft_.projectPath))
         {
             validation.diagnostics.push_back(
                 {ProjectCreationDiagnosticCode::ProjectPathRequired, "Project location is required."});

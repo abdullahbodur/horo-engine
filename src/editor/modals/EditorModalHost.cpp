@@ -1,4 +1,5 @@
 #include "Horo/Editor/EditorModalHost.h"
+#include "editor/EditorServiceErrors.h"
 #include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
@@ -13,38 +14,38 @@ namespace
 {
 [[nodiscard]] Error MakeModalHostError(ModalHostError error)
 {
-    const char *code = "editor.modal_host.invalid_modal";
+    const ErrorCodeDescriptor *descriptor = &ModalErrors::InvalidModal;
     const char *message = "The modal request is invalid.";
     switch (error)
     {
     case Busy:
-        code = "editor.modal_host.busy";
+        descriptor = &ModalErrors::Busy;
         message = "Another root modal is already active.";
         break;
     case InvalidModal:
         break;
     case DuplicateId:
-        code = "editor.modal_host.duplicate_id";
+        descriptor = &ModalErrors::DuplicateId;
         message = "The modal ID is already active.";
         break;
     case ParentNotTop:
-        code = "editor.modal_host.parent_not_top";
+        descriptor = &ModalErrors::ParentNotTop;
         message = "Only the current top modal may push a child.";
         break;
     case ModalNotTop:
-        code = "editor.modal_host.modal_not_top";
+        descriptor = &ModalErrors::ModalNotTop;
         message = "Only the current top modal may close.";
         break;
     case StackLimitReached:
-        code = "editor.modal_host.stack_limit_reached";
+        descriptor = &ModalErrors::StackLimitReached;
         message = "The modal stack has reached its configured depth limit.";
         break;
     case CloseDenied:
-        code = "editor.modal_host.close_denied";
+        descriptor = &ModalErrors::CloseDenied;
         message = "A modal denied the requested close.";
         break;
     }
-    return Error{ErrorCode{code}, ErrorDomainId{"horo.editor.modal_host"}, ErrorSeverity::Error, message};
+    return MakeError(*descriptor, message);
 }
 } // namespace
 

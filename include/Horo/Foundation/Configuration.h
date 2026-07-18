@@ -92,7 +92,7 @@ namespace Horo
     private:
         friend class ConfigurationService;
         [[nodiscard]] static bool MatchesType(const SettingValueType type, const SettingValue &value);
-        [[nodiscard]] static Error ErrorFor(const char *code);
+        [[nodiscard]] static Error ErrorFor(const ErrorCodeDescriptor &descriptor);
         bool m_sealed = false;
         std::unordered_map<SettingKey, SettingDescriptor, SettingKeyHash> m_descriptors;
     };

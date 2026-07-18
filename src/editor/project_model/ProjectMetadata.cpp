@@ -1,10 +1,11 @@
 #include "editor/project_model/ProjectMetadata.h"
 
 #include "Horo/Foundation/Diagnostics.h"
+#include "editor/EditorServiceErrors.h"
+#include "Horo/Foundation/String.h"
 
 #include <nlohmann/json.hpp>
 
-#include <cctype>
 #include <fstream>
 #include <string_view>
 #include <unordered_set>
@@ -21,24 +22,9 @@ constexpr std::size_t kMaximumProjectIdentityBytes = 256;
 constexpr std::size_t kMaximumProjectNameBytes = 1024;
 constexpr std::size_t kMaximumBackendIdBytes = 64;
 
-[[nodiscard]] Error MakeMetadataError(const char *code, std::string message)
+[[nodiscard]] Error MakeMetadataError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{.code = ErrorCode{code},
-                 .domain = ErrorDomainId{"horo.editor.project_metadata"},
-                 .severity = ErrorSeverity::Error,
-                 .message = std::move(message)};
-}
-
-[[nodiscard]] bool IsBlank(const std::string_view value) noexcept
-{
-    for (const unsigned char character : value)
-    {
-        if (std::isspace(character) == 0)
-        {
-            return false;
-        }
-    }
-    return true;
+    return MakeError(descriptor, std::move(message));
 }
 
 [[nodiscard]] bool IsCanonicalBackendId(const std::string_view value) noexcept
@@ -81,19 +67,19 @@ constexpr std::size_t kMaximumBackendIdBytes = 64;
     if (error)
     {
         return Result<std::string>::Failure(
-            MakeMetadataError("project.metadata_not_found", "Unable to inspect " + metadataPath.string() + '.'));
+            MakeMetadataError(ProjectMetadataErrors::NotFound, "Unable to inspect " + metadataPath.string() + '.'));
     }
     if (byteCount == 0 || byteCount > kMaximumProjectMetadataBytes)
     {
         return Result<std::string>::Failure(
-            MakeMetadataError("project.metadata_size_invalid", "Project metadata must be between 1 byte and 64 KiB."));
+            MakeMetadataError(ProjectMetadataErrors::SizeInvalid, "Project metadata must be between 1 byte and 64 KiB."));
     }
 
     std::ifstream input(metadataPath, std::ios::binary);
     if (!input.is_open())
     {
         return Result<std::string>::Failure(
-            MakeMetadataError("project.metadata_not_found", "Unable to open " + metadataPath.string() + '.'));
+            MakeMetadataError(ProjectMetadataErrors::NotFound, "Unable to open " + metadataPath.string() + '.'));
     }
 
     std::string contents(static_cast<std::size_t>(byteCount), '\0');
@@ -101,7 +87,7 @@ constexpr std::size_t kMaximumBackendIdBytes = 64;
     if (input.gcount() != static_cast<std::streamsize>(contents.size()) || input.bad())
     {
         return Result<std::string>::Failure(
-            MakeMetadataError("project.metadata_read_failed", "Unable to read " + metadataPath.string() + '.'));
+            MakeMetadataError(ProjectMetadataErrors::ReadFailed, "Unable to read " + metadataPath.string() + '.'));
     }
     return Result<std::string>::Success(std::move(contents));
 }
@@ -139,14 +125,14 @@ constexpr std::size_t kMaximumBackendIdBytes = 64;
         if (duplicateKey)
         {
             return Result<Json>::Failure(
-                MakeMetadataError("project.metadata_duplicate_key", "Project metadata contains a duplicate JSON key."));
+                MakeMetadataError(ProjectMetadataErrors::DuplicateKey, "Project metadata contains a duplicate JSON key."));
         }
         return Result<Json>::Success(std::move(document));
     }
     catch (const Json::exception &exception)
     {
         return Result<Json>::Failure(MakeMetadataError(
-            "project.metadata_invalid_json", "Project metadata is not valid JSON: " + std::string{exception.what()}));
+            ProjectMetadataErrors::InvalidJson, "Project metadata is not valid JSON: " + std::string{exception.what()}));
     }
 }
 } // namespace
@@ -170,18 +156,18 @@ Result<ProjectMetadata> LoadProjectMetadata(const std::filesystem::path &project
     if (!HasRequiredSchema(document))
     {
         return Result<ProjectMetadata>::Failure(MakeMetadataError(
-            "project.metadata_invalid_schema",
+            ProjectMetadataErrors::InvalidSchema,
             "Project metadata is missing a valid formatVersion, identity, name, settings, or renderer."));
     }
 
     const std::string projectId = document["projectId"].get<std::string>();
     const std::string name = document["name"].get<std::string>();
     const std::string renderBackend = document["settings"]["renderBackend"].get<std::string>();
-    if (projectId.size() > kMaximumProjectIdentityBytes || IsBlank(projectId) ||
-        name.size() > kMaximumProjectNameBytes || IsBlank(name) || !IsCanonicalBackendId(renderBackend))
+    if (projectId.size() > kMaximumProjectIdentityBytes || Text::IsBlank(projectId) ||
+        name.size() > kMaximumProjectNameBytes || Text::IsBlank(name) || !IsCanonicalBackendId(renderBackend))
     {
         return Result<ProjectMetadata>::Failure(
-            MakeMetadataError("project.metadata_invalid_values",
+            MakeMetadataError(ProjectMetadataErrors::InvalidValues,
                               "Project metadata contains an invalid identity, name, or renderer value."));
     }
 

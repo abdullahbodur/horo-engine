@@ -5,6 +5,7 @@
 #include "Horo/Editor/EditorSettingsEvents.h"
 #include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Foundation/Configuration.h"
+#include "editor/EditorServiceErrors.h"
 
 #include <string>
 #include <utility>
@@ -13,11 +14,9 @@ namespace Horo::Editor
 {
     namespace
     {
-        [[nodiscard]] Error SettingsError(const char* code, std::string message)
+        [[nodiscard]] Error SettingsError(const ErrorCodeDescriptor &descriptor, std::string message)
         {
-            return Error{
-                ErrorCode{code}, ErrorDomainId{"horo.editor.settings"}, ErrorSeverity::Error, std::move(message)
-            };
+            return MakeError(descriptor, std::move(message));
         }
     } // namespace
 
@@ -42,14 +41,14 @@ namespace Horo::Editor
         if (draft.baseRevision != m_revision)
         {
             return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError("editor.settings.draft_stale", "Editor settings draft is stale."));
+                SettingsError(SettingsErrors::DraftStale, "Editor settings draft is stale."));
         }
 
         EditorSettings candidate = draft.settings;
         if (std::string validationError; !ValidateEditorSettings(candidate, &validationError))
         {
             return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError("editor.settings.validation_failed", std::move(validationError)));
+                SettingsError(SettingsErrors::ValidationFailed, std::move(validationError)));
         }
 
         const bool languageChanged = candidate.languageTag != m_committed.languageTag;
@@ -60,7 +59,7 @@ namespace Horo::Editor
             if (!locale.has_value() || !m_localization.Prepare(*locale, &localizationError))
             {
                 return Result<EditorSettingsSnapshot>::Failure(
-                    SettingsError(localizationError.code.c_str(), std::move(localizationError.message)));
+                    SettingsError(SettingsErrors::ValidationFailed, std::move(localizationError.message)));
             }
         }
 
@@ -76,7 +75,7 @@ namespace Horo::Editor
         if (std::string persistenceError; !SaveEditorSettingsDocument(&document, &persistenceError))
         {
             return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError("editor.settings.persistence_failed", std::move(persistenceError)));
+                SettingsError(SettingsErrors::PersistenceFailed, std::move(persistenceError)));
         }
 
         if (languageChanged)
@@ -85,7 +84,7 @@ namespace Horo::Editor
             if (!m_localization.ActivatePrepared(&localizationError))
             {
                 return Result<EditorSettingsSnapshot>::Failure(
-                    SettingsError(localizationError.code.c_str(), std::move(localizationError.message)));
+                    SettingsError(SettingsErrors::ValidationFailed, std::move(localizationError.message)));
             }
         }
 

@@ -1,4 +1,5 @@
 #include "MetalBackendInternal.h"
+#include "MetalRenderBackendErrors.h"
 
 #include <limits>
 #include <memory>
@@ -9,12 +10,9 @@ namespace Horo::Render
 {
     namespace
     {
-        [[nodiscard]] Error MakeMetalError(std::string code, std::string message)
+        [[nodiscard]] Error MakeMetalError(const ErrorCodeDescriptor &descriptor, std::string message)
         {
-            return Error{
-                ErrorCode{std::move(code)}, ErrorDomainId{"horo.render.metal"}, ErrorSeverity::Error,
-                std::move(message), {}
-            };
+            return MakeError(descriptor, std::move(message));
         }
 
         struct MetalPresentationLease
@@ -42,24 +40,24 @@ namespace Horo::Render
                 if (initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.already_initialized",
+                        MakeMetalError(MetalBackendErrors::AlreadyInitialized,
                                        "Renderer backend is already initialized."));
                 }
                 if (!config.IsValid())
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.invalid_config", "Metal backend configuration is invalid."));
+                        MakeMetalError(MetalBackendErrors::InvalidConfig, "Metal backend configuration is invalid."));
                 }
                 if (config.maxFramesInFlight < 2 || config.maxFramesInFlight > 3)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.metal.unsupported_frames_in_flight",
+                        MakeMetalError(MetalBackendErrors::UnsupportedFramesInFlight,
                                        "Metal interactive presentation supports two or three frames in flight."));
                 }
                 if (presentationLease_->claimed)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.metal.presentation_in_use",
+                        MakeMetalError(MetalBackendErrors::PresentationInUse,
                                        "Metal presentation attachment is already owned by another backend."));
                 }
 
@@ -97,22 +95,22 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeMetalError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (frameActive_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeMetalError("render.backend.frame_already_active", "A renderer frame is already active."));
+                        MakeMetalError(MetalBackendErrors::FrameAlreadyActive, "A renderer frame is already active."));
                 }
                 if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid())
                 {
-                    return Result<FrameToken>::Failure(MakeMetalError("render.backend.invalid_frame_descriptor",
+                    return Result<FrameToken>::Failure(MakeMetalError(MetalBackendErrors::InvalidFrameDescriptor,
                                                                       "Frame number and output extent must be valid."));
                 }
                 if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max())
                 {
                     return Result<FrameToken>::Failure(
-                        MakeMetalError("render.backend.frame_token_exhausted", "Frame token space is exhausted."));
+                        MakeMetalError(MetalBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));
                 }
 
                 const Result<void> begun = runtime_->BeginFrame(descriptor.outputExtent);
@@ -196,16 +194,16 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!extent.IsValid())
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.invalid_extent", "Renderer output extent must be non-zero."));
+                        MakeMetalError(MetalBackendErrors::InvalidExtent, "Renderer output extent must be non-zero."));
                 }
                 if (frameActive_)
                 {
-                    return Result<void>::Failure(MakeMetalError("render.backend.frame_active",
+                    return Result<void>::Failure(MakeMetalError(MetalBackendErrors::FrameActive,
                                                                 "Renderer output cannot resize while a frame is active."));
                 }
                 return runtime_->Resize(extent);
@@ -225,17 +223,17 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!frameActive_)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.no_active_frame", "No renderer frame is active."));
+                        MakeMetalError(MetalBackendErrors::NoActiveFrame, "No renderer frame is active."));
                 }
                 if (frame != activeFrame_)
                 {
                     return Result<void>::Failure(
-                        MakeMetalError("render.backend.frame_token_mismatch",
+                        MakeMetalError(MetalBackendErrors::FrameTokenMismatch,
                                        "Frame token does not match the active frame."));
                 }
                 return Result<void>::Success();
@@ -254,25 +252,25 @@ namespace Horo::Render
                     const RenderPassDescriptor& pass = plan.orderedPasses[index];
                     if (!pass.id.IsValid())
                     {
-                        return Result<void>::Failure(MakeMetalError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
                                                                     "Execution plan contains an invalid render pass ID."));
                     }
                     if (pass.kind != RenderPassKind::Graphics)
                     {
-                        return Result<void>::Failure(MakeMetalError("render.metal.unsupported_pass_kind",
+                        return Result<void>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedPassKind,
                                                                     "Initial Metal backend supports graphics passes only."));
                     }
                     for (std::size_t previous = 0; previous < index; ++previous)
                     {
                         if (pass.id == plan.orderedPasses[previous].id)
                         {
-                            return Result<void>::Failure(MakeMetalError("render.backend.invalid_execution_plan",
+                            return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
                                                                         "Execution plan contains duplicate render pass IDs."));
                         }
                     }
                     if (pass.primaryOutput.has_value() && !pass.primaryOutput->IsValid())
                     {
-                        return Result<void>::Failure(MakeMetalError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
                                                                     "Primary output attachment operations are invalid."));
                     }
                 }

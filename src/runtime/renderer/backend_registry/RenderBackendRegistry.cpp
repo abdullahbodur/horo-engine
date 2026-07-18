@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Render/RenderBackendRegistry.h"
+#include "RenderBackendRegistryErrors.h"
 
 #include <algorithm>
 #include <utility>
@@ -8,11 +9,9 @@ namespace Horo::Render
     namespace
     {
         /** @brief Creates one registry-domain typed error. */
-        [[nodiscard]] Error MakeRegistryError(std::string code, std::string message)
+        [[nodiscard]] Error MakeRegistryError(const ErrorCodeDescriptor &descriptor, std::string message)
         {
-            return Error{
-                ErrorCode{std::move(code)}, ErrorDomainId{"horo.render"}, ErrorSeverity::Error, std::move(message), {}
-            };
+            return MakeError(descriptor, std::move(message));
         }
     } // namespace
 
@@ -22,13 +21,13 @@ namespace Horo::Render
         if (sealed_)
         {
             return Result<void>::Failure(
-                MakeRegistryError("render.registry.sealed", "Renderer backend registry is already sealed."));
+                MakeRegistryError(RegistryErrors::Sealed, "Renderer backend registry is already sealed."));
         }
 
         if (!descriptor.id.IsValid() || descriptor.displayName.empty() || !descriptor.provider)
         {
             return Result<void>::Failure(MakeRegistryError(
-                "render.registry.invalid_descriptor",
+                RegistryErrors::InvalidDescriptor,
                 "Renderer backend descriptor requires an ID, name, and provider."));
         }
 
@@ -37,7 +36,7 @@ namespace Horo::Render
         if (duplicate != descriptors_.end())
         {
             return Result<void>::Failure(
-                MakeRegistryError("render.registry.duplicate_backend",
+                MakeRegistryError(RegistryErrors::DuplicateBackend,
                                   "Renderer backend ID is already registered: " + descriptor.id.Value()));
         }
 
@@ -58,7 +57,7 @@ namespace Horo::Render
         if (!sealed_)
         {
             return Result<std::unique_ptr<IRenderBackend>>::Failure(MakeRegistryError(
-                "render.registry.not_sealed", "Renderer backend registry must be sealed before creation."));
+                RegistryErrors::NotSealed, "Renderer backend registry must be sealed before creation."));
         }
 
         const auto descriptor = std::ranges::find_if(
@@ -66,7 +65,7 @@ namespace Horo::Render
         if (descriptor == descriptors_.end())
         {
             return Result<std::unique_ptr<IRenderBackend>>::Failure(MakeRegistryError(
-                "render.registry.backend_not_found", "Renderer backend is not compiled into this host: " + id.Value()));
+                RegistryErrors::BackendNotFound, "Renderer backend is not compiled into this host: " + id.Value()));
         }
 
         Result<std::unique_ptr<IRenderBackend>> backend = [&descriptor]()
@@ -78,7 +77,7 @@ namespace Horo::Render
             catch (...)
             {
                 return Result<std::unique_ptr<IRenderBackend>>::Failure(MakeRegistryError(
-                    "render.registry.provider_exception", "The renderer backend provider threw an exception."));
+                    RegistryErrors::ProviderException, "The renderer backend provider threw an exception."));
             }
         }();
         if (backend.HasError())
@@ -88,7 +87,7 @@ namespace Horo::Render
         if (!backend.Value())
         {
             return Result<std::unique_ptr<IRenderBackend>>::Failure(MakeRegistryError(
-                "render.registry.provider_returned_null",
+                RegistryErrors::ProviderReturnedNull,
                 "The renderer backend provider returned no backend instance."));
         }
         return backend;

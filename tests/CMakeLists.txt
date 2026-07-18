@@ -12,6 +12,13 @@ target_compile_features(HoroSceneMathTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSceneMathTests PRIVATE HoroEngine::Foundation)
 add_test(NAME HoroSceneMathTests COMMAND HoroSceneMathTests)
 
+add_executable(HoroFoundationStringTests
+    unit/foundation/StringTests.cpp
+)
+target_compile_features(HoroFoundationStringTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationStringTests PRIVATE HoroEngine::Foundation)
+add_test(NAME HoroFoundationStringTests COMMAND HoroFoundationStringTests)
+
 add_executable(HoroPrimitiveMeshTests
     unit/runtime/scene/PrimitiveMeshTests.cpp
 )

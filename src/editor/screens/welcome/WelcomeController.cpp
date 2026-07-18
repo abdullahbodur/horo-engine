@@ -137,9 +137,6 @@ namespace Horo::Editor
                     }
                 }
             }
-            results.emplace_back("Desert Run", "~/projects/desert-run", "2h ago", "desert-run");
-            results.emplace_back("Arena Prototype", "~/projects/arena-proto", "yesterday", "arena-prototype");
-            results.emplace_back("Tech Demo", "~/projects/tech-demo", "3 days ago", "tech-demo");
             return results;
         }
     } // namespace
@@ -176,7 +173,7 @@ namespace Horo::Editor
     /** @copydoc IsDisplayableRecentProject */
     bool IsDisplayableRecentProject(const RecentProjectEntry& entry) noexcept
     {
-        return !entry.name.empty() && !entry.rootPath.empty();
+        return !entry.name.empty() && std::filesystem::path{entry.rootPath}.is_absolute();
     }
 
     /** @copydoc LoadRecentProjectsFromDisk */

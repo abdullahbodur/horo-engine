@@ -4,6 +4,7 @@
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "Horo/Foundation/ErrorCode.h"
 #include "editor/project_model/ProjectMetadata.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
@@ -15,6 +16,16 @@ namespace Horo::Editor
 {
     namespace
     {
+        const ErrorCodeDescriptor ProfileExistsFailed{
+            .domain = ErrorDomainId{"horo.editor.input"},
+            .code = ErrorCode{"input.profile.exists_failed"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Input profile existence check failed.",
+            .remediationHint = "Verify profile path permissions and retry.",
+            .retryable = true,
+            .userActionable = true,
+        };
+
         const std::vector<Input::InputBinding>& BindingsFor(const Input::ActionDescriptor& action,
                                                             const Input::InputBindingProfile& profile)
         {
@@ -293,12 +304,7 @@ namespace Horo::Editor
             std::error_code error;
             if (!std::filesystem::exists(path, error))
                 return error
-                           ? Result<void>::Failure(Error{
-                               .code = ErrorCode{"input.profile.exists_failed"},
-                               .domain = ErrorDomainId{"horo.editor.input"},
-                               .severity = ErrorSeverity::Error,
-                               .message = error.message()
-                           })
+                           ? Result<void>::Failure(MakeError(ProfileExistsFailed, error.message()))
                            : Result<void>::Success();
             const Result<Input::InputBindingProfile> loaded = Input::LoadBindingProfile(path);
             if (loaded.HasError()) return Result<void>::Failure(loaded.ErrorValue());

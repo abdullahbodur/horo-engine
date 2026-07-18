@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Render/NullBackendModule.h"
+#include "NullRenderBackendErrors.h"
 
 #include <limits>
 #include <memory>
@@ -10,11 +11,9 @@ namespace Horo::Render
     namespace
     {
         /** @brief Creates one backend-domain typed error. */
-        [[nodiscard]] Error MakeBackendError(std::string code, std::string message)
+        [[nodiscard]] Error MakeBackendError(const ErrorCodeDescriptor &descriptor, std::string message)
         {
-            return Error{
-                ErrorCode{std::move(code)}, ErrorDomainId{"horo.render"}, ErrorSeverity::Error, std::move(message), {}
-            };
+            return MakeError(descriptor, std::move(message));
         }
 
         /** @brief Headless backend that validates renderer lifecycle without acquiring GPU resources. */
@@ -32,17 +31,17 @@ namespace Horo::Render
                 if (initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.already_initialized",
+                        MakeBackendError(NullBackendErrors::AlreadyInitialized,
                                          "Renderer backend is already initialized."));
                 }
                 if (config.requirePresentation)
                 {
-                    return Result<void>::Failure(MakeBackendError("render.null.presentation_unsupported",
+                    return Result<void>::Failure(MakeBackendError(NullBackendErrors::PresentationUnsupported,
                                                                   "Null renderer cannot satisfy a presentation requirement."));
                 }
                 if (!config.IsValid())
                 {
-                    return Result<void>::Failure(MakeBackendError("render.backend.invalid_config",
+                    return Result<void>::Failure(MakeBackendError(NullBackendErrors::InvalidConfig,
                                                                   "Frames in flight must be in the inclusive range [1, 8]."));
                 }
 
@@ -63,22 +62,22 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeBackendError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (frameActive_)
                 {
                     return Result<FrameToken>::Failure(
-                        MakeBackendError("render.backend.frame_already_active", "A renderer frame is already active."));
+                        MakeBackendError(NullBackendErrors::FrameAlreadyActive, "A renderer frame is already active."));
                 }
                 if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid())
                 {
-                    return Result<FrameToken>::Failure(MakeBackendError("render.backend.invalid_frame_descriptor",
+                    return Result<FrameToken>::Failure(MakeBackendError(NullBackendErrors::InvalidFrameDescriptor,
                                                                         "Frame number and output extent must be valid."));
                 }
                 if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max())
                 {
                     return Result<FrameToken>::Failure(
-                        MakeBackendError("render.backend.frame_token_exhausted", "Frame token space is exhausted."));
+                        MakeBackendError(NullBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));
                 }
 
                 frameActive_ = true;
@@ -92,16 +91,16 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!frameActive_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.no_active_frame", "No renderer frame is active."));
+                        MakeBackendError(NullBackendErrors::NoActiveFrame, "No renderer frame is active."));
                 }
                 if (plan.frame != activeFrame_)
                 {
-                    return Result<void>::Failure(MakeBackendError("render.backend.frame_token_mismatch",
+                    return Result<void>::Failure(MakeBackendError(NullBackendErrors::FrameTokenMismatch,
                                                                   "Execution plan does not match the active frame."));
                 }
 
@@ -110,7 +109,7 @@ namespace Horo::Render
                     const RenderPassDescriptor& pass = plan.orderedPasses[index];
                     if (!pass.id.IsValid())
                     {
-                        return Result<void>::Failure(MakeBackendError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeBackendError(NullBackendErrors::InvalidExecutionPlan,
                                                                       "Execution plan contains an invalid render pass ID."));
                     }
                     switch (pass.kind)
@@ -121,12 +120,12 @@ namespace Horo::Render
                     case RenderPassKind::Compute:
                         if (!capabilities_.supportsCompute)
                         {
-                            return Result<void>::Failure(MakeBackendError("render.backend.unsupported_pass_kind",
+                            return Result<void>::Failure(MakeBackendError(NullBackendErrors::UnsupportedPassKind,
                                                                           "Execution plan requires unsupported compute work."));
                         }
                         break;
                     default:
-                        return Result<void>::Failure(MakeBackendError("render.backend.invalid_execution_plan",
+                        return Result<void>::Failure(MakeBackendError(NullBackendErrors::InvalidExecutionPlan,
                                                                       "Execution plan contains an invalid render pass kind."));
                     }
                     if (pass.primaryOutput.has_value())
@@ -134,13 +133,13 @@ namespace Horo::Render
                         if (pass.kind != RenderPassKind::Graphics)
                         {
                             return Result<void>::Failure(
-                                MakeBackendError("render.backend.invalid_execution_plan",
+                                MakeBackendError(NullBackendErrors::InvalidExecutionPlan,
                                                  "Only graphics passes may bind the primary output attachment."));
                         }
 
                         if (!pass.primaryOutput->IsValid())
                         {
-                            return Result<void>::Failure(MakeBackendError("render.backend.invalid_execution_plan",
+                            return Result<void>::Failure(MakeBackendError(NullBackendErrors::InvalidExecutionPlan,
                                                                           "Primary output attachment operations are invalid."));
                         }
                     }
@@ -149,7 +148,7 @@ namespace Horo::Render
                         if (pass.id == plan.orderedPasses[previous].id)
                         {
                             return Result<void>::Failure(MakeBackendError(
-                                "render.backend.invalid_execution_plan",
+                                NullBackendErrors::InvalidExecutionPlan,
                                 "Execution plan contains duplicate render pass IDs."));
                         }
                     }
@@ -164,16 +163,16 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!frameActive_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.no_active_frame", "No renderer frame is active."));
+                        MakeBackendError(NullBackendErrors::NoActiveFrame, "No renderer frame is active."));
                 }
                 if (frame != activeFrame_)
                 {
-                    return Result<void>::Failure(MakeBackendError("render.backend.frame_token_mismatch",
+                    return Result<void>::Failure(MakeBackendError(NullBackendErrors::FrameTokenMismatch,
                                                                   "Frame token does not match the active frame."));
                 }
 
@@ -204,16 +203,16 @@ namespace Horo::Render
                 if (!initialized_)
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.not_initialized", "Renderer backend is not initialized."));
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
                 if (!extent.IsValid())
                 {
                     return Result<void>::Failure(
-                        MakeBackendError("render.backend.invalid_extent", "Renderer output extent must be non-zero."));
+                        MakeBackendError(NullBackendErrors::InvalidExtent, "Renderer output extent must be non-zero."));
                 }
                 if (frameActive_)
                 {
-                    return Result<void>::Failure(MakeBackendError("render.backend.frame_active",
+                    return Result<void>::Failure(MakeBackendError(NullBackendErrors::FrameActive,
                                                                   "Renderer output cannot resize while a frame is active."));
                 }
 

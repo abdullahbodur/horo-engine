@@ -1,6 +1,7 @@
 /** @copydoc EditorViewportScene.h */
 
 #include "editor/renderer/EditorViewportScene.h"
+#include "editor/renderer/EditorRendererErrors.h"
 
 #include <algorithm>
 #include <cassert>
@@ -58,9 +59,8 @@ Result<Math::Mat4> BuildRenderMvp(const Render::RenderCameraView& camera, const 
 {
     if (!camera.IsValid() || !Math::IsFinite(localToWorld) || !std::isfinite(aspect) || aspect <= 0.0F)
     {
-        return Result<Math::Mat4>::Failure(Error{ErrorCode{"editor.viewport.invalid_render_camera"},
-                                                 ErrorDomainId{"horo.editor.viewport"}, ErrorSeverity::Error,
-                                                 "Render camera, transform, or aspect ratio is invalid.", {}});
+        return Result<Math::Mat4>::Failure(MakeError(
+            RendererErrors::InvalidRenderCamera, "Render camera, transform, or aspect ratio is invalid."));
     }
     const Result<Math::Mat4> view = Math::TryLookAt(camera.position, camera.target, camera.up);
     if (view.HasError())
@@ -82,11 +82,8 @@ Result<Math::Mat4> BuildEditorViewportViewProjection(const EditorViewportCamera 
 {
     if (!camera.IsValid() || !std::isfinite(aspect) || aspect <= 0.0F)
     {
-        return Result<Math::Mat4>::Failure(Error{ErrorCode{"editor.viewport.invalid_camera"},
-                                                 ErrorDomainId{"horo.editor.viewport"},
-                                                 ErrorSeverity::Error,
-                                                 "Viewport camera or aspect ratio is invalid.",
-                                                 {}});
+        return Result<Math::Mat4>::Failure(
+            MakeError(RendererErrors::InvalidCamera, "Viewport camera or aspect ratio is invalid."));
     }
     const Result<Math::Mat4> view = Math::TryLookAt(camera.position, camera.target, camera.up);
     if (view.HasError())
@@ -107,11 +104,8 @@ Result<Math::Ray> BuildEditorViewportRay(const EditorViewportCamera &camera, con
     if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY) || normalizedX < 0.0F || normalizedX > 1.0F ||
         normalizedY < 0.0F || normalizedY > 1.0F)
     {
-        return Result<Math::Ray>::Failure(Error{ErrorCode{"editor.viewport.invalid_coordinates"},
-                                                ErrorDomainId{"horo.editor.viewport"},
-                                                ErrorSeverity::Error,
-                                                "Viewport coordinates are outside normalized bounds.",
-                                                {}});
+        return Result<Math::Ray>::Failure(
+            MakeError(RendererErrors::InvalidCoordinates, "Viewport coordinates are outside normalized bounds."));
     }
     const Result<Math::Mat4> viewProjection =
         BuildEditorViewportViewProjection(camera, aspect, Math::ClipDepthRange::NegativeOneToOne);

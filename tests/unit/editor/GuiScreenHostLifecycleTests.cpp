@@ -90,6 +90,12 @@ void ShutdownLeavesOnceDestroysScreenAndRevokesServices()
     assert(stats.enters == 1);
     assert(!host.Services().Empty());
 
+    const Result<void> invalidRoute =
+        host.Navigate(GuiRoute{GuiRouteKind::Welcome, ProjectCreationRouteParameters{}});
+    assert(invalidRoute.HasError());
+    assert(invalidRoute.ErrorValue().domain.Value() == "horo.editor.screens");
+    assert(invalidRoute.ErrorValue().code.Value() == "navigation.invalid_route_parameters");
+
     host.Shutdown();
     assert(host.IsShutdown());
     assert(stats.leaves == 1);
@@ -101,6 +107,7 @@ void ShutdownLeavesOnceDestroysScreenAndRevokesServices()
     assert(stats.destructions == 1);
     const Result<void> navigation = host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}});
     assert(navigation.HasError());
+    assert(navigation.ErrorValue().domain.Value() == "horo.editor.screens");
     assert(navigation.ErrorValue().code.Value() == "navigation.host_shutdown");
     jobs.Shutdown(ShutdownPolicy::Cancel);
 }

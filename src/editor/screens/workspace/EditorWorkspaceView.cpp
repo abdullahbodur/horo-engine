@@ -1023,6 +1023,14 @@ namespace Horo::Editor
                                            const EditorWorkspaceViewModel& viewModel,
                                            EditorWorkspaceViewCommandData& outCommand) const
     {
+        // A screen transition, minimize, or sufficiently narrow host window can temporarily leave a dock with no
+        // drawable area. InvisibleButton requires both dimensions to be non-zero, so defer the dock until layout
+        // produces a usable rectangle on a later frame.
+        if (!(size.x > 0.0F) || !(size.y > 0.0F))
+        {
+            return;
+        }
+
         const auto& panels = m_panelRegistry.GetAllPanels();
 
         ImGui::SetNextWindowPos(pos);

@@ -1,5 +1,8 @@
 add_library(HoroFoundation STATIC
+        foundation/FoundationErrors.cpp
+        foundation/diagnostics/ErrorCode.cpp
         foundation/math/SceneMath.cpp
+        foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/data_bus/DataBus.cpp
@@ -31,6 +34,7 @@ target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
+        runtime/input/InputErrors.cpp
 )
 add_library(HoroEngine::Input ALIAS HoroInput)
 target_compile_features(HoroInput PUBLIC cxx_std_20)
@@ -49,6 +53,7 @@ target_link_libraries(HoroRenderApi INTERFACE HoroEngine::Foundation)
 
 add_library(HoroRenderBackendRegistry STATIC
         runtime/renderer/backend_registry/RenderBackendRegistry.cpp
+        runtime/renderer/backend_registry/RenderBackendRegistryErrors.cpp
 )
 add_library(HoroEngine::RenderBackendRegistry ALIAS HoroRenderBackendRegistry)
 
@@ -61,6 +66,7 @@ target_link_libraries(HoroRenderBackendRegistry PUBLIC HoroEngine::RenderApi)
 
 add_library(HoroRenderFrontend STATIC
         runtime/renderer/frontend/RenderFrontend.cpp
+        runtime/renderer/frontend/RenderFrontendErrors.cpp
 )
 add_library(HoroEngine::RenderFrontend ALIAS HoroRenderFrontend)
 
@@ -78,6 +84,7 @@ target_link_libraries(HoroRenderFrontend
 add_library(HoroSceneModel STATIC
         runtime/scene/primitive/PrimitiveCatalog.cpp
         runtime/scene/primitive/PrimitiveMesh.cpp
+        runtime/scene/primitive/PrimitiveMeshErrors.cpp
 )
 add_library(HoroEngine::SceneModel ALIAS HoroSceneModel)
 
@@ -90,6 +97,7 @@ target_link_libraries(HoroSceneModel PUBLIC HoroEngine::Foundation HoroEngine::R
 
 add_library(HoroRenderNull STATIC
         runtime/renderer/modules/null/NullRenderBackend.cpp
+        runtime/renderer/modules/null/NullRenderBackendErrors.cpp
 )
 add_library(HoroEngine::RenderNull ALIAS HoroRenderNull)
 
@@ -104,9 +112,10 @@ target_link_libraries(HoroRenderNull
         HoroEngine::RenderBackendRegistry
 )
 
-if(HORO_BUILD_RENDER_OPENGL)
+if (HORO_BUILD_RENDER_OPENGL)
     add_library(HoroRenderOpenGL STATIC
             runtime/renderer/modules/opengl/OpenGLRenderBackend.cpp
+            runtime/renderer/modules/opengl/OpenGLRenderBackendErrors.cpp
     )
     add_library(HoroEngine::RenderOpenGL ALIAS HoroRenderOpenGL)
 
@@ -122,11 +131,12 @@ if(HORO_BUILD_RENDER_OPENGL)
             PRIVATE
             OpenGL::GL
     )
-endif()
+endif ()
 
-if(HORO_BUILD_RENDER_METAL)
+if (HORO_BUILD_RENDER_METAL)
     add_library(HoroRenderMetal STATIC
             runtime/renderer/modules/metal/MetalRenderBackend.cpp
+            runtime/renderer/modules/metal/MetalRenderBackendErrors.cpp
             runtime/renderer/modules/metal/MetalRuntime.mm
     )
     add_library(HoroEngine::RenderMetal ALIAS HoroRenderMetal)
@@ -145,10 +155,11 @@ if(HORO_BUILD_RENDER_METAL)
             "-framework Metal"
             "-framework QuartzCore"
     )
-endif()
+endif ()
 
 add_library(HoroEditorModel STATIC
         editor/document/SceneDocument.cpp
+        editor/project_model/EditorModelErrors.cpp
         editor/project_model/EditorSelectionModel.cpp
         editor/project_model/EditorViewportCamera.cpp
         editor/project_model/EditorViewportModel.cpp
@@ -181,6 +192,7 @@ target_include_directories(HoroEditorViewportScene
 target_link_libraries(HoroEditorViewportScene PUBLIC HoroEngine::EditorModel)
 
 add_library(HoroEditorRenderExtraction STATIC
+        editor/document/EditorRenderExtractionErrors.cpp
         editor/document/EditorViewportSceneExtractor.cpp
         editor/document/EditorViewportPicking.cpp
 )
@@ -198,7 +210,7 @@ target_link_libraries(HoroEditorRenderExtraction
         HoroEngine::EditorViewportScene
 )
 
-if(HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_METAL)
+if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_METAL)
     add_library(HoroEditorViewportMetal STATIC
             editor/renderer/metal/EditorGuiRendererMetal.mm
             editor/renderer/metal/EditorViewportRendererMetal.mm
@@ -223,9 +235,10 @@ if(HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_METAL)
             "-framework Metal"
             "-framework QuartzCore"
     )
-endif()
+endif ()
 
 add_library(HoroEditorServices STATIC
+        editor/EditorServiceErrors.cpp
         editor/screens/welcome/WelcomeController.cpp
         editor/screens/project_creation/ProjectCreationController.cpp
         editor/project_model/ProjectCreationService.cpp
@@ -300,7 +313,7 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
             HoroThirdParty::ImGuiOpenGL
     )
 
-endif()
+endif ()
 
 if (HORO_BUILD_EDITOR_GUI)
     add_library(HoroInputSdl STATIC
@@ -333,6 +346,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/EditorWorkspaceController.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
+            editor/screens/NavigationErrors.cpp
             editor/screens/GuiScreenHost.cpp
     )
 
@@ -357,7 +371,7 @@ if (HORO_BUILD_EDITOR_GUI)
             PUBLIC
             HoroEngine::EditorServices
             HoroEngine::Foundation
-        PRIVATE
+            PRIVATE
             HoroThirdParty::ImGui
             HoroEngine::EditorRenderExtraction
     )

@@ -8,6 +8,7 @@
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Foundation/Logging/LogContext.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "editor/screens/NavigationErrors.h"
 #include "ProjectLoadingView.h"
 
 #include <memory>
@@ -117,12 +118,8 @@ namespace Horo::Editor
 
                 if (resolution.subject != operationId_.value_or(2) || resolution.revision != 1)
                 {
-                    return Result<LeaveDecision>::Failure(Error{
-                        .code = ErrorCode{"navigation.stale_leave_subject"},
-                        .domain = ErrorDomainId{"horo.editor.project_loading"},
-                        .severity = ErrorSeverity::Error,
-                        .message = "Project loading leave requirement is stale."
-                    });
+                    return Result<LeaveDecision>::Failure(
+                        MakeError(NavigationErrors::ProjectLoadingStaleLeaveSubject));
                 }
                 if (resolution.action == CancelOperation)
                 {
@@ -142,12 +139,8 @@ namespace Horo::Editor
                         .disposition = Deny, .requirement = std::nullopt
                     });
                 }
-                return Result<LeaveDecision>::Failure(Error{
-                    .code = ErrorCode{"navigation.leave_action_not_allowed"},
-                    .domain = ErrorDomainId{"horo.editor.project_loading"},
-                    .severity = ErrorSeverity::Error,
-                    .message = "Project loading leave action is not allowed."
-                });
+                return Result<LeaveDecision>::Failure(
+                    MakeError(NavigationErrors::ProjectLoadingLeaveActionNotAllowed));
             }
 
             void OnLeave() override

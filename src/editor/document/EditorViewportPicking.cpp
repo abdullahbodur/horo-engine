@@ -1,4 +1,5 @@
 #include "editor/document/EditorViewportPicking.h"
+#include "EditorRenderExtractionErrors.h"
 
 #include <algorithm>
 #include <cmath>
@@ -10,13 +11,9 @@ namespace Horo::Editor
 {
 namespace
 {
-[[nodiscard]] Error MakePickingError(std::string code, std::string message)
+[[nodiscard]] Error MakePickingError(const ErrorCodeDescriptor &descriptor, std::string message)
 {
-    return Error{ErrorCode{std::move(code)},
-                 ErrorDomainId{"horo.editor.viewport_picking"},
-                 ErrorSeverity::Error,
-                 std::move(message),
-                 {}};
+    return MakeError(descriptor, std::move(message));
 }
 } // namespace
 
@@ -29,17 +26,17 @@ Result<std::optional<SceneObjectId>> PickEditorViewportScene(const EditorViewpor
         query.aspect <= 0.0F)
     {
         return Result<std::optional<SceneObjectId>>::Failure(
-            MakePickingError("viewport_picking.invalid_query", "Viewport pick query is outside valid bounds."));
+            MakePickingError(ViewportPickingErrors::InvalidQuery, "Viewport pick query is outside valid bounds."));
     }
     if (!scene.View().IsValid() || scene.instances.size() != scene.instanceObjects.size())
     {
         return Result<std::optional<SceneObjectId>>::Failure(MakePickingError(
-            "viewport_picking.invalid_scene", "Viewport pick snapshot is invalid or has inconsistent identity data."));
+            ViewportPickingErrors::InvalidScene, "Viewport pick snapshot is invalid or has inconsistent identity data."));
     }
     if (std::ranges::any_of(scene.instanceObjects, [](const SceneObjectId object) { return !object.IsValid(); }))
     {
         return Result<std::optional<SceneObjectId>>::Failure(MakePickingError(
-            "viewport_picking.invalid_identity", "Viewport pick snapshot contains an invalid scene object identity."));
+            ViewportPickingErrors::InvalidIdentity, "Viewport pick snapshot contains an invalid scene object identity."));
     }
 
     const Result<Math::Ray> ray =
