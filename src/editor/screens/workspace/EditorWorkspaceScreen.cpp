@@ -6,6 +6,7 @@
 #include "Horo/Editor/GuiScreenHost.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/ProjectOpenService.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
@@ -14,7 +15,7 @@
 #include "EditorWorkspaceView.h"
 #include "editor/screens/workspace/EditorWorkspaceController.h"
 #include "editor/input/EditorInputActions.h"
-#include "editor/project_model/ProjectMetadata.h"
+#include "Horo/Application/ProjectCompatibility.h"
 
 #include <memory>
 #include <filesystem>
@@ -39,7 +40,8 @@ namespace Horo::Editor
                   view_(context_, registry_, services.Get<std::uintptr_t>(), inputRouter_, workspaceInputContext_),
                   viewportRenderer_(services.TryGet<IEditorViewportRenderer>()),
                   viewportSceneState_(services.Get<EditorViewportSceneState>()),
-                  runtimeScene_(services.Get<Runtime::RuntimeSceneService>())
+                  runtimeScene_(services.Get<Runtime::RuntimeSceneService>()),
+                  projectOpenService_(services.Get<ProjectOpenService>())
             {
             }
 
@@ -50,12 +52,13 @@ namespace Horo::Editor
 
             Result<void> OnEnter(const GuiRoute& route) override
             {
-                std::string projectRoot;
-                if (std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters))
-                {
-                    const auto& params = std::get<EditorWorkspaceRouteParameters>(route.parameters);
-                    projectRoot = params.projectRoot;
-                }
+                if (!std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters))
+                    return Result<void>::Failure(MakeError(NavigationErrors::InvalidRouteParameters));
+                const auto& params = std::get<EditorWorkspaceRouteParameters>(route.parameters);
+                auto reserved = projectOpenService_.ReserveSession(params.session);
+                if (reserved.HasError()) return Result<void>::Failure(reserved.ErrorValue());
+                ProjectSessionActivationLease activation = std::move(reserved).Value();
+                std::string projectRoot = activation.Candidate().projectRoot.string();
 
                 controller_ = std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
@@ -71,6 +74,13 @@ namespace Horo::Editor
                 };
                 registry_.AttachAll(panelContext);
                 UpdateStatusItems();
+                if (auto committed = activation.Commit(); committed.HasError())
+                {
+                    registry_.DetachAll();
+                    viewportSceneState_.Clear();
+                    controller_.reset();
+                    return committed;
+                }
                 return Result<void>::Success();
             }
 
@@ -287,7 +297,8 @@ namespace Horo::Editor
                 if (!mergeFile(projectRoot / ".horo" / "input.json") ||
                     !mergeProfile(*previousInputProfile_, "editor-global"))
                     return;
-                const Result<ProjectMetadata> metadata = LoadProjectMetadata(projectRoot);
+                const Result<Application::ProjectMetadata> metadata =
+                    Application::LoadProjectMetadata(projectRoot);
                 if (metadata.HasValue() &&
                     !mergeFile(ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "projects" /
                         (metadata.Value().projectId + ".json")))
@@ -398,6 +409,7 @@ namespace Horo::Editor
             IEditorViewportRenderer* viewportRenderer_{nullptr};
             EditorViewportSceneState& viewportSceneState_;
             Runtime::RuntimeSceneService& runtimeScene_;
+            ProjectOpenService& projectOpenService_;
             DocumentRevision publishedSceneRevision_{};
             SelectionRevision publishedSelectionRevision_{};
             ViewportRevision publishedViewportRevision_{};

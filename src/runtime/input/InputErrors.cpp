@@ -1,7 +1,9 @@
 #include "InputErrors.h"
 
-namespace Horo::Input::Errors {
-    namespace {
+namespace Horo::Input::Errors
+{
+    namespace
+    {
         const ErrorDomainId Domain{"horo.input"};
     }
 

@@ -41,6 +41,6 @@ class SettingsModal final : public EditorModal
     SettingsState m_draft;
     bool m_revertedPublished = false;
     /// @brief RAII MDC frame active for the lifetime of this modal.
-    std::unique_ptr<Horo::Log::LogContext> m_logCtx;
+    std::unique_ptr<Log::LogContext> m_logCtx;
 };
 } // namespace Horo::Editor

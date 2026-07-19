@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "editor/renderer/metal/EditorViewportRendererMetal.h"
@@ -24,14 +26,11 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 } // namespace
 
-int main()
+TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
 {
     Check(SDL_Init(SDL_INIT_VIDEO));
     SDL_Window *window =
@@ -83,7 +82,8 @@ int main()
             {meshHandle,
              Math::Transform{.translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}}
                  .ToMatrix(),
-             mesh.localBounds, Render::CoreDefaultMaterial,
+             mesh.localBounds,
+             Render::CoreDefaultMaterial,
              {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}});
         meshLeases.push_back(std::move(meshLease));
     }
@@ -104,12 +104,13 @@ int main()
         RenderPassDescriptor{
             .id = RenderPassId{1},
             .kind = RenderPassKind::Graphics,
-            .staticMesh = StaticMeshPassDescriptor{
-                .target = viewportTarget,
-                .extent = {128, 128},
-                .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                                         viewportScene.instances},
-            },
+            .staticMesh =
+                StaticMeshPassDescriptor{
+                    .target = viewportTarget,
+                    .extent = {128, 128},
+                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
+                                             viewportScene.instances},
+                },
         },
         RenderPassDescriptor{
             .id = RenderPassId{2},
@@ -173,5 +174,4 @@ int main()
     frontend.reset();
     SDL_DestroyWindow(window);
     SDL_Quit();
-    return 0;
 }

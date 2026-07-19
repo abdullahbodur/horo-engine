@@ -7,16 +7,15 @@
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Editor/ProjectCreationService.h"
-#include "editor/project_model/RendererAvailability.h"
 #include "Horo/Editor/SettingsModal.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Runtime/Input.h"
 #include "NavigationErrors.h"
+#include "editor/project_model/RendererAvailability.h"
 #include "editor/status_bar/EditorStatusBar.h"
 
 #include <algorithm>
-#include <cstdio>
 
 namespace Horo::Editor
 {
@@ -45,9 +44,9 @@ namespace
 GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,
                              EditorSettingsService &settingsService, LocalizationService &localization,
                              EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                             Input::InputRouter &inputRouter,
-                             const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
-                             WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture)
+                             Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
+                             ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry,
+                             std::uintptr_t logoTexture)
     : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
       engineEvents_(&engineEvents), creationService_(&creationService), logoTexture_(logoTexture),
       screenRegistry_(std::move(screenRegistry)), workspacePanelRegistry_(std::move(workspacePanelRegistry)),
@@ -115,17 +114,41 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
                                    .order = 10,
                                    .maxWidth = 112.0F},
         EditorStatusItemContent{.value = localization.Get("editor", "status.selection.none"), .available = false}));
-
-    activeScreen_ = CreateScreen(activeRoute_);
-    if (activeScreen_)
-    {
-        static_cast<void>(activeScreen_->OnEnter(activeRoute_));
-    }
 }
 
 GuiScreenHost::~GuiScreenHost()
 {
     Shutdown();
+}
+
+/** @copydoc GuiScreenHost::Start */
+Result<void> GuiScreenHost::Start(GuiRoute initialRoute)
+{
+    if (shutdown_)
+        return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
+    if (started_)
+        return Result<void>::Failure(MakeError(NavigationErrors::HostAlreadyStarted));
+    if (!IsRoutePayloadValid(initialRoute))
+    {
+        return Result<void>::Failure(
+            MakeError(NavigationErrors::InvalidRouteParameters, "Invalid initial route payload."));
+    }
+
+    std::unique_ptr<GuiScreen> initialScreen = CreateScreen(initialRoute);
+    if (!initialScreen)
+    {
+        return Result<void>::Failure(MakeError(NavigationErrors::ScreenCreationFailed));
+    }
+    if (Result<void> entered = initialScreen->OnEnter(initialRoute); entered.HasError())
+    {
+        return entered;
+    }
+
+    activeRoute_ = std::move(initialRoute);
+    activeRevision_ = GuiRouteRevision{1};
+    activeScreen_ = std::move(initialScreen);
+    started_ = true;
+    return Result<void>::Success();
 }
 
 /** @copydoc GuiScreenHost::Shutdown */
@@ -229,6 +252,8 @@ Result<void> GuiScreenHost::Navigate(GuiRoute destination)
 {
     if (shutdown_)
         return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
+    if (!started_)
+        return Result<void>::Failure(MakeError(NavigationErrors::HostNotStarted));
     if (!IsRoutePayloadValid(destination))
     {
         return Result<void>::Failure(
@@ -262,6 +287,8 @@ Result<void> GuiScreenHost::RequestCloseApplication()
 {
     if (shutdown_)
         return Result<void>::Failure(MakeError(NavigationErrors::HostShutdown));
+    if (!started_)
+        return Result<void>::Failure(MakeError(NavigationErrors::HostNotStarted));
     if (navigationBusy_ || pendingRequirement_.has_value() || pendingTarget_.has_value())
     {
         return Result<void>::Failure(MakeError(NavigationErrors::Busy, "Navigation already in progress."));
@@ -294,9 +321,8 @@ Result<void> GuiScreenHost::ExecuteLeaveCheckAndCommit(const LeaveTarget &target
     {
         if (!decision.requirement.has_value())
         {
-            return Result<void>::Failure(
-                MakeError(NavigationErrors::InvalidLeaveRequirement,
-                          "Screen requested leave resolution without a requirement."));
+            return Result<void>::Failure(MakeError(NavigationErrors::InvalidLeaveRequirement,
+                                                   "Screen requested leave resolution without a requirement."));
         }
         if (resolutionAttemptCount_ >= 5)
         {

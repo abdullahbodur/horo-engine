@@ -49,6 +49,12 @@
     "project_creation.review.settings": {
       "text": "PROJE AYARLARI"
     },
+    "project_creation.review.compatibility": {
+      "text": "Proje uyumluluğu"
+    },
+    "project_creation.review.project_id_generated": {
+      "text": "projectId oluşturulacak"
+    },
     "project_creation.review.what_will_be_created": {
       "text": "NELER OLUŞTURULACAK"
     },
@@ -145,6 +151,33 @@
     "project_loading.action.cancel": {
       "text": "İptal"
     },
+    "project_loading.action.retry": {
+      "text": "Tekrar Dene"
+    },
+    "project_loading.action.back": {
+      "text": "Projelere Dön"
+    },
+    "project_loading.status.creating": { "text": "Proje dosyaları oluşturuluyor..." },
+    "project_loading.status.inspecting": { "text": "Proje inceleniyor..." },
+    "project_loading.status.cleaning": { "text": "Tamamlanmış kurtarma verileri temizleniyor..." },
+    "project_loading.status.recovering": { "text": "Yarım kalan proje değişiklikleri kurtarılıyor..." },
+    "project_loading.status.validating": { "text": "Proje uyumluluğu doğrulanıyor..." },
+    "project_loading.status.planning": { "text": "Proje migration planı hazırlanıyor..." },
+    "project_loading.status.migrating": { "text": "Proje verileri migrate ediliyor..." },
+    "project_loading.status.updating": { "text": "Proje sürüm bilgisi güncelleniyor..." },
+    "project_loading.status.rebuilding": { "text": "Türetilmiş proje durumu yeniden oluşturuluyor..." },
+    "project_loading.status.renderer": { "text": "Renderer kullanılabilirliği kontrol ediliyor..." },
+    "project_loading.status.workspace": { "text": "Workspace oturumu hazırlanıyor..." },
+    "project_loading.status.ready": { "text": "Proje hazır." },
+    "project_loading.status.renderer_restart": { "text": "Proje renderer'ı ile yeniden başlatılıyor..." },
+    "project_loading.status.failed": { "text": "Proje açılamadı." },
+    "project_loading.status.processing": { "text": "Proje işleniyor..." },
+    "project_loading.error.busy": { "text": "Proje başka bir işlem tarafından değiştiriliyor. İşlem bitince tekrar deneyin." },
+    "project_loading.error.recovery": { "text": "Yarım kalan proje işlemi güvenli biçimde kurtarılamadı." },
+    "project_loading.error.renderer": { "text": "Projenin renderer'ı kullanılamıyor veya onarım gerektiriyor." },
+    "project_loading.error.migration": { "text": "Workspace hazırlanmadan önce proje migration işlemi başarısız oldu." },
+    "project_loading.error.derived": { "text": "Türetilmiş proje durumu güvenli biçimde yeniden oluşturulamadı." },
+    "project_loading.error.session": { "text": "Hazırlanan workspace oturumu geçersizleşti. Projeyi yeniden yükleyin." },
     "project_loading.status.cancelling": {
       "text": "İptal ediliyor..."
     },
@@ -919,6 +952,14 @@
     "web_workspace.action.toggle_bottom_dock": {"text": "Alt paneli aç/kapat"},
     "web_workspace.type.camera": {"text": "Kamera"},
     "web_workspace.type.light": {"text": "Işık"},
+    "welcome.project.compatibility.current": {"text": "Güncel"},
+    "welcome.project.compatibility.compatible": {"text": "Uyumlu"},
+    "welcome.project.compatibility.will_upgrade": {"text": "Yükseltilecek"},
+    "welcome.project.compatibility.recovery_required": {"text": "Kurtarma gerekiyor"},
+    "welcome.project.compatibility.newer_horo_required": {"text": "Daha yeni Horo gerekiyor"},
+    "welcome.project.compatibility.cannot_upgrade": {"text": "Yükseltilemiyor"},
+    "welcome.project.compatibility.version_unavailable": {"text": "Sürüm kullanılamıyor"},
+    "welcome.project.compatibility.refreshing": {"text": "Uyumluluk kontrol ediliyor…"},
     "welcome.subtitle": {
       "text": "Oyun Motoru"
     },

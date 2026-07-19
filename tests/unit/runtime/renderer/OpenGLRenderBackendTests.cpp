@@ -1,8 +1,9 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "OpenGLBackendInternal.h"
 
 #include <array>
-#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -16,10 +17,7 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 
 [[nodiscard]] Error MakePortError(const char *code, const char *message)
@@ -171,7 +169,7 @@ void ProbeClear(const std::uint32_t mask)
     return std::move(created).Value();
 }
 
-void ProviderIsInertAndBackendOwnsContextPresentationLifecycle()
+TEST_CASE("Provider Is Inert And Backend Owns Context Presentation Lifecycle", "[unit][runtime][renderer]")
 {
     commandState = {};
     PortState portState;
@@ -263,7 +261,7 @@ void ProviderIsInertAndBackendOwnsContextPresentationLifecycle()
     Check(portState.destroyCount == 1);
 }
 
-void InitializationFailuresPreserveTypedErrorsAndRollbackCreatedContext()
+TEST_CASE("Initialization Failures Preserve Typed Errors And Rollback Created Context", "[unit][runtime][renderer]")
 {
     constexpr std::array failures{PortFailure::Create, PortFailure::MakeCurrent, PortFailure::PresentMode};
     for (const PortFailure failure : failures)
@@ -285,7 +283,7 @@ void InitializationFailuresPreserveTypedErrorsAndRollbackCreatedContext()
     }
 }
 
-void InitializationExceptionRollsBackRetainedContext()
+TEST_CASE("Initialization Exception Rolls Back Retained Context", "[unit][runtime][renderer]")
 {
     PortState portState{.failure = PortFailure::CreateThrowsAfterRetain};
     FakePresentationPort port{portState};
@@ -301,7 +299,7 @@ void InitializationExceptionRollsBackRetainedContext()
     Check(portState.destroyCount == 1);
 }
 
-void SharedPresentationPortRejectsOverlappingInitializedBackends()
+TEST_CASE("Shared Presentation Port Rejects Overlapping Initialized Backends", "[unit][runtime][renderer]")
 {
     PortState portState;
     FakePresentationPort port{portState};
@@ -326,7 +324,8 @@ void SharedPresentationPortRejectsOverlappingInitializedBackends()
     Check(portState.destroyCount == 2);
 }
 
-void PlanValidationPrecedesCommandsAndPresentationFailureKeepsRecoveryToken()
+TEST_CASE("Plan Validation Precedes Commands And Presentation Failure Keeps Recovery Token",
+          "[unit][runtime][renderer]")
 {
     commandState = {};
     PortState portState;
@@ -383,7 +382,7 @@ void PlanValidationPrecedesCommandsAndPresentationFailureKeepsRecoveryToken()
     Check(portState.swapCount == 2);
 }
 
-void RegistrationRejectsInvalidCommandDispatchWithoutOwningThePort()
+TEST_CASE("Registration Rejects Invalid Command Dispatch Without Owning The Port", "[unit][runtime][renderer]")
 {
     PortState portState;
     FakePresentationPort port{portState};
@@ -405,7 +404,7 @@ void RegistrationRejectsInvalidCommandDispatchWithoutOwningThePort()
     Check(invalidConfig.ErrorValue().code.Value() == "render.backend.invalid_config");
     Check(portState.createCount == 0);
 }
-void ModuleInfoDescribesOpenGLWindowBeforeBackendCreation()
+TEST_CASE("Module Info Describes Open GL Window Before Backend Creation", "[unit][runtime][renderer]")
 {
     const RenderBackendModuleInfo &info = GetOpenGLRenderBackendModuleInfo();
     Check(info.id == RenderBackendId{"opengl"});
@@ -414,15 +413,3 @@ void ModuleInfoDescribesOpenGLWindowBeforeBackendCreation()
     Check(info.supportsInteractivePresentation);
 }
 } // namespace
-
-int main()
-{
-    ModuleInfoDescribesOpenGLWindowBeforeBackendCreation();
-    ProviderIsInertAndBackendOwnsContextPresentationLifecycle();
-    InitializationFailuresPreserveTypedErrorsAndRollbackCreatedContext();
-    InitializationExceptionRollsBackRetainedContext();
-    SharedPresentationPortRejectsOverlappingInitializedBackends();
-    PlanValidationPrecedesCommandsAndPresentationFailureKeepsRecoveryToken();
-    RegistrationRejectsInvalidCommandDispatchWithoutOwningThePort();
-    return 0;
-}

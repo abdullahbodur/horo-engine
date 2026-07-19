@@ -1,6 +1,7 @@
 #include "editor/screens/project_creation/ProjectCreationView.h"
 #include <Horo/Editor/Localization/ILocalizationService.h>
 
+#include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/GuiScreenHost.h"
@@ -195,14 +196,14 @@ namespace Horo::Editor
             const ImVec4 borderColor = error ? Theme::Err() : Theme::Border();
             const ImVec4 interactionBorderColor = hasInteraction ? Theme::Accent() : borderColor;
             const ImU32 borderCol = Theme::U32(interactionBorderColor);
-            const float rounding = WizardLayout::Radius;
+            constexpr float rounding = WizardLayout::Radius;
 
             dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, bgCol, rounding);
             dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, borderCol, rounding, 0,
                         (active || hovered) ? 1.5F : 1.0F);
 
-            const float iconW = 18.0F;
-            const float iconH = 14.0F;
+            constexpr float iconW = 18.0F;
+            constexpr float iconH = 14.0F;
             const float ox = pos.x + (size.x - iconW) * 0.5F;
             const float oy = pos.y + (size.y - iconH) * 0.5F;
             const ImU32 iconCol = Theme::U32((active || hovered) ? Theme::Accent() : Theme::Text());
@@ -461,7 +462,7 @@ namespace Horo::Editor
             using namespace Theme;
             using namespace WizardLayout;
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
             ImGui::BeginChild("WizHdr", {0, HeaderH}, false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
@@ -476,7 +477,7 @@ namespace Horo::Editor
             }
             {
                 ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, FontPx::SansEmphasis);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+                ImGui::PushStyleColor(ImGuiCol_Text, Text());
                 const std::string title = ctx.localization.Get("editor", "project_creation.title");
                 ImGui::TextUnformatted(title.c_str());
                 ImGui::PopStyleColor();
@@ -485,13 +486,13 @@ namespace Horo::Editor
             ImGui::SetCursorPos({HeaderPadX, 36.0F});
             {
                 ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 12.0F, FontPx::SansCompact);
-                ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+                ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                 const std::string subtitle = ctx.localization.Get("editor", "project_creation.subtitle");
                 ImGui::TextUnformatted(subtitle.c_str());
                 ImGui::PopStyleColor();
             }
 
-            const ImVec2 closeSize{38.0F, 36.0F};
+            constexpr ImVec2 closeSize{38.0F, 36.0F};
             ImGui::SetCursorPos({headerW - HeaderPadX - closeSize.x, 11.0F});
             if (Ui::IconCloseButton("close-new-project", closeSize))
             {
@@ -508,7 +509,7 @@ namespace Horo::Editor
             auto* dl = ImGui::GetWindowDrawList();
             dl->AddLine({headerPos.x, headerPos.y + HeaderH - 1.0F},
                         {headerPos.x + headerW, headerPos.y + HeaderH - 1.0F},
-                        Theme::U32(Theme::Border()), 1.0F);
+                        U32(Border()), 1.0F);
 
             ImGui::EndChild();
             ImGui::PopStyleColor();
@@ -519,7 +520,7 @@ namespace Horo::Editor
             using namespace Theme;
             using namespace WizardLayout;
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
             ImGui::BeginChild("WizSide", {SidebarW, sideH}, false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
@@ -555,12 +556,12 @@ namespace Horo::Editor
                 ImGui::PushID(s);
                 const bool active = (st.step == s);
                 const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-                const ImVec2 rowSize{SidebarW - SidebarPadX * 2.0F, StepH};
+                constexpr ImVec2 rowSize{SidebarW - SidebarPadX * 2.0F, StepH};
 
                 if (active)
                 {
                     dl->AddRectFilled(rowMin, {rowMin.x + rowSize.x, rowMin.y + rowSize.y},
-                                      Theme::U32(Theme::AccentSoft()),
+                                      U32(AccentSoft()),
                                       Radius);
                 }
 
@@ -571,22 +572,22 @@ namespace Horo::Editor
                 }
 
                 const ImVec2 circleCenter{rowMin.x + 10.0F + 11.0F, rowMin.y + 11.0F + 11.0F};
-                dl->AddCircleFilled(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Bg3()), 24);
-                dl->AddCircle(circleCenter, 11.0F, Theme::U32(active ? Theme::Accent() : Theme::Border()), 24, 1.0F);
+                dl->AddCircleFilled(circleCenter, 11.0F, U32(active ? Accent() : Bg3()), 24);
+                dl->AddCircle(circleCenter, 11.0F, U32(active ? Accent() : Border()), 24, 1.0F);
 
                 static constexpr std::array<const char*, 5> kStepNumbers = {"", "1", "2", "3", "4"};
                 const char* number = kStepNumbers[s];
                 ImFont* numberFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
-                const float numberFontSize = 13.0F;
+                constexpr float numberFontSize = 13.0F;
                 const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, number);
                 dl->AddText(numberFont, numberFontSize,
                             {circleCenter.x - numberSize.x * 0.5F, circleCenter.y - numberSize.y * 0.5F},
-                            Theme::U32(active ? Theme::DarkText() : Theme::Dim()), number);
+                            U32(active ? DarkText() : Dim()), number);
 
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
                 {
                     ScopedTextStyle ts(ctx.theme.fonts.sans, 17.0F, FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
+                    ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
                     ImGui::TextUnformatted(kStepLabels[s - 1]);
                     ImGui::PopStyleColor();
                 }
@@ -594,7 +595,7 @@ namespace Horo::Editor
                 ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
                 {
                     ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 14.0F, FontPx::SansCompact);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+                    ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                     ImGui::TextUnformatted(kStepDescs[s - 1]);
                     ImGui::PopStyleColor();
                 }
@@ -604,7 +605,7 @@ namespace Horo::Editor
             }
 
             dl->AddLine({sidePos.x + SidebarW - 1.0F, sidePos.y}, {sidePos.x + SidebarW - 1.0F, sidePos.y + sideH},
-                        Theme::U32(Theme::Border()), 1.0F);
+                        U32(Border()), 1.0F);
 
             ImGui::EndChild();
             ImGui::PopStyleColor();
@@ -615,7 +616,7 @@ namespace Horo::Editor
             if (index == 0)
             {
                 constexpr float size = 18.0F;
-                const float offset = (WizardLayout::TemplateIconPx - size) * 0.5F;
+                constexpr float offset = (WizardLayout::TemplateIconPx - size) * 0.5F;
                 drawList->AddRect({iconPos.x + offset, iconPos.y + offset},
                                   {iconPos.x + offset + size, iconPos.y + offset + size}, iconColor, 3.0F, 0, 2.0F);
                 return;
@@ -686,7 +687,7 @@ namespace Horo::Editor
 
             const ImVec2 iconPos = ImGui::GetCursorScreenPos();
             auto* drawList = ImGui::GetWindowDrawList();
-            const ImU32 iconColor = Theme::U32(selected ? Theme::Accent() : Theme::Text());
+            const ImU32 iconColor = U32(selected ? Accent() : Text());
 
             DrawTemplateIcon(drawList, index, iconPos, iconColor);
 
@@ -698,7 +699,7 @@ namespace Horo::Editor
                 const ImVec2 namePos = ImGui::GetCursorScreenPos();
                 const std::string templateName = GetTemplateName(index, ctx);
                 const char* name = templateName.c_str();
-                ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, Theme::U32(Theme::Text()), name);
+                ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, U32(Text()), name);
                 const ImVec2 nameSize = nameFont->CalcTextSizeA(TemplateNamePx, FLT_MAX, 0.0F, name);
                 ImGui::Dummy({nameSize.x, nameSize.y});
             }
@@ -709,7 +710,7 @@ namespace Horo::Editor
                 ImFont* descFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
                 const ImVec2 descPos = ImGui::GetCursorScreenPos();
                 const float wrapW = cardW - TemplatePad * 2.0F;
-                ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, Theme::U32(Theme::Muted()), desc,
+                ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, U32(Muted()), desc,
                                                     nullptr, wrapW);
                 const ImVec2 descSize = descFont->CalcTextSizeA(TemplateDescPx, FLT_MAX, wrapW, desc);
                 ImGui::Dummy({wrapW, descSize.y});
@@ -980,7 +981,7 @@ namespace Horo::Editor
                     "Gamepad (XInput/SDL)"
                 };
                 DrawComboField("CHARACTER INPUT MAP", &st.firstPersonInputMapIndex, kInputMaps.data(),
-                               static_cast<int>(kInputMaps.size()), colW, ctx);
+                               kInputMaps.size(), colW, ctx);
                 ImGui::Dummy({0.0F, 8.0F});
                 Ui::Hint("A first-person camera and kinematic character capsule will be generated in defaultScene.",
                          ctx.theme.fonts);
@@ -1041,24 +1042,24 @@ namespace Horo::Editor
 
                 ImGui::Dummy({0.0F, GridGap});
 
-                DrawComboField("PHYSICS", &st.physicsIndex, kPhysics.data(), static_cast<int>(kPhysics.size()), colW,
+                DrawComboField("PHYSICS", &st.physicsIndex, kPhysics.data(), kPhysics.size(), colW,
                                ctx);
                 controller.SetPhysicsEnabled(st.physicsIndex == 0);
 
                 ImGui::SameLine(0.0F, GridGap);
                 DrawComboField("BUILD PROFILE", &st.buildProfileIndex, kBuildProfile.data(),
-                               static_cast<int>(kBuildProfile.size()), colW, ctx);
+                               kBuildProfile.size(), colW, ctx);
                 controller.SetBuildProfile(kBuildProfile[st.buildProfileIndex]);
 
                 ImGui::Dummy({0.0F, GridGap});
 
                 DrawComboField("ASSET COMPRESSION", &st.assetCompressionIndex, kAssetCompression.data(),
-                               static_cast<int>(kAssetCompression.size()), colW, ctx);
+                               kAssetCompression.size(), colW, ctx);
                 controller.SetAssetCompression(kAssetCompression[st.assetCompressionIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
                 DrawComboField("TEXTURE COMPRESSION", &st.textureCompressionIndex, kTextureCompression.data(),
-                               static_cast<int>(kTextureCompression.size()), colW, ctx);
+                               kTextureCompression.size(), colW, ctx);
                 controller.SetTextureCompression(kTextureCompression[st.textureCompressionIndex]);
             }
 
@@ -1074,20 +1075,20 @@ namespace Horo::Editor
                 const float colW = (ImGui::GetContentRegionAvail().x - GridGap) * 0.5F;
 
                 DrawComboField("TARGET PLATFORM", &st.targetPlatformIndex, kPlatform.data(),
-                               static_cast<int>(kPlatform.size()),
+                               kPlatform.size(),
                                colW, ctx);
                 controller.SetTargetPlatform(kPlatform[st.targetPlatformIndex]);
 
                 ImGui::SameLine(0.0F, GridGap);
                 DrawComboField("COMPILER FAMILY", &st.compilerFamilyIndex, kCompiler.data(),
-                               static_cast<int>(kCompiler.size()),
+                               kCompiler.size(),
                                colW, ctx);
                 controller.SetCompilerFamily(kCompiler[st.compilerFamilyIndex]);
 
                 ImGui::Dummy({0.0F, GridGap});
 
                 DrawComboField("MINIMUM C++ STANDARD", &st.cppStandardIndex, kCppStd.data(),
-                               static_cast<int>(kCppStd.size()),
+                               kCppStd.size(),
                                colW, ctx);
                 controller.SetMinimumCxxStandard(st.cppStandardIndex == 0 ? 20 : 17);
 
@@ -1240,7 +1241,12 @@ namespace Horo::Editor
                            ".horo/editor workspace.json, .horo/asset index.json, .horo/local/", ctx,
                            false);
                 SummaryRow("Build output (ignore)", "build/", ctx, false);
-                SummaryRow("Project schema", "formatVersion 1 \xC2\xB7 projectId generated", ctx, false);
+                const std::string projectContract = "Horo " + Application::FormatHoroVersion(
+                    Application::CurrentEngineReleaseVersion().value) + " \xC2\xB7 " +
+                    ctx.localization.Get("editor", "project_creation.review.project_id_generated");
+                const std::string compatibilityLabel =
+                    ctx.localization.Get("editor", "project_creation.review.compatibility");
+                SummaryRow(compatibilityLabel.c_str(), projectContract, ctx, false);
 
                 std::string validationText = "Ready to create";
                 if (!validation.IsValid() && !validation.diagnostics.empty())
@@ -1298,11 +1304,11 @@ namespace Horo::Editor
             }
 
             const bool isReview = (st.step == 4);
-            const float backW = 80.0F;
-            const float nextW = 80.0F;
-            const float createW = 130.0F;
-            const float btnH = 32.0F;
-            const float gap = 8.0F;
+            constexpr float backW = 80.0F;
+            constexpr float nextW = 80.0F;
+            constexpr float createW = 130.0F;
+            constexpr float btnH = 32.0F;
+            constexpr float gap = 8.0F;
             const float actionsW = isReview ? (backW + gap + createW) : (backW + gap + nextW);
             ImGui::SetCursorPos({footerW - 22.0F - actionsW, 10.0F});
 

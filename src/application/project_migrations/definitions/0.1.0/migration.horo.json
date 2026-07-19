@@ -1,0 +1,12 @@
+{
+  "id": "core.project_settings.compression_defaults",
+  "fromBaseline": "0.0.1",
+  "toBaseline": "0.1.0",
+  "sourceContract": "sha256:5ef87e96e24c0a3a5e44f4dee182dbd3bfb5402e08e07aaf3d64d4a3ff24ae6d",
+  "targetContract": "sha256:997e790fc23515b362847c755006156aa35353ce7f2624518acf7ed1214ddb03",
+  "storageEstimate": {
+    "maximumOutputRatioPermille": 1100,
+    "maximumAddedBytesPerDocument": 128,
+    "maximumFixedBytes": 4096
+  }
+}

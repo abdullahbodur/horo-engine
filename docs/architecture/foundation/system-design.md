@@ -303,6 +303,7 @@ HoroEngine::RenderMetal
 HoroEngine::RenderD3D12
 HoroEngine::Pipeline
 HoroEngine::Application
+HoroEngine::ProjectMigrations
 HoroEngine::EditorModel
 HoroEngine::EditorServices
 HoroEngine::Gui
@@ -311,6 +312,19 @@ HoroEngine::GameplayApi
 HoroEngine::ExtensionApi
 HoroEngine::ExtensionHost
 ```
+
+`HoroEngine::Application` owns project version/compatibility plus the
+backend-neutral migration registry, planner, typed pipeline, deterministic
+inventory and verified dry-run executor. `HoroEngine::ProjectMigrations` depends
+on Application and owns only build-generated core definition composition;
+Application never depends back on that concrete catalog target. The PRJ-001A
+platform baseline owns native durability and lock handles; EditorServices owns
+the shared project-mutation coordinator and MIG-001C journaled transaction
+service. EditorServices also owns the GUI-neutral MIG-001D `ProjectOpenService`;
+the service schedules one operation-owned job, installs prepared derived state on
+the owner thread, and publishes a generation-safe project-session candidate. The
+GUI screen only projects progress and performs candidate-backed final
+route/restart actions. `Gui` cannot construct a workspace from a raw project path.
 
 Executable composition targets are:
 
@@ -338,6 +352,15 @@ Each target owns an explicit source list and the smallest practical public
 include surface. Production targets are linked into tests; production sources
 are not recompiled as part of test-only libraries.
 
+`HoroEngine::Assets` is implemented as a backend-neutral Foundation-only target.
+Its current AST-001A surface owns stable asset/type identities, immutable
+registry snapshots, sidecar/index persistence, cooked-byte providers, and the
+bounded job-system load coordinator. Importer, cooker, archive, cache, hot
+reload, and Content Browser remain later consumers or targets; they must not be
+folded into Foundation or a renderer backend. `HoroEngine::RuntimeScene` consumes
+Assets one-way for AST-001B snapshot-pinned scene preparation; Assets never
+depends on RuntimeScene.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
@@ -351,7 +374,9 @@ assets / scene-model / render-api / audio-api /
 network-api / gameplay-api / extension-api -------------> foundation
 
 physics / audio-runtime / network-runtime /
-runtime-scene / render-frontend / pipeline -------------> neutral APIs and models
+render-frontend / pipeline ------------------------------> neutral APIs and models
+
+runtime-scene -------------------------------------------> runtime + assets + foundation
 
 audio-platform / audio-null / network-sockets /
 render-opengl / render-null / render-vulkan ------------> platform + owning API

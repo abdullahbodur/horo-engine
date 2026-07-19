@@ -5,6 +5,9 @@
 namespace Horo::Editor::NavigationErrors
 {
 extern const ErrorCodeDescriptor HostShutdown;
+extern const ErrorCodeDescriptor HostNotStarted;
+extern const ErrorCodeDescriptor HostAlreadyStarted;
+extern const ErrorCodeDescriptor ScreenCreationFailed;
 extern const ErrorCodeDescriptor InvalidRouteParameters;
 extern const ErrorCodeDescriptor Busy;
 extern const ErrorCodeDescriptor LeaveDenied;

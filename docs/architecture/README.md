@@ -57,6 +57,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   bounds, ray, and fallible-math contracts shared across runtime and editor.
 - [Configuration System](./foundation/configuration-system.md): typed settings,
   precedence, immutable snapshots, dynamic reload, and secret references.
+- [Project Versioning And Migration](./foundation/project-versioning-and-migration.md):
+  one Horo project version, automatic project-open migration chains, release
+  bundles, staging, journaled publication, recovery, and Welcome/loading UX.
 - [Concurrency And Job System](./foundation/concurrency-and-jobs.md): workers,
   task groups, cancellation, progress, affinity, backpressure, and shutdown.
 - [Ownership And Resource Lifetime](./foundation/ownership-and-resource-lifetime.md):

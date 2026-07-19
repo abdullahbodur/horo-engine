@@ -107,7 +107,7 @@ Result<std::uintptr_t> EditorGuiRendererOpenGL::CreateTexture(const EditorRgba8I
             MakeGuiRendererError(RendererErrors::GuiTextureCreationFailed, "Failed to create OpenGL GUI texture."));
     }
     textures_.push_back(texture);
-    return Result<std::uintptr_t>::Success(static_cast<std::uintptr_t>(texture));
+    return Result<std::uintptr_t>::Success(texture);
 }
 
 /** @copydoc EditorGuiRendererOpenGL::DestroyTexture */

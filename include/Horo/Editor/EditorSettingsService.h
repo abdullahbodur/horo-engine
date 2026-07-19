@@ -3,8 +3,6 @@
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
-
 namespace Horo
 {
 class ConfigurationService;

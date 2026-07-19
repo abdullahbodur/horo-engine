@@ -287,7 +287,7 @@ namespace Horo {
                     return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::JsonParseError));
             } else if (type == SettingValueType::Integer) {
                 try {
-                    draft.proposedValues[settingKey] = static_cast<std::int64_t>(std::stoll(rawValue));
+                    draft.proposedValues[settingKey] = std::stoll(rawValue);
                 } catch (...) {
                     return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::JsonParseError));
                 }

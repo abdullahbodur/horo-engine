@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorGuiContext.h"
@@ -9,26 +11,71 @@
 #include "Horo/Editor/SettingsModal.h"
 #include "Horo/Foundation/DataBus.h"
 
-#include <cassert>
-#include <cstdint>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace Horo::Editor::Theme
 {
-    struct Fonts;
+struct Fonts;
 }
 
 Horo::Editor::ModalFrameResult Horo::Editor::SettingsModal::Draw()
 {
-    return Horo::Editor::ModalFrameResult::None();
+    return ModalFrameResult::None();
 }
 
 namespace
 {
-
 using namespace Horo;
 using namespace Horo::Editor;
+
+class ScopedSettingsHome
+{
+  public:
+    ScopedSettingsHome()
+        : path_(std::filesystem::temp_directory_path() /
+                ("horo-settings-modal-lifecycle-" +
+                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
+    {
+#if defined(_WIN32)
+        constexpr const char *key = "USERPROFILE";
+#else
+        constexpr const char *key = "HOME";
+#endif
+        if (const char *current = std::getenv(key))
+            previous_ = current;
+        std::filesystem::create_directories(path_);
+#if defined(_WIN32)
+        _putenv_s(key, path_.string().c_str());
+#else
+        setenv(key, path_.string().c_str(), 1);
+#endif
+    }
+
+    ~ScopedSettingsHome()
+    {
+#if defined(_WIN32)
+        constexpr const char *key = "USERPROFILE";
+        _putenv_s(key, previous_.value_or("").c_str());
+#else
+        constexpr const char *key = "HOME";
+        if (previous_)
+            setenv(key, previous_->c_str(), 1);
+        else
+            unsetenv(key);
+#endif
+        std::error_code ignored;
+        std::filesystem::remove_all(path_, ignored);
+    }
+
+  private:
+    std::filesystem::path path_;
+    std::optional<std::string> previous_;
+};
 
 struct SettingsFixture
 {
@@ -49,102 +96,105 @@ SettingsModal *Open(SettingsFixture &fixture)
 {
     auto modal = std::make_unique<SettingsModal>(fixture.ctx, fixture.settings, 0);
     SettingsModal *const result = modal.get();
-    assert(fixture.host.OpenRoot(std::move(modal)).HasValue());
+    REQUIRE((fixture.host.OpenRoot(std::move(modal)).HasValue()));
     fixture.host.OnUpdate(0.0F);
     return result;
 }
 
-void OnOpenHydratesTheDraftFromTheAuthoritySnapshot()
+TEST_CASE("Opening settings hydrates the authority snapshot", "[unit][editor][settings]")
 {
+    const ScopedSettingsHome home;
     SettingsFixture fixture;
     EditorSettings next = DefaultEditorSettings();
     next.uiScalePercent = 125;
     next.defaultSceneOnProjectOpen = "Assets/Scenes/Authority";
-    assert(fixture.settings.Commit(EditorSettingsDraft{.baseRevision = 0, .settings = next}).HasValue());
+    REQUIRE((fixture.settings.Commit(EditorSettingsDraft{.baseRevision = 0, .settings = next}).HasValue()));
 
     SettingsModal *const modal = Open(fixture);
-    assert(modal->Draft().appearance.uiScale == 125);
-    assert(std::string{modal->Draft().general.defaultScene} == "Assets/Scenes/Authority");
-    assert(!modal->Draft().dirty);
+    REQUIRE((modal->Draft().appearance.uiScale == 125));
+    REQUIRE((std::string{modal->Draft().general.defaultScene} == "Assets/Scenes/Authority"));
+    REQUIRE((!modal->Draft().dirty));
 }
 
-void CleanCloseDoesNotPublishARevertedNotification()
+TEST_CASE("Closing a clean settings modal does not publish a revert", "[unit][editor][settings]")
 {
+    const ScopedSettingsHome home;
     SettingsFixture fixture;
     int reverted = 0;
-    const Subscription subscription = fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
-        if (event.phase == SettingsChangePhase::Reverted) ++reverted;
-    });
+    const Subscription subscription =
+        fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
+            if (event.phase == SettingsChangePhase::Reverted)
+                ++reverted;
+        });
 
     Open(fixture);
-    assert(fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue());
+    REQUIRE((fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue()));
     fixture.host.OnUpdate(0.0F);
-    assert(reverted == 0);
+    REQUIRE((reverted == 0));
 }
 
-void DirtyCancelledClosePublishesExactlyOneRevertedNotification()
+TEST_CASE("Cancelling dirty settings publishes one revert", "[unit][editor][settings]")
 {
+    const ScopedSettingsHome home;
     SettingsFixture fixture;
     int reverted = 0;
-    const Subscription subscription = fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
-        if (event.phase == SettingsChangePhase::Reverted) ++reverted;
-    });
+    const Subscription subscription =
+        fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
+            if (event.phase == SettingsChangePhase::Reverted)
+                ++reverted;
+        });
 
     SettingsModal *const modal = Open(fixture);
     modal->Draft().general.autoSaveInterval = 12;
-    assert(fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue());
+    REQUIRE((fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue()));
     fixture.host.OnUpdate(0.0F);
-    assert(reverted == 1);
+    REQUIRE((reverted == 1));
     fixture.host.ForceDetachAllForShutdown();
-    assert(reverted == 1);
+    REQUIRE((reverted == 1));
 }
 
-void DirtyForcedClosePublishesExactlyOneRevertedNotification()
+TEST_CASE("Force closing dirty settings publishes one revert", "[unit][editor][settings]")
 {
+    const ScopedSettingsHome home;
     SettingsFixture fixture;
     int reverted = 0;
-    const Subscription subscription = fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
-        if (event.phase == SettingsChangePhase::Reverted) ++reverted;
-    });
+    const Subscription subscription =
+        fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
+            if (event.phase == SettingsChangePhase::Reverted)
+                ++reverted;
+        });
 
     SettingsModal *const modal = Open(fixture);
     modal->Draft().general.autoSaveInterval = 12;
     fixture.host.ForceDetachAllForShutdown();
-    assert(reverted == 1);
+    REQUIRE((reverted == 1));
     fixture.host.ForceDetachAllForShutdown();
-    assert(reverted == 1);
+    REQUIRE((reverted == 1));
 }
 
-void ApplyPublishesOnlyTheAuthorityCommittedNotification()
+TEST_CASE("Applying settings publishes only the authority commit", "[unit][editor][settings]")
 {
+    const ScopedSettingsHome home;
     SettingsFixture fixture;
     int committed = 0;
     int reverted = 0;
-    const Subscription subscription = fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
-        if (event.phase == SettingsChangePhase::Committed) ++committed;
-        if (event.phase == SettingsChangePhase::Reverted) ++reverted;
-    });
+    const Subscription subscription =
+        fixture.events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
+            if (event.phase == SettingsChangePhase::Committed)
+                ++committed;
+            if (event.phase == SettingsChangePhase::Reverted)
+                ++reverted;
+        });
 
     SettingsModal *const modal = Open(fixture);
     modal->Draft().general.autoSaveInterval = 12;
-    assert(modal->ApplyDraft());
-    assert(committed == 1);
-    assert(reverted == 0);
+    REQUIRE((modal->ApplyDraft()));
+    REQUIRE((committed == 1));
+    REQUIRE((reverted == 0));
 
-    assert(fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue());
+    REQUIRE((fixture.host.RequestClose(ModalId{SettingsModal::kModalId}, ModalCloseReason::Cancelled).HasValue()));
     fixture.host.OnUpdate(0.0F);
-    assert(committed == 1);
-    assert(reverted == 0);
+    REQUIRE((committed == 1));
+    REQUIRE((reverted == 0));
 }
-
 } // namespace
-
-int main()
-{
-    OnOpenHydratesTheDraftFromTheAuthoritySnapshot();
-    CleanCloseDoesNotPublishARevertedNotification();
-    DirtyCancelledClosePublishesExactlyOneRevertedNotification();
-    DirtyForcedClosePublishesExactlyOneRevertedNotification();
-    ApplyPublishesOnlyTheAuthorityCommittedNotification();
-    return 0;
-}

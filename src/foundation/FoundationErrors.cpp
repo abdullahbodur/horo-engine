@@ -2,92 +2,259 @@
 
 namespace Horo
 {
-namespace
-{
-const ErrorDomainId ConfigurationDomain{"horo.configuration"};
-const ErrorDomainId JobDomain{"horo.foundation.jobs"};
-const ErrorDomainId MathDomain{"horo.foundation.math"};
+    namespace
+    {
+        const ErrorDomainId ConfigurationDomain{"horo.configuration"};
+        const ErrorDomainId JobDomain{"horo.foundation.jobs"};
+        const ErrorDomainId MathDomain{"horo.foundation.math"};
+    } // namespace
 
-[[nodiscard]] ErrorCodeDescriptor Describe(const ErrorDomainId &domain, const char *code, const char *summary,
-                                           const char *remediation, const bool retryable = false,
-                                           const bool userActionable = false)
-{
-    return ErrorCodeDescriptor{.domain = domain,
-                               .code = ErrorCode{code},
-                               .defaultSeverity = ErrorSeverity::Error,
-                               .summary = summary,
-                               .remediationHint = remediation,
-                               .retryable = retryable,
-                               .userActionable = userActionable};
-}
-} // namespace
+    namespace ConfigurationErrors
+    {
+        const ErrorCodeDescriptor SchemaInvalid{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.schema_invalid"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration schema is invalid.",
+            .remediationHint = "Correct the schema descriptor before registration.",
+            .retryable = false,
+            .userActionable = false
+        };
 
-namespace ConfigurationErrors
-{
-const ErrorCodeDescriptor SchemaInvalid = Describe(ConfigurationDomain, "configuration.schema_invalid",
-                                                   "Configuration schema is invalid.",
-                                                   "Correct the schema descriptor before registration.");
-const ErrorCodeDescriptor SchemaSealed = Describe(ConfigurationDomain, "configuration.schema_sealed",
-                                                  "Configuration schema is already sealed.",
-                                                  "Register settings before sealing the schema.");
-const ErrorCodeDescriptor DraftStale = Describe(ConfigurationDomain, "configuration.draft_stale",
-                                                "Configuration draft is stale.",
-                                                "Refresh the draft from the active configuration and retry.", true);
-const ErrorCodeDescriptor ValueInvalid = Describe(ConfigurationDomain, "configuration.value_invalid",
-                                                  "Configuration value is invalid.",
-                                                  "Provide a value matching the registered setting type.", false, true);
-const ErrorCodeDescriptor JsonParseError = Describe(ConfigurationDomain, "configuration.json_parse_error",
-                                                    "Configuration JSON could not be parsed.",
-                                                    "Repair or regenerate the configuration file.", false, true);
-const ErrorCodeDescriptor FileNotFound = Describe(ConfigurationDomain, "configuration.file_not_found",
-                                                  "Configuration file was not found.",
-                                                  "Verify the configuration path.", false, true);
-const ErrorCodeDescriptor FileWriteError = Describe(ConfigurationDomain, "configuration.file_write_error",
-                                                    "Configuration file could not be written.",
-                                                    "Verify destination permissions and available storage.", true, true);
-} // namespace ConfigurationErrors
+        const ErrorCodeDescriptor SchemaSealed{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.schema_sealed"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration schema is already sealed.",
+            .remediationHint = "Register settings before sealing the schema.",
+            .retryable = false,
+            .userActionable = false
+        };
 
-namespace JobErrors
-{
-const ErrorCodeDescriptor Cancelled = Describe(JobDomain, "job.cancelled", "Job was cancelled.",
-                                               "Retry only if the owning operation is still active.", true);
-const ErrorCodeDescriptor Failed = Describe(JobDomain, "job.failed", "Job execution failed.",
-                                            "Inspect the job error and diagnostics before retrying.");
-const ErrorCodeDescriptor InvalidHandle = Describe(JobDomain, "job.invalid_handle", "Job handle is invalid.",
-                                                   "Use a handle returned by the active job system.");
-const ErrorCodeDescriptor NotFound = Describe(JobDomain, "job.not_found", "Job was not found.",
-                                             "Verify that the job belongs to the active job system.");
-const ErrorCodeDescriptor QueueFull = Describe(JobDomain, "job.queue_full", "Job queue is full.",
-                                              "Retry after queued work completes.", true);
-const ErrorCodeDescriptor Shutdown = Describe(JobDomain, "job.shutdown", "Job system is shutting down.",
-                                             "Do not submit new work after shutdown begins.");
-} // namespace JobErrors
+        const ErrorCodeDescriptor DraftStale{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.draft_stale"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration draft is stale.",
+            .remediationHint = "Refresh the draft from the active configuration and retry.",
+            .retryable = true,
+            .userActionable = false
+        };
 
-namespace Math::Errors
-{
-const ErrorCodeDescriptor InvalidAffineMatrix = Describe(MathDomain, "math.invalid_affine_matrix",
-                                                         "Matrix is not a valid affine transform.",
-                                                         "Provide a finite affine matrix.");
-const ErrorCodeDescriptor InvalidBounds = Describe(MathDomain, "math.invalid_bounds", "Bounds are invalid.",
-                                                   "Provide finite ordered bounds.");
-const ErrorCodeDescriptor InvalidHomogeneousPoint = Describe(MathDomain, "math.invalid_homogeneous_point",
-                                                             "Homogeneous point is invalid.",
-                                                             "Use a finite point with a valid homogeneous divisor.");
-const ErrorCodeDescriptor InvalidPlane = Describe(MathDomain, "math.invalid_plane", "Plane is invalid.",
-                                                  "Provide a finite plane with a non-zero normal.");
-const ErrorCodeDescriptor InvalidProjection = Describe(MathDomain, "math.invalid_projection",
-                                                       "Projection parameters are invalid.",
-                                                       "Provide finite projection parameters with valid ranges.");
-const ErrorCodeDescriptor InvalidRay = Describe(MathDomain, "math.invalid_ray", "Ray is invalid.",
-                                                "Provide a finite normalized direction and ordered distances.");
-const ErrorCodeDescriptor InvalidView = Describe(MathDomain, "math.invalid_view", "View parameters are invalid.",
-                                                 "Provide distinct finite eye and target vectors with a valid up vector.");
-const ErrorCodeDescriptor NonFiniteInput = Describe(MathDomain, "math.non_finite_input",
-                                                    "Math input contains a non-finite value.",
-                                                    "Remove NaN or infinity values before the operation.");
-const ErrorCodeDescriptor SingularMatrix = Describe(MathDomain, "math.singular_matrix", "Matrix is singular.",
-                                                    "Provide an invertible matrix.");
-const ErrorCodeDescriptor ZeroLength = Describe(MathDomain, "math.zero_length", "Vector length is zero.",
-                                                "Provide a vector with non-zero length.");
-} // namespace Math::Errors
+        const ErrorCodeDescriptor ValueInvalid{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.value_invalid"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration value is invalid.",
+            .remediationHint = "Provide a value matching the registered setting type.",
+            .retryable = false,
+            .userActionable = true
+        };
+
+        const ErrorCodeDescriptor JsonParseError{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.json_parse_error"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration JSON could not be parsed.",
+            .remediationHint = "Repair or regenerate the configuration file.",
+            .retryable = false,
+            .userActionable = true
+        };
+
+        const ErrorCodeDescriptor FileNotFound{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.file_not_found"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration file was not found.",
+            .remediationHint = "Verify the configuration path.",
+            .retryable = false,
+            .userActionable = true
+        };
+
+        const ErrorCodeDescriptor FileWriteError{
+            .domain = ConfigurationDomain,
+            .code = ErrorCode{"configuration.file_write_error"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Configuration file could not be written.",
+            .remediationHint = "Verify destination permissions and available storage.",
+            .retryable = true,
+            .userActionable = true
+        };
+    } // namespace ConfigurationErrors
+
+    namespace JobErrors
+    {
+        const ErrorCodeDescriptor Cancelled{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.cancelled"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job was cancelled.",
+            .remediationHint = "Retry only if the owning operation is still active.",
+            .retryable = true,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor Failed{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.failed"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job execution failed.",
+            .remediationHint = "Inspect the job error and diagnostics before retrying.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidHandle{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.invalid_handle"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job handle is invalid.",
+            .remediationHint = "Use a handle returned by the active job system.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor NotFound{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.not_found"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job was not found.",
+            .remediationHint = "Verify that the job belongs to the active job system.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor QueueFull{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.queue_full"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job queue is full.",
+            .remediationHint = "Retry after queued work completes.",
+            .retryable = true,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor Shutdown{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.shutdown"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Job system is shutting down.",
+            .remediationHint = "Do not submit new work after shutdown begins.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor TaskGroupClosed{
+            .domain = JobDomain,
+            .code = ErrorCode{"job.task_group_closed"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Task group is closed.",
+            .remediationHint = "Spawn child work before cancelling or joining the task group.",
+            .retryable = false,
+            .userActionable = false
+        };
+    } // namespace JobErrors
+
+    namespace Math::Errors
+    {
+        const ErrorCodeDescriptor InvalidAffineMatrix{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_affine_matrix"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Matrix is not a valid affine transform.",
+            .remediationHint = "Provide a finite affine matrix.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidBounds{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_bounds"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Bounds are invalid.",
+            .remediationHint = "Provide finite ordered bounds.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidHomogeneousPoint{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_homogeneous_point"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Homogeneous point is invalid.",
+            .remediationHint = "Use a finite point with a valid homogeneous divisor.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidPlane{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_plane"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Plane is invalid.",
+            .remediationHint = "Provide a finite plane with a non-zero normal.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidProjection{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_projection"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Projection parameters are invalid.",
+            .remediationHint = "Provide finite projection parameters with valid ranges.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidRay{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_ray"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Ray is invalid.",
+            .remediationHint = "Provide a finite normalized direction and ordered distances.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor InvalidView{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.invalid_view"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "View parameters are invalid.",
+            .remediationHint = "Provide distinct finite eye and target vectors with a valid up vector.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor NonFiniteInput{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.non_finite_input"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Math input contains a non-finite value.",
+            .remediationHint = "Remove NaN or infinity values before the operation.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor SingularMatrix{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.singular_matrix"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Matrix is singular.",
+            .remediationHint = "Provide an invertible matrix.",
+            .retryable = false,
+            .userActionable = false
+        };
+
+        const ErrorCodeDescriptor ZeroLength{
+            .domain = MathDomain,
+            .code = ErrorCode{"math.zero_length"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Vector length is zero.",
+            .remediationHint = "Provide a vector with non-zero length.",
+            .retryable = false,
+            .userActionable = false
+        };
+    } // namespace Math::Errors
 } // namespace Horo

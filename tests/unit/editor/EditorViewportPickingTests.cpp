@@ -1,7 +1,8 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "editor/document/EditorViewportPicking.h"
 #include "editor/document/RuntimeSceneConversion.h"
 
-#include <cassert>
 #include <memory>
 
 namespace
@@ -13,13 +14,13 @@ std::unique_ptr<Runtime::RuntimeScene> MakeRuntimeScene(const SceneDocument &doc
                                                         Runtime::SceneRuntimeId runtimeId = {1})
 {
     auto definition = ConvertSceneDocumentToRuntime(document.Snapshot(), Runtime::SceneDefinitionId{1});
-    assert(definition.HasValue());
+    REQUIRE((definition.HasValue()));
     auto scene = Runtime::RuntimeScene::Create(definition.Value(), runtimeId);
-    assert(scene.HasValue());
+    REQUIRE((scene.HasValue()));
     return std::move(scene).Value();
 }
 
-void CenterRayReturnsNearestStableObjectIdentity()
+TEST_CASE("Center Ray Returns Nearest Stable Object Identity", "[unit][editor]")
 {
     Runtime::PrimitiveMeshCache meshCache;
     SceneDocument document;
@@ -34,50 +35,50 @@ void CenterRayReturnsNearestStableObjectIdentity()
         .localTransform = Math::Transform{.translation = {0.0F, 0.0F, 2.0F}},
         .primitiveMesh = PrimitiveMeshDescriptor{},
     });
-    assert(farObject.HasValue() && nearObject.HasValue());
+    REQUIRE((farObject.HasValue() && nearObject.HasValue()));
     const auto runtimeScene = MakeRuntimeScene(document);
     const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache);
-    assert(scene.HasValue());
+    REQUIRE((scene.HasValue()));
 
     const auto picked = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(picked.HasValue());
-    assert(picked.Value().runtimeScene == Runtime::SceneRuntimeId{1});
-    assert(picked.Value().object == nearObject.Value().object);
+    REQUIRE((picked.HasValue()));
+    REQUIRE((picked.Value().runtimeScene == Runtime::SceneRuntimeId{1}));
+    REQUIRE((picked.Value().object == nearObject.Value().object));
 }
 
-void MissAndInvalidQueryRemainExplicitResults()
+TEST_CASE("Miss And Invalid Query Remain Explicit Results", "[unit][editor]")
 {
     Runtime::PrimitiveMeshCache meshCache;
     SceneDocument document;
     EditorHistory history;
     SceneDocumentCommandExecutor commands{document, history};
-    assert(commands
-               .Execute(CreateSceneObjectCommand{
-                   .name = "Box",
-                   .primitiveMesh = PrimitiveMeshDescriptor{},
-               })
-               .HasValue());
+    REQUIRE((commands
+                 .Execute(CreateSceneObjectCommand{
+                     .name = "Box",
+                     .primitiveMesh = PrimitiveMeshDescriptor{},
+                 })
+                 .HasValue()));
     const auto runtimeScene = MakeRuntimeScene(document);
     const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache);
-    assert(scene.HasValue());
+    REQUIRE((scene.HasValue()));
 
     const auto missed = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.0F, .normalizedY = 0.0F, .aspect = 1.0F});
-    assert(missed.HasValue());
-    assert(!missed.Value().object.has_value());
+    REQUIRE((missed.HasValue()));
+    REQUIRE((!missed.Value().object.has_value()));
 
     const auto invalid = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = -0.1F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(invalid.HasError());
-    assert(invalid.ErrorValue().code.Value() == "viewport_picking.invalid_query");
+    REQUIRE((invalid.HasError()));
+    REQUIRE((invalid.ErrorValue().code.Value() == "viewport_picking.invalid_query"));
 }
 
-void IdentityMappingMismatchIsRejected()
+TEST_CASE("Identity Mapping Mismatch Is Rejected", "[unit][editor]")
 {
     Runtime::PrimitiveMeshCache meshCache;
     auto acquired = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box));
-    assert(acquired.HasValue());
+    REQUIRE((acquired.HasValue()));
     Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
     const Render::MeshData &mesh = lease.Data();
     EditorViewportSceneSnapshot scene{
@@ -94,17 +95,17 @@ void IdentityMappingMismatchIsRejected()
     };
     const auto picked = PickEditorViewportScene(
         scene, EditorViewportPickQuery{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(picked.HasError());
-    assert(picked.ErrorValue().code.Value() == "viewport_picking.invalid_scene");
+    REQUIRE((picked.HasError()));
+    REQUIRE((picked.ErrorValue().code.Value() == "viewport_picking.invalid_scene"));
 
     scene.instanceObjects = {SceneObjectId{}};
     const auto invalidIdentity = PickEditorViewportScene(
         scene, EditorViewportPickQuery{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(invalidIdentity.HasError());
-    assert(invalidIdentity.ErrorValue().code.Value() == "viewport_picking.invalid_identity");
+    REQUIRE((invalidIdentity.HasError()));
+    REQUIRE((invalidIdentity.ErrorValue().code.Value() == "viewport_picking.invalid_identity"));
 }
 
-void OrthographicRayPicksTransformedBounds()
+TEST_CASE("Orthographic Ray Picks Transformed Bounds", "[unit][editor]")
 {
     Runtime::PrimitiveMeshCache meshCache;
     SceneDocument document;
@@ -120,24 +121,15 @@ void OrthographicRayPicksTransformedBounds()
             },
         .primitiveMesh = PrimitiveMeshDescriptor{},
     });
-    assert(object.HasValue());
+    REQUIRE((object.HasValue()));
     EditorViewportCamera camera;
     camera.projection = Runtime::CameraProjection::Orthographic;
     camera.orthographicHeight = 4.0F;
     const auto runtimeScene = MakeRuntimeScene(document);
     const auto scene = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), camera, meshCache);
-    assert(scene.HasValue());
+    REQUIRE((scene.HasValue()));
     const auto picked = PickEditorViewportScene(
         scene.Value(), EditorViewportPickQuery{.normalizedX = 0.75F, .normalizedY = 0.5F, .aspect = 1.0F});
-    assert(picked.HasValue() && picked.Value().object == object.Value().object);
+    REQUIRE((picked.HasValue() && picked.Value().object == object.Value().object));
 }
 } // namespace
-
-int main()
-{
-    CenterRayReturnsNearestStableObjectIdentity();
-    MissAndInvalidQueryRemainExplicitResults();
-    IdentityMappingMismatchIsRejected();
-    OrthographicRayPicksTransformedBounds();
-    return 0;
-}

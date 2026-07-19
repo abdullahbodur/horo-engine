@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "HierarchyPanel.h"
 
 #include "Horo/Editor/EditorDataBus.h"
@@ -29,7 +31,7 @@ class TestLocalization final : public Horo::Editor::ILocalizationService
 };
 } // namespace
 
-int main()
+TEST_CASE("Hierarchy Panel Render Tests", "[unit][editor]")
 {
     using namespace Horo;
     using namespace Horo::Editor;
@@ -58,10 +60,7 @@ int main()
     viewModel.documentRevision = DocumentRevision{1};
     viewModel.objects = {
         SceneObject{.id = SceneObjectId{1}, .name = "Root"},
-        SceneObject{.id = SceneObjectId{2},
-                    .parent = SceneObjectId{1},
-                    .name = "Box",
-                    .kind = SceneObjectKind::Mesh},
+        SceneObject{.id = SceneObjectId{2}, .parent = SceneObjectId{1}, .name = "Box", .kind = SceneObjectKind::Mesh},
     };
     viewModel.primarySelection = SceneObjectId{2};
     EditorWorkspaceViewCommandData command;
@@ -77,5 +76,4 @@ int main()
     ImGui::Render();
 
     ImGui::DestroyContext();
-    return 0;
 }

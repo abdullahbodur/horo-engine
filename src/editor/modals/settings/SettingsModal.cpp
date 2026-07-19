@@ -1,6 +1,5 @@
 #include "editor/modals/settings/SettingsModal.h"
 #include "Horo/Editor/SettingsModal.h"
-#include <cstring>
 
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Editor/EditorTheme.h"
@@ -89,8 +88,8 @@ struct PluginDetailHeaderSpec
 void DrawNavGroup(const char *label, const EditorGuiContext &ctx)
 {
     ImGui::Dummy({0.0F, 5.0F});
-    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 12.0F, Theme::FontPx::SansEmphasis);
-    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 12.0F, FontPx::SansEmphasis);
+    ImGui::PushStyleColor(ImGuiCol_Text, Dim());
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 10.0F);
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
@@ -118,26 +117,26 @@ void DrawNavItem(SettingsState &st, const NavItem item, const EditorGuiContext &
     auto *dl = ImGui::GetWindowDrawList();
     if (active || hovered)
     {
-        const auto accentGlow = ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.14F};
-        dl->AddRectFilled(pos, {pos.x + rowW, pos.y + rowH}, Theme::U32(active ? accentGlow : Theme::Hover()),
+        const auto accentGlow = ImVec4{Accent().x, Accent().y, Accent().z, 0.14F};
+        dl->AddRectFilled(pos, {pos.x + rowW, pos.y + rowH}, U32(active ? accentGlow : Hover()),
                           Layout::Radius);
     }
     if (active)
     {
-        dl->AddRectFilled(pos, {pos.x + 2.0F, pos.y + rowH}, Theme::U32(Theme::Accent()), 1.0F);
+        dl->AddRectFilled(pos, {pos.x + 2.0F, pos.y + rowH}, U32(Accent()), 1.0F);
     }
 
     ImGui::SetCursorScreenPos({pos.x + 12.0F, pos.y + 10.0F});
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, Theme::FontPx::SansEmphasis);
-        ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Accent() : Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, FontPx::SansEmphasis);
+        ImGui::PushStyleColor(ImGuiCol_Text, active ? Accent() : Muted());
         ImGui::TextUnformatted(item.icon);
         ImGui::PopStyleColor();
     }
     ImGui::SameLine(0.0F, 10.0F);
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 15.0F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 15.0F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
         ImGui::TextUnformatted(item.label);
         ImGui::PopStyleColor();
     }
@@ -145,9 +144,9 @@ void DrawNavItem(SettingsState &st, const NavItem item, const EditorGuiContext &
     ImGui::PopID();
 }
 
-[[nodiscard]] bool DrawHeader(SettingsState &, const EditorGuiContext &ctx, const ::ImTextureID logo)
+[[nodiscard]] bool DrawHeader(SettingsState &, const EditorGuiContext &ctx, const ImTextureID logo)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
     ImGui::BeginChild("SettingsHeader", {0.0F, Layout::HeaderH}, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::SetCursorPos({22.0F, 16.0F});
@@ -160,20 +159,20 @@ void DrawNavItem(SettingsState &st, const NavItem item, const EditorGuiContext &
     {
         const ImVec2 mark = ImGui::GetCursorScreenPos();
         ImGui::GetWindowDrawList()->AddRectFilled({mark.x + 4.0F, mark.y + 4.0F}, {mark.x + 14.0F, mark.y + 14.0F},
-                                                  Theme::U32(Theme::Accent()), 2.0F);
+                                                  U32(Accent()), 2.0F);
         ImGui::Dummy({20.0F, 20.0F});
         ImGui::SameLine(0.0F, 10.0F);
     }
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 13.0F, Theme::FontPx::SansEmphasis);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 13.0F, FontPx::SansEmphasis);
+        ImGui::PushStyleColor(ImGuiCol_Text, Text());
         ImGui::TextUnformatted(ctx.localization.Get("editor", "settings.title").c_str());
         ImGui::PopStyleColor();
     }
 
     ImGui::SetCursorPos({ImGui::GetWindowWidth() - 50.0F, 10.0F});
     bool requestClose = false;
-    if (Ui::IconCloseButton("close-settings", {28.0F, 28.0F}))
+    if (IconCloseButton("close-settings", {28.0F, 28.0F}))
     {
         requestClose = true;
     }
@@ -181,7 +180,7 @@ void DrawNavItem(SettingsState &st, const NavItem item, const EditorGuiContext &
     const ImVec2 p = ImGui::GetWindowPos();
     ImGui::GetWindowDrawList()->AddLine({p.x, p.y + Layout::HeaderH - 1.0F},
                                         {p.x + ImGui::GetWindowWidth(), p.y + Layout::HeaderH - 1.0F},
-                                        Theme::U32(Theme::Border()), 1.0F);
+                                        U32(Border()), 1.0F);
     ImGui::EndChild();
     ImGui::PopStyleColor();
     return requestClose;
@@ -191,7 +190,7 @@ void DrawNavigation(SettingsState &st, const EditorGuiContext &ctx, const float 
 {
     using enum SettingsTab;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 10.0F});
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
     ImGui::BeginChild("SettingsNav", {Layout::NavW, bodyH}, false, ImGuiWindowFlags_AlwaysUseWindowPadding);
 
     const std::string editor = ctx.localization.Get("editor", "settings.nav.editor");
@@ -219,7 +218,7 @@ void DrawNavigation(SettingsState &st, const EditorGuiContext &ctx, const float 
 
     const ImVec2 p = ImGui::GetWindowPos();
     ImGui::GetWindowDrawList()->AddLine({p.x + Layout::NavW - 1.0F, p.y}, {p.x + Layout::NavW - 1.0F, p.y + bodyH},
-                                        Theme::U32(Theme::Border()), 1.0F);
+                                        U32(Border()), 1.0F);
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
@@ -302,7 +301,7 @@ void DrawAppearance(SettingsState &st, const EditorGuiContext &ctx)
     const std::string fontSizeDescription =
         ctx.localization.Get("editor", "settings.appearance.code_font_size.description");
     SettingRow(colorThemeLabel.c_str(), colorThemeDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
-        const auto &themeList = Theme::GetThemeList();
+        const auto &themeList = GetThemeList();
         static std::vector<const char *> s_names;
         s_names.clear();
         for (const auto &t : themeList)
@@ -514,9 +513,9 @@ void DrawPluginsHeader(SettingsState &st, const EditorGuiContext &ctx)
 
     ImGui::BeginGroup();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + copyW);
-    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+    ImGui::PushStyleColor(ImGuiCol_Text, Muted());
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, Theme::FontPx::Sans);
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
         const std::string pluginDescription = ctx.localization.Get("editor", "settings.plugins.description");
         ImGui::TextWrapped("%s", pluginDescription.c_str());
     }
@@ -558,8 +557,8 @@ void DrawPluginSectionTabs(SettingsState &st, const EditorGuiContext &ctx)
     const ImVec2 p = ImGui::GetCursorScreenPos();
     auto *dl = ImGui::GetWindowDrawList();
 
-    dl->AddRectFilled(p, {p.x + containerW, p.y + containerH}, Theme::U32(Theme::Bg0()), Layout::Radius);
-    dl->AddRect(p, {p.x + containerW, p.y + containerH}, Theme::U32(Theme::Border()), Layout::Radius);
+    dl->AddRectFilled(p, {p.x + containerW, p.y + containerH}, U32(Bg0()), Layout::Radius);
+    dl->AddRect(p, {p.x + containerW, p.y + containerH}, U32(Border()), Layout::Radius);
     ImGui::SetCursorScreenPos({p.x + pad, p.y + pad});
 
     for (int i = 0; i < 2; ++i)
@@ -571,16 +570,16 @@ void DrawPluginSectionTabs(SettingsState &st, const EditorGuiContext &ctx)
         ImGui::PushID(i + 100);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
         ImGui::PushStyleColor(ImGuiCol_Button,
-                              active ? ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.12F}
+                              active ? ImVec4{Accent().x, Accent().y, Accent().z, 0.12F}
                                      : ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                              active ? ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.18F}
-                                     : Theme::Hover());
+                              active ? ImVec4{Accent().x, Accent().y, Accent().z, 0.18F}
+                                     : Hover());
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                              ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.22F});
-        ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Text() : Theme::Muted());
+                              ImVec4{Accent().x, Accent().y, Accent().z, 0.22F});
+        ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 14.5F, Theme::FontPx::Sans);
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 14.5F, FontPx::Sans);
             if (ImGui::Button(kSectionTabs[i], {tabW, tabH}))
                 st.pluginSectionTab = i;
         }
@@ -592,7 +591,7 @@ void DrawPluginSectionTabs(SettingsState &st, const EditorGuiContext &ctx)
         {
             const ImVec2 bMin = ImGui::GetItemRectMin();
             const ImVec2 bMax = ImGui::GetItemRectMax();
-            dl->AddLine({bMin.x + 8.0F, bMax.y - 2.0F}, {bMax.x - 8.0F, bMax.y - 2.0F}, Theme::U32(Theme::Accent()),
+            dl->AddLine({bMin.x + 8.0F, bMax.y - 2.0F}, {bMax.x - 8.0F, bMax.y - 2.0F}, U32(Accent()),
                         2.0F);
         }
     }
@@ -632,7 +631,7 @@ void DrawBadge(const char *text, const ImVec4 colour, const EditorGuiContext &ct
     ImGui::SetCursorScreenPos({badgeMin.x + padX, badgeMin.y + padY});
     ImGui::PushStyleColor(ImGuiCol_Text, colour);
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
         ImGui::TextUnformatted(text);
     }
     ImGui::PopStyleColor();
@@ -668,16 +667,16 @@ void PluginSettingRow(const char *label, const char *description, const EditorGu
     const float startY = ImGui::GetCursorScreenPos().y;
 
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, Text());
         ImGui::TextUnformatted(label);
         ImGui::PopStyleColor();
     }
 
     if (description != nullptr && description[0] != '\0')
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);
         ImGui::TextWrapped("%s", description);
         ImGui::PopTextWrapPos();
@@ -689,7 +688,7 @@ void PluginSettingRow(const char *label, const char *description, const EditorGu
     ImGui::Dummy({0.0F, 8.0F});
 
     const ImVec2 sep = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine({sep.x, sep.y}, {sep.x + rowW, sep.y}, Theme::U32(Theme::Border()), 1.0F);
+    ImGui::GetWindowDrawList()->AddLine({sep.x, sep.y}, {sep.x + rowW, sep.y}, U32(Border()), 1.0F);
     ImGui::Dummy({0.0F, 10.0F});
 
     if (ImGui::GetCursorScreenPos().y - startY < 58.0F)
@@ -700,8 +699,8 @@ void DrawToggleState(const char *id, bool *value, const EditorGuiContext &ctx)
 {
     (void)ToggleControl(id, value, ctx.theme.fonts, false);
     ImGui::SameLine(0.0F, 8.0F);
-    ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, Theme::FontPx::Sans);
-    ImGui::PushStyleColor(ImGuiCol_Text, *value ? Theme::Text() : Theme::Muted());
+    ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+    ImGui::PushStyleColor(ImGuiCol_Text, *value ? Text() : Muted());
     const std::string enabledText = ctx.localization.Get("editor", "settings.plugins.status.enabled");
     const std::string disabledText = ctx.localization.Get("editor", "settings.plugins.status.disabled");
     ImGui::TextUnformatted(*value ? enabledText.c_str() : disabledText.c_str());
@@ -719,12 +718,12 @@ void DrawPermissionRows(const std::span<const PermissionRowSpec> rows, const Edi
         const float badgeW = BadgeWidth(perm.badgeText);
         auto *dl = ImGui::GetWindowDrawList();
 
-        dl->AddRectFilled(p, {p.x + cardW, p.y + cardH}, Theme::U32(Theme::Bg3()), Layout::Radius);
-        dl->AddRect(p, {p.x + cardW, p.y + cardH}, Theme::U32(Theme::Border()), Layout::Radius);
+        dl->AddRectFilled(p, {p.x + cardW, p.y + cardH}, U32(Bg3()), Layout::Radius);
+        dl->AddRect(p, {p.x + cardW, p.y + cardH}, U32(Border()), Layout::Radius);
 
         ImGui::SetCursorScreenPos({p.x + 13.0F, p.y + 19.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, Theme::FontPx::SansEmphasis);
+            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, perm.badgeColour);
             ImGui::TextUnformatted(perm.icon);
             ImGui::PopStyleColor();
@@ -732,16 +731,16 @@ void DrawPermissionRows(const std::span<const PermissionRowSpec> rows, const Edi
 
         ImGui::SetCursorScreenPos({p.x + 40.0F, p.y + 11.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, Theme::FontPx::Sans);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Text());
             ImGui::TextUnformatted(perm.title);
             ImGui::PopStyleColor();
         }
 
         ImGui::SetCursorScreenPos({p.x + 40.0F, p.y + 32.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, Theme::FontPx::Sans);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Muted());
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW - badgeW - 68.0F);
             ImGui::TextWrapped("%s", perm.desc);
             ImGui::PopTextWrapPos();
@@ -769,20 +768,20 @@ void DrawDiagnosticMetrics(const std::span<const DiagnosticMetricSpec> metrics, 
     {
         const ImVec2 p{start.x + static_cast<float>(i) * (cardW + gap), start.y};
         const auto &m = metrics[i];
-        dl->AddRectFilled(p, {p.x + cardW, p.y + cardH}, Theme::U32(Theme::Bg3()), Layout::Radius);
-        dl->AddRect(p, {p.x + cardW, p.y + cardH}, Theme::U32(Theme::Border()), Layout::Radius);
+        dl->AddRectFilled(p, {p.x + cardW, p.y + cardH}, U32(Bg3()), Layout::Radius);
+        dl->AddRect(p, {p.x + cardW, p.y + cardH}, U32(Border()), Layout::Radius);
 
         ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 10.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 9.5F, Theme::FontPx::SansEmphasis);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 9.5F, FontPx::SansEmphasis);
+            ImGui::PushStyleColor(ImGuiCol_Text, Dim());
             ImGui::TextUnformatted(m.label);
             ImGui::PopStyleColor();
         }
 
         ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 28.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 15.0F, Theme::FontPx::SansEmphasis);
+            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 15.0F, FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, m.valueColour);
             ImGui::TextUnformatted(m.value);
             ImGui::PopStyleColor();
@@ -791,8 +790,8 @@ void DrawDiagnosticMetrics(const std::span<const DiagnosticMetricSpec> metrics, 
         if (m.hint != nullptr && m.hint[0] != '\0')
         {
             ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 49.0F});
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 9.8F, Theme::FontPx::Sans);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 9.8F, FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Dim());
             ImGui::TextUnformatted(m.hint);
             ImGui::PopStyleColor();
         }
@@ -811,12 +810,12 @@ void DrawDiagnosticActivity(const std::span<const char *const> items, const Edit
         constexpr float rowH = 30.0F;
         const ImVec2 p = ImGui::GetCursorScreenPos();
         auto *dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p, {p.x + rowW, p.y + rowH}, Theme::U32(i % 2 == 0 ? Theme::Bg3() : Theme::Bg2()),
+        dl->AddRectFilled(p, {p.x + rowW, p.y + rowH}, U32(i % 2 == 0 ? Bg3() : Bg2()),
                           Layout::Radius);
 
         ImGui::SetCursorScreenPos({p.x + 10.0F, p.y + 7.0F});
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::TextUnformatted(items[i]);
         ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos({p.x, p.y + rowH + 4.0F});
@@ -833,8 +832,8 @@ void DrawManifestBlock(const char *path, const char *manifest, const EditorGuiCo
     if (path != nullptr && path[0] != '\0')
     {
         ImGui::SameLine(0.0F, 8.0F);
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.0F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.0F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Dim());
         ImGui::TextUnformatted(path);
         ImGui::PopStyleColor();
     }
@@ -846,13 +845,13 @@ void DrawManifestBlock(const char *path, const char *manifest, const EditorGuiCo
     ImGui::PopStyleVar();
     ImGui::SetCursorScreenPos({headerPos.x, headerPos.y + 30.0F});
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
     ImGui::BeginChild("manifest-code", {0.0F, 168.0F}, true,
                       ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar |
                           ImGuiWindowFlags_NoScrollWithMouse);
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 11.0F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 11.0F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::TextUnformatted(manifest);
         ImGui::PopStyleColor();
     }
@@ -887,8 +886,8 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
     SettingGroup("INSTALLED PLUGINS", ctx.theme.fonts, true);
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-    ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, Bg3());
+    ImGui::PushStyleColor(ImGuiCol_Text, Text());
     st.pluginFilter.resize(std::min(st.pluginFilter.size(), std::size_t{63}));
     st.pluginFilter.resize(63, '\0');
     ImGui::InputTextWithHint("##filter", "Filter plugins...", st.pluginFilter.data(), st.pluginFilter.size() + 1);
@@ -910,11 +909,11 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
     const std::string steamCat = ctx.localization.Get("editor", "settings.plugins.category.platform");
 
     const std::array<PluginSpec, 3> kPlugins = {{
-        {"Horo MCP Bridge", mcpDesc.c_str(), "v0.4.0", mcpStatus.c_str(), Theme::Ok(), mcpCat.c_str(), 0,
+        {"Horo MCP Bridge", mcpDesc.c_str(), "v0.4.0", mcpStatus.c_str(), Ok(), mcpCat.c_str(), 0,
          &st.plugins.horoMcpBridge},
-        {"Vendor FMOD Integration", fmodDesc.c_str(), "v2.02.20", fmodStatus.c_str(), Theme::Ok(), fmodCat.c_str(), 1,
+        {"Vendor FMOD Integration", fmodDesc.c_str(), "v2.02.20", fmodStatus.c_str(), Ok(), fmodCat.c_str(), 1,
          &st.plugins.fmodIntegration},
-        {"Steamworks SDK", steamDesc.c_str(), "v1.59", steamStatus.c_str(), Theme::Warn(), steamCat.c_str(), 2,
+        {"Steamworks SDK", steamDesc.c_str(), "v1.59", steamStatus.c_str(), Warn(), steamCat.c_str(), 2,
          &st.plugins.steamworksSdk},
     }};
 
@@ -937,20 +936,20 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
         if (active)
         {
             dl->AddRectFilled(cardPos, {cardPos.x + cardW, cardPos.y + cardH},
-                              ImColor{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.09F}, Layout::Radius);
-            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, Theme::U32(Theme::BorderStrong()),
+                              ImColor{Accent().x, Accent().y, Accent().z, 0.09F}, Layout::Radius);
+            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, U32(BorderStrong()),
                         Layout::Radius);
-            dl->AddRectFilled(cardPos, {cardPos.x + 3.0F, cardPos.y + cardH}, Theme::U32(Theme::Accent()), 1.0F);
+            dl->AddRectFilled(cardPos, {cardPos.x + 3.0F, cardPos.y + cardH}, U32(Accent()), 1.0F);
         }
         else if (ImGui::IsMouseHoveringRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}))
         {
-            dl->AddRectFilled(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, Theme::U32(Theme::Hover()),
+            dl->AddRectFilled(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, U32(Hover()),
                               Layout::Radius);
-            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, Theme::U32(Theme::Border()), Layout::Radius);
+            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, U32(Border()), Layout::Radius);
         }
         else
         {
-            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, Theme::U32(Theme::Border()), Layout::Radius);
+            dl->AddRect(cardPos, {cardPos.x + cardW, cardPos.y + cardH}, U32(Border()), Layout::Radius);
         }
 
         ImGui::InvisibleButton("##card", {cardW, cardH});
@@ -961,14 +960,14 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
         }
 
         const ImVec2 dotCenter{cardPos.x + padLeft + 6.0F, cardPos.y + 18.0F};
-        dl->AddCircleFilled(dotCenter, 4.5F, enabled ? Theme::U32(Theme::Ok()) : Theme::U32(Theme::Dim()));
+        dl->AddCircleFilled(dotCenter, 4.5F, enabled ? U32(Ok()) : U32(Dim()));
         if (enabled)
-            dl->AddCircleFilled(dotCenter, 7.0F, ImColor{Theme::Ok().x, Theme::Ok().y, Theme::Ok().z, 0.13F});
+            dl->AddCircleFilled(dotCenter, 7.0F, ImColor{Ok().x, Ok().y, Ok().z, 0.13F});
 
         ImGui::SetCursorScreenPos({innerX, cardPos.y + 9.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, Theme::FontPx::Sans);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Text());
             ImGui::TextUnformatted(p.name);
             ImGui::PopStyleColor();
         }
@@ -978,8 +977,8 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
 
         ImGui::SetCursorScreenPos({innerX, cardPos.y + 33.0F});
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 11.8F, Theme::FontPx::Sans);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 11.8F, FontPx::Sans);
+            ImGui::PushStyleColor(ImGuiCol_Text, Muted());
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW - (innerX - cardPos.x) - 56.0F);
             ImGui::TextWrapped("%s", p.desc);
             ImGui::PopTextWrapPos();
@@ -987,11 +986,11 @@ void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*list
         }
 
         ImGui::SetCursorScreenPos({innerX, cardPos.y + cardH - 26.0F});
-        DrawBadge(p.version, Theme::Accent(), ctx);
+        DrawBadge(p.version, Accent(), ctx);
         DrawBadge(p.statusLabel, p.statusColour, ctx);
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+            ImGui::PushStyleColor(ImGuiCol_Text, Dim());
             ImGui::TextUnformatted(p.category);
             ImGui::PopStyleColor();
         }
@@ -1044,27 +1043,27 @@ void DrawPluginDetailHeaderCard(SettingsState &st, const EditorGuiContext &ctx, 
     constexpr float headerH = 126.0F;
     const ImVec2 p = ImGui::GetCursorScreenPos();
     auto *dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, {p.x + headerW, p.y + headerH}, Theme::U32(Theme::Bg3()), Layout::Radius);
-    dl->AddRect(p, {p.x + headerW, p.y + headerH}, Theme::U32(Theme::Border()), Layout::Radius);
+    dl->AddRectFilled(p, {p.x + headerW, p.y + headerH}, U32(Bg3()), Layout::Radius);
+    dl->AddRect(p, {p.x + headerW, p.y + headerH}, U32(Border()), Layout::Radius);
 
     const bool selectedEnabled = !(st.selectedPlugin == 2 && !st.plugins.steamworksSdk);
     const ImVec2 dotCenter{p.x + 18.0F, p.y + 20.0F};
-    dl->AddCircleFilled(dotCenter, 4.5F, selectedEnabled ? Theme::U32(Theme::Ok()) : Theme::U32(Theme::Dim()));
+    dl->AddCircleFilled(dotCenter, 4.5F, selectedEnabled ? U32(Ok()) : U32(Dim()));
     if (selectedEnabled)
-        dl->AddCircleFilled(dotCenter, 7.0F, ImColor{Theme::Ok().x, Theme::Ok().y, Theme::Ok().z, 0.13F});
+        dl->AddCircleFilled(dotCenter, 7.0F, ImColor{Ok().x, Ok().y, Ok().z, 0.13F});
 
     ImGui::SetCursorScreenPos({p.x + 34.0F, p.y + 12.0F});
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 14.5F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 14.5F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Text());
         ImGui::TextUnformatted(hdr.name);
         ImGui::PopStyleColor();
     }
 
     ImGui::SetCursorScreenPos({p.x + 20.0F, p.y + 40.0F});
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + headerW - 44.0F);
         ImGui::TextWrapped("%s", hdr.desc);
         ImGui::PopTextWrapPos();
@@ -1072,11 +1071,11 @@ void DrawPluginDetailHeaderCard(SettingsState &st, const EditorGuiContext &ctx, 
     }
 
     ImGui::SetCursorScreenPos({p.x + 20.0F, p.y + 94.0F});
-    DrawBadge(hdr.scopeBadge, Theme::Accent(), ctx);
+    DrawBadge(hdr.scopeBadge, Accent(), ctx);
     DrawBadge(hdr.signedBadge, hdr.signedColour, ctx);
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+        ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Dim());
         ImGui::TextUnformatted(hdr.restartBadge);
         ImGui::PopStyleColor();
     }
@@ -1087,14 +1086,14 @@ void DrawPluginDetailHeaderCard(SettingsState &st, const EditorGuiContext &ctx, 
         constexpr float actionGap = 6.0F;
         ImGui::SetCursorScreenPos({p.x + headerW - actionW * 2.0F - actionGap - 14.0F, p.y + headerH - 36.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{8.0F, 4.0F});
-        ImGui::PushStyleColor(ImGuiCol_Button, Theme::Bg1());
+        ImGui::PushStyleColor(ImGuiCol_Button, Bg1());
         if (ImGui::Button(hdr.action1, {actionW, 28.0F}))
             DrawPluginDetailPanelPrimaryAction(st);
         ImGui::PopStyleColor();
         ImGui::SameLine(0.0F, actionGap);
         const bool danger = (st.selectedPlugin == 0 || st.selectedPlugin == 1);
         if (danger)
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
+            ImGui::PushStyleColor(ImGuiCol_Text, Err());
         if (ImGui::Button(hdr.action2, {actionW, 28.0F}))
             DrawPluginDetailPanelSecondaryAction(st);
         if (danger)
@@ -1123,14 +1122,14 @@ void DrawPluginDetailTabs(int &activeTab, const EditorGuiContext &ctx)
         ImGui::PushID(i + 200);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Layout::Radius);
         ImGui::PushStyleColor(ImGuiCol_Button,
-                              active ? ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.09F}
-                                     : Theme::Bg2());
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::Hover());
+                              active ? ImVec4{Accent().x, Accent().y, Accent().z, 0.09F}
+                                     : Bg2());
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Hover());
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                              ImVec4{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.16F});
-        ImGui::PushStyleColor(ImGuiCol_Text, active ? Theme::Accent() : Theme::Muted());
+                              ImVec4{Accent().x, Accent().y, Accent().z, 0.16F});
+        ImGui::PushStyleColor(ImGuiCol_Text, active ? Accent() : Muted());
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 13.5F, Theme::FontPx::Sans);
+            ScopedTextStyle ts(ctx.theme.fonts.sans, 13.5F, FontPx::Sans);
             if (ImGui::Button(kDetailTabs[i], {tabW, tabH}))
                 activeTab = i;
         }
@@ -1142,7 +1141,7 @@ void DrawPluginDetailTabs(int &activeTab, const EditorGuiContext &ctx)
         {
             const ImVec2 bMin = ImGui::GetItemRectMin();
             const ImVec2 bMax = ImGui::GetItemRectMax();
-            dl->AddLine({bMin.x + 8.0F, bMax.y - 2.0F}, {bMax.x - 8.0F, bMax.y - 2.0F}, Theme::U32(Theme::Accent()),
+            dl->AddLine({bMin.x + 8.0F, bMax.y - 2.0F}, {bMax.x - 8.0F, bMax.y - 2.0F}, U32(Accent()),
                         2.0F);
         }
     }
@@ -1173,11 +1172,11 @@ void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float
     {
         if (!embedded)
         {
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
             ImGui::BeginChild("PluginDetail", {w, 0.0F}, true,
                               ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar);
         }
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+        ImGui::PushStyleColor(ImGuiCol_Text, Dim());
         ImGui::TextUnformatted("Select a plugin from the list.");
         ImGui::PopStyleColor();
         if (!embedded)
@@ -1208,11 +1207,11 @@ void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float
     const std::string enableStr = ctx.localization.Get("editor", "settings.plugins.action.enable");
     const std::string openDocs = ctx.localization.Get("editor", "settings.plugins.action.open_docs");
     const std::array<PluginDetailHeaderSpec, 3> kDetailHeaders = {{
-        {"Horo MCP Bridge", mcpDDesc.c_str(), mcpScope.c_str(), mcpSigned.c_str(), Theme::Ok(), mcpRestart.c_str(),
+        {"Horo MCP Bridge", mcpDDesc.c_str(), mcpScope.c_str(), mcpSigned.c_str(), Ok(), mcpRestart.c_str(),
          openLogs.c_str(), disableStr.c_str()},
-        {"Vendor FMOD Integration", fmodDDesc.c_str(), fmodScope.c_str(), fmodSigned.c_str(), Theme::Ok(),
+        {"Vendor FMOD Integration", fmodDDesc.c_str(), fmodScope.c_str(), fmodSigned.c_str(), Ok(),
          fmodRestart.c_str(), validateStr.c_str(), disableStr.c_str()},
-        {"Steamworks SDK", steamDDesc.c_str(), steamScope.c_str(), steamSigned.c_str(), Theme::Warn(),
+        {"Steamworks SDK", steamDDesc.c_str(), steamScope.c_str(), steamSigned.c_str(), Warn(),
          steamRestart.c_str(), enableStr.c_str(), openDocs.c_str()},
     }};
     const auto &hdr = kDetailHeaders[st.selectedPlugin];
@@ -1224,7 +1223,7 @@ void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float
 
     if (!embedded)
     {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg2());
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
         ImGui::BeginChild("PluginDetail", {w, 0.0F}, true,
                           ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar |
                               ImGuiWindowFlags_NoScrollWithMouse);
@@ -1284,11 +1283,11 @@ void DrawMcpDetailContent(SettingsState &st, const EditorGuiContext &ctx, const 
     case 1: {
         static const std::array<PermissionRowSpec, 3> kPerms = {{
             {"✓", "Read project metadata", "Read project name, scene list, package graph, and editor state.", "Allowed",
-             Theme::Ok()},
+             Ok()},
             {"✓", "Write generated assets", "Create files only under Assets/Generated unless policy is elevated.",
-             "Scoped", Theme::Ok()},
+             "Scoped", Ok()},
             {"!", "Execute build commands", "Requires interactive confirmation before running build or release tasks.",
-             "Confirm", Theme::Warn()},
+             "Confirm", Warn()},
         }};
         DrawPermissionRows(kPerms, ctx);
     }
@@ -1296,9 +1295,9 @@ void DrawMcpDetailContent(SettingsState &st, const EditorGuiContext &ctx, const 
 
     case 2: {
         static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
-            {"STATUS", "Running", "sandboxed", Theme::Ok()},
-            {"LAST CALL", "2m ago", "tool request", Theme::Text()},
-            {"ERRORS", "0", "last 24h", Theme::Ok()},
+            {"STATUS", "Running", "sandboxed", Ok()},
+            {"LAST CALL", "2m ago", "tool request", Text()},
+            {"ERRORS", "0", "last 24h", Ok()},
         }};
         DrawDiagnosticMetrics(kMetrics, ctx);
         const std::array kActivity = {"14:22  project.read completed in 18ms",
@@ -1355,9 +1354,9 @@ void DrawFmodDetailContent(SettingsState &st, const EditorGuiContext &ctx, const
     case 1: {
         static const std::array<PermissionRowSpec, 2> kPerms = {{
             {"✓", "Read and write audio banks", "Limited to configured FMOD project and bank output paths.", "Scoped",
-             Theme::Ok()},
+             Ok()},
             {"!", "Launch external FMOD Studio process",
-             "Requires a configured executable path and user initiated action.", "User action", Theme::Warn()},
+             "Requires a configured executable path and user initiated action.", "User action", Warn()},
         }};
         DrawPermissionRows(kPerms, ctx);
     }
@@ -1365,9 +1364,9 @@ void DrawFmodDetailContent(SettingsState &st, const EditorGuiContext &ctx, const
 
     case 2: {
         static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
-            {"BANKS", "14", "loaded", Theme::Text()},
-            {"UNRESOLVED", "2", "events", Theme::Warn()},
-            {"LIVE UPDATE", "On", "connected", Theme::Ok()},
+            {"BANKS", "14", "loaded", Text()},
+            {"UNRESOLVED", "2", "events", Warn()},
+            {"LIVE UPDATE", "On", "connected", Ok()},
         }};
         DrawDiagnosticMetrics(kMetrics, ctx);
         const std::array kActivity = {"13:58  bank import finished with 2 unresolved event refs",
@@ -1425,9 +1424,9 @@ void DrawSteamDetailContent(SettingsState &st, const EditorGuiContext &ctx, cons
     case 1: {
         static const std::array<PermissionRowSpec, 2> kPerms = {{
             {"✓", "Read platform config", "Reads App ID, achievements config, and build target metadata.", "Allowed",
-             Theme::Ok()},
+             Ok()},
             {"!", "Network access", "Only enabled when Steam networking transport is selected.", "Conditional",
-             Theme::Warn()},
+             Warn()},
         }};
         DrawPermissionRows(kPerms, ctx);
     }
@@ -1435,9 +1434,9 @@ void DrawSteamDetailContent(SettingsState &st, const EditorGuiContext &ctx, cons
 
     case 2: {
         static const std::array<DiagnosticMetricSpec, 3> kMetrics = {{
-            {"STATUS", "Disabled", "not loaded", Theme::Dim()},
-            {"SDK", "Missing", "path required", Theme::Warn()},
-            {"OVERLAY", "Ready", "waiting", Theme::Ok()},
+            {"STATUS", "Disabled", "not loaded", Dim()},
+            {"SDK", "Missing", "path required", Warn()},
+            {"OVERLAY", "Ready", "waiting", Ok()},
         }};
         DrawDiagnosticMetrics(kMetrics, ctx);
         const std::array kActivity = {"12:45  skipped init because Steamworks SDK is disabled",
@@ -1467,8 +1466,8 @@ void DrawSteamDetailContent(SettingsState &st, const EditorGuiContext &ctx, cons
 void DrawInstalledPlugins(SettingsState &st, const EditorGuiContext &ctx)
 {
     {
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::TextWrapped(
             "Select a plugin to edit its settings, permissions, diagnostics, and manifest details. The selected plugin "
             "appears below in the same workspace so the layout stays simpler and easier to scan.");
@@ -1481,7 +1480,7 @@ void DrawInstalledPlugins(SettingsState &st, const EditorGuiContext &ctx)
     ImGui::Dummy({0.0F, 10.0F});
     const ImVec2 sep = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine({sep.x, sep.y}, {sep.x + ImGui::GetContentRegionAvail().x, sep.y},
-                                        Theme::U32(Theme::Border()), 1.0F);
+                                        U32(Border()), 1.0F);
     ImGui::Dummy({0.0F, 14.0F});
 
     DrawPluginDetailPanel(st, ctx, ImGui::GetContentRegionAvail().x, true);
@@ -1493,9 +1492,9 @@ void DrawRuntimeDiscovery(SettingsState &st, const EditorGuiContext &ctx)
     SettingGroup("RUNTIME OVERVIEW", ctx.theme.fonts, true);
 
     static const std::array<DiagnosticMetricSpec, 3> kRuntimeCards = {{
-        {"ISOLATION", "Sandboxed", "processes", Theme::Text()},
-        {"DISCOVERY", "Project + editor", "paths", Theme::Text()},
-        {"UPDATES", "Signed only", "registries", Theme::Ok()},
+        {"ISOLATION", "Sandboxed", "processes", Text()},
+        {"DISCOVERY", "Project + editor", "paths", Text()},
+        {"UPDATES", "Signed only", "registries", Ok()},
     }};
     DrawDiagnosticMetrics(kRuntimeCards, ctx);
 
@@ -1556,12 +1555,12 @@ void DrawRuntimeDiscovery(SettingsState &st, const EditorGuiContext &ctx)
         constexpr float noteH = 54.0F;
         auto *dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(p, {p.x + noteW, p.y + noteH},
-                          ImColor{Theme::Accent().x, Theme::Accent().y, Theme::Accent().z, 0.06F}, Layout::Radius);
-        dl->AddRect(p, {p.x + noteW, p.y + noteH}, Theme::U32(Theme::Border()), Layout::Radius);
+                          ImColor{Accent().x, Accent().y, Accent().z, 0.06F}, Layout::Radius);
+        dl->AddRect(p, {p.x + noteW, p.y + noteH}, U32(Border()), Layout::Radius);
 
         ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 10.0F});
-        ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, Theme::FontPx::Sans);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+        ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, FontPx::Sans);
+        ImGui::PushStyleColor(ImGuiCol_Text, Muted());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + noteW - 26.0F);
         ImGui::TextWrapped(
             "Runtime settings are editor-wide defaults. Individual plugin settings live inside each plugin detail "
@@ -1575,7 +1574,7 @@ void DrawRuntimeDiscovery(SettingsState &st, const EditorGuiContext &ctx)
 void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bodyH)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{26.0F, 22.0F});
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg1());
     ImGui::BeginChild("SettingsContent", {0.0F, bodyH}, false,
                       ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar |
                           ImGuiWindowFlags_NoScrollWithMouse);
@@ -1620,24 +1619,24 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
 
 [[nodiscard]] bool DrawFooter(SettingsState &st, EditorSettingsService &settings, const EditorGuiContext &ctx)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
     ImGui::BeginChild("SettingsFooter", {0.0F, Layout::FooterH}, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     const ImVec2 p = ImGui::GetWindowPos();
-    ImGui::GetWindowDrawList()->AddLine(p, {p.x + ImGui::GetWindowWidth(), p.y}, Theme::U32(Theme::Border()), 1.0F);
+    ImGui::GetWindowDrawList()->AddLine(p, {p.x + ImGui::GetWindowWidth(), p.y}, U32(Border()), 1.0F);
 
     ImGui::SetCursorPos({22.0F, 22.0F});
     if (st.dirty)
     {
-        ScopedTextStyle badge(ctx.theme.fonts.sansCompact, 10.5F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Warn());
+        ScopedTextStyle badge(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, Warn());
         ImGui::TextUnformatted("unsaved");
         ImGui::PopStyleColor();
         ImGui::SameLine(0.0F, 8.0F);
     }
     {
-        ScopedTextStyle hint(ctx.theme.fonts.sansCompact, 11.5F, Theme::FontPx::SansCompact);
-        ImGui::PushStyleColor(ImGuiCol_Text, st.statusIsError ? Theme::Err() : Theme::Dim());
+        ScopedTextStyle hint(ctx.theme.fonts.sansCompact, 11.5F, FontPx::SansCompact);
+        ImGui::PushStyleColor(ImGuiCol_Text, st.statusIsError ? Err() : Dim());
         ImGui::TextUnformatted(st.statusMessage.empty()
                                    ? "Apply writes user preferences to ~/.horo/editor_settings.json"
                                    : st.statusMessage.c_str());
@@ -1648,9 +1647,9 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
     if (!st.modalFeedback.empty())
     {
         ImGui::SetCursorPosX(22.0F);
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Accent());
+        ImGui::PushStyleColor(ImGuiCol_Text, Accent());
         {
-            ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 11.0F, Theme::FontPx::SansCompact);
+            ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 11.0F, FontPx::SansCompact);
             ImGui::TextUnformatted(st.modalFeedback.c_str());
         }
         ImGui::PopStyleColor();
@@ -1666,10 +1665,10 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
     if (const std::string restoreDefaults = ctx.localization.Get("editor", "settings.restore_defaults");
         Button({.label = restoreDefaults.c_str(),
                 .size = {restoreW, 34.0F},
-                .variant = Ui::ButtonVariant::Secondary,
+                .variant = ButtonVariant::Secondary,
                 .fontSize = 13.0F,
                 .font = ctx.theme.fonts.sansCompact,
-                .baseFontSize = Theme::FontPx::SansCompact}))
+                .baseFontSize = FontPx::SansCompact}))
     {
         LOG_INFO("editor.settings", "Restore Defaults clicked — draft reset to factory defaults.");
         ApplySettingsToDraft(st, DefaultEditorSettings());
@@ -1679,10 +1678,10 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
     ImGui::SameLine(0.0F, gap);
     if (Button({.label = ctx.localization.Get("editor", "settings.cancel").c_str(),
                 .size = {cancelW, 34.0F},
-                .variant = Ui::ButtonVariant::Secondary,
+                .variant = ButtonVariant::Secondary,
                 .fontSize = 13.0F,
                 .font = ctx.theme.fonts.sansCompact,
-                .baseFontSize = Theme::FontPx::SansCompact}))
+                .baseFontSize = FontPx::SansCompact}))
     {
         LOG_INFO("editor.settings", "Settings cancelled by user (dirty=%s).", st.dirty ? "yes" : "no");
         requestClose = true;
@@ -1690,10 +1689,10 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
     ImGui::SameLine(0.0F, gap);
     if (Button({.label = ctx.localization.Get("editor", "settings.apply").c_str(),
                 .size = {applyW, 34.0F},
-                .variant = Ui::ButtonVariant::Primary,
+                .variant = ButtonVariant::Primary,
                 .fontSize = 13.0F,
                 .font = ctx.theme.fonts.sansCompact,
-                .baseFontSize = Theme::FontPx::SansCompact}))
+                .baseFontSize = FontPx::SansCompact}))
     {
         (void)ApplySettings(st, settings);
         LOG_INFO("editor.settings", "Settings applied via Apply button.");
@@ -1705,11 +1704,11 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
 }
 
 [[nodiscard]] ModalFrameResult DrawSettingsModalPresentationImpl(SettingsState &st, EditorSettingsService &settings,
-                                                                 const EditorGuiContext &ctx, const ::ImTextureID logo)
+                                                                 const EditorGuiContext &ctx, const ImTextureID logo)
 {
     if (st.appearance.pendingThemeIndex >= 0)
     {
-        Theme::SelectThemeByIndex(st.appearance.pendingThemeIndex);
+        SelectThemeByIndex(st.appearance.pendingThemeIndex);
         st.appearance.pendingThemeIndex = -1;
     }
 
@@ -1739,8 +1738,8 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Layout::ModalRadius);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-    ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, Bg1());
+    ImGui::PushStyleColor(ImGuiCol_Border, Border());
 
     ImGui::Begin("Settings", nullptr,
                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
@@ -1763,7 +1762,7 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
 } // namespace
 
 ModalFrameResult DrawSettingsModalPresentation(SettingsState &state, EditorSettingsService &settings,
-                                               const EditorGuiContext &ctx, const ::ImTextureID logo)
+                                               const EditorGuiContext &ctx, const ImTextureID logo)
 {
     return DrawSettingsModalPresentationImpl(state, settings, ctx, logo);
 }

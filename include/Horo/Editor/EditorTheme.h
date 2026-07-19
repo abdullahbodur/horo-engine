@@ -26,90 +26,90 @@ namespace Horo::Editor::Theme
 /** @brief Returns the active (theme-aware) design token set. */
 [[nodiscard]] const DesignSystem::DesignTokens &GetActiveTokens();
 
-[[nodiscard]] inline ::ImVec4 Bg0()
+[[nodiscard]] inline ImVec4 Bg0()
 {
     return GetActiveTokens().colors.surfaceRoot;
 }
-[[nodiscard]] inline ::ImVec4 Bg1()
+[[nodiscard]] inline ImVec4 Bg1()
 {
     return GetActiveTokens().colors.surfaceWindow;
 }
-[[nodiscard]] inline ::ImVec4 Bg2()
+[[nodiscard]] inline ImVec4 Bg2()
 {
     return GetActiveTokens().colors.surfacePanel;
 }
-[[nodiscard]] inline ::ImVec4 Bg3()
+[[nodiscard]] inline ImVec4 Bg3()
 {
     return GetActiveTokens().colors.surfaceRaised;
 }
-[[nodiscard]] inline ::ImVec4 Hover()
+[[nodiscard]] inline ImVec4 Hover()
 {
     return GetActiveTokens().colors.surfaceHover;
 }
-[[nodiscard]] inline ::ImVec4 Border()
+[[nodiscard]] inline ImVec4 Border()
 {
     return GetActiveTokens().colors.border;
 }
-[[nodiscard]] inline ::ImVec4 BorderStrong()
+[[nodiscard]] inline ImVec4 BorderStrong()
 {
     return GetActiveTokens().colors.borderStrong;
 }
-[[nodiscard]] inline ::ImVec4 Text()
+[[nodiscard]] inline ImVec4 Text()
 {
     return GetActiveTokens().colors.textPrimary;
 }
-[[nodiscard]] inline ::ImVec4 Muted()
+[[nodiscard]] inline ImVec4 Muted()
 {
     return GetActiveTokens().colors.textMuted;
 }
-[[nodiscard]] inline ::ImVec4 Dim()
+[[nodiscard]] inline ImVec4 Dim()
 {
     return GetActiveTokens().colors.textDim;
 }
-[[nodiscard]] inline ::ImVec4 Accent()
+[[nodiscard]] inline ImVec4 Accent()
 {
     return GetActiveTokens().colors.actionPrimary;
 }
-[[nodiscard]] inline ::ImVec4 AccentHover()
+[[nodiscard]] inline ImVec4 AccentHover()
 {
     return GetActiveTokens().colors.actionPrimaryHover;
 }
-[[nodiscard]] inline ::ImVec4 AccentActive()
+[[nodiscard]] inline ImVec4 AccentActive()
 {
     return GetActiveTokens().colors.actionPrimaryActive;
 }
-[[nodiscard]] inline ::ImVec4 AccentSoft()
+[[nodiscard]] inline ImVec4 AccentSoft()
 {
     return GetActiveTokens().colors.actionPrimarySoft;
 }
-[[nodiscard]] inline ::ImVec4 Ok()
+[[nodiscard]] inline ImVec4 Ok()
 {
     return GetActiveTokens().colors.statusOk;
 }
-[[nodiscard]] inline ::ImVec4 Warn()
+[[nodiscard]] inline ImVec4 Warn()
 {
     return GetActiveTokens().colors.statusWarn;
 }
-[[nodiscard]] inline ::ImVec4 Err()
+[[nodiscard]] inline ImVec4 Err()
 {
     return GetActiveTokens().colors.statusError;
 }
-[[nodiscard]] inline ::ImVec4 ErrSoft()
+[[nodiscard]] inline ImVec4 ErrSoft()
 {
-    ::ImVec4 c = GetActiveTokens().colors.statusError;
+    ImVec4 c = GetActiveTokens().colors.statusError;
     c.w = 0.12F;
     return c;
 }
-[[nodiscard]] inline ::ImVec4 DarkText()
+[[nodiscard]] inline ImVec4 DarkText()
 {
     return GetActiveTokens().colors.textOnActionPrimary;
 }
-[[nodiscard]] inline ::ImVec4 Shadow()
+[[nodiscard]] inline ImVec4 Shadow()
 {
     return {0.0F, 0.0F, 0.0F, 0.55F};
 }
 
-[[nodiscard]] inline ::ImU32 U32(const ::ImVec4 &c)
+[[nodiscard]] inline ImU32 U32(const ImVec4 &c)
 {
     return ImGui::GetColorU32(c);
 }
@@ -119,9 +119,9 @@ namespace Horo::Editor::Theme
 // ─────────────────────────────────────────────────────────────────────────
 struct Fonts
 {
-    ::ImFont *sans = nullptr;
-    ::ImFont *sansCompact = nullptr;
-    ::ImFont *sansEmphasis = nullptr;
+    ImFont *sans = nullptr;
+    ImFont *sansCompact = nullptr;
+    ImFont *sansEmphasis = nullptr;
 };
 
 namespace FontPx
@@ -136,12 +136,12 @@ constexpr float SansEmphasis = DesignSystem::DefaultDesignTokens().typography.sa
     return targetPx / basePx;
 }
 
-inline void PushFont(::ImFont *f)
+inline void PushFont(ImFont *f)
 {
     if (f)
         ImGui::PushFont(f);
 }
-inline void PopFont(::ImFont *f)
+inline void PopFont(ImFont *f)
 {
     if (f)
         ImGui::PopFont();
@@ -149,8 +149,8 @@ inline void PopFont(::ImFont *f)
 
 struct ScopedFont
 {
-    ::ImFont *font;
-    explicit ScopedFont(::ImFont *f) : font(f)
+    ImFont *font;
+    explicit ScopedFont(ImFont *f) : font(f)
     {
         PushFont(font);
     }
@@ -180,7 +180,7 @@ struct ScopedTextStyle
 {
     [[no_unique_address]] ScopedFont font;
     [[no_unique_address]] ScopedFontScale scale;
-    ScopedTextStyle(::ImFont *f, float targetPx, float basePx) : font(f), scale(Scale(targetPx, basePx))
+    ScopedTextStyle(ImFont *f, float targetPx, float basePx) : font(f), scale(Scale(targetPx, basePx))
     {
     }
 };
@@ -248,7 +248,7 @@ struct ThemeEntry
 {
     std::string name;       // display name (e.g. "Monokai")
     std::string sourcePath; // empty for built-in, file path for custom
-    std::unordered_map<std::string, ::ImVec4, ThemeStringHash, std::equal_to<>> colors; // key → RGBA
+    std::unordered_map<std::string, ImVec4, ThemeStringHash, std::equal_to<>> colors; // key → RGBA
     bool isBuiltIn = true;
 };
 

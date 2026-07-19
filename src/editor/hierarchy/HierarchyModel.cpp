@@ -1,7 +1,6 @@
 #include "Horo/Editor/HierarchyModel.h"
 
 #include <algorithm>
-#include <cctype>
 #include <unordered_map>
 #include <utility>
 

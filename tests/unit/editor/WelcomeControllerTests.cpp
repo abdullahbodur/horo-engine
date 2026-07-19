@@ -1,26 +1,78 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/WelcomeController.h"
 
-#include <cassert>
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
-namespace {
+namespace
+{
+class ScopedTestHome
+{
+  public:
+    explicit ScopedTestHome(std::string_view name)
+        : path_(std::filesystem::temp_directory_path() /
+                (std::string{name} + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
+    {
+#if defined(_WIN32)
+        constexpr const char *key = "USERPROFILE";
+#else
+        constexpr const char *key = "HOME";
+#endif
+        if (const char *current = std::getenv(key))
+            previous_ = current;
+        std::filesystem::create_directories(path_);
+#if defined(_WIN32)
+        _putenv_s(key, path_.string().c_str());
+#else
+        setenv(key, path_.string().c_str(), 1);
+#endif
+    }
 
-void ValidateRoutePayloads() {
+    ~ScopedTestHome()
+    {
+#if defined(_WIN32)
+        constexpr const char *key = "USERPROFILE";
+        _putenv_s(key, previous_.value_or("").c_str());
+#else
+        constexpr const char *key = "HOME";
+        if (previous_)
+            setenv(key, previous_->c_str(), 1);
+        else
+            unsetenv(key);
+#endif
+        std::error_code ignored;
+        std::filesystem::remove_all(path_, ignored);
+    }
+
+  private:
+    std::filesystem::path path_;
+    std::optional<std::string> previous_;
+};
+
+TEST_CASE("Route payload validation rejects mismatched parameters", "[unit][editor][welcome]")
+{
     using namespace Horo::Editor;
 
-    assert(IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
-    assert(IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectBrowser, ProjectBrowserRouteParameters{}}));
-    assert(IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}}));
-    assert(IsRoutePayloadValid(GuiRoute{GuiRouteKind::EditorWorkspace,
-                                        EditorWorkspaceRouteParameters{"/tmp/project", std::nullopt}}));
+    REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}})));
+    REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectBrowser, ProjectBrowserRouteParameters{}})));
+    REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}})));
+    REQUIRE((IsRoutePayloadValid(GuiRoute{
+        GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{1}, std::nullopt}})));
+    REQUIRE((!IsRoutePayloadValid(GuiRoute{
+        GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{}, std::nullopt}})));
 
-    assert(!IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, ProjectBrowserRouteParameters{}}));
+    REQUIRE((!IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, ProjectBrowserRouteParameters{}})));
 }
 
-void FiltersInvalidRecentProjects() {
+TEST_CASE("Welcome filters invalid recent projects", "[unit][editor][welcome]")
+{
     using namespace Horo::Editor;
 
     const std::string validRoot = (std::filesystem::temp_directory_path() / "horo-valid-project").string();
@@ -33,23 +85,24 @@ void FiltersInvalidRecentProjects() {
     }};
 
     const WelcomeViewModel model = controller.BuildViewModel();
-    assert(model.productName == "Horo Editor");
-    assert(model.recentProjects.size() == 1);
-    assert(model.recentProjects[0].name == "Valid");
+    REQUIRE((model.productName == "Horo Editor"));
+    REQUIRE((model.recentProjects.size() == 1));
+    REQUIRE((model.recentProjects[0].name == "Valid"));
 
     const std::optional<WelcomeAction> openRecent = controller.RequestOpenRecentProject(0);
-    assert(openRecent.has_value());
-    assert(openRecent->kind == WelcomeActionKind::OpenRecentProject);
-    assert(openRecent->route.kind == GuiRouteKind::EditorWorkspace);
+    REQUIRE((openRecent.has_value()));
+    REQUIRE((openRecent->kind == WelcomeActionKind::OpenRecentProject));
+    REQUIRE((openRecent->route.kind == GuiRouteKind::ProjectLoading));
 
-    const auto* parameters = std::get_if<EditorWorkspaceRouteParameters>(&openRecent->route.parameters);
-    assert(parameters != nullptr);
-    assert(parameters->projectRoot == validRoot);
+    const auto *parameters = std::get_if<ProjectLoadingRouteParameters>(&openRecent->route.parameters);
+    REQUIRE((parameters != nullptr));
+    REQUIRE((parameters->projectRoot == validRoot));
 
-    assert(!controller.RequestOpenRecentProject(1).has_value());
+    REQUIRE((!controller.RequestOpenRecentProject(1).has_value()));
 }
 
-void RendersDeterministicPreviewText() {
+TEST_CASE("Welcome preview text is deterministic", "[unit][editor][welcome]")
+{
     using namespace Horo::Editor;
 
     const std::string projectRoot = (std::filesystem::temp_directory_path() / "horo-preview-project").string();
@@ -57,17 +110,31 @@ void RendersDeterministicPreviewText() {
     const WelcomeViewModel viewModel = controller.BuildViewModel();
     const std::string text = RenderWelcomeScreenText(viewModel);
 
-    assert(text.find("Horo Editor") != std::string::npos);
-    assert(text.find(viewModel.statusLabel) != std::string::npos);
-    assert(text.find("Project") != std::string::npos);
-    assert(text.find(projectRoot) != std::string::npos);
+    REQUIRE((text.find("Horo Editor") != std::string::npos));
+    REQUIRE((text.find(viewModel.statusLabel) != std::string::npos));
+    REQUIRE((text.find("Project") != std::string::npos));
+    REQUIRE((text.find(projectRoot) != std::string::npos));
 }
 
+TEST_CASE("Cached compatibility projection round trips", "[unit][editor][welcome]")
+{
+    const ScopedTestHome home{"horo-welcome-controller"};
+    using namespace Horo::Application;
+    using namespace Horo::Editor;
+
+    const auto current = CurrentEngineReleaseVersion();
+    const std::string root = (std::filesystem::temp_directory_path() / "horo-cached-project").string();
+    RecentProjectEntry entry{"Cached", root, "today", "custom"};
+    entry.compatibility = RecentProjectCompatibilityProjection{.projectVersion = current,
+                                                               .status = ProjectCompatibilityStatus::Current,
+                                                               .targetVersion = current,
+                                                               .inspectionState = RecentProjectInspectionState::Fresh};
+    REQUIRE((SaveRecentProjectsToDisk({entry})));
+    const auto loaded = LoadRecentProjectsFromDisk();
+    REQUIRE((loaded.size() == 1));
+    REQUIRE((loaded.front().compatibility.has_value()));
+    REQUIRE((loaded.front().compatibility->status == ProjectCompatibilityStatus::Current));
+    REQUIRE((loaded.front().compatibility->projectVersion == current));
+    REQUIRE((loaded.front().compatibility->inspectionState == RecentProjectInspectionState::Cached));
+}
 } // namespace
-
-int main() {
-    ValidateRoutePayloads();
-    FiltersInvalidRecentProjects();
-    RendersDeterministicPreviewText();
-    return 0;
-}

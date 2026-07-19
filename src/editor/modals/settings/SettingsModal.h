@@ -16,5 +16,5 @@ namespace Horo::Editor
  */
 [[nodiscard]] ModalFrameResult DrawSettingsModalPresentation(SettingsState &state, EditorSettingsService &settings,
                                                              LocalizationService &localization,
-                                                             const Theme::Fonts &fonts, ::ImTextureID logo);
+                                                             const Theme::Fonts &fonts, ImTextureID logo);
 } // namespace Horo::Editor

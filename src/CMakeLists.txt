@@ -32,6 +32,38 @@ target_include_directories(HoroPlatform
 )
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
+add_library(HoroApplication STATIC
+        application/project/ProjectErrors.cpp
+        application/project/ProjectVersion.cpp
+        application/project/ProjectCompatibility.cpp
+        application/project_migration/ProjectMigrationRegistry.cpp
+        application/project_migration/ProjectMigrationExecution.cpp
+)
+add_library(HoroEngine::Application ALIAS HoroApplication)
+target_compile_features(HoroApplication PUBLIC cxx_std_20)
+target_include_directories(HoroApplication
+        PUBLIC ${PROJECT_SOURCE_DIR}/include
+        PRIVATE ${HORO_GENERATED_DIR}
+)
+target_link_libraries(HoroApplication
+        PUBLIC HoroEngine::Foundation
+        PRIVATE nlohmann_json::nlohmann_json
+)
+add_dependencies(HoroApplication HoroProjectCompatibilityCatalog)
+
+add_library(HoroProjectMigrations STATIC
+        ${HORO_PROJECT_MIGRATION_CATALOG_CPP}
+        ${HORO_PROJECT_MIGRATION_SOURCES}
+)
+add_library(HoroEngine::ProjectMigrations ALIAS HoroProjectMigrations)
+target_compile_features(HoroProjectMigrations PUBLIC cxx_std_20)
+target_include_directories(HoroProjectMigrations
+        PUBLIC ${PROJECT_SOURCE_DIR}/include
+        PRIVATE ${PROJECT_SOURCE_DIR} ${HORO_GENERATED_DIR}
+)
+target_link_libraries(HoroProjectMigrations PUBLIC HoroEngine::Application PRIVATE nlohmann_json::nlohmann_json)
+add_dependencies(HoroProjectMigrations HoroProjectMigrationCatalog)
+
 add_library(HoroRuntime STATIC
         runtime/frame/FrameScheduler.cpp
         runtime/lifecycle/RuntimeLifecycle.cpp
@@ -52,6 +84,22 @@ add_library(HoroEngine::RuntimeScene ALIAS HoroRuntimeScene)
 target_compile_features(HoroRuntimeScene PUBLIC cxx_std_20)
 target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime)
+
+add_library(HoroAssets STATIC
+        runtime/assets/AssetErrors.cpp
+        runtime/assets/registry/AssetId.cpp
+        runtime/assets/registry/AssetRegistry.cpp
+        runtime/assets/runtime_provider/AssetProviderRead.h
+        runtime/assets/runtime_provider/AssetProvider.cpp
+)
+add_library(HoroEngine::Assets ALIAS HoroAssets)
+target_compile_features(HoroAssets PUBLIC cxx_std_20)
+target_include_directories(HoroAssets PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroAssets
+        PUBLIC HoroEngine::Foundation
+        PRIVATE nlohmann_json::nlohmann_json
+)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
@@ -265,6 +313,10 @@ add_library(HoroEditorServices STATIC
         editor/screens/welcome/WelcomeController.cpp
         editor/screens/project_creation/ProjectCreationController.cpp
         editor/project_model/ProjectCreationService.cpp
+        editor/project_model/ProjectMutation.cpp
+        editor/project_model/ProjectMigrationTransaction.cpp
+        editor/project_model/ProjectOpenService.cpp
+        editor/project_model/RecentProjectInspectionService.cpp
         editor/project_model/ProjectMetadata.cpp
         editor/project_model/RendererAvailability.cpp
         editor/settings/EditorConfiguration.cpp
@@ -300,6 +352,8 @@ target_include_directories(HoroEditorServices
 target_link_libraries(HoroEditorServices
         PUBLIC
         HoroEngine::Foundation
+        HoroEngine::Application
+        HoroEngine::Platform
         HoroEngine::EditorModel
         HoroEngine::Input
         PRIVATE

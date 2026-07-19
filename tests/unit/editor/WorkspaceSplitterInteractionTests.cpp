@@ -1,7 +1,8 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "WorkspaceSplitterInteraction.h"
 
 #include <array>
-#include <cassert>
 
 namespace
 {
@@ -16,60 +17,67 @@ constexpr WorkspaceSplitterRegion kLeftRegion{
     .maxY = 600.0F,
 };
 
-void CapturesDragWithoutDependingOnAnImGuiWindow()
+TEST_CASE("Captures Drag Without Depending On An Im Gui Window", "[unit][editor]")
 {
     Horo::Input::InputRouter router;
-    auto context = router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
+    auto context =
+        router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
     WorkspaceSplitterInteraction interaction;
     const std::array regions{kLeftRegion};
 
     const auto pressed = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 280.0F, .y = 240.0F, .deltaX = 2.0F, .deltaY = 0.0F, .primaryClicked = true, .primaryDown = true}, router, context);
-    assert(pressed.active == WorkspaceSplitterId::Left);
-    assert(pressed.axis == WorkspaceSplitterAxis::Horizontal);
-    assert(pressed.delta == 2.0F);
-    assert(interaction.OwnsPrimaryPointer());
+            .x = 280.0F, .y = 240.0F, .deltaX = 2.0F, .deltaY = 0.0F, .primaryClicked = true, .primaryDown = true},
+        router, context);
+    REQUIRE((pressed.active == WorkspaceSplitterId::Left));
+    REQUIRE((pressed.axis == WorkspaceSplitterAxis::Horizontal));
+    REQUIRE((pressed.delta == 2.0F));
+    REQUIRE((interaction.OwnsPrimaryPointer()));
 
     const auto draggedOutside = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 340.0F, .y = 240.0F, .deltaX = 12.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = true}, router, context);
-    assert(draggedOutside.active == WorkspaceSplitterId::Left);
-    assert(draggedOutside.axis == WorkspaceSplitterAxis::Horizontal);
-    assert(draggedOutside.delta == 12.0F);
+            .x = 340.0F, .y = 240.0F, .deltaX = 12.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = true},
+        router, context);
+    REQUIRE((draggedOutside.active == WorkspaceSplitterId::Left));
+    REQUIRE((draggedOutside.axis == WorkspaceSplitterAxis::Horizontal));
+    REQUIRE((draggedOutside.delta == 12.0F));
 
     const auto released = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 340.0F, .y = 240.0F, .deltaX = 0.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = false}, router, context);
-    assert(released.active == WorkspaceSplitterId::None);
-    assert(released.delta == 0.0F);
-    assert(!interaction.OwnsPrimaryPointer());
+            .x = 340.0F, .y = 240.0F, .deltaX = 0.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = false},
+        router, context);
+    REQUIRE((released.active == WorkspaceSplitterId::None));
+    REQUIRE((released.delta == 0.0F));
+    REQUIRE((!interaction.OwnsPrimaryPointer()));
 }
 
-void ReportsHoverWithoutCapturing()
+TEST_CASE("Reports Hover Without Capturing", "[unit][editor]")
 {
     Horo::Input::InputRouter router;
-    auto context = router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
+    auto context =
+        router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
     WorkspaceSplitterInteraction interaction;
     const std::array regions{kLeftRegion};
 
     const auto hovered = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 280.0F, .y = 240.0F, .deltaX = 0.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = false}, router, context);
-    assert(hovered.hovered == WorkspaceSplitterId::Left);
-    assert(hovered.active == WorkspaceSplitterId::None);
-    assert(hovered.axis == WorkspaceSplitterAxis::Horizontal);
-    assert(hovered.delta == 0.0F);
+            .x = 280.0F, .y = 240.0F, .deltaX = 0.0F, .deltaY = 0.0F, .primaryClicked = false, .primaryDown = false},
+        router, context);
+    REQUIRE((hovered.hovered == WorkspaceSplitterId::Left));
+    REQUIRE((hovered.active == WorkspaceSplitterId::None));
+    REQUIRE((hovered.axis == WorkspaceSplitterAxis::Horizontal));
+    REQUIRE((hovered.delta == 0.0F));
 }
 
-void BottomResizeOwnsPointerOutsideTheOverlappingSeam()
+TEST_CASE("Bottom Resize Owns Pointer Outside The Overlapping Seam", "[unit][editor]")
 {
     Horo::Input::InputRouter router;
-    auto context = router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
+    auto context =
+        router.PushContext(Horo::Input::InputContextId{"workspace"}, Horo::Input::InputContextKind::EditorWorkspace);
     WorkspaceSplitterInteraction interaction;
     const std::array regions{WorkspaceSplitterRegion{
         .id = WorkspaceSplitterId::Bottom,
@@ -83,26 +91,20 @@ void BottomResizeOwnsPointerOutsideTheOverlappingSeam()
     const auto pressed = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 640.0F, .y = 502.0F, .deltaX = 0.0F, .deltaY = -3.0F, .primaryClicked = true, .primaryDown = true}, router, context);
-    assert(pressed.active == WorkspaceSplitterId::Bottom);
-    assert(pressed.axis == WorkspaceSplitterAxis::Vertical);
-    assert(pressed.delta == -3.0F);
-    assert(interaction.OwnsPrimaryPointer());
+            .x = 640.0F, .y = 502.0F, .deltaX = 0.0F, .deltaY = -3.0F, .primaryClicked = true, .primaryDown = true},
+        router, context);
+    REQUIRE((pressed.active == WorkspaceSplitterId::Bottom));
+    REQUIRE((pressed.axis == WorkspaceSplitterAxis::Vertical));
+    REQUIRE((pressed.delta == -3.0F));
+    REQUIRE((interaction.OwnsPrimaryPointer()));
 
     const auto draggedIntoPanel = interaction.Update(
         regions,
         WorkspaceSplitterPointerInput{
-            .x = 640.0F, .y = 470.0F, .deltaX = 0.0F, .deltaY = -12.0F, .primaryClicked = false, .primaryDown = true}, router, context);
-    assert(draggedIntoPanel.active == WorkspaceSplitterId::Bottom);
-    assert(draggedIntoPanel.delta == -12.0F);
-    assert(interaction.OwnsPrimaryPointer());
+            .x = 640.0F, .y = 470.0F, .deltaX = 0.0F, .deltaY = -12.0F, .primaryClicked = false, .primaryDown = true},
+        router, context);
+    REQUIRE((draggedIntoPanel.active == WorkspaceSplitterId::Bottom));
+    REQUIRE((draggedIntoPanel.delta == -12.0F));
+    REQUIRE((interaction.OwnsPrimaryPointer()));
 }
 } // namespace
-
-int main()
-{
-    CapturesDragWithoutDependingOnAnImGuiWindow();
-    ReportsHoverWithoutCapturing();
-    BottomResizeOwnsPointerOutsideTheOverlappingSeam();
-    return 0;
-}

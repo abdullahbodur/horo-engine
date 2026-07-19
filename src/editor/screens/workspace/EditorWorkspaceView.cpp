@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <format>
 #include <numbers>
 
@@ -619,7 +618,7 @@ namespace Horo::Editor
             }
             if (m_logoTexture != 0)
             {
-                ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(m_logoTexture), logoMin,
+                ImGui::GetWindowDrawList()->AddImage(m_logoTexture, logoMin,
                                                      ImVec2(logoMin.x + logoSize.x, logoMin.y + logoSize.y));
             }
             else
@@ -671,7 +670,7 @@ namespace Horo::Editor
                 ImVec2(ox + 2.5f, oy + 2.5f), ImVec2(ox + 6.3f, oy + 12.0f),
                 ImVec2(ox + 8.0f, oy + 8.0f), ImVec2(ox + 12.2f, oy + 6.2f)
             };
-            dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), col, ImDrawFlags_Closed, 1.5f);
+            dl->AddPolyline(pts.data(), pts.size(), col, ImDrawFlags_Closed, 1.5f);
         }
 
         void DrawMoveIcon(ImDrawList* dl, const float x, const float y, const float w, const float h, const ImU32 col)
@@ -681,17 +680,17 @@ namespace Horo::Editor
             dl->AddLine(ImVec2(ox + 7, oy + 2), ImVec2(ox + 7, oy + 12), col, 1.4f);
             dl->AddLine(ImVec2(ox + 2, oy + 7), ImVec2(ox + 12, oy + 7), col, 1.4f);
             const std::array<ImVec2, 3> p1 = {ImVec2(ox + 5, oy + 4), ImVec2(ox + 7, oy + 2), ImVec2(ox + 9, oy + 4)};
-            dl->AddPolyline(p1.data(), static_cast<int>(p1.size()), col, 0, 1.4f);
+            dl->AddPolyline(p1.data(), p1.size(), col, 0, 1.4f);
             const std::array<ImVec2, 3> p2 = {
                 ImVec2(ox + 5, oy + 10), ImVec2(ox + 7, oy + 12), ImVec2(ox + 9, oy + 10)
             };
-            dl->AddPolyline(p2.data(), static_cast<int>(p2.size()), col, 0, 1.4f);
+            dl->AddPolyline(p2.data(), p2.size(), col, 0, 1.4f);
             const std::array<ImVec2, 3> p3 = {ImVec2(ox + 4, oy + 5), ImVec2(ox + 2, oy + 7), ImVec2(ox + 4, oy + 9)};
-            dl->AddPolyline(p3.data(), static_cast<int>(p3.size()), col, 0, 1.4f);
+            dl->AddPolyline(p3.data(), p3.size(), col, 0, 1.4f);
             const std::array<ImVec2, 3> p4 = {
                 ImVec2(ox + 10, oy + 5), ImVec2(ox + 12, oy + 7), ImVec2(ox + 10, oy + 9)
             };
-            dl->AddPolyline(p4.data(), static_cast<int>(p4.size()), col, 0, 1.4f);
+            dl->AddPolyline(p4.data(), p4.size(), col, 0, 1.4f);
         }
 
         void DrawRotateIcon(ImDrawList* dl, const float x, const float y, const float w, const float h, const ImU32 col)
@@ -705,7 +704,7 @@ namespace Horo::Editor
                 ImVec2(ox + 12, oy + 1.5f), ImVec2(ox + 11, oy + 4.1f),
                 ImVec2(ox + 8.4f, oy + 3)
             };
-            dl->AddPolyline(p1.data(), static_cast<int>(p1.size()), col, 0, 1.4f);
+            dl->AddPolyline(p1.data(), p1.size(), col, 0, 1.4f);
         }
 
         void DrawScaleIcon(ImDrawList* dl, const float x, const float y, const float w, const float h, const ImU32 col)

@@ -9,7 +9,6 @@
 #include "Horo/Foundation/Diagnostics.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -226,9 +225,9 @@ class GuiScreenHost
     explicit GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,
                            EditorSettingsService &settingsService, LocalizationService &localization,
                            EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                           Input::InputRouter &inputRouter,
-                           const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
-                           WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture = 0);
+                           Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
+                           ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry,
+                           std::uintptr_t logoTexture = 0);
 
     ~GuiScreenHost();
 
@@ -236,6 +235,13 @@ class GuiScreenHost
     GuiScreenHost &operator=(const GuiScreenHost &) = delete;
     GuiScreenHost(GuiScreenHost &&) = delete;
     GuiScreenHost &operator=(GuiScreenHost &&) = delete;
+
+    /**
+     * @brief Constructs and enters the initial route after composition has registered every borrowed service.
+     * @param initialRoute Initial typed route to activate.
+     * @return Success when the initial screen entered, or a typed lifecycle/navigation failure.
+     */
+    [[nodiscard]] Result<void> Start(GuiRoute initialRoute);
 
     /** @brief Leaves and destroys the active screen exactly once, then revokes borrowed services. */
     void Shutdown() noexcept;
@@ -343,6 +349,7 @@ class GuiScreenHost
     bool closeRequested_{false};
     bool navigationBusy_{false};
     bool isScreenCallbackActive_{false};
+    bool started_{false};
     bool shutdown_{false};
 
     std::optional<LeaveRequirement> pendingRequirement_;

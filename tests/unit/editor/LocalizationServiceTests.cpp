@@ -1,7 +1,8 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/Localization/LocalizationService.h"
 
 #include <array>
-#include <cassert>
 #include <filesystem>
 #include <fstream>
 
@@ -14,54 +15,56 @@ Horo::Editor::LocalizationCatalog Catalog(const char *locale, const char *text)
     return catalog;
 }
 
-void LocaleTagsNormalizeAndRejectInvalidInput()
+TEST_CASE("Locale Tags Normalize And Reject Invalid Input", "[unit][editor]")
 {
     const auto normalized = Horo::Editor::LocaleTag::Parse("tr-TR");
-    assert(normalized.has_value());
-    assert(normalized->value == "tr-TR");
-    assert(!Horo::Editor::LocaleTag::Parse("not a locale").has_value());
+    REQUIRE((normalized.has_value()));
+    REQUIRE((normalized->value == "tr-TR"));
+    REQUIRE((!Horo::Editor::LocaleTag::Parse("not a locale").has_value()));
 }
 
-void LocaleSwitchUsesImmutablePreparedSnapshot()
+TEST_CASE("Locale Switch Uses Immutable Prepared Snapshot", "[unit][editor]")
 {
     Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
-    assert(service.RegisterCatalog(Catalog("en-US", "Settings")));
-    assert(service.RegisterCatalog(Catalog("tr-TR", "Ayarlar")));
-    assert(service.Prepare(Horo::Editor::LocaleTag{"en-US"}));
-    assert(service.ActivatePrepared());
+    REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
+    REQUIRE((service.RegisterCatalog(Catalog("tr-TR", "Ayarlar"))));
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"en-US"})));
+    REQUIRE((service.ActivatePrepared()));
 
-    assert(service.Get("editor", "settings.title") == "Settings");
+    REQUIRE((service.Get("editor", "settings.title") == "Settings"));
     const auto before = service.Snapshot();
 
-    assert(service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}));
-    assert(service.Get("editor", "settings.title") == "Settings");
-    assert(service.ActivatePrepared());
-    assert(service.Get("editor", "settings.title") == "Ayarlar");
-    assert(before.revision != service.Snapshot().revision);
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"tr-TR"})));
+    REQUIRE((service.Get("editor", "settings.title") == "Settings"));
+    REQUIRE((service.ActivatePrepared()));
+    REQUIRE((service.Get("editor", "settings.title") == "Ayarlar"));
+    REQUIRE((before.revision != service.Snapshot().revision));
 }
 
-void FailedPreparationLeavesActiveLocaleUnchanged()
+TEST_CASE("Failed Preparation Leaves Active Locale Unchanged", "[unit][editor]")
 {
     Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
-    assert(service.RegisterCatalog(Catalog("en-US", "Settings")));
-    assert(service.Prepare(Horo::Editor::LocaleTag{"en-US"}));
-    assert(service.ActivatePrepared());
+    REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"en-US"})));
+    REQUIRE((service.ActivatePrepared()));
 
     Horo::Editor::LocalizationError error;
-    assert(!service.Prepare(Horo::Editor::LocaleTag{"de-DE"}, &error));
-    assert(error.code == "editor.localization.catalog_missing");
-    assert(service.ActiveLocale().value == "en-US");
+    REQUIRE((!service.Prepare(Horo::Editor::LocaleTag{"de-DE"}, &error)));
+    REQUIRE((error.code == "editor.localization.catalog_missing"));
+    REQUIRE((service.ActiveLocale().value == "en-US"));
 }
-void MissingMessageDoesNotUseSourceFallback()
+
+TEST_CASE("Missing Message Does Not Use Source Fallback", "[unit][editor]")
 {
     Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
-    assert(service.RegisterCatalog(Catalog("en-US", "Settings")));
-    assert(service.Prepare(Horo::Editor::LocaleTag{"en-US"}));
-    assert(service.ActivatePrepared());
+    REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"en-US"})));
+    REQUIRE((service.ActivatePrepared()));
 
-    assert(service.Get("editor", "missing") == "[missing:editor:missing]");
+    REQUIRE((service.Get("editor", "missing") == "[missing:editor:missing]"));
 }
-void CatalogFileLoaderParsesResourceFormat()
+
+TEST_CASE("Catalog File Loader Parses Resource Format", "[unit][editor]")
 {
     const auto path = std::filesystem::temp_directory_path() / "horo-localization-test.json";
     {
@@ -72,14 +75,14 @@ void CatalogFileLoaderParsesResourceFormat()
 
     Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
     Horo::Editor::LocalizationError error;
-    assert(service.LoadCatalogFile(path, &error));
-    assert(service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error));
-    assert(service.ActivatePrepared(&error));
-    assert(service.Get("editor", "settings.title") == "Ayarlar");
+    REQUIRE((service.LoadCatalogFile(path, &error)));
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error)));
+    REQUIRE((service.ActivatePrepared(&error)));
+    REQUIRE((service.Get("editor", "settings.title") == "Ayarlar"));
     std::filesystem::remove(path);
 }
 
-void AssetLocalizationCatalogsContainRequiredEditorMessages()
+TEST_CASE("Asset Localization Catalogs Contain Required Editor Messages", "[unit][editor]")
 {
     constexpr std::array globalDockKeys{
         "workspace.global_dock.tab.assets",
@@ -123,7 +126,7 @@ void AssetLocalizationCatalogsContainRequiredEditorMessages()
     };
     const auto assertGlobalDockKeysExist = [&globalDockKeys](const Horo::Editor::LocalizationService &service) {
         for (const char *key : globalDockKeys)
-            assert(!service.Get("editor", key).starts_with("[missing:"));
+            REQUIRE((!service.Get("editor", key).starts_with("[missing:")));
     };
 
     const std::filesystem::path enPath = "assets/localization/editor/en-US.json";
@@ -133,38 +136,27 @@ void AssetLocalizationCatalogsContainRequiredEditorMessages()
 
     Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
     Horo::Editor::LocalizationError error;
-    assert(service.LoadCatalogFile(enPath, &error));
-    assert(service.LoadCatalogFile(trPath, &error));
+    REQUIRE((service.LoadCatalogFile(enPath, &error)));
+    REQUIRE((service.LoadCatalogFile(trPath, &error)));
 
-    assert(service.Prepare(Horo::Editor::LocaleTag{"en-US"}, &error));
-    assert(service.ActivatePrepared(&error));
-    assert(service.Get("editor", "settings.input.shortcut.click_to_record") == "Click to record");
-    assert(service.Get("editor", "settings.input.shortcut.press_keys") == "Press keys...");
-    assert(service.Get("editor", "workspace.content_browser.embedded") == "EMBEDDED");
-    assert(service.Get("editor", "workspace.content_browser.project_asset_dock") == "Project asset dock");
-    assert(service.Get("editor", "workspace.global_dock.tab.assets") == "Assets");
-    assert(service.Get("editor", "workspace.global_dock.tab.localization") == "L10n");
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"en-US"}, &error)));
+    REQUIRE((service.ActivatePrepared(&error)));
+    REQUIRE((service.Get("editor", "settings.input.shortcut.click_to_record") == "Click to record"));
+    REQUIRE((service.Get("editor", "settings.input.shortcut.press_keys") == "Press keys..."));
+    REQUIRE((service.Get("editor", "workspace.content_browser.embedded") == "EMBEDDED"));
+    REQUIRE((service.Get("editor", "workspace.content_browser.project_asset_dock") == "Project asset dock"));
+    REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Assets"));
+    REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
     assertGlobalDockKeysExist(service);
 
-    assert(service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error));
-    assert(service.ActivatePrepared(&error));
-    assert(service.Get("editor", "settings.input.shortcut.click_to_record") == "Kaydetmek için tıkla");
-    assert(service.Get("editor", "settings.input.shortcut.press_keys") == "Tuşlara basın...");
-    assert(service.Get("editor", "workspace.content_browser.embedded") == "YERLEŞİK");
-    assert(service.Get("editor", "workspace.content_browser.project_asset_dock") == "Proje varlık paneli");
-    assert(service.Get("editor", "workspace.global_dock.tab.assets") == "Varlıklar");
-    assert(service.Get("editor", "workspace.global_dock.tab.localization") == "L10n");
+    REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error)));
+    REQUIRE((service.ActivatePrepared(&error)));
+    REQUIRE((service.Get("editor", "settings.input.shortcut.click_to_record") == "Kaydetmek için tıkla"));
+    REQUIRE((service.Get("editor", "settings.input.shortcut.press_keys") == "Tuşlara basın..."));
+    REQUIRE((service.Get("editor", "workspace.content_browser.embedded") == "YERLEŞİK"));
+    REQUIRE((service.Get("editor", "workspace.content_browser.project_asset_dock") == "Proje varlık paneli"));
+    REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Varlıklar"));
+    REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
     assertGlobalDockKeysExist(service);
 }
 } // namespace
-
-int main()
-{
-    LocaleTagsNormalizeAndRejectInvalidInput();
-    LocaleSwitchUsesImmutablePreparedSnapshot();
-    FailedPreparationLeavesActiveLocaleUnchanged();
-    MissingMessageDoesNotUseSourceFallback();
-    CatalogFileLoaderParsesResourceFormat();
-    AssetLocalizationCatalogsContainRequiredEditorMessages();
-    return 0;
-}

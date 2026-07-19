@@ -1,9 +1,8 @@
 #pragma once
 
+#include "Horo/Application/ProjectCompatibility.h"
 #include "editor/project_model/RendererAvailability.h"
-#include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -14,14 +13,7 @@ namespace Horo::Editor
  * @brief Project identity and renderer startup preflight contracts.
  */
 
-/** @brief Startup-relevant subset of `.horo/project.json`. */
-struct ProjectMetadata
-{
-    std::uint32_t formatVersion = 0;
-    std::string projectId;
-    std::string name;
-    std::string renderBackend;
-};
+using ProjectMetadata = Application::ProjectMetadata;
 
 /** @brief Result category for project renderer startup preflight. */
 enum class ProjectOpenPreflightStatus
@@ -33,6 +25,7 @@ enum class ProjectOpenPreflightStatus
     RendererRepairRequired,
     RendererUpdateRequired,
     RendererCapabilityMismatch,
+    ProjectCompatibilityBlocked,
     ProjectMetadataUnreadable,
 };
 
@@ -44,13 +37,6 @@ struct ProjectOpenPreflight
     std::string projectName;
     std::string diagnostic;
 };
-
-/**
- * @brief Loads and validates startup-relevant project metadata.
- * @param projectRoot Root directory containing `.horo/project.json`.
- * @return Parsed metadata or a typed Foundation error. No backend fallback is applied.
- */
-[[nodiscard]] Result<ProjectMetadata> LoadProjectMetadata(const std::filesystem::path &projectRoot);
 
 /**
  * @brief Resolves whether a project may open in the current renderer composition.

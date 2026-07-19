@@ -1,3 +1,6 @@
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/EditorStatusBarModel.h"
 
 #include <algorithm>
@@ -13,11 +16,8 @@ using namespace Horo::Editor;
 
 void Expect(const bool condition, const char *message)
 {
-    if (!condition)
-    {
-        std::cerr << "FAILED: " << message << '\n';
-        std::exit(1);
-    }
+    INFO(message);
+    REQUIRE((condition));
 }
 
 EditorStatusItemDescriptor Descriptor(std::string id, const int priority = 0,
@@ -37,7 +37,7 @@ EditorStatusItemContent Content(std::string label, std::string value = {})
     return EditorStatusItemContent{.label = std::move(label), .value = std::move(value)};
 }
 
-void TestRegistrationValidation()
+TEST_CASE("Registration rejects invalid status item descriptors", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
 
@@ -62,7 +62,7 @@ void TestRegistrationValidation()
            "interactive contributions must name a typed action");
 }
 
-void TestContentUpdatesAreBoundedAndTransactional()
+TEST_CASE("Content updates are bounded and transactional", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("horo.status.nav"), Content("Nav", "idle")), "setup registration must pass");
@@ -76,7 +76,7 @@ void TestContentUpdatesAreBoundedAndTransactional()
            "unknown contribution updates must return a typed error");
 }
 
-void TestPanelVisibilityUsesFrameContext()
+TEST_CASE("Panel visibility uses the frame context", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     auto descriptor = Descriptor("vendor.profiler.status");
@@ -94,7 +94,7 @@ void TestPanelVisibilityUsesFrameContext()
            "panel-only status must appear while its panel is active");
 }
 
-void TestOrderingDoesNotDependOnRegistrationOrder()
+TEST_CASE("Status item ordering does not depend on registration order", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("vendor.z", 0, EditorStatusBarAlignment::Right, 20), Content("Z")),
@@ -114,7 +114,7 @@ void TestOrderingDoesNotDependOnRegistrationOrder()
            "alignment, explicit order, and stable ID must determine presentation order");
 }
 
-void TestWidthBudgetKeepsHigherPriorityItems()
+TEST_CASE("Width budget keeps higher priority status items", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("core.essential", 100, EditorStatusBarAlignment::Left, 0), Content("Unsaved")),
@@ -144,7 +144,7 @@ void TestWidthBudgetKeepsHigherPriorityItems()
            "lowest-priority contribution must be removed first");
 }
 
-void TestAdmissionIsStrictPriorityPrefix()
+TEST_CASE("Status item admission is a strict priority prefix", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("vendor.high", 100), Content("High")), "register high");
@@ -158,7 +158,7 @@ void TestAdmissionIsStrictPriorityPrefix()
     Expect(layout.hiddenCount == 2, "strict-prefix admission must report every omitted item");
 }
 
-void TestAdmissionTieBreakIgnoresPresentationAlignment()
+TEST_CASE("Admission tie breaks ignore presentation alignment", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("vendor.right", 50, EditorStatusBarAlignment::Right, 0), Content("Right")),
@@ -174,7 +174,7 @@ void TestAdmissionTieBreakIgnoresPresentationAlignment()
            "equal-priority admission must use explicit order before presentation alignment");
 }
 
-void TestRegistryCapacityAndStablePointers()
+TEST_CASE("Status registry capacity preserves stable pointers", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("vendor.stable"), Content("Stable")), "register stable item");
@@ -193,7 +193,7 @@ void TestRegistryCapacityAndStablePointers()
            "registry must reject contributions above its hard capacity");
 }
 
-void TestMaximumVisibleItemCount()
+TEST_CASE("Status layout enforces the maximum visible item count", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     for (std::size_t index = 0; index < 13; ++index)
@@ -214,7 +214,7 @@ void TestMaximumVisibleItemCount()
     Expect(layout.items.size() == 12 && layout.hiddenCount == 1, "layout must enforce the visible-item cap");
 }
 
-void TestOverflowReservationIncludesVisualGap()
+TEST_CASE("Overflow reservation includes the visual gap", "[unit][editor][status-bar]")
 {
     EditorStatusItemRegistry registry;
     Expect(registry.Register(Descriptor("vendor.high", 100), Content("High")), "register high");
@@ -238,19 +238,3 @@ void TestOverflowReservationIncludesVisualGap()
            "planner must reject an item that fits only when the overflow gap is omitted");
 }
 } // namespace
-
-int main()
-{
-    TestRegistrationValidation();
-    TestContentUpdatesAreBoundedAndTransactional();
-    TestPanelVisibilityUsesFrameContext();
-    TestOrderingDoesNotDependOnRegistrationOrder();
-    TestWidthBudgetKeepsHigherPriorityItems();
-    TestAdmissionIsStrictPriorityPrefix();
-    TestAdmissionTieBreakIgnoresPresentationAlignment();
-    TestRegistryCapacityAndStablePointers();
-    TestMaximumVisibleItemCount();
-    TestOverflowReservationIncludesVisualGap();
-    std::cout << "Editor status bar model tests passed\n";
-    return 0;
-}

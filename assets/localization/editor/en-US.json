@@ -49,6 +49,12 @@
     "project_creation.review.settings": {
       "text": "PROJECT SETTINGS"
     },
+    "project_creation.review.compatibility": {
+      "text": "Project compatibility"
+    },
+    "project_creation.review.project_id_generated": {
+      "text": "projectId generated"
+    },
     "project_creation.review.what_will_be_created": {
       "text": "WHAT WILL BE CREATED"
     },
@@ -145,6 +151,33 @@
     "project_loading.action.cancel": {
       "text": "Cancel"
     },
+    "project_loading.action.retry": {
+      "text": "Retry"
+    },
+    "project_loading.action.back": {
+      "text": "Back to Projects"
+    },
+    "project_loading.status.creating": { "text": "Creating project files..." },
+    "project_loading.status.inspecting": { "text": "Inspecting project..." },
+    "project_loading.status.cleaning": { "text": "Cleaning completed recovery data..." },
+    "project_loading.status.recovering": { "text": "Recovering interrupted project changes..." },
+    "project_loading.status.validating": { "text": "Validating project compatibility..." },
+    "project_loading.status.planning": { "text": "Planning project migration..." },
+    "project_loading.status.migrating": { "text": "Migrating project data..." },
+    "project_loading.status.updating": { "text": "Updating project version metadata..." },
+    "project_loading.status.rebuilding": { "text": "Rebuilding derived project state..." },
+    "project_loading.status.renderer": { "text": "Checking renderer availability..." },
+    "project_loading.status.workspace": { "text": "Preparing workspace session..." },
+    "project_loading.status.ready": { "text": "Project ready." },
+    "project_loading.status.renderer_restart": { "text": "Restarting with the project renderer..." },
+    "project_loading.status.failed": { "text": "Project could not be opened." },
+    "project_loading.status.processing": { "text": "Processing project..." },
+    "project_loading.error.busy": { "text": "The project is being modified by another operation. Retry when it finishes." },
+    "project_loading.error.recovery": { "text": "The interrupted project operation could not be recovered safely." },
+    "project_loading.error.renderer": { "text": "The project's renderer is unavailable or requires repair." },
+    "project_loading.error.migration": { "text": "Project migration failed before a workspace could be prepared." },
+    "project_loading.error.derived": { "text": "Derived project state could not be rebuilt safely." },
+    "project_loading.error.session": { "text": "The prepared workspace session became stale. Retry project loading." },
     "project_loading.status.cancelling": {
       "text": "Cancelling..."
     },
@@ -919,6 +952,14 @@
     "web_workspace.action.toggle_bottom_dock": {"text": "Toggle bottom dock"},
     "web_workspace.type.camera": {"text": "Camera"},
     "web_workspace.type.light": {"text": "Light"},
+    "welcome.project.compatibility.current": {"text": "Current"},
+    "welcome.project.compatibility.compatible": {"text": "Compatible"},
+    "welcome.project.compatibility.will_upgrade": {"text": "Will upgrade"},
+    "welcome.project.compatibility.recovery_required": {"text": "Recovery required"},
+    "welcome.project.compatibility.newer_horo_required": {"text": "Newer Horo required"},
+    "welcome.project.compatibility.cannot_upgrade": {"text": "Cannot upgrade"},
+    "welcome.project.compatibility.version_unavailable": {"text": "Version unavailable"},
+    "welcome.project.compatibility.refreshing": {"text": "Checking compatibility…"},
     "welcome.subtitle": {
       "text": "Game Engine"
     },

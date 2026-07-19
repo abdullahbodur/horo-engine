@@ -1,5 +1,6 @@
 #include "Horo/Editor/ProjectCreationService.h"
 
+#include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Foundation/DataBus.h"
 #include "editor/EditorServiceErrors.h"
 #include "Horo/Foundation/JobSystem.h"
@@ -9,6 +10,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <mutex>
 #include <sstream>
@@ -19,7 +21,6 @@
 
 #if defined(__APPLE__)
 #include <fcntl.h>
-#include <stdio.h>
 #include <unistd.h>
 #elif defined(__linux__)
 #include <fcntl.h>
@@ -259,9 +260,17 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string ProjectJson(const ProjectCreationRequest &request, const std::string &projectId) {
+            const Application::EngineReleaseVersion release = Application::CurrentEngineReleaseVersion();
+            const Application::ReleaseCompatibilityDecision *decision =
+                Application::BuiltInReleaseCompatibilityRegistry().Find(release);
+            if (decision == nullptr)
+                std::terminate();
+
             std::ostringstream json;
             json << "{\n"
-                    << "  \"formatVersion\": 1,\n"
+                    << "  \"horoVersion\": \"" << Application::FormatHoroVersion(release.value) << "\",\n"
+                    << "  \"persistentContract\": \""
+                    << Application::FormatPersistentContractHash(decision->persistentContract) << "\",\n"
                     << "  \"projectId\": \"" << EscapeJson(projectId) << "\",\n"
                     << "  \"name\": \"" << EscapeJson(request.projectName) << "\",\n"
                     << "  \"projectVersion\": \"" << EscapeJson(request.projectVersion) << "\",\n"
@@ -271,6 +280,8 @@ namespace Horo::Editor {
                     << "    \"physicsEnabled\": " << (request.physicsEnabled ? "true" : "false") << ",\n"
                     << "    \"targetFrameRate\": " << request.targetFrameRate << ",\n"
                     << "    \"defaultScene\": \"" << EscapeJson(request.defaultScene) << "\",\n"
+                    << "    \"assetCompression\": \"" << EscapeJson(request.assetCompression) << "\",\n"
+                    << "    \"textureCompression\": \"" << EscapeJson(request.textureCompression) << "\",\n"
                     << "    \"buildProfile\": \"" << EscapeJson(request.buildProfile) << "\",\n"
                     << "    \"requiredToolchain\": {\n"
                     << "      \"targetPlatform\": \"" << EscapeJson(request.targetPlatform) << "\",\n"

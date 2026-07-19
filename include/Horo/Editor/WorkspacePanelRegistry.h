@@ -1,11 +1,8 @@
 #pragma once
 
-#include "Horo/Editor/EditorGuiContext.h"
-
 #include <array>
 #include <functional>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "Horo/Editor/IWorkspacePanel.h"

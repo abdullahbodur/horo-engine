@@ -1,13 +1,16 @@
 #pragma once
 
+#include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Time.h"
 
-#include <cstdint>
+#include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace Horo
 {
@@ -35,6 +38,71 @@ namespace Horo
         [[nodiscard]] virtual bool Exists(const std::filesystem::path& path) const = 0;
     };
 
+    /** @brief Move-only operating-system-held exclusive file lock. */
+    class ExclusiveFileLock
+    {
+    public:
+        struct State;
+
+        ExclusiveFileLock() noexcept;
+        ~ExclusiveFileLock();
+        ExclusiveFileLock(ExclusiveFileLock&&) noexcept;
+        ExclusiveFileLock& operator=(ExclusiveFileLock&&) noexcept;
+        ExclusiveFileLock(const ExclusiveFileLock&) = delete;
+        ExclusiveFileLock& operator=(const ExclusiveFileLock&) = delete;
+
+        /** @brief Reports whether this object currently owns the native lock. */
+        [[nodiscard]] explicit operator bool() const noexcept;
+
+    private:
+        friend class NativeDurableFileSystem;
+        explicit ExclusiveFileLock(std::unique_ptr<State> state) noexcept;
+        std::unique_ptr<State> state_;
+    };
+
+    /** @brief Cross-platform durable filesystem primitives for user-data transactions. */
+    class DurableFileSystem
+    {
+    public:
+        virtual ~DurableFileSystem() = default;
+
+        /** @brief Immediately acquires an exclusive OS lock. @param path Lock-file path. @param ownerMetadata Diagnostic-only owner text. @return Move-only lock or typed busy/I/O failure. */
+        [[nodiscard]] virtual Result<ExclusiveFileLock> TryAcquireExclusive(
+            const std::filesystem::path& path, std::string_view ownerMetadata) = 0;
+        /** @brief Queries filesystem capacity. @param path Path on the target filesystem. @return Currently available bytes or typed I/O failure. */
+        [[nodiscard]] virtual Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path) const = 0;
+        /** @brief Writes and flushes a complete file. @param path Destination path. @param bytes Complete contents. @return Success after file and directory durability, or typed I/O failure. */
+        [[nodiscard]] virtual Result<void> WriteDurable(
+            const std::filesystem::path& path, std::span<const std::byte> bytes) = 0;
+        /** @brief Copies and flushes a file. @param source Existing source file. @param destination Destination on the transaction filesystem. @return Success after destination durability, or typed I/O failure. */
+        [[nodiscard]] virtual Result<void> CopyDurable(
+            const std::filesystem::path& source, const std::filesystem::path& destination) = 0;
+        /** @brief Atomically replaces a destination. @param prepared Same-filesystem prepared file. @param destination Published destination. @return Success after directory durability, or typed I/O failure. */
+        [[nodiscard]] virtual Result<void> AtomicReplace(
+            const std::filesystem::path& prepared, const std::filesystem::path& destination) = 0;
+        /** @brief Durably removes a file. @param path File to remove. @return Success after directory durability, or typed I/O failure. */
+        [[nodiscard]] virtual Result<void> RemoveDurable(const std::filesystem::path& path) = 0;
+        /** @brief Synchronizes directory metadata. @param path Directory to synchronize. @return Success or typed I/O failure. */
+        [[nodiscard]] virtual Result<void> SyncDirectory(const std::filesystem::path& path) = 0;
+    };
+
+    /** @brief Native Windows/macOS/Linux durable filesystem implementation. */
+    class NativeDurableFileSystem final : public DurableFileSystem
+    {
+    public:
+        [[nodiscard]] Result<ExclusiveFileLock> TryAcquireExclusive(
+            const std::filesystem::path& path, std::string_view ownerMetadata) override;
+        [[nodiscard]] Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path) const override;
+        [[nodiscard]] Result<void> WriteDurable(
+            const std::filesystem::path& path, std::span<const std::byte> bytes) override;
+        [[nodiscard]] Result<void> CopyDurable(
+            const std::filesystem::path& source, const std::filesystem::path& destination) override;
+        [[nodiscard]] Result<void> AtomicReplace(
+            const std::filesystem::path& prepared, const std::filesystem::path& destination) override;
+        [[nodiscard]] Result<void> RemoveDurable(const std::filesystem::path& path) override;
+        [[nodiscard]] Result<void> SyncDirectory(const std::filesystem::path& path) override;
+    };
+
     /** @brief Provides monotonic time for scheduling without exposing wall-clock time. */
     class Clock
     {
@@ -43,6 +111,22 @@ namespace Horo
 
         /** @brief Gets the elapsed monotonic time from an implementation-defined origin. @return Monotonic elapsed time. */
         [[nodiscard]] virtual Duration MonotonicNow() const = 0;
+    };
+
+    /** @brief Wall-clock source used only for durable records and user-facing timestamps. */
+    class WallClock
+    {
+    public:
+        virtual ~WallClock() = default;
+        /** @brief Returns the current UTC system-clock time. */
+        [[nodiscard]] virtual std::chrono::system_clock::time_point UtcNow() const = 0;
+    };
+
+    /** @brief Production wall clock backed by std::chrono::system_clock. */
+    class SystemWallClock final : public WallClock
+    {
+    public:
+        [[nodiscard]] std::chrono::system_clock::time_point UtcNow() const override;
     };
 
     /** @brief Identifies the current host process without exposing native handles. */

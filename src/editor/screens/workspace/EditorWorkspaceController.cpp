@@ -881,15 +881,7 @@ namespace Horo::Editor
                       definition.ErrorValue().message.c_str());
             return;
         }
-        Result<std::unique_ptr<Runtime::RuntimeScene>> candidate =
-            m_runtimeScene.Prepare(definition.Value());
-        if (candidate.HasError())
-        {
-            LOG_ERROR("editor.runtime_scene", "Scene preparation failed: %s",
-                      candidate.ErrorValue().message.c_str());
-            return;
-        }
-        const Result<void> queued = m_runtimeScene.QueueActivation(std::move(candidate).Value());
+        const Result<void> queued = m_runtimeScene.QueuePreparation(definition.Value());
         if (queued.HasError())
         {
             m_deferredRuntimeSnapshot = std::move(snapshot);

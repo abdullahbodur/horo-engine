@@ -7,9 +7,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <filesystem>
 #include <format>
 #include <mutex>
@@ -22,7 +20,6 @@
 
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
-#include <sys/utsname.h>
 #elif defined(__linux__)
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
@@ -118,7 +115,7 @@ namespace Horo::Log
 #endif
 
             return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z", tm.tm_year + 1900, tm.tm_mon + 1,
-                               tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<long long>(ms.count()));
+                               tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, ms.count());
         }
 
         /** @brief JSON-escapes a string value, including control characters outside \\n \\r \\t. */

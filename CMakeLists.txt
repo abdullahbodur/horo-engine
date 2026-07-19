@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-set(HORO_ENGINE_VERSION "0.0.1")
+set(HORO_ENGINE_VERSION "0.1.0")
 
 project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
 
@@ -32,6 +32,9 @@ endif()
 
 include(Dependencies)
 include(GenerateBuildInfo)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(GenerateProjectMigrations)
+include(GenerateProjectCompatibility)
 
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")

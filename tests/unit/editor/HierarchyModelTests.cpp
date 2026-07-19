@@ -1,6 +1,8 @@
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/HierarchyModel.h"
 
-#include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string_view>
@@ -10,14 +12,11 @@ namespace
 {
 void Expect(const bool condition, const std::string_view message)
 {
-    if (!condition)
-    {
-        std::cerr << "FAILED: " << message << '\n';
-        std::exit(1);
-    }
+    INFO(message);
+    REQUIRE((condition));
 }
 
-void TestMockHierarchyMatchesEditorReference()
+TEST_CASE("Mock Hierarchy Matches Editor Reference", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model = CreateMockHierarchyModel();
@@ -31,7 +30,7 @@ void TestMockHierarchyMatchesEditorReference()
     Expect(model.Roots()[2]->children[0]->type == HierarchyNodeType::Camera, "Cameras should contain a camera");
 }
 
-void TestVisibleRowsRespectExpansionAndSearchAncestors()
+TEST_CASE("Visible Rows Respect Expansion And Search Ancestors", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model = CreateMockHierarchyModel();
@@ -52,7 +51,7 @@ void TestVisibleRowsRespectExpansionAndSearchAncestors()
            "search should preserve hierarchy context");
 }
 
-void TestRenameValidatesAndUpdatesNode()
+TEST_CASE("Rename Validates And Updates Node", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model = CreateMockHierarchyModel();
@@ -65,7 +64,7 @@ void TestRenameValidatesAndUpdatesNode()
     Expect(model.Find(floorId)->name == "Player Floor", "failed rename should preserve the prior name");
 }
 
-void TestDeleteRemovesWholeSubtreeAndSelection()
+TEST_CASE("Delete Removes Whole Subtree And Selection", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model;
@@ -80,7 +79,7 @@ void TestDeleteRemovesWholeSubtreeAndSelection()
     Expect(!model.SelectedId().has_value(), "deleting the selected subtree should clear selection");
 }
 
-void TestReparentPreservesSubtreeAndRejectsCycles()
+TEST_CASE("Reparent Preserves Subtree And Rejects Cycles", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model;
@@ -103,7 +102,7 @@ void TestReparentPreservesSubtreeAndRejectsCycles()
     Expect(model.ParentId(grandchild) == child, "root move should still preserve descendants");
 }
 
-void TestReplaceProjectsStableHierarchyAndPreservesPresentationState()
+TEST_CASE("Replace Projects Stable Hierarchy And Preserves Presentation State", "[unit][editor]")
 {
     using namespace Horo::Editor;
     HierarchyModel model;
@@ -131,14 +130,3 @@ void TestReplaceProjectsStableHierarchyAndPreservesPresentationState()
     Expect(!model.SelectedId().has_value(), "replacement should clear stale presentation selection");
 }
 } // namespace
-
-int main()
-{
-    TestMockHierarchyMatchesEditorReference();
-    TestVisibleRowsRespectExpansionAndSearchAncestors();
-    TestRenameValidatesAndUpdatesNode();
-    TestDeleteRemovesWholeSubtreeAndSelection();
-    TestReparentPreservesSubtreeAndRejectsCycles();
-    TestReplaceProjectsStableHierarchyAndPreservesPresentationState();
-    return 0;
-}

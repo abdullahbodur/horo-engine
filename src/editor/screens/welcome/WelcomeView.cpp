@@ -5,6 +5,7 @@
 #include "Horo/Editor/GuiScreenHost.h"
 
 #include <cfloat>
+#include <algorithm>
 
 namespace Horo::Editor
 {
@@ -17,6 +18,26 @@ namespace Horo::Editor
         constexpr float kNewsTitleFontSize = 15.0F;
         constexpr float kNewsBodyFontSize = 14.0F;
         constexpr float kSectionLabelFontSize = 14.0F;
+
+        [[nodiscard]] const char* CompatibilityLabelKey(const RecentProjectCompatibilityProjection& projection)
+        {
+            if (projection.inspectionState == RecentProjectInspectionState::Refreshing)
+                return "welcome.project.compatibility.refreshing";
+            using enum Application::ProjectCompatibilityStatus;
+            switch (projection.status)
+            {
+            case Current: return "welcome.project.compatibility.current";
+            case CompatibleReleaseLine: return "welcome.project.compatibility.compatible";
+            case AutomaticMigrationRequired: return "welcome.project.compatibility.will_upgrade";
+            case RecoveryRequired: return "welcome.project.compatibility.recovery_required";
+            case FutureVersion: return "welcome.project.compatibility.newer_horo_required";
+            case MigrationPathMissing:
+            case RequiredProviderUnavailable: return "welcome.project.compatibility.cannot_upgrade";
+            case Corrupt:
+            case Inaccessible: return "welcome.project.compatibility.version_unavailable";
+            }
+            return "welcome.project.compatibility.version_unavailable";
+        }
 
         /// @brief Draws a single recent project card.
         /// @return true if the card was clicked this frame.
@@ -52,16 +73,29 @@ namespace Horo::Editor
                 }
                 ImGui::EndGroup();
 
+                std::string versionText;
+                std::string statusText = project.lastOpenedLabel;
+                if (project.compatibility.has_value())
+                {
+                    versionText = project.compatibility->projectVersion.has_value()
+                                      ? "Horo " + Application::FormatHoroVersion(
+                                                       project.compatibility->projectVersion->value)
+                                      : ctx.localization.Get("editor", "welcome.project.compatibility.version_unavailable");
+                    statusText = ctx.localization.Get("editor", CompatibilityLabelKey(*project.compatibility));
+                }
                 float metaWidth = 0.0F;
                 {
                     ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kProjectMetaFontSize, FontPx::SansCompact);
-                    metaWidth = ImGui::CalcTextSize(project.lastOpenedLabel.c_str()).x;
+                    metaWidth = std::max(ImGui::CalcTextSize(versionText.c_str()).x,
+                                         ImGui::CalcTextSize(statusText.c_str()).x);
                 }
                 ImGui::SameLine(ImGui::GetWindowWidth() - metaWidth - 14.0F);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0F);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (versionText.empty() ? 8.0F : 1.0F));
                 {
                     ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kProjectMetaFontSize, FontPx::SansCompact);
-                    ImGui::TextDisabled("%s", project.lastOpenedLabel.c_str());
+                    if (!versionText.empty())
+                        ImGui::TextDisabled("%s", versionText.c_str());
+                    ImGui::TextDisabled("%s", statusText.c_str());
                 }
 
                 // Detect click over the card's bounding rect.

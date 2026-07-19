@@ -5,6 +5,7 @@ namespace Horo::Editor {
         const ErrorDomainId SettingsDomain{"horo.editor.settings"};
         const ErrorDomainId ProjectCreationDomain{"horo.editor.project_creation"};
         const ErrorDomainId ProjectMetadataDomain{"horo.editor.project_metadata"};
+        const ErrorDomainId ProjectOpenDomain{"horo.editor.project_open"};
         const ErrorDomainId ModalDomain{"horo.editor.modal_host"};
     } // namespace
 
@@ -151,6 +152,50 @@ namespace Horo::Editor {
             .userActionable = true,
         };
     } // namespace ProjectMetadataErrors
+
+    namespace ProjectOpenErrors {
+        const ErrorCodeDescriptor Busy{.domain = ProjectOpenDomain, .code = ErrorCode{"project.open.busy"},
+            .defaultSeverity = ErrorSeverity::Error, .summary = "Another project-open operation is active.",
+            .remediationHint = "Wait for it to finish or cancel it before retrying.", .retryable = true,
+            .userActionable = true};
+        const ErrorCodeDescriptor NotFound{.domain = ProjectOpenDomain, .code = ErrorCode{"project.open.not_found"},
+            .defaultSeverity = ErrorSeverity::Error, .summary = "Project-open operation was not found.",
+            .remediationHint = "Start a new project-open operation.", .retryable = false, .userActionable = false};
+        const ErrorCodeDescriptor CompatibilityBlocked{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.compatibility_blocked"}, .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Project compatibility prevents opening.",
+            .remediationHint = "Use a compatible Horo release or restore the required migration provider.",
+            .retryable = false, .userActionable = true};
+        const ErrorCodeDescriptor MigrationPlanMissing{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.migration_plan_missing"}, .defaultSeverity = ErrorSeverity::Error,
+            .summary = "No deterministic migration path is available.",
+            .remediationHint = "Install a release that supports this project version.", .retryable = false,
+            .userActionable = true};
+        const ErrorCodeDescriptor MetadataUpdateFailed{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.metadata_update_failed"}, .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Project version metadata could not be updated.",
+            .remediationHint = "Check project permissions and retry.", .retryable = true, .userActionable = true};
+        const ErrorCodeDescriptor DerivedStateFailed{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.derived_state_failed"}, .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Derived project state could not be rebuilt.",
+            .remediationHint = "Inspect the diagnostic and retry project opening.", .retryable = true,
+            .userActionable = true};
+        const ErrorCodeDescriptor Cancelled{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.cancelled"}, .defaultSeverity = ErrorSeverity::Warning,
+            .summary = "Project opening was cancelled.", .remediationHint = "Retry when ready.", .retryable = true,
+            .userActionable = true};
+        const ErrorCodeDescriptor SessionStale{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.session_stale"}, .defaultSeverity = ErrorSeverity::Error,
+            .summary = "The prepared project session is stale or already consumed.",
+            .remediationHint = "Return to project loading and prepare a new session.", .retryable = true,
+            .userActionable = true};
+        const ErrorCodeDescriptor WorkerCapacityInsufficient{.domain = ProjectOpenDomain,
+            .code = ErrorCode{"project.open.worker_capacity_insufficient"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Project migration requires additional structured-concurrency capacity.",
+            .remediationHint = "Retry with at least two project worker threads.", .retryable = true,
+            .userActionable = false};
+    } // namespace ProjectOpenErrors
 
     namespace ModalErrors {
         const ErrorCodeDescriptor Busy{

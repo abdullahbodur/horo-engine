@@ -1,64 +1,53 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Foundation/Handles.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Time.h"
 
-#include <cassert>
 #include <chrono>
 
 namespace
 {
-
 struct TextureTag;
 struct MeshTag;
 
-void ProjectPathNormalizesPortableSeparators()
+TEST_CASE("Project Path Normalizes Portable Separators", "[unit][foundation]")
 {
     const auto result = Horo::ProjectPath::Parse("Assets\\Textures/../UI/icon.png");
-    assert(result.HasValue());
-    assert(result.Value().String() == "Assets/UI/icon.png");
+    REQUIRE((result.HasValue()));
+    REQUIRE((result.Value().String() == "Assets/UI/icon.png"));
 }
 
-void ProjectPathRejectsRootEscape()
+TEST_CASE("Project Path Rejects Root Escape", "[unit][foundation]")
 {
     const auto result = Horo::ProjectPath::Parse("../../outside.txt");
-    assert(result.HasError());
+    REQUIRE((result.HasError()));
 }
 
-void TypedHandlesRejectDifferentResourceTags()
+TEST_CASE("Typed Handles Reject Different Resource Tags", "[unit][foundation]")
 {
     constexpr Horo::Handle<TextureTag> texture{.index = 4, .generation = 9};
     constexpr Horo::Handle<MeshTag> mesh{.index = 4, .generation = 9};
-    assert(texture.IsValid());
-    assert(mesh.IsValid());
+    REQUIRE((texture.IsValid()));
+    REQUIRE((mesh.IsValid()));
     static_assert(!std::is_same_v<decltype(texture), decltype(mesh)>);
 }
 
-void DefaultHandleIsInvalid()
+TEST_CASE("Default Handle Is Invalid", "[unit][foundation]")
 {
     constexpr Horo::Handle<TextureTag> handle{};
-    assert(!handle.IsValid());
+    REQUIRE((!handle.IsValid()));
 }
 
-void MonotonicDurationUsesSteadyClockDuration()
+TEST_CASE("Monotonic Duration Uses Steady Clock Duration", "[unit][foundation]")
 {
     constexpr Horo::Duration duration = Horo::Duration::FromMilliseconds(25);
-    assert(duration.ToMilliseconds() == 25);
+    REQUIRE((duration.ToMilliseconds() == 25));
     constexpr Horo::Duration sum = duration + Horo::Duration::FromMilliseconds(5);
-    assert(sum.ToMilliseconds() == 30);
+    REQUIRE((sum.ToMilliseconds() == 30));
     constexpr Horo::Duration precise = Horo::Duration::FromNanoseconds(16'666'667);
-    assert(precise.ToNanoseconds() == 16'666'667);
-    assert((sum - duration).ToMilliseconds() == 5);
-    assert(precise > Horo::Duration{});
+    REQUIRE((precise.ToNanoseconds() == 16'666'667));
+    REQUIRE(((sum - duration).ToMilliseconds() == 5));
+    REQUIRE((precise > Horo::Duration{}));
 }
-
 } // namespace
-
-int main()
-{
-    ProjectPathNormalizesPortableSeparators();
-    ProjectPathRejectsRootEscape();
-    TypedHandlesRejectDifferentResourceTags();
-    DefaultHandleIsInvalid();
-    MonotonicDurationUsesSteadyClockDuration();
-    return 0;
-}

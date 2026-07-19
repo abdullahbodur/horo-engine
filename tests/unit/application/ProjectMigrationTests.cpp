@@ -1,0 +1,499 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include "Horo/Application/ProjectMigrationCatalog.h"
+
+#include <algorithm>
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+namespace
+{
+    const Horo::ErrorCodeDescriptor TestFailure{
+        .domain = Horo::ErrorDomainId("test.project_migration"),
+        .code = Horo::ErrorCode("test.project_migration.failed"),
+        .defaultSeverity = Horo::ErrorSeverity::Error,
+        .summary = "Migration fixture failed.",
+        .remediationHint = "Inspect the fixture.",
+    };
+
+    [[nodiscard]] Horo::Application::ContractBaselineVersion Version(const char* text)
+    {
+        const auto parsed = Horo::Application::ParseHoroVersion(text);
+        REQUIRE((parsed.HasValue()));
+        return Horo::Application::ContractBaselineVersion{parsed.Value()};
+    }
+
+    [[nodiscard]] Horo::Application::PersistentContractHash Contract(const std::uint8_t marker)
+    {
+        Horo::Application::PersistentContractHash hash;
+        hash.bytes.fill(marker);
+        return hash;
+    }
+
+    [[nodiscard]] std::vector<std::byte> Bytes(const std::string& text)
+    {
+        std::vector<std::byte> bytes(text.size());
+        std::ranges::transform(text, bytes.begin(), [](const char value) { return static_cast<std::byte>(value); });
+        return bytes;
+    }
+
+    [[nodiscard]] std::string Text(const std::span<const std::byte> bytes)
+    {
+        if (bytes.empty())
+            return {};
+        return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    }
+
+    class AppendStage final : public Horo::Application::IProjectMigrationDocumentStage
+    {
+    public:
+        AppendStage(std::string id, std::string suffix) : id_(std::move(id)), suffix_(std::move(suffix))
+        {
+        }
+
+        [[nodiscard]] Horo::Application::MigrationStageDescriptor Describe() const override
+        {
+            return {.id = {id_}, .readFamilies = {"text"}, .writeFamilies = {"text"}};
+        }
+
+        [[nodiscard]] Horo::Result<Horo::Application::MigrationDocumentChange> Execute(
+            const Horo::Application::ProjectDocumentView& source, const Horo::Application::MigrationStageContext&,
+            const Horo::CancellationToken& cancellation) const override
+        {
+            if (cancellation.IsCancellationRequested())
+                return Horo::Result<Horo::Application::MigrationDocumentChange>::Failure(
+                    Horo::MakeError(TestFailure, "cancelled"));
+            std::string output = Text(source.bytes) + suffix_;
+            return Horo::Result<Horo::Application::MigrationDocumentChange>::Success(
+                {.document = source.handle, .replacement = Bytes(output)});
+        }
+
+    private:
+        std::string id_;
+        std::string suffix_;
+    };
+
+    class ObserveMergedStage final : public Horo::Application::IProjectMigrationStage
+    {
+    public:
+        ObserveMergedStage(std::string id, std::string expected, bool* observed)
+            : id_(std::move(id)), expected_(std::move(expected)), observed_(observed)
+        {
+        }
+
+        [[nodiscard]] Horo::Application::MigrationStageDescriptor Describe() const override
+        {
+            return {.id = {id_}, .readFamilies = {"text"}};
+        }
+
+        [[nodiscard]] Horo::Result<void> Execute(Horo::Application::ProjectMigrationContext& context,
+                                                 const Horo::CancellationToken&) const override
+        {
+            for (const auto& entry : context.ListDocuments(
+                     Horo::Application::MigrationDocumentQuery::Kind(Horo::Application::MigrationDocumentKind::Other)))
+            {
+                const auto document = context.ReadDocument(entry.handle);
+                if (document.HasError() || !Text(document.Value().bytes).ends_with(expected_))
+                    return Horo::Result<void>::Failure(Horo::MakeError(TestFailure, "merged output missing"));
+            }
+            *observed_ = true;
+            return Horo::Result<void>::Success();
+        }
+
+    private:
+        std::string id_;
+        std::string expected_;
+        bool* observed_;
+    };
+
+    class SuffixValidator final : public Horo::Application::IProjectMigrationValidator
+    {
+    public:
+        SuffixValidator(std::string id, std::string expected, bool* validated = nullptr)
+            : id_(std::move(id)), expected_(std::move(expected)), validated_(validated)
+        {
+        }
+
+        [[nodiscard]] Horo::Application::MigrationStageDescriptor Describe() const override
+        {
+            return {.id = {id_}, .readFamilies = {"text"}};
+        }
+
+        [[nodiscard]] Horo::Result<void> Validate(const Horo::Application::ProjectMigrationContext& context,
+                                                  const Horo::CancellationToken&) const override
+        {
+            for (const auto& entry : context.ListDocuments(
+                     Horo::Application::MigrationDocumentQuery::Kind(Horo::Application::MigrationDocumentKind::Other)))
+            {
+                const auto document = context.ReadDocument(entry.handle);
+                if (document.HasError() || !Text(document.Value().bytes).ends_with(expected_))
+                    return Horo::Result<void>::Failure(Horo::MakeError(TestFailure, "validation failed"));
+            }
+            if (validated_)
+                *validated_ = true;
+            return Horo::Result<void>::Success();
+        }
+
+    private:
+        std::string id_;
+        std::string expected_;
+        bool* validated_;
+    };
+
+    [[nodiscard]] std::shared_ptr<const Horo::Application::ProjectMigrationPipeline> Pipeline(const std::string& id,
+        const std::string& append,
+        const std::string& expected,
+        bool* observed = nullptr,
+        bool* validated = nullptr)
+    {
+        auto builder = Horo::Application::ProjectMigrationPipelineBuilder::Begin({id});
+        static_cast<void>(builder.AddForEach(
+            Horo::Application::MigrationDocumentQuery::Kind(Horo::Application::MigrationDocumentKind::Other),
+            std::make_shared<AppendStage>(id + ".append", append)));
+        if (observed)
+            static_cast<void>(builder.
+                AddThen(std::make_shared<ObserveMergedStage>(id + ".observe", expected, observed)));
+        static_cast<void>(builder.
+            AddValidator(std::make_shared<SuffixValidator>(id + ".validate", expected, validated)));
+        auto built = std::move(builder).Build();
+        REQUIRE((built.HasValue()));
+        return built.Value();
+    }
+
+    [[nodiscard]] Horo::Application::ProjectMigrationDefinition Definition(
+        const std::string& id, const Horo::Application::ProjectMigrationDefinitionKind kind, const char* from,
+        const char* to, const std::uint8_t sourceContract, const std::uint8_t targetContract,
+        std::shared_ptr<const Horo::Application::ProjectMigrationPipeline> pipeline)
+    {
+        return {
+            .id = {id},
+            .kind = kind,
+            .from = Version(from),
+            .to = Version(to),
+            .sourceContract = Contract(sourceContract),
+            .targetContract = Contract(targetContract),
+            .pipeline = std::move(pipeline)
+        };
+    }
+
+    class TemporaryProject
+    {
+    public:
+        TemporaryProject()
+        {
+            root = std::filesystem::temp_directory_path() / ("horo-migration-test-" + std::to_string(++sequence));
+            std::filesystem::create_directories(root / ".horo/local");
+            std::filesystem::create_directories(root / "assets");
+            Write(".horo/project.json", "{\"horoVersion\":\"0.0.1\"}");
+            Write(".horo/local/ignored.txt", "ignored");
+            Write("assets/a.txt", "alpha");
+            Write("assets/b.txt", "beta");
+        }
+
+        ~TemporaryProject()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(root, ignored);
+        }
+
+        void Write(const std::filesystem::path& relative, const std::string& value)
+        {
+            std::filesystem::create_directories((root / relative).parent_path());
+            std::ofstream stream(root / relative, std::ios::binary);
+            stream << value;
+        }
+
+        [[nodiscard]] std::string Read(const std::filesystem::path& relative) const
+        {
+            std::ifstream stream(root / relative, std::ios::binary);
+            return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+        }
+
+        std::filesystem::path root;
+        inline static std::uint64_t sequence{};
+    };
+
+    TEST_CASE("Pipeline Requires Terminal Validation", "[unit][application]")
+    {
+        auto builder = Horo::Application::ProjectMigrationPipelineBuilder::Begin({"test.invalid"});
+        static_cast<void>(builder.AddForEach(Horo::Application::MigrationDocumentQuery::Any(),
+                                             std::make_shared<AppendStage>("test.append", "A")));
+        const auto built = std::move(builder).Build();
+        REQUIRE((built.HasError()));
+        REQUIRE((built.ErrorValue().code.Value() == "project.migration.pipeline_invalid"));
+    }
+
+    TEST_CASE("Registry Plans Sequential And Declared Checkpoint Paths", "[unit][application]")
+    {
+        const auto first = Definition("test.c1_c2", Horo::Application::ProjectMigrationDefinitionKind::Sequential,
+                                      "0.0.1",
+                                      "0.1.0", 1, 2, Pipeline("test.c1_c2", "A", "A"));
+        const auto second = Definition("test.c2_c3", Horo::Application::ProjectMigrationDefinitionKind::Sequential,
+                                       "0.1.0",
+                                       "0.2.0", 2, 3, Pipeline("test.c2_c3", "B", "B"));
+        const auto checkpoint = Definition("test.c1_c3", Horo::Application::ProjectMigrationDefinitionKind::Checkpoint,
+                                           "0.0.1", "0.2.0", 1, 3, Pipeline("test.c1_c3", "AB", "AB"));
+        const std::vector definitions{first, second, checkpoint};
+        const auto registry = Horo::Application::ProjectMigrationRegistry::Create(definitions);
+        REQUIRE((registry.HasValue()));
+        const std::vector sequentialDefinitions{first, second};
+        const auto sequentialRegistry = Horo::Application::ProjectMigrationRegistry::Create(sequentialDefinitions);
+        REQUIRE((sequentialRegistry.HasValue()));
+
+        Horo::Application::ProjectMigrationSupportDescriptor support{
+            .target = Version("0.2.0"),
+            .minimumMigratable = Version("0.0.1"),
+            .targetContract = Contract(3),
+            .targetValidator = std::make_shared<SuffixValidator>("test.target", "AB")
+        };
+        const auto sequential = sequentialRegistry.Value().Plan(Version("0.0.1"), Contract(1), support);
+        REQUIRE((sequential.HasValue()));
+        REQUIRE((sequential.Value().definitions.size() == 2));
+        REQUIRE((sequential.Value().definitions[0].id.value == "test.c1_c2"));
+
+        const auto undeclared = registry.Value().Plan(Version("0.0.1"), Contract(1), support);
+        REQUIRE((undeclared.HasError()));
+        REQUIRE((undeclared.ErrorValue().code.Value() == "project.migration.catalog_invalid"));
+        support.checkpoints.push_back({.id = {"test.c1_c3"}, .source = Version("0.0.1"), .target = Version("0.2.0")});
+        const auto direct = registry.Value().Plan(Version("0.0.1"), Contract(1), support);
+        REQUIRE((direct.HasValue()));
+        REQUIRE((direct.Value().definitions.size() == 1));
+        REQUIRE((direct.Value().definitions[0].kind == Horo::Application::ProjectMigrationDefinitionKind::Checkpoint));
+    }
+
+    TEST_CASE("Planner Rejects Ambiguous Sequential Next Hop And Missing Provider", "[unit][application]")
+    {
+        auto first = Definition("test.first", Horo::Application::ProjectMigrationDefinitionKind::Sequential, "0.0.1",
+                                "0.1.0", 1, 2, Pipeline("test.first", "A", "A"));
+        auto alternative = Definition("test.alternative", Horo::Application::ProjectMigrationDefinitionKind::Sequential,
+                                      "0.0.1", "0.1.1", 1, 4, Pipeline("test.alternative", "X", "X"));
+        auto final = Definition("test.final", Horo::Application::ProjectMigrationDefinitionKind::Sequential, "0.1.0",
+                                "0.2.0", 2, 3, Pipeline("test.final", "B", "B"));
+        const std::vector definitions{first, alternative, final};
+        const auto registry = Horo::Application::ProjectMigrationRegistry::Create(definitions);
+        REQUIRE((registry.HasValue()));
+        Horo::Application::ProjectMigrationSupportDescriptor support{
+            .target = Version("0.2.0"),
+            .minimumMigratable = Version("0.0.1"),
+            .targetContract = Contract(3),
+            .targetValidator = std::make_shared<SuffixValidator>("test.target", "AB")
+        };
+        const auto ambiguous = registry.Value().Plan(Version("0.0.1"), Contract(1), support);
+        REQUIRE((ambiguous.HasError()));
+        REQUIRE((ambiguous.ErrorValue().code.Value() == "project.migration.ambiguous"));
+
+        first.requiredProviders.push_back({"plugin.test"});
+        const std::vector providerDefinitions{first, final};
+        const auto providerRegistry = Horo::Application::ProjectMigrationRegistry::Create(providerDefinitions);
+        REQUIRE((providerRegistry.HasValue()));
+        const auto unavailable = providerRegistry.Value().Plan(Version("0.0.1"), Contract(1), support);
+        REQUIRE((unavailable.HasError()));
+        REQUIRE((unavailable.ErrorValue().code.Value() == "project.migration.provider_missing"));
+    }
+
+    TEST_CASE("Verified Dry Run Uses Merged Hop State And Preserves Authoritative Tree", "[unit][application]")
+    {
+        bool observedMerged = false;
+        bool firstValidated = false;
+        bool secondValidated = false;
+        bool targetValidated = false;
+        const auto first = Definition("test.first", Horo::Application::ProjectMigrationDefinitionKind::Sequential,
+                                      "0.0.1",
+                                      "0.1.0", 1, 2,
+                                      Pipeline("test.first", "A", "A", &observedMerged, &firstValidated));
+        const auto second =
+            Definition("test.second", Horo::Application::ProjectMigrationDefinitionKind::Sequential, "0.1.0", "0.2.0",
+                       2, 3,
+                       Pipeline("test.second", "B", "AB", nullptr, &secondValidated));
+        Horo::Application::ProjectMigrationPlan plan{
+            .source = Version("0.0.1"),
+            .target = Version("0.2.0"),
+            .definitions = {first, second},
+            .targetValidator = std::make_shared<SuffixValidator>("test.target.validate", "AB", &targetValidated)
+        };
+        TemporaryProject project;
+        const std::string beforeA = project.Read("assets/a.txt");
+        const std::string beforeB = project.Read("assets/b.txt");
+        const std::string ignored = project.Read(".horo/local/ignored.txt");
+        Horo::JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
+        const auto result =
+            Horo::Application::ProjectMigrationExecutor::VerifiedDryRun(project.root, plan, jobs,
+                                                                        {.maxConcurrency = 2});
+        REQUIRE((result.HasValue()));
+        REQUIRE((observedMerged));
+        REQUIRE((firstValidated));
+        REQUIRE((secondValidated));
+        REQUIRE((targetValidated));
+        REQUIRE((result.Value().changedFiles == std::vector<std::string>{"assets/a.txt", "assets/b.txt"}));
+        REQUIRE((project.Read("assets/a.txt") == beforeA));
+        REQUIRE((project.Read("assets/b.txt") == beforeB));
+        REQUIRE((project.Read(".horo/local/ignored.txt") == ignored));
+        for (const auto& entry : std::filesystem::directory_iterator(project.root))
+            REQUIRE((!entry.path().filename().string().starts_with(".horo-migration-dry-run-")));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Verified Dry Run Honors Parent Cancellation Without Mutation", "[unit][application]")
+    {
+        const auto definition = Definition("test.cancel", Horo::Application::ProjectMigrationDefinitionKind::Sequential,
+                                           "0.0.1", "0.1.0", 1, 2, Pipeline("test.cancel", "A", "A"));
+        Horo::Application::ProjectMigrationPlan plan{
+            .source = Version("0.0.1"), .target = Version("0.1.0"), .definitions = {definition}
+        };
+        TemporaryProject project;
+        const std::string before = project.Read("assets/a.txt");
+        Horo::CancellationSource cancellation;
+        cancellation.RequestCancellation();
+        Horo::JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 4});
+        const auto result =
+            Horo::Application::ProjectMigrationExecutor::VerifiedDryRun(project.root, plan, jobs, {},
+                                                                        cancellation.Token());
+        REQUIRE((result.HasError()));
+        REQUIRE((result.ErrorValue().code.Value() == "project.migration.cancelled"));
+        REQUIRE((project.Read("assets/a.txt") == before));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Built In Catalog Contains Compression Defaults Migration", "[unit][application]")
+    {
+        const auto catalog = Horo::Application::BuildBuiltInProjectMigrationCatalog();
+        REQUIRE((catalog.HasValue()));
+        REQUIRE((catalog.Value().size() == 1));
+        const auto& definition = catalog.Value().front();
+        REQUIRE((definition.id.value == "core.project_settings.compression_defaults"));
+        REQUIRE((Horo::Application::FormatHoroVersion(definition.from.value) == "0.0.1"));
+        REQUIRE((Horo::Application::FormatHoroVersion(definition.to.value) == "0.1.0"));
+
+        const auto support = Horo::Application::BuildBuiltInProjectMigrationSupportDescriptor();
+        REQUIRE((support.HasValue()));
+        REQUIRE((Horo::Application::FormatHoroVersion(support.Value().target.value) == "0.1.0"));
+        REQUIRE((Horo::Application::FormatHoroVersion(support.Value().minimumMigratable.value) == "0.0.1"));
+        REQUIRE((support.Value().targetValidator != nullptr));
+    }
+
+    TEST_CASE("Production Compression Migration Preserves Unknown Json Semantics", "[unit][application]")
+    {
+        const auto catalog = Horo::Application::BuildBuiltInProjectMigrationCatalog();
+        REQUIRE((catalog.HasValue() && catalog.Value().size() == 1));
+        TemporaryProject project;
+        project.Write(
+            ".horo/project.json",
+            R"({"horoVersion":"0.0.1","persistentContract":"sha256:5ef87e96e24c0a3a5e44f4dee182dbd3bfb5402e08e07aaf3d64d4a3ff24ae6d","projectId":"migration-fixture","name":"Fixture","projectVersion":"0.2.0","createdAt":"2026-07-19T00:00:00Z","settings":{"renderBackend":"opengl","unknown":{"array":[1,true,null],"label":"kept"}},"unknownRoot":{"enabled":true}})");
+
+        Horo::Application::ProjectMigrationPlan plan{
+            .source = catalog.Value().front().from,
+            .target = catalog.Value().front().to,
+            .definitions = {catalog.Value().front()},
+            .targetValidator = {}
+        };
+        Horo::JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
+        auto prepared = Horo::Application::ProjectMigrationExecutor::Prepare(
+            project.root, project.root.parent_path() / (project.root.filename().string() + "-candidate"), plan, jobs);
+        REQUIRE((prepared.HasValue()));
+        const auto root = prepared.Value().ReadCandidateDocument(".horo/project.json");
+        REQUIRE((root.HasValue()));
+        const std::string migrated = Text(root.Value());
+        REQUIRE((migrated.find("\"assetCompression\": \"lz4\"") != std::string::npos));
+        REQUIRE((migrated.find("\"textureCompression\": \"bc7\"") != std::string::npos));
+        REQUIRE((migrated.find("\"unknownRoot\"") != std::string::npos));
+        REQUIRE((migrated.find("\"array\"") != std::string::npos));
+        REQUIRE((project.Read(".horo/project.json").find("assetCompression") == std::string::npos));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Production Compression Migration Validates Supported And Invalid Values", "[unit][application]")
+    {
+        const auto catalog = Horo::Application::BuildBuiltInProjectMigrationCatalog();
+        const auto support = Horo::Application::BuildBuiltInProjectMigrationSupportDescriptor();
+        REQUIRE((catalog.HasValue() && catalog.Value().size() == 1 && support.HasValue()));
+        Horo::Application::ProjectMigrationPlan plan{
+            .source = catalog.Value().front().from,
+            .target = catalog.Value().front().to,
+            .definitions = {catalog.Value().front()}
+        };
+        Horo::JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 16});
+
+        constexpr std::array assetValues{"lz4", "none", "zstd"};
+        constexpr std::array textureValues{"bc7", "bc5", "astc", "none"};
+        for (const char* asset : assetValues)
+            for (const char* texture : textureValues)
+            {
+                TemporaryProject project;
+                project.Write(".horo/project.json",
+                              std::string{
+                                  "{\"projectId\":\"supported\",\"settings\":{\"assetCompression\":\""
+                              } + asset +
+                              "\",\"textureCompression\":\"" + texture + "\"}}\n");
+                auto prepared = Horo::Application::ProjectMigrationExecutor::Prepare(
+                    project.root, project.root.parent_path() / (project.root.filename().string() + "-candidate"), plan,
+                    jobs);
+                REQUIRE((prepared.HasValue()));
+                const auto root = prepared.Value().ReadCandidateDocument(".horo/project.json");
+                REQUIRE((root.HasValue()));
+                const std::string migrated = Text(root.Value());
+                REQUIRE((migrated.find(std::string{"\"assetCompression\": \""} + asset + "\"") != std::string::npos));
+                REQUIRE(
+                    (migrated.find(std::string{"\"textureCompression\": \""} + texture + "\"") != std::string::npos));
+            }
+
+        constexpr std::array invalidSettings{
+            "{\"projectId\":\"invalid\",\"settings\":{\"assetCompression\":\"\",\"textureCompression\":\"bc7\"}}",
+            "{\"projectId\":\"invalid\",\"settings\":{\"assetCompression\":17,\"textureCompression\":\"bc7\"}}",
+            "{\"projectId\":\"invalid\",\"settings\":{\"assetCompression\":\"brotli\",\"textureCompression\":\"bc7\"}}"
+        };
+        for (const char* invalid : invalidSettings)
+        {
+            TemporaryProject project;
+            project.Write(".horo/project.json", invalid);
+            auto prepared = Horo::Application::ProjectMigrationExecutor::Prepare(
+                project.root, project.root.parent_path() / (project.root.filename().string() + "-candidate"), plan,
+                jobs);
+            REQUIRE((prepared.HasError()));
+            REQUIRE(
+                (prepared.ErrorValue().message.find("core.project_settings.compression_defaults") != std::string::npos))
+            ;
+            REQUIRE((prepared.ErrorValue().message.find("validate_compression_postconditions") != std::string::npos));
+        }
+
+        TemporaryProject finalProject;
+        finalProject.Write(".horo/project.json",
+                           "{\"projectId\":\"target-attribution\",\"settings\":{\"assetCompression\":\"lz4\","
+                           "\"textureCompression\":\"bc7\"}}\n");
+        auto prepared = Horo::Application::ProjectMigrationExecutor::Prepare(
+            finalProject.root, finalProject.root.parent_path() / (finalProject.root.filename().string() + "-candidate"),
+            plan, jobs);
+        REQUIRE((prepared.HasValue()));
+        auto candidate = std::move(prepared).Value();
+        const auto finalValidation =
+            Horo::Application::ProjectMigrationExecutor::Finalize(candidate, {}, support.Value().targetValidator);
+        REQUIRE((finalValidation.HasError()));
+        REQUIRE((finalValidation.ErrorValue().message.find("horo.project.target_contract") != std::string::npos));
+        REQUIRE((finalValidation.ErrorValue().message.find("validate_0_1_0_target_contract") != std::string::npos));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Production Compression Verified Dry Run Preserves Authoritative Bytes", "[unit][application]")
+    {
+        const auto catalog = Horo::Application::BuildBuiltInProjectMigrationCatalog();
+        REQUIRE((catalog.HasValue() && catalog.Value().size() == 1));
+        Horo::Application::ProjectMigrationPlan plan{
+            .source = catalog.Value().front().from,
+            .target = catalog.Value().front().to,
+            .definitions = {catalog.Value().front()},
+            // Transaction-owned root/history overlay is intentionally absent from this definition-level dry run.
+            .targetValidator = {}
+        };
+        TemporaryProject project;
+        project.Write(".horo/project.json", "{\"projectId\":\"dry-run\",\"settings\":{\"renderBackend\":\"opengl\"},"
+                      "\"unknown\":[1,true,null]}\n");
+        const std::string before = project.Read(".horo/project.json");
+        Horo::JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
+        const auto dryRun = Horo::Application::ProjectMigrationExecutor::VerifiedDryRun(project.root, plan, jobs);
+        REQUIRE((dryRun.HasValue()));
+        REQUIRE((dryRun.Value().changedFiles == std::vector<std::string>{".horo/project.json"}));
+        REQUIRE((project.Read(".horo/project.json") == before));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+} // namespace

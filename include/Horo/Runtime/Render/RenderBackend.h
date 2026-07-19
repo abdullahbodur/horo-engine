@@ -9,9 +9,6 @@
 #include "Horo/Runtime/Render/RenderScene.h"
 
 #include <cmath>
-#include <compare>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>

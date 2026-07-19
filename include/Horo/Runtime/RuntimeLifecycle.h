@@ -7,7 +7,6 @@
 
 #include "Horo/Runtime/FrameScheduler.h"
 
-#include <cstdint>
 #include <memory>
 #include <vector>
 

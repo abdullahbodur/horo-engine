@@ -1,6 +1,7 @@
 #include "Horo/Runtime/Scene/RuntimeSceneDefinition.h"
 #include "RuntimeSceneErrors.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <string>
@@ -68,30 +69,34 @@ namespace
 
 /** @copydoc RuntimeSceneDefinition::RuntimeSceneDefinition */
 RuntimeSceneDefinition::RuntimeSceneDefinition(SceneDefinitionId id, SceneDefinitionRevision revision,
-                                               std::vector<RuntimeEntityDefinition> entities) noexcept
-    : id_(id), revision_(revision), entities_(std::move(entities))
+                                               std::vector<RuntimeEntityDefinition> entities,
+                                               std::vector<SceneAssetDependency> assetDependencies) noexcept
+    : id_(id), revision_(revision), entities_(std::move(entities)), assetDependencies_(std::move(assetDependencies))
 {
 }
 
-/** @copydoc RuntimeSceneDefinition::SchemaVersion */
-std::uint32_t RuntimeSceneDefinition::SchemaVersion() const noexcept
-{
-    return 1;
-}
 /** @copydoc RuntimeSceneDefinition::Id */
 SceneDefinitionId RuntimeSceneDefinition::Id() const noexcept
 {
     return id_;
 }
+
 /** @copydoc RuntimeSceneDefinition::Revision */
 SceneDefinitionRevision RuntimeSceneDefinition::Revision() const noexcept
 {
     return revision_;
 }
+
 /** @copydoc RuntimeSceneDefinition::Entities */
 std::span<const RuntimeEntityDefinition> RuntimeSceneDefinition::Entities() const noexcept
 {
     return entities_;
+}
+
+/** @copydoc RuntimeSceneDefinition::AssetDependencies */
+std::span<const SceneAssetDependency> RuntimeSceneDefinition::AssetDependencies() const noexcept
+{
+    return assetDependencies_;
 }
 
 /** @copydoc SceneDefinitionBuilder::SceneDefinitionBuilder */
@@ -104,6 +109,25 @@ SceneDefinitionBuilder::SceneDefinitionBuilder(SceneDefinitionId id, SceneDefini
 void SceneDefinitionBuilder::Add(RuntimeEntityDefinition entity)
 {
     entities_.push_back(std::move(entity));
+}
+
+/** @copydoc SceneDefinitionBuilder::RequireAsset */
+Result<void> SceneDefinitionBuilder::RequireAsset(SceneAssetDependency dependency)
+{
+    if (!dependency.id.IsValid() || dependency.expectedType.Value().empty())
+        return Failure(SceneErrors::InvalidAssetDependency,
+                       "Runtime scene asset dependency must have a non-zero identity and valid type.");
+    const auto found = std::ranges::find(assetDependencies_, dependency.id,
+                                         [](const SceneAssetDependency &value) { return value.id; });
+    if (found == assetDependencies_.end())
+    {
+        assetDependencies_.push_back(std::move(dependency));
+        return Result<void>::Success();
+    }
+    if (found->expectedType != dependency.expectedType)
+        return Failure(SceneErrors::ConflictingAssetDependency,
+                       "Runtime scene requires one asset identity with conflicting types.");
+    return Result<void>::Success();
 }
 
 /** @copydoc ValidateRuntimeEntityDefinition */
@@ -157,7 +181,7 @@ Result<RuntimeSceneDefinition> SceneDefinitionBuilder::Build() &&
         Visiting,
         Complete
     };
-    std::vector<Visit> visits(entities_.size(), Visit::Unvisited);
+    std::vector visits(entities_.size(), Visit::Unvisited);
     std::function<bool(std::size_t)> visit = [&](std::size_t index) {
         if (visits[index] == Visit::Complete)
             return true;
@@ -174,6 +198,8 @@ Result<RuntimeSceneDefinition> SceneDefinitionBuilder::Build() &&
             return Result<RuntimeSceneDefinition>::Failure(
                 MakeError(SceneErrors::HierarchyCycle, "Runtime scene hierarchy contains a cycle."));
 
-    return Result<RuntimeSceneDefinition>::Success(RuntimeSceneDefinition{id_, revision_, std::move(entities_)});
+    std::ranges::sort(assetDependencies_, {}, [](const SceneAssetDependency &dependency) { return dependency.id; });
+    return Result<RuntimeSceneDefinition>::Success(
+        RuntimeSceneDefinition{id_, revision_, std::move(entities_), std::move(assetDependencies_)});
 }
 } // namespace Horo::Runtime

@@ -1,19 +1,19 @@
-#include "editor/screens/workspace/EditorWorkspaceController.h"
+#include <catch2/catch_test_macros.hpp>
 
-#include <cassert>
+#include "editor/screens/workspace/EditorWorkspaceController.h"
 
 namespace
 {
 using namespace Horo;
 using namespace Horo::Editor;
-namespace Math = Horo::Math;
+namespace Math = Math;
 
 class TestWorkspaceController final
 {
   public:
     TestWorkspaceController() : controller_("test-project", runtimeScene_)
     {
-        assert(runtimeScene_.Startup(cancellation_.Token()).HasValue());
+        REQUIRE((runtimeScene_.Startup(cancellation_.Token()).HasValue()));
         PumpLifecycleCommit();
     }
 
@@ -28,7 +28,10 @@ class TestWorkspaceController final
         return controller_.ViewModel();
     }
 
-    [[nodiscard]] EditorDataBus &DataBus() noexcept { return controller_.DataBus(); }
+    [[nodiscard]] EditorDataBus &DataBus() noexcept
+    {
+        return controller_.DataBus();
+    }
 
     [[nodiscard]] ViewportRevision CurrentViewportRevision() const noexcept
     {
@@ -44,9 +47,7 @@ class TestWorkspaceController final
     void PumpLifecycleCommit()
     {
         const Runtime::FrameContext context{1, {}, 0.0, 0, {}, false, cancellation_.Token()};
-        assert(runtimeScene_
-                   .OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context)
-                   .HasValue());
+        REQUIRE((runtimeScene_.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context).HasValue()));
         controller_.SynchronizeRuntimeScenePreview();
     }
 
@@ -55,7 +56,7 @@ class TestWorkspaceController final
     EditorWorkspaceController controller_;
 };
 
-void MovingAnActivePanelAcrossAreasUpdatesItsRuntimePlacement()
+TEST_CASE("Moving An Active Panel Across Areas Updates Its Runtime Placement", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -67,16 +68,16 @@ void MovingAnActivePanelAcrossAreasUpdatesItsRuntimePlacement()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.activeLeftPanelId.empty());
-    assert(viewModel.activeBottomPanelId == "horo.hierarchy");
-    assert(viewModel.panelDockAreas.at("horo.hierarchy") == WorkspaceDockArea::Bottom);
+    REQUIRE((viewModel.activeLeftPanelId.empty()));
+    REQUIRE((viewModel.activeBottomPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.panelDockAreas.at("horo.hierarchy") == WorkspaceDockArea::Bottom));
     const auto slot = viewModel.activityBarLayout.FindSlot("horo.hierarchy");
-    assert(slot.has_value());
-    assert((*slot == ActivityBarSlot{ActivityBarRail::Left, 2, 1}));
-    assert(viewModel.activityBarLayout.ItemAt(ActivityBarRail::Left, 2, 0) == "horo.content_browser");
+    REQUIRE((slot.has_value()));
+    REQUIRE((*slot == ActivityBarSlot{ActivityBarRail::Left, 2, 1}));
+    REQUIRE((viewModel.activityBarLayout.ItemAt(ActivityBarRail::Left, 2, 0) == "horo.content_browser"));
 }
 
-void ReplacingATargetAreaPreservesTheDisplacedPanelsPlacement()
+TEST_CASE("Replacing A Target Area Preserves The Displaced Panels Placement", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -87,11 +88,11 @@ void ReplacingATargetAreaPreservesTheDisplacedPanelsPlacement()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.activeBottomPanelId == "horo.hierarchy");
-    assert(viewModel.panelDockAreas.at("horo.content_browser") == WorkspaceDockArea::Bottom);
+    REQUIRE((viewModel.activeBottomPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.panelDockAreas.at("horo.content_browser") == WorkspaceDockArea::Bottom));
 }
 
-void DroppingIntoBottomRightSplitsTheFullBottomDock()
+TEST_CASE("Dropping Into Bottom Right Splits The Full Bottom Dock", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -104,15 +105,14 @@ void DroppingIntoBottomRightSplitsTheFullBottomDock()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.bottomDockMode == BottomDockMode::Split);
-    assert(viewModel.activeBottomPanelId.empty());
-    assert(viewModel.activeBottomLeftPanelId == "horo.content_browser");
-    assert(viewModel.activeBottomRightPanelId == "horo.inspector");
-    assert((viewModel.activityBarLayout.FindSlot("horo.inspector") ==
-            ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
+    REQUIRE((viewModel.bottomDockMode == BottomDockMode::Split));
+    REQUIRE((viewModel.activeBottomPanelId.empty()));
+    REQUIRE((viewModel.activeBottomLeftPanelId == "horo.content_browser"));
+    REQUIRE((viewModel.activeBottomRightPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
 }
 
-void ClickingASplitPanelExpandsItToTheFullBottomDock()
+TEST_CASE("Clicking A Split Panel Expands It To The Full Bottom Dock", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -131,13 +131,13 @@ void ClickingASplitPanelExpandsItToTheFullBottomDock()
     controller.ProcessCommand(clickCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.bottomDockMode == BottomDockMode::Full);
-    assert(viewModel.activeBottomPanelId == "horo.inspector");
-    assert(viewModel.activeBottomLeftPanelId.empty());
-    assert(viewModel.activeBottomRightPanelId.empty());
+    REQUIRE((viewModel.bottomDockMode == BottomDockMode::Full));
+    REQUIRE((viewModel.activeBottomPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activeBottomLeftPanelId.empty()));
+    REQUIRE((viewModel.activeBottomRightPanelId.empty()));
 }
 
-void DroppingALeftRailIconIntoBottomRightMovesItToTheRightRail()
+TEST_CASE("Dropping A Left Rail Icon Into Bottom Right Moves It To The Right Rail", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -156,22 +156,21 @@ void DroppingALeftRailIconIntoBottomRightMovesItToTheRightRail()
     controller.ProcessCommand(splitCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.bottomDockMode == BottomDockMode::Split);
-    assert(viewModel.activeBottomLeftPanelId == "horo.inspector");
-    assert(viewModel.activeBottomRightPanelId == "horo.hierarchy");
-    assert((viewModel.activityBarLayout.FindSlot("horo.hierarchy") ==
-            ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
+    REQUIRE((viewModel.bottomDockMode == BottomDockMode::Split));
+    REQUIRE((viewModel.activeBottomLeftPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activeBottomRightPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
 }
 
-void PlacesTheViewportInTheDocumentTopRailByDefault()
+TEST_CASE("Places The Viewport In The Document Top Rail By Default", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
-    assert((controller.ViewModel().activityBarLayout.FindSlot("horo.viewport") ==
-            ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
+    REQUIRE((controller.ViewModel().activityBarLayout.FindSlot("horo.viewport") ==
+             ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
 }
 
-void DroppingIntoTheLowerHalfSplitsTheLeftDock()
+TEST_CASE("Dropping Into The Lower Half Splits The Left Dock", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -184,16 +183,15 @@ void DroppingIntoTheLowerHalfSplitsTheLeftDock()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Split);
-    assert(viewModel.activeLeftPanelId.empty());
-    assert(viewModel.activeLeftTopPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftBottomPanelId == "horo.inspector");
-    assert(viewModel.activeRightPanelId.empty());
-    assert((viewModel.activityBarLayout.FindSlot("horo.inspector") ==
-            ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Split));
+    REQUIRE((viewModel.activeLeftPanelId.empty()));
+    REQUIRE((viewModel.activeLeftTopPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftBottomPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activeRightPanelId.empty()));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
 }
 
-void DroppingIntoTheLowerHalfSplitsTheRightDock()
+TEST_CASE("Dropping Into The Lower Half Splits The Right Dock", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -206,16 +204,15 @@ void DroppingIntoTheLowerHalfSplitsTheRightDock()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.rightDockMode == SideDockMode::Split);
-    assert(viewModel.activeRightPanelId.empty());
-    assert(viewModel.activeRightTopPanelId == "horo.inspector");
-    assert(viewModel.activeRightBottomPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftPanelId.empty());
-    assert((viewModel.activityBarLayout.FindSlot("horo.hierarchy") ==
-            ActivityBarSlot{ActivityBarRail::Right, 1, 0}));
+    REQUIRE((viewModel.rightDockMode == SideDockMode::Split));
+    REQUIRE((viewModel.activeRightPanelId.empty()));
+    REQUIRE((viewModel.activeRightTopPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activeRightBottomPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftPanelId.empty()));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Right, 1, 0}));
 }
 
-void ClickingASplitSidePanelExpandsItToTheFullDock()
+TEST_CASE("Clicking A Split Side Panel Expands It To The Full Dock", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -234,13 +231,13 @@ void ClickingASplitSidePanelExpandsItToTheFullDock()
     controller.ProcessCommand(clickCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Full);
-    assert(viewModel.activeLeftPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftTopPanelId.empty());
-    assert(viewModel.activeLeftBottomPanelId.empty());
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Full));
+    REQUIRE((viewModel.activeLeftPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftTopPanelId.empty()));
+    REQUIRE((viewModel.activeLeftBottomPanelId.empty()));
 }
 
-void MovingOneHalfAwayExpandsTheRemainingSidePanel()
+TEST_CASE("Moving One Half Away Expands The Remaining Side Panel", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -260,13 +257,13 @@ void MovingOneHalfAwayExpandsTheRemainingSidePanel()
     controller.ProcessCommand(moveCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Full);
-    assert(viewModel.activeLeftPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftTopPanelId.empty());
-    assert(viewModel.activeLeftBottomPanelId.empty());
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Full));
+    REQUIRE((viewModel.activeLeftPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftTopPanelId.empty()));
+    REQUIRE((viewModel.activeLeftBottomPanelId.empty()));
 }
 
-void ReorderingAnActiveIconMovesItsPanelAndActivatesASourceFallback()
+TEST_CASE("Reordering An Active Icon Moves Its Panel And Activates A Source Fallback", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -297,17 +294,16 @@ void ReorderingAnActiveIconMovesItsPanelAndActivatesASourceFallback()
     controller.ProcessCommand(moveActiveIcon);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Split);
-    assert(viewModel.activeLeftTopPanelId == "horo.content_browser");
-    assert(viewModel.activeLeftBottomPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftBottomPanelId != "horo.inspector");
-    assert(viewModel.panelDockAreas.at("horo.hierarchy") == WorkspaceDockArea::Left);
-    assert(viewModel.panelDockAreas.at("horo.content_browser") == WorkspaceDockArea::Left);
-    assert((viewModel.activityBarLayout.FindSlot("horo.hierarchy") ==
-            ActivityBarSlot{ActivityBarRail::Left, 1, 1}));
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Split));
+    REQUIRE((viewModel.activeLeftTopPanelId == "horo.content_browser"));
+    REQUIRE((viewModel.activeLeftBottomPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftBottomPanelId != "horo.inspector"));
+    REQUIRE((viewModel.panelDockAreas.at("horo.hierarchy") == WorkspaceDockArea::Left));
+    REQUIRE((viewModel.panelDockAreas.at("horo.content_browser") == WorkspaceDockArea::Left));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Left, 1, 1}));
 }
 
-void ReorderingTheOnlyBottomIconDoesNotLeaveAHalfEmptySplit()
+TEST_CASE("Reordering The Only Bottom Icon Does Not Leave A Half Empty Split", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -318,13 +314,13 @@ void ReorderingTheOnlyBottomIconDoesNotLeaveAHalfEmptySplit()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.bottomDockMode == BottomDockMode::Full);
-    assert(viewModel.activeBottomPanelId == "horo.content_browser");
-    assert(viewModel.activeBottomLeftPanelId.empty());
-    assert(viewModel.activeBottomRightPanelId.empty());
+    REQUIRE((viewModel.bottomDockMode == BottomDockMode::Full));
+    REQUIRE((viewModel.activeBottomPanelId == "horo.content_browser"));
+    REQUIRE((viewModel.activeBottomLeftPanelId.empty()));
+    REQUIRE((viewModel.activeBottomRightPanelId.empty()));
 }
 
-void DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon()
+TEST_CASE("Dropping On A Side Merge Target Expands The Panel Without Moving Its Icon", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -343,14 +339,12 @@ void DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon()
     controller.ProcessCommand(mergeCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Full);
-    assert(viewModel.activeLeftPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftTopPanelId.empty());
-    assert(viewModel.activeLeftBottomPanelId.empty());
-    assert((viewModel.activityBarLayout.FindSlot("horo.hierarchy") ==
-            ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
-    assert((viewModel.activityBarLayout.FindSlot("horo.inspector") ==
-            ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Full));
+    REQUIRE((viewModel.activeLeftPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftTopPanelId.empty()));
+    REQUIRE((viewModel.activeLeftBottomPanelId.empty()));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
 
     EditorWorkspaceViewCommandData replaceFullCommand;
     replaceFullCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
@@ -358,13 +352,12 @@ void DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon()
     replaceFullCommand.stringPayload = "horo.inspector";
     controller.ProcessCommand(replaceFullCommand);
 
-    assert(viewModel.leftDockMode == SideDockMode::Full);
-    assert(viewModel.activeLeftPanelId == "horo.inspector");
-    assert((viewModel.activityBarLayout.FindSlot("horo.inspector") ==
-            ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Full));
+    REQUIRE((viewModel.activeLeftPanelId == "horo.inspector"));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
 }
 
-void DroppingOnTheBottomMergeTargetPreservesItsActivityGroup()
+TEST_CASE("Dropping On The Bottom Merge Target Preserves Its Activity Group", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -383,17 +376,16 @@ void DroppingOnTheBottomMergeTargetPreservesItsActivityGroup()
     controller.ProcessCommand(mergeCommand);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.bottomDockMode == BottomDockMode::Full);
-    assert(viewModel.activeBottomPanelId == "horo.content_browser");
-    assert(viewModel.activeBottomLeftPanelId.empty());
-    assert(viewModel.activeBottomRightPanelId.empty());
-    assert((viewModel.activityBarLayout.FindSlot("horo.content_browser") ==
-            ActivityBarSlot{ActivityBarRail::Left, 2, 0}));
-    assert((viewModel.activityBarLayout.FindSlot("horo.inspector") ==
-            ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
+    REQUIRE((viewModel.bottomDockMode == BottomDockMode::Full));
+    REQUIRE((viewModel.activeBottomPanelId == "horo.content_browser"));
+    REQUIRE((viewModel.activeBottomLeftPanelId.empty()));
+    REQUIRE((viewModel.activeBottomRightPanelId.empty()));
+    REQUIRE(
+        (viewModel.activityBarLayout.FindSlot("horo.content_browser") == ActivityBarSlot{ActivityBarRail::Left, 2, 0}));
+    REQUIRE((viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
 }
 
-void ReorderingAnActiveBottomPanelToTheLeftDoesNotRenderItTwice()
+TEST_CASE("Reordering An Active Bottom Panel To The Left Does Not Render It Twice", "[unit][editor]")
 {
     TestWorkspaceController controller;
 
@@ -404,74 +396,74 @@ void ReorderingAnActiveBottomPanelToTheLeftDoesNotRenderItTwice()
     controller.ProcessCommand(command);
 
     const auto &viewModel = controller.ViewModel();
-    assert(viewModel.leftDockMode == SideDockMode::Split);
-    assert(viewModel.activeLeftTopPanelId == "horo.hierarchy");
-    assert(viewModel.activeLeftBottomPanelId == "horo.content_browser");
-    assert(viewModel.activeBottomPanelId.empty());
-    assert(viewModel.activeBottomLeftPanelId.empty());
-    assert(viewModel.activeBottomRightPanelId.empty());
+    REQUIRE((viewModel.leftDockMode == SideDockMode::Split));
+    REQUIRE((viewModel.activeLeftTopPanelId == "horo.hierarchy"));
+    REQUIRE((viewModel.activeLeftBottomPanelId == "horo.content_browser"));
+    REQUIRE((viewModel.activeBottomPanelId.empty()));
+    REQUIRE((viewModel.activeBottomLeftPanelId.empty()));
+    REQUIRE((viewModel.activeBottomRightPanelId.empty()));
 }
 
-void SceneCommandsPublishCommittedEventsAndDriveUndoRedoState()
+TEST_CASE("Scene Commands Publish Committed Events And Drive Undo Redo State", "[unit][editor]")
 {
     TestWorkspaceController controller;
     std::vector<SceneDocumentChangedEvent> events;
     auto subscription = controller.DataBus().Subscribe<SceneDocumentChangedEvent>(
         [&events](const SceneDocumentChangedEvent &event) { events.push_back(event); });
-    assert(controller.ViewModel().objects.size() == 1);
-    assert(!controller.ViewModel().isDirty);
-    assert(!controller.ViewModel().canUndo);
+    REQUIRE((controller.ViewModel().objects.size() == 1));
+    REQUIRE((!controller.ViewModel().isDirty));
+    REQUIRE((!controller.ViewModel().canUndo));
 
     EditorWorkspaceViewCommandData add;
     add.command = EditorWorkspaceViewCommand::CreatePrimitive;
-    add.primitivePayload = Horo::Runtime::PrimitiveId{"primitive.mesh.box"};
+    add.primitivePayload = Runtime::PrimitiveId{"primitive.mesh.box"};
     controller.ProcessCommand(add);
-    assert(controller.ViewModel().objects.size() == 2);
-    assert(controller.ViewModel().isDirty);
-    assert(controller.ViewModel().canUndo);
-    assert(events.size() == 1 && events.back().kind == DocumentChangeKind::Created);
+    REQUIRE((controller.ViewModel().objects.size() == 2));
+    REQUIRE((controller.ViewModel().isDirty));
+    REQUIRE((controller.ViewModel().canUndo));
+    REQUIRE((events.size() == 1 && events.back().kind == DocumentChangeKind::Created));
 
     EditorWorkspaceViewCommandData undo;
     undo.command = EditorWorkspaceViewCommand::UndoScene;
     controller.ProcessCommand(undo);
-    assert(controller.ViewModel().objects.size() == 1);
-    assert(!controller.ViewModel().isDirty);
-    assert(controller.ViewModel().canRedo);
-    assert(events.size() == 2 && events.back().kind == DocumentChangeKind::Undone);
+    REQUIRE((controller.ViewModel().objects.size() == 1));
+    REQUIRE((!controller.ViewModel().isDirty));
+    REQUIRE((controller.ViewModel().canRedo));
+    REQUIRE((events.size() == 2 && events.back().kind == DocumentChangeKind::Undone));
 
     EditorWorkspaceViewCommandData redo;
     redo.command = EditorWorkspaceViewCommand::RedoScene;
     controller.ProcessCommand(redo);
-    assert(controller.ViewModel().objects.size() == 2);
-    assert(controller.ViewModel().isDirty);
-    assert(events.size() == 3 && events.back().kind == DocumentChangeKind::Redone);
+    REQUIRE((controller.ViewModel().objects.size() == 2));
+    REQUIRE((controller.ViewModel().isDirty));
+    REQUIRE((events.size() == 3 && events.back().kind == DocumentChangeKind::Redone));
 }
 
-void CatalogCreationSelectsTheResultAndHonorsTheRequestedParent()
+TEST_CASE("Catalog Creation Selects The Result And Honors The Requested Parent", "[unit][editor]")
 {
     TestWorkspaceController controller;
     EditorWorkspaceViewCommandData createRoot;
     createRoot.command = EditorWorkspaceViewCommand::CreatePrimitive;
-    createRoot.primitivePayload = Horo::Runtime::PrimitiveId{"primitive.object.empty"};
+    createRoot.primitivePayload = Runtime::PrimitiveId{"primitive.object.empty"};
     controller.ProcessCommand(createRoot);
     const SceneObject root = controller.ViewModel().objects.back();
-    assert(root.kind == SceneObjectKind::Empty);
-    assert(!root.parent.has_value());
-    assert(controller.ViewModel().primarySelection == root.id);
+    REQUIRE((root.kind == SceneObjectKind::Empty));
+    REQUIRE((!root.parent.has_value()));
+    REQUIRE((controller.ViewModel().primarySelection == root.id));
 
     EditorWorkspaceViewCommandData createCamera;
     createCamera.command = EditorWorkspaceViewCommand::CreatePrimitive;
-    createCamera.primitivePayload = Horo::Runtime::PrimitiveId{"primitive.object.camera"};
+    createCamera.primitivePayload = Runtime::PrimitiveId{"primitive.object.camera"};
     createCamera.objectPayload = root.id;
     controller.ProcessCommand(createCamera);
     const SceneObject camera = controller.ViewModel().objects.back();
-    assert(camera.kind == SceneObjectKind::Camera);
-    assert(camera.parent == root.id);
-    assert(controller.ViewModel().primarySelection == camera.id);
-    assert(controller.ViewModel().hierarchyRevealObject == camera.id);
+    REQUIRE((camera.kind == SceneObjectKind::Camera));
+    REQUIRE((camera.parent == root.id));
+    REQUIRE((controller.ViewModel().primarySelection == camera.id));
+    REQUIRE((controller.ViewModel().hierarchyRevealObject == camera.id));
 }
 
-void StableSelectionDrivesInspectorProjectionAndReconcilesAfterDelete()
+TEST_CASE("Stable Selection Drives Inspector Projection And Reconciles After Delete", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -483,29 +475,29 @@ void StableSelectionDrivesInspectorProjectionAndReconcilesAfterDelete()
     select.command = EditorWorkspaceViewCommand::SelectObject;
     select.objectPayload = object;
     controller.ProcessCommand(select);
-    assert(controller.ViewModel().primarySelection == object);
-    assert(controller.ViewportScene().instances.front().presentation.tintStrength > 0.0F);
-    assert(events.size() == 1 && events.back().kind == SelectionChangeKind::ObjectsChanged);
+    REQUIRE((controller.ViewModel().primarySelection == object));
+    REQUIRE((controller.ViewportScene().instances.front().presentation.tintStrength > 0.0F));
+    REQUIRE((events.size() == 1 && events.back().kind == SelectionChangeKind::ObjectsChanged));
 
     EditorWorkspaceViewCommandData remove;
     remove.command = EditorWorkspaceViewCommand::DeleteObject;
     remove.objectPayload = object;
     controller.ProcessCommand(remove);
-    assert(controller.ViewModel().objects.empty());
-    assert(!controller.ViewModel().primarySelection.has_value());
-    assert(events.size() == 2 && events.back().kind == SelectionChangeKind::Cleared);
+    REQUIRE((controller.ViewModel().objects.empty()));
+    REQUIRE((!controller.ViewModel().primarySelection.has_value()));
+    REQUIRE((events.size() == 2 && events.back().kind == SelectionChangeKind::Cleared));
 
     EditorWorkspaceViewCommandData undo;
     undo.command = EditorWorkspaceViewCommand::UndoScene;
     controller.ProcessCommand(undo);
-    assert(controller.ViewModel().objects.size() == 1);
-    assert(controller.ViewModel().objects.front().id == object);
-    assert(!controller.ViewModel().primarySelection.has_value());
-    assert(events.size() == 2);
+    REQUIRE((controller.ViewModel().objects.size() == 1));
+    REQUIRE((controller.ViewModel().objects.front().id == object));
+    REQUIRE((!controller.ViewModel().primarySelection.has_value()));
+    REQUIRE((events.size() == 2));
     static_cast<void>(subscription);
 }
 
-void ViewportPickingUsesTheAuthoritativeSelectionModel()
+TEST_CASE("Viewport Picking Uses The Authoritative Selection Model", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -517,21 +509,21 @@ void ViewportPickingUsesTheAuthoritativeSelectionModel()
     hit.command = EditorWorkspaceViewCommand::PickViewport;
     hit.viewportPickPayload = ViewportPickRequest{.normalizedX = 0.5F, .normalizedY = 0.5F, .aspect = 1.0F};
     controller.ProcessCommand(hit);
-    assert(controller.ViewModel().primarySelection == object);
-    assert(controller.ViewportScene().instances.front().presentation.tintStrength > 0.0F);
-    assert(events.size() == 1 && events.back().kind == SelectionChangeKind::ObjectsChanged);
+    REQUIRE((controller.ViewModel().primarySelection == object));
+    REQUIRE((controller.ViewportScene().instances.front().presentation.tintStrength > 0.0F));
+    REQUIRE((events.size() == 1 && events.back().kind == SelectionChangeKind::ObjectsChanged));
 
     EditorWorkspaceViewCommandData miss;
     miss.command = EditorWorkspaceViewCommand::PickViewport;
     miss.viewportPickPayload = ViewportPickRequest{.normalizedX = 0.0F, .normalizedY = 0.0F, .aspect = 1.0F};
     controller.ProcessCommand(miss);
-    assert(!controller.ViewModel().primarySelection.has_value());
-    assert(controller.ViewportScene().instances.front().presentation.tintStrength == 0.0F);
-    assert(events.size() == 2 && events.back().kind == SelectionChangeKind::Cleared);
+    REQUIRE((!controller.ViewModel().primarySelection.has_value()));
+    REQUIRE((controller.ViewportScene().instances.front().presentation.tintStrength == 0.0F));
+    REQUIRE((events.size() == 2 && events.back().kind == SelectionChangeKind::Cleared));
     static_cast<void>(subscription);
 }
 
-void TransformCommandsUpdateTheDocumentProjectionViewportAndHistory()
+TEST_CASE("Transform Commands Update The Document Projection Viewport And History", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -551,26 +543,25 @@ void TransformCommandsUpdateTheDocumentProjectionViewportAndHistory()
     transform.transformPayload = edited;
     controller.ProcessCommand(transform);
 
-    assert(controller.ViewModel().objects.front().localTransform == edited);
-    assert(controller.ViewModel().isDirty);
-    assert(controller.ViewModel().canUndo);
-    assert(events.size() == 1);
-    assert(events.back().kind == DocumentChangeKind::TransformChanged);
-    assert(events.back().affectedObjects == std::vector{object});
-    const Math::Vec3 worldOrigin =
-        Math::TransformPoint(controller.ViewportScene().instances.front().localToWorld, {});
-    assert(worldOrigin == edited.translation);
+    REQUIRE((controller.ViewModel().objects.front().localTransform == edited));
+    REQUIRE((controller.ViewModel().isDirty));
+    REQUIRE((controller.ViewModel().canUndo));
+    REQUIRE((events.size() == 1));
+    REQUIRE((events.back().kind == DocumentChangeKind::TransformChanged));
+    REQUIRE((events.back().affectedObjects == std::vector{object}));
+    const Math::Vec3 worldOrigin = Math::TransformPoint(controller.ViewportScene().instances.front().localToWorld, {});
+    REQUIRE((worldOrigin == edited.translation));
 
     EditorWorkspaceViewCommandData undo;
     undo.command = EditorWorkspaceViewCommand::UndoScene;
     controller.ProcessCommand(undo);
-    assert(controller.ViewModel().objects.front().localTransform == original);
-    assert(!controller.ViewModel().isDirty);
-    assert(events.size() == 2 && events.back().kind == DocumentChangeKind::Undone);
+    REQUIRE((controller.ViewModel().objects.front().localTransform == original));
+    REQUIRE((!controller.ViewModel().isDirty));
+    REQUIRE((events.size() == 2 && events.back().kind == DocumentChangeKind::Undone));
     static_cast<void>(subscription);
 }
 
-void ViewportNavigationUpdatesOnlyTheEditorCameraAuthority()
+TEST_CASE("Viewport Navigation Updates Only The Editor Camera Authority", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const EditorViewportCamera before = controller.ViewportScene().camera;
@@ -581,21 +572,20 @@ void ViewportNavigationUpdatesOnlyTheEditorCameraAuthority()
 
     EditorWorkspaceViewCommandData navigate;
     navigate.command = EditorWorkspaceViewCommand::NavigateViewport;
-    navigate.viewportNavigationPayload =
-        EditorViewportNavigationDelta{.yawRadians = 0.2F, .moveForward = 0.5F};
+    navigate.viewportNavigationPayload = EditorViewportNavigationDelta{.yawRadians = 0.2F, .moveForward = 0.5F};
     controller.ProcessCommand(navigate);
 
-    assert(controller.CurrentViewportRevision() == ViewportRevision{1});
-    assert(controller.ViewportScene().camera.IsValid());
-    assert(controller.ViewportScene().camera.position != before.position);
-    assert(controller.ViewModel().documentRevision == documentRevision);
-    assert(!controller.ViewModel().isDirty);
-    assert(!controller.ViewModel().canUndo);
-    assert(events.size() == 1 && events.front().kind == ViewportChangeKind::CameraMoved);
+    REQUIRE((controller.CurrentViewportRevision() == ViewportRevision{1}));
+    REQUIRE((controller.ViewportScene().camera.IsValid()));
+    REQUIRE((controller.ViewportScene().camera.position != before.position));
+    REQUIRE((controller.ViewModel().documentRevision == documentRevision));
+    REQUIRE((!controller.ViewModel().isDirty));
+    REQUIRE((!controller.ViewModel().canUndo));
+    REQUIRE((events.size() == 1 && events.front().kind == ViewportChangeKind::CameraMoved));
     static_cast<void>(subscription);
 }
 
-void GizmoPreviewIsTransientAndCommitCreatesOneUndoableDocumentChange()
+TEST_CASE("Gizmo Preview Is Transient And Commit Creates One Undoable Document Change", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -614,36 +604,36 @@ void GizmoPreviewIsTransientAndCommitCreatesOneUndoableDocumentChange()
     preview.objectPayload = object;
     preview.transformPayload = edited;
     controller.ProcessCommand(preview);
-    assert(controller.ViewModel().objects.front().localTransform != edited);
-    assert(controller.ViewModel().documentRevision == initialRevision);
-    assert(!controller.ViewModel().isDirty && !controller.ViewModel().canUndo);
+    REQUIRE((controller.ViewModel().objects.front().localTransform != edited));
+    REQUIRE((controller.ViewModel().documentRevision == initialRevision));
+    REQUIRE((!controller.ViewModel().isDirty && !controller.ViewModel().canUndo));
     const Math::Vec3 previewOrigin =
         Math::TransformPoint(controller.ViewportScene().instances.front().localToWorld, {});
-    assert(previewOrigin == edited.translation);
-    assert(documentEvents.empty());
-    assert(viewportEvents.size() == 1 && viewportEvents.front().kind == ViewportChangeKind::ScenePreviewChanged);
+    REQUIRE((previewOrigin == edited.translation));
+    REQUIRE((documentEvents.empty()));
+    REQUIRE((viewportEvents.size() == 1 && viewportEvents.front().kind == ViewportChangeKind::ScenePreviewChanged));
 
     EditorWorkspaceViewCommandData commit;
     commit.command = EditorWorkspaceViewCommand::CommitObjectTransform;
     commit.objectPayload = object;
     commit.transformPayload = edited;
     controller.ProcessCommand(commit);
-    assert(controller.ViewModel().objects.front().localTransform == edited);
-    assert(controller.ViewModel().documentRevision.value == initialRevision.value + 1);
-    assert(controller.ViewModel().isDirty && controller.ViewModel().canUndo);
-    assert(documentEvents.size() == 1 && documentEvents.front().kind == DocumentChangeKind::TransformChanged);
-    assert(controller.CurrentViewportRevision() == ViewportRevision{2});
-    assert(viewportEvents.size() == 2 && viewportEvents.back().kind == ViewportChangeKind::ScenePreviewChanged);
+    REQUIRE((controller.ViewModel().objects.front().localTransform == edited));
+    REQUIRE((controller.ViewModel().documentRevision.value == initialRevision.value + 1));
+    REQUIRE((controller.ViewModel().isDirty && controller.ViewModel().canUndo));
+    REQUIRE((documentEvents.size() == 1 && documentEvents.front().kind == DocumentChangeKind::TransformChanged));
+    REQUIRE((controller.CurrentViewportRevision() == ViewportRevision{2}));
+    REQUIRE((viewportEvents.size() == 2 && viewportEvents.back().kind == ViewportChangeKind::ScenePreviewChanged));
 
     EditorWorkspaceViewCommandData undo;
     undo.command = EditorWorkspaceViewCommand::UndoScene;
     controller.ProcessCommand(undo);
-    assert(!controller.ViewModel().isDirty);
+    REQUIRE((!controller.ViewModel().isDirty));
     static_cast<void>(documentSubscription);
     static_cast<void>(viewportSubscription);
 }
 
-void CancellingGizmoPreviewRestoresTheExactCommittedProjection()
+TEST_CASE("Cancelling Gizmo Preview Restores The Exact Committed Projection", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -669,18 +659,18 @@ void CancellingGizmoPreviewRestoresTheExactCommittedProjection()
     cancel.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
     controller.ProcessCommand(cancel);
 
-    assert(controller.ViewModel().objects.front().localTransform == committedTransform);
-    assert(controller.ViewportScene().instances.front().localToWorld == committedMatrix);
-    assert(controller.ViewModel().documentRevision == committedRevision);
-    assert(!controller.ViewModel().isDirty && !controller.ViewModel().canUndo);
-    assert(documentEvents.empty());
-    assert(controller.CurrentViewportRevision() == ViewportRevision{2});
-    assert(viewportEvents.size() == 2);
+    REQUIRE((controller.ViewModel().objects.front().localTransform == committedTransform));
+    REQUIRE((controller.ViewportScene().instances.front().localToWorld == committedMatrix));
+    REQUIRE((controller.ViewModel().documentRevision == committedRevision));
+    REQUIRE((!controller.ViewModel().isDirty && !controller.ViewModel().canUndo));
+    REQUIRE((documentEvents.empty()));
+    REQUIRE((controller.CurrentViewportRevision() == ViewportRevision{2}));
+    REQUIRE((viewportEvents.size() == 2));
     static_cast<void>(documentSubscription);
     static_cast<void>(viewportSubscription);
 }
 
-void NoOpGizmoCommitClearsPreviewWithoutCreatingHistory()
+TEST_CASE("No Op Gizmo Commit Clears Preview Without Creating History", "[unit][editor]")
 {
     TestWorkspaceController controller;
     const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -704,37 +694,8 @@ void NoOpGizmoCommitClearsPreviewWithoutCreatingHistory()
     commit.transformPayload = committedTransform;
     controller.ProcessCommand(commit);
 
-    assert(controller.ViewModel().objects.front().localTransform == committedTransform);
-    assert(!controller.ViewModel().isDirty && !controller.ViewModel().canUndo);
-    assert(controller.CurrentViewportRevision() == ViewportRevision{3});
+    REQUIRE((controller.ViewModel().objects.front().localTransform == committedTransform));
+    REQUIRE((!controller.ViewModel().isDirty && !controller.ViewModel().canUndo));
+    REQUIRE((controller.CurrentViewportRevision() == ViewportRevision{3}));
 }
 } // namespace
-
-int main()
-{
-    MovingAnActivePanelAcrossAreasUpdatesItsRuntimePlacement();
-    ReplacingATargetAreaPreservesTheDisplacedPanelsPlacement();
-    DroppingIntoBottomRightSplitsTheFullBottomDock();
-    ClickingASplitPanelExpandsItToTheFullBottomDock();
-    DroppingALeftRailIconIntoBottomRightMovesItToTheRightRail();
-    PlacesTheViewportInTheDocumentTopRailByDefault();
-    DroppingIntoTheLowerHalfSplitsTheLeftDock();
-    DroppingIntoTheLowerHalfSplitsTheRightDock();
-    ClickingASplitSidePanelExpandsItToTheFullDock();
-    MovingOneHalfAwayExpandsTheRemainingSidePanel();
-    ReorderingAnActiveIconMovesItsPanelAndActivatesASourceFallback();
-    ReorderingTheOnlyBottomIconDoesNotLeaveAHalfEmptySplit();
-    DroppingOnASideMergeTargetExpandsThePanelWithoutMovingItsIcon();
-    DroppingOnTheBottomMergeTargetPreservesItsActivityGroup();
-    ReorderingAnActiveBottomPanelToTheLeftDoesNotRenderItTwice();
-    SceneCommandsPublishCommittedEventsAndDriveUndoRedoState();
-    CatalogCreationSelectsTheResultAndHonorsTheRequestedParent();
-    StableSelectionDrivesInspectorProjectionAndReconcilesAfterDelete();
-    ViewportPickingUsesTheAuthoritativeSelectionModel();
-    TransformCommandsUpdateTheDocumentProjectionViewportAndHistory();
-    ViewportNavigationUpdatesOnlyTheEditorCameraAuthority();
-    GizmoPreviewIsTransientAndCommitCreatesOneUndoableDocumentChange();
-    CancellingGizmoPreviewRestoresTheExactCommittedProjection();
-    NoOpGizmoCommitClearsPreviewWithoutCreatingHistory();
-    return 0;
-}

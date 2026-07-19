@@ -584,18 +584,14 @@ STBIDEF int   stbi_zlib_decode_noheader_buffer(char *obuffer, int olen, const ch
 #endif
 
 
-#include <stdarg.h>
 #include <stddef.h> // ptrdiff_t on osx
-#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
 #if !defined(STBI_NO_LINEAR) || !defined(STBI_NO_HDR)
-#include <math.h>  // ldexp, pow
 #endif
 
 #ifndef STBI_NO_STDIO
-#include <stdio.h>
 #endif
 
 #ifndef STBI_ASSERT
@@ -876,7 +872,7 @@ static stbi_io_callbacks stbi__stdio_callbacks =
 
 static void stbi__start_file(stbi__context *s, FILE *f)
 {
-   stbi__start_callbacks(s, &stbi__stdio_callbacks, (void *) f);
+   stbi__start_callbacks(s, &stbi__stdio_callbacks, f);
 }
 
 //static void stop_file(stbi__context *s) { }
@@ -1866,7 +1862,7 @@ static float   *stbi__ldr_to_hdr(stbi_uc *data, int x, int y, int comp)
    if (comp & 1) n = comp; else n = comp-1;
    for (i=0; i < x*y; ++i) {
       for (k=0; k < n; ++k) {
-         output[i*comp + k] = (float) (pow(data[i*comp+k]/255.0f, stbi__l2h_gamma) * stbi__l2h_scale);
+         output[i*comp + k] = pow(data[i*comp+k]/255.0f, stbi__l2h_gamma) * stbi__l2h_scale;
       }
    }
    if (n < comp) {
@@ -1892,7 +1888,7 @@ static stbi_uc *stbi__hdr_to_ldr(float   *data, int x, int y, int comp)
    if (comp & 1) n = comp; else n = comp-1;
    for (i=0; i < x*y; ++i) {
       for (k=0; k < n; ++k) {
-         float z = (float) pow(data[i*comp+k]*stbi__h2l_scale_i, stbi__h2l_gamma_i) * 255 + 0.5f;
+         float z = pow(data[i*comp+k]*stbi__h2l_scale_i, stbi__h2l_gamma_i) * 255 + 0.5f;
          if (z < 0) z = 0;
          if (z > 255) z = 255;
          output[i*comp + k] = (stbi_uc) stbi__float2int(z);
@@ -3205,7 +3201,7 @@ static int stbi__process_scan_header(stbi__jpeg *z)
    int i;
    int Ls = stbi__get16be(z->s);
    z->scan_n = stbi__get8(z->s);
-   if (z->scan_n < 1 || z->scan_n > 4 || z->scan_n > (int) z->s->img_n) return stbi__err("bad SOS component count","Corrupt JPEG");
+   if (z->scan_n < 1 || z->scan_n > 4 || z->scan_n > z->s->img_n) return stbi__err("bad SOS component count","Corrupt JPEG");
    if (Ls != 6+2*z->scan_n) return stbi__err("bad SOS len","Corrupt JPEG");
    for (i=0; i < z->scan_n; ++i) {
       int id = stbi__get8(z->s), which;
@@ -5409,7 +5405,7 @@ static int stbi__shiftsigned(unsigned int v, int shift, int bits)
    STBI_ASSERT(v < 256);
    v >>= (8-bits);
    STBI_ASSERT(bits >= 0 && bits <= 8);
-   return (int) ((unsigned) v * mul_table[bits]) >> shift_table[bits];
+   return (int) (v * mul_table[bits]) >> shift_table[bits];
 }
 
 typedef struct
@@ -7133,7 +7129,7 @@ static void stbi__hdr_convert(float *output, stbi_uc *input, int req_comp)
    if ( input[3] != 0 ) {
       float f1;
       // Exponent
-      f1 = (float) ldexp(1.0f, input[3] - (int)(128 + 8));
+      f1 = ldexp(1.0f, input[3] - (128 + 8));
       if (req_comp <= 2)
          output[0] = (input[0] + input[1] + input[2]) * f1 / 3;
       else {
@@ -7238,7 +7234,7 @@ static float *stbi__hdr_load(stbi__context *s, int *x, int *y, int *comp, int re
             rgbe[0] = (stbi_uc) c1;
             rgbe[1] = (stbi_uc) c2;
             rgbe[2] = (stbi_uc) len;
-            rgbe[3] = (stbi_uc) stbi__get8(s);
+            rgbe[3] = stbi__get8(s);
             stbi__hdr_convert(hdr_data, rgbe, req_comp);
             i = 1;
             j = 0;
@@ -7508,7 +7504,7 @@ static void *stbi__pnm_load(stbi__context *s, int *x, int *y, int *comp, int req
    stbi_uc *out;
    STBI_NOTUSED(ri);
 
-   ri->bits_per_channel = stbi__pnm_info(s, (int *)&s->img_x, (int *)&s->img_y, (int *)&s->img_n);
+   ri->bits_per_channel = stbi__pnm_info(s, (int *)&s->img_x, (int *)&s->img_y, &s->img_n);
    if (ri->bits_per_channel == 0)
       return 0;
 

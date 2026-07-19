@@ -1,7 +1,6 @@
 #include "Horo/Editor/EditorStatusBarModel.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <ranges>
 #include <utility>

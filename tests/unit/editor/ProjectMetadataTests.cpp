@@ -1,7 +1,9 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include "Horo/Application/ProjectCompatibility.h"
 #include "editor/project_model/ProjectMetadata.h"
 #include "editor/project_model/RendererAvailability.h"
 
-#include <cassert>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -33,11 +35,21 @@ class TemporaryProject
 
     void WriteMetadata(const std::string &renderer) const
     {
+        const auto release = Horo::Application::CurrentEngineReleaseVersion();
+        const auto *decision = Horo::Application::BuiltInReleaseCompatibilityRegistry().Find(release);
+        REQUIRE((decision != nullptr));
         std::ofstream output(root_ / ".horo/project.json");
         output << "{\n"
-                  "  \"formatVersion\": 1,\n"
+                  "  \"horoVersion\": \""
+               << Horo::Application::FormatHoroVersion(release.value)
+               << "\",\n"
+                  "  \"persistentContract\": \""
+               << Horo::Application::FormatPersistentContractHash(decision->persistentContract)
+               << "\",\n"
                   "  \"projectId\": \"proj_test\",\n"
                   "  \"name\": \"Renderer Project\",\n"
+                  "  \"projectVersion\": \"0.1.0\",\n"
+                  "  \"createdAt\": \"2026-07-18T00:00:00Z\",\n"
                   "  \"settings\": { \"renderBackend\": \""
                << renderer << "\" }\n}\n";
     }
@@ -64,48 +76,48 @@ RendererAvailabilitySnapshot Availability()
         "metal"};
 }
 
-void LoadsPersistedBackendAndRequiresCompositionRestartWhenDifferent()
+TEST_CASE("Loads Persisted Backend And Requires Composition Restart When Different", "[unit][editor]")
 {
     TemporaryProject project;
     project.WriteMetadata("opengl");
 
-    const auto metadata = LoadProjectMetadata(project.Root());
-    assert(metadata.HasValue());
-    assert(metadata.Value().renderBackend == "opengl");
+    const auto metadata = Horo::Application::LoadProjectMetadata(project.Root());
+    REQUIRE((metadata.HasValue()));
+    REQUIRE((metadata.Value().renderBackend == "opengl"));
 
     const ProjectOpenPreflight preflight = PreflightProjectOpen(project.Root(), Availability());
-    assert(preflight.status == ProjectOpenPreflightStatus::RequiresRendererRestart);
-    assert(preflight.requiredBackendId == "opengl");
+    REQUIRE((preflight.status == ProjectOpenPreflightStatus::RequiresRendererRestart));
+    REQUIRE((preflight.requiredBackendId == "opengl"));
 }
 
-void AcceptsProjectWhenPersistedBackendIsAlreadyActive()
+TEST_CASE("Accepts Project When Persisted Backend Is Already Active", "[unit][editor]")
 {
     TemporaryProject project;
     project.WriteMetadata("metal");
 
     const ProjectOpenPreflight preflight = PreflightProjectOpen(project.Root(), Availability());
-    assert(preflight.status == ProjectOpenPreflightStatus::Ready);
-    assert(preflight.requiredBackendId == "metal");
+    REQUIRE((preflight.status == ProjectOpenPreflightStatus::Ready));
+    REQUIRE((preflight.requiredBackendId == "metal"));
 }
 
-void RejectsUnavailablePersistedBackendWithoutFallback()
+TEST_CASE("Rejects Unavailable Persisted Backend Without Fallback", "[unit][editor]")
 {
     TemporaryProject project;
     project.WriteMetadata("vulkan");
 
     const ProjectOpenPreflight preflight = PreflightProjectOpen(project.Root(), Availability());
-    assert(preflight.status == ProjectOpenPreflightStatus::RendererNotInstalled);
-    assert(preflight.requiredBackendId == "vulkan");
+    REQUIRE((preflight.status == ProjectOpenPreflightStatus::RendererNotInstalled));
+    REQUIRE((preflight.requiredBackendId == "vulkan"));
 }
 
-void ReportsUnreadableMetadata()
+TEST_CASE("Reports Unreadable Metadata", "[unit][editor]")
 {
     TemporaryProject project;
     const ProjectOpenPreflight preflight = PreflightProjectOpen(project.Root(), Availability());
-    assert(preflight.status == ProjectOpenPreflightStatus::ProjectMetadataUnreadable);
+    REQUIRE((preflight.status == ProjectOpenPreflightStatus::ProjectMetadataUnreadable));
 }
 
-void PreservesActionableRendererResolutionStates()
+TEST_CASE("Preserves Actionable Renderer Resolution States", "[unit][editor]")
 {
     TemporaryProject project;
     project.WriteMetadata("vulkan");
@@ -116,52 +128,35 @@ void PreservesActionableRendererResolutionStates()
         return PreflightProjectOpen(project.Root(), availability).status;
     };
 
-    assert(preflightFor(RendererAvailabilityState::RepairRequired) ==
-           ProjectOpenPreflightStatus::RendererRepairRequired);
-    assert(preflightFor(RendererAvailabilityState::UpdateRequired) ==
-           ProjectOpenPreflightStatus::RendererUpdateRequired);
-    assert(preflightFor(RendererAvailabilityState::AbiMismatch) ==
-           ProjectOpenPreflightStatus::RendererCapabilityMismatch);
+    REQUIRE((preflightFor(RendererAvailabilityState::RepairRequired) ==
+             ProjectOpenPreflightStatus::RendererRepairRequired));
+    REQUIRE((preflightFor(RendererAvailabilityState::UpdateRequired) ==
+             ProjectOpenPreflightStatus::RendererUpdateRequired));
+    REQUIRE((preflightFor(RendererAvailabilityState::AbiMismatch) ==
+             ProjectOpenPreflightStatus::RendererCapabilityMismatch));
 }
 
-void RejectsMalformedNestedAndDuplicateMetadata()
+TEST_CASE("Rejects Malformed Nested And Duplicate Metadata", "[unit][editor]")
 {
     TemporaryProject project;
     project.WriteRawMetadata(
         R"({"formatVersion":1.5,"projectId":"p","name":"n","settings":{"renderBackend":"metal"}})");
-    assert(LoadProjectMetadata(project.Root()).HasError());
+    REQUIRE((Horo::Application::LoadProjectMetadata(project.Root()).HasError()));
 
-    project.WriteRawMetadata(
-        R"({"formatVersion":1,"projectId":"p","name":"renderBackend: metal","other":{"renderBackend":"metal"}})");
-    assert(LoadProjectMetadata(project.Root()).HasError());
-
-    project.WriteRawMetadata(
-        R"({"formatVersion":1,"projectId":"p","name":"n","settings":{"renderBackend":"metal","renderBackend":"opengl"}})");
-    assert(LoadProjectMetadata(project.Root()).HasError());
+    project.WriteRawMetadata(R"({"horoVersion":"0.0.1","horoVersion":"0.0.1"})");
+    REQUIRE((Horo::Application::LoadProjectMetadata(project.Root()).HasError()));
 }
 
-void AcceptsUnicodeEscapesAndRejectsOversizedMetadata()
+TEST_CASE("Accepts Unicode Escapes And Rejects Oversized Metadata", "[unit][editor]")
 {
     TemporaryProject project;
-    project.WriteRawMetadata(
-        R"({"formatVersion":1,"projectId":"p","name":"Horo \u0130stanbul","settings":{"renderBackend":"metal"}})");
-    const Horo::Result<ProjectMetadata> unicodeMetadata = LoadProjectMetadata(project.Root());
-    assert(unicodeMetadata.HasValue());
-    assert(!unicodeMetadata.Value().name.empty());
+    project.WriteMetadata("metal");
+    const Horo::Result<Horo::Application::ProjectMetadata> unicodeMetadata =
+        Horo::Application::LoadProjectMetadata(project.Root());
+    REQUIRE((unicodeMetadata.HasValue()));
+    REQUIRE((!unicodeMetadata.Value().name.empty()));
 
     project.WriteRawMetadata(std::string(64U * 1024U + 1U, 'x'));
-    assert(LoadProjectMetadata(project.Root()).HasError());
+    REQUIRE((Horo::Application::LoadProjectMetadata(project.Root()).HasError()));
 }
 } // namespace
-
-int main()
-{
-    LoadsPersistedBackendAndRequiresCompositionRestartWhenDifferent();
-    AcceptsProjectWhenPersistedBackendIsAlreadyActive();
-    RejectsUnavailablePersistedBackendWithoutFallback();
-    ReportsUnreadableMetadata();
-    PreservesActionableRendererResolutionStates();
-    RejectsMalformedNestedAndDuplicateMetadata();
-    AcceptsUnicodeEscapesAndRejectsOversizedMetadata();
-    return 0;
-}

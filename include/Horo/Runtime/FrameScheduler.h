@@ -9,7 +9,6 @@
 #include "Horo/Foundation/Platform.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <memory>
 
 namespace Horo::Runtime {

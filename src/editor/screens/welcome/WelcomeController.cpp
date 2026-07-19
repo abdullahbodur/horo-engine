@@ -1,7 +1,10 @@
 #include "Horo/Editor/WelcomeController.h"
 #include "Horo/Editor/EditorSettingsStore.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Platform.h"
 #include "GeneratedBuildInfo.h"
+
+#include <nlohmann/json.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -156,7 +159,9 @@ namespace Horo::Editor
         case ProjectLoading:
             return std::holds_alternative<ProjectLoadingRouteParameters>(route.parameters);
         case EditorWorkspace:
-            return std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters);
+            if (const auto* parameters = std::get_if<EditorWorkspaceRouteParameters>(&route.parameters))
+                return parameters->session.value != 0;
+            return false;
         }
 
         return false;
@@ -175,6 +180,46 @@ namespace Horo::Editor
     {
         return !entry.name.empty() && std::filesystem::path{entry.rootPath}.is_absolute();
     }
+
+    namespace
+    {
+        using Json = nlohmann::json;
+
+        [[nodiscard]] std::string_view CompatibilityStatusName(
+            const Application::ProjectCompatibilityStatus status) noexcept
+        {
+            using enum Application::ProjectCompatibilityStatus;
+            switch (status)
+            {
+            case Current: return "current";
+            case CompatibleReleaseLine: return "compatible";
+            case AutomaticMigrationRequired: return "automatic_migration";
+            case RecoveryRequired: return "recovery";
+            case FutureVersion: return "future";
+            case MigrationPathMissing: return "migration_missing";
+            case RequiredProviderUnavailable: return "provider_missing";
+            case Corrupt: return "corrupt";
+            case Inaccessible: return "inaccessible";
+            }
+            return "inaccessible";
+        }
+
+        [[nodiscard]] std::optional<Application::ProjectCompatibilityStatus> ParseCompatibilityStatus(
+            const std::string_view text) noexcept
+        {
+            using enum Application::ProjectCompatibilityStatus;
+            if (text == "current") return Current;
+            if (text == "compatible") return CompatibleReleaseLine;
+            if (text == "automatic_migration") return AutomaticMigrationRequired;
+            if (text == "recovery") return RecoveryRequired;
+            if (text == "future") return FutureVersion;
+            if (text == "migration_missing") return MigrationPathMissing;
+            if (text == "provider_missing") return RequiredProviderUnavailable;
+            if (text == "corrupt") return Corrupt;
+            if (text == "inaccessible") return Inaccessible;
+            return std::nullopt;
+        }
+    } // namespace
 
     /** @copydoc LoadRecentProjectsFromDisk */
     std::vector<RecentProjectEntry> LoadRecentProjectsFromDisk()
@@ -197,40 +242,61 @@ namespace Horo::Editor
             return BuildDefaultBootstrapRecentProjects();
         }
 
-        std::ostringstream buffer;
-        buffer << file.rdbuf();
-        const std::string content = buffer.str();
-
+        file.seekg(0, std::ios::end);
+        const std::streamoff size = file.tellg();
+        if (size <= 0 || size > 512 * 1024)
+            return BuildDefaultBootstrapRecentProjects();
+        file.seekg(0, std::ios::beg);
+        std::string content(static_cast<std::size_t>(size), '\0');
+        if (!file.read(content.data(), size))
+            return BuildDefaultBootstrapRecentProjects();
         std::vector<RecentProjectEntry> results;
-        std::size_t pos = 0;
-        while ((pos = content.find('{', pos)) != std::string::npos)
+        Json root;
+        try
         {
-            const std::size_t endPos = content.find('}', pos);
-            if (endPos == std::string::npos)
+            root = Json::parse(content);
+        }
+        catch (...)
+        {
+            return BuildDefaultBootstrapRecentProjects();
+        }
+        if (!root.is_array() || root.size() > 128)
+            return BuildDefaultBootstrapRecentProjects();
+        for (const Json &value : root)
+        {
+            if (!value.is_object() || !value.contains("name") || !value["name"].is_string() ||
+                !value.contains("rootPath") || !value["rootPath"].is_string())
+                continue;
+            RecentProjectEntry entry{value["name"].get<std::string>(), value["rootPath"].get<std::string>(),
+                                     value.value("lastOpenedLabel", "Recently"),
+                                     value.value("thumbnailKey", "custom")};
+            if (value.contains("compatibility") && value["compatibility"].is_object())
             {
-                break;
-            }
-            const std::string objStr = content.substr(pos, endPos - pos + 1);
-            pos = endPos + 1;
-
-            auto name = FindJsonStringField(objStr, "name");
-            auto rootPath = FindJsonStringField(objStr, "rootPath");
-            auto lastOpened = FindJsonStringField(objStr, "lastOpenedLabel");
-            auto thumbnailKey = FindJsonStringField(objStr, "thumbnailKey");
-
-            if (name && rootPath)
-            {
-                RecentProjectEntry entry{
-                    std::move(*name),
-                    std::move(*rootPath),
-                    std::move(lastOpened).value_or("Recently"),
-                    std::move(thumbnailKey).value_or("custom")
-                };
-                if (IsDisplayableRecentProject(entry))
+                const Json &cached = value["compatibility"];
+                if (cached.contains("status") && cached["status"].is_string() &&
+                    cached.contains("targetVersion") && cached["targetVersion"].is_string())
                 {
-                    results.push_back(std::move(entry));
+                    auto status = ParseCompatibilityStatus(cached["status"].get_ref<const std::string &>());
+                    auto target = Application::ParseHoroVersion(cached["targetVersion"].get_ref<const std::string &>());
+                    if (status.has_value() && target.HasValue())
+                    {
+                        RecentProjectCompatibilityProjection projection{
+                            .status = *status,
+                            .targetVersion = Application::EngineReleaseVersion{target.Value()},
+                            .inspectionState = RecentProjectInspectionState::Cached};
+                        if (cached.contains("projectVersion") && cached["projectVersion"].is_string())
+                        {
+                            auto projectVersion =
+                                Application::ParseHoroVersion(cached["projectVersion"].get_ref<const std::string &>());
+                            if (projectVersion.HasValue())
+                                projection.projectVersion = Application::EngineReleaseVersion{projectVersion.Value()};
+                        }
+                        entry.compatibility = std::move(projection);
+                    }
                 }
             }
+            if (IsDisplayableRecentProject(entry))
+                results.push_back(std::move(entry));
         }
 
         if (results.empty())
@@ -257,41 +323,41 @@ namespace Horo::Editor
             return false;
         }
 
-        std::ostringstream out;
-        out << "[\n";
-        for (std::size_t i = 0; i < projects.size(); ++i)
+        Json root = Json::array();
+        for (const RecentProjectEntry &project : projects)
         {
-            const auto& p = projects[i];
-            out << "  {\n";
-            out << R"(    "name": ")" << EscapeRecentJsonString(p.name) << R"(",)" << '\n';
-            out << R"(    "rootPath": ")" << EscapeRecentJsonString(p.rootPath) << R"(",)" << '\n';
-            out << R"(    "lastOpenedLabel": ")" << EscapeRecentJsonString(p.lastOpenedLabel) << R"(",)" << '\n';
-            out << R"(    "thumbnailKey": ")" << EscapeRecentJsonString(p.thumbnailKey) << R"(")" << '\n';
-            out << "  }" << (i + 1 < projects.size() ? "," : "") << "\n";
+            Json value{{"name", project.name}, {"rootPath", project.rootPath},
+                       {"lastOpenedLabel", project.lastOpenedLabel}, {"thumbnailKey", project.thumbnailKey}};
+            if (project.compatibility.has_value())
+            {
+                Json compatibility{{"status", CompatibilityStatusName(project.compatibility->status)},
+                                   {"targetVersion", Application::FormatHoroVersion(
+                                                         project.compatibility->targetVersion.value)}};
+                if (project.compatibility->projectVersion.has_value())
+                    compatibility["projectVersion"] =
+                        Application::FormatHoroVersion(project.compatibility->projectVersion->value);
+                value["compatibility"] = std::move(compatibility);
+            }
+            root.push_back(std::move(value));
         }
-        out << "]\n";
-
-        std::ofstream file(path, std::ios::binary | std::ios::trunc);
-        if (!file.is_open())
+        const std::string content = root.dump(2) + "\n";
+        const std::filesystem::path temporary = path.string() + ".tmp";
+        const std::span bytes{reinterpret_cast<const std::byte *>(content.data()), content.size()};
+        NativeDurableFileSystem files;
+        if (const auto written = files.WriteDurable(temporary, bytes); written.HasError())
         {
             LOG_ERROR("editor.welcome", "Failed to open recent_projects.json for writing at '%s'",
                       path.string().c_str());
             return false;
         }
-        const std::string content = out.str();
-        file.write(content.data(), static_cast<std::streamsize>(content.size()));
-        const bool success = file.good();
-        file.close();
-
-        if (success)
+        if (const auto published = files.AtomicReplace(temporary, path); published.HasError())
         {
-            LOG_INFO("editor.welcome", "Saved %zu recent projects to '%s'", projects.size(), path.string().c_str());
+            std::filesystem::remove(temporary, error);
+            LOG_ERROR("editor.welcome", "Failed to publish recent_projects.json at '%s'", path.string().c_str());
+            return false;
         }
-        else
-        {
-            LOG_ERROR("editor.welcome", "Error while writing recent_projects.json to '%s'", path.string().c_str());
-        }
-        return success;
+        LOG_INFO("editor.welcome", "Saved %zu recent projects to '%s'", projects.size(), path.string().c_str());
+        return true;
     }
 
     /** @copydoc WelcomeScreenController::WelcomeScreenController */
@@ -361,7 +427,7 @@ namespace Horo::Editor
                   project.name.c_str(), project.rootPath.c_str());
         return WelcomeAction{
             WelcomeActionKind::OpenRecentProject,
-            GuiRoute{GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{project.rootPath, std::nullopt}},
+            GuiRoute{GuiRouteKind::ProjectLoading, ProjectLoadingRouteParameters{project.rootPath, project.name}},
         };
     }
 

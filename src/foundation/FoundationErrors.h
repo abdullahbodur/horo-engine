@@ -21,6 +21,7 @@ extern const ErrorCodeDescriptor InvalidHandle;
 extern const ErrorCodeDescriptor NotFound;
 extern const ErrorCodeDescriptor QueueFull;
 extern const ErrorCodeDescriptor Shutdown;
+extern const ErrorCodeDescriptor TaskGroupClosed;
 } // namespace Horo::JobErrors
 
 namespace Horo::Math::Errors

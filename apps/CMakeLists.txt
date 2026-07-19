@@ -49,6 +49,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::Runtime
             HoroEngine::RuntimeScene
             HoroEngine::Platform
+            HoroEngine::ProjectMigrations
             HoroEngine::InputSdl
             HoroThirdParty::ImGui
             ${HORO_SDL3_TARGET}

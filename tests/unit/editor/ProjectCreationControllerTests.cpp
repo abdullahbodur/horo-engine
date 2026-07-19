@@ -1,7 +1,8 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/ProjectCreationController.h"
 #include "editor/project_model/RendererAvailability.h"
 
-#include <cassert>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -52,30 +53,30 @@ void HasDiagnostic(const Horo::Editor::ProjectCreationValidation &validation,
             return;
         }
     }
-    assert(false && "expected validation diagnostic");
+    REQUIRE((false && "expected validation diagnostic"));
 }
 
-void ProvidesDocumentDefaults()
+TEST_CASE("Provides Document Defaults", "[unit][editor]")
 {
     using namespace Horo::Editor;
 
     const ProjectCreationDraft draft = ProjectCreationController{DefaultAvailability()}.Draft();
-    assert(draft.templateId == "3d-starter");
-    assert(draft.projectVersion == "0.1.0");
-    assert(draft.defaultScene == "assets/scenes/main.horo");
-    assert(draft.renderBackend == "opengl");
-    assert(draft.physicsEnabled);
-    assert(draft.targetFrameRate == 60);
-    assert(draft.buildProfile == "desktop-debug");
-    assert(draft.assetCompression == "lz4");
-    assert(draft.textureCompression == "bc7");
-    assert(draft.targetPlatform == "host");
-    assert(draft.compilerFamily == "default");
-    assert(draft.minimumCxxStandard == 20);
-    assert(!ProjectCreationController{DefaultAvailability()}.IsDirty());
+    REQUIRE((draft.templateId == "3d-starter"));
+    REQUIRE((draft.projectVersion == "0.1.0"));
+    REQUIRE((draft.defaultScene == "assets/scenes/main.horo"));
+    REQUIRE((draft.renderBackend == "opengl"));
+    REQUIRE((draft.physicsEnabled));
+    REQUIRE((draft.targetFrameRate == 60));
+    REQUIRE((draft.buildProfile == "desktop-debug"));
+    REQUIRE((draft.assetCompression == "lz4"));
+    REQUIRE((draft.textureCompression == "bc7"));
+    REQUIRE((draft.targetPlatform == "host"));
+    REQUIRE((draft.compilerFamily == "default"));
+    REQUIRE((draft.minimumCxxStandard == 20));
+    REQUIRE((!ProjectCreationController{DefaultAvailability()}.IsDirty()));
 }
 
-void RejectsBlankAndPathLikeNames()
+TEST_CASE("Rejects Blank And Path Like Names", "[unit][editor]")
 {
     using namespace Horo::Editor;
 
@@ -90,7 +91,7 @@ void RejectsBlankAndPathLikeNames()
     HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator);
 }
 
-void DistinguishesOccupiedEmptyAndMissingDestinations()
+TEST_CASE("Distinguishes Occupied Empty And Missing Destinations", "[unit][editor]")
 {
     using namespace Horo::Editor;
 
@@ -102,9 +103,9 @@ void DistinguishesOccupiedEmptyAndMissingDestinations()
     std::filesystem::create_directories(empty);
     std::ofstream{occupied / "existing.txt"} << "occupied";
 
-    assert(InspectProjectCreationLocation(occupied).kind == ProjectCreationLocationKind::OccupiedDirectory);
-    assert(InspectProjectCreationLocation(empty).kind == ProjectCreationLocationKind::EmptyDirectory);
-    assert(InspectProjectCreationLocation(missing).kind == ProjectCreationLocationKind::Missing);
+    REQUIRE((InspectProjectCreationLocation(occupied).kind == ProjectCreationLocationKind::OccupiedDirectory));
+    REQUIRE((InspectProjectCreationLocation(empty).kind == ProjectCreationLocationKind::EmptyDirectory));
+    REQUIRE((InspectProjectCreationLocation(missing).kind == ProjectCreationLocationKind::Missing));
 
     ProjectCreationController controller{DefaultAvailability()};
     controller.SetProjectName("NewProject");
@@ -112,32 +113,32 @@ void DistinguishesOccupiedEmptyAndMissingDestinations()
     HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::ProjectPathOccupied);
 
     controller.SetProjectPath(empty.string());
-    assert(controller.Validate().IsValid());
-    assert(controller.BuildCreationRequest().has_value());
+    REQUIRE((controller.Validate().IsValid()));
+    REQUIRE((controller.BuildCreationRequest().has_value()));
 
     controller.SetProjectPath(missing.string());
-    assert(controller.Validate().IsValid());
-    assert(controller.BuildCreationRequest().has_value());
-    assert(!std::filesystem::exists(missing));
+    REQUIRE((controller.Validate().IsValid()));
+    REQUIRE((controller.BuildCreationRequest().has_value()));
+    REQUIRE((!std::filesystem::exists(missing)));
 }
 
-void TracksDraftLeaveIntent()
+TEST_CASE("Tracks Draft Leave Intent", "[unit][editor]")
 {
     using namespace Horo::Editor;
 
     ProjectCreationController controller{DefaultAvailability()};
-    assert(controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow);
+    REQUIRE((controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow));
 
     controller.SetProjectName("Changed");
-    assert(controller.IsDirty());
-    assert(controller.LeaveIntent() == ProjectCreationLeaveIntent::RequireDiscardConfirmation);
+    REQUIRE((controller.IsDirty()));
+    REQUIRE((controller.LeaveIntent() == ProjectCreationLeaveIntent::RequireDiscardConfirmation));
 
     controller.DiscardDraft();
-    assert(!controller.IsDirty());
-    assert(controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow);
+    REQUIRE((!controller.IsDirty()));
+    REQUIRE((controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow));
 }
 
-void DefaultsToActiveBackendAndRejectsUnavailableSelection()
+TEST_CASE("Defaults To Active Backend And Rejects Unavailable Selection", "[unit][editor]")
 {
     using namespace Horo::Editor;
     const RendererAvailabilitySnapshot availability{
@@ -149,24 +150,13 @@ void DefaultsToActiveBackendAndRejectsUnavailableSelection()
         },
         "metal"};
     ProjectCreationController controller{availability};
-    assert(controller.Draft().renderBackend == "metal");
+    REQUIRE((controller.Draft().renderBackend == "metal"));
 
     TemporaryDirectory temporaryDirectory;
     controller.SetProjectName("BackendProject");
     controller.SetProjectPath((temporaryDirectory.Path() / "backend-project").string());
     controller.SetRenderBackend("vulkan");
     HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::RendererBackendUnavailable);
-    assert(!controller.BuildCreationRequest().has_value());
+    REQUIRE((!controller.BuildCreationRequest().has_value()));
 }
-
 } // namespace
-
-int main()
-{
-    ProvidesDocumentDefaults();
-    RejectsBlankAndPathLikeNames();
-    DistinguishesOccupiedEmptyAndMissingDestinations();
-    TracksDraftLeaveIntent();
-    DefaultsToActiveBackendAndRejectsUnavailableSelection();
-    return 0;
-}

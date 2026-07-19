@@ -102,7 +102,8 @@ Startup order:
    required for Welcome/component repair.
 2. The renderer component service discovers and validates machine-local
    component records without loading a project renderer.
-3. `GuiScreenHost` starts on `GuiRouteKind::Welcome`.
+3. Composition constructs `GuiScreenHost`, registers every borrowed screen
+   service, and then starts the host on `GuiRouteKind::Welcome`.
 4. `WelcomeScreen` requests recent projects and renderer preflight snapshots from
    application/project-model services.
 5. Create/open actions resolve renderer requirements before requesting project
@@ -177,10 +178,11 @@ struct ProjectCreationRouteParameters {
 
 struct ProjectLoadingRouteParameters {
     std::string projectRoot;
+    std::string projectName;
 };
 
 struct EditorWorkspaceRouteParameters {
-    ProjectId projectId;
+    ProjectSessionCandidateId session;
     std::optional<ProjectPath> initialScene;
 };
 
@@ -199,10 +201,11 @@ struct GuiRoute {
 
 The host validates that the parameter alternative matches `GuiRouteKind` and
 that IDs and paths are structurally valid before constructing a destination
-screen. The destination then performs semantic validation through application
-services during `OnEnter()`, such as checking project existence, trust, access,
-or format compatibility. Invalid parameters return a typed navigation error and
-leave the active route unchanged.
+screen. A workspace route requires a non-zero session candidate ID; raw project
+paths are accepted only by `ProjectLoading`. The workspace reserves the candidate
+during `OnEnter()`, commits its single consumption after controller/panel setup,
+and releases the reservation if entry fails. Invalid parameters return a typed
+navigation error and leave the active route unchanged.
 
 ## Screen Contract
 
@@ -472,12 +475,18 @@ Leaving:
 5. close the editor session
 6. close or retain the project according to destination requirements
 
+Process startup uses an explicit lifecycle boundary. Constructing
+`GuiScreenHost` creates its registries but does not invoke a screen factory.
+Composition registers every borrowed screen dependency and then calls
+`Start(initialRoute)` exactly once. No screen may observe a partially populated
+service registry.
+
 Process shutdown uses the same explicit lifecycle boundary. `GuiScreenHost::Shutdown()`
 is idempotent: it calls the active screen's `OnLeave()` at most once, destroys
 the screen, and clears borrowed service registrations while their owners still
-exist. The input router is registered before the initial screen is constructed,
-so screens can create native-dialog and widget contexts during their entire
-lifecycle. The application first cancels input capture and resolves or force-detaches the
+exist. The input router and all route-specific services are registered before
+`Start()` constructs the initial screen, so screens can use their complete
+dependency set during their entire lifecycle. The application first cancels input capture and resolves or force-detaches the
 modal stack, then calls `Shutdown()` before composition-owned viewport, ImGui, renderer,
 window, input, and project services begin destruction; the host destructor delegates
 to `Shutdown()` only as a safety net.

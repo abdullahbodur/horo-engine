@@ -29,6 +29,19 @@ extern const ErrorCodeDescriptor ReadFailed;
 extern const ErrorCodeDescriptor SizeInvalid;
 } // namespace Horo::Editor::ProjectMetadataErrors
 
+namespace Horo::Editor::ProjectOpenErrors
+{
+extern const ErrorCodeDescriptor Busy;
+extern const ErrorCodeDescriptor NotFound;
+extern const ErrorCodeDescriptor CompatibilityBlocked;
+extern const ErrorCodeDescriptor MigrationPlanMissing;
+extern const ErrorCodeDescriptor MetadataUpdateFailed;
+extern const ErrorCodeDescriptor DerivedStateFailed;
+extern const ErrorCodeDescriptor Cancelled;
+extern const ErrorCodeDescriptor SessionStale;
+extern const ErrorCodeDescriptor WorkerCapacityInsufficient;
+} // namespace Horo::Editor::ProjectOpenErrors
+
 namespace Horo::Editor::ModalErrors
 {
 extern const ErrorCodeDescriptor Busy;

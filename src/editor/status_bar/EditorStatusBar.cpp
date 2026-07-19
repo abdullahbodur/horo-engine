@@ -5,7 +5,6 @@
 #include "Horo/Editor/Localization/ILocalizationService.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <ranges>
 
 namespace Horo::Editor

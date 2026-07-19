@@ -1,511 +1,517 @@
+include(Catch)
+
+execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -c "import pytest; print(pytest.__version__)"
+        RESULT_VARIABLE HORO_PYTEST_IMPORT_RESULT
+        OUTPUT_VARIABLE HORO_PYTEST_VERSION
+        ERROR_VARIABLE HORO_PYTEST_IMPORT_ERROR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if (NOT HORO_PYTEST_IMPORT_RESULT EQUAL 0)
+    message(FATAL_ERROR
+            "BUILD_TESTING requires pytest for repository Python tests. "
+            "Install the declared test dependencies with: "
+            "${Python3_EXECUTABLE} -m pip install -r ${PROJECT_SOURCE_DIR}/scripts/requirements.txt\n"
+            "Python error: ${HORO_PYTEST_IMPORT_ERROR}"
+    )
+endif ()
+message(STATUS "Using pytest ${HORO_PYTEST_VERSION} with ${Python3_EXECUTABLE}")
+
+add_test(NAME HoroPythonToolingTests
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+        "${PROJECT_SOURCE_DIR}/tests/python"
+        --quiet
+        --basetemp "${CMAKE_CURRENT_BINARY_DIR}/pytest-temp"
+)
+set_tests_properties(HoroPythonToolingTests PROPERTIES
+        LABELS "python;tooling"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1;PYTHONUTF8=1"
+)
+
+function(horo_register_catch_test target)
+    cmake_parse_arguments(ARG "" "" "LABELS;EXTRA_ARGS;PROPERTIES" ${ARGN})
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
+    catch_discover_tests(${target}
+            TEST_PREFIX "${target}::"
+            EXTRA_ARGS ${ARG_EXTRA_ARGS}
+            PROPERTIES LABELS "${ARG_LABELS}" ${ARG_PROPERTIES}
+    )
+endfunction()
+
 add_executable(HoroInputTests
-    unit/runtime/input/InputTests.cpp
+        unit/runtime/input/InputTests.cpp
 )
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
-add_test(NAME HoroInputTests COMMAND HoroInputTests)
-
 add_executable(HoroSceneMathTests
-    unit/foundation/SceneMathTests.cpp
+        unit/foundation/SceneMathTests.cpp
 )
 target_compile_features(HoroSceneMathTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSceneMathTests PRIVATE HoroEngine::Foundation)
-add_test(NAME HoroSceneMathTests COMMAND HoroSceneMathTests)
-
 add_executable(HoroFoundationStringTests
-    unit/foundation/StringTests.cpp
+        unit/foundation/StringTests.cpp
 )
 target_compile_features(HoroFoundationStringTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationStringTests PRIVATE HoroEngine::Foundation)
-add_test(NAME HoroFoundationStringTests COMMAND HoroFoundationStringTests)
-
 add_executable(HoroPrimitiveMeshTests
-    unit/runtime/scene/PrimitiveMeshTests.cpp
+        unit/runtime/scene/PrimitiveMeshTests.cpp
 )
 find_package(Threads REQUIRED)
 target_compile_features(HoroPrimitiveMeshTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPrimitiveMeshTests PRIVATE HoroEngine::SceneModel Threads::Threads)
-add_test(NAME HoroPrimitiveMeshTests COMMAND HoroPrimitiveMeshTests)
-
 add_executable(HoroEditorWelcomeControllerTests
-    unit/editor/WelcomeControllerTests.cpp
+        unit/editor/WelcomeControllerTests.cpp
 )
 
 target_compile_features(HoroEditorWelcomeControllerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorWelcomeControllerTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroEditorWelcomeControllerTests COMMAND HoroEditorWelcomeControllerTests)
-
 add_executable(HoroEditorModalHostTests
-    unit/editor/EditorModalHostTests.cpp
+        unit/editor/EditorModalHostTests.cpp
 )
 
 target_compile_features(HoroEditorModalHostTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorModalHostTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroEditorModalHostTests COMMAND HoroEditorModalHostTests)
-
 if (HORO_BUILD_EDITOR_GUI)
     add_executable(HoroGuiScreenHostLifecycleTests
-        unit/editor/GuiScreenHostLifecycleTests.cpp
+            unit/editor/GuiScreenHostLifecycleTests.cpp
     )
     target_compile_features(HoroGuiScreenHostLifecycleTests PRIVATE cxx_std_20)
     target_link_libraries(HoroGuiScreenHostLifecycleTests PRIVATE HoroEngine::Gui)
-    add_test(NAME HoroGuiScreenHostLifecycleTests COMMAND HoroGuiScreenHostLifecycleTests)
 endif ()
 
 add_executable(HoroSettingsModalLifecycleTests
-    unit/editor/SettingsModalLifecycleTests.cpp
+        unit/editor/SettingsModalLifecycleTests.cpp
 )
 
 target_compile_features(HoroSettingsModalLifecycleTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSettingsModalLifecycleTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroSettingsModalLifecycleTests COMMAND HoroSettingsModalLifecycleTests)
-
 add_executable(HoroEditorLocalizationServiceTests
-    unit/editor/LocalizationServiceTests.cpp
+        unit/editor/LocalizationServiceTests.cpp
 )
 
 target_compile_features(HoroEditorLocalizationServiceTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorLocalizationServiceTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroEditorLocalizationServiceTests COMMAND HoroEditorLocalizationServiceTests)
-
 add_executable(HoroProjectCreationControllerTests
-    unit/editor/ProjectCreationControllerTests.cpp
+        unit/editor/ProjectCreationControllerTests.cpp
 )
 
 target_compile_features(HoroProjectCreationControllerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectCreationControllerTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroProjectCreationControllerTests COMMAND HoroProjectCreationControllerTests)
-
 add_executable(HoroRendererAvailabilityTests
-    unit/editor/RendererAvailabilityTests.cpp
+        unit/editor/RendererAvailabilityTests.cpp
 )
 target_compile_features(HoroRendererAvailabilityTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRendererAvailabilityTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroRendererAvailabilityTests COMMAND HoroRendererAvailabilityTests)
-
 add_executable(HoroProjectMetadataTests
-    unit/editor/ProjectMetadataTests.cpp
+        unit/editor/ProjectMetadataTests.cpp
 )
 target_compile_features(HoroProjectMetadataTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectMetadataTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroProjectMetadataTests COMMAND HoroProjectMetadataTests)
-
+add_executable(HoroProjectCompatibilityTests
+        unit/application/ProjectCompatibilityTests.cpp
+)
+target_compile_features(HoroProjectCompatibilityTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectCompatibilityTests PRIVATE HoroEngine::Application)
+add_executable(HoroProjectMigrationTests
+        unit/application/ProjectMigrationTests.cpp
+)
+target_compile_features(HoroProjectMigrationTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectMigrationTests PRIVATE HoroEngine::ProjectMigrations)
+add_executable(HoroProjectMigrationTransactionTests
+        unit/editor/ProjectMigrationTransactionTests.cpp
+)
+target_compile_features(HoroProjectMigrationTransactionTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectMigrationTransactionTests PRIVATE
+        HoroEngine::EditorServices HoroEngine::ProjectMigrations)
+add_executable(HoroProjectOpenServiceTests
+        unit/editor/ProjectOpenServiceTests.cpp
+)
+target_compile_features(HoroProjectOpenServiceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectOpenServiceTests PRIVATE
+        HoroEngine::EditorServices HoroEngine::ProjectMigrations nlohmann_json::nlohmann_json)
+add_executable(HoroRecentProjectInspectionServiceTests
+        unit/editor/RecentProjectInspectionServiceTests.cpp
+)
+target_compile_features(HoroRecentProjectInspectionServiceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRecentProjectInspectionServiceTests PRIVATE
+        HoroEngine::EditorServices HoroEngine::ProjectMigrations)
 add_executable(HoroProjectCreationServiceTests
-    unit/editor/ProjectCreationServiceTests.cpp
+        unit/editor/ProjectCreationServiceTests.cpp
 )
 
 target_compile_features(HoroProjectCreationServiceTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectCreationServiceTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroProjectCreationServiceTests COMMAND HoroProjectCreationServiceTests)
-
 add_executable(HoroEditorSettingsStoreTests
-    unit/editor/EditorSettingsStoreTests.cpp
+        unit/editor/EditorSettingsStoreTests.cpp
 )
 
 target_compile_features(HoroEditorSettingsStoreTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorSettingsStoreTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroEditorSettingsStoreTests COMMAND HoroEditorSettingsStoreTests)
-
 add_executable(HoroWorkspaceLayoutTests
-    unit/editor/WorkspaceLayoutTests.cpp
+        unit/editor/WorkspaceLayoutTests.cpp
 )
 target_compile_features(HoroWorkspaceLayoutTests PRIVATE cxx_std_20)
 target_link_libraries(HoroWorkspaceLayoutTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroWorkspaceLayoutTests COMMAND HoroWorkspaceLayoutTests)
-
 add_executable(HoroWorkspacePanelHostTests
-    unit/editor/WorkspacePanelHostTests.cpp
+        unit/editor/WorkspacePanelHostTests.cpp
 )
 target_link_libraries(HoroWorkspacePanelHostTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroWorkspacePanelHostTests COMMAND HoroWorkspacePanelHostTests)
-
 add_executable(HoroWorkspaceLayoutPersistenceTests
-    unit/editor/WorkspaceLayoutPersistenceTests.cpp
+        unit/editor/WorkspaceLayoutPersistenceTests.cpp
 )
 target_link_libraries(HoroWorkspaceLayoutPersistenceTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroWorkspaceLayoutPersistenceTests COMMAND HoroWorkspaceLayoutPersistenceTests)
-
 add_executable(HoroActivityBarLayoutTests
-    unit/editor/ActivityBarLayoutTests.cpp
+        unit/editor/ActivityBarLayoutTests.cpp
 )
 target_compile_features(HoroActivityBarLayoutTests PRIVATE cxx_std_20)
 target_link_libraries(HoroActivityBarLayoutTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroActivityBarLayoutTests COMMAND HoroActivityBarLayoutTests)
-
 add_executable(HoroWorkspaceSplitterInteractionTests
-    unit/editor/WorkspaceSplitterInteractionTests.cpp
+        unit/editor/WorkspaceSplitterInteractionTests.cpp
 )
 target_compile_features(HoroWorkspaceSplitterInteractionTests PRIVATE cxx_std_20)
 target_include_directories(HoroWorkspaceSplitterInteractionTests PRIVATE
-    ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
 )
 target_link_libraries(HoroWorkspaceSplitterInteractionTests PRIVATE HoroEngine::EditorServices)
-add_test(NAME HoroWorkspaceSplitterInteractionTests COMMAND HoroWorkspaceSplitterInteractionTests)
-
 if (HORO_BUILD_EDITOR_GUI)
     add_executable(HoroEditorWorkspaceControllerTests
-        unit/editor/EditorWorkspaceControllerTests.cpp
+            unit/editor/EditorWorkspaceControllerTests.cpp
     )
 
     target_compile_features(HoroEditorWorkspaceControllerTests PRIVATE cxx_std_20)
     target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui)
-
-    add_test(NAME HoroEditorWorkspaceControllerTests COMMAND HoroEditorWorkspaceControllerTests)
 endif ()
 
 add_executable(HoroEditorMenuModelTests
-    unit/editor/EditorMenuModelTests.cpp
+        unit/editor/EditorMenuModelTests.cpp
 )
 
 target_compile_features(HoroEditorMenuModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorMenuModelTests PRIVATE HoroEngine::EditorServices)
-
-add_test(NAME HoroEditorMenuModelTests COMMAND HoroEditorMenuModelTests)
-
 add_executable(HoroEditorStatusBarModelTests
-    unit/editor/EditorStatusBarModelTests.cpp
+        unit/editor/EditorStatusBarModelTests.cpp
 )
 
 target_compile_features(HoroEditorStatusBarModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorStatusBarModelTests PRIVATE HoroEngine::EditorServices)
-
-add_test(NAME HoroEditorStatusBarModelTests COMMAND HoroEditorStatusBarModelTests)
-
 add_executable(HoroHierarchyModelTests
-    unit/editor/HierarchyModelTests.cpp
+        unit/editor/HierarchyModelTests.cpp
 )
 
 target_compile_features(HoroHierarchyModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroHierarchyModelTests PRIVATE HoroEngine::EditorServices)
-
-add_test(NAME HoroHierarchyModelTests COMMAND HoroHierarchyModelTests)
-
 add_executable(HoroEditorSelectionModelTests
-    unit/editor/EditorSelectionModelTests.cpp
+        unit/editor/EditorSelectionModelTests.cpp
 )
 
 target_compile_features(HoroEditorSelectionModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorSelectionModelTests PRIVATE HoroEngine::EditorServices)
-
-add_test(NAME HoroEditorSelectionModelTests COMMAND HoroEditorSelectionModelTests)
-
 add_executable(HoroEditorViewportModelTests
-    unit/editor/EditorViewportModelTests.cpp
+        unit/editor/EditorViewportModelTests.cpp
 )
 
 target_compile_features(HoroEditorViewportModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorViewportModelTests PRIVATE HoroEngine::EditorServices)
-
-add_test(NAME HoroEditorViewportModelTests COMMAND HoroEditorViewportModelTests)
-
 if (HORO_BUILD_EDITOR_GUI)
     add_executable(HoroHierarchyPanelRenderTests
-        unit/editor/HierarchyPanelRenderTests.cpp
+            unit/editor/HierarchyPanelRenderTests.cpp
     )
 
     target_compile_features(HoroHierarchyPanelRenderTests PRIVATE cxx_std_20)
     target_include_directories(HoroHierarchyPanelRenderTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
     )
     target_link_libraries(HoroHierarchyPanelRenderTests
-        PRIVATE
+            PRIVATE
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
-
-    add_test(NAME HoroHierarchyPanelRenderTests COMMAND HoroHierarchyPanelRenderTests)
-
     add_executable(HoroInspectorPanelRenderTests
-        unit/editor/InspectorPanelRenderTests.cpp
+            unit/editor/InspectorPanelRenderTests.cpp
     )
 
     target_compile_features(HoroInspectorPanelRenderTests PRIVATE cxx_std_20)
     target_include_directories(HoroInspectorPanelRenderTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
     )
     target_link_libraries(HoroInspectorPanelRenderTests
-        PRIVATE
+            PRIVATE
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
-
-    add_test(NAME HoroInspectorPanelRenderTests COMMAND HoroInspectorPanelRenderTests)
-
     add_executable(HoroContentBrowserPanelRenderTests
-        unit/editor/ContentBrowserPanelRenderTests.cpp
+            unit/editor/ContentBrowserPanelRenderTests.cpp
     )
 
     target_compile_features(HoroContentBrowserPanelRenderTests PRIVATE cxx_std_20)
     target_include_directories(HoroContentBrowserPanelRenderTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
     )
     target_link_libraries(HoroContentBrowserPanelRenderTests
-        PRIVATE
+            PRIVATE
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
-
-    add_test(NAME HoroContentBrowserPanelRenderTests COMMAND HoroContentBrowserPanelRenderTests)
-
     add_executable(HoroViewportPanelRenderTests
-        unit/editor/ViewportPanelRenderTests.cpp
+            unit/editor/ViewportPanelRenderTests.cpp
     )
 
     target_compile_features(HoroViewportPanelRenderTests PRIVATE cxx_std_20)
     target_include_directories(HoroViewportPanelRenderTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
     )
     target_link_libraries(HoroViewportPanelRenderTests
-        PRIVATE
+            PRIVATE
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
-
-    add_test(NAME HoroViewportPanelRenderTests COMMAND HoroViewportPanelRenderTests)
 endif ()
 
 add_executable(HoroDataBusTests
-    unit/foundation/DataBusTests.cpp
+        unit/foundation/DataBusTests.cpp
 )
 
 target_compile_features(HoroDataBusTests PRIVATE cxx_std_20)
 target_link_libraries(HoroDataBusTests
-    PRIVATE
+        PRIVATE
         HoroEngine::EditorServices
 )
-
-add_test(NAME HoroDataBusTests COMMAND HoroDataBusTests)
-
 add_executable(HoroFoundationResultTests
-    unit/foundation/ResultTests.cpp
+        unit/foundation/ResultTests.cpp
 )
 
 target_compile_features(HoroFoundationResultTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationResultTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationResultTests COMMAND HoroFoundationResultTests)
-
 add_executable(HoroFoundationPathsTimeHandlesTests
-    unit/foundation/PathsTimeHandlesTests.cpp
+        unit/foundation/PathsTimeHandlesTests.cpp
 )
 
 target_compile_features(HoroFoundationPathsTimeHandlesTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationPathsTimeHandlesTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationPathsTimeHandlesTests COMMAND HoroFoundationPathsTimeHandlesTests)
-
 add_executable(HoroFoundationCancellationProgressTests
-    unit/foundation/CancellationProgressTests.cpp
+        unit/foundation/CancellationProgressTests.cpp
 )
 
 target_compile_features(HoroFoundationCancellationProgressTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationCancellationProgressTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationCancellationProgressTests COMMAND HoroFoundationCancellationProgressTests)
-
 add_executable(HoroFoundationConfigurationTests
-    unit/foundation/ConfigurationTests.cpp
+        unit/foundation/ConfigurationTests.cpp
 )
 
 target_compile_features(HoroFoundationConfigurationTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationConfigurationTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationConfigurationTests COMMAND HoroFoundationConfigurationTests)
-
 add_executable(HoroFoundationDiagnosticsTests
-    unit/foundation/DiagnosticsTests.cpp
+        unit/foundation/DiagnosticsTests.cpp
 )
 
 target_compile_features(HoroFoundationDiagnosticsTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationDiagnosticsTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationDiagnosticsTests COMMAND HoroFoundationDiagnosticsTests)
-
 add_executable(HoroFoundationJobSystemTests
-    unit/foundation/JobSystemTests.cpp
+        unit/foundation/JobSystemTests.cpp
 )
 
 target_compile_features(HoroFoundationJobSystemTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationJobSystemTests PRIVATE HoroEngine::Foundation)
-
-add_test(NAME HoroFoundationJobSystemTests COMMAND HoroFoundationJobSystemTests)
-
 add_executable(HoroPlatformTests
-    unit/foundation/PlatformTests.cpp
+        unit/foundation/PlatformTests.cpp
 )
 
 target_compile_features(HoroPlatformTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPlatformTests PRIVATE HoroEngine::Platform)
-
-add_test(NAME HoroPlatformTests COMMAND HoroPlatformTests)
-
 add_executable(HoroEditorViewportSceneTests
-    unit/editor/EditorViewportSceneTests.cpp
+        unit/editor/EditorViewportSceneTests.cpp
 )
 
 target_compile_features(HoroEditorViewportSceneTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorViewportSceneTests PRIVATE HoroEngine::EditorViewportScene)
-
-add_test(NAME HoroEditorViewportSceneTests COMMAND HoroEditorViewportSceneTests)
-
 add_executable(HoroSceneDocumentTests
-    unit/editor/SceneDocumentTests.cpp
+        unit/editor/SceneDocumentTests.cpp
 )
 target_compile_features(HoroSceneDocumentTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSceneDocumentTests PRIVATE HoroEngine::EditorRenderExtraction)
-add_test(NAME HoroSceneDocumentTests COMMAND HoroSceneDocumentTests)
-
 add_executable(HoroEditorViewportPickingTests
-    unit/editor/EditorViewportPickingTests.cpp
+        unit/editor/EditorViewportPickingTests.cpp
 )
 target_compile_features(HoroEditorViewportPickingTests PRIVATE cxx_std_20)
 target_link_libraries(HoroEditorViewportPickingTests PRIVATE HoroEngine::EditorRenderExtraction)
-add_test(NAME HoroEditorViewportPickingTests COMMAND HoroEditorViewportPickingTests)
-
 add_executable(HoroRenderBackendRegistryTests
-    unit/runtime/renderer/RenderBackendRegistryTests.cpp
+        unit/runtime/renderer/RenderBackendRegistryTests.cpp
 )
 
 target_compile_features(HoroRenderBackendRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderBackendRegistryTests
-    PRIVATE
+        PRIVATE
         HoroEngine::RenderNull
 )
-
-add_test(NAME HoroRenderBackendRegistryTests COMMAND HoroRenderBackendRegistryTests)
-
 add_executable(HoroRenderFrontendTests
-    unit/runtime/renderer/RenderFrontendTests.cpp
+        unit/runtime/renderer/RenderFrontendTests.cpp
 )
 
 target_compile_features(HoroRenderFrontendTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderFrontendTests
-    PRIVATE
+        PRIVATE
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
-
-add_test(NAME HoroRenderFrontendTests COMMAND HoroRenderFrontendTests)
-
 add_executable(HoroRuntimeLifecycleTests
-    unit/runtime/lifecycle/RuntimeLifecycleTests.cpp
+        unit/runtime/lifecycle/RuntimeLifecycleTests.cpp
 )
 target_compile_features(HoroRuntimeLifecycleTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeLifecycleTests
-    PRIVATE
+        PRIVATE
         HoroEngine::Runtime
         HoroEngine::Platform
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
-add_test(NAME HoroRuntimeLifecycleTests COMMAND HoroRuntimeLifecycleTests)
-
 add_executable(HoroRuntimeSceneTests
-    unit/runtime/scene/RuntimeSceneTests.cpp
+        unit/runtime/scene/RuntimeSceneTests.cpp
 )
 target_compile_features(HoroRuntimeSceneTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSceneTests PRIVATE HoroEngine::RuntimeScene)
-add_test(NAME HoroRuntimeSceneTests COMMAND HoroRuntimeSceneTests)
+add_executable(HoroAssetRegistryTests
+        unit/runtime/assets/AssetRegistryTests.cpp
+)
+target_compile_features(HoroAssetRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetRegistryTests PRIVATE HoroEngine::Assets)
+add_executable(HoroAssetProviderTests
+        unit/runtime/assets/AssetProviderTests.cpp
+)
+target_compile_features(HoroAssetProviderTests PRIVATE cxx_std_20)
+target_include_directories(HoroAssetProviderTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/runtime_provider
+)
+target_link_libraries(HoroAssetProviderTests PRIVATE HoroEngine::Assets)
+function(horo_add_public_header_compile_target target owning_target)
+    set(generated_sources)
+    foreach (header IN LISTS ARGN)
+        string(REPLACE "/" "_" source_name "${header}")
+        set(source "${CMAKE_CURRENT_BINARY_DIR}/header_compile/${source_name}.cpp")
+        file(GENERATE OUTPUT "${source}" CONTENT "#include \"${header}\"\n")
+        list(APPEND generated_sources "${source}")
+    endforeach ()
+    add_library(${target} OBJECT ${generated_sources})
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    target_link_libraries(${target} PRIVATE ${owning_target})
+endfunction()
 
-if(HORO_BUILD_RENDER_OPENGL)
+horo_add_public_header_compile_target(HoroRuntimePublicHeaderCompile HoroEngine::RuntimeScene
+        Horo/Runtime/FrameScheduler.h
+        Horo/Runtime/RuntimeHost.h
+        Horo/Runtime/RuntimeLifecycle.h
+        Horo/Runtime/Scene/RuntimeScene.h
+        Horo/Runtime/Scene/RuntimeSceneDefinition.h
+)
+horo_add_public_header_compile_target(HoroAssetsPublicHeaderCompile HoroEngine::Assets
+        Horo/Assets/AssetId.h
+        Horo/Assets/AssetRegistry.h
+        Horo/Assets/AssetProvider.h
+)
+horo_add_public_header_compile_target(HoroApplicationPublicHeaderCompile HoroEngine::Application
+        Horo/Application/ProjectVersion.h
+        Horo/Application/ProjectCompatibility.h
+        Horo/Application/ProjectMigration.h
+        Horo/Application/ProjectMigrationCatalog.h
+)
+horo_add_public_header_compile_target(HoroPlatformPublicHeaderCompile HoroEngine::Platform
+        Horo/Foundation/Platform.h
+)
+horo_add_public_header_compile_target(HoroEditorServicesPublicHeaderCompile HoroEngine::EditorServices
+        Horo/Editor/ProjectMutation.h
+        Horo/Editor/ProjectMigrationTransaction.h
+        Horo/Editor/ProjectSession.h
+        Horo/Editor/ProjectOpenService.h
+        Horo/Editor/RecentProjectInspectionService.h
+)
+
+if (HORO_BUILD_RENDER_OPENGL)
     add_executable(HoroRenderOpenGLTests
-        unit/runtime/renderer/OpenGLRenderBackendTests.cpp
+            unit/runtime/renderer/OpenGLRenderBackendTests.cpp
     )
 
     target_compile_features(HoroRenderOpenGLTests PRIVATE cxx_std_20)
     target_include_directories(HoroRenderOpenGLTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/runtime/renderer/modules/opengl
+            ${PROJECT_SOURCE_DIR}/src/runtime/renderer/modules/opengl
     )
     target_link_libraries(HoroRenderOpenGLTests
-        PRIVATE
+            PRIVATE
             HoroEngine::RenderFrontend
             HoroEngine::RenderOpenGL
     )
-
-    add_test(NAME HoroRenderOpenGLTests COMMAND HoroRenderOpenGLTests)
-
-    if(HORO_BUILD_EDITOR_GUI)
+    if (HORO_BUILD_EDITOR_GUI)
         add_executable(HoroEditorViewportOpenGLSmoke
-            integration/renderer/EditorViewportOpenGLSmoke.cpp
+                integration/renderer/EditorViewportOpenGLSmoke.cpp
         )
 
         target_compile_features(HoroEditorViewportOpenGLSmoke PRIVATE cxx_std_20)
         target_compile_definitions(HoroEditorViewportOpenGLSmoke PRIVATE GL_SILENCE_DEPRECATION)
         target_include_directories(HoroEditorViewportOpenGLSmoke PRIVATE ${PROJECT_SOURCE_DIR}/src)
         target_link_libraries(HoroEditorViewportOpenGLSmoke
-            PRIVATE
+                PRIVATE
                 HoroEngine::EditorViewportOpenGL
                 HoroEngine::RenderFrontend
                 HoroThirdParty::Glad
         )
 
-        if(HORO_ENABLE_GPU_SMOKE_TESTS)
-            add_test(
-                NAME HoroEditorViewportOpenGLSmoke
-                COMMAND HoroEditorViewportOpenGLSmoke ${CMAKE_CURRENT_BINARY_DIR}/horo-viewport-cube.ppm
-            )
-            set_tests_properties(HoroEditorViewportOpenGLSmoke PROPERTIES LABELS "gpu;display")
-            if(TARGET HoroEditor)
+        if (HORO_ENABLE_GPU_SMOKE_TESTS)
+            if (TARGET HoroEditor)
+                set(HORO_OPENGL_FIRST_FRAME_HOME "${CMAKE_CURRENT_BINARY_DIR}/first-frame-home/opengl")
+                file(MAKE_DIRECTORY "${HORO_OPENGL_FIRST_FRAME_HOME}")
                 add_test(NAME HoroEditorOpenGLFirstFrame
-                         COMMAND $<TARGET_FILE:HoroEditor> --renderer opengl --exit-after-first-frame)
-                set_tests_properties(HoroEditorOpenGLFirstFrame PROPERTIES LABELS "gpu;display;editor")
-            endif()
-        endif()
-    endif()
-endif()
+                        COMMAND $<TARGET_FILE:HoroEditor> --renderer opengl --exit-after-first-frame)
+                set_tests_properties(HoroEditorOpenGLFirstFrame PROPERTIES
+                        LABELS "gpu;display;editor"
+                        ENVIRONMENT "HOME=${HORO_OPENGL_FIRST_FRAME_HOME};USERPROFILE=${HORO_OPENGL_FIRST_FRAME_HOME}"
+                )
+            endif ()
+        endif ()
+    endif ()
+endif ()
 
-if(HORO_BUILD_RENDER_METAL)
+if (HORO_BUILD_RENDER_METAL)
     add_executable(HoroRenderMetalTests
-        unit/runtime/renderer/MetalRenderBackendTests.cpp
+            unit/runtime/renderer/MetalRenderBackendTests.cpp
     )
 
     target_compile_features(HoroRenderMetalTests PRIVATE cxx_std_20)
     target_include_directories(HoroRenderMetalTests PRIVATE ${PROJECT_SOURCE_DIR}/src)
     target_link_libraries(HoroRenderMetalTests
-        PRIVATE
+            PRIVATE
             HoroEngine::RenderFrontend
             HoroEngine::RenderMetal
     )
-
-    add_test(NAME HoroRenderMetalTests COMMAND HoroRenderMetalTests)
-
-    if(HORO_BUILD_EDITOR_GUI)
+    if (HORO_BUILD_EDITOR_GUI)
         add_executable(HoroEditorViewportMetalSmoke
-            integration/renderer/EditorViewportMetalSmoke.mm
+                integration/renderer/EditorViewportMetalSmoke.mm
         )
 
         target_compile_features(HoroEditorViewportMetalSmoke PRIVATE cxx_std_20)
         target_include_directories(HoroEditorViewportMetalSmoke PRIVATE ${PROJECT_SOURCE_DIR}/src)
         target_link_libraries(HoroEditorViewportMetalSmoke
-            PRIVATE
+                PRIVATE
                 HoroEngine::EditorViewportMetal
                 HoroEngine::RenderFrontend
                 HoroEngine::RenderMetal
@@ -514,17 +520,92 @@ if(HORO_BUILD_RENDER_METAL)
                 "-framework QuartzCore"
         )
 
-        if(HORO_ENABLE_GPU_SMOKE_TESTS)
-            add_test(NAME HoroEditorViewportMetalSmoke COMMAND HoroEditorViewportMetalSmoke)
-            set_tests_properties(HoroEditorViewportMetalSmoke PROPERTIES
-                LABELS "gpu;display;metal"
-                ENVIRONMENT "MTL_DEBUG_LAYER=1"
-            )
-            if(TARGET HoroEditor)
+        if (HORO_ENABLE_GPU_SMOKE_TESTS)
+            if (TARGET HoroEditor)
+                set(HORO_METAL_FIRST_FRAME_HOME "${CMAKE_CURRENT_BINARY_DIR}/first-frame-home/metal")
+                file(MAKE_DIRECTORY "${HORO_METAL_FIRST_FRAME_HOME}")
                 add_test(NAME HoroEditorMetalFirstFrame
-                         COMMAND $<TARGET_FILE:HoroEditor> --renderer metal --exit-after-first-frame)
-                set_tests_properties(HoroEditorMetalFirstFrame PROPERTIES LABELS "gpu;display;metal;editor")
-            endif()
-        endif()
-    endif()
-endif()
+                        COMMAND $<TARGET_FILE:HoroEditor> --renderer metal --exit-after-first-frame)
+                set_tests_properties(HoroEditorMetalFirstFrame PROPERTIES
+                        LABELS "gpu;display;metal;editor"
+                        ENVIRONMENT "HOME=${HORO_METAL_FIRST_FRAME_HOME};USERPROFILE=${HORO_METAL_FIRST_FRAME_HOME}"
+                        FAIL_REGULAR_EXPRESSION "Runtime frame failed"
+                )
+            endif ()
+        endif ()
+    endif ()
+endif ()
+
+set(HORO_CATCH_TEST_TARGETS
+        HoroInputTests
+        HoroSceneMathTests
+        HoroFoundationStringTests
+        HoroPrimitiveMeshTests
+        HoroEditorWelcomeControllerTests
+        HoroEditorModalHostTests
+        HoroGuiScreenHostLifecycleTests
+        HoroSettingsModalLifecycleTests
+        HoroEditorLocalizationServiceTests
+        HoroProjectCreationControllerTests
+        HoroRendererAvailabilityTests
+        HoroProjectMetadataTests
+        HoroProjectCompatibilityTests
+        HoroProjectMigrationTests
+        HoroProjectMigrationTransactionTests
+        HoroProjectOpenServiceTests
+        HoroRecentProjectInspectionServiceTests
+        HoroProjectCreationServiceTests
+        HoroEditorSettingsStoreTests
+        HoroWorkspaceLayoutTests
+        HoroWorkspacePanelHostTests
+        HoroWorkspaceLayoutPersistenceTests
+        HoroActivityBarLayoutTests
+        HoroWorkspaceSplitterInteractionTests
+        HoroEditorWorkspaceControllerTests
+        HoroEditorMenuModelTests
+        HoroEditorStatusBarModelTests
+        HoroHierarchyModelTests
+        HoroEditorSelectionModelTests
+        HoroEditorViewportModelTests
+        HoroHierarchyPanelRenderTests
+        HoroInspectorPanelRenderTests
+        HoroContentBrowserPanelRenderTests
+        HoroViewportPanelRenderTests
+        HoroDataBusTests
+        HoroFoundationResultTests
+        HoroFoundationPathsTimeHandlesTests
+        HoroFoundationCancellationProgressTests
+        HoroFoundationConfigurationTests
+        HoroFoundationDiagnosticsTests
+        HoroFoundationJobSystemTests
+        HoroPlatformTests
+        HoroEditorViewportSceneTests
+        HoroSceneDocumentTests
+        HoroEditorViewportPickingTests
+        HoroRenderBackendRegistryTests
+        HoroRenderFrontendTests
+        HoroRuntimeLifecycleTests
+        HoroRuntimeSceneTests
+        HoroAssetRegistryTests
+        HoroAssetProviderTests
+        HoroRenderOpenGLTests
+        HoroRenderMetalTests
+)
+
+foreach (target IN LISTS HORO_CATCH_TEST_TARGETS)
+    if (TARGET ${target})
+        horo_register_catch_test(${target} LABELS "native")
+    endif ()
+endforeach ()
+
+if (HORO_ENABLE_GPU_SMOKE_TESTS)
+    if (TARGET HoroEditorViewportOpenGLSmoke)
+        horo_register_catch_test(HoroEditorViewportOpenGLSmoke LABELS "gpu;display;opengl")
+    endif ()
+    if (TARGET HoroEditorViewportMetalSmoke)
+        horo_register_catch_test(HoroEditorViewportMetalSmoke
+                LABELS "gpu;display;metal"
+                PROPERTIES ENVIRONMENT "MTL_DEBUG_LAYER=1"
+        )
+    endif ()
+endif ()

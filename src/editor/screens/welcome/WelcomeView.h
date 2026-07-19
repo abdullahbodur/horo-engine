@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/WelcomeController.h"
 #include "Horo/Editor/EditorGuiContext.h"
 #include <imgui.h>

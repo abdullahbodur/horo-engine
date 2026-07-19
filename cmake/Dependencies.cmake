@@ -13,6 +13,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+if(BUILD_TESTING)
+    set(HORO_CATCH2_REVISION "6ee0826dcae55ed1e06b2c5701981221e979e1e6")
+    set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+    set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG "${HORO_CATCH2_REVISION}"
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(Catch2)
+    list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
+endif()
+
 if(HORO_BUILD_RENDER_OPENGL)
     find_package(OpenGL REQUIRED)
 endif()

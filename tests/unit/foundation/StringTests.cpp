@@ -1,33 +1,26 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Foundation/String.h"
 
-#include <cassert>
 #include <string>
 
 namespace
 {
-void EmptyAndWhitespaceOnlyStringsAreBlank()
+TEST_CASE("Empty And Whitespace Only Strings Are Blank", "[unit][foundation]")
 {
-    assert(Horo::Text::IsBlank(""));
-    assert(Horo::Text::IsBlank(" \t\n\r\f\v"));
+    REQUIRE((Horo::Text::IsBlank("")));
+    REQUIRE((Horo::Text::IsBlank(" \t\n\r\f\v")));
 }
 
-void StringsContainingVisibleCharactersAreNotBlank()
+TEST_CASE("Strings Containing Visible Characters Are Not Blank", "[unit][foundation]")
 {
-    assert(!Horo::Text::IsBlank("horo"));
-    assert(!Horo::Text::IsBlank("  horo  "));
+    REQUIRE((!Horo::Text::IsBlank("horo")));
+    REQUIRE((!Horo::Text::IsBlank("  horo  ")));
 }
 
-void CharactersWithNegativePlainCharValuesAreHandledSafely()
+TEST_CASE("Characters With Negative Plain Char Values Are Handled Safely", "[unit][foundation]")
 {
     constexpr std::string value(1, static_cast<char>(0xFF));
-    assert(!Horo::Text::IsBlank(value));
+    REQUIRE((!Horo::Text::IsBlank(value)));
 }
-}
-
-int main()
-{
-    EmptyAndWhitespaceOnlyStringsAreBlank();
-    StringsContainingVisibleCharactersAreNotBlank();
-    CharactersWithNegativePlainCharValuesAreHandledSafely();
-    return 0;
-}
+} // namespace

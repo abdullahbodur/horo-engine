@@ -1,9 +1,10 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/NullBackendModule.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
 #include "Horo/Runtime/Render/RenderBackendRegistry.h"
 
 #include <array>
-#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -16,10 +17,7 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 
 enum class ProviderBehavior
@@ -91,7 +89,7 @@ class TestBackendProvider final : public IRenderBackendProvider
     return std::make_unique<TestBackendProvider>(behavior, probe);
 }
 
-void RegistryOwnsProviderAndDefersInvocationUntilCreate()
+TEST_CASE("Registry Owns Provider And Defers Invocation Until Create", "[unit][runtime][renderer]")
 {
     ProviderProbe probe;
     {
@@ -117,7 +115,7 @@ void RegistryOwnsProviderAndDefersInvocationUntilCreate()
     Check(probe.destroyCount == 1);
 }
 
-void RegistryDestroysAProviderRejectedDuringRegistration()
+TEST_CASE("Registry Destroys A Provider Rejected During Registration", "[unit][runtime][renderer]")
 {
     ProviderProbe probe;
     RenderBackendRegistry registry;
@@ -131,7 +129,7 @@ void RegistryDestroysAProviderRejectedDuringRegistration()
     Check(probe.destroyCount == 1);
 }
 
-void RegistryRejectsInvalidAndDuplicateDescriptors()
+TEST_CASE("Registry Rejects Invalid And Duplicate Descriptors", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
 
@@ -160,7 +158,7 @@ void RegistryRejectsInvalidAndDuplicateDescriptors()
     Check(duplicate.ErrorValue().code.Value() == "render.registry.duplicate_backend");
 }
 
-void RegistrySealsDeterministicallyAndRejectsLateMutation()
+TEST_CASE("Registry Seals Deterministically And Rejects Late Mutation", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -185,7 +183,7 @@ void RegistrySealsDeterministicallyAndRejectsLateMutation()
     Check(lateRegistration.ErrorValue().code.Value() == "render.registry.sealed");
 }
 
-void RegistryRequiresSealAndReturnsTypedUnknownBackendErrors()
+TEST_CASE("Registry Requires Seal And Returns Typed Unknown Backend Errors", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -200,7 +198,7 @@ void RegistryRequiresSealAndReturnsTypedUnknownBackendErrors()
     Check(missing.ErrorValue().code.Value() == "render.registry.backend_not_found");
 }
 
-void RegistryRejectsAProviderThatReturnsNoBackendInstance()
+TEST_CASE("Registry Rejects A Provider That Returns No Backend Instance", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(registry
@@ -217,7 +215,7 @@ void RegistryRejectsAProviderThatReturnsNoBackendInstance()
     Check(created.ErrorValue().code.Value() == "render.registry.provider_returned_null");
 }
 
-void RegistryPreservesProviderFailuresAndTranslatesExceptions()
+TEST_CASE("Registry Preserves Provider Failures And Translates Exceptions", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(registry
@@ -256,7 +254,7 @@ void RegistryPreservesProviderFailuresAndTranslatesExceptions()
     Check(threw.ErrorValue().code.Value() == "render.registry.provider_exception");
 }
 
-void NullProviderIsInertUntilExplicitInitialization()
+TEST_CASE("Null Provider Is Inert Until Explicit Initialization", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -277,7 +275,7 @@ void NullProviderIsInertUntilExplicitInitialization()
     Check(!backend->Capabilities().presentsToWindow);
 }
 
-void NullBackendValidatesFrameLifecycleWithoutGpuWork()
+TEST_CASE("Null Backend Validates Frame Lifecycle Without Gpu Work", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -337,7 +335,7 @@ void NullBackendValidatesFrameLifecycleWithoutGpuWork()
     backend->Shutdown();
 }
 
-void NullBackendRejectsPresentationRequirements()
+TEST_CASE("Null Backend Rejects Presentation Requirements", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -351,7 +349,7 @@ void NullBackendRejectsPresentationRequirements()
     Check(initialized.ErrorValue().code.Value() == "render.null.presentation_unsupported");
 }
 
-void NullBackendRejectsInvalidConfigurationAndFrameExtent()
+TEST_CASE("Null Backend Rejects Invalid Configuration And Frame Extent", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -381,7 +379,7 @@ void NullBackendRejectsInvalidConfigurationAndFrameExtent()
           "render.backend.invalid_frame_descriptor");
 }
 
-void NullBackendValidatesPrimaryOutputAttachments()
+TEST_CASE("Null Backend Validates Primary Output Attachments", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -445,20 +443,3 @@ void NullBackendValidatesPrimaryOutputAttachments()
     backend->AbortFrame(frame);
 }
 } // namespace
-
-int main()
-{
-    RegistryOwnsProviderAndDefersInvocationUntilCreate();
-    RegistryDestroysAProviderRejectedDuringRegistration();
-    RegistryRejectsInvalidAndDuplicateDescriptors();
-    RegistrySealsDeterministicallyAndRejectsLateMutation();
-    RegistryRequiresSealAndReturnsTypedUnknownBackendErrors();
-    RegistryRejectsAProviderThatReturnsNoBackendInstance();
-    RegistryPreservesProviderFailuresAndTranslatesExceptions();
-    NullProviderIsInertUntilExplicitInitialization();
-    NullBackendValidatesFrameLifecycleWithoutGpuWork();
-    NullBackendRejectsPresentationRequirements();
-    NullBackendRejectsInvalidConfigurationAndFrameExtent();
-    NullBackendValidatesPrimaryOutputAttachments();
-    return 0;
-}

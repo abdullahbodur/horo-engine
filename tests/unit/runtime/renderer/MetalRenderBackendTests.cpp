@@ -1,8 +1,9 @@
-#include "runtime/renderer/modules/metal/MetalBackendInternal.h"
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/RenderFrontend.h"
+#include "runtime/renderer/modules/metal/MetalBackendInternal.h"
 
 #include <array>
-#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -13,10 +14,7 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 
 [[nodiscard]] Error MakePortError(const char *code, const char *message)
@@ -179,8 +177,8 @@ class FakeMetalRuntimeFactory final : public Detail::IMetalRuntimeFactory
     {
     }
 
-    Result<std::unique_ptr<Detail::IMetalRuntime>> Create(
-        IMetalPresentationPort &presentationPort, MetalEditorGraphicsBridge &) const override
+    Result<std::unique_ptr<Detail::IMetalRuntime>> Create(IMetalPresentationPort &presentationPort,
+                                                          MetalEditorGraphicsBridge &) const override
     {
         return Result<std::unique_ptr<Detail::IMetalRuntime>>::Success(
             std::make_unique<FakeMetalRuntime>(presentationPort, *state_));
@@ -202,7 +200,7 @@ class FakeMetalRuntimeFactory final : public Detail::IMetalRuntimeFactory
     return std::move(created).Value();
 }
 
-void ProviderIsInertAndBackendOwnsPresentationLifecycle()
+TEST_CASE("Provider Is Inert And Backend Owns Presentation Lifecycle", "[unit][runtime][renderer]")
 {
     PortState state;
     FakePresentationPort port{state};
@@ -265,7 +263,7 @@ void ProviderIsInertAndBackendOwnsPresentationLifecycle()
     Check(state.destroyCount == 1);
 }
 
-void FailuresPreserveTypedErrorsAndFrameRecovery()
+TEST_CASE("Failures Preserve Typed Errors And Frame Recovery", "[unit][runtime][renderer]")
 {
     PortState state{.failure = PortFailure::Create};
     FakePresentationPort port{state};
@@ -309,7 +307,7 @@ void FailuresPreserveTypedErrorsAndFrameRecovery()
     backend->Shutdown();
 }
 
-void SharedPresentationPortRejectsOverlappingBackends()
+TEST_CASE("Shared Presentation Port Rejects Overlapping Backends", "[unit][runtime][renderer]")
 {
     PortState state;
     FakePresentationPort port{state};
@@ -334,7 +332,7 @@ void SharedPresentationPortRejectsOverlappingBackends()
     Check(state.destroyCount == 2);
 }
 
-void InvalidPlansDoNotReachThePresentationPort()
+TEST_CASE("Invalid Plans Do Not Reach The Presentation Port", "[unit][runtime][renderer]")
 {
     PortState state;
     FakePresentationPort port{state};
@@ -357,7 +355,7 @@ void InvalidPlansDoNotReachThePresentationPort()
     backend->AbortActiveFrame();
     backend->Shutdown();
 }
-void ModuleInfoDescribesMetalWindowBeforeBackendCreation()
+TEST_CASE("Module Info Describes Metal Window Before Backend Creation", "[unit][runtime][renderer]")
 {
     const RenderBackendModuleInfo &info = GetMetalRenderBackendModuleInfo();
     Check(info.id == RenderBackendId{"metal"});
@@ -366,7 +364,7 @@ void ModuleInfoDescribesMetalWindowBeforeBackendCreation()
     Check(info.supportsInteractivePresentation);
 }
 
-void UnsupportedDrawableBufferCountFailsBeforePresentationCreation()
+TEST_CASE("Unsupported Drawable Buffer Count Fails Before Presentation Creation", "[unit][runtime][renderer]")
 {
     PortState state;
     FakePresentationPort port{state};
@@ -378,14 +376,3 @@ void UnsupportedDrawableBufferCountFailsBeforePresentationCreation()
     Check(state.createCount == 0);
 }
 } // namespace
-
-int main()
-{
-    ModuleInfoDescribesMetalWindowBeforeBackendCreation();
-    ProviderIsInertAndBackendOwnsPresentationLifecycle();
-    FailuresPreserveTypedErrorsAndFrameRecovery();
-    SharedPresentationPortRejectsOverlappingBackends();
-    InvalidPlansDoNotReachThePresentationPort();
-    UnsupportedDrawableBufferCountFailsBeforePresentationCreation();
-    return 0;
-}

@@ -9,7 +9,6 @@
 #include "Horo/Foundation/Result.h"
 #include "editor/document/SceneDocument.h"
 
-#include <cstdint>
 #include <optional>
 #include <vector>
 

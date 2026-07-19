@@ -6,7 +6,7 @@
 #include "Horo/Editor/GuiScreenHost.h"
 #include "editor/project_model/ProjectMetadata.h"
 #include "Horo/Editor/RecentProject.h"
-#include "editor/project_model/RendererAvailability.h"
+#include "Horo/Editor/RecentProjectInspectionService.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/SettingsModal.h"
 #include "Horo/Editor/WelcomeController.h"
@@ -18,6 +18,7 @@
 #include <portable-file-dialogs.h>
 
 #include <filesystem>
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -32,7 +33,7 @@ namespace Horo::Editor
                 : host_(services.Get<GuiScreenHost>()), context_(services.GetConst<EditorGuiContext>()),
                   modalHost_(services.Get<EditorModalHost>()), settings_(services.Get<EditorSettingsService>()),
                   inputRouter_(services.Get<Input::InputRouter>()),
-                  rendererAvailability_(services.GetConst<RendererAvailabilitySnapshot>()),
+                  recentInspection_(services.Get<RecentProjectInspectionService>()),
                   logoTexture_(services.TryGet<std::uintptr_t>() ? *services.TryGet<std::uintptr_t>() : 0)
             {
             }
@@ -45,6 +46,12 @@ namespace Horo::Editor
             Result<void> OnEnter(const GuiRoute&) override
             {
                 recentProjects_ = LoadRecentProjectsFromDisk();
+                for (RecentProjectEntry& project : recentProjects_)
+                {
+                    if (project.compatibility.has_value())
+                        project.compatibility->inspectionState = RecentProjectInspectionState::Refreshing;
+                }
+                static_cast<void>(recentInspection_.Refresh(recentProjects_));
                 controller_ = std::make_unique<WelcomeScreenController>(recentProjects_);
                 viewModel_ = controller_->BuildViewModel();
                 LOG_DEBUG("editor.screens", "WelcomeScreen entered with %zu recent projects.", recentProjects_.size());
@@ -53,7 +60,22 @@ namespace Horo::Editor
 
             void OnUpdate(float) override
             {
-                // No time-dependent simulation required for the welcome screen.
+                bool changed = false;
+                for (RecentProjectInspectionUpdate& update : recentInspection_.DrainUpdates())
+                {
+                    const auto project = std::ranges::find(recentProjects_, update.rootPath,
+                                                           &RecentProjectEntry::rootPath);
+                    if (project == recentProjects_.end())
+                        continue;
+                    project->compatibility = std::move(update.projection);
+                    changed = true;
+                }
+                if (changed)
+                {
+                    static_cast<void>(SaveRecentProjectsToDisk(recentProjects_));
+                    controller_ = std::make_unique<WelcomeScreenController>(recentProjects_);
+                    viewModel_ = controller_->BuildViewModel();
+                }
             }
 
             void Draw(const GuiContentRegion& contentRegion) override
@@ -149,32 +171,8 @@ namespace Horo::Editor
         private:
             void OpenProject(const std::string& projectRoot, const std::string& fallbackName)
             {
-                const ProjectOpenPreflight preflight = PreflightProjectOpen(projectRoot, rendererAvailability_);
-                if (preflight.status == ProjectOpenPreflightStatus::Ready)
-                {
-                    static_cast<void>(host_.Navigate(
-                        GuiRoute{
-                            GuiRouteKind::ProjectLoading,
-                            ProjectLoadingRouteParameters{
-                                projectRoot, preflight.projectName.empty() ? fallbackName : preflight.projectName
-                            }
-                        }));
-                    return;
-                }
-                if (preflight.status == ProjectOpenPreflightStatus::RequiresRendererRestart)
-                {
-                    static_cast<void>(host_.RequestRendererRestart(
-                        EditorRendererRestartRequest{
-                            preflight.requiredBackendId, projectRoot,
-                            preflight.projectName.empty() ? fallbackName : preflight.projectName
-                        }));
-                    return;
-                }
-
-                LOG_ERROR("editor.welcome", "Project open preflight failed for '%s': %s", projectRoot.c_str(),
-                          preflight.diagnostic.c_str());
-                static_cast<void>(
-                    pfd::message("Unable to Open Project", preflight.diagnostic, pfd::choice::ok, pfd::icon::error));
+                static_cast<void>(host_.Navigate(GuiRoute{
+                    GuiRouteKind::ProjectLoading, ProjectLoadingRouteParameters{projectRoot, fallbackName}}));
             }
 
             GuiScreenHost& host_;
@@ -182,7 +180,7 @@ namespace Horo::Editor
             EditorModalHost& modalHost_;
             EditorSettingsService& settings_;
             Input::InputRouter& inputRouter_;
-            const RendererAvailabilitySnapshot& rendererAvailability_;
+            RecentProjectInspectionService& recentInspection_;
             std::uintptr_t logoTexture_;
             std::vector<RecentProjectEntry> recentProjects_;
             std::unique_ptr<WelcomeScreenController> controller_;

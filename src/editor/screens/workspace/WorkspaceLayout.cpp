@@ -266,32 +266,32 @@ namespace Horo::Editor
 
     LayoutNode* WorkspaceLayout::FindNode(const std::string_view nodeId) noexcept
     {
-        return ::Horo::Editor::FindNode(root, nodeId);
+        return Editor::FindNode(root, nodeId);
     }
 
     const LayoutNode* WorkspaceLayout::FindNode(const std::string_view nodeId) const noexcept
     {
-        return ::Horo::Editor::FindNode(root, nodeId);
+        return Editor::FindNode(root, nodeId);
     }
 
     TabStackNode* WorkspaceLayout::FindTabStack(const std::string_view stackId) noexcept
     {
-        return ::Horo::Editor::FindTabStack(root, stackId);
+        return Editor::FindTabStack(root, stackId);
     }
 
     const TabStackNode* WorkspaceLayout::FindTabStack(const std::string_view stackId) const noexcept
     {
-        return ::Horo::Editor::FindTabStack(root, stackId);
+        return Editor::FindTabStack(root, stackId);
     }
 
     PanelNode* WorkspaceLayout::FindPanel(const std::string_view panelId) noexcept
     {
-        return ::Horo::Editor::FindPanel(root, panelId);
+        return Editor::FindPanel(root, panelId);
     }
 
     const PanelNode* WorkspaceLayout::FindPanel(const std::string_view panelId) const noexcept
     {
-        return ::Horo::Editor::FindPanel(root, panelId);
+        return Editor::FindPanel(root, panelId);
     }
 
     WorkspaceLayoutOperationResult WorkspaceLayout::MoveTab(const std::string_view panelId,
@@ -304,7 +304,7 @@ namespace Horo::Editor
             return {WorkspaceLayoutOperationCode::UnknownPanel};
         }
 
-        TabStackNode* target = ::Horo::Editor::FindTabStack(root, placement.stack);
+        TabStackNode* target = Editor::FindTabStack(root, placement.stack);
         if (target == nullptr)
         {
             return {WorkspaceLayoutOperationCode::UnknownStack};

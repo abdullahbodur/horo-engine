@@ -41,45 +41,114 @@ Every imported asset has a **stable logical asset ID**. The ID must be:
 - independent of the source file path
 - independent of the source file name
 - stable across renames and moves
+- encoded as one canonical lowercase UUID in the sidecar `assetId` field
 
-The recommended strategy is a **persistent GUID** assigned on first import:
+The importer assigns the random 128-bit ID once and commits it to the sidecar:
 
 ```cpp
 AssetId GenerateAssetId(const std::filesystem::path& projectRelativePath,
                         const std::array<uint8_t, 16>& randomGuid) {
     // randomGuid is generated once and stored in the sidecar metadata.
     // It survives renames and moves as long as the sidecar travels with the asset.
-    return AssetId{ToHexString(randomGuid)};
+    return AssetId::FromBytes(randomGuid);
 }
 ```
 
-A separate **asset path index** maps `projectRelativePath → AssetId` so that
-collisions are detected and references can be resolved when the sidecar is
-unavailable.
+There is no parallel `assetGuid` identity. `assetId` is the single authority.
+The derived `.horo/asset_index.json` stores both ID and normalized project path
+lookups, but it never invents an ID and may always be rebuilt from valid
+sidecars.
+
+## Implemented AST-001A Baseline
+
+`HoroEngine::Assets` is a backend-neutral target depending only on Foundation.
+The implemented baseline contains canonical `AssetId`/`AssetTypeId` parsing,
+immutable registry snapshots, sidecar rebuild, deterministic derived-index
+storage, synchronous providers, and a bounded asynchronous load service over
+the process `JobSystem`.
+
+Registry candidates are mutable only on their owner thread while being built.
+Publish first validates the complete candidate and then atomically replaces one
+immutable shared state. Snapshots pin that state and are safe for concurrent,
+allocation-free ID/path lookup while later revisions publish. A global duplicate
+ID, duplicate canonical path, or portable case collision rejects the candidate
+and preserves the last valid snapshot.
+
+Project open uses the explicit two-stage form: the operation worker calls
+`PrepareAssetRegistryCandidate()` to scan committed sidecars into an unpublished
+candidate; the application owner thread first writes the deterministic derived
+index and only then publishes the validated immutable registry revision. The
+worker never replaces the registry consumed by runtime/editor readers.
+
+An asynchronous request captures an `AssetRecord` and registry revision at
+submission; workers never access mutable registry state. Registry replacement
+therefore cannot invalidate an in-flight read. Completion carries its source
+revision so a later authoritative installation boundary can reject stale work.
+Service shutdown stops admission, cancels and joins owned requests, and prevents
+callbacks after service destruction.
+
+AST-001A does not implement importers, ID generation, cooking, archives, cache,
+hot reload, or Content Browser integration. Runtime-scene consumption is the
+separate AST-001B slice described below.
+
+## Implemented AST-001B Runtime Scene Consumption
+
+`HoroEngine::RuntimeScene` depends one-way on `HoroEngine::Assets` and resolves
+versioned scene dependencies through the AST-001A snapshot/provider contracts.
+The scene definition stores only stable AssetId and expected AssetTypeId values;
+it never stores a source path, process-local provider handle, or mutable registry
+record.
+
+`QueuePreparation` captures an immutable registry snapshot and validates the
+complete dependency set before starting I/O. Each accepted async request carries
+the captured registry revision. Workers read provider-owned cooked bytes without
+re-entering the registry. Registry replacement therefore cannot invalidate
+in-flight memory, while the owner-thread activation boundary can still reject a
+logically stale candidate by comparing revisions.
+
+Loads are admitted in configurable bounded waves. The default candidate limits
+are 1,024 dependencies, eight concurrent loads, and one GiB of logical resident
+payload. Budget checks are incremental and fail fast. Reused payload leases and
+new payloads both count once toward the candidate budget; physical storage
+shared with the active scene is not copied. Matching AssetId/type payloads may
+be reused independently when the registry revision is unchanged.
+
+Every declared dependency is required in AST-001B. Missing records, type
+mismatch, empty payload, provider failure, cancellation, queue pressure, budget
+overflow, or authoritative revision change prevents activation and preserves
+the previous active scene. No fallback asset or partial scene activation is
+invented. `RuntimeSceneView` exposes allocation-free lookup of the opaque cooked
+bytes; decoding and typed resource installation belong to later asset/material/
+renderer slices.
 
 ### Collision Rules
 
 - Two source files with the same name in different directories are independent
   assets and receive independent IDs.
-- A duplicate import (same GUID already registered) updates the existing asset
-  rather than creating a new one.
-- A missing or manually edited sidecar is detected by path index mismatch and
-  triggers a re-import prompt.
+- A duplicate ID or canonical path is a global ambiguity: no candidate is
+  published and the previous registry remains active.
+- Paths are compared both canonically and with a portable case fold so a project
+  cannot become ambiguous on a case-insensitive filesystem.
+- A source without a sidecar is untracked and excluded with
+  `asset.registry.sidecar_missing`; AST-001A never generates an ID.
+- Missing/empty identity, invalid UUID, malformed JSON, unsupported schema, and
+  an orphan sidecar are distinct typed diagnostics. These record-local failures
+  may publish one degraded snapshot containing the remaining valid records.
 
 ## Source Assets
 
 Source assets are files created by external tools:
 
-| Type | Extensions |
-|---|---|
-| meshes | `.fbx`, `.obj`, `.gltf`, `.glb` |
-| textures | `.png`, `.jpg`, `.tga`, `.exr`, `.hdr` |
-| materials | `.horomat` |
-| shaders | `.vert`, `.frag`, `.comp`, `.hlsl` |
-| shader graphs | `.horoshadergraph` |
-| scenes | `.horo` |
-| prefabs | `.prefab` |
-| audio | `.wav`, `.ogg` |
+| Type          | Extensions                             |
+|---------------|----------------------------------------|
+| meshes        | `.fbx`, `.obj`, `.gltf`, `.glb`        |
+| textures      | `.png`, `.jpg`, `.tga`, `.exr`, `.hdr` |
+| materials     | `.horomat`                             |
+| shaders       | `.vert`, `.frag`, `.comp`, `.hlsl`     |
+| shader graphs | `.horoshadergraph`                     |
+| scenes        | `.horo`                                |
+| prefabs       | `.prefab`                              |
+| audio         | `.wav`, `.ogg`                         |
 
 Built-in scene primitives (cube, sphere, capsule, etc.) are not source assets.
 They are described by `PrimitiveMeshDescriptor` and resolved by the engine
@@ -202,28 +271,33 @@ Metadata includes:
 
 ```json
 {
-    "schemaVersion": 1,
-    "assetId": "mesh_cube_001",
-    "assetGuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "assetType": "mesh",
-    "sourceHash": "sha256:abc123...",
-    "importerVersion": "1.2.0",
-    "importSettings": {
-        "coordinateSystem": "YUp",
-        "unitScale": 1.0
-    },
-    "cookSettings": {
-        "meshCompression": "draco",
-        "generateTangents": true
-    },
-    "dependencies": [
-        "texture_checker_001"
-    ]
+  "schemaVersion": 1,
+  "assetId": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+  "assetType": "core.mesh",
+  "sourceHash": "sha256:abc123...",
+  "importerVersion": "1.2.0",
+  "importSettings": {
+    "coordinateSystem": "YUp",
+    "unitScale": 1.0
+  },
+  "cookSettings": {
+    "meshCompression": "draco",
+    "generateTangents": true
+  },
+  "dependencies": [
+    "texture_checker_001"
+  ]
 }
 ```
 
-The `assetGuid` is the stable identity. The sidecar file name follows the source
-asset name so that moves and renames are detectable by the path index.
+The canonical `assetId` is the stable identity. The sidecar file name follows
+the source asset name; moving source and sidecar together preserves identity.
+
+Rebuild is all-or-nothing at the snapshot boundary. A malformed or
+version-skewed derived index is never partially consumed; it is discarded and a
+sidecar rebuild is attempted. Read-only rebuild publishes only memory state.
+Edit-mode rebuild may atomically replace `.horo/asset_index.json`. Filesystem
+scans reject root escape and symlink ambiguity before opening source metadata.
 
 ## Schema Migration
 
@@ -271,72 +345,72 @@ concerns. It also matches how artists and technical artists think about assets:
 
 ```json
 {
-    "schemaVersion": 1,
-    "assetGuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "assetType": "texture",
-    "importSettings": {
-        "colorSpace": "sRGB",
-        "wrapMode": "Repeat"
-    },
-    "cookSettings": {
-        "generateMipmaps": true,
-        "mipmapFilter": "Box"
-    }
+  "schemaVersion": 1,
+  "assetId": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+  "assetType": "core.texture",
+  "importSettings": {
+    "colorSpace": "sRGB",
+    "wrapMode": "Repeat"
+  },
+  "cookSettings": {
+    "generateMipmaps": true,
+    "mipmapFilter": "Box"
+  }
 }
 ```
 
 ### Texture Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `colorSpace` | import | `sRGB`, `Linear`, `HDR`. Defines how shaders sample the texture. |
-| `wrapMode` | import | `Repeat`, `Clamp`, `MirrorRepeat`. Written into the sampler descriptor. |
-| `generateMipmaps` | cook | Whether to build a mipmap chain. |
-| `mipmapFilter` | cook | `Box`, `Lanczos`, `Kaiser`. |
-| `compression` | cook | `BC7`, `ASTC4x4`, `ETC2`, `None`. Defaults come from the active `CookProfile`. |
-| `maxResolution` | cook | Per-asset resolution cap. Final size is `min(source, profile.max, target.max)`. |
+| Setting           | Block  | Description                                                                     |
+|-------------------|--------|---------------------------------------------------------------------------------|
+| `colorSpace`      | import | `sRGB`, `Linear`, `HDR`. Defines how shaders sample the texture.                |
+| `wrapMode`        | import | `Repeat`, `Clamp`, `MirrorRepeat`. Written into the sampler descriptor.         |
+| `generateMipmaps` | cook   | Whether to build a mipmap chain.                                                |
+| `mipmapFilter`    | cook   | `Box`, `Lanczos`, `Kaiser`.                                                     |
+| `compression`     | cook   | `BC7`, `ASTC4x4`, `ETC2`, `None`. Defaults come from the active `CookProfile`.  |
+| `maxResolution`   | cook   | Per-asset resolution cap. Final size is `min(source, profile.max, target.max)`. |
 
 ### Mesh Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `coordinateSystem` | import | `YUp`, `ZUp`. Normalized during import. |
-| `unitScale` | import | Scale factor from source units to engine units. |
-| `importNormals` | import | `Imported`, `Calculate`, `CalculateSmoothed`. |
-| `meshCompression` | cook | `None`, `Draco`, `MeshOpt`. Platform profile may override. |
-| `generateTangents` | cook | Required for normal-mapped meshes. |
-| `lodSettings` | cook | Optional automatic LOD generation. Stored as derived assets. |
+| Setting            | Block  | Description                                                  |
+|--------------------|--------|--------------------------------------------------------------|
+| `coordinateSystem` | import | `YUp`, `ZUp`. Normalized during import.                      |
+| `unitScale`        | import | Scale factor from source units to engine units.              |
+| `importNormals`    | import | `Imported`, `Calculate`, `CalculateSmoothed`.                |
+| `meshCompression`  | cook   | `None`, `Draco`, `MeshOpt`. Platform profile may override.   |
+| `generateTangents` | cook   | Required for normal-mapped meshes.                           |
+| `lodSettings`      | cook   | Optional automatic LOD generation. Stored as derived assets. |
 
 ### Material Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `blendMode` | cook | `Opaque`, `Masked`, `Translucent`, `Additive`. |
-| `parameterDefaults` | cook | Default color, float, vector, and texture slot values. |
-| `shadingModel` | cook | `Lit`, `Unlit`. Expanded later as more models are implemented. |
+| Setting             | Block | Description                                                    |
+|---------------------|-------|----------------------------------------------------------------|
+| `blendMode`         | cook  | `Opaque`, `Masked`, `Translucent`, `Additive`.                 |
+| `parameterDefaults` | cook  | Default color, float, vector, and texture slot values.         |
+| `shadingModel`      | cook  | `Lit`, `Unlit`. Expanded later as more models are implemented. |
 
 ### Shader Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `entryPoints` | cook | Map of stage to function name: `{ "vertex": "vsMain", "fragment": "fsMain" }`. |
-| `targetStages` | cook | Which SPIR-V stages to produce: `Vertex`, `Fragment`, `Compute`. |
-| `defines` | cook | Preprocessor macros included in the variant key. |
+| Setting        | Block | Description                                                                    |
+|----------------|-------|--------------------------------------------------------------------------------|
+| `entryPoints`  | cook  | Map of stage to function name: `{ "vertex": "vsMain", "fragment": "fsMain" }`. |
+| `targetStages` | cook  | Which SPIR-V stages to produce: `Vertex`, `Fragment`, `Compute`.               |
+| `defines`      | cook  | Preprocessor macros included in the variant key.                               |
 
 ### Audio Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `channels` | import | `Mono`, `Stereo`. Spatialized sounds must be mono. |
-| `compression` | cook | `PCM`, `Vorbis`, `Opus`. Profile and target aware. |
-| `sampleRate` | cook | `44100`, `22050`. Final rate is `min(source, profile, target)`. |
+| Setting       | Block  | Description                                                     |
+|---------------|--------|-----------------------------------------------------------------|
+| `channels`    | import | `Mono`, `Stereo`. Spatialized sounds must be mono.              |
+| `compression` | cook   | `PCM`, `Vorbis`, `Opus`. Profile and target aware.              |
+| `sampleRate`  | cook   | `44100`, `22050`. Final rate is `min(source, profile, target)`. |
 
 ### Scene Configuration
 
-| Setting | Block | Description |
-|---|---|---|
-| `referenceMode` | import | `Embed` or `Reference`. Large scenes should reference external assets. |
-| `chunkAssignment` | cook | Which release chunk this scene belongs to. |
+| Setting           | Block  | Description                                                            |
+|-------------------|--------|------------------------------------------------------------------------|
+| `referenceMode`   | import | `Embed` or `Reference`. Large scenes should reference external assets. |
+| `chunkAssignment` | cook   | Which release chunk this scene belongs to.                             |
 
 ### Cook Profiles
 
@@ -345,39 +419,39 @@ settings and is selected by `--profile` on the command line.
 
 ```json
 {
-    "id": "pc-low",
-    "textureDefaults": {
-        "maxResolution": 1024,
-        "compression": "BC7",
-        "generateMipmaps": true
-    },
-    "meshDefaults": {
-        "maxLOD": 2,
-        "meshCompression": "MeshOpt"
-    },
-    "audioDefaults": {
-        "compression": "Opus",
-        "sampleRate": 22050
-    }
+  "id": "pc-low",
+  "textureDefaults": {
+    "maxResolution": 1024,
+    "compression": "BC7",
+    "generateMipmaps": true
+  },
+  "meshDefaults": {
+    "maxLOD": 2,
+    "meshCompression": "MeshOpt"
+  },
+  "audioDefaults": {
+    "compression": "Opus",
+    "sampleRate": 22050
+  }
 }
 ```
 
 ```json
 {
-    "id": "pc-high",
-    "textureDefaults": {
-        "maxResolution": 4096,
-        "compression": "BC7",
-        "generateMipmaps": true
-    },
-    "meshDefaults": {
-        "maxLOD": 4,
-        "meshCompression": "None"
-    },
-    "audioDefaults": {
-        "compression": "Vorbis",
-        "sampleRate": 44100
-    }
+  "id": "pc-high",
+  "textureDefaults": {
+    "maxResolution": 4096,
+    "compression": "BC7",
+    "generateMipmaps": true
+  },
+  "meshDefaults": {
+    "maxLOD": 4,
+    "meshCompression": "None"
+  },
+  "audioDefaults": {
+    "compression": "Vorbis",
+    "sampleRate": 44100
+  }
 }
 ```
 
@@ -406,28 +480,32 @@ path.
 
 ```json
 {
-    "folderRules": [
-        {
-            "path": "assets/ui",
-            "types": ["texture"],
-            "overrides": {
-                "cookSettings": {
-                    "maxResolution": 512,
-                    "compression": "BC7"
-                }
-            }
-        },
-        {
-            "path": "assets/audio/sfx",
-            "types": ["audio"],
-            "overrides": {
-                "cookSettings": {
-                    "compression": "Opus",
-                    "sampleRate": 22050
-                }
-            }
+  "folderRules": [
+    {
+      "path": "assets/ui",
+      "types": [
+        "texture"
+      ],
+      "overrides": {
+        "cookSettings": {
+          "maxResolution": 512,
+          "compression": "BC7"
         }
-    ]
+      }
+    },
+    {
+      "path": "assets/audio/sfx",
+      "types": [
+        "audio"
+      ],
+      "overrides": {
+        "cookSettings": {
+          "compression": "Opus",
+          "sampleRate": 22050
+        }
+      }
+    }
+  ]
 }
 ```
 
@@ -559,9 +637,9 @@ Pipeline stages:
    canonical intermediate representation.
 3. **Transpile to target**: SPIR-V is translated or packaged for the selected
    backend profile:
-   - `desktop-vulkan` → SPIR-V with validated reflection metadata
-   - `desktop-opengl` → GLSL or backend-approved translated shader payload
-   - `headless-null` → reflection-only payload for validation and tests
+    - `desktop-vulkan` → SPIR-V with validated reflection metadata
+    - `desktop-opengl` → GLSL or backend-approved translated shader payload
+    - `headless-null` → reflection-only payload for validation and tests
 4. **Variant generation**: produce permutations for static shader keywords
    (e.g., `USE_NORMAL_MAP`, `SHADOWS_ENABLED`). Variants are cached by keyword
    hash.
@@ -714,31 +792,26 @@ modes are supported:
 class IAssetProvider {
 public:
     virtual ~IAssetProvider() = default;
-
-    // Synchronous load. Use only for small or required assets.
-    virtual std::vector<uint8_t> LoadBytes(AssetId id) = 0;
-
-    // Asynchronous load. Returns a handle that completes on a worker thread.
-    virtual AssetLoadHandle LoadBytesAsync(AssetId id) = 0;
-
-    virtual bool Exists(AssetId id) = 0;
+    virtual Result<bool> Exists(AssetId id,
+                                const CancellationToken& cancellation) const = 0;
+    virtual Result<std::vector<uint8_t>> Load(
+        AssetId id, const CancellationToken& cancellation) const = 0;
 };
 ```
 
-```cpp
-class AssetLoadHandle {
-public:
-    bool IsReady() const;
-    std::vector<uint8_t> Get(); // blocks until ready
-    void Wait();
-};
-```
+Synchronous access is the provider contract. `AssetLoadService` adds bounded
+`JobSystem` scheduling and returns a move-only `AssetLoadHandle` with poll,
+wait, cancel, and single-consumption result operations. Payloads are owned bytes;
+providers enforce an allocation bound before reading.
 
-Two provider implementations exist:
+AST-001A provides:
 
-- `FilesystemAssetProvider`: loads from `build/<preset>/cooked_assets/<target>/`
-  during development.
-- `ArchiveAssetProvider`: loads from `assets.horo` in release builds.
+- `FilesystemAssetProvider`: resolves only canonical `<AssetId>.cooked` files
+  beneath an injected cooked-artifact root and rejects symlink artifacts.
+- `MemoryAssetProvider`: deterministic concurrent headless/test provider.
+
+`ArchiveAssetProvider` remains part of the later packaging/runtime-loading
+slice and is not implemented by AST-001A.
 
 Runtime loaders (mesh, texture, shader, material) consume the bytes returned by
 the provider and do not know whether the asset came from disk or archive.
@@ -793,13 +866,13 @@ public:
 
 ### Per-Asset-Type Reload Strategy
 
-| Asset type | Reload strategy |
-|---|---|
-| Texture | Replace GPU texture in-place if format matches; otherwise defer reload to next frame boundary. |
-| Mesh | Recreate vertex/index buffers; update bounding box and LODs. |
-| Material | Update uniform values and texture bindings without recreating mesh draws. |
-| Shader | Recreate pipeline state objects and rebind materials that use the shader. |
-| Scene | Full scene reload or incremental merge depending on the change scope. |
+| Asset type | Reload strategy                                                                                |
+|------------|------------------------------------------------------------------------------------------------|
+| Texture    | Replace GPU texture in-place if format matches; otherwise defer reload to next frame boundary. |
+| Mesh       | Recreate vertex/index buffers; update bounding box and LODs.                                   |
+| Material   | Update uniform values and texture bindings without recreating mesh draws.                      |
+| Shader     | Recreate pipeline state objects and rebind materials that use the shader.                      |
+| Scene      | Full scene reload or incremental merge depending on the change scope.                          |
 
 Hot reload is editor-only. Release builds do not support asset modification at
 runtime; they rely on chunk loading and unloading.
@@ -887,7 +960,7 @@ horo-engine asset cook --target desktop-vulkan --profile pc-high
 horo-engine asset cook --target desktop-vulkan --target desktop-opengl
 
 # Cook a specific asset
-horo-engine asset cook --asset mesh_cube_001 --target desktop-vulkan
+horo-engine asset cook --asset a1b2c3d4-e5f6-4890-abcd-ef1234567890 --target desktop-vulkan
 
 # Validate and migrate stale metadata
 horo-engine asset validate

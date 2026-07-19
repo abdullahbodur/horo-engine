@@ -1,13 +1,14 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "editor/project_model/RendererAvailability.h"
 
-#include <cassert>
 #include <string_view>
 
 namespace
 {
 using namespace Horo::Editor;
 
-void KeepsKnownUnavailableBackendsVisibleButNotSelectable()
+TEST_CASE("Keeps Known Unavailable Backends Visible But Not Selectable", "[unit][editor]")
 {
     const RendererAvailabilitySnapshot snapshot{
         {
@@ -18,15 +19,15 @@ void KeepsKnownUnavailableBackendsVisibleButNotSelectable()
         },
         "metal"};
 
-    assert(snapshot.Entries().size() == 3);
-    assert(snapshot.Find("opengl")->IsSelectable());
-    assert(snapshot.Find("metal")->IsSelectable());
-    assert(!snapshot.Find("vulkan")->IsSelectable());
-    assert(snapshot.Find("vulkan")->diagnostic == "Renderer component is not installed.");
-    assert(snapshot.ActiveBackendId() == "metal");
+    REQUIRE((snapshot.Entries().size() == 3));
+    REQUIRE((snapshot.Find("opengl")->IsSelectable()));
+    REQUIRE((snapshot.Find("metal")->IsSelectable()));
+    REQUIRE((!snapshot.Find("vulkan")->IsSelectable()));
+    REQUIRE((snapshot.Find("vulkan")->diagnostic == "Renderer component is not installed."));
+    REQUIRE((snapshot.ActiveBackendId() == "metal"));
 }
 
-void SelectsActiveBackendAsProjectDefault()
+TEST_CASE("Selects Active Backend As Project Default", "[unit][editor]")
 {
     const RendererAvailabilitySnapshot snapshot{
         {
@@ -36,13 +37,6 @@ void SelectsActiveBackendAsProjectDefault()
         },
         "metal"};
 
-    assert(snapshot.DefaultSelectableBackendId() == "metal");
+    REQUIRE((snapshot.DefaultSelectableBackendId() == "metal"));
 }
 } // namespace
-
-int main()
-{
-    KeepsKnownUnavailableBackendsVisibleButNotSelectable();
-    SelectsActiveBackendAsProjectDefault();
-    return 0;
-}

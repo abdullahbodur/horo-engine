@@ -4,7 +4,6 @@
 #include "Horo/Editor/Localization/LocalizationTypes.h"
 
 #include <memory>
-#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>

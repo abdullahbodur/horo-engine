@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/NullBackendModule.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/RuntimeHost.h"
@@ -5,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cstdlib>
 #include <memory>
 #include <new>
 #include <optional>
@@ -63,8 +64,7 @@ using namespace Horo::Runtime;
 
 void Check(const bool condition)
 {
-    if (!condition)
-        std::abort();
+    REQUIRE((condition));
 }
 
 [[nodiscard]] Error TestError(const char *code = "runtime.test.failure")
@@ -231,7 +231,7 @@ class NullRenderParticipant final : public RuntimeLifecycleParticipant
     return std::move(created).Value();
 }
 
-void PhaseOrderAndTickContextsAreCanonical()
+TEST_CASE("Phase Order And Tick Contexts Are Canonical", "[unit][runtime]")
 {
     DeterministicClock clock;
     std::vector<RuntimePhase> phases;
@@ -266,7 +266,7 @@ void PhaseOrderAndTickContextsAreCanonical()
     Check(observed->lastInterpolationAlpha == 0.0);
 }
 
-void CatchUpIsBoundedAndObservable()
+TEST_CASE("Catch Up Is Bounded And Observable", "[unit][runtime]")
 {
     DeterministicClock clock;
     auto participant = std::make_unique<RecordingParticipant>();
@@ -291,7 +291,7 @@ void CatchUpIsBoundedAndObservable()
     Check(host->Statistics().maximumDeltaClampCount == 1);
 }
 
-void NegativeDeltaIsNormalized()
+TEST_CASE("Negative Delta Is Normalized", "[unit][runtime]")
 {
     DeterministicClock clock(Duration::FromMilliseconds(100));
     auto participant = std::make_unique<RecordingParticipant>();
@@ -306,7 +306,7 @@ void NegativeDeltaIsNormalized()
     Check(host->Statistics().negativeDeltaNormalizationCount == 1);
 }
 
-void StartupFailureRollsBackAndShutdownIsReverseOrdered()
+TEST_CASE("Startup Failure Rolls Back And Shutdown Is Reverse Ordered", "[unit][runtime]")
 {
     DeterministicClock clock;
     std::vector<int> order;
@@ -346,7 +346,7 @@ void StartupFailureRollsBackAndShutdownIsReverseOrdered()
     Check(order == std::vector<int>({3, 2, 1}));
 }
 
-void FailuresAndExceptionsGatePresentation()
+TEST_CASE("Failures And Exceptions Gate Presentation", "[unit][runtime]")
 {
     constexpr std::array gatedPhases{RuntimePhase::RenderExtraction, RuntimePhase::RenderExecution,
                                      RuntimePhase::RenderGui};
@@ -378,7 +378,7 @@ void FailuresAndExceptionsGatePresentation()
     Check(failed.ErrorValue().code.Value() == "runtime.lifecycle.unexpected_exception");
 }
 
-void FailedFixedTickDoesNotCommit()
+TEST_CASE("Failed Fixed Tick Does Not Commit", "[unit][runtime]")
 {
     DeterministicClock clock;
     auto participant = std::make_unique<RecordingParticipant>();
@@ -393,7 +393,7 @@ void FailedFixedTickDoesNotCommit()
     Check(host->Statistics().totalDroppedFixedSteps == 0);
 }
 
-void SuspendPumpsOnlySafePhasesAndResumeDropsWallTime()
+TEST_CASE("Suspend Pumps Only Safe Phases And Resume Drops Wall Time", "[unit][runtime]")
 {
     DeterministicClock clock;
     std::vector<RuntimePhase> phases;
@@ -418,7 +418,7 @@ void SuspendPumpsOnlySafePhasesAndResumeDropsWallTime()
     Check(observed->fixedTicks.empty());
 }
 
-void MidFrameCancellationStopsLaterPhases()
+TEST_CASE("Mid Frame Cancellation Stops Later Phases", "[unit][runtime]")
 {
     DeterministicClock clock;
     std::vector<RuntimePhase> phases;
@@ -456,7 +456,7 @@ std::uint64_t RunDeterministicCadence(const int frameCount)
     return observed->lastCompletedSimulationTick;
 }
 
-void FixedSimulationIsIndependentOfPresentationCadence()
+TEST_CASE("Fixed Simulation Is Independent Of Presentation Cadence", "[unit][runtime]")
 {
     const std::uint64_t thirtyHz = RunDeterministicCadence(30);
     const std::uint64_t sixtyHz = RunDeterministicCadence(60);
@@ -466,7 +466,7 @@ void FixedSimulationIsIndependentOfPresentationCadence()
     Check(highHz == thirtyHz);
 }
 
-void HeadlessNullRendererUsesCanonicalContract()
+TEST_CASE("Headless Null Renderer Uses Canonical Contract", "[unit][runtime]")
 {
     DeterministicClock clock;
     auto participant = std::make_unique<NullRenderParticipant>();
@@ -478,7 +478,7 @@ void HeadlessNullRendererUsesCanonicalContract()
     Check(observed->presentCount == 1);
 }
 
-void SuccessfulSteadyStateSchedulerDoesNotAllocate()
+TEST_CASE("Successful Steady State Scheduler Does Not Allocate", "[unit][runtime]")
 {
     DeterministicClock clock;
     auto participant = std::make_unique<AllocationFreeParticipant>();
@@ -492,19 +492,3 @@ void SuccessfulSteadyStateSchedulerDoesNotAllocate()
     Check(gAllocationCount.load(std::memory_order_relaxed) == 0);
 }
 } // namespace
-
-int main()
-{
-    PhaseOrderAndTickContextsAreCanonical();
-    CatchUpIsBoundedAndObservable();
-    NegativeDeltaIsNormalized();
-    StartupFailureRollsBackAndShutdownIsReverseOrdered();
-    FailuresAndExceptionsGatePresentation();
-    FailedFixedTickDoesNotCommit();
-    SuspendPumpsOnlySafePhasesAndResumeDropsWallTime();
-    MidFrameCancellationStopsLaterPhases();
-    FixedSimulationIsIndependentOfPresentationCadence();
-    HeadlessNullRendererUsesCanonicalContract();
-    SuccessfulSteadyStateSchedulerDoesNotAllocate();
-    return 0;
-}

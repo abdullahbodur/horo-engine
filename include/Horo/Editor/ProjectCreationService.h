@@ -3,7 +3,6 @@
 #include "Horo/Editor/ProjectCreationController.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>

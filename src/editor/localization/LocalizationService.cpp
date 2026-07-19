@@ -1,7 +1,6 @@
 #include "Horo/Editor/Localization/LocalizationService.h"
 
 #include <algorithm>
-#include <cctype>
 #include <fstream>
 #include <functional>
 #include <regex>

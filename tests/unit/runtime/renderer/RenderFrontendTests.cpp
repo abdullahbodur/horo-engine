@@ -1,9 +1,10 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/NullBackendModule.h"
 #include "Horo/Runtime/Render/RenderBackendRegistry.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 
 #include <array>
-#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -27,10 +28,7 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 
 enum class FrameThrowPoint
@@ -232,7 +230,7 @@ static_assert(std::is_nothrow_move_assignable_v<RenderFrameScope>);
     return std::move(created).Value();
 }
 
-void FrontendStagesExecutionAndPresentation()
+TEST_CASE("Frontend Stages Execution And Presentation", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -256,7 +254,7 @@ void FrontendStagesExecutionAndPresentation()
     Check(lifecycleState.abortCount == 0);
 }
 
-void FrameScopeMoveTransfersAbortOwnership()
+TEST_CASE("Frame Scope Move Transfers Abort Ownership", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -277,7 +275,7 @@ void FrameScopeMoveTransfersAbortOwnership()
     Check(frontend->SubmitFrame(FrameDescriptor{.frameNumber = 52, .outputExtent = {800, 600}}, passes).HasValue());
 }
 
-void FrameScopeRejectsInvalidStageTransitionsWithoutLosingRecovery()
+TEST_CASE("Frame Scope Rejects Invalid Stage Transitions Without Losing Recovery", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -303,7 +301,7 @@ void FrameScopeRejectsInvalidStageTransitionsWithoutLosingRecovery()
     Check(!lifecycleState.frameActive);
 }
 
-void FrontendRejectsASecondFrameWithoutAbortingTheOwnedScope()
+TEST_CASE("Frontend Rejects A Second Frame Without Aborting The Owned Scope", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -324,7 +322,7 @@ void FrontendRejectsASecondFrameWithoutAbortingTheOwnedScope()
     Check(frame.Present().HasValue());
 }
 
-void FrontendDestructionAbortsAndInvalidatesAnOutstandingScope()
+TEST_CASE("Frontend Destruction Aborts And Invalidates An Outstanding Scope", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -342,7 +340,7 @@ void FrontendDestructionAbortsAndInvalidatesAnOutstandingScope()
     Check(inactive.ErrorValue().code.Value() == "render.frontend.frame_not_active");
 }
 
-void FrameScopeMoveAssignmentAbortsThePreviousFrameAndTransfersOwnership()
+TEST_CASE("Frame Scope Move Assignment Aborts The Previous Frame And Transfers Ownership", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> trackingFrontend = CreateTrackingFrontend();
@@ -374,7 +372,7 @@ void FrameScopeMoveAssignmentAbortsThePreviousFrameAndTransfersOwnership()
     Check(destination.Present().HasValue());
 }
 
-void FrameScopeSupportsSelfMoveAndMoveAfterExecute()
+TEST_CASE("Frame Scope Supports Self Move And Move After Execute", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -397,7 +395,7 @@ void FrameScopeSupportsSelfMoveAndMoveAfterExecute()
     Check(lifecycleState.abortCount == 0);
 }
 
-void FrontendRejectsResizeDuringActiveFrameAndSupportsExplicitCancel()
+TEST_CASE("Frontend Rejects Resize During Active Frame And Supports Explicit Cancel", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -421,7 +419,7 @@ void FrontendRejectsResizeDuringActiveFrameAndSupportsExplicitCancel()
     Check(lifecycleState.resizeCount == 1);
 }
 
-void FrontendInitializesAndOwnsSelectedBackendLifetime()
+TEST_CASE("Frontend Initializes And Owns Selected Backend Lifetime", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     RenderBackendRegistry registry;
@@ -445,7 +443,7 @@ void FrontendInitializesAndOwnsSelectedBackendLifetime()
     Check(lifecycleState.shutdownCount == 1);
 }
 
-void FrontendSubmitsFramesAndRecoversAfterPlanFailure()
+TEST_CASE("Frontend Submits Frames And Recovers After Plan Failure", "[unit][runtime][renderer]")
 {
     RenderBackendRegistry registry;
     Check(RegisterNullRenderBackend(registry).HasValue());
@@ -474,7 +472,7 @@ void FrontendSubmitsFramesAndRecoversAfterPlanFailure()
         frontend->SubmitFrame(FrameDescriptor{.frameNumber = 3, .outputExtent = {1280, 720}}, validPasses).HasValue());
 }
 
-void FrontendRecoversAfterPresentationFailure()
+TEST_CASE("Frontend Recovers After Presentation Failure", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     lifecycleState.failPresentation = true;
@@ -505,7 +503,7 @@ void FrontendRecoversAfterPresentationFailure()
     Check(frontend->SubmitFrame(FrameDescriptor{.frameNumber = 11, .outputExtent = {640, 480}}, passes).HasValue());
 }
 
-void FrontendContainsInitializationExceptionsAndCleansUpPartialState()
+TEST_CASE("Frontend Contains Initialization Exceptions And Cleans Up Partial State", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     lifecycleState.throwDuringInitialize = true;
@@ -526,7 +524,7 @@ void FrontendContainsInitializationExceptionsAndCleansUpPartialState()
     Check(lifecycleState.shutdownCount == 1);
 }
 
-void FrontendContainsFrameExceptionsAndRecoversOwnedFrameState()
+TEST_CASE("Frontend Contains Frame Exceptions And Recovers Owned Frame State", "[unit][runtime][renderer]")
 {
     constexpr std::array throwPoints{FrameThrowPoint::Begin, FrameThrowPoint::Execute, FrameThrowPoint::Present};
     for (const FrameThrowPoint throwPoint : throwPoints)
@@ -561,7 +559,7 @@ void FrontendContainsFrameExceptionsAndRecoversOwnedFrameState()
     }
 }
 
-void FrontendOwnsResizeBoundaryAndContainsBackendExceptions()
+TEST_CASE("Frontend Owns Resize Boundary And Contains Backend Exceptions", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     RenderBackendRegistry registry;
@@ -598,7 +596,7 @@ void FrontendOwnsResizeBoundaryAndContainsBackendExceptions()
     Check(frontend->Resize(FramebufferExtent{1280, 720}).HasValue());
 }
 
-void FrontendRejectsInvalidSuccessfulFrameTokensAndRecoversBackendState()
+TEST_CASE("Frontend Rejects Invalid Successful Frame Tokens And Recovers Backend State", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     lifecycleState.returnInvalidFrameToken = true;
@@ -629,7 +627,7 @@ void FrontendRejectsInvalidSuccessfulFrameTokensAndRecoversBackendState()
     Check(frontend->SubmitFrame(FrameDescriptor{.frameNumber = 31, .outputExtent = {640, 480}}, passes).HasValue());
 }
 
-void FrontendPreservesTypedBeginFailuresAndRecoversPartialBackendState()
+TEST_CASE("Frontend Preserves Typed Begin Failures And Recovers Partial Backend State", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     lifecycleState.failBeginAfterActivation = true;
@@ -662,22 +660,22 @@ void FrontendPreservesTypedBeginFailuresAndRecoversPartialBackendState()
     Check(frontend->SubmitFrame(FrameDescriptor{.frameNumber = 41, .outputExtent = {640, 480}}, passes).HasValue());
 }
 
-void FrontendOwnsStaticMeshExecutorAttachmentAndRejectsMissingExecution()
+TEST_CASE("Frontend Owns Static Mesh Executor Attachment And Rejects Missing Execution", "[unit][runtime][renderer]")
 {
     lifecycleState = {};
     RenderBackendRegistry registry;
-    Check(registry.Register(RenderBackendDescriptor{.id = RenderBackendId{"tracking"},
-                                                     .displayName = "Tracking",
-                                                     .provider = MakeTrackingBackendProvider()})
+    Check(registry
+              .Register(RenderBackendDescriptor{.id = RenderBackendId{"tracking"},
+                                                .displayName = "Tracking",
+                                                .provider = MakeTrackingBackendProvider()})
               .HasValue());
     Check(registry.Seal().HasValue());
     auto created = RenderFrontend::Create(registry, RenderBackendId{"tracking"}, RenderBackendConfig{});
     Check(created.HasValue());
     std::unique_ptr<RenderFrontend> frontend = std::move(created).Value();
 
-    const std::array staticPass{RenderPassDescriptor{.id = RenderPassId{1},
-                                                     .kind = RenderPassKind::Graphics,
-                                                     .staticMesh = StaticMeshPassDescriptor{}}};
+    const std::array staticPass{RenderPassDescriptor{
+        .id = RenderPassId{1}, .kind = RenderPassKind::Graphics, .staticMesh = StaticMeshPassDescriptor{}}};
     auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 50, .outputExtent = {64, 64}});
     Check(begun.HasValue());
     RenderFrameScope missingExecutorFrame = std::move(begun).Value();
@@ -706,25 +704,3 @@ void FrontendOwnsStaticMeshExecutorAttachmentAndRejectsMissingExecution()
     Check(staleResize.ErrorValue().code.Value() == "render.frontend.stale_render_target");
 }
 } // namespace
-
-int main()
-{
-    FrontendStagesExecutionAndPresentation();
-    FrameScopeMoveTransfersAbortOwnership();
-    FrameScopeRejectsInvalidStageTransitionsWithoutLosingRecovery();
-    FrontendRejectsASecondFrameWithoutAbortingTheOwnedScope();
-    FrontendDestructionAbortsAndInvalidatesAnOutstandingScope();
-    FrameScopeMoveAssignmentAbortsThePreviousFrameAndTransfersOwnership();
-    FrameScopeSupportsSelfMoveAndMoveAfterExecute();
-    FrontendRejectsResizeDuringActiveFrameAndSupportsExplicitCancel();
-    FrontendInitializesAndOwnsSelectedBackendLifetime();
-    FrontendSubmitsFramesAndRecoversAfterPlanFailure();
-    FrontendRecoversAfterPresentationFailure();
-    FrontendContainsInitializationExceptionsAndCleansUpPartialState();
-    FrontendContainsFrameExceptionsAndRecoversOwnedFrameState();
-    FrontendOwnsResizeBoundaryAndContainsBackendExceptions();
-    FrontendRejectsInvalidSuccessfulFrameTokensAndRecoversBackendState();
-    FrontendPreservesTypedBeginFailuresAndRecoversPartialBackendState();
-    FrontendOwnsStaticMeshExecutorAttachmentAndRejectsMissingExecution();
-    return 0;
-}

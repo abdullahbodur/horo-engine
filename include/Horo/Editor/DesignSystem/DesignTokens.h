@@ -14,24 +14,24 @@ namespace Horo::Editor::DesignSystem
  */
 struct ColorTokens
 {
-    ::ImVec4 surfaceRoot;
-    ::ImVec4 surfaceWindow;
-    ::ImVec4 surfacePanel;
-    ::ImVec4 surfaceRaised;
-    ::ImVec4 surfaceHover;
-    ::ImVec4 border;
-    ::ImVec4 borderStrong;
-    ::ImVec4 textPrimary;
-    ::ImVec4 textMuted;
-    ::ImVec4 textDim;
-    ::ImVec4 actionPrimary;
-    ::ImVec4 actionPrimaryHover;
-    ::ImVec4 actionPrimaryActive;
-    ::ImVec4 actionPrimarySoft;
-    ::ImVec4 statusOk;
-    ::ImVec4 statusWarn;
-    ::ImVec4 statusError;
-    ::ImVec4 textOnActionPrimary;
+    ImVec4 surfaceRoot;
+    ImVec4 surfaceWindow;
+    ImVec4 surfacePanel;
+    ImVec4 surfaceRaised;
+    ImVec4 surfaceHover;
+    ImVec4 border;
+    ImVec4 borderStrong;
+    ImVec4 textPrimary;
+    ImVec4 textMuted;
+    ImVec4 textDim;
+    ImVec4 actionPrimary;
+    ImVec4 actionPrimaryHover;
+    ImVec4 actionPrimaryActive;
+    ImVec4 actionPrimarySoft;
+    ImVec4 statusOk;
+    ImVec4 statusWarn;
+    ImVec4 statusError;
+    ImVec4 textOnActionPrimary;
 };
 
 /** @brief Semantic typography sizes for the bootstrap GUI. */
@@ -93,24 +93,24 @@ struct DesignTokens
 {
     return DesignTokens{
         ColorTokens{
-            ::ImVec4{0.039F, 0.047F, 0.059F, 1.0F},
-            ::ImVec4{0.071F, 0.082F, 0.102F, 1.0F},
-            ::ImVec4{0.094F, 0.110F, 0.129F, 1.0F},
-            ::ImVec4{0.122F, 0.141F, 0.169F, 1.0F},
-            ::ImVec4{0.137F, 0.157F, 0.188F, 1.0F},
-            ::ImVec4{0.165F, 0.184F, 0.216F, 1.0F},
-            ::ImVec4{0.227F, 0.251F, 0.286F, 1.0F},
-            ::ImVec4{0.910F, 0.894F, 0.851F, 1.0F},
-            ::ImVec4{0.604F, 0.584F, 0.541F, 1.0F},
-            ::ImVec4{0.369F, 0.357F, 0.329F, 1.0F},
-            ::ImVec4{0.016F, 0.647F, 0.988F, 1.0F},
-            ::ImVec4{0.180F, 0.706F, 0.992F, 1.0F},
-            ::ImVec4{0.000F, 0.500F, 0.820F, 1.0F},
-            ::ImVec4{0.016F, 0.647F, 0.988F, 0.15F},
-            ::ImVec4{0.373F, 0.722F, 0.541F, 1.0F},
-            ::ImVec4{0.910F, 0.639F, 0.239F, 1.0F},
-            ::ImVec4{0.831F, 0.322F, 0.290F, 1.0F},
-            ::ImVec4{0.020F, 0.075F, 0.110F, 1.0F},
+            ImVec4{0.039F, 0.047F, 0.059F, 1.0F},
+            ImVec4{0.071F, 0.082F, 0.102F, 1.0F},
+            ImVec4{0.094F, 0.110F, 0.129F, 1.0F},
+            ImVec4{0.122F, 0.141F, 0.169F, 1.0F},
+            ImVec4{0.137F, 0.157F, 0.188F, 1.0F},
+            ImVec4{0.165F, 0.184F, 0.216F, 1.0F},
+            ImVec4{0.227F, 0.251F, 0.286F, 1.0F},
+            ImVec4{0.910F, 0.894F, 0.851F, 1.0F},
+            ImVec4{0.604F, 0.584F, 0.541F, 1.0F},
+            ImVec4{0.369F, 0.357F, 0.329F, 1.0F},
+            ImVec4{0.016F, 0.647F, 0.988F, 1.0F},
+            ImVec4{0.180F, 0.706F, 0.992F, 1.0F},
+            ImVec4{0.000F, 0.500F, 0.820F, 1.0F},
+            ImVec4{0.016F, 0.647F, 0.988F, 0.15F},
+            ImVec4{0.373F, 0.722F, 0.541F, 1.0F},
+            ImVec4{0.910F, 0.639F, 0.239F, 1.0F},
+            ImVec4{0.831F, 0.322F, 0.290F, 1.0F},
+            ImVec4{0.020F, 0.075F, 0.110F, 1.0F},
         },
         TypographyTokens{16.0F, 14.0F, 16.0F},
         RadiusTokens{4.0F, 6.0F, 8.0F},

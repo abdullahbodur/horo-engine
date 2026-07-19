@@ -11,7 +11,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor | İncelenecek                                                                                                                                                                                                                                                                                                                          | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Bağımlı                                                                                                                                                                                                                | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| —         | [FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001) | [AST-001 · Asset pipeline temeli](#ast-001)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
+| [MIG-001 · Project migration architecture](#mig-001) | [MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001) | [AST-001 · Asset pipeline temeli](#ast-001)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
 
 ## Durum Sözleşmesi
 
@@ -40,26 +40,214 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 18 Temmuz 2026 itibarıyla aktif CMake yüzeyi Foundation, Platform, Runtime,
 Input, Scene Model, Render API/Frontend, OpenGL, Metal, Editor Model ve Editor
 GUI katmanlarını kapsar. Runtime lifecycle ve frame scheduler artık graphical
-HoroEditor ile null-renderer headless test hostunun ortak kontratıdır. Runtime
-scene Phase 1; immutable definition, ownership ve editor viewport tüketimini ekler.
-Assets, tam ECS, physics, audio, networking, game UI, CLI/MCP, gameplay,
+HoroEditor ile null-renderer headless test hostunun ortak kontratıdır. SCN-001
+baseline immutable definition, tek-owner runtime storage ve editor viewport
+tüketimini; AST-001A asset identity, registry ve provider temelini; AST-001B ise
+snapshot-pinned runtime scene asset çözümlemeyi ekler.
+Tam ECS, importer/cooker, physics, audio, networking, game UI, CLI/MCP, gameplay,
 extensions, packages, observability, release ve security alanlarının çoğu hâlâ
-placeholder veya sonraki ticket kapsamındadır.
+sonraki ticket kapsamındadır.
 
 Önerilen temel ilerleme sırası:
 
 1. [ARC-001](#arc-001), [EDT-001](#edt-001) ve [RND-001](#rnd-001) ile mevcut
    local dilimi stabilize et.
-2. [SCN-001](#scn-001) canonical doğrulamasını kapatırken [AST-001](#ast-001)
-   provider ve registry temelini başlat.
-3. [AST-001](#ast-001) entegrasyonu ve [MAT-001](#mat-001) ile editor viewport verisini gerçek
+2. [AST-001](#ast-001) importer/cooker dilimini ve [MAT-001](#mat-001) ile editor viewport verisini gerçek
    asset/resource akışına bağla.
-4. Editor authoring ve persistence ticketlarını kapat.
-5. Gameplay, physics ve audio gibi bağımlı sistemleri ancak bu omurgadan sonra aç.
+3. Editor authoring ve persistence ticketlarını kapat.
+4. Gameplay, physics ve audio gibi bağımlı sistemleri ancak bu omurgadan sonra aç.
 
 ## Ticket Detayları
 
 ### Aktif çalışma
+
+<a id="mig-001"></a>
+
+### MIG-001 — Project migration architecture
+
+- **Durum:** Yapılıyor
+- **Öncelik:** P0
+- **Özet:** Tek Horo sürümü, persistent-contract kararları, deterministic
+  migration catalog/pipeline, staged transaction/recovery ve project-open
+  entegrasyonunu tek uygulama mimarisi altında kur.
+- **Alt işler:** [MIG-001A](#mig-001a), [MIG-001B](#mig-001b),
+  [MIG-001D](#mig-001d), [MIG-001E](#mig-001e) ve ilk production adoption
+  dilimi [MIG-001F-01](#mig-001f-01) review aşamasındadır; parent MIG-001F
+  sonraki authored subsystem dönüşümleri için açık kalır.
+- **Mimari:** [Project Versioning and Migration](./architecture/foundation/project-versioning-and-migration.md).
+
+[↑ Kanbana dön](#kanban)
+
+<a id="mig-001a"></a>
+
+### MIG-001A — Version ve compatibility foundation
+
+- **Durum:** İncelenecek
+- **Öncelik:** P0
+- **Özet:** `HoroEngine::Application` içinde canonical SemVer, strong release ve
+  contract-baseline kimlikleri, generated persistent-contract catalog ve bounded
+  read-only project compatibility inspection kur.
+- **Kabul:** Yeni projeler `horoVersion` ve `persistentContract` yazar; eski
+  `formatVersion` reddedilir; exact/current, same-line patch, future, corrupt ve
+  inaccessible sonuçları typed olur; unknown future patch proof olmadan açılmaz.
+- **Kanıt:** `include/Horo/Application/`, `src/application/project/`, frozen
+  `releases/0.0.1/`, current `releases/0.1.0/`,
+  `HoroProjectCompatibilityTests`, editor metadata/preflight
+  ve project creation regressions.
+- **Bağımlılık:** Foundation Result/error ve CMake `PROJECT_VERSION` otoritesi.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 54/54; OpenGL/Metal
+  smoke ve first-frame; GUI-off Application/EditorServices build; standalone
+  Application header; compatibility catalog generator ve targeted 5/5 geçti.
+  Linux/GCC ile Windows/MSVC kapıları bekleniyor.
+
+[↑ Kanbana dön](#kanban)
+
+<a id="mig-001b"></a>
+
+### MIG-001B — Migration registry ve planner
+
+- **Durum:** İncelenecek
+- **Öncelik:** P0
+- **Özet:** Otomatik discovered migration definitions, typed pipeline stages,
+  deterministic chain planning ve verified dry-run kur.
+- **Kabul:** Sequential/checkpoint catalog build-time ve deterministic üretilir;
+  exact-baseline planner ambiguity/gap/contract/provider hatalarını typed
+  reddeder; her hop kendi validation barrier'ını bitirir; verified dry-run
+  authoritative tree'yi değiştirmez.
+- **Kanıt:** `HoroEngine::ProjectMigrations`, `ProjectMigration.h`, generated
+  catalog/set hash, `HoroProjectMigrationTests` ve generator testleri.
+- **Bağımlılık:** MIG-001A ve [FND-001A](#fnd-001a).
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 56/56,
+  GUI-off targeted 5/5, generated catalog/release gate ve standalone
+  Application header kapıları geçti; Linux/GCC ve Windows/MSVC bekleniyor.
+
+<a id="fnd-001a"></a>
+
+### FND-001A — TaskGroup structured concurrency
+
+- **Durum:** İncelenecek
+- **Öncelik:** P0
+- **Özet:** Result döndüren job submission ve operation-owned, non-movable
+  `TaskGroup` ile accepted-child join/cancellation sınırını kur.
+- **Kabul:** Fail-fast ve collect-all, deterministic spawn-order error,
+  parent cancellation, queue/shutdown rejection, idempotent join ve destructor
+  join testlerle korunur; mevcut void `Submit` tüketicileri değişmez.
+- **Kanıt:** `JobSystem.h`, `JobSystem.cpp`, `HoroFoundationJobSystemTests`.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 56/56 ve GUI-off
+  targeted 5/5 geçti; Linux/GCC ve Windows/MSVC bekleniyor.
+
+<a id="prj-001a"></a>
+
+### PRJ-001A — Shared project mutation
+
+- **Durum:** İncelenecek
+- **Özet:** Save, autosave, migration, package, CLI ve MCP yazarlarının
+  paylaşacağı project-root mutation lease’i ile native durable filesystem
+  primitive’lerini kur.
+- **Kanıt:** `DurableFileSystem`, move-only `ExclusiveFileLock`,
+  `ProjectMutationCoordinator` ve platform/lock regression testleri.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang skeleton build, standalone
+  Platform ve EditorServices header kapıları, targeted migration/platform 5/5
+  ve display/GPU hariç canonical 53/53 geçti.
+- **Kalan:** Save ve autosave tüketici geçişleri parent PRJ-001 kapsamındadır;
+  cross-process crash fixture’ı ile Linux/GCC ve Windows/MSVC kapıları bekleniyor.
+
+<a id="mig-001c"></a>
+
+### MIG-001C — Transaction ve recovery
+
+- **Durum:** İncelenecek
+- **Özet:** Mutation lock, same-filesystem staging, durable journal, ordered
+  publish, rollback/recovery ve migration history uygula.
+- **Kanıt:** `ProjectMigrationTransactionService`, sparse
+  `PreparedProjectMigration`, native `DurableFileSystem`, root-last history/root
+  publication, final-candidate validation ve hash-derived resume/rollback
+  regression testleri.
+- **Hardening:** Content-addressed recovery contract seçimi, canonical compact
+  history, committed cleanup namespace/janitor ve typed storage policy eklendi.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang skeleton build, standalone
+  Application/Platform/EditorServices header kapıları, targeted 5/5 ve
+  display/GPU hariç canonical 53/53 geçti. Sandbox içindeki dört display/GPU
+  testi macOS UI servislerine erişemediği için bu koşuda doğrulanmadı.
+- **Bağımlılık:** MIG-001B ve PRJ-001A. Linux/GCC ile Windows/MSVC filesystem
+  kapıları ve bütün durable boundary’leri kapsayan subprocess crash-injection
+  matrisi bekleniyor.
+
+<a id="mig-001d"></a>
+
+### MIG-001D — Project-open entegrasyonu
+
+- **Durum:** İncelenecek
+- **Özet:** Inspection, recovery, migration, derived rebuild, renderer preflight
+  ve workspace activation'ı tek `ProjectOpenService` operasyonunda birleştir.
+- **Kanıt:** Operation-owned asynchronous open job, automatic recovery, patch
+  marker ve migration transaction; iki aşamalı derived candidate/install,
+  owner-thread asset registry publication, generation-safe session activation
+  lease ve Retry/Back loading görünümü. Recent/startup/creation girişleri aynı
+  ProjectLoading hattını kullanır; raw-root workspace route'u kaldırılmıştır.
+- **Son doğrulama:** 2026-07-19 — macOS/AppleClang canonical build geçti;
+  display/GPU hariç 55/55 test geçti. Project-open async/owner-affinity,
+  candidate rollback/single-consumption, asset candidate publication, public
+  header ve settings test izolasyonu kapsandı. GUI-off Application/Assets/
+  EditorServices build ve targeted 2/2 de geçti; OpenGL-only ve Metal-only
+  HoroEditor build'leri ile targeted project-open testleri geçti. Dört
+  GPU/display testi sandbox macOS UI servislerine erişemediği için bu koşuda
+  doğrulanmadı. Frozen `0.0.1` fixture’ının production catalog, durable
+  transaction, derived-state install ve single-use session candidate üzerinden
+  `0.1.0`’a açıldığı; ikinci açılışta yeni receipt üretmediği ayrıca doğrulandı.
+- **Kalan:** Linux/GCC, Windows/MSVC, subprocess crash matrix ve manuel loading
+  interaction doğrulaması.
+- **Bağımlılık:** MIG-001C üç platform kapısı tamamlanana kadar kapanış bağımlılığıdır.
+
+<a id="mig-001e"></a>
+
+### MIG-001E — Welcome compatibility görünümü
+
+- **Durum:** İncelenecek
+- **Özet:** Project kartlarında typed Horo version/status göster ve bounded
+  background inspection/cache projection ekle.
+- **Kanıt:** `RecentProjectCompatibilityProjection`, host-owned
+  `RecentProjectInspectionService`, shared `ProjectOpenPreflightService`, typed
+  bounded `recent_projects.json` cache, localized right-side card metadata ve
+  `HoroRecentProjectInspectionServiceTests`.
+- **Son doğrulama:** 2026-07-19 — macOS/AppleClang HoroEditor, GUI-off,
+  OpenGL-only ve Metal-only build’leri ile targeted Welcome/inspection service
+  testleri geçti; cached/refreshing/fresh,
+  current/migratable/corrupt ve stale-generation yolları kapsandı.
+- **Kalan:** Narrow/long-text görsel fixture, Linux/GCC ve Windows/MSVC kapıları.
+- **Bağımlılık:** MIG-001A ve MIG-001D üç-platform kapanış kapıları.
+
+<a id="mig-001f"></a>
+
+### MIG-001F — Subsystem/provider adoption
+
+- **Durum:** Bağımlı
+- **Özet:** Core authored document ve trusted package/plugin dönüşümlerini tek
+  Horo migration zincirine kaydet; ikinci project-version otoritelerini kaldır.
+- **Bağımlılık:** MIG-001B–D ile ilgili subsystem/package ticketları.
+
+<a id="mig-001f-01"></a>
+
+### MIG-001F-01 — Project settings migration adoption
+
+- **Durum:** İncelenecek
+- **Özet:** Frozen `0.0.1` project settings contract’ını production
+  `core.project_settings.compression_defaults` definition’ı ile `0.1.0`
+  contract’ına yükselt.
+- **Kabul:** Missing compression defaults eklenir; supported değerler korunur;
+  boş, yanlış tip ve whitelist dışı değerler typed validation failure üretir;
+  migrated candidate root transaction overlay sırasında kaybolmaz.
+- **Kanıt:** `releases/0.1.0/`,
+  `src/application/project_migrations/definitions/0.1.0/`, frozen
+  `tests/fixtures/projects/horo_0_0_1_compression/`, production catalog unit
+  testleri ve durable `HoroProjectOpenServiceTests` E2E akışı.
+- **Son doğrulama:** 2026-07-19 — macOS/AppleClang catalog/release gate,
+  migration unit/component, transaction/project-open E2E ve idempotent second
+  open testleri geçti.
+- **Kalan:** Cross-platform deterministic fixture output ve crash-injection
+  matrisi parent MIG-001C/TST-001 kapılarında kaydedilecek.
+
+[↑ Kanbana dön](#kanban)
 
 <a id="arc-001"></a>
 
@@ -254,7 +442,7 @@ placeholder veya sonraki ticket kapsamındadır.
 
 ### SCN-001 — Scene runtime ve ECS temeli
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Authored scene document'ten bağımsız immutable definition, runtime
   ownership, generation-checked identity, transactional transition ve dar
@@ -263,6 +451,10 @@ placeholder veya sonraki ticket kapsamındadır.
   `RuntimeSceneView` değerini gerçek kaynak olarak tüketir; load/unload,
   replacement, atomic structural mutation, stale reference ve allocation-free
   steady-state testleri vardır.
+- **Ownership invariant:** `RuntimeScene` copy/move edilemez; transactional
+  candidate kimliksiz private storage'dır. Başarılı non-empty commit revision'ı
+  artırıp eski view'ı stale yapar; failed/empty commit aktif state ve view'ı
+  korur.
 - **Alt işler:** SCN-001A immutable definition/conversion; SCN-001B identity,
   storage ve retirement; SCN-001C lifecycle/structural boundary; SCN-001D editor
   viewport migration — tamamı uygulanmıştır.
@@ -270,12 +462,11 @@ placeholder veya sonraki ticket kapsamındadır.
   `HoroRuntimeSceneTests` ve runtime-backed editor extraction/picking/controller
   testleri.
 - **Mimari:** [Scene Runtime](./architecture/runtime/scene-runtime.md).
-- **Bağımlılık:** [RUN-001](#run-001). AST-001A identity kontratları üzerinden
-  başlayabilir; AST-001B bu ticket'ın kapanmasını bekler.
-- **Son doğrulama:** 2026-07-18 — Windows Debug'ta RuntimeScene ve
-  runtime-backed editor testleri 5/5, GUI-off kontrat matrisi 4/4 ve OpenGL
-  first-frame smoke geçti. Canonical tam build, çalışma ağacındaki kapsam dışı
-  Foundation constexpr test derleme hataları nedeniyle henüz kapanmadı.
+- **Bağımlılık:** [RUN-001](#run-001).
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical build ve 52/52
+  `ctest`; OpenGL/Metal smoke + first-frame; GUI-off Runtime/Assets standalone
+  header targetları ve targeted 3/3; OpenGL-only ve Metal-only 4/4 test geçti.
+  Linux/GCC ve Windows/MSVC CI bekleniyor.
 
 [↑ Kanbana dön](#kanban)
 
@@ -290,11 +481,77 @@ placeholder veya sonraki ticket kapsamındadır.
 - **Kabul:** Source path runtime identity değildir; malformed input, cache miss,
   cancellation ve atomic publish test edilir; headless cook mümkündür.
 - **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md).
-- **Alt işler:** AST-001A stable asset ID/provider/registry kontratı SCN-001 ile
-  paralel başlayabilir; AST-001B runtime-scene resolution için SCN-001'i bekler.
+- **Alt işler:** [AST-001A](#ast-001a) stable asset ID/provider/registry kontratı
+  ve [AST-001B](#ast-001b) runtime-scene resolution tamamlandı. Importer/cooker,
+  cache ve archive ayrı sonraki dilimlerdir.
 - **Bağımlılık:** AST-001A için [RUN-001](#run-001); AST-001B için
   [SCN-001](#scn-001) ve AST-001A.
-- **Mevcut boşluk:** `src/runtime/assets/` placeholder.
+- **Mevcut boşluk:** Importer, cooker, cache, archive, hot reload ve Content
+  Browser henüz yoktur.
+
+[↑ Kanbana dön](#kanban)
+
+<a id="ast-001a"></a>
+
+### AST-001A — Asset registry ve provider baseline
+
+- **Durum:** Tamamlandı
+- **Öncelik:** P0
+- **Özet:** Foundation-only `HoroEngine::Assets` target'ında canonical UUID
+  identity, immutable revisioned registry snapshot, sidecar rebuild, derived
+  index ve bounded sync/async cooked-byte provider kontratını kur.
+- **Kabul:** Missing/invalid/malformed/future/orphan sidecar ayrımı; duplicate
+  ID/path/case collision rollback; deterministic degraded rebuild; snapshot
+  pinning ve concurrent replacement; cancellation, queue-full, oversize,
+  truncation, shutdown ve stale source-revision davranışları testlidir.
+- **Concurrency invariant:** Worker request submission anındaki `AssetRecord` ve
+  registry revision'ını yakalar; mutable registry'ye erişmez. Registry publish
+  mevcut request'in belleğini geçersiz kılmaz. Shutdown admission'ı kapatır ve
+  service-owned işleri destruction öncesinde cancel/join eder.
+- **Kanıt:** `include/Horo/Assets/`, `src/runtime/assets/`,
+  `HoroAssetRegistryTests`, `HoroAssetProviderTests` ve Assets standalone-header
+  compile target'ı.
+- **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md),
+  [Project Model](./architecture/editor/project-model.md).
+- **Kapanış checklist'i:** `scene-runtime.md`, `asset-pipeline.md`,
+  `project-model.md`, `system-design.md`, `desired-project-tree.md` ve bu kanban
+  güncel. Repository-wide direct-include cleanup ve üç platform remote CI takibi
+  [TST-001](#tst-001) kapsamındadır.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 52/52 ve temiz
+  GUI-off build içinde `HoroAssetRegistryTests`, `HoroAssetProviderTests`,
+  `HoroAssetsPublicHeaderCompile`; OpenGL-only ve Metal-only composition 4/4
+  geçti. Linux/GCC ve Windows/MSVC CI bekleniyor.
+
+[↑ Kanbana dön](#kanban)
+
+<a id="ast-001b"></a>
+
+### AST-001B — Runtime scene asset resolution
+
+- **Durum:** Tamamlandı
+- **Öncelik:** P0
+- **Özet:** Typed scene definition dependency setini immutable registry
+  snapshot, bounded async provider ve owner-thread transactional activation
+  hattına bağla.
+- **Kabul:** Canonical dependency dedup/type conflict; missing/type/empty/provider
+  hataları; sekizli bounded concurrency; incremental logical byte budget;
+  per-asset payload reuse; registry replacement isolation ve authoritative stale
+  rejection; unload/shutdown cancellation; allocation-free active lookup testli.
+- **Concurrency invariant:** Worker yalnız submission anında yakalanmış record ve
+  revision ile çalışır. Owner thread safe point authoritative revision'ı tekrar
+  doğrular. Aktif scene immutable payload lease'lerini pinler; replacement aynı
+  revision'da eşleşen AssetId/type payloadlarını bağımsız reuse eder.
+- **Kanıt:** `SceneAssetDependency`, `RuntimeSceneAssetLimits`,
+  `RuntimeSceneAssetView`, `RuntimeSceneService::QueuePreparation` ve
+  `HoroRuntimeSceneTests` asset senaryoları.
+- **Mimari:** [Scene Runtime](./architecture/runtime/scene-runtime.md),
+  [Asset Pipeline](./architecture/runtime/asset-pipeline.md).
+- **Bağımlılık:** [SCN-001](#scn-001), [AST-001A](#ast-001a).
+- **Kapsam dışı:** Editor document/Inspector asset binding, importer, cooker,
+  decoded runtime resources, process cache, archive ve hot reload.
+- **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 52/52; GUI-off
+  40/40; targeted RuntimeScene, standalone Runtime header ve editor consumer
+  build/test kapıları geçti. Linux/GCC ve Windows/MSVC takibi TST-001'dedir.
 
 [↑ Kanbana dön](#kanban)
 

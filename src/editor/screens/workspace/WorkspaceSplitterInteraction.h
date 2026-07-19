@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <span>
 #include "Horo/Runtime/Input.h"
 

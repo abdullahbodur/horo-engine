@@ -47,15 +47,21 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
+Implementation status on 18 July 2026: the FND-001A baseline implements the
+bounded worker queue, result-returning submissions, parent cancellation and the
+non-movable operation-owned `TaskGroup` below. Priority, affinity, configuration
+snapshot capture, main-thread pumping and the richer operation store remain
+later Foundation work; examples later in this document describe that target and
+must not be read as already implemented.
+
 ```cpp
 class JobSystem {
 public:
-    template<typename Work>
-    Result<JobHandle> Submit(JobDescriptor descriptor, Work&& work);
+    Result<JobHandle> Submit(JobDescriptor descriptor, VoidJobFunction work);
+    Result<JobHandle> SubmitResult(JobDescriptor descriptor, JobFunction work);
 
     Result<void> RequestCancel(JobId id);
     JobSnapshot Query(JobId id) const;
-    void PumpMainThreadTasks(MainThreadBudget budget);
     void Shutdown(ShutdownPolicy policy);
 };
 
@@ -76,24 +82,22 @@ struct JoinOptions {
 the handle does not implicitly cancel a job unless the descriptor explicitly
 uses scoped cancellation.
 
+`WorkerCount()` exposes the immutable configured capacity for admission checks;
+it is not a load metric. An operation job that synchronously joins nested
+`TaskGroup` work must require at least one additional worker or fail admission
+with a typed capacity diagnostic instead of deadlocking a single-worker pool.
+
 ## Job Descriptor
 
 ```cpp
 struct JobDescriptor {
-    JobKind kind;
-    JobPriority priority;
-    JobAffinity affinity;
-    TaskGroupId group;
     CancellationToken parentCancellation;
-    ConfigurationSnapshotRef configuration;
-    DiagnosticContext context;
-    BackpressurePolicy backpressure;
 };
-
-`ConfigurationSnapshotRef` is a cheap, immutable handle to a specific
-configuration revision. Copying it keeps the captured revision alive for the job
-lifetime without copying the resolved configuration set into every descriptor.
 ```
+
+The implemented descriptor intentionally contains only parent cancellation.
+Additional scheduling metadata is introduced only with its owning scheduler
+policy and tests.
 
 Priorities are coarse and starvation-safe:
 
@@ -125,11 +129,18 @@ Operations that spawn related work own a `TaskGroup`:
 ```cpp
 class TaskGroup {
 public:
-    Result<JobHandle> Spawn(JobDescriptor descriptor, JobFunction work);
+    Result<JobId> Spawn(JobDescriptor descriptor, JobFunction work);
     void RequestCancel();
     Result<void> Join();
 };
 ```
+
+`TaskGroup` is non-copyable and non-movable. Its injected `JobSystem` must outlive
+it. Admission rejection does not create or retain a child. `Join()` is
+idempotent and reports child failure in deterministic spawn order. `FailFast`
+requests sibling cancellation on the first observed failure; `CollectAll` joins
+all accepted children without early sibling cancellation. Destruction closes
+admission, requests cancellation and joins every accepted child.
 
 A parent operation cannot report completion while required child work remains
 unaccounted for. Child failures follow the task group's declared policy:

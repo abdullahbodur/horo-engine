@@ -18,6 +18,13 @@ The project uses **Catch2 v3** for C++ tests. Catch2 provides:
 - tag-based test selection
 - BDD-style macros when useful
 
+Catch2 is a test-only dependency pinned to an immutable revision in
+`cmake/Dependencies.cmake`. Native test targets link
+`Catch2::Catch2WithMain`; production targets must not expose or transitively
+link the framework. `tests/CMakeLists.txt` registers native executables through
+`horo_register_catch_test()`, which uses `catch_discover_tests()` so every
+`TEST_CASE` is independently visible to CTest, IDEs, and CI.
+
 ```cpp
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,7 +34,89 @@ TEST_CASE("ProjectPath resolves relative to project root", "[core][path]") {
 }
 ```
 
-Python-based tooling tests use `pytest` for scripts and automation harnesses.
+Python tooling tests use the pinned pytest 8.4.2 dependency and remain a process-level CTest suite; C++
+and Python test frameworks are not mixed inside one executable. The canonical
+Python conventions are:
+
+- files: `tests/python/test_<concern>.py`
+- test functions: `test_<behavior>()`
+- shared pytest fixtures only: `tests/python/conftest.py`
+- private helpers: a leading underscore and no `test_` prefix
+
+Class-based tests are reserved for cases that genuinely share behavior or
+fixture scope; they are not used merely for naming. Every scenario remains
+independently discoverable by pytest.
+
+## Running Tests Locally
+
+Configure and build the canonical test matrix from the repository root:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+cmake -S . -B build/skeleton -DBUILD_TESTING=ON
+cmake --build build/skeleton --parallel
+```
+
+The default local verification excludes tests that require a display or GPU:
+
+```bash
+ctest --test-dir build/skeleton -LE gpu --output-on-failure
+```
+
+Run all tests present in the configured build, or select them by CTest regex:
+
+```bash
+ctest --test-dir build/skeleton --output-on-failure
+ctest --test-dir build/skeleton -R HoroProjectMigrationTests --output-on-failure
+ctest --test-dir build/skeleton -N
+```
+
+Every discovered Catch2 case is a separate CTest test. A Catch2 executable may
+also be invoked directly by exact case name or tag expression:
+
+```bash
+./build/skeleton/tests/HoroProjectMigrationTests \
+  "Pipeline Requires Terminal Validation"
+./build/skeleton/tests/HoroProjectMigrationTests "[unit][application]"
+./build/skeleton/tests/HoroProjectMigrationTests --list-tests
+```
+
+CTest invokes the Python suite through the same interpreter selected by CMake.
+For direct pytest selection and failure output:
+
+```bash
+python3 -m pytest tests/python
+python3 -m pytest tests/python/test_project_migration_generator.py -k factory -vv
+```
+
+`BUILD_TESTING=ON` fails during configure with the required installation
+command when pytest is unavailable. CMake never installs Python packages or
+mutates the developer environment implicitly.
+
+GPU smoke and editor first-frame checks are opt-in. They require a compatible
+display and graphics device and must not be reported as run merely because the
+targets compiled:
+
+```bash
+cmake -S . -B build/skeleton \
+  -DBUILD_TESTING=ON \
+  -DHORO_ENABLE_GPU_SMOKE_TESTS=ON
+cmake --build build/skeleton --parallel
+ctest --test-dir build/skeleton -L gpu --output-on-failure
+```
+
+For a GUI-off/headless matrix:
+
+```bash
+cmake -S . -B build/headless \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=OFF \
+  -DHORO_BUILD_RENDER_OPENGL=OFF \
+  -DHORO_BUILD_RENDER_METAL=OFF \
+  -DHORO_ENABLE_GPU_SMOKE_TESTS=OFF
+cmake --build build/headless --parallel
+ctest --test-dir build/headless --output-on-failure
+```
 
 ## Test Layers
 
@@ -42,11 +131,15 @@ packaged-player smoke validation as defined by
 Unit tests validate isolated module behavior. They link against production
 targets and must not compile production sources directly.
 
-Location: `tests/test_<module>/` or `tests/test_<feature>.cpp`
+Location: `tests/unit/<owner>/<concern>Tests.cpp`
 
 Rules:
 
 - one logical concern per `TEST_CASE`
+- place the scenario body directly in `TEST_CASE`; do not keep a second
+  test-named function that is called only by that case
+- retain helpers only for genuinely shared fixtures, setup/teardown, test data,
+  or reusable domain actions
 - mock or stub external dependencies
 - avoid disk I/O when possible; use in-memory fixtures
 - run in milliseconds
@@ -154,7 +247,8 @@ one machine-specific absolute number.
 
 ```text
 tests/
-    test_<module>/           unit tests per module
+    CMakeLists.txt           native discovery and process-test registration
+    unit/                    unit/component tests grouped by owning target
     integration/             cross-module integration tests
     contract/                GUI/CLI/MCP contract tests (typed-outcome equivalence)
     cli/                     CLI-specific tests
@@ -165,36 +259,13 @@ tests/
     helpers/                 shared test utilities
 ```
 
-Each test executable corresponds to one test target in CMake.
+Each native test executable corresponds to one owning CMake test target. A
+target may contain multiple source files from the same dependency boundary;
+unrelated owners, platform guards, and renderer compositions must not be folded
+into a monolithic executable. Each behavior is a separately named and tagged
+Catch2 `TEST_CASE`.
 
-## Running Tests
-
-### Local Fast Suite
-
-```bash
-python3 scripts/dev.py test
-```
-
-Runs unit, integration, and fast contract tests that complete quickly and have no
-GUI dependency. 
-
-*Note: This local convenience command runs a broader set of tests than the CI "PR Fast Lane", which strictly defers cross-module integration tests to later gates to preserve cycle time.*
-
-### Specific Tests
-
-```bash
-python3 scripts/dev.py test -- test_core test_scene_project_model
-```
-
-### Complete Matrix
-
-```bash
-python3 scripts/dev.py test --all
-```
-
-Runs every test including GUI, renderer, and platform-specific tests. This corresponds to the full suite executed during CI's Scheduled Validation, and is a superset of the bounded acceptance shard run in Protected Matrix jobs.
-
-### Game Project Tests
+## Downstream Game Project Tests
 
 Downstream games run their own tests through the `horo-engine test` command, not
 through engine-private test binaries:
@@ -214,13 +285,6 @@ engine coverage.
 in-repository developer wrapper. It builds or locates the local `horo-engine`
 executable and delegates to the same public `horo-engine test` command. External
 project documentation and CI examples should use `horo-engine test` directly.
-
-### Direct CTest
-
-```bash
-cd build/debug
-ctest --output-on-failure -R "test_core|test_scene"
-```
 
 ## Writing Tests
 
@@ -247,9 +311,22 @@ TEST_CASE("Asset archive can round-trip a mesh", "[asset][archive]") {
 
 Every `TEST_CASE` must have tags. Use the convention:
 
-- module tag: `[core]`, `[scene]`, `[asset]`, `[editor]`
+- layer tag: `[unit]` or `[integration]`
+- module tag: `[foundation]`, `[application]`, `[runtime]`, `[scene]`, `[assets]`, `[editor]`
 - concern tag: `[path]`, `[serialization]`, `[lifecycle]`
-- speed tag: `[slow]`, `[gui]`, `[integration]`
+- capability tag when relevant: `[renderer]`, `[gpu]`, `[gui]`, `[slow]`
+
+Test names are behavioral sentences and do not contain ticket IDs. Use
+`REQUIRE` for prerequisites that make later assertions unsafe and `CHECK` when
+independent observations should all be reported. Assertions must run on the
+Catch2 test thread; worker tasks publish typed results or thread-safe probes
+that the test thread inspects after join.
+
+Public-header self-containment checks are compile targets, not Catch2 cases.
+Python generator checks, editor first-frame processes, and other subprocess
+contracts remain direct CTest entries. GPU smoke executables use Catch2 but are
+registered only when `HORO_ENABLE_GPU_SMOKE_TESTS=ON` and retain `gpu`/display
+labels.
 
 ### Avoid Shared Mutable State
 

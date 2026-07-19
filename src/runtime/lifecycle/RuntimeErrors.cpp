@@ -1,7 +1,9 @@
 #include "RuntimeErrors.h"
 
-namespace Horo::Runtime::RuntimeErrors {
-    namespace {
+namespace Horo::Runtime::RuntimeErrors
+{
+    namespace
+    {
         constexpr auto kError = ErrorSeverity::Error;
         const ErrorDomainId kDomain{"horo.runtime"};
     } // namespace

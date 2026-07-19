@@ -75,6 +75,13 @@ Rules:
 Filesystem writes that protect user data use temporary same-filesystem writes
 and atomic replacement when supported.
 
+The implemented PRJ-001A baseline exposes `DurableFileSystem` and the move-only
+`ExclusiveFileLock`. Native Windows, macOS, and Linux adapters provide durable
+write/copy/remove, same-filesystem atomic replacement, parent-directory
+synchronization according to host policy, capacity inspection, and immediate
+OS-held exclusive locking. Lock-file text is diagnostic only; ownership lives
+in the native handle and is released by RAII or process termination.
+
 ## User Directories
 
 The platform service resolves logical directories:

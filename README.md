@@ -38,15 +38,70 @@ full target structure.
 
 ## Build Status
 
-The active root `CMakeLists.txt` is currently a minimal skeleton used to validate
-the new layout shell.
+Configure and build the canonical local development matrix from the repository
+root:
 
 ```bash
 cmake -S . -B build/skeleton -DBUILD_TESTING=ON
+cmake --build build/skeleton --parallel
 ```
 
-Full editor/runtime build commands will be restored as modules are introduced
-into the active layout.
+## Tests
+
+Install the repository-owned Python test dependency before configuring a test
+build, preferably inside a virtual environment:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+```
+
+Run the normal test suite without display/GPU-dependent tests:
+
+```bash
+ctest --test-dir build/skeleton -LE gpu --output-on-failure
+```
+
+Run every configured test:
+
+```bash
+ctest --test-dir build/skeleton --output-on-failure
+```
+
+GPU smoke and editor first-frame tests are opt-in and require a compatible
+display and graphics device. Enable them while configuring:
+
+```bash
+cmake -S . -B build/skeleton \
+  -DBUILD_TESTING=ON \
+  -DHORO_ENABLE_GPU_SMOKE_TESTS=ON
+cmake --build build/skeleton --parallel
+ctest --test-dir build/skeleton -L gpu --output-on-failure
+```
+
+Filter CTest by target or test name:
+
+```bash
+ctest --test-dir build/skeleton -R HoroProjectMigrationTests --output-on-failure
+ctest --test-dir build/skeleton -N
+```
+
+Catch2 executables also support direct case and tag selection:
+
+```bash
+./build/skeleton/tests/HoroProjectMigrationTests \
+  "Pipeline Requires Terminal Validation"
+./build/skeleton/tests/HoroProjectMigrationTests "[unit][application]"
+```
+
+Run Python tooling tests directly through pytest:
+
+```bash
+python3 -m pytest tests/python
+```
+
+See [Testing Architecture](./docs/architecture/delivery/testing-architecture.md)
+for the headless matrix, test layers, tags, fixtures, GPU requirements, and test
+authoring rules.
 
 ## AI-Centric Editor Direction
 
@@ -78,6 +133,7 @@ See:
 | Release architecture         | [docs/architecture/release/release.md](./docs/architecture/release/release.md)                                         |
 | CLI architecture             | [docs/architecture/interfaces/cli-architecture.md](./docs/architecture/interfaces/cli-architecture.md)                 |
 | MCP architecture             | [docs/architecture/interfaces/mcp-architecture.md](./docs/architecture/interfaces/mcp-architecture.md)                 |
+| Testing architecture         | [docs/architecture/delivery/testing-architecture.md](./docs/architecture/delivery/testing-architecture.md)             |
 | ADRs                         | [docs/adr/README.md](./docs/adr/README.md)                                                                             |
 
 ### Topics needs to be covered

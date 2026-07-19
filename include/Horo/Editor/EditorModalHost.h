@@ -5,7 +5,6 @@
 #include "Horo/Runtime/Input.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>

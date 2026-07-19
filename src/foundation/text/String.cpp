@@ -1,7 +1,5 @@
 #include "Horo/Foundation/String.h"
 
-#include <cctype>
-
 namespace Horo::Text {
     /** @copydoc IsBlank */
     bool IsBlank(const std::string_view value) noexcept {

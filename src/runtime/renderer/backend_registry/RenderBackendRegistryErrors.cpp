@@ -2,42 +2,78 @@
 
 namespace Horo::Render::RegistryErrors
 {
-namespace
-{
-const ErrorDomainId Domain{"horo.render"};
+    namespace
+    {
+        const ErrorDomainId Domain{"horo.render"};
+    } // namespace
 
-[[nodiscard]] ErrorCodeDescriptor Describe(const char *code, const char *summary, const char *remediation,
-                                           const bool retryable = false)
-{
-    return ErrorCodeDescriptor{.domain = Domain,
-                               .code = ErrorCode{code},
-                               .defaultSeverity = ErrorSeverity::Error,
-                               .summary = summary,
-                               .remediationHint = remediation,
-                               .retryable = retryable,
-                               .userActionable = false};
-}
-} // namespace
+    const ErrorCodeDescriptor BackendNotFound{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.backend_not_found"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend is not registered.",
+        .remediationHint = "Register the requested backend before creating it.",
+        .retryable = false,
+        .userActionable = false
+    };
 
-const ErrorCodeDescriptor BackendNotFound =
-    Describe("render.registry.backend_not_found", "Renderer backend is not registered.",
-             "Register the requested backend before creating it.");
-const ErrorCodeDescriptor DuplicateBackend =
-    Describe("render.registry.duplicate_backend", "Renderer backend ID is already registered.",
-             "Use one provider for each stable backend ID.");
-const ErrorCodeDescriptor InvalidDescriptor =
-    Describe("render.registry.invalid_descriptor", "Renderer backend descriptor is invalid.",
-             "Provide a valid ID, display name, and provider.");
-const ErrorCodeDescriptor NotSealed =
-    Describe("render.registry.not_sealed", "Renderer backend registry is not sealed.",
-             "Seal backend registration before runtime selection.");
-const ErrorCodeDescriptor ProviderException =
-    Describe("render.registry.provider_exception", "Renderer backend provider threw an exception.",
-             "Inspect the provider implementation and diagnostics.", true);
-const ErrorCodeDescriptor ProviderReturnedNull =
-    Describe("render.registry.provider_returned_null", "Renderer backend provider returned no backend.",
-             "Return a valid backend instance from the registered provider.");
-const ErrorCodeDescriptor Sealed =
-    Describe("render.registry.sealed", "Renderer backend registry is already sealed.",
-             "Register all backends before sealing the registry.");
+    const ErrorCodeDescriptor DuplicateBackend{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.duplicate_backend"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend ID is already registered.",
+        .remediationHint = "Use one provider for each stable backend ID.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor InvalidDescriptor{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.invalid_descriptor"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend descriptor is invalid.",
+        .remediationHint = "Provide a valid ID, display name, and provider.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor NotSealed{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.not_sealed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend registry is not sealed.",
+        .remediationHint = "Seal backend registration before runtime selection.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor ProviderException{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.provider_exception"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend provider threw an exception.",
+        .remediationHint = "Inspect the provider implementation and diagnostics.",
+        .retryable = true,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor ProviderReturnedNull{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.provider_returned_null"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend provider returned no backend.",
+        .remediationHint = "Return a valid backend instance from the registered provider.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor Sealed{
+        .domain = Domain,
+        .code = ErrorCode{"render.registry.sealed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend registry is already sealed.",
+        .remediationHint = "Register all backends before sealing the registry.",
+        .retryable = false,
+        .userActionable = false
+    };
 } // namespace Horo::Render::RegistryErrors

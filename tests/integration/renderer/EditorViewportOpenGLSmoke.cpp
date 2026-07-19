@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "editor/renderer/opengl/EditorViewportRendererOpenGL.h"
@@ -24,10 +26,7 @@ using namespace Horo::Render;
 
 void Check(const bool condition)
 {
-    if (!condition)
-    {
-        std::abort();
-    }
+    REQUIRE((condition));
 }
 
 void WritePpm(const std::filesystem::path &path, const std::span<const std::uint8_t> rgba, const std::uint32_t width,
@@ -49,11 +48,11 @@ void WritePpm(const std::filesystem::path &path, const std::span<const std::uint
 }
 } // namespace
 
-int main(const int argc, char **argv)
+TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
 {
     constexpr std::uint32_t width = 512;
     constexpr std::uint32_t height = 384;
-    const std::filesystem::path outputPath = argc > 1 ? argv[1] : "horo-viewport-primitives.ppm";
+    const std::filesystem::path outputPath = "horo-viewport-primitives.ppm";
 
     Check(SDL_Init(SDL_INIT_VIDEO));
     Check(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1));
@@ -73,7 +72,7 @@ int main(const int argc, char **argv)
     Check(frontendResult.HasValue());
     std::unique_ptr<RenderFrontend> frontend = std::move(frontendResult).Value();
 
-    Check(gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress)) != 0);
+    Check(gladLoadGL(SDL_GL_GetProcAddress) != 0);
     GLuint callerVertexArray = 0;
     GLuint callerArrayBuffer = 0;
     GLuint callerDrawFramebuffer = 0;
@@ -100,8 +99,8 @@ int main(const int argc, char **argv)
         auto acquiredMesh = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(primitiveTypes[index]));
         Check(acquiredMesh.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquiredMesh).Value();
-        const Render::MeshData &mesh = meshLease.Data();
-        const Render::RenderMeshHandle meshHandle{meshLease.Id(), 1};
+        const MeshData &mesh = meshLease.Data();
+        const RenderMeshHandle meshHandle{meshLease.Id(), 1};
         meshResources.push_back({meshHandle, mesh.vertices, mesh.indices, mesh.localBounds});
         constexpr std::array positions{Math::Vec2{0, 0},       Math::Vec2{-1.0F, 0.7F},  Math::Vec2{0, 0.9F},
                                        Math::Vec2{1.0F, 0.7F}, Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},
@@ -113,7 +112,8 @@ int main(const int argc, char **argv)
             {meshHandle,
              Math::Transform{.translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}}
                  .ToMatrix(),
-             mesh.localBounds, Render::CoreDefaultMaterial,
+             mesh.localBounds,
+             CoreDefaultMaterial,
              {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}});
         meshLeases.push_back(std::move(meshLease));
     }
@@ -139,12 +139,13 @@ int main(const int argc, char **argv)
         RenderPassDescriptor{
             .id = RenderPassId{1},
             .kind = RenderPassKind::Graphics,
-            .staticMesh = StaticMeshPassDescriptor{
-                .target = viewportTarget,
-                .extent = {width, height},
-                .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                                         viewportScene.instances},
-            },
+            .staticMesh =
+                StaticMeshPassDescriptor{
+                    .target = viewportTarget,
+                    .extent = {width, height},
+                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
+                                             viewportScene.instances},
+                },
         },
         RenderPassDescriptor{
             .id = RenderPassId{2},
@@ -245,5 +246,4 @@ int main(const int argc, char **argv)
     frontend.reset();
     SDL_DestroyWindow(window);
     SDL_Quit();
-    return 0;
 }

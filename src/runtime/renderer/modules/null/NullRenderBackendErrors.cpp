@@ -2,54 +2,138 @@
 
 namespace Horo::Render::NullBackendErrors
 {
-namespace
-{
-const ErrorDomainId Domain{"horo.render"};
-[[nodiscard]] ErrorCodeDescriptor Describe(const char *code, const char *summary, const char *remediation,
-                                           const bool retryable = false)
-{
-    return {.domain = Domain,
-            .code = ErrorCode{code},
-            .defaultSeverity = ErrorSeverity::Error,
-            .summary = summary,
-            .remediationHint = remediation,
-            .retryable = retryable,
-            .userActionable = false};
-}
-} // namespace
+    namespace
+    {
+        const ErrorDomainId Domain{"horo.render"};
+    } // namespace
 
-const ErrorCodeDescriptor AlreadyInitialized = Describe("render.backend.already_initialized",
-                                                        "Renderer backend is already initialized.",
-                                                        "Shut down the backend before initializing it again.");
-const ErrorCodeDescriptor FrameActive = Describe("render.backend.frame_active", "A renderer frame is active.",
-                                                 "Complete or abort the frame before this operation.");
-const ErrorCodeDescriptor FrameAlreadyActive = Describe("render.backend.frame_already_active",
-                                                        "A renderer frame is already active.",
-                                                        "Complete or abort the frame before beginning another.");
-const ErrorCodeDescriptor FrameTokenExhausted = Describe("render.backend.frame_token_exhausted",
-                                                        "Renderer frame token space was exhausted.",
-                                                        "Restart the backend after all queued GPU work is retired.");
-const ErrorCodeDescriptor FrameTokenMismatch = Describe("render.backend.frame_token_mismatch",
-                                                       "Renderer frame token does not match the active frame.",
-                                                       "Use the token returned by the current BeginFrame call.");
-const ErrorCodeDescriptor InvalidConfig = Describe("render.backend.invalid_config", "Renderer configuration is invalid.",
-                                                   "Use a supported frames-in-flight and presentation configuration.");
-const ErrorCodeDescriptor InvalidExecutionPlan = Describe("render.backend.invalid_execution_plan",
-                                                          "Renderer execution plan is invalid.",
-                                                          "Submit a valid ordered pass plan.");
-const ErrorCodeDescriptor InvalidExtent = Describe("render.backend.invalid_extent", "Render extent is invalid.",
-                                                   "Use a non-zero supported render extent.");
-const ErrorCodeDescriptor InvalidFrameDescriptor = Describe("render.backend.invalid_frame_descriptor",
-                                                            "Renderer frame descriptor is invalid.",
-                                                            "Provide a valid frame descriptor.");
-const ErrorCodeDescriptor NoActiveFrame = Describe("render.backend.no_active_frame", "No renderer frame is active.",
-                                                   "Begin a frame before this operation.");
-const ErrorCodeDescriptor NotInitialized = Describe("render.backend.not_initialized", "Renderer backend is not initialized.",
-                                                    "Initialize the backend before use.");
-const ErrorCodeDescriptor UnsupportedPassKind = Describe("render.backend.unsupported_pass_kind",
-                                                         "Render pass kind is unsupported.",
-                                                         "Submit only pass kinds supported by the backend.");
-const ErrorCodeDescriptor PresentationUnsupported = Describe("render.null.presentation_unsupported",
-                                                             "Null renderer does not support presentation.",
-                                                             "Use a presentation-capable backend or disable presentation.");
+    const ErrorCodeDescriptor AlreadyInitialized{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.already_initialized"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend is already initialized.",
+        .remediationHint = "Shut down the backend before initializing it again.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor FrameActive{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.frame_active"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A renderer frame is active.",
+        .remediationHint = "Complete or abort the frame before this operation.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor FrameAlreadyActive{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.frame_already_active"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A renderer frame is already active.",
+        .remediationHint = "Complete or abort the frame before beginning another.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor FrameTokenExhausted{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.frame_token_exhausted"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer frame token space was exhausted.",
+        .remediationHint = "Restart the backend after all queued GPU work is retired.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor FrameTokenMismatch{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.frame_token_mismatch"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer frame token does not match the active frame.",
+        .remediationHint = "Use the token returned by the current BeginFrame call.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor InvalidConfig{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.invalid_config"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer configuration is invalid.",
+        .remediationHint = "Use a supported frames-in-flight and presentation configuration.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor InvalidExecutionPlan{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.invalid_execution_plan"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer execution plan is invalid.",
+        .remediationHint = "Submit a valid ordered pass plan.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor InvalidExtent{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.invalid_extent"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Render extent is invalid.",
+        .remediationHint = "Use a non-zero supported render extent.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor InvalidFrameDescriptor{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.invalid_frame_descriptor"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer frame descriptor is invalid.",
+        .remediationHint = "Provide a valid frame descriptor.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor NoActiveFrame{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.no_active_frame"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "No renderer frame is active.",
+        .remediationHint = "Begin a frame before this operation.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor NotInitialized{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.not_initialized"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Renderer backend is not initialized.",
+        .remediationHint = "Initialize the backend before use.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor UnsupportedPassKind{
+        .domain = Domain,
+        .code = ErrorCode{"render.backend.unsupported_pass_kind"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Render pass kind is unsupported.",
+        .remediationHint = "Submit only pass kinds supported by the backend.",
+        .retryable = false,
+        .userActionable = false
+    };
+
+    const ErrorCodeDescriptor PresentationUnsupported{
+        .domain = Domain,
+        .code = ErrorCode{"render.null.presentation_unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Null renderer does not support presentation.",
+        .remediationHint = "Use a presentation-capable backend or disable presentation.",
+        .retryable = false,
+        .userActionable = false
+    };
 } // namespace Horo::Render::NullBackendErrors

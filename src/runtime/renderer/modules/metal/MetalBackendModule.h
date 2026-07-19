@@ -7,8 +7,6 @@
 
 #include "Horo/Runtime/Render/RenderBackendRegistry.h"
 
-#include <cstdint>
-
 namespace Horo::Render
 {
 namespace Detail

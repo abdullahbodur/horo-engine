@@ -13,8 +13,6 @@
 #include "editor/screens/NavigationErrors.h"
 #include "ProjectCreationView.h"
 
-#include <imgui.h>
-
 #include <memory>
 #include <vector>
 
@@ -66,7 +64,7 @@ namespace Horo::Editor
             {
                 const auto command = DrawProjectCreationView(controller_, state_, context_, inputRouter_,
                                                              rendererAvailability_,
-                                                             contentRegion, (ImTextureID)logoTexture_);
+                                                             contentRegion, logoTexture_);
                 if (command == ProjectCreationViewCommand::ReturnToWelcome)
                 {
                     static_cast<void>(host_.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));

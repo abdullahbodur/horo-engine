@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/python"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = ["--strict-config", "--strict-markers"]
+cache_dir = "build/pytest-cache"

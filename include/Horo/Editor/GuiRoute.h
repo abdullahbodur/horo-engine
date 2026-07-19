@@ -4,6 +4,8 @@
 #include <string>
 #include <variant>
 
+#include "Horo/Editor/ProjectSession.h"
+
 namespace Horo::Editor
 {
 
@@ -64,7 +66,7 @@ struct ProjectLoadingRouteParameters
  */
 struct EditorWorkspaceRouteParameters
 {
-    std::string projectRoot;
+    ProjectSessionCandidateId session;
     std::optional<std::string> initialScene;
     bool operator==(const EditorWorkspaceRouteParameters &) const = default;
 };

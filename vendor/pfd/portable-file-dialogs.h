@@ -38,7 +38,6 @@
 #   endif
 #endif
 #include <cstdio>     // popen()
-#include <cstdlib>    // std::getenv()
 #include <fcntl.h>    // fcntl()
 #include <unistd.h>   // read(), pipe(), dup2(), getuid()
 #include <csignal>    // ::kill, std::signal
@@ -1219,22 +1218,22 @@ inline internal::file_dialog::file_dialog(type in_type,
         std::string script = "set ret to choose";
         switch (in_type)
         {
-            case type::save:
+            case save:
                 script += " file name";
                 break;
-            case type::open: default:
+            case open: default:
                 script += " file";
                 if (options & opt::multiselect)
                     script += " with multiple selections allowed";
                 break;
-            case type::folder:
+            case folder:
                 script += " folder";
                 break;
         }
 
         if (default_path.size())
         {
-            if (in_type == type::folder || is_directory(default_path))
+            if (in_type == folder || is_directory(default_path))
                 script += " default location ";
             else
                 script += " default name ";
@@ -1243,7 +1242,7 @@ inline internal::file_dialog::file_dialog(type in_type,
 
         script += " with prompt " + osascript_quote(title);
 
-        if (in_type == type::open)
+        if (in_type == open)
         {
             // Concatenate all user-provided filter patterns
             std::string patterns;
@@ -1263,7 +1262,7 @@ inline internal::file_dialog::file_dialog(type in_type,
                 auto pat = iter->str();
                 if (pat == "*" || pat == "*.*")
                     has_filter = false;
-                else if (internal::starts_with(pat, "*."))
+                else if (starts_with(pat, "*."))
                     filter_list += "," + osascript_quote(pat.substr(2, pat.size() - 2));
             }
 
@@ -1278,7 +1277,7 @@ inline internal::file_dialog::file_dialog(type in_type,
             }
         }
 
-        if (in_type == type::open && (options & opt::multiselect))
+        if (in_type == open && (options & opt::multiselect))
         {
             script += "\nset s to \"\"";
             script += "\nrepeat with i in ret";
@@ -1301,7 +1300,7 @@ inline internal::file_dialog::file_dialog(type in_type,
         // If the default path is a directory, make sure it ends with "/" otherwise zenity will
         // open the file dialog in the parent directory.
         auto filename_arg = "--filename=" + default_path;
-        if (in_type != type::folder && !ends_with(default_path, "/") && internal::is_directory(default_path))
+        if (in_type != folder && !ends_with(default_path, "/") && is_directory(default_path))
             filename_arg += "/";
         command.push_back(filename_arg);
 
@@ -1315,9 +1314,9 @@ inline internal::file_dialog::file_dialog(type in_type,
             command.push_back(filters[2 * i] + "|" + filters[2 * i + 1]);
         }
 
-        if (in_type == type::save)
+        if (in_type == save)
             command.push_back("--save");
-        if (in_type == type::folder)
+        if (in_type == folder)
             command.push_back("--directory");
         if (!(options & opt::force_overwrite))
             command.push_back("--confirm-overwrite");
@@ -1328,9 +1327,9 @@ inline internal::file_dialog::file_dialog(type in_type,
     {
         switch (in_type)
         {
-            case type::save: command.push_back("--getsavefilename"); break;
-            case type::open: command.push_back("--getopenfilename"); break;
-            case type::folder: command.push_back("--getexistingdirectory"); break;
+            case save: command.push_back("--getsavefilename"); break;
+            case open: command.push_back("--getopenfilename"); break;
+            case folder: command.push_back("--getexistingdirectory"); break;
         }
         if (options & opt::multiselect)
         {
@@ -1826,7 +1825,7 @@ inline open_file::open_file(std::string const &title,
                             std::string const &default_path /* = "" */,
                             std::vector<std::string> const &filters /* = { "All Files", "*" } */,
                             opt options /* = opt::none */)
-  : file_dialog(type::open, title, default_path, filters, options)
+  : file_dialog(open, title, default_path, filters, options)
 {
 }
 
@@ -1850,7 +1849,7 @@ inline save_file::save_file(std::string const &title,
                             std::string const &default_path /* = "" */,
                             std::vector<std::string> const &filters /* = { "All Files", "*" } */,
                             opt options /* = opt::none */)
-  : file_dialog(type::save, title, default_path, filters, options)
+  : file_dialog(save, title, default_path, filters, options)
 {
 }
 
@@ -1873,7 +1872,7 @@ inline std::string save_file::result()
 inline select_folder::select_folder(std::string const &title,
                                     std::string const &default_path /* = "" */,
                                     opt options /* = opt::none */)
-  : file_dialog(type::folder, title, default_path, {}, options)
+  : file_dialog(folder, title, default_path, {}, options)
 {
 }
 

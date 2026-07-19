@@ -1,18 +1,21 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Foundation/Platform.h"
 
-#include <cassert>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace
 {
-
 class RecordingFileSystem final : public Horo::FileSystem
 {
-public:
-    [[nodiscard]] bool Exists(const std::filesystem::path& path) const override
+  public:
+    [[nodiscard]] bool Exists(const std::filesystem::path &path) const override
     {
         lastPath = path;
         return exists;
@@ -24,7 +27,7 @@ public:
 
 class FixedProcessService final : public Horo::ProcessService
 {
-public:
+  public:
     [[nodiscard]] Horo::ProcessMetadata CurrentProcess() const override
     {
         return Horo::ProcessMetadata{.id = 42, .executableName = "test-host"};
@@ -32,12 +35,13 @@ public:
 
     [[nodiscard]] std::optional<std::string> EnvironmentValue(const std::string_view name) const override
     {
-        if (name == "HORO_TEST") return std::string{"enabled"};
+        if (name == "HORO_TEST")
+            return std::string{"enabled"};
         return std::nullopt;
     }
 };
 
-void PlatformServicesUseExplicitlyInjectedBaselineServices()
+TEST_CASE("Platform Services Use Explicitly Injected Baseline Services", "[unit][foundation]")
 {
     RecordingFileSystem files;
     Horo::DeterministicClock clock(Horo::Duration::FromMilliseconds(10));
@@ -53,15 +57,15 @@ void PlatformServicesUseExplicitlyInjectedBaselineServices()
 
     Horo::PlatformServices services(files, clock, processes, directories);
 
-    assert(services.files.Exists("/test/project.horo"));
-    assert(files.lastPath == "/test/project.horo");
-    assert(services.clock.MonotonicNow().ToMilliseconds() == 10);
-    assert(services.processes.CurrentProcess().id == 42);
-    assert(services.processes.EnvironmentValue("HORO_TEST") == "enabled");
-    assert(services.directories.Config() == "/test/config");
+    REQUIRE((services.files.Exists("/test/project.horo")));
+    REQUIRE((files.lastPath == "/test/project.horo"));
+    REQUIRE((services.clock.MonotonicNow().ToMilliseconds() == 10));
+    REQUIRE((services.processes.CurrentProcess().id == 42));
+    REQUIRE((services.processes.EnvironmentValue("HORO_TEST") == "enabled"));
+    REQUIRE((services.directories.Config() == "/test/config"));
 }
 
-void PlatformCapabilitiesReportOptionalServiceAvailability()
+TEST_CASE("Platform Capabilities Report Optional Service Availability", "[unit][foundation]")
 {
     Horo::NullFileSystem files;
     Horo::DeterministicClock clock;
@@ -76,40 +80,56 @@ void PlatformCapabilitiesReportOptionalServiceAvailability()
 
     const Horo::PlatformServices services(files, clock, processes, directories, capabilities);
 
-    assert(!services.Capabilities().supportsProcessExecution);
-    assert(!services.Capabilities().hasCredentialStore);
-    assert(!services.Capabilities().hasNativeDialogs);
-    assert(!services.Capabilities().hasCrashService);
+    REQUIRE((!services.Capabilities().supportsProcessExecution));
+    REQUIRE((!services.Capabilities().hasCredentialStore));
+    REQUIRE((!services.Capabilities().hasNativeDialogs));
+    REQUIRE((!services.Capabilities().hasCrashService));
 }
 
-void DeterministicAdaptersProvideStableClockAndPaths()
+TEST_CASE("Deterministic Adapters Provide Stable Clock And Paths", "[unit][foundation]")
 {
     Horo::DeterministicClock clock(Horo::Duration::FromMilliseconds(100));
     Horo::StaticUserDirectories directories({.temporary = "/test/tmp"});
     Horo::NullFileSystem files;
 
-    assert(clock.MonotonicNow().ToMilliseconds() == 100);
+    REQUIRE((clock.MonotonicNow().ToMilliseconds() == 100));
     clock.Advance(Horo::Duration::FromMilliseconds(25));
-    assert(clock.MonotonicNow().ToMilliseconds() == 125);
-    assert(directories.Temporary() == "/test/tmp");
-    assert(!files.Exists("/test/missing"));
+    REQUIRE((clock.MonotonicNow().ToMilliseconds() == 125));
+    REQUIRE((directories.Temporary() == "/test/tmp"));
+    REQUIRE((!files.Exists("/test/missing")));
 }
 
-void SteadyClockIsMonotonic()
+TEST_CASE("Steady Clock Is Monotonic", "[unit][foundation]")
 {
     const Horo::SteadyClock clock;
     const Horo::Duration first = clock.MonotonicNow();
     const Horo::Duration second = clock.MonotonicNow();
-    assert(second >= first);
+    REQUIRE((second >= first));
 }
 
-} // namespace
-
-int main()
+TEST_CASE("Native Durable Filesystem Serializes Locks And Replaces Files", "[unit][foundation]")
 {
-    PlatformServicesUseExplicitlyInjectedBaselineServices();
-    PlatformCapabilitiesReportOptionalServiceAvailability();
-    DeterministicAdaptersProvideStableClockAndPaths();
-    SteadyClockIsMonotonic();
-    return 0;
+    const auto root = std::filesystem::temp_directory_path() / "horo-platform-durable-test";
+    std::error_code ignored;
+    std::filesystem::remove_all(root, ignored);
+    std::filesystem::create_directories(root);
+    Horo::NativeDurableFileSystem files;
+    {
+        auto first = files.TryAcquireExclusive(root / "mutation.lock", "first");
+        REQUIRE((first.HasValue()));
+        auto second = files.TryAcquireExclusive(root / "mutation.lock", "second");
+        REQUIRE((second.HasError()));
+    }
+    REQUIRE((files.TryAcquireExclusive(root / "mutation.lock", "after-release").HasValue()));
+    const std::string text = "durable";
+    std::vector<std::byte> bytes(text.size());
+    std::memcpy(bytes.data(), text.data(), text.size());
+    REQUIRE((files.WriteDurable(root / "prepared", bytes).HasValue()));
+    REQUIRE((files.AtomicReplace(root / "prepared", root / "published").HasValue()));
+    std::ifstream input(root / "published", std::ios::binary);
+    REQUIRE((std::string(std::istreambuf_iterator<char>(input), {}) == text));
+    REQUIRE((files.AvailableBytes(root).HasValue()));
+    REQUIRE((files.RemoveDurable(root / "published").HasValue()));
+    std::filesystem::remove_all(root, ignored);
 }
+} // namespace

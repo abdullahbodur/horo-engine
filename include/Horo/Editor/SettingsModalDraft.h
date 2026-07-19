@@ -3,7 +3,6 @@
 #include "Horo/Editor/EditorSettingsStore.h"
 
 #include <cstdint>
-#include <iterator>
 #include <string>
 
 namespace Horo::Editor

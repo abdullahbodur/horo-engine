@@ -1,57 +1,46 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Progress.h"
 
-#include <cassert>
-
 namespace
 {
-
-void ParentCancellationReachesChildToken()
+TEST_CASE("Parent Cancellation Reaches Child Token", "[unit][foundation]")
 {
     Horo::CancellationSource parent;
     Horo::CancellationSource child{parent.Token()};
-    assert(!child.Token().IsCancellationRequested());
+    REQUIRE((!child.Token().IsCancellationRequested()));
 
     parent.RequestCancellation();
-    assert(child.Token().IsCancellationRequested());
+    REQUIRE((child.Token().IsCancellationRequested()));
 }
 
-void ChildCancellationDoesNotCancelParent()
+TEST_CASE("Child Cancellation Does Not Cancel Parent", "[unit][foundation]")
 {
     Horo::CancellationSource parent;
     Horo::CancellationSource child{parent.Token()};
     child.RequestCancellation();
 
-    assert(child.Token().IsCancellationRequested());
-    assert(!parent.Token().IsCancellationRequested());
+    REQUIRE((child.Token().IsCancellationRequested()));
+    REQUIRE((!parent.Token().IsCancellationRequested()));
 }
 
-void ProgressIsMonotonicWithinOnePhase()
+TEST_CASE("Progress Is Monotonic Within One Phase", "[unit][foundation]")
 {
     Horo::ProgressTracker progress;
-    assert(progress.Report("compile", 0.25F));
-    assert(progress.Report("compile", 0.75F));
-    assert(!progress.Report("compile", 0.50F));
-    assert(progress.Snapshot().phase == "compile");
-    assert(progress.Snapshot().value == 0.75F);
+    REQUIRE((progress.Report("compile", 0.25F)));
+    REQUIRE((progress.Report("compile", 0.75F)));
+    REQUIRE((!progress.Report("compile", 0.50F)));
+    REQUIRE((progress.Snapshot().phase == "compile"));
+    REQUIRE((progress.Snapshot().value == 0.75F));
 }
 
-void ProgressMayResetWhenPhaseAdvances()
+TEST_CASE("Progress May Reset When Phase Advances", "[unit][foundation]")
 {
     Horo::ProgressTracker progress;
-    assert(progress.Report("compile", 1.0F));
-    assert(progress.Report("package", 0.1F));
-    assert(progress.Snapshot().phase == "package");
-    assert(progress.Snapshot().value == 0.1F);
+    REQUIRE((progress.Report("compile", 1.0F)));
+    REQUIRE((progress.Report("package", 0.1F)));
+    REQUIRE((progress.Snapshot().phase == "package"));
+    REQUIRE((progress.Snapshot().value == 0.1F));
 }
-
 } // namespace
-
-int main()
-{
-    ParentCancellationReachesChildToken();
-    ChildCancellationDoesNotCancelParent();
-    ProgressIsMonotonicWithinOnePhase();
-    ProgressMayResetWhenPhaseAdvances();
-    return 0;
-}

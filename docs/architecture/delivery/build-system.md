@@ -415,9 +415,9 @@ horo_register_resolved_dependency(
     SOURCE_DIR "${nlohmann_json_SOURCE_DIR}"
 )
 
-if(HORO_ENGINE_BUILD_TESTS)
+if(BUILD_TESTING)
     set(HORO_CATCH2_REVISION
-        "b234c567d890e123f456a789b012c345d678e901"
+        "6ee0826dcae55ed1e06b2c5701981221e979e1e6"
     )
     FetchContent_Declare(
         Catch2
@@ -439,7 +439,7 @@ horo_write_resolved_dependency_manifest()
 Production dependencies are made available independently so configure errors
 identify the failing declaration clearly. Test-only dependencies are declared
 and populated only when the canonical test option is enabled. The same
-`HORO_ENGINE_BUILD_TESTS` guard controls `add_subdirectory(tests)`, so CLI,
+`BUILD_TESTING` guard controls `add_subdirectory(tests)`, so CLI,
 runtime-only, and production release configurations do not download or
 configure Catch2.
 

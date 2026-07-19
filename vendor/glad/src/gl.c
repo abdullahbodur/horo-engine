@@ -535,8 +535,8 @@ static void glad_gl_load_GL_VERSION_1_0( GLADuserptrloadfunc load, void* userptr
     glad_glDisable = (PFNGLDISABLEPROC) load(userptr, "glDisable");
     glad_glDrawBuffer = (PFNGLDRAWBUFFERPROC) load(userptr, "glDrawBuffer");
     glad_glEnable = (PFNGLENABLEPROC) load(userptr, "glEnable");
-    glad_glFinish = (PFNGLFINISHPROC) load(userptr, "glFinish");
-    glad_glFlush = (PFNGLFLUSHPROC) load(userptr, "glFlush");
+    glad_glFinish = load(userptr, "glFinish");
+    glad_glFlush = load(userptr, "glFlush");
     glad_glFrontFace = (PFNGLFRONTFACEPROC) load(userptr, "glFrontFace");
     glad_glGetBooleanv = (PFNGLGETBOOLEANVPROC) load(userptr, "glGetBooleanv");
     glad_glGetDoublev = (PFNGLGETDOUBLEVPROC) load(userptr, "glGetDoublev");
@@ -768,8 +768,8 @@ static void glad_gl_load_GL_VERSION_3_0( GLADuserptrloadfunc load, void* userptr
     glad_glDeleteVertexArrays = (PFNGLDELETEVERTEXARRAYSPROC) load(userptr, "glDeleteVertexArrays");
     glad_glDisablei = (PFNGLDISABLEIPROC) load(userptr, "glDisablei");
     glad_glEnablei = (PFNGLENABLEIPROC) load(userptr, "glEnablei");
-    glad_glEndConditionalRender = (PFNGLENDCONDITIONALRENDERPROC) load(userptr, "glEndConditionalRender");
-    glad_glEndTransformFeedback = (PFNGLENDTRANSFORMFEEDBACKPROC) load(userptr, "glEndTransformFeedback");
+    glad_glEndConditionalRender = load(userptr, "glEndConditionalRender");
+    glad_glEndTransformFeedback = load(userptr, "glEndTransformFeedback");
     glad_glFlushMappedBufferRange = (PFNGLFLUSHMAPPEDBUFFERRANGEPROC) load(userptr, "glFlushMappedBufferRange");
     glad_glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC) load(userptr, "glFramebufferRenderbuffer");
     glad_glFramebufferTexture1D = (PFNGLFRAMEBUFFERTEXTURE1DPROC) load(userptr, "glFramebufferTexture1D");
@@ -931,8 +931,8 @@ static void glad_gl_load_GL_VERSION_4_0( GLADuserptrloadfunc load, void* userptr
     glad_glMinSampleShading = (PFNGLMINSAMPLESHADINGPROC) load(userptr, "glMinSampleShading");
     glad_glPatchParameterfv = (PFNGLPATCHPARAMETERFVPROC) load(userptr, "glPatchParameterfv");
     glad_glPatchParameteri = (PFNGLPATCHPARAMETERIPROC) load(userptr, "glPatchParameteri");
-    glad_glPauseTransformFeedback = (PFNGLPAUSETRANSFORMFEEDBACKPROC) load(userptr, "glPauseTransformFeedback");
-    glad_glResumeTransformFeedback = (PFNGLRESUMETRANSFORMFEEDBACKPROC) load(userptr, "glResumeTransformFeedback");
+    glad_glPauseTransformFeedback = load(userptr, "glPauseTransformFeedback");
+    glad_glResumeTransformFeedback = load(userptr, "glResumeTransformFeedback");
     glad_glUniform1d = (PFNGLUNIFORM1DPROC) load(userptr, "glUniform1d");
     glad_glUniform1dv = (PFNGLUNIFORM1DVPROC) load(userptr, "glUniform1dv");
     glad_glUniform2d = (PFNGLUNIFORM2DPROC) load(userptr, "glUniform2d");
@@ -1023,7 +1023,7 @@ static void glad_gl_load_GL_VERSION_4_1( GLADuserptrloadfunc load, void* userptr
     glad_glProgramUniformMatrix4x2fv = (PFNGLPROGRAMUNIFORMMATRIX4X2FVPROC) load(userptr, "glProgramUniformMatrix4x2fv");
     glad_glProgramUniformMatrix4x3dv = (PFNGLPROGRAMUNIFORMMATRIX4X3DVPROC) load(userptr, "glProgramUniformMatrix4x3dv");
     glad_glProgramUniformMatrix4x3fv = (PFNGLPROGRAMUNIFORMMATRIX4X3FVPROC) load(userptr, "glProgramUniformMatrix4x3fv");
-    glad_glReleaseShaderCompiler = (PFNGLRELEASESHADERCOMPILERPROC) load(userptr, "glReleaseShaderCompiler");
+    glad_glReleaseShaderCompiler = load(userptr, "glReleaseShaderCompiler");
     glad_glScissorArrayv = (PFNGLSCISSORARRAYVPROC) load(userptr, "glScissorArrayv");
     glad_glScissorIndexed = (PFNGLSCISSORINDEXEDPROC) load(userptr, "glScissorIndexed");
     glad_glScissorIndexedv = (PFNGLSCISSORINDEXEDVPROC) load(userptr, "glScissorIndexedv");
@@ -1050,9 +1050,9 @@ static void glad_gl_free_extensions(char **exts_i) {
     if (exts_i != NULL) {
         unsigned int index;
         for(index = 0; exts_i[index]; index++) {
-            free((void *) (exts_i[index]));
+            free(exts_i[index]);
         }
-        free((void *)exts_i);
+        free(exts_i);
         exts_i = NULL;
     }
 }
@@ -1071,7 +1071,7 @@ static int glad_gl_get_extensions( const char **out_exts, char ***out_exts_i) {
             const char *gl_str_tmp = (const char*) glad_glGetStringi(GL_EXTENSIONS, index);
             size_t len = strlen(gl_str_tmp) + 1;
 
-            char *local_str = (char*) malloc(len * sizeof(char));
+            char *local_str = malloc(len * sizeof(char));
             if(local_str == NULL) {
                 exts_i[index] = NULL;
                 glad_gl_free_extensions(exts_i);

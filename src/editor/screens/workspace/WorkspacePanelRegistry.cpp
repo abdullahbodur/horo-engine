@@ -1,7 +1,6 @@
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 
 #include <algorithm>
-#include <cstddef>
 
 namespace Horo::Editor
 {

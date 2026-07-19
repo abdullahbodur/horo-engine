@@ -15,7 +15,7 @@ namespace Horo
 {
     namespace
     {
-        [[nodiscard]] Error MakeJobError(const ErrorCodeDescriptor &descriptor, const char *message)
+        [[nodiscard]] Error MakeJobError(const ErrorCodeDescriptor& descriptor, const char* message)
         {
             return MakeError(descriptor, message);
         }
@@ -28,26 +28,33 @@ namespace Horo
 
     struct JobRecord
     {
-        JobRecord(const JobId jobId, const JobDescriptor &, std::function<void(const CancellationToken &)> jobWork)
-            : id(jobId), work(std::move(jobWork)) {}
+        JobRecord(const JobId jobId, const JobDescriptor& descriptor, JobFunction jobWork)
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork))
+        {
+        }
 
-        [[nodiscard]] std::mutex& Mutex() const noexcept { return mutex; }
+        [[nodiscard]] std::mutex& Mutex() const noexcept
+        {
+            return mutex;
+        }
 
-        private:
+    private:
         mutable std::mutex mutex;
 
-        public:
-            JobId id;
-            std::condition_variable completed;
+    public:
+        JobId id;
+        std::condition_variable completed;
         JobState state = JobState::Queued;
         std::optional<Error> error;
         CancellationSource cancellation;
-        std::function<void(const CancellationToken &)> work;
+        JobFunction work;
     };
 
     struct JobSystem::State
     {
-        explicit State(const JobSystemConfig value) : config(value) {}
+        explicit State(const JobSystemConfig value) : config(value)
+        {
+        }
 
         JobSystemConfig config;
         std::mutex mutex;
@@ -63,17 +70,19 @@ namespace Horo
 
     namespace
     {
-        void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt)
+        void SetTerminalState(const std::shared_ptr<JobRecord>& record, const JobState state,
+                              std::optional<Error> error = std::nullopt)
         {
             std::lock_guard lock(record->Mutex());
-            if (IsTerminal(record->state)) return;
+            if (IsTerminal(record->state))
+                return;
             record->state = state;
             record->error = std::move(error);
             record->completed.notify_all();
         }
     } // namespace
 
-    void JobSystem::RunWorker(const std::shared_ptr<State> &state)
+    void JobSystem::RunWorker(const std::shared_ptr<State>& state)
     {
         for (;;)
         {
@@ -83,7 +92,8 @@ namespace Horo
                 state->workAvailable.wait(lock, [&state] { return state->stopping || !state->queue.empty(); });
                 if (state->queue.empty())
                 {
-                    if (state->stopping) return;
+                    if (state->stopping)
+                        return;
                     continue;
                 }
                 record = std::move(state->queue.front());
@@ -92,20 +102,27 @@ namespace Horo
 
             {
                 std::lock_guard lock(record->Mutex());
-                if (record->state != JobState::Queued) continue;
+                if (record->state != JobState::Queued)
+                    continue;
                 record->state = JobState::Running;
             }
 
             try
             {
-                record->work(record->cancellation.Token());
-                if (record->cancellation.Token().IsCancellationRequested())
+                Result<void> outcome = record->work(record->cancellation.Token());
+                if (outcome.HasError())
+                {
+                    const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
+                        outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
+                    SetTerminalState(record, cancelled ? JobState::Cancelled : JobState::Failed, outcome.ErrorValue());
+                }
+                else if (record->cancellation.Token().IsCancellationRequested())
                     SetTerminalState(record, JobState::Cancelled,
                                      MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
                 else
                     SetTerminalState(record, JobState::Succeeded);
             }
-            catch (const std::exception &exception)
+            catch (const std::exception& exception)
             {
                 SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
             }
@@ -128,12 +145,21 @@ namespace Horo
         Shutdown(ShutdownPolicy::Cancel);
     }
 
-    Result<JobHandle> JobSystem::Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work)
+    Result<JobHandle> JobSystem::Submit(JobDescriptor descriptor, std::function<void(const CancellationToken&)> work)
+    {
+        return SubmitResult(std::move(descriptor), [work = std::move(work)](const CancellationToken& cancellation)
+        {
+            work(cancellation);
+            return Result<void>::Success();
+        });
+    }
+
+    Result<JobHandle> JobSystem::SubmitResult(JobDescriptor descriptor, JobFunction work)
     {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
-            return Result<JobHandle>::Failure(
-                MakeJobError(JobErrors::Shutdown, "Job system is no longer accepting work."));
+            return Result<JobHandle>::Failure(MakeJobError(JobErrors::Shutdown,
+                                                           "Job system is no longer accepting work."));
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
@@ -168,18 +194,25 @@ namespace Horo
         return Result<void>::Success();
     }
 
-    JobSnapshot JobSystem::Query(const JobId id) const
+JobSnapshot JobSystem::Query(const JobId id) const
     {
         std::shared_ptr<JobRecord> record;
         {
             std::lock_guard lock(m_state->mutex);
             const auto found = m_state->jobs.find(id);
-            if (found == m_state->jobs.end()) return JobSnapshot{.id = id};
+            if (found == m_state->jobs.end())
+                return JobSnapshot{.id = id};
             record = found->second;
         }
 
         std::lock_guard lock(record->Mutex());
         return JobSnapshot{.id = record->id, .state = record->state, .error = record->error};
+    }
+
+    /** @copydoc JobSystem::WorkerCount */
+    std::size_t JobSystem::WorkerCount() const noexcept
+    {
+        return m_state->config.workerCount;
     }
 
     void JobSystem::Shutdown(const ShutdownPolicy policy)
@@ -191,14 +224,14 @@ namespace Horo
             m_state->stopping = true;
             if (policy == ShutdownPolicy::Cancel)
             {
-                for (const auto &record : m_state->queue)
+                for (const auto& record : m_state->queue)
                 {
                     record->cancellation.RequestCancellation();
                     SetTerminalState(record, JobState::Cancelled,
                                      MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown."));
                 }
                 m_state->queue.clear();
-                for (const auto &[id, record] : m_state->jobs)
+                for (const auto& [id, record] : m_state->jobs)
                 {
                     (void)id;
                     record->cancellation.RequestCancellation();
@@ -206,8 +239,9 @@ namespace Horo
             }
         }
         m_state->workAvailable.notify_all();
-        for (auto &worker : m_state->workers)
-            if (worker.joinable()) worker.join();
+        for (auto& worker : m_state->workers)
+            if (worker.joinable())
+                worker.join();
     }
 
     Result<void> JobHandle::Wait() const
@@ -219,12 +253,127 @@ namespace Horo
         const auto record = m_record;
         std::unique_lock lock(record->Mutex());
         record->completed.wait(lock, [record] { return IsTerminal(record->state); });
-        if (record->state == JobState::Succeeded) return Result<void>::Success();
+        if (record->state == JobState::Succeeded)
+            return Result<void>::Success();
         return Result<void>::Failure(*record->error);
     }
 
     JobId JobHandle::Id() const noexcept
     {
         return m_record ? m_record->id : 0;
+    }
+
+    struct TaskGroup::State
+    {
+        State(JobSystem& jobSystem, const TaskGroupFailurePolicy failurePolicy,
+              const CancellationToken& parentCancellation)
+            : jobs(jobSystem), policy(failurePolicy), cancellation(parentCancellation)
+        {
+        }
+
+        JobSystem& jobs;
+        TaskGroupFailurePolicy policy;
+        CancellationSource cancellation;
+        std::mutex mutex;
+        std::mutex joinMutex;
+        bool accepting = true;
+        bool joined = false;
+        std::optional<Error> joinError;
+        std::vector<std::shared_ptr<JobHandle>> children;
+    };
+
+    void TaskGroup::CancelChildren(const std::shared_ptr<State>& state)
+    {
+        std::vector<JobId> childIds;
+        {
+            std::lock_guard lock(state->mutex);
+            state->accepting = false;
+            state->cancellation.RequestCancellation();
+            childIds.reserve(state->children.size());
+            for (const auto& child : state->children)
+                childIds.push_back(child->Id());
+        }
+        for (const JobId childId : childIds)
+            static_cast<void>(state->jobs.RequestCancel(childId));
+    }
+
+    TaskGroup::TaskGroup(JobSystem& jobs, const TaskGroupFailurePolicy policy,
+                         const CancellationToken parentCancellation)
+        : m_state(std::make_shared<State>(jobs, policy, parentCancellation))
+    {
+    }
+
+    TaskGroup::~TaskGroup()
+    {
+        RequestCancel();
+        static_cast<void>(Join());
+    }
+
+    Result<JobId> TaskGroup::Spawn(JobDescriptor descriptor, JobFunction work)
+    {
+        std::lock_guard lock(m_state->mutex);
+        if (!m_state->accepting)
+            return Result<JobId>::Failure(MakeJobError(JobErrors::TaskGroupClosed, "Task group admission is closed."));
+
+        descriptor.parentCancellation = m_state->cancellation.Token();
+        const std::weak_ptr weakState = m_state;
+        Result<JobHandle> submitted = m_state->jobs.SubmitResult(
+            std::move(descriptor), [weakState, work = std::move(work)](const CancellationToken& cancellation)
+            {
+                if (cancellation.IsCancellationRequested())
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::Cancelled, "Task group child was cancelled before execution."));
+                Result<void> outcome = work(cancellation);
+                if (outcome.HasError())
+                {
+                    if (const auto state = weakState.lock(); state && state->policy == TaskGroupFailurePolicy::FailFast)
+                        CancelChildren(state);
+                }
+                return outcome;
+            });
+        if (submitted.HasError())
+            return Result<JobId>::Failure(submitted.ErrorValue());
+
+        auto child = std::make_shared<JobHandle>(std::move(submitted).Value());
+        const JobId childId = child->Id();
+        m_state->children.push_back(std::move(child));
+        return Result<JobId>::Success(childId);
+    }
+
+    void TaskGroup::RequestCancel()
+    {
+        CancelChildren(m_state);
+    }
+
+    Result<void> TaskGroup::Join()
+    {
+        std::lock_guard joinLock(m_state->joinMutex);
+        if (m_state->cancellation.Token().IsCancellationRequested())
+            CancelChildren(m_state);
+
+        std::vector<std::shared_ptr<JobHandle>> children;
+        {
+            std::lock_guard lock(m_state->mutex);
+            if (m_state->joined)
+                return m_state->joinError.has_value()
+                           ? Result<void>::Failure(*m_state->joinError)
+                           : Result<void>::Success();
+            m_state->accepting = false;
+            children = m_state->children;
+        }
+
+        std::optional<Error> firstError;
+        for (const auto& child : children)
+        {
+            const Result<void> waited = child->Wait();
+            if (waited.HasError() && !firstError.has_value())
+                firstError = waited.ErrorValue();
+        }
+        {
+            std::lock_guard lock(m_state->mutex);
+            m_state->joined = true;
+            m_state->joinError = firstError;
+        }
+        return firstError.has_value() ? Result<void>::Failure(*firstError) : Result<void>::Success();
     }
 } // namespace Horo

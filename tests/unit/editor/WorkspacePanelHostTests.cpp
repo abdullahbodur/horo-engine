@@ -1,68 +1,58 @@
-#include "Horo/Editor/WorkspacePanelHost.h"
+#include <catch2/catch_test_macros.hpp>
 
-#include <cassert>
+#include "Horo/Editor/WorkspacePanelHost.h"
 
 namespace
 {
 using namespace Horo::Editor;
 
-void DefaultLayoutContainsExpectedStacks()
+TEST_CASE("Default Layout Contains Expected Stacks", "[unit][editor]")
 {
     WorkspacePanelHost host;
-    assert(host.Layout().FindTabStack("workspace.left") != nullptr);
-    assert(host.Layout().FindTabStack("workspace.document") != nullptr);
-    assert(host.Layout().FindTabStack("workspace.right") != nullptr);
-    assert(host.Layout().FindTabStack("workspace.document")->activeTab == "horo.viewport");
+    REQUIRE((host.Layout().FindTabStack("workspace.left") != nullptr));
+    REQUIRE((host.Layout().FindTabStack("workspace.document") != nullptr));
+    REQUIRE((host.Layout().FindTabStack("workspace.right") != nullptr));
+    REQUIRE((host.Layout().FindTabStack("workspace.document")->activeTab == "horo.viewport"));
 }
 
-void OpensAndMovesPanelTransactionally()
+TEST_CASE("Opens And Moves Panel Transactionally", "[unit][editor]")
 {
     WorkspacePanelHost host;
-    assert(host.OpenPanel("horo.content_browser", "workspace.document").Succeeded());
-    assert(host.Layout().FindTabStack("workspace.document")->activeTab == "horo.content_browser");
+    REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
+    REQUIRE((host.Layout().FindTabStack("workspace.document")->activeTab == "horo.content_browser"));
 
-    assert(host.MovePanel("horo.content_browser", TabPlacement{"workspace.left", 1}).Succeeded());
+    REQUIRE((host.MovePanel("horo.content_browser", TabPlacement{"workspace.left", 1}).Succeeded()));
     const auto *left = host.Layout().FindTabStack("workspace.left");
-    assert(left != nullptr);
-    assert(left->tabs.size() == 2);
-    assert(left->tabs[1] == "horo.content_browser");
+    REQUIRE((left != nullptr));
+    REQUIRE((left->tabs.size() == 2));
+    REQUIRE((left->tabs[1] == "horo.content_browser"));
 }
 
-void RejectsDuplicatePanelWithoutMutation()
+TEST_CASE("Rejects Duplicate Panel Without Mutation", "[unit][editor]")
 {
     WorkspacePanelHost host;
-    assert(!host.OpenPanel("horo.viewport", "workspace.left").Succeeded());
-    assert(host.Layout().FindTabStack("workspace.left")->tabs.size() == 1);
+    REQUIRE((!host.OpenPanel("horo.viewport", "workspace.left").Succeeded()));
+    REQUIRE((host.Layout().FindTabStack("workspace.left")->tabs.size() == 1));
 }
 
-void ClosesPanelAndKeepsActiveTabValid()
+TEST_CASE("Closes Panel And Keeps Active Tab Valid", "[unit][editor]")
 {
     WorkspacePanelHost host;
-    assert(host.OpenPanel("horo.content_browser", "workspace.document").Succeeded());
-    assert(host.ClosePanel("horo.content_browser").Succeeded());
+    REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
+    REQUIRE((host.ClosePanel("horo.content_browser").Succeeded()));
     const auto *document = host.Layout().FindTabStack("workspace.document");
-    assert(document != nullptr);
-    assert(document->activeTab == "horo.viewport");
-    assert(!host.ClosePanel("missing").Succeeded());
+    REQUIRE((document != nullptr));
+    REQUIRE((document->activeTab == "horo.viewport"));
+    REQUIRE((!host.ClosePanel("missing").Succeeded()));
 }
 
-void CreatesASplitWithoutLosingTheTargetNode()
+TEST_CASE("Creates A Split Without Losing The Target Node", "[unit][editor]")
 {
     WorkspacePanelHost host;
-    assert(host.DockPanel("horo.content_browser", "workspace.document",
-                          WorkspacePanelHost::DropKind::SplitBottom).Succeeded());
-    assert(host.Layout().FindNode("workspace.document") != nullptr);
-    assert(host.Layout().FindNode("workspace.document.split.horo.content_browser") != nullptr);
-    assert(host.Layout().Validate().empty());
+    REQUIRE((host.DockPanel("horo.content_browser", "workspace.document", WorkspacePanelHost::DropKind::SplitBottom)
+                 .Succeeded()));
+    REQUIRE((host.Layout().FindNode("workspace.document") != nullptr));
+    REQUIRE((host.Layout().FindNode("workspace.document.split.horo.content_browser") != nullptr));
+    REQUIRE((host.Layout().Validate().empty()));
 }
 } // namespace
-
-int main()
-{
-    DefaultLayoutContainsExpectedStacks();
-    OpensAndMovesPanelTransactionally();
-    RejectsDuplicatePanelWithoutMutation();
-    ClosesPanelAndKeepsActiveTabValid();
-    CreatesASplitWithoutLosingTheTargetNode();
-    return 0;
-}

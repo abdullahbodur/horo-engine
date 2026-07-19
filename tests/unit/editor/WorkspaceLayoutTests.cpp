@@ -1,9 +1,9 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "Horo/Editor/WorkspaceLayout.h"
 
-#include <cassert>
 #include <memory>
 #include <string>
-#include <variant>
 
 namespace
 {
@@ -14,18 +14,18 @@ LayoutNode MakePanelNode(const std::string &nodeId, const std::string &panelId)
     return LayoutNode{PanelNode{nodeId, panelId}};
 }
 
-void FindsNodesAndPanelsByStableId()
+TEST_CASE("Finds Nodes And Panels By Stable Id", "[unit][editor]")
 {
     WorkspaceLayout layout;
     layout.root = MakePanelNode("root.panel", "horo.viewport");
 
-    assert(layout.FindNode("root.panel") != nullptr);
-    assert(layout.FindNode("missing") == nullptr);
-    assert(layout.FindPanel("horo.viewport") != nullptr);
-    assert(layout.FindPanel("missing") == nullptr);
+    REQUIRE((layout.FindNode("root.panel") != nullptr));
+    REQUIRE((layout.FindNode("missing") == nullptr));
+    REQUIRE((layout.FindPanel("horo.viewport") != nullptr));
+    REQUIRE((layout.FindPanel("missing") == nullptr));
 }
 
-void ValidatesAWellFormedTabStack()
+TEST_CASE("Validates A Well Formed Tab Stack", "[unit][editor]")
 {
     WorkspaceLayout layout;
     layout.root = LayoutNode{TabStackNode{
@@ -34,10 +34,10 @@ void ValidatesAWellFormedTabStack()
         .activeTab = "horo.inspector",
     }};
 
-    assert(layout.Validate().empty());
+    REQUIRE((layout.Validate().empty()));
 }
 
-void RejectsAnActiveTabThatIsNotInItsStack()
+TEST_CASE("Rejects An Active Tab That Is Not In Its Stack", "[unit][editor]")
 {
     WorkspaceLayout layout;
     layout.root = LayoutNode{TabStackNode{
@@ -47,73 +47,61 @@ void RejectsAnActiveTabThatIsNotInItsStack()
     }};
 
     const auto issues = layout.Validate();
-    assert(!issues.empty());
-    assert(issues.front().code == WorkspaceLayoutIssueCode::ActiveTabMissing);
+    REQUIRE((!issues.empty()));
+    REQUIRE((issues.front().code == WorkspaceLayoutIssueCode::ActiveTabMissing));
 }
 
-void LayoutCopiesOwnItsTree()
+TEST_CASE("Layout Copies Own Its Tree", "[unit][editor]")
 {
     WorkspaceLayout original;
     original.root = MakePanelNode("root.panel", "horo.viewport");
     WorkspaceLayout copy = original;
 
     auto *panel = copy.FindPanel("horo.viewport");
-    assert(panel != nullptr);
+    REQUIRE((panel != nullptr));
     panel->panel = "horo.inspector";
 
-    assert(original.FindPanel("horo.viewport") != nullptr);
-    assert(original.FindPanel("horo.inspector") == nullptr);
+    REQUIRE((original.FindPanel("horo.viewport") != nullptr));
+    REQUIRE((original.FindPanel("horo.inspector") == nullptr));
 }
 
-void MovesATabBetweenStacksAndActivatesIt()
+TEST_CASE("Moves A Tab Between Stacks And Activates It", "[unit][editor]")
 {
     WorkspaceLayout layout;
     layout.root = LayoutNode{SplitNode{
         .id = "root.split",
-        .first = std::make_unique<LayoutNode>(LayoutNode{TabStackNode{
-            .id = "left.stack", .tabs = {"horo.hierarchy"}, .activeTab = "horo.hierarchy"}}),
-        .second = std::make_unique<LayoutNode>(LayoutNode{TabStackNode{
-            .id = "right.stack", .tabs = {"horo.inspector"}, .activeTab = "horo.inspector"}}),
+        .first = std::make_unique<LayoutNode>(
+            LayoutNode{TabStackNode{.id = "left.stack", .tabs = {"horo.hierarchy"}, .activeTab = "horo.hierarchy"}}),
+        .second = std::make_unique<LayoutNode>(
+            LayoutNode{TabStackNode{.id = "right.stack", .tabs = {"horo.inspector"}, .activeTab = "horo.inspector"}}),
     }};
 
     const auto result = layout.MoveTab("horo.hierarchy", TabPlacement{"right.stack", std::nullopt});
-    assert(result.Succeeded());
-    assert(layout.FindTabStack("left.stack")->tabs.empty());
-    assert(layout.FindTabStack("right.stack")->tabs.size() == 2);
-    assert(layout.FindTabStack("right.stack")->activeTab == "horo.hierarchy");
+    REQUIRE((result.Succeeded()));
+    REQUIRE((layout.FindTabStack("left.stack")->tabs.empty()));
+    REQUIRE((layout.FindTabStack("right.stack")->tabs.size() == 2));
+    REQUIRE((layout.FindTabStack("right.stack")->activeTab == "horo.hierarchy"));
 }
 
-void RejectsMovingAnUnknownTabWithoutMutation()
+TEST_CASE("Rejects Moving An Unknown Tab Without Mutation", "[unit][editor]")
 {
     WorkspaceLayout layout;
     layout.root = LayoutNode{TabStackNode{.id = "root.stack", .tabs = {"horo.viewport"}, .activeTab = "horo.viewport"}};
 
     const auto result = layout.MoveTab("missing", TabPlacement{"root.stack", std::nullopt});
-    assert(!result.Succeeded());
-    assert(layout.FindTabStack("root.stack")->tabs.size() == 1);
+    REQUIRE((!result.Succeeded()));
+    REQUIRE((layout.FindTabStack("root.stack")->tabs.size() == 1));
 }
 
-void ClosesATabAndSelectsTheRemainingTab()
+TEST_CASE("Closes A Tab And Selects The Remaining Tab", "[unit][editor]")
 {
     WorkspaceLayout layout;
-    layout.root = LayoutNode{TabStackNode{
-        .id = "root.stack", .tabs = {"horo.viewport", "horo.inspector"}, .activeTab = "horo.viewport"}};
+    layout.root = LayoutNode{
+        TabStackNode{.id = "root.stack", .tabs = {"horo.viewport", "horo.inspector"}, .activeTab = "horo.viewport"}};
 
     const auto result = layout.CloseTab("horo.viewport");
-    assert(result.Succeeded());
-    assert(layout.FindTabStack("root.stack")->tabs == std::vector<TabId>{"horo.inspector"});
-    assert(layout.FindTabStack("root.stack")->activeTab == "horo.inspector");
+    REQUIRE((result.Succeeded()));
+    REQUIRE((layout.FindTabStack("root.stack")->tabs == std::vector<TabId>{"horo.inspector"}));
+    REQUIRE((layout.FindTabStack("root.stack")->activeTab == "horo.inspector"));
 }
 } // namespace
-
-int main()
-{
-    FindsNodesAndPanelsByStableId();
-    ValidatesAWellFormedTabStack();
-    RejectsAnActiveTabThatIsNotInItsStack();
-    LayoutCopiesOwnItsTree();
-    MovesATabBetweenStacksAndActivatesIt();
-    RejectsMovingAnUnknownTabWithoutMutation();
-    ClosesATabAndSelectsTheRemainingTab();
-    return 0;
-}

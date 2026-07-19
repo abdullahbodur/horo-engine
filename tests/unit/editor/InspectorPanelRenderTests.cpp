@@ -1,3 +1,5 @@
+#include <catch2/catch_test_macros.hpp>
+
 #include "InspectorPanel.h"
 
 #include "Horo/Editor/EditorDataBus.h"
@@ -8,7 +10,6 @@
 
 #include <imgui.h>
 
-#include <cassert>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -30,7 +31,7 @@ class TestLocalization final : public Horo::Editor::ILocalizationService
 };
 } // namespace
 
-int main()
+TEST_CASE("Inspector Panel Render Tests", "[unit][editor]")
 {
     using namespace Horo;
     using namespace Horo::Editor;
@@ -61,11 +62,12 @@ int main()
         .id = SceneObjectId{7},
         .name = "Box",
         .kind = SceneObjectKind::Mesh,
-        .localTransform = Math::Transform{
-            .translation = {1.0F, 2.0F, 3.0F},
-            .rotation = Math::Quaternion::FromEulerRadians({0.1F, 0.2F, 0.3F}),
-            .scale = {1.0F, 1.5F, 2.0F},
-        },
+        .localTransform =
+            Math::Transform{
+                .translation = {1.0F, 2.0F, 3.0F},
+                .rotation = Math::Quaternion::FromEulerRadians({0.1F, 0.2F, 0.3F}),
+                .scale = {1.0F, 1.5F, 2.0F},
+            },
     }};
     viewModel.primarySelection = SceneObjectId{7};
     EditorWorkspaceViewCommandData command;
@@ -80,9 +82,8 @@ int main()
     ImGui::End();
     ImGui::Render();
 
-    assert(command.command == EditorWorkspaceViewCommand::None);
-    assert(panel.GetObservedEventTypes() ==
-           std::vector<std::string>({"SceneDocumentChangedEvent", "SelectionChangedEvent"}));
+    REQUIRE((command.command == EditorWorkspaceViewCommand::None));
+    REQUIRE((panel.GetObservedEventTypes() ==
+             std::vector<std::string>({"SceneDocumentChangedEvent", "SelectionChangedEvent"})));
     ImGui::DestroyContext();
-    return 0;
 }

@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstddef>
 
 namespace Horo::Editor
 {
@@ -165,7 +164,7 @@ namespace Horo::Editor
                     ImVec2{center.x - halfWidth, center.y + radius * 0.5F},
                     ImVec2{center.x - halfWidth, center.y - radius * 0.5F},
                 };
-                drawList->AddPolyline(points.data(), static_cast<int>(points.size()), color, ImDrawFlags_Closed, 1.5F);
+                drawList->AddPolyline(points.data(), points.size(), color, ImDrawFlags_Closed, 1.5F);
             }
             else if (glyph == AssetGlyph::Play)
             {

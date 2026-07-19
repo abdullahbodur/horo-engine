@@ -1,5 +1,35 @@
 # Project Model
 
+## Project-open ownership
+
+`ProjectLoading` is a presentation route over the host-owned, GUI-neutral
+`ProjectOpenService`; it does not simulate progress or mutate project metadata.
+The service runs cleanup/recovery before compatibility inspection, resolves an
+atomic same-contract patch marker or the journaled migration transaction,
+prepares registered derived state on its operation job, installs those candidates
+on the application owner thread, and performs renderer preflight. A project-open
+job holds the shared mutation lease while it acts as the dedicated serialized
+project-mutation executor; the GUI thread only pumps progress and owner-thread
+publication. The current route remains active until a fully authoritative,
+generation-safe `ProjectSessionCandidate` is ready or a renderer restart
+continuation is returned. Failure exposes Retry/Back without constructing a
+workspace against staged state.
+
+`EditorWorkspace` is not a root-path entry point. Its route carries a non-zero
+`ProjectSessionCandidateId`. `OnEnter()` reserves the candidate, constructs the
+controller and attaches panels, then consumes the candidate exactly once. A
+failed entry releases the reservation and rolls partial workspace state back.
+Welcome recent projects, startup projects and newly created projects all enter
+through `ProjectLoading`; no UI route may bypass compatibility, recovery,
+derived-state or renderer preflight.
+
+Welcome uses the same read-only `ProjectOpenPreflightService` as project-open,
+but only through a display projection. At most 128 recent roots are refreshed
+per generation with four concurrent inspection jobs. Cached version/status data
+exists solely for first paint; it cannot disable a card, publish metadata, or
+authorize migration. Clicking any card creates a `ProjectLoading` request, where
+fresh preflight is repeated before mutation authority can be acquired.
+
 ## Purpose
 
 This document defines the durable project and workspace model for Horo Engine.
@@ -49,7 +79,8 @@ separate:
 
 ```json
 {
-  "formatVersion": 1,
+  "horoVersion": "0.1.0",
+  "persistentContract": "sha256:997e790fc23515b362847c755006156aa35353ce7f2624518acf7ed1214ddb03",
   "projectId": "proj_2a4f...",
   "name": "MyGame",
   "projectVersion": "0.1.0",
@@ -59,6 +90,8 @@ separate:
     "physicsEnabled": true,
     "targetFrameRate": 60,
     "defaultScene": "assets/scenes/main.horo",
+    "assetCompression": "lz4",
+    "textureCompression": "bc7",
     "buildProfile": "desktop-debug",
     "requiredToolchain": {
       "targetPlatform": "host",
@@ -69,10 +102,12 @@ separate:
 }
 ```
 
-`formatVersion` identifies the durable project schema and selects migrations.
-`projectVersion` is the game/product version and does not select project-format
-migrations. Unknown future format versions are rejected with a typed diagnostic;
-the engine does not guess compatibility.
+`horoVersion` is the single engine/project compatibility marker.
+`persistentContract` binds that exact release to the durable project descriptor.
+`projectVersion` remains the independent game/product version and never selects
+engine migrations. MIG-001A performs bounded, read-only classification through
+`HoroEngine::Application`; unknown future releases are fail-closed unless an
+injected verifier validates an exact compatibility proof.
 
 `projectId` is generated once at project creation and never changes. It is used
 as a non-secret observability, crash-reporting, and workspace-correlation
@@ -283,8 +318,9 @@ stack are transient GUI state and are not stored in the workspace document.
 {
   "schemaVersion": 1,
   "assets": {
-    "mesh_cube_001": {
-      "type": "mesh",
+    "a1b2c3d4-e5f6-4890-abcd-ef1234567890": {
+      "assetId": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+      "assetType": "core.mesh",
       "sourcePath": "assets/models/cube.fbx",
       "metadataPath": "assets/models/cube.fbx.horo"
     }
@@ -294,7 +330,7 @@ stack are transient GUI state and are not stored in the workspace document.
 
 The committed sidecar next to each source asset is the source of truth for:
 
-- stable logical asset ID and GUID
+- the single canonical UUID `assetId`
 - metadata schema and importer version
 - import and cook settings
 - dependency identities
@@ -303,14 +339,30 @@ Scene documents reference the stable logical asset ID. `asset_index.json` may be
 ignored because rebuilding it scans source assets and their committed sidecars;
 rebuild never generates replacement IDs for valid sidecars.
 
+Runtime conversion emits canonical typed scene dependencies, not source paths.
+At activation, `RuntimeSceneService` pins the current immutable registry
+snapshot, validates expected asset types, and loads cooked bytes through the
+runtime provider. Registry revision changes reject the candidate at the
+owner-thread safe point and preserve the previous active scene. The editor
+document and project model never retain process-local payload leases.
+
+The index is loaded as one bounded all-or-nothing candidate. Malformed,
+version-skewed, or globally ambiguous index content is never partially applied;
+the project attempts a sidecar rebuild and retains the last valid in-memory
+snapshot if publication fails. Read-only project access does not rewrite the
+derived index. Edit-mode rebuild uses deterministic serialization and atomic
+replacement.
+
 Rebuild is deterministic and transactional:
 
 - deleted source assets remove derived path entries but do not silently rewrite
   scene references
 - moved assets retain identity when the sidecar moves with the source
-- missing, corrupt, or manually edited sidecars produce typed diagnostics and
-  require repair or explicit re-import
-- duplicate or conflicting IDs fail validation rather than selecting one entry
+- a source without a sidecar remains untracked and does not receive an ID
+- missing/invalid identity, malformed/future sidecar, and orphan-sidecar cases
+  remain distinguishable typed diagnostics; valid records may publish degraded
+- duplicate ID, duplicate canonical path, or portable case collision rejects
+  the entire candidate rather than selecting one entry
 - changed import settings invalidate the affected imported/cooked cache entries
 - stale generated outputs are excluded until their source and sidecar validate
 
@@ -365,7 +417,8 @@ enum class ProjectValidationMode {
 All modes require:
 
 - `.horo/project.json` exists and parses correctly
-- `formatVersion` is supported or has a valid migration path
+- `horoVersion` and `persistentContract` form a known compatible decision, or a
+  migration planner can produce a valid path
 - `projectId` is present
 - referenced default scene exists or is empty
 - asset sidecars can be scanned and the index can be loaded or reconstructed
@@ -390,8 +443,8 @@ case-folding rules even when the current filesystem would allow both names.
 
 ## Migration
 
-When `formatVersion` is older than the current supported project schema,
-migration use cases transform the project:
+When the project's contract baseline is older than the current supported
+baseline, migration use cases transform the project:
 
 ```text
 project v1  ->  project v2  ->  project v3
@@ -542,7 +595,8 @@ build/
 Required coverage:
 
 - project format and product version remain independent
-- unknown future `formatVersion` values fail without mutation
+- unknown future `horoVersion` values fail without mutation unless an exact,
+  trusted same-release-line compatibility proof is verified
 - each supported migration fixture upgrades deterministically and atomically
 - failed migration preserves the original portable metadata
 - `defaultScene` resolves from the project root as `assets/scenes/...`

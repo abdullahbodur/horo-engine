@@ -5,7 +5,7 @@
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Foundation/ErrorCode.h"
-#include "editor/project_model/ProjectMetadata.h"
+#include "Horo/Application/ProjectCompatibility.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <algorithm>
@@ -238,7 +238,7 @@ namespace Horo::Editor
             };
             ImGui::SetNextItemWidth(140.0F);
             if (ImGui::Combo(context.localization.Get("editor", "workspace.input_mapping.player").c_str(), &assignment,
-                             assignmentItems.data(), static_cast<int>(assignmentItems.size())))
+                             assignmentItems.data(), assignmentItems.size()))
             {
                 if (assignment == 0) router_->UnassignGamepad(gamepad.id);
                 else static_cast<void>(router_->
@@ -441,7 +441,8 @@ namespace Horo::Editor
     std::optional<std::filesystem::path> InputMappingPanel::ProjectUserProfilePath() const
     {
         if (projectRoot_.empty()) return std::nullopt;
-        const Result<ProjectMetadata> metadata = LoadProjectMetadata(projectRoot_);
+        const Result<Application::ProjectMetadata> metadata =
+            Application::LoadProjectMetadata(projectRoot_);
         if (metadata.HasError()) return std::nullopt;
         return ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "projects" /
             (metadata.Value().projectId + ".json");
