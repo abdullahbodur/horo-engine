@@ -71,6 +71,19 @@ if(HORO_BUILD_EDITOR_GUI)
     )
     FetchContent_MakeAvailable(imgui)
 
+    if(HORO_ENABLE_IMGUI_UI_TESTS)
+        set(HORO_IMGUI_TEST_ENGINE_REVISION
+            "4018a79b61da483544ccbfbc2f6e8e85a35c2cbc"
+        )
+        FetchContent_Declare(
+            imgui_test_engine
+            GIT_REPOSITORY https://github.com/ocornut/imgui_test_engine.git
+            GIT_TAG "${HORO_IMGUI_TEST_ENGINE_REVISION}"
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(imgui_test_engine)
+    endif()
+
     if(HORO_BUILD_RENDER_OPENGL)
         add_library(HoroThirdPartyGlad STATIC
             ${CMAKE_CURRENT_LIST_DIR}/../vendor/glad/src/gl.c
@@ -89,6 +102,23 @@ if(HORO_BUILD_EDITOR_GUI)
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     )
+
+    if(HORO_ENABLE_IMGUI_UI_TESTS)
+        target_sources(HoroThirdPartyImGui PRIVATE
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_capture_tool.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_context.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_coroutine.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_engine.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_exporters.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_perftool.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_ui.cpp
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine/imgui_te_utils.cpp
+        )
+        target_include_directories(HoroThirdPartyImGui PRIVATE
+            ${imgui_test_engine_SOURCE_DIR}
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine
+        )
+    endif()
     add_library(HoroThirdParty::ImGui ALIAS HoroThirdPartyImGui)
 
     target_compile_features(HoroThirdPartyImGui PUBLIC cxx_std_20)
@@ -101,6 +131,14 @@ if(HORO_BUILD_EDITOR_GUI)
         PUBLIC
             GL_SILENCE_DEPRECATION
     )
+    if(HORO_ENABLE_IMGUI_UI_TESTS)
+        target_compile_definitions(HoroThirdPartyImGui
+            PUBLIC
+                IMGUI_ENABLE_TEST_ENGINE
+                IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1
+                IMGUI_TEST_ENGINE_ENABLE_STD_FUNCTION=1
+        )
+    endif()
     target_link_libraries(HoroThirdPartyImGui
         PUBLIC
             ${HORO_SDL3_TARGET}

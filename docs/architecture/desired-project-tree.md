@@ -630,8 +630,23 @@ horo-engine/
 │   │   ├── packages/
 │   │   ├── release/
 │   │   └── observability/
+│   ├── gui/
+│   │   ├── EditorUiAutomationHarnessTests.cpp
+│   │   └── FullEditorUiAutomationScenarios.cpp
+│   ├── helpers/
+│   │   └── editor_ui/
+│   │       ├── EditorUiTestHarness.h
+│   │       ├── EditorUiTestHarness.cpp
+│   │       ├── EditorUiTestSurface.h
+│   │       ├── EditorUiTestSurface.cpp
+│   │       ├── FullEditorUiTestActions.h
+│   │       ├── FullEditorUiTestActions.cpp
+│   │       ├── FullEditorUiTestHost.h
+│   │       ├── FullEditorUiTestHost.cpp
+│   │       ├── FullEditorUiTestSetups.h
+│   │       ├── FullEditorUiTestSetups.cpp
+│   │       └── InteractiveOpenGlEditorUiTestSurface.cpp
 │   ├── mocks/
-│   ├── ui_scenarios/
 │   └── python/
 │       ├── conftest.py
 │       ├── test_project_compatibility_generator.py

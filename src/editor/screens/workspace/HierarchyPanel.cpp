@@ -56,9 +56,10 @@ namespace Horo::Editor
             for (const EditorMenuItem& item : items)
             {
                 const std::string& label = context.localization.Get("editor", item.labelKey);
+                const std::string stableLabel = label + "###hierarchy_create_" + std::string(item.labelKey);
                 if (item.kind == EditorMenuItemKind::Submenu)
                 {
-                    if (Ui::BeginContextSubmenu(label.c_str(), context.theme.fonts))
+                    if (Ui::BeginContextSubmenu(stableLabel.c_str(), context.theme.fonts))
                     {
                         DrawCreateMenuItems(item.children, parent, command, context);
                         Ui::EndContextSubmenu();
@@ -67,7 +68,7 @@ namespace Horo::Editor
                 }
                 if (item.kind == EditorMenuItemKind::Command && item.action == EditorMenuAction::CreatePrimitive &&
                     item.primitive.has_value() &&
-                    Ui::ContextMenuItem(label.c_str(), nullptr, context.theme.fonts))
+                    Ui::ContextMenuItem(stableLabel.c_str(), nullptr, context.theme.fonts))
                 {
                     command.command = EditorWorkspaceViewCommand::CreatePrimitive;
                     command.primitivePayload = item.primitive;
@@ -241,7 +242,7 @@ namespace Horo::Editor
             ImGui::SetCursorPosX(kOuterPadding);
             const ImVec2 rowMin = ImGui::GetCursorScreenPos();
             const ImVec2 rowMax{rowMin.x + listWidth, rowMin.y + kRowHeight};
-            ImGui::InvisibleButton("##HierarchyRow", ImVec2(listWidth, kRowHeight));
+            ImGui::InvisibleButton("Hierarchy object###hierarchy_object_row", ImVec2(listWidth, kRowHeight));
             const bool hovered = ImGui::IsItemHovered();
             const bool selected = model_.SelectedId() == node.id;
 
@@ -310,8 +311,9 @@ namespace Horo::Editor
             if (Ui::BeginContextMenu("##HierarchyContext"))
             {
                 if (workspaceEligible &&
-                    Ui::BeginContextSubmenu(ctx.localization.Get("editor", "workspace.create").c_str(),
-                                            ctx.theme.fonts))
+                    Ui::BeginContextSubmenu(
+                        (ctx.localization.Get("editor", "workspace.create") + "###hierarchy_create_root").c_str(),
+                        ctx.theme.fonts))
                 {
                     DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), SceneObjectId{node.id}, cmd, ctx);
                     Ui::EndContextSubmenu();
@@ -419,7 +421,9 @@ namespace Horo::Editor
         if (Ui::BeginContextMenu("##HierarchyRootContext"))
         {
             if (workspaceEligible &&
-                Ui::BeginContextSubmenu(ctx.localization.Get("editor", "workspace.create").c_str(), ctx.theme.fonts))
+                Ui::BeginContextSubmenu(
+                    (ctx.localization.Get("editor", "workspace.create") + "###hierarchy_create_root").c_str(),
+                    ctx.theme.fonts))
             {
                 DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), std::nullopt, cmd, ctx);
                 Ui::EndContextSubmenu();

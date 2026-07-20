@@ -21,6 +21,15 @@ if(APPLE AND HORO_BUILD_EDITOR_GUI)
 endif()
 option(HORO_BUILD_RENDER_METAL "Build the Metal renderer backend" ${_HORO_BUILD_RENDER_METAL_DEFAULT})
 option(HORO_ENABLE_GPU_SMOKE_TESTS "Register tests that require a display server and hardware graphics context" OFF)
+option(HORO_ENABLE_IMGUI_UI_TESTS "Build headless Dear ImGui UI automation tests" OFF)
+
+if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT BUILD_TESTING)
+    message(FATAL_ERROR "HORO_ENABLE_IMGUI_UI_TESTS requires BUILD_TESTING=ON")
+endif()
+
+if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT HORO_BUILD_EDITOR_GUI)
+    message(FATAL_ERROR "HORO_ENABLE_IMGUI_UI_TESTS requires HORO_BUILD_EDITOR_GUI=ON")
+endif()
 
 if(HORO_BUILD_RENDER_METAL AND NOT APPLE)
     message(FATAL_ERROR "HORO_BUILD_RENDER_METAL is supported only on Apple platforms")

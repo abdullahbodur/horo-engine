@@ -652,7 +652,7 @@ auto ViewportPanel::DrawPanel(const ImVec2 &pos, const ImVec2 &size, const Edito
     };
     int projectionIndex = vm.viewportCamera.projection == Runtime::CameraProjection::Perspective ? 0 : 1;
     ImGui::PushItemWidth(190.0F);
-    if (Ui::ComboControl("ViewportProjection", &projectionIndex, projectionItems, 2, ctx.theme.fonts))
+    if (Ui::ComboControl("viewport_projection", &projectionIndex, projectionItems, 2, ctx.theme.fonts))
     {
         cmd.command = EditorWorkspaceViewCommand::ChangeViewportProjection;
         cmd.viewportProjectionPayload =

@@ -315,6 +315,7 @@ namespace Horo::Editor
             const char* hint = nullptr;
             bool error = false;
             const char* errorText = nullptr;
+            const char* inputId = "##value";
         };
 
         bool DrawInputField(const char* label, std::string& value, const size_t maxSize, const float width,
@@ -323,7 +324,7 @@ namespace Horo::Editor
             ImGui::PushID(label);
             ImGui::BeginGroup();
             Ui::FieldLabel(label, ctx.theme.fonts);
-            const bool changed = Ui::InputTextControl("##value", value, maxSize, ctx.theme.fonts, opts.error, width);
+            const bool changed = Ui::InputTextControl(opts.inputId, value, maxSize, ctx.theme.fonts, opts.error, width);
             if (opts.error && opts.errorText)
                 Ui::ErrorText(opts.errorText, ctx.theme.fonts);
             else if (opts.hint)
@@ -747,9 +748,17 @@ namespace Horo::Editor
 
             ImGui::BeginChild("TemplateCard", {cardW, TemplateH}, true,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
-                              ImGuiWindowFlags_AlwaysUseWindowPadding);
+                              ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoInputs);
             DrawTemplateCardContent(ctx, index, selected, cardW, desc);
             ImGui::EndChild();
+
+            const ImVec2 cardMin = ImGui::GetItemRectMin();
+            const ImVec2 cardMax = ImGui::GetItemRectMax();
+            const ImVec2 cursorAfterCard = ImGui::GetCursorScreenPos();
+            const std::string cardActionId = std::string{"###project_template_"} + kTemplateIds[index];
+            ImGui::SetCursorScreenPos(cardMin);
+            ImGui::InvisibleButton(cardActionId.c_str(), {cardMax.x - cardMin.x, cardMax.y - cardMin.y});
+            ImGui::SetCursorScreenPos(cursorAfterCard);
 
             if (const bool hovered = ImGui::IsItemHovered(); hovered || selected)
                 DrawTemplateCardBorder(selected, hovered);
@@ -824,8 +833,8 @@ namespace Horo::Editor
             constexpr float buttonWidth = 38.0F;
             constexpr float gapWidth = 8.0F;
             const float inputWidth = ImGui::GetContentRegionAvail().x - (buttonWidth + gapWidth);
-            (void)Ui::InputTextControl("##value", st.projectPath, 512, ctx.theme.fonts, pathErr != nullptr,
-                                       std::max(inputWidth, 1.0F));
+            (void)Ui::InputTextControl("###project_creation_location", st.projectPath, 512, ctx.theme.fonts,
+                                       pathErr != nullptr, std::max(inputWidth, 1.0F));
             controller.SetProjectPath(st.projectPath);
             ImGui::SameLine(0.0F, gapWidth);
             const std::string selectPrompt = ctx.localization.
@@ -892,7 +901,8 @@ namespace Horo::Editor
                            DrawInputFieldOptions{
                                .hint = nameHint.c_str(),
                                .error = nameErr != nullptr,
-                               .errorText = nameErr ? nameErr->message.c_str() : nullptr
+                               .errorText = nameErr ? nameErr->message.c_str() : nullptr,
+                               .inputId = "###project_creation_name"
                            });
             controller.SetProjectName(st.projectName);
 
@@ -1312,9 +1322,12 @@ namespace Horo::Editor
             const float actionsW = isReview ? (backW + gap + createW) : (backW + gap + nextW);
             ImGui::SetCursorPos({footerW - 22.0F - actionsW, 10.0F});
 
-            const std::string backLabel = ctx.localization.Get("editor", "project_creation.back");
-            const std::string nextLabel = ctx.localization.Get("editor", "project_creation.next");
-            const std::string createLabel = ctx.localization.Get("editor", "project_creation.create");
+            const std::string backLabel =
+                ctx.localization.Get("editor", "project_creation.back") + "###project_creation_back";
+            const std::string nextLabel =
+                ctx.localization.Get("editor", "project_creation.next") + "###project_creation_next";
+            const std::string createLabel =
+                ctx.localization.Get("editor", "project_creation.create") + "###project_creation_create";
             if (Ui::Button({
                 backLabel.c_str(),
                 {backW, btnH},

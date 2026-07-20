@@ -246,7 +246,9 @@ namespace Horo::Editor::Ui
         const ImVec2 rowMin = ImGui::GetCursorScreenPos();
         constexpr float rowH = 28.0F;
         const float rowW = ImGui::GetContentRegionAvail().x;
-        ImGui::InvisibleButton("##row", {rowW, rowH});
+        const std::string rowId =
+            std::string(source.label(source.context, index)) + "###combo_option_" + std::to_string(index);
+        ImGui::InvisibleButton(rowId.c_str(), {rowW, rowH});
         const bool rowHovered = ImGui::IsItemHovered();
         const bool clicked = isEnabled && ImGui::IsItemClicked();
         if (clicked)
@@ -294,7 +296,8 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleVar();
 
         const ImVec2 fieldPos = ImGui::GetCursorScreenPos();
-        ImGui::InvisibleButton("##field", ImVec2{fieldW, fieldH});
+        const std::string fieldId = std::string("Combo###") + id;
+        ImGui::InvisibleButton(fieldId.c_str(), ImVec2{fieldW, fieldH});
         const bool fieldHovered = ImGui::IsItemHovered();
         const bool fieldClicked = ImGui::IsItemClicked();
 

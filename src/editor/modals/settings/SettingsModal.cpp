@@ -1676,7 +1676,8 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
         st.statusIsError = false;
     }
     ImGui::SameLine(0.0F, gap);
-    if (Button({.label = ctx.localization.Get("editor", "settings.cancel").c_str(),
+    const std::string cancelLabel = ctx.localization.Get("editor", "settings.cancel") + "###settings_cancel";
+    if (Button({.label = cancelLabel.c_str(),
                 .size = {cancelW, 34.0F},
                 .variant = ButtonVariant::Secondary,
                 .fontSize = 13.0F,
@@ -1687,7 +1688,8 @@ void DrawContent(SettingsState &st, const EditorGuiContext &ctx, const float bod
         requestClose = true;
     }
     ImGui::SameLine(0.0F, gap);
-    if (Button({.label = ctx.localization.Get("editor", "settings.apply").c_str(),
+    const std::string applyLabel = ctx.localization.Get("editor", "settings.apply") + "###settings_apply";
+    if (Button({.label = applyLabel.c_str(),
                 .size = {applyW, 34.0F},
                 .variant = ButtonVariant::Primary,
                 .fontSize = 13.0F,

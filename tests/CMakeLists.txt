@@ -40,6 +40,57 @@ function(horo_register_catch_test target)
     )
 endfunction()
 
+if(HORO_ENABLE_IMGUI_UI_TESTS)
+    if(NOT TARGET HoroThirdPartyImGui)
+        message(FATAL_ERROR "HoroEditorUiAutomationTests requires instrumented HoroThirdPartyImGui")
+    endif()
+    get_target_property(HORO_IMGUI_TEST_ENGINE_DEFINITIONS HoroThirdPartyImGui COMPILE_DEFINITIONS)
+    if(NOT "IMGUI_ENABLE_TEST_ENGINE" IN_LIST HORO_IMGUI_TEST_ENGINE_DEFINITIONS)
+        message(FATAL_ERROR "HoroEditorUiAutomationTests requires IMGUI_ENABLE_TEST_ENGINE")
+    endif()
+
+    add_executable(HoroEditorUiAutomationTests
+        gui/EditorUiAutomationHarnessTests.cpp
+        gui/FullEditorUiAutomationScenarios.cpp
+        helpers/editor_ui/EditorUiTestHarness.cpp
+        helpers/editor_ui/EditorUiTestSurface.cpp
+        helpers/editor_ui/FullEditorUiTestActions.cpp
+        helpers/editor_ui/FullEditorUiTestHost.cpp
+        helpers/editor_ui/FullEditorUiTestSetups.cpp
+    )
+    target_include_directories(HoroEditorUiAutomationTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/tests/helpers/editor_ui
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+        ${imgui_test_engine_SOURCE_DIR}
+        ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine
+    )
+    target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
+        HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
+    target_link_libraries(HoroEditorUiAutomationTests PRIVATE
+        HoroEngine::Gui
+        HoroEngine::ProjectMigrations
+        HoroThirdParty::ImGui
+    )
+    if(HORO_BUILD_RENDER_OPENGL)
+        target_sources(HoroEditorUiAutomationTests PRIVATE
+            helpers/editor_ui/InteractiveOpenGlEditorUiTestSurface.cpp
+        )
+        target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
+            HORO_UI_TEST_HAS_INTERACTIVE_OPENGL=1
+        )
+        target_link_libraries(HoroEditorUiAutomationTests PRIVATE
+            HoroEngine::EditorViewportOpenGL
+            HoroThirdParty::Glad
+        )
+    endif()
+    horo_register_catch_test(HoroEditorUiAutomationTests
+        LABELS "gui;headless;imgui"
+        PROPERTIES TIMEOUT 120
+    )
+endif()
+
 add_executable(HoroInputTests
         unit/runtime/input/InputTests.cpp
 )
@@ -471,6 +522,7 @@ if (HORO_BUILD_RENDER_OPENGL)
         target_include_directories(HoroEditorViewportOpenGLSmoke PRIVATE ${PROJECT_SOURCE_DIR}/src)
         target_link_libraries(HoroEditorViewportOpenGLSmoke
                 PRIVATE
+                Catch2::Catch2WithMain
                 HoroEngine::EditorViewportOpenGL
                 HoroEngine::RenderFrontend
                 HoroThirdParty::Glad
@@ -512,6 +564,7 @@ if (HORO_BUILD_RENDER_METAL)
         target_include_directories(HoroEditorViewportMetalSmoke PRIVATE ${PROJECT_SOURCE_DIR}/src)
         target_link_libraries(HoroEditorViewportMetalSmoke
                 PRIVATE
+                Catch2::Catch2WithMain
                 HoroEngine::EditorViewportMetal
                 HoroEngine::RenderFrontend
                 HoroEngine::RenderMetal

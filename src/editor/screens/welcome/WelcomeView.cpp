@@ -98,17 +98,12 @@ namespace Horo::Editor
                     ImGui::TextDisabled("%s", statusText.c_str());
                 }
 
-                // Detect click over the card's bounding rect.
                 const ImVec2 cardEnd = ImGui::GetItemRectMax();
-                if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_None))
-                {
-                    const ImVec2 mouse = ImGui::GetMousePos();
-                    if (mouse.x >= cursorBefore.x && mouse.x <= cardEnd.x && mouse.y >= cursorBefore.y && mouse.y <=
-                        cardEnd.y)
-                    {
-                        clicked = true;
-                    }
-                }
+                const ImVec2 cursorAfter = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(cursorBefore);
+                clicked = ImGui::InvisibleButton("Project card###welcome_project_card",
+                                                 {cardEnd.x - cursorBefore.x, cardEnd.y - cursorBefore.y});
+                ImGui::SetCursorScreenPos(cursorAfter);
             }
             ImGui::PopID();
             return clicked;
@@ -222,9 +217,12 @@ namespace Horo::Editor
         }
         ImGui::Dummy({0.0F, 28.0F});
 
-        const std::string newProject = ctx.localization.Get("editor", "welcome.new_project");
-        const std::string openProject = ctx.localization.Get("editor", "welcome.open_project");
-        const std::string openSettings = ctx.localization.Get("editor", "welcome.open_settings");
+        const std::string newProject =
+            ctx.localization.Get("editor", "welcome.new_project") + "###welcome_new_project";
+        const std::string openProject =
+            ctx.localization.Get("editor", "welcome.open_project") + "###welcome_open_project";
+        const std::string openSettings =
+            ctx.localization.Get("editor", "welcome.open_settings") + "###welcome_open_settings";
         if (DrawWelcomeActionButton(newProject.c_str(), Ui::ButtonVariant::Primary, ctx))
         {
             result.command = WelcomeViewCommand::NewProject;

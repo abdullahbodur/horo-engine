@@ -210,8 +210,14 @@ asserts on responses and side effects.
 
 ### GUI Tests
 
-GUI tests use the `HoroEditorUiTest` harness. They drive ImGui state
-programmatically and assert on widget state, selection, and persistence.
+GUI tests use `EditorUiTestHarness`, with Catch2 owning discovery and final
+reporting and Dear ImGui Test Engine owning widget lookup, input automation,
+and popup/focus progression. Presentation is injected behind
+`IEditorUiTestSurface`. The default headless surface runs an instrumented ImGui
+context without initializing SDL or owning a window, display connection, or GPU
+resource. An opt-in OpenGL surface presents the same scenario in a real SDL
+window for local observation; it does not define a second test or interaction
+path.
 
 Types:
 
@@ -389,37 +395,153 @@ without real OS resources.
 
 ## GUI Test Harness
 
-GUI tests are implemented using the **Dear ImGui Test Engine** (`imgui_test_engine`). This official framework allows tests to interact with the UI exactly as a user would, verifying focus, popup stacks, drag-and-drop operations, and actual widget rendering.
+The dependency is fetched only in an explicit test-enabled GUI composition:
 
-Tests are registered within the ImGui Test Engine's coroutine system but are invoked and reported through Catch2. The engine runs with a null renderer to ensure tests execute in milliseconds without requiring a visible window.
+```bash
+cmake -S . -B build/ui-automation \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=ON \
+  -DHORO_ENABLE_IMGUI_UI_TESTS=ON
+cmake --build build/ui-automation \
+  --target HoroEditorUiAutomationTests --parallel
+```
+
+That composition instruments the existing `HoroThirdPartyImGui` target with
+`IMGUI_ENABLE_TEST_ENGINE`; it never links a second ImGui implementation into
+the same process. With the option disabled, or with GUI disabled, Test Engine
+is absent from the target graph.
+
+Each workflow is a Catch2 `TEST_CASE` tagged `[ui][imgui][editor]`. It registers
+one parent Test Engine coroutine. `UiScenarioPipe` registers each named
+operation as a native Test Engine child test and executes it with
+`RunChildTest()`. The harness pumps deterministic frames through the injected
+surface, stops and joins the coroutine, and only then translates parent status,
+child-step results, logs, or captured exceptions into Catch2 assertions. Catch2
+assertions must never run on the Test Engine coroutine thread.
 
 ```cpp
-TEST_CASE("Selecting an object updates the properties panel", "[editor][gui]") {
-    // Setup ImGui test engine environment
-    ImGuiTestEngine* engine = HoroTestEnvironment::GetImGuiTestEngine();
-    
-    ImGuiTest* t = IM_REGISTER_TEST(engine, "Editor", "select_object_updates_properties");
-    t->TestFunc = [](ImGuiTestContext* ctx) {
-        ctx->SetRef("Editor");
-        
-        // Open project via headless bridge
-        LoadTestProject("tests/fixtures/projects/minimal_project");
-        
-        // Drive actual ImGui interaction using ImGui IDs
-        ctx->ItemClick("hierarchy/wall_north");
-        
-        // Verify UI reaction
-        ctx->SetRef("properties");
-        IM_CHECK_STR_EQ(GetInspectedObjectId().c_str(), "wall_north");
-    };
-    
-    // Pump frames until test completes
-    HoroTestEnvironment::RunImGuiTest(t);
+TEST_CASE("Full editor project journey creates content and configures the viewport",
+          "[ui][imgui][editor][e2e]") {
+    EditorUiTestHarness harness;
+    FullEditorUiTestHost editor;
+    const auto result = harness.RunScenario(
+        "full_editor", "project_journey",
+        [&](ImGuiTestContext* context) { editor.DrawFrame(context); },
+        [&](UiScenarioPipe& scenario) {
+            FullEditorSetups::CreateProjectAndOpenWorkspace(
+                scenario, editor, {.name = "PipelineProject", .templateId = "empty"});
+            FullEditorActions::CreateRootBox(scenario);
+            FullEditorActions::SelectOrthographicProjection(scenario, editor);
+        }, EditorUiScenarioBudget::Extended(1800), &editor.Input());
+
+    INFO(result.testEngineLog);
+    for (const UiScenarioStepResult& step : result.steps) {
+        INFO(step.name);
+        CHECK(step.status == UiScenarioStepStatus::Passed);
+    }
+    REQUIRE(result.Succeeded());
 }
 ```
 
-GUI tests run against the null renderer by default. Renderer-specific visual
-tests use screenshot baselines per platform.
+Child tests share the parent test context and application state. `Setup()` and
+`Step()` both use native child tests, but setup children run at the fast Test
+Engine speed and are reported separately from the behavior under test. A step is one
+atomic user operation, not necessarily one low-level click. Transient ImGui
+state such as an open popup or menu must be opened and consumed in the same
+step; a later step may verify the resulting persistent editor command or model
+state. Failure marks the current step failed and records later steps as
+skipped. Every step records its name and frame interval for Catch2 diagnostics.
+
+A basic harness-only contract scenario covers Button, Checkbox, Slider,
+InputText, nested items, menu actions, and application-side state verification.
+It validates the adapter and is not an editor workflow. Product UI scenarios
+use `FullEditorUiTestHost`, which composes the real screen registry, modal host,
+workspace panel registry, input router, project creation/open services, runtime
+scene preview, and isolated editor configuration. They never replace the editor
+with a hand-built component window.
+
+Reusable setup pipelines live in `FullEditorUiTestSetups`. For example,
+`CreateProjectAndOpenWorkspace()` composes four named setup children: open the
+creation route, choose a template, enter and submit identity, and wait through
+the real asynchronous `ProjectLoading` route. The following behavior steps
+continue against the same live editor session. A scenario may compose the
+smaller `OpenProjectCreation()`, `SubmitProjectCreation()`, and
+`AwaitWorkspace()` setup functions when it needs an intermediate route.
+Reusable behavior blocks live in `FullEditorUiTestActions`. A connected user
+journey prepares the editor once, then composes several action blocks against
+that same project/session instead of recreating the project for every feature.
+Setup children assert only the route/barrier invariants required to make the
+following behavior meaningful; feature assertions belong to `Step()` children.
+
+Interactive controls use localization-independent ImGui identities such as
+`Visible label###stable_id`. Test code addresses stable IDs or ID paths, never
+translated text. Full-editor workflows currently cover project creation/open,
+hierarchy creation with cross-panel observation, and viewport projection in
+both `en-US` and `tr-TR`. Settings modal, splitter, and Welcome routing retain
+their lower-level model/render coverage until equivalent full-editor workflows
+are added; isolated component windows are not accepted as replacements in this
+automation suite.
+
+The Test Engine override is the single input source in this harness. After
+`ImGui::NewFrame`, `TestInputBridge` converts the current ImGui IO state into a
+`RawInputCollector` snapshot and starts the same `InputRouter` frame consumed by
+editor code. The harness does not inject an independent second event stream.
+
+The default deterministic budget is 600 simulated frames. A scenario may opt
+into 601–1800 frames through an explicit extended budget. Each discovered CTest
+case also has a 120-second process timeout. Cases are process-isolated by
+`catch_discover_tests()` and may run under `ctest -j`; a process-local admission
+guard rejects a second live harness/ImGui context.
+
+Run the suite by label, target regex, or Catch2 tags:
+
+```bash
+ctest --test-dir build/ui-automation -L gui --output-on-failure -j 8
+ctest --test-dir build/ui-automation \
+  -R '^HoroEditorUiAutomationTests' --output-on-failure -j 8
+./build/ui-automation/tests/HoroEditorUiAutomationTests \
+  '[ui][imgui][editor]'
+```
+
+GUI tests run against the headless surface by default. To observe one scenario
+in a real window, configure the UI-test composition with OpenGL enabled and run
+the Catch2 case directly:
+
+```bash
+cmake -S . -B build/ui-automation \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=ON \
+  -DHORO_BUILD_RENDER_OPENGL=ON \
+  -DHORO_ENABLE_IMGUI_UI_TESTS=ON
+cmake --build build/ui-automation \
+  --target HoroEditorUiAutomationTests --parallel
+HORO_UI_TEST_PRESENTATION=opengl \
+  ./build/ui-automation/tests/HoroEditorUiAutomationTests \
+  "Full editor project journey creates content and configures the viewport" \
+  --reporter console --success
+```
+
+The visible surface uses the production SDL3/OpenGL ImGui bridge and normal
+Test Engine speed so pointer and widget actions can be followed. Closing the
+window cancels the case cleanly. Run one directly selected case at a time;
+using this environment variable with parallel CTest would intentionally open
+one window per process. Builds without OpenGL retain the complete headless
+suite and reject `HORO_UI_TEST_PRESENTATION=opengl` with a clear error. The
+visible mode is a developer visualization aid, not OpenGL/Metal parity or
+screenshot-golden coverage. Renderer-specific visual tests use screenshot
+baselines per platform.
+
+Select a product scenario when inspecting Horo's UI. The
+`Basic Dear ImGui widgets execute as named child test steps` case intentionally
+renders a minimal Button/Checkbox/Slider fixture and validates only the harness.
+Harness-contract cases explicitly force the headless surface even when
+`HORO_UI_TEST_PRESENTATION=opengl` is set, so running the complete executable
+never opens this fixture as a visible product window.
+Every editor behavior scenario, whether headless or visible, pumps the complete
+`FullEditorUiTestHost` composition. This is required because an interaction in
+one panel may alter another panel, modal, route, input context, or project
+service. Lower-level panel render tests remain useful outside this automation
+suite, but do not substitute for a full-editor workflow scenario.
 
 Selection tests update `EditorSelectionModel` through the same interaction path
 as production UI. They also verify that a tab attached after the selection can
@@ -525,7 +647,10 @@ ctest --preset sanitizer --output-on-failure
 
 ### GUI test failure
 
-GUI test failures produce screenshots in `build/debug/test_output/`:
+The current headless interaction suite reports Test Engine logs through
+Catch2. Screenshot golden comparison is a later TST-002 slice; when enabled,
+visual tests write their artifacts under the configured build tree rather than
+the source tree:
 
 ```text
 build/debug/test_output/
