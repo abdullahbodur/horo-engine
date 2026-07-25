@@ -23,6 +23,14 @@ enum class ButtonVariant
     Secondary,
 };
 
+/** @brief Predefined size presets for shared buttons. */
+enum class ButtonSize
+{
+    Small,
+    Medium,
+    Large,
+};
+
 // ── Button props & primitive ─────────────────────────────────────────
 
 /** @brief Input contract for the shared editor button primitive. */
@@ -35,6 +43,8 @@ struct ButtonProps
     float fontSize = 14.0F;
     ImFont *font = nullptr;
     float baseFontSize = Theme::FontPx::Sans;
+    ButtonSize componentSize = ButtonSize::Medium;
+    bool fillAvailableWidth = false;
 };
 
 /** @brief Draws a shared editor button primitive. */

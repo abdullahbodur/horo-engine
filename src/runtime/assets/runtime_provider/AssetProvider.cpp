@@ -6,6 +6,7 @@
 #include <fstream>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
@@ -20,7 +21,8 @@ template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor 
 
 [[nodiscard]] bool IsTerminal(const AssetLoadState state) noexcept
 {
-    return state == AssetLoadState::Succeeded || state == AssetLoadState::Failed || state == AssetLoadState::Cancelled;
+    using enum AssetLoadState;
+    return state == Succeeded || state == Failed || state == Cancelled;
 }
 
 struct AssetLoadControl
@@ -97,8 +99,12 @@ Result<std::vector<std::uint8_t>> FilesystemAssetProvider::Load(const AssetId id
 
 struct MemoryAssetProvider::State
 {
-    mutable std::mutex mutex;
     std::unordered_map<AssetId, std::vector<std::uint8_t>, AssetIdHash> assets;
+
+    [[nodiscard]] std::mutex &Mutex() const noexcept { return mutex_; }
+
+private:
+    mutable std::mutex mutex_;
 };
 
 MemoryAssetProvider::MemoryAssetProvider() : state_(std::make_unique<State>())
@@ -109,14 +115,14 @@ MemoryAssetProvider::~MemoryAssetProvider() = default;
 /** @copydoc MemoryAssetProvider::Insert */
 void MemoryAssetProvider::Insert(const AssetId id, std::vector<std::uint8_t> bytes)
 {
-    std::scoped_lock lock{state_->mutex};
+    std::scoped_lock lock{state_->Mutex()};
     state_->assets.insert_or_assign(id, std::move(bytes));
 }
 
 /** @copydoc MemoryAssetProvider::Remove */
 void MemoryAssetProvider::Remove(const AssetId id)
 {
-    std::scoped_lock lock{state_->mutex};
+    std::scoped_lock lock{state_->Mutex()};
     state_->assets.erase(id);
 }
 
@@ -125,7 +131,7 @@ Result<bool> MemoryAssetProvider::Exists(const AssetId id, const CancellationTok
 {
     if (cancellation.IsCancellationRequested())
         return Failure<bool>(AssetErrors::LoadCancelled);
-    std::scoped_lock lock{state_->mutex};
+    std::scoped_lock lock{state_->Mutex()};
     return Result<bool>::Success(state_->assets.contains(id));
 }
 
@@ -135,7 +141,7 @@ Result<std::vector<std::uint8_t>> MemoryAssetProvider::Load(const AssetId id,
 {
     if (cancellation.IsCancellationRequested())
         return Failure<std::vector<std::uint8_t>>(AssetErrors::LoadCancelled);
-    std::scoped_lock lock{state_->mutex};
+    std::scoped_lock lock{state_->Mutex()};
     const auto found = state_->assets.find(id);
     if (found == state_->assets.end())
         return Failure<std::vector<std::uint8_t>>(AssetErrors::ProviderNotFound);
@@ -153,12 +159,38 @@ struct AssetLoadHandle::Request
     std::mutex resultMutex;
     std::optional<Result<AssetLoadResult>> result;
     bool consumed{};
+
+    void Complete(Result<std::vector<std::uint8_t>> &loaded, const CancellationToken &cancel)
+    {
+        using enum AssetLoadState;
+        std::scoped_lock lock{resultMutex};
+        if (loaded.HasError())
+        {
+            const bool wasCancelled =
+                cancel.IsCancellationRequested() || loaded.ErrorValue().code.Value() == "asset.load.cancelled";
+            result = Result<AssetLoadResult>::Failure(loaded.ErrorValue());
+            state.store(wasCancelled ? Cancelled : Failed);
+        }
+        else
+        {
+            result = Result<AssetLoadResult>::Success(AssetLoadResult{id, revision, std::move(loaded).Value()});
+            state.store(Succeeded);
+        }
+    }
+
+    void Fail(const ErrorCodeDescriptor &error)
+    {
+        using enum AssetLoadState;
+        std::scoped_lock lock{resultMutex};
+        result = Result<AssetLoadResult>::Failure(MakeError(error));
+        state.store(Failed);
+    }
 };
 
 /** @copydoc AssetLoadHandle::State */
 AssetLoadState AssetLoadHandle::State() const noexcept
 {
-    return request_ ? request_->state.load(std::memory_order_acquire) : AssetLoadState::Failed;
+    return request_ ? request_->state.load() : AssetLoadState::Failed;
 }
 
 /** @copydoc AssetLoadHandle::RequestCancel */
@@ -166,17 +198,17 @@ Result<void> AssetLoadHandle::RequestCancel()
 {
     if (!request_ || !request_->job)
         return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
-    JobSystem *jobs = request_->control ? request_->control->jobs.load(std::memory_order_acquire) : nullptr;
+    JobSystem *jobs = request_->control ? request_->control->jobs.load() : nullptr;
     if (!jobs)
         return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
-    AssetLoadState expected = AssetLoadState::Queued;
-    if (request_->state.compare_exchange_strong(expected, AssetLoadState::Cancelled, std::memory_order_acq_rel))
+    if (AssetLoadState expected = AssetLoadState::Queued;
+        request_->state.compare_exchange_strong(expected, AssetLoadState::Cancelled))
     {
         std::scoped_lock lock{request_->resultMutex};
         request_->result = Result<AssetLoadResult>::Failure(MakeError(AssetErrors::LoadCancelled));
     }
-    const Result<void> cancelled = jobs->RequestCancel(request_->job->Id());
-    if (cancelled.HasError() && !IsTerminal(request_->state.load(std::memory_order_acquire)))
+    if (const Result<void> cancelled = jobs->RequestCancel(request_->job->Id());
+        cancelled.HasError() && !IsTerminal(request_->state.load()))
         return cancelled;
     return Result<void>::Success();
 }
@@ -187,9 +219,9 @@ Result<void> AssetLoadHandle::Wait() const
     if (!request_ || !request_->job)
         return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
     const Result<void> waited = request_->job->Wait();
-    if (waited.HasError() && request_->state.load(std::memory_order_acquire) == AssetLoadState::Queued)
-        request_->state.store(AssetLoadState::Cancelled, std::memory_order_release);
-    return waited.HasError() && request_->state.load(std::memory_order_acquire) != AssetLoadState::Cancelled
+    if (waited.HasError() && request_->state.load() == AssetLoadState::Queued)
+        request_->state.store(AssetLoadState::Cancelled);
+    return waited.HasError() && request_->state.load() != AssetLoadState::Cancelled
                ? waited
                : Result<void>::Success();
 }
@@ -199,7 +231,7 @@ Result<AssetLoadResult> AssetLoadHandle::TakeResult()
 {
     if (!request_)
         return Failure<AssetLoadResult>(AssetErrors::LoadShutdown);
-    if (!IsTerminal(request_->state.load(std::memory_order_acquire)))
+    if (!IsTerminal(request_->state.load()))
         return Failure<AssetLoadResult>(AssetErrors::LoadNotReady);
     std::scoped_lock lock{request_->resultMutex};
     if (request_->consumed)
@@ -216,7 +248,7 @@ struct AssetLoadService::State
         : jobs(jobSystem), provider(assetProvider), maximumOutstanding(limit),
           control(std::make_shared<AssetLoadControl>())
     {
-        control->jobs.store(&jobs, std::memory_order_release);
+        control->jobs.store(&jobs);
     }
     JobSystem &jobs;
     const IAssetProvider &provider;
@@ -238,6 +270,8 @@ AssetLoadService::~AssetLoadService()
     Shutdown();
 }
 
+
+
 /** @copydoc AssetLoadService::LoadAsync */
 Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot &snapshot, const AssetId id)
 {
@@ -250,7 +284,7 @@ Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot 
     if (!state_->accepting)
         return Failure<AssetLoadHandle>(AssetErrors::LoadShutdown);
     std::erase_if(state_->requests,
-                  [](const auto &request) { return IsTerminal(request->state.load(std::memory_order_acquire)); });
+                  [](const auto &request) { return IsTerminal(request->state.load()); });
     if (state_->requests.size() >= state_->maximumOutstanding)
         return Failure<AssetLoadHandle>(AssetErrors::LoadQueueFull);
 
@@ -261,33 +295,17 @@ Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot 
     request->control = state_->control;
     Result<JobHandle> submitted = state_->jobs.Submit(
         JobDescriptor{}, [request, provider = &state_->provider](const CancellationToken &cancellation) {
-            AssetLoadState expected = AssetLoadState::Queued;
-            if (!request->state.compare_exchange_strong(expected, AssetLoadState::Running, std::memory_order_acq_rel))
+            using enum AssetLoadState;
+            if (AssetLoadState expected = Queued; !request->state.compare_exchange_strong(expected, Running))
                 return;
             try
             {
                 Result<std::vector<std::uint8_t>> loaded = provider->Load(request->id, cancellation);
-                std::scoped_lock resultLock{request->resultMutex};
-                if (loaded.HasError())
-                {
-                    const bool cancelled = cancellation.IsCancellationRequested() ||
-                                           loaded.ErrorValue().code.Value() == "asset.load.cancelled";
-                    request->result = Result<AssetLoadResult>::Failure(loaded.ErrorValue());
-                    request->state.store(cancelled ? AssetLoadState::Cancelled : AssetLoadState::Failed,
-                                         std::memory_order_release);
-                }
-                else
-                {
-                    request->result = Result<AssetLoadResult>::Success(
-                        AssetLoadResult{request->id, request->revision, std::move(loaded).Value()});
-                    request->state.store(AssetLoadState::Succeeded, std::memory_order_release);
-                }
+                request->Complete(loaded, cancellation);
             }
-            catch (...)
+            catch (const std::exception &)
             {
-                std::scoped_lock resultLock{request->resultMutex};
-                request->result = Result<AssetLoadResult>::Failure(MakeError(AssetErrors::ProviderReadFailed));
-                request->state.store(AssetLoadState::Failed, std::memory_order_release);
+                request->Fail(AssetErrors::ProviderReadFailed);
             }
         });
     if (submitted.HasError())
@@ -323,7 +341,7 @@ void AssetLoadService::Shutdown() noexcept
     for (const auto &request : requests)
         if (request->job)
             static_cast<void>(request->job->Wait());
-    state_->control->jobs.store(nullptr, std::memory_order_release);
+    state_->control->jobs.store(nullptr);
     std::scoped_lock lock{state_->mutex};
     state_->requests.clear();
 }

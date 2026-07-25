@@ -211,19 +211,20 @@ void AddDisc(MeshData &mesh, const float y, const float radius, const std::uint3
     {
         const float t = static_cast<float>(index) / static_cast<float>(parameters.hemisphereRings);
         const float angle = -Math::Pi * 0.5F + t * Math::Pi * 0.5F;
+        const float v = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
         rings.push_back({-bodyHalf + std::sin(angle) * parameters.radius, std::cos(angle) * parameters.radius,
-                         std::sin(angle), std::cos(angle),
-                         (rings.size() + 1.0F) / (2 * parameters.hemisphereRings + 2.0F)});
+                         std::sin(angle), std::cos(angle), v});
     }
+    const float midV = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
     rings.push_back(
-        {bodyHalf, parameters.radius, 0, 1, (rings.size() + 1.0F) / (2 * parameters.hemisphereRings + 2.0F)});
+        {bodyHalf, parameters.radius, 0, 1, midV});
     for (std::uint32_t index = 1; index < parameters.hemisphereRings; ++index)
     {
         const float t = static_cast<float>(index) / static_cast<float>(parameters.hemisphereRings);
         const float angle = t * Math::Pi * 0.5F;
+        const float v = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
         rings.push_back({bodyHalf + std::sin(angle) * parameters.radius, std::cos(angle) * parameters.radius,
-                         std::sin(angle), std::cos(angle),
-                         (rings.size() + 1.0F) / (2 * parameters.hemisphereRings + 2.0F)});
+                         std::sin(angle), std::cos(angle), v});
     }
     mesh.vertices.push_back({{0, -parameters.totalHeight * 0.5F, 0}, {0, -1, 0}, {0.5F, 0}});
     const std::uint32_t stride = parameters.radialSegments + 1;
@@ -268,78 +269,213 @@ void HashCombine(std::size_t &seed, const std::size_t value) noexcept
     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
 }
 
+struct ParameterHashVisitor
+{
+    std::size_t &hash;
+
+    template <typename T>
+    void operator()(const T &parameters) const noexcept
+    {
+        if constexpr (std::is_same_v<T, BoxMeshParameters>)
+        {
+            HashCombine(hash, HashFloat(parameters.size.x));
+            HashCombine(hash, HashFloat(parameters.size.y));
+            HashCombine(hash, HashFloat(parameters.size.z));
+        }
+        else if constexpr (std::is_same_v<T, SphereMeshParameters>)
+        {
+            HashCombine(hash, HashFloat(parameters.radius));
+            HashCombine(hash, parameters.slices);
+            HashCombine(hash, parameters.stacks);
+        }
+        else if constexpr (std::is_same_v<T, CapsuleMeshParameters>)
+        {
+            HashCombine(hash, HashFloat(parameters.radius));
+            HashCombine(hash, HashFloat(parameters.totalHeight));
+            HashCombine(hash, parameters.radialSegments);
+            HashCombine(hash, parameters.hemisphereRings);
+        }
+        else if constexpr (std::is_same_v<T, CylinderMeshParameters> || std::is_same_v<T, ConeMeshParameters>)
+        {
+            HashCombine(hash, HashFloat(parameters.radius));
+            HashCombine(hash, HashFloat(parameters.height));
+            HashCombine(hash, parameters.radialSegments);
+        }
+        else
+        {
+            HashCombine(hash, HashFloat(parameters.size.x));
+            HashCombine(hash, HashFloat(parameters.size.y));
+        }
+    }
+};
+
 struct DescriptorHash
 {
     [[nodiscard]] std::size_t operator()(const PrimitiveMeshDescriptor &descriptor) const noexcept
     {
         std::size_t hash = static_cast<std::size_t>(descriptor.type);
         HashCombine(hash, descriptor.version.value);
-        std::visit(
-            [&](const auto &parameters) {
-                using T = std::decay_t<decltype(parameters)>;
-                HashCombine(hash, descriptor.parameters.index());
-                if constexpr (std::is_same_v<T, BoxMeshParameters>)
-                {
-                    HashCombine(hash, HashFloat(parameters.size.x));
-                    HashCombine(hash, HashFloat(parameters.size.y));
-                    HashCombine(hash, HashFloat(parameters.size.z));
-                }
-                else if constexpr (std::is_same_v<T, SphereMeshParameters>)
-                {
-                    HashCombine(hash, HashFloat(parameters.radius));
-                    HashCombine(hash, parameters.slices);
-                    HashCombine(hash, parameters.stacks);
-                }
-                else if constexpr (std::is_same_v<T, CapsuleMeshParameters>)
-                {
-                    HashCombine(hash, HashFloat(parameters.radius));
-                    HashCombine(hash, HashFloat(parameters.totalHeight));
-                    HashCombine(hash, parameters.radialSegments);
-                    HashCombine(hash, parameters.hemisphereRings);
-                }
-                else if constexpr (std::is_same_v<T, CylinderMeshParameters> || std::is_same_v<T, ConeMeshParameters>)
-                {
-                    HashCombine(hash, HashFloat(parameters.radius));
-                    HashCombine(hash, HashFloat(parameters.height));
-                    HashCombine(hash, parameters.radialSegments);
-                }
-                else
-                {
-                    HashCombine(hash, HashFloat(parameters.size.x));
-                    HashCombine(hash, HashFloat(parameters.size.y));
-                }
-            },
-            descriptor.parameters);
+        HashCombine(hash, descriptor.parameters.index());
+        std::visit(ParameterHashVisitor{hash}, descriptor.parameters);
         return hash;
     }
 };
+
+[[nodiscard]] Result<MeshData> GenerateBoxMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<BoxMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y) || !PositiveFinite(p->size.z))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidSize, "Box size must be finite and positive."));
+    return Result<MeshData>::Success(GenerateBox(*p));
+}
+
+[[nodiscard]] Result<MeshData> GenerateSphereMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<SphereMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->radius))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidRadius, "Sphere radius must be finite and positive."));
+    if (p->slices < 3 || p->stacks < 2)
+        return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
+                                                            "Sphere tessellation is below the supported minimum."));
+    if (p->slices > kMaximumSegments || p->stacks > kMaximumSegments)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::CapacityExceeded, "Sphere tessellation exceeds the generation capacity."));
+    return Result<MeshData>::Success(GenerateSphere(*p));
+}
+
+[[nodiscard]] Result<MeshData> GenerateCapsuleMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<CapsuleMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->radius) || !PositiveFinite(p->totalHeight))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Capsule dimensions must be finite and positive."));
+    if (p->totalHeight < 2.0F * p->radius)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::InvalidCapsuleHeight, "Capsule total height cannot be smaller than its diameter."));
+    if (p->radialSegments < 3 || p->hemisphereRings < 1)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::InvalidTessellation, "Capsule tessellation is below the supported minimum."));
+    if (p->radialSegments > kMaximumSegments || p->hemisphereRings > kMaximumSegments)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::CapacityExceeded, "Capsule tessellation exceeds the generation capacity."));
+    return Result<MeshData>::Success(GenerateCapsule(*p));
+}
+
+[[nodiscard]] Result<MeshData> GenerateCylinderMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<CylinderMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cylinder dimensions must be finite and positive."));
+    if (p->radialSegments < 3)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::InvalidTessellation, "Cylinder tessellation is below the supported minimum."));
+    if (p->radialSegments > kMaximumSegments)
+        return Result<MeshData>::Failure(MakePrimitiveError(
+            PrimitiveErrors::CapacityExceeded, "Cylinder tessellation exceeds the generation capacity."));
+    return Result<MeshData>::Success(GenerateCylinder(*p));
+}
+
+[[nodiscard]] Result<MeshData> GenerateConeMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<ConeMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cone dimensions must be finite and positive."));
+    if (p->radialSegments < 3)
+        return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
+                                                            "Cone tessellation is below the supported minimum."));
+    if (p->radialSegments > kMaximumSegments)
+        return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::CapacityExceeded,
+                                                            "Cone tessellation exceeds the generation capacity."));
+    return Result<MeshData>::Success(GenerateCone(*p));
+}
+
+[[nodiscard]] Result<MeshData> GeneratePlaneMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<PlaneMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidSize, "Plane size must be finite and positive."));
+    return Result<MeshData>::Success(GeneratePlanar(p->size, false));
+}
+
+[[nodiscard]] Result<MeshData> GenerateQuadMesh(const PrimitiveMeshDescriptor &descriptor)
+{
+    const auto p = std::get_if<QuadMeshParameters>(&descriptor.parameters);
+    if (!p)
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+    if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
+        return Result<MeshData>::Failure(
+            MakePrimitiveError(PrimitiveErrors::InvalidSize, "Quad size must be finite and positive."));
+    return Result<MeshData>::Success(GeneratePlanar(p->size, true));
+}
+
+[[nodiscard]] Result<MeshData> GenerateMeshTypeChecked(const PrimitiveMeshDescriptor &descriptor)
+{
+    using enum PrimitiveMeshType;
+    switch (descriptor.type)
+    {
+    case Box: return GenerateBoxMesh(descriptor);
+    case Sphere: return GenerateSphereMesh(descriptor);
+    case Capsule: return GenerateCapsuleMesh(descriptor);
+    case Cylinder: return GenerateCylinderMesh(descriptor);
+    case Cone: return GenerateConeMesh(descriptor);
+    case Plane: return GeneratePlaneMesh(descriptor);
+    case Quad: return GenerateQuadMesh(descriptor);
+    }
+    return Result<MeshData>::Failure(
+        MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Unknown primitive mesh type."));
+}
 } // namespace
 
 /** @copydoc PrimitiveMeshDescriptor::Defaults */
 PrimitiveMeshDescriptor PrimitiveMeshDescriptor::Defaults(const PrimitiveMeshType type) noexcept
 {
+    using enum PrimitiveMeshType;
     PrimitiveMeshDescriptor descriptor{.type = type};
     switch (type)
     {
-    case PrimitiveMeshType::Box:
+    case Box:
         descriptor.parameters = BoxMeshParameters{};
         break;
-    case PrimitiveMeshType::Sphere:
+    case Sphere:
         descriptor.parameters = SphereMeshParameters{};
         break;
-    case PrimitiveMeshType::Capsule:
+    case Capsule:
         descriptor.parameters = CapsuleMeshParameters{};
         break;
-    case PrimitiveMeshType::Cylinder:
+    case Cylinder:
         descriptor.parameters = CylinderMeshParameters{};
         break;
-    case PrimitiveMeshType::Cone:
+    case Cone:
         descriptor.parameters = ConeMeshParameters{};
         break;
-    case PrimitiveMeshType::Plane:
+    case Plane:
         descriptor.parameters = PlaneMeshParameters{};
         break;
-    case PrimitiveMeshType::Quad:
+    case Quad:
         descriptor.parameters = QuadMeshParameters{};
         break;
     }
@@ -352,111 +488,10 @@ Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor 
     if (descriptor.version.value != 1)
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::UnsupportedVersion, "Primitive mesh version is unsupported."));
-    MeshData mesh;
-    const auto mismatch = [&] {
-        return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
-    };
-    switch (descriptor.type)
-    {
-    case PrimitiveMeshType::Box: {
-        const auto *p = std::get_if<BoxMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y) || !PositiveFinite(p->size.z))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Box size must be finite and positive."));
-        mesh = GenerateBox(*p);
-        break;
-    }
-    case PrimitiveMeshType::Sphere: {
-        const auto *p = std::get_if<SphereMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->radius))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidRadius, "Sphere radius must be finite and positive."));
-        if (p->slices < 3 || p->stacks < 2)
-            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
-                                                                "Sphere tessellation is below the supported minimum."));
-        if (p->slices > kMaximumSegments || p->stacks > kMaximumSegments)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::CapacityExceeded, "Sphere tessellation exceeds the generation capacity."));
-        mesh = GenerateSphere(*p);
-        break;
-    }
-    case PrimitiveMeshType::Capsule: {
-        const auto *p = std::get_if<CapsuleMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->radius) || !PositiveFinite(p->totalHeight))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Capsule dimensions must be finite and positive."));
-        if (p->totalHeight < 2.0F * p->radius)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::InvalidCapsuleHeight, "Capsule total height cannot be smaller than its diameter."));
-        if (p->radialSegments < 3 || p->hemisphereRings < 1)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::InvalidTessellation, "Capsule tessellation is below the supported minimum."));
-        if (p->radialSegments > kMaximumSegments || p->hemisphereRings > kMaximumSegments)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::CapacityExceeded, "Capsule tessellation exceeds the generation capacity."));
-        mesh = GenerateCapsule(*p);
-        break;
-    }
-    case PrimitiveMeshType::Cylinder: {
-        const auto *p = std::get_if<CylinderMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cylinder dimensions must be finite and positive."));
-        if (p->radialSegments < 3)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::InvalidTessellation, "Cylinder tessellation is below the supported minimum."));
-        if (p->radialSegments > kMaximumSegments)
-            return Result<MeshData>::Failure(MakePrimitiveError(
-                PrimitiveErrors::CapacityExceeded, "Cylinder tessellation exceeds the generation capacity."));
-        mesh = GenerateCylinder(*p);
-        break;
-    }
-    case PrimitiveMeshType::Cone: {
-        const auto *p = std::get_if<ConeMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cone dimensions must be finite and positive."));
-        if (p->radialSegments < 3)
-            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::InvalidTessellation,
-                                                                "Cone tessellation is below the supported minimum."));
-        if (p->radialSegments > kMaximumSegments)
-            return Result<MeshData>::Failure(MakePrimitiveError(PrimitiveErrors::CapacityExceeded,
-                                                                "Cone tessellation exceeds the generation capacity."));
-        mesh = GenerateCone(*p);
-        break;
-    }
-    case PrimitiveMeshType::Plane: {
-        const auto *p = std::get_if<PlaneMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Plane size must be finite and positive."));
-        mesh = GeneratePlanar(p->size, false);
-        break;
-    }
-    case PrimitiveMeshType::Quad: {
-        const auto *p = std::get_if<QuadMeshParameters>(&descriptor.parameters);
-        if (!p)
-            return mismatch();
-        if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
-            return Result<MeshData>::Failure(
-                MakePrimitiveError(PrimitiveErrors::InvalidSize, "Quad size must be finite and positive."));
-        mesh = GeneratePlanar(p->size, true);
-        break;
-    }
-    }
+    Result<MeshData> generated = GenerateMeshTypeChecked(descriptor);
+    if (generated.HasError())
+        return generated;
+    MeshData mesh = std::move(generated).Value();
     if (mesh.vertices.size() > kMaximumVertices || mesh.indices.size() > kMaximumIndices)
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::CapacityExceeded, "Generated mesh exceeds the supported capacity."));
@@ -476,12 +511,15 @@ struct PrimitiveMeshCache::Impl
         std::uint64_t lastUse;
     };
     PrimitiveMeshCacheLimits limits;
-    mutable std::mutex mutex;
     std::list<Entry> entries;
     std::unordered_map<PrimitiveMeshDescriptor, std::list<Entry>::iterator, DescriptorHash> byDescriptor;
     std::size_t bytes{0};
     std::uint64_t nextId{1};
     std::uint64_t useClock{0};
+
+private:
+    mutable std::mutex mutex;
+    friend class PrimitiveMeshCache;
 };
 
 PrimitiveMeshCache::PrimitiveMeshCache(const PrimitiveMeshCacheLimits limits) : m_impl(std::make_unique<Impl>())
@@ -524,9 +562,9 @@ Result<PrimitiveMeshLease> PrimitiveMeshCache::Acquire(const PrimitiveMeshDescri
         m_impl->entries.erase(victim);
     }
     const MeshResourceId id{m_impl->nextId++};
-    m_impl->entries.push_back({descriptor, id, data, ++m_impl->useClock});
+    m_impl->entries.emplace_back(descriptor, id, data, ++m_impl->useClock);
     auto inserted = std::prev(m_impl->entries.end());
-    m_impl->byDescriptor.emplace(descriptor, inserted);
+    m_impl->byDescriptor.try_emplace(descriptor, inserted);
     m_impl->bytes += bytes;
     return Result<PrimitiveMeshLease>::Success(PrimitiveMeshLease{id, std::move(data)});
 }

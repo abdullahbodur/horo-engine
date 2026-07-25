@@ -40,56 +40,69 @@ function(horo_register_catch_test target)
     )
 endfunction()
 
-if(HORO_ENABLE_IMGUI_UI_TESTS)
-    if(NOT TARGET HoroThirdPartyImGui)
+if (HORO_ENABLE_IMGUI_UI_TESTS)
+    if (NOT TARGET HoroThirdPartyImGui)
         message(FATAL_ERROR "HoroEditorUiAutomationTests requires instrumented HoroThirdPartyImGui")
-    endif()
+    endif ()
     get_target_property(HORO_IMGUI_TEST_ENGINE_DEFINITIONS HoroThirdPartyImGui COMPILE_DEFINITIONS)
-    if(NOT "IMGUI_ENABLE_TEST_ENGINE" IN_LIST HORO_IMGUI_TEST_ENGINE_DEFINITIONS)
+    if (NOT "IMGUI_ENABLE_TEST_ENGINE" IN_LIST HORO_IMGUI_TEST_ENGINE_DEFINITIONS)
         message(FATAL_ERROR "HoroEditorUiAutomationTests requires IMGUI_ENABLE_TEST_ENGINE")
-    endif()
+    endif ()
 
     add_executable(HoroEditorUiAutomationTests
-        gui/EditorUiAutomationHarnessTests.cpp
-        gui/FullEditorUiAutomationScenarios.cpp
-        helpers/editor_ui/EditorUiTestHarness.cpp
-        helpers/editor_ui/EditorUiTestSurface.cpp
-        helpers/editor_ui/FullEditorUiTestActions.cpp
-        helpers/editor_ui/FullEditorUiTestHost.cpp
-        helpers/editor_ui/FullEditorUiTestSetups.cpp
+            gui/EditorUiAutomationHarnessTests.cpp
+            gui/FullEditorUiAutomationScenarios.cpp
+            helpers/editor_ui/EditorUiTestHarness.cpp
+            helpers/editor_ui/EditorUiTestSurface.cpp
+            helpers/editor_ui/InteractiveEditorUiTestRenderer.cpp
+            helpers/editor_ui/FullEditorUiTestActions.cpp
+            helpers/editor_ui/FullEditorUiTestHost.cpp
+            helpers/editor_ui/FullEditorUiTestSetups.cpp
     )
     target_include_directories(HoroEditorUiAutomationTests PRIVATE
-        ${PROJECT_SOURCE_DIR}/tests/helpers/editor_ui
-        ${PROJECT_SOURCE_DIR}/src
-        ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
-        ${imgui_test_engine_SOURCE_DIR}
-        ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine
+            ${PROJECT_SOURCE_DIR}/tests/helpers/editor_ui
+            ${PROJECT_SOURCE_DIR}/src
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+            ${imgui_test_engine_SOURCE_DIR}
+            ${imgui_test_engine_SOURCE_DIR}/imgui_test_engine
     )
     target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
-        HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+            HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
     target_link_libraries(HoroEditorUiAutomationTests PRIVATE
-        HoroEngine::Gui
-        HoroEngine::ProjectMigrations
-        HoroThirdParty::ImGui
+            HoroEngine::Gui
+            HoroEngine::ProjectMigrations
+            HoroEngine::RenderFrontend
+            HoroThirdParty::ImGui
+            nlohmann_json::nlohmann_json
     )
-    if(HORO_BUILD_RENDER_OPENGL)
+    if (HORO_BUILD_RENDER_OPENGL)
         target_sources(HoroEditorUiAutomationTests PRIVATE
-            helpers/editor_ui/InteractiveOpenGlEditorUiTestSurface.cpp
+                helpers/editor_ui/InteractiveOpenGlEditorUiTestSurface.cpp
         )
         target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
-            HORO_UI_TEST_HAS_INTERACTIVE_OPENGL=1
+                HORO_UI_TEST_HAS_INTERACTIVE_OPENGL=1
         )
         target_link_libraries(HoroEditorUiAutomationTests PRIVATE
-            HoroEngine::EditorViewportOpenGL
-            HoroThirdParty::Glad
+                HoroEngine::EditorViewportOpenGL
         )
-    endif()
+    endif ()
+    if (HORO_BUILD_RENDER_METAL)
+        target_sources(HoroEditorUiAutomationTests PRIVATE
+                helpers/editor_ui/InteractiveMetalEditorUiTestSurface.mm
+        )
+        target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
+                HORO_UI_TEST_HAS_INTERACTIVE_METAL=1
+        )
+        target_link_libraries(HoroEditorUiAutomationTests PRIVATE
+                HoroEngine::EditorViewportMetal
+        )
+    endif ()
     horo_register_catch_test(HoroEditorUiAutomationTests
-        LABELS "gui;headless;imgui"
-        PROPERTIES TIMEOUT 120
+            LABELS "gui;headless;imgui"
+            PROPERTIES TIMEOUT 120
     )
-endif()
+endif ()
 
 add_executable(HoroInputTests
         unit/runtime/input/InputTests.cpp
@@ -106,6 +119,21 @@ add_executable(HoroFoundationStringTests
 )
 target_compile_features(HoroFoundationStringTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationStringTests PRIVATE HoroEngine::Foundation)
+add_executable(HoroFoundationSha256Tests
+        unit/foundation/Sha256Tests.cpp
+)
+target_compile_features(HoroFoundationSha256Tests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationSha256Tests PRIVATE HoroEngine::Foundation)
+
+set(HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCE
+        ${CMAKE_CURRENT_BINARY_DIR}/HoroFoundationPublicHeaderCompile.cpp)
+file(GENERATE OUTPUT ${HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCE}
+        CONTENT "#include \"Horo/Foundation/Sha256.h\"\n")
+add_library(HoroFoundationPublicHeaderCompile OBJECT
+        ${HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCE}
+)
+target_compile_features(HoroFoundationPublicHeaderCompile PRIVATE cxx_std_20)
+target_include_directories(HoroFoundationPublicHeaderCompile PRIVATE ${PROJECT_SOURCE_DIR}/include)
 add_executable(HoroPrimitiveMeshTests
         unit/runtime/scene/PrimitiveMeshTests.cpp
 )
@@ -146,6 +174,16 @@ target_compile_features(HoroSettingsModalLifecycleTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSettingsModalLifecycleTests
         PRIVATE
         HoroEngine::EditorServices
+)
+add_executable(HoroAssetImportModalLifecycleTests
+        unit/editor/AssetImportModalLifecycleTests.cpp
+)
+target_compile_features(HoroAssetImportModalLifecycleTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetImportModalLifecycleTests
+        PRIVATE
+        HoroEngine::EditorServices
+        HoroEngine::Assets
+        HoroEngine::Foundation
 )
 add_executable(HoroEditorLocalizationServiceTests
         unit/editor/LocalizationServiceTests.cpp
@@ -197,6 +235,18 @@ add_executable(HoroProjectOpenServiceTests
 target_compile_features(HoroProjectOpenServiceTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectOpenServiceTests PRIVATE
         HoroEngine::EditorServices HoroEngine::ProjectMigrations nlohmann_json::nlohmann_json)
+add_executable(HoroProjectMigrationIntegrationTests
+        integration/project/ProjectMigrationIntegrationTests.cpp
+        helpers/project_migration/ProjectMigrationTestFixture.cpp
+        helpers/project_migration/ProjectMigrationTestFixture.h
+)
+target_compile_features(HoroProjectMigrationIntegrationTests PRIVATE cxx_std_20)
+target_include_directories(HoroProjectMigrationIntegrationTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/helpers/project_migration)
+target_link_libraries(HoroProjectMigrationIntegrationTests PRIVATE
+        HoroEngine::EditorServices HoroEngine::ProjectMigrations nlohmann_json::nlohmann_json)
+horo_register_catch_test(HoroProjectMigrationIntegrationTests
+        LABELS "migration")
 add_executable(HoroRecentProjectInspectionServiceTests
         unit/editor/RecentProjectInspectionServiceTests.cpp
 )
@@ -456,6 +506,78 @@ target_include_directories(HoroAssetProviderTests PRIVATE
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/runtime_provider
 )
 target_link_libraries(HoroAssetProviderTests PRIVATE HoroEngine::Assets)
+add_executable(HoroAssetCookTests
+        unit/runtime/assets/AssetCookContractTests.cpp
+)
+target_compile_features(HoroAssetCookTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetCookTests PRIVATE HoroEngine::Assets)
+add_executable(HoroCookCatalogTests
+        unit/runtime/assets/CookCatalogTests.cpp
+)
+target_compile_features(HoroCookCatalogTests PRIVATE cxx_std_20)
+target_link_libraries(HoroCookCatalogTests PRIVATE HoroEngine::Assets)
+add_executable(HoroHeadlessNullCookerTests
+        unit/runtime/assets/HeadlessNullCookerTests.cpp
+)
+target_compile_features(HoroHeadlessNullCookerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroHeadlessNullCookerTests PRIVATE HoroEngine::Assets)
+target_include_directories(HoroHeadlessNullCookerTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
+)
+add_executable(HoroAssetCookCacheTests
+        unit/runtime/assets/AssetCookCacheTests.cpp
+)
+target_compile_features(HoroAssetCookCacheTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetCookCacheTests PRIVATE HoroEngine::Assets)
+add_executable(HoroAssetCookOutputTests
+        unit/runtime/assets/AssetCookOutputTests.cpp
+)
+target_compile_features(HoroAssetCookOutputTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetCookOutputTests PRIVATE HoroEngine::Assets)
+add_executable(HoroAssetCookServiceTests
+        unit/runtime/assets/AssetCookServiceTests.cpp
+)
+target_compile_features(HoroAssetCookServiceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetCookServiceTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
+target_include_directories(HoroAssetCookServiceTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
+)
+add_executable(HoroAssetCookIntegrationTests
+        integration/assets/AssetCookIntegrationTests.cpp
+)
+target_compile_features(HoroAssetCookIntegrationTests PRIVATE cxx_std_20)
+target_compile_definitions(HoroAssetCookIntegrationTests PRIVATE PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(HoroAssetCookIntegrationTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
+target_include_directories(HoroAssetCookIntegrationTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
+)
+add_executable(HoroAssetImporterCatalogTests
+        unit/runtime/assets/AssetImporterCatalogTests.cpp
+)
+target_compile_features(HoroAssetImporterCatalogTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetImporterCatalogTests PRIVATE HoroEngine::Assets)
+add_executable(HoroAssetImportOperationTests
+        unit/runtime/assets/AssetImportOperationTests.cpp
+)
+target_compile_features(HoroAssetImportOperationTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAssetImportOperationTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
+add_executable(HoroObjMeshImporterTests
+        unit/runtime/assets/ObjMeshImporterTests.cpp
+)
+target_compile_features(HoroObjMeshImporterTests PRIVATE cxx_std_20)
+target_link_libraries(HoroObjMeshImporterTests PRIVATE HoroEngine::Assets)
+target_include_directories(HoroObjMeshImporterTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer/builtin/obj_mesh
+)
+add_executable(HoroModularAssetImportIntegrationTests
+        integration/assets/ModularAssetImportIntegrationTests.cpp
+)
+target_compile_features(HoroModularAssetImportIntegrationTests PRIVATE cxx_std_20)
+target_compile_definitions(HoroModularAssetImportIntegrationTests PRIVATE PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(HoroModularAssetImportIntegrationTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
+target_include_directories(HoroModularAssetImportIntegrationTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
+)
 function(horo_add_public_header_compile_target target owning_target)
     set(generated_sources)
     foreach (header IN LISTS ARGN)
@@ -480,6 +602,7 @@ horo_add_public_header_compile_target(HoroAssetsPublicHeaderCompile HoroEngine::
         Horo/Assets/AssetId.h
         Horo/Assets/AssetRegistry.h
         Horo/Assets/AssetProvider.h
+        Horo/Assets/AssetCook.h
 )
 horo_add_public_header_compile_target(HoroApplicationPublicHeaderCompile HoroEngine::Application
         Horo/Application/ProjectVersion.h
@@ -593,11 +716,13 @@ set(HORO_CATCH_TEST_TARGETS
         HoroInputTests
         HoroSceneMathTests
         HoroFoundationStringTests
+        HoroFoundationSha256Tests
         HoroPrimitiveMeshTests
         HoroEditorWelcomeControllerTests
         HoroEditorModalHostTests
         HoroGuiScreenHostLifecycleTests
         HoroSettingsModalLifecycleTests
+        HoroAssetImportModalLifecycleTests
         HoroEditorLocalizationServiceTests
         HoroProjectCreationControllerTests
         HoroRendererAvailabilityTests
@@ -641,6 +766,17 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSceneTests
         HoroAssetRegistryTests
         HoroAssetProviderTests
+        HoroAssetCookTests
+        HoroCookCatalogTests
+        HoroHeadlessNullCookerTests
+        HoroAssetCookCacheTests
+        HoroAssetCookOutputTests
+        HoroAssetCookServiceTests
+        HoroAssetCookIntegrationTests
+        HoroAssetImporterCatalogTests
+        HoroAssetImportOperationTests
+        HoroModularAssetImportIntegrationTests
+        HoroObjMeshImporterTests
         HoroRenderOpenGLTests
         HoroRenderMetalTests
 )

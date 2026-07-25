@@ -4,7 +4,6 @@
 #include "Horo/Assets/AssetProvider.h"
 
 #include <atomic>
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>

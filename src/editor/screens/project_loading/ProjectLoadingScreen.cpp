@@ -35,6 +35,9 @@ class ProjectLoadingScreen final : public GuiScreen
     Result<void> OnEnter(const GuiRoute &route) override
     {
         state_ = {};
+        hasPresentedLoadingView_ = false;
+        readyStateAwaitingPresentation_ = false;
+        readyStatePresented_ = false;
         if (std::holds_alternative<ProjectLoadingRouteParameters>(route.parameters))
         {
             const auto &params = std::get<ProjectLoadingRouteParameters>(route.parameters);
@@ -50,6 +53,11 @@ class ProjectLoadingScreen final : public GuiScreen
 
     void OnUpdate(float) override
     {
+        // Route transitions are committed after the previous screen draws. Keep
+        // this route alive until its first draw so fast operations cannot skip
+        // the loading feedback entirely.
+        if (!hasPresentedLoadingView_)
+            return;
         if (creationOperation_.has_value())
             UpdateCreation();
         else
@@ -58,7 +66,11 @@ class ProjectLoadingScreen final : public GuiScreen
 
     void Draw(const GuiContentRegion &contentRegion) override
     {
-        switch (DrawProjectLoadingView(state_, context_, contentRegion))
+        const ProjectLoadingViewCommand command = DrawProjectLoadingView(state_, context_, contentRegion);
+        hasPresentedLoadingView_ = true;
+        if (readyStateAwaitingPresentation_)
+            readyStatePresented_ = true;
+        switch (command)
         {
         case ProjectLoadingViewCommand::Cancel:
             CancelActive();
@@ -117,6 +129,8 @@ class ProjectLoadingScreen final : public GuiScreen
   private:
     void StartOpen()
     {
+        readyStateAwaitingPresentation_ = false;
+        readyStatePresented_ = false;
         auto started = openService_.Start({.projectRoot = state_.projectRoot,
                                            .expectedProjectName = state_.projectName,
                                            .engineBuildIdentity = "HoroEditor"});
@@ -168,6 +182,14 @@ class ProjectLoadingScreen final : public GuiScreen
         state_.statusText = PhaseText(snapshot->phase);
         if (snapshot->outcome == ProjectOpenOutcome::ReadyToActivate)
         {
+            // Completion is first projected through the loading view. Workspace
+            // activation happens on the following update, after that state has
+            // participated in a rendered frame.
+            if (!readyStatePresented_)
+            {
+                readyStateAwaitingPresentation_ = true;
+                return;
+            }
             if (!snapshot->readySession.has_value())
             {
                 state_.hasFailed = true;
@@ -309,6 +331,9 @@ class ProjectLoadingScreen final : public GuiScreen
     std::optional<ProjectCreationOperationId> creationOperation_;
     std::optional<ProjectOpenOperationHandle> openOperation_;
     std::unique_ptr<Log::LogContext> logCtx_;
+    bool hasPresentedLoadingView_ = false;
+    bool readyStateAwaitingPresentation_ = false;
+    bool readyStatePresented_ = false;
 };
 } // namespace
 

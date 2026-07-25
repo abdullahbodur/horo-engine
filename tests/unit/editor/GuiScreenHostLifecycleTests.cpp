@@ -18,122 +18,130 @@
 
 namespace Horo::Editor::Theme
 {
-struct Fonts;
+    struct Fonts;
 }
 
 namespace
 {
-using namespace Horo;
-using namespace Horo::Editor;
+    using namespace Horo;
+    using namespace Horo::Editor;
 
-struct ScreenStats
-{
-    int enters = 0;
-    int leaves = 0;
-    int destructions = 0;
-};
-
-class RecordingScreen final : public GuiScreen
-{
-  public:
-    explicit RecordingScreen(ScreenStats &stats) : stats_(stats)
+    struct ScreenStats
     {
-    }
+        int enters = 0;
+        int leaves = 0;
+        int destructions = 0;
+    };
 
-    ~RecordingScreen() override
+    class RecordingScreen final : public GuiScreen
     {
-        ++stats_.destructions;
-    }
+    public:
+        explicit RecordingScreen(ScreenStats& stats) : stats_(stats)
+        {
+        }
 
-    [[nodiscard]] ScreenId Id() const override
+        ~RecordingScreen() override
+        {
+            ++stats_.destructions;
+        }
+
+        [[nodiscard]] ScreenId Id() const override
+        {
+            return 1;
+        }
+
+        [[nodiscard]] Result<void> OnEnter(const GuiRoute&) override
+        {
+            ++stats_.enters;
+            return Result<void>::Success();
+        }
+
+        void OnUpdate(float) override
+        {
+        }
+
+        void Draw(const GuiContentRegion&) override
+        {
+        }
+
+        [[nodiscard]] LeaveDecision CanLeave(const LeaveTarget&) const override
+        {
+            return {.disposition = LeaveDisposition::Allow, .requirement = std::nullopt};
+        }
+
+        [[nodiscard]] Result<LeaveDecision> ResolveLeave(const LeaveTarget&, const LeaveResolution&) override
+        {
+            return Result<LeaveDecision>::Success({
+                .disposition = LeaveDisposition::Allow, .requirement = std::nullopt
+            });
+        }
+
+        void OnLeave() override
+        {
+            ++stats_.leaves;
+        }
+
+    private:
+        ScreenStats& stats_;
+    };
+
+    TEST_CASE("Shutdown Leaves Once Destroys Screen And Revokes Services", "[unit][editor]")
     {
-        return 1;
+        EngineDataBus engineEvents;
+        EditorDataBus editorEvents;
+        Input::InputRouter input;
+        JobSystem jobs{JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8}};
+        ProjectCreationService creation{jobs, engineEvents};
+        LocalizationService localization{LocaleTag{"en-US"}};
+        ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
+        EditorSettingsService settings{DefaultEditorSettings(), configuration, editorEvents, localization};
+        EditorModalHost modals{editorEvents, input};
+        const Theme::Fonts& fonts = *reinterpret_cast<const Theme::Fonts*>(static_cast<std::uintptr_t>(1));
+        ThemeContext theme{fonts};
+        EditorSettingsSnapshot settingsSnapshot = settings.Snapshot();
+        EditorGuiContext gui{engineEvents, editorEvents, localization, theme, settingsSnapshot};
+        RendererAvailabilitySnapshot renderers{
+            {RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"
+        };
+        ScreenStats stats;
+        ScreenRegistry screens;
+        screens.Register(GuiRouteKind::Welcome, [](const EditorServiceRegistry& services, const GuiRoute&)
+        {
+            return std::make_unique<RecordingScreen>(services.Get<ScreenStats>());
+        });
+        WorkspacePanelRegistry panels;
+
+        GuiScreenHost host{
+            gui, modals, settings, localization, engineEvents,
+            creation, input, renderers, std::move(screens), std::move(panels)
+        };
+        REQUIRE((stats.enters == 0));
+        REQUIRE((host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasError()));
+        host.Services().Register(stats);
+        REQUIRE((host.Start(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasValue()));
+        REQUIRE((stats.enters == 1));
+        REQUIRE((!host.Services().Empty()));
+
+        const Result<void> invalidRoute = host.Navigate(GuiRoute{
+            GuiRouteKind::Welcome, ProjectCreationRouteParameters{}
+        });
+        REQUIRE((invalidRoute.HasError()));
+        REQUIRE((invalidRoute.ErrorValue().domain.Value() == "horo.editor.screens"));
+        REQUIRE((invalidRoute.ErrorValue().code.Value() == "navigation.invalid_route_parameters"));
+
+        host.Shutdown();
+        REQUIRE((host.IsShutdown()));
+        REQUIRE((stats.leaves == 1));
+        REQUIRE((stats.destructions == 1));
+        REQUIRE((host.Services().Empty()));
+
+        host.Shutdown();
+        REQUIRE((stats.leaves == 1));
+        REQUIRE((stats.destructions == 1));
+        const Result<void> navigation = host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}});
+        REQUIRE((navigation.HasError()));
+        REQUIRE((navigation.ErrorValue().domain.Value() == "horo.editor.screens"));
+        REQUIRE((navigation.ErrorValue().code.Value() == "navigation.host_shutdown"));
+        jobs.Shutdown(ShutdownPolicy::Cancel);
     }
-
-    [[nodiscard]] Result<void> OnEnter(const GuiRoute &) override
-    {
-        ++stats_.enters;
-        return Result<void>::Success();
-    }
-
-    void OnUpdate(float) override
-    {
-    }
-
-    void Draw(const GuiContentRegion &) override
-    {
-    }
-
-    [[nodiscard]] LeaveDecision CanLeave(const LeaveTarget &) const override
-    {
-        return {.disposition = LeaveDisposition::Allow, .requirement = std::nullopt};
-    }
-
-    [[nodiscard]] Result<LeaveDecision> ResolveLeave(const LeaveTarget &, const LeaveResolution &) override
-    {
-        return Result<LeaveDecision>::Success({.disposition = LeaveDisposition::Allow, .requirement = std::nullopt});
-    }
-
-    void OnLeave() override
-    {
-        ++stats_.leaves;
-    }
-
-  private:
-    ScreenStats &stats_;
-};
-
-TEST_CASE("Shutdown Leaves Once Destroys Screen And Revokes Services", "[unit][editor]")
-{
-    EngineDataBus engineEvents;
-    EditorDataBus editorEvents;
-    Input::InputRouter input;
-    JobSystem jobs{JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8}};
-    ProjectCreationService creation{jobs, engineEvents};
-    LocalizationService localization{LocaleTag{"en-US"}};
-    ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
-    EditorSettingsService settings{DefaultEditorSettings(), configuration, editorEvents, localization};
-    EditorModalHost modals{editorEvents, input};
-    const Theme::Fonts &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
-    ThemeContext theme{fonts};
-    EditorSettingsSnapshot settingsSnapshot = settings.Snapshot();
-    EditorGuiContext gui{engineEvents, editorEvents, localization, theme, settingsSnapshot};
-    RendererAvailabilitySnapshot renderers{
-        {RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"};
-    ScreenStats stats;
-    ScreenRegistry screens;
-    screens.Register(GuiRouteKind::Welcome, [](const EditorServiceRegistry &services, const GuiRoute &) {
-        return std::make_unique<RecordingScreen>(services.Get<ScreenStats>());
-    });
-    WorkspacePanelRegistry panels;
-
-    GuiScreenHost host{gui,      modals, settings,  localization,       engineEvents,
-                       creation, input,  renderers, std::move(screens), std::move(panels)};
-    REQUIRE((stats.enters == 0));
-    REQUIRE((host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasError()));
-    host.Services().Register(stats);
-    REQUIRE((host.Start(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasValue()));
-    REQUIRE((stats.enters == 1));
-    REQUIRE((!host.Services().Empty()));
-
-    const Result<void> invalidRoute = host.Navigate(GuiRoute{GuiRouteKind::Welcome, ProjectCreationRouteParameters{}});
-    REQUIRE((invalidRoute.HasError()));
-    REQUIRE((invalidRoute.ErrorValue().domain.Value() == "horo.editor.screens"));
-    REQUIRE((invalidRoute.ErrorValue().code.Value() == "navigation.invalid_route_parameters"));
-
-    host.Shutdown();
-    REQUIRE((host.IsShutdown()));
-    REQUIRE((stats.leaves == 1));
-    REQUIRE((stats.destructions == 1));
-    REQUIRE((host.Services().Empty()));
-
-    host.Shutdown();
-    REQUIRE((stats.leaves == 1));
-    REQUIRE((stats.destructions == 1));
-    const Result<void> navigation = host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}});
-    REQUIRE((navigation.HasError()));
-    REQUIRE((navigation.ErrorValue().domain.Value() == "horo.editor.screens"));
-    REQUIRE((navigation.ErrorValue().code.Value() == "navigation.host_shutdown"));
-    jobs.Shutdown(ShutdownPolicy::Cancel);
-}
 } // namespace

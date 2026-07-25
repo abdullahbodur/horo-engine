@@ -58,7 +58,7 @@ namespace Horo::Application
          * @param release Exact release identity.
          * @return Stable pointer owned by this registry, or null when unknown.
          */
-        [[nodiscard]] const ReleaseCompatibilityDecision* Find(EngineReleaseVersion release) const noexcept;
+        [[nodiscard]] const ReleaseCompatibilityDecision* Find(const EngineReleaseVersion& release) const noexcept;
         /** @brief Returns immutable decisions in deterministic SemVer order. */
         [[nodiscard]] std::span<const ReleaseCompatibilityDecision> Decisions() const noexcept;
 
@@ -140,7 +140,7 @@ namespace Horo::Application
          * @param currentRelease Exact running engine release.
          * @param proofVerifier Trust boundary that outlives the inspector.
          */
-        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry, EngineReleaseVersion currentRelease,
+        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry, const EngineReleaseVersion& currentRelease,
                                       const ICompatibilityProofVerifier& proofVerifier) noexcept;
 
         /**

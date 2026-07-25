@@ -589,7 +589,7 @@ class GameplayInputFrameBuilder
 class GameplayInputRecording
 {
   public:
-    void Record(GameplayInputFrame frame);
+    void Record(const GameplayInputFrame& frame);
     void ResetReplay() noexcept;
     [[nodiscard]] std::optional<GameplayInputFrame> Next();
     [[nodiscard]] std::span<const GameplayInputFrame> Frames() const noexcept { return frames_; }

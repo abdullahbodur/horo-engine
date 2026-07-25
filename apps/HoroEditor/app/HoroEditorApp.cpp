@@ -23,6 +23,7 @@
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Platform.h"
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
@@ -107,8 +108,9 @@ class PreparedAssetRegistryState final : public IPreparedProjectOpenDerivedState
         if (validated.status == Assets::AssetRegistryBuildStatus::Failed)
             return Result<std::string>::Failure(
                 MakeError(ProjectOpenErrors::DerivedStateFailed, "Asset registry candidate was rejected."));
-        const auto saved = Assets::AssetIndexStore::SaveAtomically(projectRoot_ / ".horo/asset_index.json",
-                                                                   validationRegistry.Snapshot());
+        const auto saved = Assets::AssetIndexStore::SaveAtomically(
+            projectRoot_ / std::filesystem::path{ProjectLayout::AssetIndexPath},
+            validationRegistry.Snapshot());
         if (saved.HasError())
             return Result<std::string>::Failure(saved.ErrorValue());
         const Assets::AssetRegistryBuildReport report = registry_.Publish(std::move(candidate_));
@@ -259,6 +261,16 @@ struct EditorTextures
                                                  Theme::FontPx::SansCompact, &compactCfg, ranges);
     f.sansEmphasis = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/inter/InterVariable.ttf").c_str(),
                                                   Theme::FontPx::SansEmphasis, &emphasisCfg, ranges);
+
+    // Material Symbols icon font — only the codepoints we need for editor UI icons.
+    // Covers: error(U+E000), warning(U+E002), check_circle(U+E86C), circle(U+EF4A)
+    static const ImWchar iconRanges[] = {0xE000, 0xE003, 0xE86C, 0xE86D, 0xEF4A, 0xEF4B, 0};
+    ImFontConfig iconCfg{};
+    iconCfg.OversampleH = 3;
+    iconCfg.OversampleV = 2;
+    iconCfg.RasterizerDensity = rasterizerDensity;
+    f.icon = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/MaterialSymbolsOutlined.ttf").c_str(),
+                                          Theme::FontPx::Icon, &iconCfg, iconRanges);
     if (f.sans)
         io.FontDefault = f.sans;
     return f;
@@ -746,6 +758,17 @@ class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipa
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
             p_->inputBackend.ProcessEvent(event);
+
+            // SDL3 drag-and-drop: forward dropped file paths to the active import modal.
+            if (event.type == SDL_EVENT_DROP_FILE)
+            {
+                const char *droppedPath = event.drop.data;
+                if (droppedPath && droppedPath[0])
+                {
+                    screenHost_->HandleDropFiles({std::filesystem::path(droppedPath)});
+                }
+            }
+
             if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                                                  event.window.windowID == SDL_GetWindowID(p_->window)))
             {

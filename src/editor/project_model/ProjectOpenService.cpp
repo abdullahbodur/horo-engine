@@ -2,6 +2,7 @@
 
 #include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Application/ProjectMigrationCatalog.h"
+#include "Horo/Foundation/Logging/Logger.h"
 #include "editor/EditorServiceErrors.h"
 #include "editor/project_model/ProjectMetadata.h"
 #include "editor/project_model/RendererAvailability.h"
@@ -320,6 +321,8 @@ Result<ProjectOpenOperationHandle> ProjectOpenService::Start(ProjectOpenRequest 
     }
 
     const ProjectOpenOperationId id{state_->nextOperation++};
+    LOG_INFO("editor.project_open", "Project open admitted operation=%llu.",
+             static_cast<unsigned long long>(id.value));
     ProjectOpenProgressSnapshot snapshot{.operationId = id,
                                          .phase = ProjectOpenPhase::Inspecting,
                                          .outcome = ProjectOpenOutcome::Running,
@@ -335,6 +338,8 @@ Result<ProjectOpenOperationHandle> ProjectOpenService::Start(ProjectOpenRequest 
         JobDescriptor{.parentCancellation = cancellation},
         [state = state_.get(), completion, requestCopy, id](const CancellationToken &jobCancellation) -> Result<void> {
             const auto fail = [&](Error error) -> Result<void> {
+                LOG_ERROR("editor.project_open", "Project open failed operation=%llu code=%s.",
+                          static_cast<unsigned long long>(id.value), error.code.Value().c_str());
                 std::lock_guard lock(completion->mutex);
                 completion->error = error;
                 return Result<void>::Failure(std::move(error));
@@ -356,6 +361,9 @@ Result<ProjectOpenOperationHandle> ProjectOpenService::Start(ProjectOpenRequest 
             SetPhase(completion, ProjectOpenPhase::ValidatingCompatibility);
             ProjectOpenPreflightSnapshot preflight = state->preflight.Inspect(requestCopy.projectRoot);
             ProjectCompatibilitySnapshot compatibility = preflight.compatibility;
+            LOG_DEBUG("editor.project_open", "Compatibility classified operation=%llu status=%d migration_plan=%s.",
+                      static_cast<unsigned long long>(id.value), static_cast<int>(compatibility.status),
+                      preflight.migrationPlan.has_value() ? "yes" : "no");
             std::optional<ProjectMigrationPlan> plan;
             bool cancellationDeferred{};
             if (compatibility.status == ProjectCompatibilityStatus::CompatibleReleaseLine &&
@@ -380,6 +388,13 @@ Result<ProjectOpenOperationHandle> ProjectOpenService::Start(ProjectOpenRequest 
                 if (target == nullptr)
                     return fail(OpenError(ProjectOpenErrors::MigrationPlanMissing));
                 plan.emplace(std::move(*preflight.migrationPlan));
+                const std::string sourceVersion = FormatHoroVersion(compatibility.metadata->horoVersion.value);
+                const std::string targetVersion = FormatHoroVersion(target->release.value);
+                LOG_INFO("editor.project_open",
+                         "Automatic migration selected operation=%llu source=%s target=%s.",
+                         static_cast<unsigned long long>(id.value), sourceVersion.c_str(), targetVersion.c_str());
+                LOG_DEBUG("editor.project_open", "Migration selection aggregate operation=%llu definitions=%zu.",
+                          static_cast<unsigned long long>(id.value), plan->definitions.size());
                 SetPhase(completion, ProjectOpenPhase::Migrating);
                 if (state->jobs.WorkerCount() < 2)
                     return fail(OpenError(ProjectOpenErrors::WorkerCapacityInsufficient));
@@ -444,6 +459,8 @@ Result<void> ProjectOpenService::RequestCancel(const ProjectOpenOperationId oper
     if (!state_->operation.has_value() || state_->operation->snapshot.operationId != operation)
         return Result<void>::Failure(OpenError(ProjectOpenErrors::NotFound));
     state_->operation->cancellation.RequestCancellation();
+    LOG_WARN("editor.project_open", "Project open cancellation requested operation=%llu.",
+             static_cast<unsigned long long>(operation.value));
     if (state_->operation->job.has_value())
         static_cast<void>(state_->jobs.RequestCancel(state_->operation->job->Id()));
     return Result<void>::Success();
@@ -500,6 +517,9 @@ void ProjectOpenService::PumpOwnerThread()
                                                                                      : ProjectOpenOutcome::Failed;
         snapshot.progress = 1.0F;
         snapshot.diagnostic = error.has_value() ? std::move(error) : job.error;
+        if (snapshot.outcome == ProjectOpenOutcome::Cancelled)
+            LOG_WARN("editor.project_open", "Project open cancelled operation=%llu.",
+                     static_cast<unsigned long long>(snapshot.operationId.value));
         return;
     }
     snapshot.projectName = result->metadata.name;
@@ -509,6 +529,9 @@ void ProjectOpenService::PumpOwnerThread()
         snapshot.phase = ProjectOpenPhase::Cancelled;
         snapshot.outcome = ProjectOpenOutcome::Cancelled;
         snapshot.progress = 1.0F;
+        LOG_WARN("editor.project_open", "Project open cancelled after safe boundary operation=%llu deferred=%s.",
+                 static_cast<unsigned long long>(snapshot.operationId.value),
+                 result->cancellationDeferred ? "yes" : "no");
         return;
     }
 
@@ -540,6 +563,9 @@ void ProjectOpenService::PumpOwnerThread()
         snapshot.phase = ProjectOpenPhase::RequiresRendererRestart;
         snapshot.outcome = ProjectOpenOutcome::RequiresRendererRestart;
         snapshot.progress = 1.0F;
+        LOG_WARN("editor.project_open", "Project open requires renderer restart operation=%llu backend=%s.",
+                 static_cast<unsigned long long>(snapshot.operationId.value),
+                 snapshot.requiredRendererBackend.c_str());
         return;
     }
     if (preflight.status != ProjectOpenPreflightStatus::Ready)
@@ -574,6 +600,8 @@ void ProjectOpenService::PumpOwnerThread()
     snapshot.phase = ProjectOpenPhase::ReadyToActivate;
     snapshot.outcome = ProjectOpenOutcome::ReadyToActivate;
     snapshot.progress = 1.0F;
+    LOG_INFO("editor.project_open", "Project open ready operation=%llu backend=%s.",
+             static_cast<unsigned long long>(snapshot.operationId.value), snapshot.requiredRendererBackend.c_str());
 }
 
 void ProjectOpenService::Shutdown() noexcept

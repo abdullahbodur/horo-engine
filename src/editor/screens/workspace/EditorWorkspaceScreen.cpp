@@ -61,6 +61,7 @@ namespace Horo::Editor
                 std::string projectRoot = activation.Candidate().projectRoot.string();
 
                 controller_ = std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_);
+                host_.SetCurrentProjectRoot(controller_->ViewModel().projectRoot);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
                 viewportSceneState_.Replace(controller_->ViewportScene());
                 publishedSceneRevision_ = controller_->ViewportScene().documentRevision;

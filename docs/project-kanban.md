@@ -1,5 +1,6 @@
 # Horo Engine Project Kanban
 
+
 Bu dosya Horo Engine'in mimari hedefleri ile gerçek repository durumunu aynı
 yerde izlemek için kullanılan yaşayan kanbandır. Normatif davranışın kaynağı
 [`docs/architecture/`](./architecture/README.md) belgeleridir; bu dosya o
@@ -11,7 +12,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor                                            | İncelenecek                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Bağımlı                                                                                                                                                                                                                                                                       | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 |------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [MIG-001 · Project migration architecture](#mig-001) | [MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [AST-001 · Asset pipeline temeli](#ast-001)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
+| [AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001D · Modular import ve GUI modal](#ast-001d) | [FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007)<br>[AST-001C · headless-null cooking ve cache](#ast-001c) |
 
 ## Durum Sözleşmesi
 
@@ -65,16 +66,21 @@ sonraki ticket kapsamındadır.
 
 ### MIG-001 — Project migration architecture
 
-- **Durum:** Yapılıyor
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Tek Horo sürümü, persistent-contract kararları, deterministic
   migration catalog/pipeline, staged transaction/recovery ve project-open
   entegrasyonunu tek uygulama mimarisi altında kur.
 - **Alt işler:** [MIG-001A](#mig-001a), [MIG-001B](#mig-001b),
-  [MIG-001D](#mig-001d), [MIG-001E](#mig-001e) ve ilk production adoption
-  dilimi [MIG-001F-01](#mig-001f-01) review aşamasındadır; parent MIG-001F
-  sonraki authored subsystem dönüşümleri için açık kalır.
+  [MIG-001C](#mig-001c), [MIG-001D](#mig-001d), [MIG-001E](#mig-001e) ve ilk
+  production adoption dilimi [MIG-001F-01](#mig-001f-01) local olarak
+  tamamlandı; parent MIG-001F sonraki authored subsystem dönüşümleri için açık
+  kalır.
 - **Mimari:** [Project Versioning and Migration](./architecture/foundation/project-versioning-and-migration.md).
+- **Son doğrulama:** 2026-07-23 — macOS/AppleClang targeted migration matrisi
+  24/24, backend integration 2/2, generator testleri 6/6 ve canonical build
+  geçti. Full local suite 326/328; iki kalan failure migration
+  dışındaki mevcut `ProjectCreationService` timeout testleridir.
 
 [↑ Kanbana dön](#kanban)
 
@@ -82,7 +88,7 @@ sonraki ticket kapsamındadır.
 
 ### MIG-001A — Version ve compatibility foundation
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** `HoroEngine::Application` içinde canonical SemVer, strong release ve
   contract-baseline kimlikleri, generated persistent-contract catalog ve bounded
@@ -98,7 +104,8 @@ sonraki ticket kapsamındadır.
 - **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 54/54; OpenGL/Metal
   smoke ve first-frame; GUI-off Application/EditorServices build; standalone
   Application header; compatibility catalog generator ve targeted 5/5 geçti.
-  Linux/GCC ile Windows/MSVC kapıları bekleniyor.
+  2026-07-23 local migration integration ve generator kapıları tekrar geçti;
+  cross-platform takip [TST-001](#tst-001) kapsamındadır.
 
 [↑ Kanbana dön](#kanban)
 
@@ -106,7 +113,7 @@ sonraki ticket kapsamındadır.
 
 ### MIG-001B — Migration registry ve planner
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Otomatik discovered migration definitions, typed pipeline stages,
   deterministic chain planning ve verified dry-run kur.
@@ -119,7 +126,9 @@ sonraki ticket kapsamındadır.
 - **Bağımlılık:** MIG-001A ve [FND-001A](#fnd-001a).
 - **Son doğrulama:** 2026-07-18 — macOS/AppleClang canonical 56/56,
   GUI-off targeted 5/5, generated catalog/release gate ve standalone
-  Application header kapıları geçti; Linux/GCC ve Windows/MSVC bekleniyor.
+  Application header kapıları geçti. 2026-07-23 production catalog/planner,
+  backend integration ve generator kapıları tekrar geçti; cross-platform takip
+  [TST-001](#tst-001) kapsamındadır.
 
 <a id="fnd-001a"></a>
 
@@ -156,7 +165,7 @@ sonraki ticket kapsamındadır.
 
 ### MIG-001C — Transaction ve recovery
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Özet:** Mutation lock, same-filesystem staging, durable journal, ordered
   publish, rollback/recovery ve migration history uygula.
 - **Kanıt:** `ProjectMigrationTransactionService`, sparse
@@ -169,15 +178,17 @@ sonraki ticket kapsamındadır.
   Application/Platform/EditorServices header kapıları, targeted 5/5 ve
   display/GPU hariç canonical 53/53 geçti. Sandbox içindeki dört display/GPU
   testi macOS UI servislerine erişemediği için bu koşuda doğrulanmadı.
-- **Bağımlılık:** MIG-001B ve PRJ-001A. Linux/GCC ile Windows/MSVC filesystem
-  kapıları ve bütün durable boundary’leri kapsayan subprocess crash-injection
-  matrisi bekleniyor.
+- **Bağımlılık:** MIG-001B ve PRJ-001A.
+- **Local kapanış:** 2026-07-23 — storage admission, pre-publish cancellation,
+  committed finalization ve unrecoverable fail-closed regressions eklendi;
+  transaction matrisi 8/8 geçti. Gerçek process-kill ve cross-platform
+  filesystem hardening [TST-001](#tst-001) kapsamındadır.
 
 <a id="mig-001d"></a>
 
 ### MIG-001D — Project-open entegrasyonu
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Özet:** Inspection, recovery, migration, derived rebuild, renderer preflight
   ve workspace activation'ı tek `ProjectOpenService` operasyonunda birleştir.
 - **Kanıt:** Operation-owned asynchronous open job, automatic recovery, patch
@@ -195,15 +206,18 @@ sonraki ticket kapsamındadır.
   doğrulanmadı. Frozen `0.0.1` fixture’ının production catalog, durable
   transaction, derived-state install ve single-use session candidate üzerinden
   `0.1.0`’a açıldığı; ikinci açılışta yeni receipt üretmediği ayrıca doğrulandı.
-- **Kalan:** Linux/GCC, Windows/MSVC, subprocess crash matrix ve manuel loading
-  interaction doğrulaması.
-- **Bağımlılık:** MIG-001C üç platform kapısı tamamlanana kadar kapanış bağımlılığıdır.
+- **Local kapanış:** 2026-07-23 — frozen `0.0.1` fixture production preflight,
+  planner, transaction ve backend `ProjectOpenService` hattından `0.1.0`'a
+  yükseltildi; unknown data, receipt/history binding, single-use session ve
+  second-open no-op doğrulandı. GUI/GPU kanıtı bu backend kontratının kapanış
+  koşulu değildir.
+- **Bağımlılık:** MIG-001C.
 
 <a id="mig-001e"></a>
 
 ### MIG-001E — Welcome compatibility görünümü
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Özet:** Project kartlarında typed Horo version/status göster ve bounded
   background inspection/cache projection ekle.
 - **Kanıt:** `RecentProjectCompatibilityProjection`, host-owned
@@ -214,8 +228,9 @@ sonraki ticket kapsamındadır.
   OpenGL-only ve Metal-only build’leri ile targeted Welcome/inspection service
   testleri geçti; cached/refreshing/fresh,
   current/migratable/corrupt ve stale-generation yolları kapsandı.
-- **Kalan:** Narrow/long-text görsel fixture, Linux/GCC ve Windows/MSVC kapıları.
-- **Bağımlılık:** MIG-001A ve MIG-001D üç-platform kapanış kapıları.
+- **Kalan hardening:** Narrow/long-text görsel fixture ve cross-platform kapılar
+  [TST-001](#tst-001) kapsamında izlenir; local migration foundation'ı bloklamaz.
+- **Bağımlılık:** MIG-001A ve MIG-001D.
 
 <a id="mig-001f"></a>
 
@@ -230,7 +245,7 @@ sonraki ticket kapsamındadır.
 
 ### MIG-001F-01 — Project settings migration adoption
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Özet:** Frozen `0.0.1` project settings contract’ını production
   `core.project_settings.compression_defaults` definition’ı ile `0.1.0`
   contract’ına yükselt.
@@ -241,11 +256,11 @@ sonraki ticket kapsamındadır.
   `src/application/project_migrations/definitions/0.1.0/`, frozen
   `tests/fixtures/projects/horo_0_0_1_compression/`, production catalog unit
   testleri ve durable `HoroProjectOpenServiceTests` E2E akışı.
-- **Son doğrulama:** 2026-07-19 — macOS/AppleClang catalog/release gate,
-  migration unit/component, transaction/project-open E2E ve idempotent second
-  open testleri geçti.
-- **Kalan:** Cross-platform deterministic fixture output ve crash-injection
-  matrisi parent MIG-001C/TST-001 kapılarında kaydedilecek.
+- **Son doğrulama:** 2026-07-23 — macOS/AppleClang production catalog ve backend
+  integration testleri; defaults, supported/invalid values, unknown JSON,
+  authoritative-byte preservation, receipt/history binding ve idempotent second
+  open dahil 24/24 targeted test geçti. Cross-platform deterministic output ve
+  process-kill hardening [TST-001](#tst-001) altında izlenir.
 
 [↑ Kanbana dön](#kanban)
 
@@ -509,20 +524,15 @@ sonraki ticket kapsamındadır.
 
 ### AST-001 — Asset pipeline temeli
 
-- **Durum:** Hazır
+- **Durum:** Tamamlandı
 - **Öncelik:** P1
 - **Özet:** Stable asset ID, registry, importer, cooker, cache, runtime provider
-  ve hot-reload akışının minimal çalışan dikey dilimini kur.
+  ve hot-reload akışını birbirinden ayrılmış, doğrulanabilir dilimlerle kur.
 - **Kabul:** Source path runtime identity değildir; malformed input, cache miss,
-  cancellation ve atomic publish test edilir; headless cook mümkündür.
+  cancellation ve atomic publish test edilir; `headless-null` target cook mümkündür.
+- **Son doğrulama:** 2026-07-23. AST-001A (registry/provider baseline) Tamamlandı, AST-001B (runtime-scene) Tamamlandı, AST-001C (headless-null cooking/cache) Tamamlandı. 63/63 asset tests pass. E2E integration: fixture OBJ+sidecar → registry → cook → cache → generation → provider.
 - **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md).
-- **Alt işler:** [AST-001A](#ast-001a) stable asset ID/provider/registry kontratı
-  ve [AST-001B](#ast-001b) runtime-scene resolution tamamlandı. Importer/cooker,
-  cache ve archive ayrı sonraki dilimlerdir.
-- **Bağımlılık:** AST-001A için [RUN-001](#run-001); AST-001B için
-  [SCN-001](#scn-001) ve AST-001A.
-- **Mevcut boşluk:** Importer, cooker, cache, archive, hot reload ve Content
-  Browser henüz yoktur.
+- **Alt işler:** [AST-001A](#ast-001a), [AST-001B](#ast-001b), [AST-001C](#ast-001c) — üçü de Tamamlandı.
 
 [↑ Kanbana dön](#kanban)
 
@@ -590,6 +600,35 @@ sonraki ticket kapsamındadır.
 
 [↑ Kanbana dön](#kanban)
 
+<a id="ast-001c"></a>
+
+### AST-001C — `headless-null` target cooking ve content-addressed cache
+
+- **Durum:** Tamamlandı
+- **Öncelik:** P1
+- **Özet:** Target-neutral generic cook operasyonunda yalnız `headless-null`
+  target'ını kabul eden bounded cooking, versioned artifact, content-addressed
+  immutable cache ve atomic generation publication dilimini host-owned typed
+  cooker catalogu üzerinden kur.
+- **Kabul:** `headless-null` gerçek source/sidecar fixture'ını cook eder; aynı
+  input byte-identical artifact üretir ve ikinci çalıştırmada doğrulanmış cache
+  hit alınır. Malformed artifact, oversize input/output, missing cooker, cache
+  corruption ve cancellation typed hatalardır. Failed/cancelled run aktif
+  generation'ı korur; mevcut `FilesystemAssetProvider` yayınlanan artifact'ı
+  yükler. Built-in ve trusted extension cooker'ları aynı validated catalog
+  yolundan geçer; versioned C ABI adapter'ı external contribution fixture'ı ile
+  doğrulanarak dilim dış katkıya hazır olur.
+- **Son doğrulama:** 2026-07-23. `ctest -R "HoroAsset|HoroCook|HoroHeadless|AssetCookInt"` → 63/63 pass. End-to-end integration: fixture OBJ+sidecar → registry → cook (cache hit on 2nd run) → generation → FilesystemAssetProvider → artifact decode verificatio n. C ABI adapter deferred to Phase B.
+- **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md) ve
+  [Extension System](./architecture/extensions/plugin-system.md).
+- **Bağımlılık:** [AST-001A](#ast-001a), [AST-001B](#ast-001b) ve
+  [FND-001A](#fnd-001a).
+- **Kapsam dışı (Phase A):** Importer-sidecar mutation, archive, hot reload,
+  shader compiler, GPU upload, editor UI ve CLI/MCP adapters. C ABI external
+  cooker fixture.
+
+[↑ Kanbana dön](#kanban)
+
 <a id="mat-001"></a>
 
 ### MAT-001 — Material ve shader temeli
@@ -605,7 +644,29 @@ sonraki ticket kapsamındadır.
 
 [↑ Kanbana dön](#kanban)
 
-<a id="edt-002"></a>
+<a id="ast-001d"></a>
+
+### AST-001D — Modular import ve Asset Import modal
+
+- **Durum:** Yapılıyor
+- **Öncelik:** P1
+- **Özet:** Import pipeline'ını modular importer katalogu, transactional commit
+  boundary ve GUI import modal ile tamamla.
+- **Kabul:** Source file → importer catalog → import operation → registry → cook
+  → provider akışı 76/76 test ile doğrulandı. Importer katalogu snapshot-based
+  immutable lookup yapar. Import operation headless olarak çalışır. HTML design
+  güncellendi. GUI modal implementation pending.
+- **Son doğrulama:** 2026-07-23. Backend complete: importer catalog (9 tests),
+  import operation (3 tests), full pipeline integration (1 test). 76 total asset
+  tests pass. GUI modal (ImGui) requires full editor stack.
+- **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md),
+  [Asset Import Modal HTML](./architecture/runtime/asset-import-modal.html).
+- **Bağımlılık:** [AST-001C](#ast-001c).
+- **Kapsam dışı:** Editor UI modal ImGui implementation (ayrı dilim).
+
+[↑ Kanbana dön](#kanban)
+
+### MAT-001 — Material ve shader temeli
 
 ### EDT-002 — Inspector typed authoring
 

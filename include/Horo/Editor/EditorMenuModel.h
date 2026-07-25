@@ -23,6 +23,7 @@ enum class EditorMenuAction
     Undo,
     Redo,
     OpenEditorSettings,
+    ImportAssets,
     ExitApplication,
     CreatePrimitive,
 };

@@ -1,142 +1,168 @@
 #include "EditorUiTestSurface.h"
 
+#include "InteractiveEditorUiTestRenderer.h"
 #include "editor/renderer/opengl/EditorGuiRendererOpenGL.h"
+#include "editor/renderer/opengl/EditorViewportRendererOpenGL.h"
+#include "editor/renderer/opengl/SdlOpenGLPresentationPort.h"
+#include "runtime/renderer/modules/opengl/OpenGLBackendModule.h"
 
 #include <SDL3/SDL.h>
-#include <glad/gl.h>
 #include <imgui_impl_sdl3.h>
 
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace Horo::Tests
 {
-namespace
-{
-[[nodiscard]] std::runtime_error MakeSdlError(const char *operation)
-{
-    return std::runtime_error(std::string{operation} + ": " + SDL_GetError());
-}
-
-class InteractiveOpenGlEditorUiTestSurface final : public IEditorUiTestSurface
-{
-  public:
-    ~InteractiveOpenGlEditorUiTestSurface() override
+    namespace
     {
-        Shutdown();
-    }
-
-    void Initialize(ImGuiContext &context) override
-    {
-        if (initialized_)
-            throw std::logic_error("Interactive UI test surface is already initialized.");
-        ImGui::SetCurrentContext(&context);
-
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-            throw MakeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO) failed");
-        ownsVideoSubsystem_ = true;
-        if (!SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) || !SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24) ||
-            !SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8) ||
-            !SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE) ||
-            !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
-            !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2))
+        [[nodiscard]] std::runtime_error MakeSdlError(const char* operation)
         {
-            throw MakeSdlError("SDL_GL_SetAttribute failed");
+            return std::runtime_error(std::string{operation} + ": " + SDL_GetError());
         }
 
-        window_ = SDL_CreateWindow("Horo Editor UI Test", 1280, 800,
-                                   SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-        if (window_ == nullptr)
-            throw MakeSdlError("SDL_CreateWindow failed");
-        context_ = SDL_GL_CreateContext(window_);
-        if (context_ == nullptr)
-            throw MakeSdlError("SDL_GL_CreateContext failed");
-        if (!SDL_GL_MakeCurrent(window_, context_))
-            throw MakeSdlError("SDL_GL_MakeCurrent failed");
-        if (gladLoadGL(SDL_GL_GetProcAddress) == 0)
-            throw std::runtime_error("Unable to load OpenGL functions for the interactive UI test surface.");
-        static_cast<void>(SDL_GL_SetSwapInterval(1));
-
-        renderer_ = std::make_unique<Editor::EditorGuiRendererOpenGL>(*window_, context_);
-        if (const auto initialized = renderer_->Initialize(); initialized.HasError())
-            throw std::runtime_error(initialized.ErrorValue().message);
-        initialized_ = true;
-    }
-
-    [[nodiscard]] bool BeginFrame() override
-    {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
+        [[noreturn]] void ThrowRendererError(const Error& error)
         {
-            ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT ||
-                (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window_)))
+            throw std::runtime_error(error.message);
+        }
+
+        class InteractiveOpenGlEditorUiTestSurface final : public IEditorUiTestSurface
+        {
+        public:
+            ~InteractiveOpenGlEditorUiTestSurface() override
             {
-                return false;
+                Shutdown();
             }
-        }
-        if (const auto begun = renderer_->BeginFrame(); begun.HasError())
-            throw std::runtime_error(begun.ErrorValue().message);
-        return true;
-    }
 
-    void Present() override
+            void Initialize(ImGuiContext& context) override
+            {
+                if (initialized_)
+                    throw std::logic_error("Interactive OpenGL UI-test surface is already initialized.");
+                ImGui::SetCurrentContext(&context);
+
+                if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+                    throw MakeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO) failed");
+                ownsVideoSubsystem_ = true;
+                if (!SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) || !SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24) ||
+                    !SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8))
+                {
+                    throw MakeSdlError("SDL_GL_SetAttribute failed");
+                }
+
+                window_ = SDL_CreateWindow("Horo Editor UI Test — OpenGL", 1280, 800,
+                                           SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                if (window_ == nullptr)
+                    throw MakeSdlError("SDL_CreateWindow failed");
+
+                presentationPort_ = std::make_unique<Editor::SdlOpenGLPresentationPort>(*window_);
+                Render::RenderBackendRegistry registry;
+                const Result<void> registered = Render::RegisterOpenGLRenderBackend(registry, *presentationPort_);
+                if (registered.HasError())
+                    ThrowRendererError(registered.ErrorValue());
+                const Result<void> sealed = registry.Seal();
+                if (sealed.HasError())
+                    ThrowRendererError(sealed.ErrorValue());
+
+                auto frontend = Render::RenderFrontend::Create(
+                    registry, Render::RenderBackendId{"opengl"},
+                    Render::RenderBackendConfig{.requirePresentation = true,
+                                                .enableValidation = false,
+                                                .maxFramesInFlight = 2,
+                                                .presentMode = Render::PresentMode::Immediate});
+                if (frontend.HasError())
+                    ThrowRendererError(frontend.ErrorValue());
+
+                auto viewportRenderer = std::make_unique<Editor::EditorViewportRendererOpenGL>();
+                const Result<void> viewportInitialized = viewportRenderer->Initialize();
+                if (viewportInitialized.HasError())
+                    ThrowRendererError(viewportInitialized.ErrorValue());
+                auto guiRenderer =
+                    std::make_unique<Editor::EditorGuiRendererOpenGL>(*window_, presentationPort_->Context());
+                renderer_ = InteractiveEditorUiTestRenderer::Create(
+                    std::move(frontend).Value(), std::move(guiRenderer), std::move(viewportRenderer));
+                initialized_ = true;
+            }
+
+            [[nodiscard]] bool BeginFrame() override
+            {
+                SDL_Event event;
+                while (SDL_PollEvent(&event))
+                {
+                    ImGui_ImplSDL3_ProcessEvent(&event);
+                    if (event.type == SDL_EVENT_QUIT ||
+                        (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                         event.window.windowID == SDL_GetWindowID(window_)))
+                    {
+                        return false;
+                    }
+                }
+
+                int width = 0;
+                int height = 0;
+                if (!SDL_GetWindowSizeInPixels(window_, &width, &height))
+                    throw MakeSdlError("SDL_GetWindowSizeInPixels failed");
+                if (width <= 0 || height <= 0)
+                    return false;
+                renderer_->BeginFrame(
+                    {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)});
+                return true;
+            }
+
+            void Present() override
+            {
+                renderer_->Present();
+            }
+
+            void Shutdown() noexcept override
+            {
+                renderer_.reset();
+                presentationPort_.reset();
+                if (window_ != nullptr)
+                {
+                    SDL_DestroyWindow(window_);
+                    window_ = nullptr;
+                }
+                if (ownsVideoSubsystem_)
+                {
+                    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+                    ownsVideoSubsystem_ = false;
+                }
+                initialized_ = false;
+            }
+
+            [[nodiscard]] bool IsInteractive() const noexcept override
+            {
+                return true;
+            }
+
+            [[nodiscard]] Editor::IEditorViewportRenderer& ViewportRenderer() noexcept override
+            {
+                return renderer_->ViewportRenderer();
+            }
+
+            void RenderViewport(const Editor::EditorViewportSceneView scene) override
+            {
+                renderer_->RenderViewport(scene);
+            }
+
+            [[nodiscard]] std::string_view RendererName() const noexcept override
+            {
+                return "opengl";
+            }
+
+        private:
+            SDL_Window* window_{nullptr};
+            std::unique_ptr<Editor::SdlOpenGLPresentationPort> presentationPort_;
+            std::unique_ptr<InteractiveEditorUiTestRenderer> renderer_;
+            bool ownsVideoSubsystem_{false};
+            bool initialized_{false};
+        };
+    } // namespace
+
+    std::unique_ptr<IEditorUiTestSurface> CreateInteractiveOpenGlEditorUiTestSurface()
     {
-        int width = 0;
-        int height = 0;
-        if (!SDL_GetWindowSizeInPixels(window_, &width, &height))
-            throw MakeSdlError("SDL_GetWindowSizeInPixels failed");
-        glViewport(0, 0, width, height);
-        glClearColor(0.035F, 0.045F, 0.065F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT);
-        if (const auto rendered = renderer_->RenderDrawData(); rendered.HasError())
-            throw std::runtime_error(rendered.ErrorValue().message);
-        if (!SDL_GL_SwapWindow(window_))
-            throw MakeSdlError("SDL_GL_SwapWindow failed");
+        return std::make_unique<InteractiveOpenGlEditorUiTestSurface>();
     }
-
-    void Shutdown() noexcept override
-    {
-        if (renderer_ != nullptr)
-        {
-            renderer_->Shutdown();
-            renderer_.reset();
-        }
-        if (context_ != nullptr)
-        {
-            SDL_GL_DestroyContext(context_);
-            context_ = nullptr;
-        }
-        if (window_ != nullptr)
-        {
-            SDL_DestroyWindow(window_);
-            window_ = nullptr;
-        }
-        if (ownsVideoSubsystem_)
-        {
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-            ownsVideoSubsystem_ = false;
-        }
-        initialized_ = false;
-    }
-
-    [[nodiscard]] bool IsInteractive() const noexcept override
-    {
-        return true;
-    }
-
-  private:
-    SDL_Window *window_{nullptr};
-    SDL_GLContext context_{nullptr};
-    std::unique_ptr<Editor::EditorGuiRendererOpenGL> renderer_;
-    bool ownsVideoSubsystem_{false};
-    bool initialized_{false};
-};
-} // namespace
-
-std::unique_ptr<IEditorUiTestSurface> CreateInteractiveOpenGlEditorUiTestSurface()
-{
-    return std::make_unique<InteractiveOpenGlEditorUiTestSurface>();
-}
 } // namespace Horo::Tests

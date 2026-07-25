@@ -67,3 +67,67 @@ const ErrorCodeDescriptor LoadQueueFull{kDomain, ErrorCode{"asset.load.queue_ful
 const ErrorCodeDescriptor LoadShutdown{kDomain, ErrorCode{"asset.load.shutdown"}, kError,
                                        "The asset load service is shutting down.", "Do not submit new work."};
 } // namespace Horo::Assets::AssetErrors
+
+namespace Horo::Assets::CookErrors
+{
+namespace
+{
+const ErrorDomainId kCookDomain{"horo.asset"};
+constexpr auto kCookError = ErrorSeverity::Error;
+} // namespace
+
+const ErrorCodeDescriptor InvalidTarget{kCookDomain, ErrorCode{"asset.cook.invalid_target"}, kCookError,
+                                        "Cook target ID is not canonical.",
+                                        "Use a lowercase hyphen-separated identifier such as headless-null."};
+const ErrorCodeDescriptor UnsupportedFormat{kCookDomain, ErrorCode{"asset.cook.unsupported_format"}, kCookError,
+                                             "Cooked artifact format version is unsupported.",
+                                             "Use a compatible engine version or re-cook the asset."};
+const ErrorCodeDescriptor MalformedArtifact{kCookDomain, ErrorCode{"asset.cook.malformed_artifact"}, kCookError,
+                                             "Cooked artifact is malformed.",
+                                             "Re-cook the asset from its authoritative source."};
+const ErrorCodeDescriptor TooLarge{kCookDomain, ErrorCode{"asset.cook.too_large"}, kCookError,
+                                    "Cooked artifact exceeds the configured size limit.",
+                                    "Increase the limit or reduce the source asset."};
+const ErrorCodeDescriptor HashMismatch{kCookDomain, ErrorCode{"asset.cook.hash_mismatch"}, kCookError,
+                                        "Cooked artifact payload digest does not match.",
+                                        "Re-cook the asset from its authoritative source."};
+const ErrorCodeDescriptor CookerMissing{kCookDomain, ErrorCode{"asset.cook.cooker_missing"}, kCookError,
+                                         "No cooker contribution is registered for this asset type and target.",
+                                         "Install or enable a matching cooker extension."};
+const ErrorCodeDescriptor DuplicateCooker{kCookDomain, ErrorCode{"asset.cook.duplicate_cooker"}, kCookError,
+                                          "Two cooker contributions claim the same asset type and target.",
+                                          "Resolve the conflict in project policy or disable one contribution."};
+const ErrorCodeDescriptor CatalogSealed{kCookDomain, ErrorCode{"asset.cook.catalog_sealed"}, kCookError,
+                                        "The cooker catalog is already sealed.",
+                                        "Register cookers before sealing the catalog."};
+const ErrorCodeDescriptor Cancelled{kCookDomain, ErrorCode{"asset.cook.cancelled"}, kCookError,
+                                     "The cook operation was cancelled.",
+                                     "Retry if the owning operation is still active."};
+const ErrorCodeDescriptor DependencyUnsupported{kCookDomain, ErrorCode{"asset.cook.dependency_unsupported"}, kCookError,
+                                                "The cook operation does not support non-empty dependency sets in this slice.",
+                                                "Remove dependencies or use a dependency-aware cook target."};
+const ErrorCodeDescriptor SourceReadFailed{kCookDomain, ErrorCode{"asset.cook.source_read_failed"}, kCookError,
+                                           "The source asset could not be read.",
+                                           "Verify the source file exists and is readable."};
+} // namespace Horo::Assets::CookErrors
+
+namespace Horo::Assets::ImportErrors
+{
+namespace
+{
+const ErrorDomainId kImportDomain{"horo.asset"};
+constexpr auto kImportError = ErrorSeverity::Error;
+} // namespace
+
+const ErrorCodeDescriptor NoImporter{kImportDomain, ErrorCode{"asset.import.no_importer"}, kImportError,
+                                     "No importer registered for this file extension.",
+                                     "Install or enable a matching importer extension."};
+const ErrorCodeDescriptor ObjNoVertices{kImportDomain, ErrorCode{"asset.import.obj.no_vertices"}, kImportError,
+                                        "OBJ file contains no vertex positions.",
+                                        "Ensure the file has valid vertex data."};
+const ErrorCodeDescriptor ImportCancelled{kImportDomain, ErrorCode{"asset.import.cancelled"}, kImportError,
+                                          "The import operation was cancelled.",
+                                          "Retry if the owning operation is still active."};
+const ErrorCodeDescriptor ObjParseWarning{kImportDomain, ErrorCode{"asset.import.obj.warning"}, ErrorSeverity::Warning,
+                                          "OBJ parse warning.", "Review the import diagnostics."};
+} // namespace Horo::Assets::ImportErrors

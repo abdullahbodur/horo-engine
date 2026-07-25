@@ -122,6 +122,7 @@ struct Fonts
     ImFont *sans = nullptr;
     ImFont *sansCompact = nullptr;
     ImFont *sansEmphasis = nullptr;
+    ImFont *icon = nullptr; /**< Material Symbols Outlined for editor UI icons. */
 };
 
 namespace FontPx
@@ -129,6 +130,7 @@ namespace FontPx
 constexpr float Sans = DesignSystem::DefaultDesignTokens().typography.sansBase;
 constexpr float SansCompact = DesignSystem::DefaultDesignTokens().typography.sansCompactBase;
 constexpr float SansEmphasis = DesignSystem::DefaultDesignTokens().typography.sansEmphasisBase;
+constexpr float Icon = 16.0f; /**< Pixel size for Material Symbols icon font. */
 } // namespace FontPx
 
 [[nodiscard]] constexpr float Scale(float targetPx, float basePx)

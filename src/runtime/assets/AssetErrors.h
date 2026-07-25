@@ -28,3 +28,26 @@ extern const ErrorCodeDescriptor LoadConsumed;
 extern const ErrorCodeDescriptor LoadQueueFull;
 extern const ErrorCodeDescriptor LoadShutdown;
 } // namespace Horo::Assets::AssetErrors
+
+namespace Horo::Assets::CookErrors
+{
+extern const ErrorCodeDescriptor InvalidTarget;
+extern const ErrorCodeDescriptor UnsupportedFormat;
+extern const ErrorCodeDescriptor MalformedArtifact;
+extern const ErrorCodeDescriptor TooLarge;
+extern const ErrorCodeDescriptor HashMismatch;
+extern const ErrorCodeDescriptor CookerMissing;
+extern const ErrorCodeDescriptor DuplicateCooker;
+extern const ErrorCodeDescriptor CatalogSealed;
+extern const ErrorCodeDescriptor Cancelled;
+extern const ErrorCodeDescriptor DependencyUnsupported;
+extern const ErrorCodeDescriptor SourceReadFailed;
+} // namespace Horo::Assets::CookErrors
+
+namespace Horo::Assets::ImportErrors
+{
+extern const ErrorCodeDescriptor NoImporter;
+extern const ErrorCodeDescriptor ObjNoVertices;
+extern const ErrorCodeDescriptor ImportCancelled;
+extern const ErrorCodeDescriptor ObjParseWarning;
+} // namespace Horo::Assets::ImportErrors

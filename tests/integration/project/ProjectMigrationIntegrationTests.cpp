@@ -1,0 +1,212 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include "ProjectMigrationTestFixture.h"
+
+#include "Horo/Application/ProjectCompatibility.h"
+#include "Horo/Editor/ProjectMigrationTransaction.h"
+#include "Horo/Editor/ProjectMutation.h"
+#include "Horo/Editor/ProjectOpenService.h"
+#include "Horo/Foundation/JobSystem.h"
+#include "Horo/Foundation/Logging/Logger.h"
+#include "editor/project_model/RendererAvailability.h"
+
+#include <nlohmann/json.hpp>
+
+#include <algorithm>
+#include <fstream>
+#include <vector>
+
+namespace
+{
+using namespace Horo;
+using namespace Horo::Application;
+using namespace Horo::Editor;
+using namespace Horo::Tests;
+
+constexpr auto ProductionDefinitionId = "core.project_settings.compression_defaults";
+
+class MigrationLogCapture final
+{
+  public:
+    explicit MigrationLogCapture(const std::filesystem::path& root)
+        : path_(root / "migration-integration-test.jsonl")
+    {
+        Log::Logger::Init(root.string(), "migration-integration-test");
+        Log::Logger::SetLevel(Log::Level::Debug);
+    }
+
+    ~MigrationLogCapture()
+    {
+        Log::Logger::Shutdown();
+    }
+
+    [[nodiscard]] std::vector<nlohmann::json> Records() const
+    {
+        std::ifstream input(path_, std::ios::binary);
+        REQUIRE((input.good()));
+        std::vector<nlohmann::json> records;
+        for (std::string line; std::getline(input, line);)
+            if (!line.empty())
+                records.push_back(nlohmann::json::parse(line));
+        return records;
+    }
+
+  private:
+    std::filesystem::path path_;
+};
+
+[[nodiscard]] bool HasLogCategory(const std::vector<nlohmann::json>& records, const std::string_view category)
+{
+    return std::ranges::any_of(records, [category](const nlohmann::json& record)
+    {
+        return record.value("category", "") == category;
+    });
+}
+
+[[nodiscard]] bool HasLogMessagePart(const std::vector<nlohmann::json>& records, const std::string_view text)
+{
+    return std::ranges::any_of(records, [text](const nlohmann::json& record)
+    {
+        return record.value("message", "").find(text) != std::string::npos;
+    });
+}
+
+struct BackendProjectOpen
+{
+    BackendProjectOpen()
+        : jobs({.workerCount = 3, .maxQueuedJobs = 32}), mutations(files), transactions(files, clock, mutations, jobs),
+          preflight(transactions), renderers({{{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"}),
+          service(jobs, files, preflight, mutations, transactions, renderers)
+    {
+    }
+
+    ~BackendProjectOpen()
+    {
+        service.Shutdown();
+        jobs.Shutdown(ShutdownPolicy::Drain);
+    }
+
+    NativeDurableFileSystem files;
+    SystemWallClock clock;
+    JobSystem jobs;
+    ProjectMutationCoordinator mutations;
+    ProjectMigrationTransactionService transactions;
+    ProjectOpenPreflightService preflight;
+    RendererAvailabilitySnapshot renderers;
+    ProjectOpenService service;
+};
+
+[[nodiscard]] ProjectOpenProgressSnapshot OpenProject(BackendProjectOpen& backend,
+                                                      const ProjectMigrationTestFixture& project)
+{
+    auto started = backend.service.Start({
+        .projectRoot = project.Root(),
+        .expectedProjectName = "Legacy Migration Test",
+        .engineBuildIdentity = "integration-test",
+    });
+    REQUIRE((started.HasValue()));
+    return PumpProjectOpenToTerminal(backend.service, started.Value().Id());
+}
+} // namespace
+
+TEST_CASE("Legacy 0.0.1 project migrates to 0.1.0 through backend project open",
+          "[integration][project][migration]")
+{
+    REQUIRE((ComputeTestSha256("abc") ==
+             "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+    ProjectMigrationTestFixture project;
+    MigrationLogCapture logs(project.LogRoot());
+    BackendProjectOpen backend;
+
+    const auto preflight = backend.preflight.Inspect(project.Root());
+    REQUIRE((preflight.compatibility.status == ProjectCompatibilityStatus::AutomaticMigrationRequired));
+    REQUIRE((preflight.migrationPlan.has_value()));
+    REQUIRE((preflight.migrationPlan->definitions.size() == 1));
+    REQUIRE((preflight.migrationPlan->definitions.front().id.value == ProductionDefinitionId));
+
+    const auto opened = OpenProject(backend, project);
+    REQUIRE((opened.outcome == ProjectOpenOutcome::ReadyToActivate));
+    REQUIRE((opened.readySession.has_value()));
+
+    const auto migrated = project.ReadProjectJson();
+    REQUIRE((migrated.at("horoVersion") == "0.1.0"));
+    REQUIRE((migrated.at("settings").at("assetCompression") == "lz4"));
+    REQUIRE((migrated.at("settings").at("textureCompression") == "bc7"));
+    REQUIRE((migrated.at("settings").at("unknownNested").at("label") == "preserved"));
+    REQUIRE((migrated.at("unknownRoot").at("enabled") == true));
+    REQUIRE((migrated.contains("migrationHistoryHead")));
+    REQUIRE((migrated.at("migrationHistoryHead").is_string()));
+    REQUIRE_FALSE((migrated.at("migrationHistoryHead").get<std::string>().empty()));
+    REQUIRE((migrated.at("migrationHistoryHead").get<std::string>() ==
+             ComputeTestSha256(project.ReadHistoryBytes())));
+
+    const auto history = project.ReadHistoryJson();
+    REQUIRE((history.at("receipts").size() == 1));
+    REQUIRE((history.at("receipts").front().at("definitions").size() == 1));
+    REQUIRE((history.at("receipts").front().at("definitions").front().at("id") == ProductionDefinitionId));
+
+    const auto activeMigrationRoot = project.Root() / ".horo/local/migration";
+    REQUIRE((!std::filesystem::exists(activeMigrationRoot) || std::filesystem::is_empty(activeMigrationRoot)));
+
+    auto reserved = backend.service.ReserveSession(*opened.readySession);
+    REQUIRE((reserved.HasValue()));
+    REQUIRE((reserved.Value().Candidate().projectRoot == project.Root()));
+    auto activation = std::move(reserved).Value();
+    REQUIRE((activation.Commit().HasValue()));
+    REQUIRE((backend.service.ReserveSession(*opened.readySession).HasError()));
+
+    const auto reopened = OpenProject(backend, project);
+    REQUIRE((reopened.outcome == ProjectOpenOutcome::ReadyToActivate));
+    REQUIRE((reopened.readySession.has_value()));
+    REQUIRE((project.ReadHistoryJson().at("receipts").size() == 1));
+    REQUIRE((backend.service.DiscardSession(*reopened.readySession).HasValue()));
+
+    const auto records = logs.Records();
+    REQUIRE((HasLogCategory(records, "application.project_migration.plan")));
+    REQUIRE((HasLogCategory(records, "application.project_migration.execute")));
+    REQUIRE((HasLogCategory(records, "editor.project_migration.transaction")));
+    REQUIRE((HasLogCategory(records, "editor.project_open")));
+    REQUIRE((HasLogMessagePart(records, "source=0.0.1")));
+    REQUIRE((HasLogMessagePart(records, "target=0.1.0")));
+    REQUIRE((HasLogMessagePart(records, ProductionDefinitionId)));
+    REQUIRE((HasLogMessagePart(records, "operation=")));
+    REQUIRE_FALSE((HasLogMessagePart(records, project.Root().string())));
+    REQUIRE_FALSE((HasLogMessagePart(records, "Legacy Migration Test")));
+    REQUIRE_FALSE((HasLogMessagePart(records, migrated.at("projectId").get<std::string>())));
+    REQUIRE((std::ranges::none_of(records, [](const nlohmann::json& record)
+    {
+        return record.value("message", "").find("unknownNested") != std::string::npos;
+    })));
+}
+
+TEST_CASE("Invalid legacy project fails without authoritative mutation", "[integration][project][migration]")
+{
+    ProjectMigrationTestFixture project;
+    MigrationLogCapture logs(project.LogRoot());
+    auto invalid = project.ReadProjectJson();
+    invalid["settings"]["assetCompression"] = "brotli";
+    {
+        std::ofstream output(project.Root() / ".horo/project.json", std::ios::binary | std::ios::trunc);
+        REQUIRE((output.good()));
+        output << invalid.dump(2) << '\n';
+        REQUIRE((output.good()));
+    }
+    const auto authoritativeBytes = project.ReadProjectBytes();
+
+    BackendProjectOpen backend;
+    const auto opened = OpenProject(backend, project);
+
+    REQUIRE((opened.outcome == ProjectOpenOutcome::Failed));
+    REQUIRE((opened.diagnostic.has_value()));
+    REQUIRE((opened.diagnostic->code.Value() == "project.migration.stage_failed"));
+    REQUIRE((!opened.diagnostic->message.empty()));
+    REQUIRE((!opened.readySession.has_value()));
+    REQUIRE((project.ReadProjectBytes() == authoritativeBytes));
+    REQUIRE((!std::filesystem::exists(project.Root() / ".horo/migration_history.json")));
+    const auto records = logs.Records();
+    REQUIRE((std::ranges::any_of(records, [](const nlohmann::json& record)
+    {
+        return record.value("level", "") == "error" &&
+            record.value("message", "").find("project.migration.stage_failed") != std::string::npos;
+    })));
+}

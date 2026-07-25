@@ -1,6 +1,7 @@
 add_library(HoroFoundation STATIC
         foundation/FoundationErrors.cpp
         foundation/diagnostics/ErrorCode.cpp
+        foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
@@ -9,6 +10,7 @@ add_library(HoroFoundation STATIC
         foundation/jobs/JobSystem.cpp
         foundation/config/Configuration.cpp
         foundation/diagnostics/DiagnosticsEngine.cpp
+        foundation/paths/PathUtils.cpp
 )
 
 add_library(HoroEngine::Foundation ALIAS HoroFoundation)
@@ -91,6 +93,17 @@ add_library(HoroAssets STATIC
         runtime/assets/registry/AssetRegistry.cpp
         runtime/assets/runtime_provider/AssetProviderRead.h
         runtime/assets/runtime_provider/AssetProvider.cpp
+        runtime/assets/cooker/AssetCookTypes.cpp
+        runtime/assets/cooker/CookCatalog.cpp
+        runtime/assets/cooker/builtin/HeadlessMeshCooker.cpp
+        runtime/assets/cache/AssetCookCache.cpp
+        runtime/assets/cooker/AssetCookOutput.cpp
+        runtime/assets/cooker/AssetCookService.cpp
+        runtime/assets/importer/AssetImporterCatalog.cpp
+        runtime/assets/importer/AssetImportOperation.cpp
+        runtime/assets/importer/ProjectAssetImportCommitter.cpp
+        runtime/assets/importer/builtin/obj_mesh/ObjMeshImporter.cpp
+        runtime/assets/importer/builtin/fbx_mesh/FbxMeshImporter.cpp
 )
 add_library(HoroEngine::Assets ALIAS HoroAssets)
 target_compile_features(HoroAssets PUBLIC cxx_std_20)
@@ -331,6 +344,8 @@ add_library(HoroEditorServices STATIC
         editor/modals/EditorModalHost.cpp
         editor/modals/settings/SettingsModalLifecycle.cpp
         editor/modals/settings/SettingsModalState.cpp
+        editor/modals/asset_import/AssetImportModalLifecycle.cpp
+        editor/modals/asset_import/AssetImportModalDrawStub.cpp
         editor/screens/workspace/WorkspaceLayout.cpp
         editor/screens/workspace/WorkspacePanelHost.cpp
         editor/screens/workspace/WorkspaceLayoutPersistence.cpp
@@ -407,6 +422,8 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/menu/EditorMenuPlatform.cpp
             editor/status_bar/EditorStatusBar.cpp
             editor/modals/settings/SettingsModal.cpp
+            editor/modals/asset_import/AssetImportModal.cpp
+            editor/modals/asset_import/AssetImportModalPresentation.cpp
             editor/screens/welcome/WelcomeView.cpp
             editor/screens/welcome/WelcomeScreen.cpp
             editor/screens/project_creation/ProjectCreationView.cpp

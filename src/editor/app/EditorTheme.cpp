@@ -588,8 +588,24 @@ namespace Horo::Editor::Theme
         style.ItemInnerSpacing = ImVec2{8, 4};
         style.ScrollbarSize = 10.0F;
 
-        RefreshThemeList();
-        SelectThemeByIndex(0);
+        RefreshThemeList(std::getenv("HORO_THEME_OVERRIDE"));
+
+        // If env var points to a specific JSON file, load it directly
+        const char *overridePath = std::getenv("HORO_THEME_OVERRIDE");
+        if (overridePath && overridePath[0] != '\0')
+        {
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(overridePath, ec))
+            {
+                ThemeEntry theme;
+                if (LoadThemeFromJson(overridePath, theme))
+                    SelectThemeByIndex(static_cast<int>(GetThemeList().size()) - 1);
+            }
+        }
+        else
+        {
+            SelectThemeByIndex(0);
+        }
     }
 
     void SetThemePreset(const Preset preset)

@@ -81,6 +81,23 @@ also be invoked directly by exact case name or tag expression:
 ./build/skeleton/tests/HoroProjectMigrationTests --list-tests
 ```
 
+The backend migration integration target runs the frozen `0.0.1` fixture through
+the production catalog, planner, durable transaction, and `ProjectOpenService`
+without ImGui, SDL, or a GPU:
+
+```bash
+cmake --build build/skeleton --target HoroProjectMigrationIntegrationTests --parallel
+./build/skeleton/tests/HoroProjectMigrationIntegrationTests \
+  "Legacy 0.0.1 project migrates to 0.1.0 through backend project open" \
+  --reporter console --success
+```
+
+The target verifies the `0.1.0` root, compression defaults, unknown JSON
+preservation, migration receipt/history binding, second-open idempotence,
+failure-without-publication, and the required structured log categories. It uses
+an isolated temporary copy of the frozen fixture and never mutates repository
+fixtures.
+
 CTest invokes the Python suite through the same interpreter selected by CMake.
 For direct pytest selection and failure output:
 
@@ -215,9 +232,11 @@ reporting and Dear ImGui Test Engine owning widget lookup, input automation,
 and popup/focus progression. Presentation is injected behind
 `IEditorUiTestSurface`. The default headless surface runs an instrumented ImGui
 context without initializing SDL or owning a window, display connection, or GPU
-resource. An opt-in OpenGL surface presents the same scenario in a real SDL
-window for local observation; it does not define a second test or interaction
-path.
+resource. Opt-in OpenGL and Metal surfaces present the same scenario in a real
+SDL window and run the production render frontend, viewport adapter, GUI
+bridge, and presentation lifecycle. Supported interactive backends execute the
+same test and interaction path; renderer selection changes only the injected
+host composition.
 
 Types:
 
@@ -492,6 +511,9 @@ into 601–1800 frames through an explicit extended budget. Each discovered CTes
 case also has a 120-second process timeout. Cases are process-isolated by
 `catch_discover_tests()` and may run under `ctest -j`; a process-local admission
 guard rejects a second live harness/ImGui context.
+Interactive input animation expands the effective frame ceiling by 10x at
+normal speed and 30x at cinematic speed; the 120-second process timeout remains
+the terminal bound. Fast/headless execution retains the declared frame budget.
 
 Run the suite by label, target regex, or Catch2 tags:
 
@@ -503,9 +525,9 @@ ctest --test-dir build/ui-automation \
   '[ui][imgui][editor]'
 ```
 
-GUI tests run against the headless surface by default. To observe one scenario
-in a real window, configure the UI-test composition with OpenGL enabled and run
-the Catch2 case directly:
+GUI tests run against the null renderer by default. To exercise one scenario
+through a real renderer, configure the desired backend and run the Catch2 case
+directly:
 
 ```bash
 cmake -S . -B build/ui-automation \
@@ -515,27 +537,33 @@ cmake -S . -B build/ui-automation \
   -DHORO_ENABLE_IMGUI_UI_TESTS=ON
 cmake --build build/ui-automation \
   --target HoroEditorUiAutomationTests --parallel
-HORO_UI_TEST_PRESENTATION=opengl \
+HORO_UI_TEST_RENDERER=opengl \
   ./build/ui-automation/tests/HoroEditorUiAutomationTests \
   "Full editor project journey creates content and configures the viewport" \
   --reporter console --success
 ```
 
-The visible surface uses the production SDL3/OpenGL ImGui bridge and normal
-Test Engine speed so pointer and widget actions can be followed. Closing the
-window cancels the case cleanly. Run one directly selected case at a time;
-using this environment variable with parallel CTest would intentionally open
-one window per process. Builds without OpenGL retain the complete headless
-suite and reject `HORO_UI_TEST_PRESENTATION=opengl` with a clear error. The
-visible mode is a developer visualization aid, not OpenGL/Metal parity or
-screenshot-golden coverage. Renderer-specific visual tests use screenshot
-baselines per platform.
+`HORO_UI_TEST_RENDERER` accepts `null`, `opengl`, or `metal`. The null renderer
+is the default deterministic CI composition. OpenGL and Metal use their
+production SDL presentation port, render frontend, editor viewport adapter,
+GUI bridge, offscreen target, and frame/present ordering. A requested backend
+that is absent from the build is rejected with a clear error. Metal requires
+`HORO_BUILD_RENDER_METAL=ON` on Apple platforms.
+
+Interactive compositions use normal Test Engine speed by default so pointer,
+widget, and rendered viewport actions can be followed; set
+`HORO_UI_TEST_SPEED=cinematic` for slower observation. Closing the window
+cancels the case cleanly. Run one directly selected case at a time because a
+parallel CTest run would open one renderer window per process. These E2E runs
+verify renderer integration and readiness, but are not screenshot-golden
+coverage. Pixel baselines and backend-specific visual assertions remain in the
+renderer GPU test layer.
 
 Select a product scenario when inspecting Horo's UI. The
 `Basic Dear ImGui widgets execute as named child test steps` case intentionally
 renders a minimal Button/Checkbox/Slider fixture and validates only the harness.
 Harness-contract cases explicitly force the headless surface even when
-`HORO_UI_TEST_PRESENTATION=opengl` is set, so running the complete executable
+`HORO_UI_TEST_RENDERER=opengl` is set, so running the complete executable
 never opens this fixture as a visible product window.
 Every editor behavior scenario, whether headless or visible, pumps the complete
 `FullEditorUiTestHost` composition. This is required because an interaction in

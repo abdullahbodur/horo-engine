@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -183,9 +185,15 @@ namespace
     public:
         TemporaryProject()
         {
-            root = std::filesystem::temp_directory_path() / ("horo-migration-test-" + std::to_string(++sequence));
-            std::filesystem::create_directories(root / ".horo/local");
-            std::filesystem::create_directories(root / "assets");
+            const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+            root = std::filesystem::temp_directory_path() /
+                ("horo-migration-test-" + std::to_string(stamp) + "-" +
+                 std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+            std::error_code error;
+            REQUIRE((std::filesystem::create_directories(root / ".horo/local", error)));
+            REQUIRE_FALSE((error));
+            REQUIRE((std::filesystem::create_directories(root / "assets", error)));
+            REQUIRE_FALSE((error));
             Write(".horo/project.json", "{\"horoVersion\":\"0.0.1\"}");
             Write(".horo/local/ignored.txt", "ignored");
             Write("assets/a.txt", "alpha");
@@ -200,9 +208,13 @@ namespace
 
         void Write(const std::filesystem::path& relative, const std::string& value)
         {
-            std::filesystem::create_directories((root / relative).parent_path());
-            std::ofstream stream(root / relative, std::ios::binary);
+            std::error_code error;
+            std::filesystem::create_directories((root / relative).parent_path(), error);
+            REQUIRE_FALSE((error));
+            std::ofstream stream(root / relative, std::ios::binary | std::ios::trunc);
+            REQUIRE((stream.good()));
             stream << value;
+            REQUIRE((stream.good()));
         }
 
         [[nodiscard]] std::string Read(const std::filesystem::path& relative) const
@@ -212,7 +224,7 @@ namespace
         }
 
         std::filesystem::path root;
-        inline static std::uint64_t sequence{};
+        inline static std::atomic<std::uint64_t> sequence{};
     };
 
     TEST_CASE("Pipeline Requires Terminal Validation", "[unit][application]")

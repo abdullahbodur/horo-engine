@@ -7,6 +7,7 @@
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Diagnostics.h"
+#include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Result.h"
 
 #include <memory>
@@ -283,6 +284,12 @@ class GuiScreenHost
     /** @brief Returns active project creation operation ID if one is currently tracked. */
     [[nodiscard]] std::optional<ProjectCreationOperationId> GetActiveCreationId() const noexcept;
 
+    /** @brief Sets the current project root for import/file operations. */
+    void SetCurrentProjectRoot(const std::filesystem::path &root) noexcept { currentProjectRoot_ = root; }
+
+    /** @brief Returns the current project root, or current_path() as fallback. */
+    [[nodiscard]] std::filesystem::path CurrentProjectRoot() const noexcept;
+
     /** @brief Updates the active screen and checks pending leave dialogs. */
     void OnUpdate(float dt);
 
@@ -309,6 +316,9 @@ class GuiScreenHost
 
     /** @brief Returns the host-owned registry used by built-ins, modules, and plugin adapters. */
     [[nodiscard]] EditorStatusItemRegistry &StatusItems() noexcept;
+
+    /** @brief Handles files dropped onto the editor window, dispatching to the import modal. */
+    void HandleDropFiles(const std::vector<std::filesystem::path> &files);
 
     /** @brief Returns the host-owned status-item registry for read-only inspection. */
     [[nodiscard]] const EditorStatusItemRegistry &StatusItems() const noexcept;
@@ -337,6 +347,8 @@ class GuiScreenHost
     std::unique_ptr<EditorStatusBar> statusBar_;
     std::vector<std::string_view> activeStatusPanelIds_;
 
+    JobSystem m_importJobs{JobSystemConfig{.workerCount = 1}};
+
     GuiRoute activeRoute_;
     GuiRouteRevision activeRevision_{0};
     ScreenInstanceId nextScreenInstanceId_{1};
@@ -346,6 +358,7 @@ class GuiScreenHost
     std::optional<GuiRoute> pendingNavigation_;
     std::optional<ProjectCreationOperationId> activeCreationId_;
     std::optional<EditorRendererRestartRequest> rendererRestartRequest_;
+    std::filesystem::path currentProjectRoot_;
     bool closeRequested_{false};
     bool navigationBusy_{false};
     bool isScreenCallbackActive_{false};

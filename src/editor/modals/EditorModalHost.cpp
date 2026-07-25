@@ -148,6 +148,13 @@ std::optional<ModalId> EditorModalHost::TopModalId() const
     return m_stack.back().modal->Id();
 }
 
+/** @copydoc EditorModalHost::TopModal */
+EditorModal *EditorModalHost::TopModal()
+{
+    if (m_stack.empty()) return nullptr;
+    return m_stack.back().modal.get();
+}
+
 /** @copydoc EditorModalHost::InteractionScope */
 EditorInteractionScope EditorModalHost::InteractionScope() const noexcept
 {

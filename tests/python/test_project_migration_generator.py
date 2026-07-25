@@ -59,7 +59,7 @@ def _run_generator(script: Path, root: Path, output: Path) -> subprocess.Complet
 
 
 def test_catalog_discovery_is_deterministic_and_freezes_definition_hash(
-    tmp_path: Path, migration_generator: Path
+        tmp_path: Path, migration_generator: Path
 ) -> None:
     root = tmp_path / "migrations"
     output = tmp_path / "generated"

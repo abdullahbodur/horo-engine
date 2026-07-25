@@ -4,7 +4,6 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Input.h"
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -172,6 +171,8 @@ class EditorModalHost
     [[nodiscard]] bool HasOpenModal() const noexcept;
     /** @brief Returns the active stack top, including a pending accepted modal. */
     [[nodiscard]] std::optional<ModalId> TopModalId() const;
+    /** @brief Returns a pointer to the top modal for typed access. */
+    [[nodiscard]] EditorModal *TopModal();
     /** @brief Returns the current input-routing scope; accepted pending roots are already modal-scoped. */
     [[nodiscard]] EditorInteractionScope InteractionScope() const noexcept;
     /** @brief Performs modal updates and commits any deferred lifecycle transition at its boundary. */

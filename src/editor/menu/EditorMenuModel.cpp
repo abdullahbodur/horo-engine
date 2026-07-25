@@ -134,7 +134,7 @@ namespace Horo::Editor {
                         }),
                 Submenu("web_workspace.menu.assets",
                         {
-                            Command("web_workspace.menu.import_asset"),
+                            Command("web_workspace.menu.import_asset", EditorMenuAction::ImportAssets, true),
                             Command("web_workspace.menu.reimport_all"),
                             Command("web_workspace.menu.refresh_asset_index"),
                         }),

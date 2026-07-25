@@ -8,7 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 def _write_release(root: Path, version: str, baseline: str, contract_value: str) -> None:
     directory = root / version
     directory.mkdir(parents=True)
@@ -42,15 +41,13 @@ def _write_release(root: Path, version: str, baseline: str, contract_value: str)
         ),
         encoding="utf-8",
     )
-
-
 def _run_generator(
-    script: Path,
-    releases: Path,
-    version: str,
-    output: Path,
-    definition_hash: str | None = None,
-    migration_catalog: Path | None = None,
+        script: Path,
+        releases: Path,
+        version: str,
+        output: Path,
+        definition_hash: str | None = None,
+        migration_catalog: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, str(script), str(releases), version, str(output)]
     if definition_hash is not None:
@@ -61,7 +58,7 @@ def _run_generator(
 
 
 def test_matching_patch_contract_generates_release_line_catalog(
-    tmp_path: Path, compatibility_generator: Path
+        tmp_path: Path, compatibility_generator: Path
 ) -> None:
     releases = tmp_path / "releases"
     output = tmp_path / "Generated.h"
@@ -86,13 +83,13 @@ def test_patch_contract_drift_is_rejected(tmp_path: Path, compatibility_generato
 
     assert drift.returncode != 0
     assert (
-        "does not match baseline contract" in drift.stderr
-        or "frozen release-line contract" in drift.stderr
+            "does not match baseline contract" in drift.stderr
+            or "frozen release-line contract" in drift.stderr
     )
 
 
 def test_contract_change_requires_incoming_migration_definition(
-    tmp_path: Path, compatibility_generator: Path
+        tmp_path: Path, compatibility_generator: Path
 ) -> None:
     releases = tmp_path / "releases"
     output = tmp_path / "Generated.h"

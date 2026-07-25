@@ -24,6 +24,11 @@ extern const ErrorCodeDescriptor Shutdown;
 extern const ErrorCodeDescriptor TaskGroupClosed;
 } // namespace Horo::JobErrors
 
+namespace Horo::HashingErrors
+{
+extern const ErrorCodeDescriptor InvalidSha256Text;
+} // namespace Horo::HashingErrors
+
 namespace Horo::Math::Errors
 {
 extern const ErrorCodeDescriptor InvalidAffineMatrix;
@@ -37,3 +42,10 @@ extern const ErrorCodeDescriptor NonFiniteInput;
 extern const ErrorCodeDescriptor SingularMatrix;
 extern const ErrorCodeDescriptor ZeroLength;
 } // namespace Horo::Math::Errors
+
+namespace Horo::PathErrors
+{
+extern const ErrorCodeDescriptor DirectoryCreateFailed;
+extern const ErrorCodeDescriptor PathEscape;
+extern const ErrorCodeDescriptor InvalidPath;
+} // namespace Horo::PathErrors

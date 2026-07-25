@@ -43,4 +43,11 @@ namespace Horo
         }
         std::string m_value;
     };
+
+    /** @brief Stable project-root-relative paths shared across engine modules. */
+    namespace ProjectLayout
+    {
+        /** @brief Derived asset registry index rebuilt from authoritative asset data. */
+        inline constexpr std::string_view AssetIndexPath = ".horo/asset_index.json";
+    }
 } // namespace Horo

@@ -19,8 +19,8 @@ namespace Horo::Application
                 return Result<std::uint32_t>::Failure(MakeError(ProjectErrors::VersionInvalid));
             }
             std::uint32_t value{};
-            const auto [end, error] = std::from_chars(component.data(), component.data() + component.size(), value);
-            if (error != std::errc{} || end != component.data() + component.size())
+            if (const auto [end, error] = std::from_chars(component.data(), component.data() + component.size(), value);
+                error != std::errc{} || end != component.data() + component.size())
             {
                 return Result<std::uint32_t>::Failure(MakeError(ProjectErrors::VersionInvalid));
             }

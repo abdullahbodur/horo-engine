@@ -49,29 +49,17 @@ namespace Horo::Editor
             bool clicked = false;
             ImGui::PushID(index);
             {
-                // Invisible button over the full card area for click detection.
-                const ImVec2 cardSize{-1.0F, 64.0F};
-                const ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
+                Ui::ScopedCard card("ProjectCard", {-1.0F, 64.0F}, 14.0F, 12.0F);
 
-                Ui::ScopedCard card("ProjectCard", cardSize, 14.0F, 12.0F);
+                const ImVec2 contentMin = ImGui::GetCursorScreenPos();
+                constexpr float contentHeight = 40.0F;
+                const float contentWidth = ImGui::GetContentRegionAvail().x;
+                clicked = ImGui::InvisibleButton(
+                    "Project card###welcome_project_card", {contentWidth, contentHeight});
 
-                auto* dl = ImGui::GetWindowDrawList();
-                const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
-                dl->AddRectFilled(thumbMin, {thumbMin.x + 40.0F, thumbMin.y + 40.0F}, U32(Bg3()), Layout::Radius);
-                ImGui::Dummy({52.0F, 40.0F});
-                ImGui::SameLine(0.0F, 0.0F);
-
-                ImGui::BeginGroup();
-                {
-                    ScopedTextStyle textStyle(ctx.theme.fonts.sans, kProjectNameFontSize, FontPx::Sans);
-                    ImGui::TextUnformatted(project.name.c_str());
-                }
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0F);
-                {
-                    ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kProjectPathFontSize, FontPx::SansCompact);
-                    ImGui::TextDisabled("%s", project.rootPath.c_str());
-                }
-                ImGui::EndGroup();
+                auto* drawList = ImGui::GetWindowDrawList();
+                drawList->AddRectFilled(contentMin, {contentMin.x + contentHeight, contentMin.y + contentHeight},
+                                        U32(Bg3()), Layout::Radius);
 
                 std::string versionText;
                 std::string statusText = project.lastOpenedLabel;
@@ -80,30 +68,40 @@ namespace Horo::Editor
                     versionText = project.compatibility->projectVersion.has_value()
                                       ? "Horo " + Application::FormatHoroVersion(
                                                        project.compatibility->projectVersion->value)
-                                      : ctx.localization.Get("editor", "welcome.project.compatibility.version_unavailable");
+                                      : ctx.localization.Get(
+                                            "editor", "welcome.project.compatibility.version_unavailable");
                     statusText = ctx.localization.Get("editor", CompatibilityLabelKey(*project.compatibility));
                 }
-                float metaWidth = 0.0F;
-                {
-                    ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kProjectMetaFontSize, FontPx::SansCompact);
-                    metaWidth = std::max(ImGui::CalcTextSize(versionText.c_str()).x,
-                                         ImGui::CalcTextSize(statusText.c_str()).x);
-                }
-                ImGui::SameLine(ImGui::GetWindowWidth() - metaWidth - 14.0F);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (versionText.empty() ? 8.0F : 1.0F));
-                {
-                    ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kProjectMetaFontSize, FontPx::SansCompact);
-                    if (!versionText.empty())
-                        ImGui::TextDisabled("%s", versionText.c_str());
-                    ImGui::TextDisabled("%s", statusText.c_str());
-                }
 
-                const ImVec2 cardEnd = ImGui::GetItemRectMax();
-                const ImVec2 cursorAfter = ImGui::GetCursorScreenPos();
-                ImGui::SetCursorScreenPos(cursorBefore);
-                clicked = ImGui::InvisibleButton("Project card###welcome_project_card",
-                                                 {cardEnd.x - cursorBefore.x, cardEnd.y - cursorBefore.y});
-                ImGui::SetCursorScreenPos(cursorAfter);
+                ImFont* const nameFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
+                ImFont* const compactFont =
+                    ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
+                const float metaWidth = std::max(
+                    compactFont->CalcTextSizeA(kProjectMetaFontSize, FLT_MAX, 0.0F, versionText.c_str()).x,
+                    compactFont->CalcTextSizeA(kProjectMetaFontSize, FLT_MAX, 0.0F, statusText.c_str()).x);
+                const float contentMaxX = contentMin.x + contentWidth;
+                const float visibleMetaWidth = std::min(metaWidth, contentWidth * 0.38F);
+                const float metaMinX = contentMaxX - visibleMetaWidth;
+                constexpr float textGap = 12.0F;
+                const float detailsMinX = contentMin.x + contentHeight + textGap;
+                const float detailsMaxX = std::max(detailsMinX, metaMinX - textGap);
+                const ImVec4 detailsClip{detailsMinX, contentMin.y, detailsMaxX, contentMin.y + contentHeight};
+                const ImVec4 metaClip{metaMinX, contentMin.y, contentMaxX, contentMin.y + contentHeight};
+
+                drawList->AddText(nameFont, kProjectNameFontSize, {detailsMinX, contentMin.y}, U32(Text()),
+                                  project.name.c_str(), nullptr, 0.0F, &detailsClip);
+                drawList->AddText(compactFont, kProjectPathFontSize, {detailsMinX, contentMin.y + 21.0F}, U32(Muted()),
+                                  project.rootPath.c_str(), nullptr, 0.0F, &detailsClip);
+
+                const float metaY = contentMin.y + (versionText.empty() ? 11.0F : 0.0F);
+                if (!versionText.empty())
+                {
+                    drawList->AddText(compactFont, kProjectMetaFontSize, {metaMinX, metaY}, U32(Muted()),
+                                      versionText.c_str(), nullptr, 0.0F, &metaClip);
+                }
+                drawList->AddText(compactFont, kProjectMetaFontSize,
+                                  {metaMinX, metaY + (versionText.empty() ? 0.0F : 21.0F)}, U32(Muted()),
+                                  statusText.c_str(), nullptr, 0.0F, &metaClip);
             }
             ImGui::PopID();
             return clicked;

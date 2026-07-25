@@ -91,16 +91,43 @@ namespace Horo::Editor::Ui
             ImGui::PushStyleColor(ImGuiCol_Text, Text());
         }
 
+        // Apply size preset if no explicit size given
+        ImVec2 actualSize = props.size;
+        bool pushedFramePadding = false;
+        if (actualSize.x == 0.0F && actualSize.y == 0.0F)
+        {
+            pushedFramePadding = true;
+            switch (props.componentSize)
+            {
+            case ButtonSize::Small:
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 6.0f}); break;
+            case ButtonSize::Medium:
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0f, 9.0f}); break;
+            case ButtonSize::Large:
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{18.0f, 12.0f}); break;
+            }
+        }
+
+        // fillAvailableWidth
+        if (props.fillAvailableWidth)
+        {
+            actualSize.x = ImGui::GetContentRegionAvail().x;
+        }
+
         bool clicked = false;
         {
             ScopedTextStyle textStyle(props.font, props.fontSize, props.baseFontSize);
-            clicked = ImGui::Button(props.label, props.size);
+            clicked = ImGui::Button(props.label, actualSize);
         }
 
         ImGui::PopStyleColor(4);
         if (!props.enabled)
         {
             ImGui::PopStyleVar();
+        }
+        if (pushedFramePadding)
+        {
+            ImGui::PopStyleVar(); // FramePadding from componentSize
         }
         return clicked;
     }

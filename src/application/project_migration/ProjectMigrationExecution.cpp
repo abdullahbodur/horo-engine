@@ -1,8 +1,11 @@
 #include "Horo/Application/ProjectMigration.h"
+#include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Paths.h"
 
 #include "../project/ProjectErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -45,6 +48,10 @@ namespace Horo::Application
             if (cleanupOwned) std::filesystem::remove_all(candidateRoot, ignored);
         }
 
+        State() = default;
+        State(const State&) = delete;
+        State& operator=(const State&) = delete;
+
         bool cleanupOwned{true};
     };
 
@@ -54,6 +61,23 @@ namespace Horo::Application
         {
             return MakeError(descriptor, std::move(message));
         }
+
+        struct StringHash
+        {
+            using is_transparent = void;
+
+            std::size_t operator()(const std::string_view sv) const noexcept
+            {
+                return std::hash<std::string_view>{}(sv);
+            }
+        };
+
+        using TransparentStringSet = std::unordered_set<std::string, StringHash, std::equal_to<>>;
+
+        constexpr std::string_view kMigrationDryRunRootPrefix = ".horo-migration-dry-run-";
+        constexpr std::array<std::string_view, 6> kExcludedMigrationDirectoryPrefixes{
+            ".horo/local/", ".horo/cache/", ".horo/build/", "build/", "cache/", ".git/"
+        };
 
         [[nodiscard]] std::string PortablePathKey(std::string value)
         {
@@ -68,15 +92,11 @@ namespace Horo::Application
         [[nodiscard]] bool IsExcluded(const std::filesystem::path& relative)
         {
             const std::string generic = relative.generic_string();
-            if (generic == ".horo/asset_index.json")
+            if (generic == ProjectLayout::AssetIndexPath)
                 return true;
-            if (generic.starts_with(".horo-migration-dry-run-"))
+            if (generic.starts_with(kMigrationDryRunRootPrefix))
                 return true;
-            static constexpr std::string_view prefixes[]{
-                ".horo/local/", ".horo/cache/", ".horo/build/",
-                "build/", "cache/", ".git/"
-            };
-            return std::ranges::any_of(prefixes,
+            return std::ranges::any_of(kExcludedMigrationDirectoryPrefixes,
                                        [&generic](const std::string_view prefix)
                                        {
                                            return generic.starts_with(prefix);
@@ -85,23 +105,24 @@ namespace Horo::Application
 
         [[nodiscard]] MigrationDocumentKind ClassifyDocument(const std::string_view path)
         {
+            using enum MigrationDocumentKind;
             if (path == ".horo/project.json")
-                return MigrationDocumentKind::ProjectMetadata;
+                return ProjectMetadata;
             if (path.ends_with(".scene.horo") || path.ends_with(".hscene"))
-                return MigrationDocumentKind::Scene;
+                return Scene;
             if (path.ends_with(".prefab.horo") || path.ends_with(".hprefab"))
-                return MigrationDocumentKind::Prefab;
+                return Prefab;
             if (path.ends_with(".horo.meta"))
-                return MigrationDocumentKind::AssetSidecar;
+                return AssetSidecar;
             if (path.find("/input") != std::string_view::npos)
-                return MigrationDocumentKind::Input;
+                return Input;
             if (path.ends_with(".material.horo"))
-                return MigrationDocumentKind::Material;
+                return Material;
             if (path.ends_with(".graph.horo"))
-                return MigrationDocumentKind::Graph;
+                return Graph;
             if (path.starts_with(".horo/"))
-                return MigrationDocumentKind::ProjectSettings;
-            return MigrationDocumentKind::Other;
+                return ProjectSettings;
+            return Other;
         }
 
         [[nodiscard]] Result<std::vector<std::byte>> ReadFile(const std::filesystem::path& path,
@@ -117,9 +138,9 @@ namespace Horo::Application
                 return Result<std::vector<std::byte>>::Failure(MigrationError(
                     ProjectErrors::MigrationInventoryLimit, "Migration input exceeds the configured byte limit."));
             std::vector<std::byte> bytes(size);
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream ||
+            if (std::ifstream stream(path, std::ios::binary); !stream ||
                 (size > 0 && !stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))))
+                // NOSONAR
                 return Result<std::vector<std::byte>>::Failure(MigrationError(
                     ProjectErrors::MigrationInventoryInvalid, "Cannot read migration input: " + path.generic_string()));
             return Result<std::vector<std::byte>>::Success(std::move(bytes));
@@ -133,9 +154,9 @@ namespace Horo::Application
                 return Result<void>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryInvalid,
                                    "Cannot create disposable candidate directory."));
-            std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-            if (!stream || (!bytes.empty() && !stream.write(reinterpret_cast<const char*>(bytes.data()),
-                                                            static_cast<std::streamsize>(bytes.size()))))
+            if (std::ofstream stream(path, std::ios::binary | std::ios::trunc); !stream || (!bytes.empty() && !stream.
+                write(reinterpret_cast<const char*>(bytes.data()), // NOSONAR
+                      static_cast<std::streamsize>(bytes.size())))) // NOSONAR
                 return Result<void>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryInvalid,
                                    "Cannot write disposable candidate document."));
@@ -167,24 +188,24 @@ namespace Horo::Application
                     ProjectErrors::MigrationInventoryLimit, "Migration document limit exceeds handle capacity."));
 
             std::vector<std::filesystem::path> files;
-            std::unordered_set<std::string> portablePaths;
-            for (std::filesystem::recursive_directory_iterator
-                     iterator(canonicalRoot, std::filesystem::directory_options::skip_permission_denied, error),
-                     end;
-                 iterator != end; iterator.increment(error))
+            TransparentStringSet portablePaths;
+            std::filesystem::recursive_directory_iterator iterator(canonicalRoot,
+                                                                   std::filesystem::directory_options::skip_permission_denied,
+                                                                   error);
+            std::filesystem::recursive_directory_iterator end;
+            while (iterator != end)
             {
                 if (error)
                     return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
                         MigrationError(ProjectErrors::MigrationInventoryInvalid,
                                        "Project inventory traversal failed."));
-                const auto status = iterator->symlink_status(error);
-                if (error || std::filesystem::is_symlink(status))
+                if (const auto status = iterator->symlink_status(error); error || std::filesystem::is_symlink(status))
                     return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
                         MigrationError(ProjectErrors::MigrationInventoryInvalid,
                                        "Symlinks are not accepted in authoritative migration inventory."));
                 const std::filesystem::path relative = iterator->path().lexically_relative(canonicalRoot);
-                const std::string relativeText = relative.generic_string();
-                if (relative.empty() || relativeText == ".." || relativeText.starts_with("../"))
+                if (const std::string relativeText = relative.generic_string(); relative.empty() || relativeText == ".."
+                    || relativeText.starts_with("../"))
                     return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(MigrationError(
                         ProjectErrors::MigrationInventoryInvalid,
                         "Migration inventory path escapes the project root."));
@@ -192,16 +213,21 @@ namespace Horo::Application
                 {
                     if (IsExcluded(relative))
                         iterator.disable_recursion_pending();
+                    iterator.increment(error);
                     continue;
                 }
                 if (!iterator->is_regular_file(error) || IsExcluded(relative))
+                {
+                    iterator.increment(error);
                     continue;
-                const std::string generic = relative.generic_string();
-                if (!portablePaths.emplace(PortablePathKey(generic)).second)
+                }
+                if (const std::string generic = relative.generic_string(); !portablePaths.emplace(
+                    PortablePathKey(generic)).second)
                     return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
                         MigrationError(ProjectErrors::MigrationInventoryInvalid,
                                        "Portable case collision in migration inventory: " + generic));
                 files.push_back(relative);
+                iterator.increment(error);
             }
             std::ranges::sort(
                 files, [](const auto& left, const auto& right)
@@ -250,6 +276,30 @@ namespace Horo::Application
             return annotated;
         }
 
+        [[nodiscard]] Result<void> MergeExecutionResults(std::vector<std::optional<MigrationDocumentChange>>& results,
+                                                         ProjectMigrationContext& context)
+        {
+            std::unordered_set<std::uint64_t> writes;
+            for (auto& result : results)
+            {
+                if (!result.has_value() || !result->changed)
+                    continue;
+                const MigrationDocumentHandle handle = result->document;
+                if (const std::uint64_t key = (static_cast<std::uint64_t>(handle.generation) << 32U) | handle.index; !
+                    writes.emplace(key).second)
+                    return Result<void>::Failure(
+                        MigrationError(ProjectErrors::MigrationWriteConflict,
+                                       "Parallel document stage produced duplicate write targets."));
+                const Result<void> merged = result->remove
+                                                ? context.RemoveDocument(handle)
+                                                : context.ReplaceDocument(
+                                                    handle, std::move(result->replacement));
+                if (merged.HasError())
+                    return merged;
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<void> ExecuteForEach(const ProjectMigrationDefinition& definition,
                                                   const ProjectMigrationNode& node, ProjectMigrationContext& context,
                                                   JobSystem& jobs, const ProjectMigrationLimits& limits,
@@ -276,17 +326,19 @@ namespace Horo::Application
                         return Result<void>::Failure(source.ErrorValue());
                     }
                     const ProjectDocumentView view = source.Value();
-                    const auto spawned = group.Spawn({}, [&, index, view](const CancellationToken& childCancellation)
-                    {
-                        Result<MigrationDocumentChange> changed = node.documentStage->Execute(
-                            view, MigrationStageContext{.definitionId = definition.id, .stageId = descriptor.id},
-                            childCancellation);
-                        if (changed.HasError())
-                            return Result<void>::Failure(
-                                AnnotateStageError(changed.ErrorValue(), definition.id, descriptor.id, view.path));
-                        results[index - begin] = std::move(changed).Value();
-                        return Result<void>::Success();
-                    });
+                    const auto spawned = group.Spawn(
+                        {}, [index, begin, view, &node, &definition, &descriptor, &results](
+                        const CancellationToken& childCancellation)
+                        {
+                            Result<MigrationDocumentChange> changed = node.documentStage->Execute(
+                                view, MigrationStageContext{.definitionId = definition.id, .stageId = descriptor.id},
+                                childCancellation);
+                            if (changed.HasError())
+                                return Result<void>::Failure(
+                                    AnnotateStageError(changed.ErrorValue(), definition.id, descriptor.id, view.path));
+                            results[index - begin] = std::move(changed).Value();
+                            return Result<void>::Success();
+                        });
                     if (spawned.HasError())
                     {
                         group.RequestCancel();
@@ -294,27 +346,10 @@ namespace Horo::Application
                         return Result<void>::Failure(spawned.ErrorValue());
                     }
                 }
-                const Result<void> joined = group.Join();
-                if (joined.HasError())
+                if (const Result<void> joined = group.Join(); joined.HasError())
                     return joined;
-                std::unordered_set<std::uint64_t> writes;
-                for (std::size_t index = 0; index < results.size(); ++index)
-                {
-                    if (!results[index].has_value() || !results[index]->changed)
-                        continue;
-                    const MigrationDocumentHandle handle = results[index]->document;
-                    const std::uint64_t key = (static_cast<std::uint64_t>(handle.generation) << 32U) | handle.index;
-                    if (!writes.emplace(key).second)
-                        return Result<void>::Failure(
-                            MigrationError(ProjectErrors::MigrationWriteConflict,
-                                           "Parallel document stage produced duplicate write targets."));
-                    const Result<void> merged = results[index]->remove
-                                                    ? context.RemoveDocument(handle)
-                                                    : context.ReplaceDocument(
-                                                        handle, std::move(results[index]->replacement));
-                    if (merged.HasError())
-                        return merged;
-                }
+                if (const auto merged = MergeExecutionResults(results, context); merged.HasError())
+                    return merged;
             }
             return Result<void>::Success();
         }
@@ -357,6 +392,36 @@ namespace Horo::Application
             return Result<void>::Success();
         }
 
+        [[nodiscard]] Result<void> ExecuteNode(const ProjectMigrationDefinition& definition,
+                                               const ProjectMigrationNode& node, ProjectMigrationContext& context,
+                                               JobSystem& jobs, const ProjectMigrationLimits& limits,
+                                               const CancellationToken& cancellation)
+        {
+            if (cancellation.IsCancellationRequested())
+                return Result<void>::Failure(MigrationError(
+                    ProjectErrors::MigrationCancelled, "Migration cancellation was requested."));
+            Result<void> executed = Result<void>::Success();
+            if (node.kind == ProjectMigrationNodeKind::ForEach)
+                executed = ExecuteForEach(definition, node, context, jobs, limits, cancellation);
+            else if (node.kind == ProjectMigrationNodeKind::Then)
+            {
+                const auto descriptor = node.stage->Describe();
+                executed = node.stage->Execute(context, cancellation);
+                if (executed.HasError())
+                    executed = Result<void>::Failure(
+                        AnnotateStageError(executed.ErrorValue(), definition.id, descriptor.id));
+            }
+            else
+            {
+                const auto descriptor = node.validator->Describe();
+                executed = node.validator->Validate(context, cancellation);
+                if (executed.HasError())
+                    executed = Result<void>::Failure(
+                        AnnotateStageError(executed.ErrorValue(), definition.id, descriptor.id));
+            }
+            return executed;
+        }
+
         [[nodiscard]] Result<void> ExecutePlan(const ProjectMigrationPlan& plan, ProjectMigrationContext& context,
                                                JobSystem& jobs, const ProjectMigrationLimits& limits,
                                                const CancellationToken& cancellation)
@@ -365,29 +430,9 @@ namespace Horo::Application
             {
                 for (const ProjectMigrationNode& node : definition.pipeline->Nodes())
                 {
-                    if (cancellation.IsCancellationRequested())
-                        return Result<void>::Failure(MigrationError(
-                            ProjectErrors::MigrationCancelled, "Migration cancellation was requested."));
-                    Result<void> executed = Result<void>::Success();
-                    if (node.kind == ProjectMigrationNodeKind::ForEach)
-                        executed = ExecuteForEach(definition, node, context, jobs, limits, cancellation);
-                    else if (node.kind == ProjectMigrationNodeKind::Then)
-                    {
-                        const auto descriptor = node.stage->Describe();
-                        executed = node.stage->Execute(context, cancellation);
-                        if (executed.HasError())
-                            executed = Result<void>::Failure(
-                                AnnotateStageError(executed.ErrorValue(), definition.id, descriptor.id));
-                    }
-                    else
-                    {
-                        const auto descriptor = node.validator->Describe();
-                        executed = node.validator->Validate(context, cancellation);
-                        if (executed.HasError())
-                            executed = Result<void>::Failure(
-                                AnnotateStageError(executed.ErrorValue(), definition.id, descriptor.id));
-                    }
-                    if (executed.HasError()) return executed;
+                    if (const Result<void> executed = ExecuteNode(definition, node, context, jobs, limits, cancellation)
+                        ; executed.HasError())
+                        return executed;
                 }
             }
             return Result<void>::Success();
@@ -396,18 +441,23 @@ namespace Horo::Application
         void RebuildPreparedChanges(PreparedProjectMigration::State& prepared)
         {
             prepared.changes.clear();
+            using enum PreparedMigrationChangeKind;
             for (const auto& document : prepared.context->documents)
-                if (document.changed)
-                    prepared.changes.push_back({
-                        .path = document.entry.path,
-                        .kind = !document.existedInSource
-                                    ? PreparedMigrationChangeKind::Add
-                                    : !document.alive
-                                    ? PreparedMigrationChangeKind::Remove
-                                    : PreparedMigrationChangeKind::Replace,
-                        .originalBytes = document.original.size(),
-                        .stagedBytes = document.alive ? document.bytes.size() : 0
-                    });
+            {
+                if (!document.changed)
+                    continue;
+                auto kind = Replace;
+                if (!document.existedInSource)
+                    kind = Add;
+                else if (!document.alive)
+                    kind = Remove;
+                prepared.changes.push_back({
+                    .path = document.entry.path,
+                    .kind = kind,
+                    .originalBytes = document.original.size(),
+                    .stagedBytes = document.alive ? document.bytes.size() : 0
+                });
+            }
             std::ranges::sort(prepared.changes, {}, &PreparedMigrationChange::path);
         }
     } // namespace
@@ -439,7 +489,8 @@ namespace Horo::Application
         const std::string_view projectRelativePath) const
     {
         const auto document = std::ranges::find_if(
-            state_->context->documents, [projectRelativePath](const ProjectMigrationContext::State::Document &candidate) {
+            state_->context->documents, [projectRelativePath](const ProjectMigrationContext::State::Document& candidate)
+            {
                 return candidate.alive && candidate.entry.path == projectRelativePath;
             });
         if (document == state_->context->documents.end())
@@ -502,7 +553,8 @@ namespace Horo::Application
         return Result<void>::Success();
     }
 
-    Result<void> ProjectMigrationContext::AddDocument(std::string projectRelativePath, const MigrationDocumentKind kind,
+    Result<void> ProjectMigrationContext::AddDocument(const std::string& projectRelativePath,
+                                                      const MigrationDocumentKind kind,
                                                       std::vector<std::byte> document)
     {
         const std::filesystem::path normalized = std::filesystem::path(projectRelativePath).lexically_normal();
@@ -554,28 +606,48 @@ namespace Horo::Application
         const std::filesystem::path& candidateRoot,
         const ProjectMigrationPlan& plan,
         JobSystem& jobs,
-        const ProjectMigrationLimits limits,
+        const ProjectMigrationLimits& limits,
         const CancellationToken cancellation)
     {
+        const std::string sourceText = FormatHoroVersion(plan.source.value);
+        const std::string targetText = FormatHoroVersion(plan.target.value);
+        LOG_INFO("application.project_migration.execute",
+                 "Preparing migration source=%s target=%s.", sourceText.c_str(), targetText.c_str());
+        LOG_DEBUG("application.project_migration.execute", "Execution aggregate definitions=%zu.",
+                  plan.definitions.size());
         const auto built = BuildInventory(projectRoot, limits, candidateRoot);
         if (built.HasError())
+        {
+            LOG_ERROR("application.project_migration.execute", "Inventory failed code=%s.",
+                      built.ErrorValue().code.Value().c_str());
             return Result<PreparedProjectMigration>::Failure(built.ErrorValue());
+        }
         auto state = built.Value();
+        LOG_DEBUG("application.project_migration.execute",
+                  "Inventory ready documents=%zu input_bytes=%llu.", state->documents.size(),
+                  static_cast<unsigned long long>(state->inputBytes));
         ProjectMigrationContext context(state);
-        const Result<void> executed = ExecutePlan(plan, context, jobs, limits, cancellation);
-        if (executed.HasError()) return Result<PreparedProjectMigration>::Failure(executed.ErrorValue());
+        if (const Result<void> executed = ExecutePlan(plan, context, jobs, limits, cancellation); executed.HasError())
+        {
+            LOG_ERROR("application.project_migration.execute", "Execution failed code=%s.",
+                      executed.ErrorValue().code.Value().c_str());
+            return Result<PreparedProjectMigration>::Failure(executed.ErrorValue());
+        }
 
-        const Result<void> materialized = MaterializeCandidate(state);
-        if (materialized.HasError())
+        if (const Result<void> materialized = MaterializeCandidate(state); materialized.HasError())
             return Result<PreparedProjectMigration>::Failure(materialized.ErrorValue());
-        const Result<void> unchanged = VerifyAuthoritativeUnchanged(state);
-        if (unchanged.HasError())
+        if (const Result<void> unchanged = VerifyAuthoritativeUnchanged(state); unchanged.HasError())
             return Result<PreparedProjectMigration>::Failure(unchanged.ErrorValue());
 
         auto prepared = std::make_unique<PreparedProjectMigration::State>();
         prepared->context = state;
         prepared->candidateRoot = candidateRoot;
         RebuildPreparedChanges(*prepared);
+        LOG_INFO("application.project_migration.execute",
+                 "Migration candidate prepared source=%s target=%s.", sourceText.c_str(), targetText.c_str());
+        LOG_DEBUG("application.project_migration.execute",
+                  "Prepared candidate aggregate changed_files=%zu output_bytes=%llu.", prepared->changes.size(),
+                  static_cast<unsigned long long>(state->outputBytes));
         return Result<PreparedProjectMigration>::Success(PreparedProjectMigration(std::move(prepared)));
     }
 
@@ -624,11 +696,9 @@ namespace Horo::Application
                 return Result<void>::Failure(AnnotateStageError(
                     validated.ErrorValue(), {"horo.project.target_contract"}, descriptor.id));
         }
-        const Result<void> materialized = MaterializeCandidate(prepared.state_->context);
-        if (materialized.HasError())
+        if (const Result<void> materialized = MaterializeCandidate(prepared.state_->context); materialized.HasError())
             return materialized;
-        const Result<void> unchanged = VerifyAuthoritativeUnchanged(prepared.state_->context);
-        if (unchanged.HasError())
+        if (const Result<void> unchanged = VerifyAuthoritativeUnchanged(prepared.state_->context); unchanged.HasError())
             return unchanged;
         RebuildPreparedChanges(*prepared.state_);
         return Result<void>::Success();
@@ -636,18 +706,17 @@ namespace Horo::Application
 
     Result<ProjectMigrationDryRunResult> ProjectMigrationExecutor::VerifiedDryRun(
         const std::filesystem::path& projectRoot, const ProjectMigrationPlan& plan, JobSystem& jobs,
-        const ProjectMigrationLimits limits, const CancellationToken cancellation)
+        const ProjectMigrationLimits& limits, const CancellationToken cancellation)
     {
         static std::atomic<std::uint64_t> sequence{0};
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        const auto candidateRoot = projectRoot / (".horo-migration-dry-run-" + std::to_string(stamp) + "-" +
-            std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+        const auto candidateRoot = projectRoot / std::format("{}{}-{}", kMigrationDryRunRootPrefix, stamp,
+                                                             sequence.fetch_add(1));
         auto prepared = Prepare(projectRoot, candidateRoot, plan, jobs, limits, cancellation);
         if (prepared.HasError()) return Result<ProjectMigrationDryRunResult>::Failure(prepared.ErrorValue());
         PreparedProjectMigration candidate = std::move(prepared).Value();
-        const Result<void> finalized = Finalize(
-            candidate, {}, plan.targetValidator, cancellation);
-        if (finalized.HasError())
+        if (const Result<void> finalized = Finalize(candidate, {}, plan.targetValidator, cancellation); finalized.
+            HasError())
             return Result<ProjectMigrationDryRunResult>::Failure(finalized.ErrorValue());
         ProjectMigrationDryRunResult result{
             .inputBytes = candidate.InputBytes(),

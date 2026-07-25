@@ -17,120 +17,120 @@
 
 namespace
 {
-using namespace Horo;
-using namespace Horo::Application;
-using namespace Horo::Editor;
+    using namespace Horo;
+    using namespace Horo::Application;
+    using namespace Horo::Editor;
 
-struct TempProject
-{
-    std::filesystem::path root = std::filesystem::temp_directory_path() / "horo-project-open-service-test";
-
-    TempProject()
+    struct TempProject
     {
-        std::error_code error;
-        std::filesystem::remove_all(root, error);
-        std::filesystem::create_directories(root / ".horo");
-        const auto *decision = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
-        std::ofstream out(root / ".horo/project.json");
-        out << "{\"horoVersion\":\"" << FormatHoroVersion(decision->release.value) << "\",\"persistentContract\":\""
-            << FormatPersistentContractHash(decision->persistentContract)
-            << "\",\"projectId\":\"test-project\",\"name\":\"Open Test\","
-               "\"projectVersion\":\"0.1.0\",\"createdAt\":\"2026-07-19T00:00:00Z\","
-               "\"settings\":{\"renderBackend\":\"opengl\"}}\n";
+        std::filesystem::path root = std::filesystem::temp_directory_path() / "horo-project-open-service-test";
+
+        TempProject()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+            std::filesystem::create_directories(root / ".horo");
+            const auto* decision = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
+            std::ofstream out(root / ".horo/project.json");
+            out << "{\"horoVersion\":\"" << FormatHoroVersion(decision->release.value) << "\",\"persistentContract\":\""
+                << FormatPersistentContractHash(decision->persistentContract)
+                << "\",\"projectId\":\"test-project\",\"name\":\"Open Test\","
+                "\"projectVersion\":\"0.1.0\",\"createdAt\":\"2026-07-19T00:00:00Z\","
+                "\"settings\":{\"renderBackend\":\"opengl\"}}\n";
+        }
+
+        ~TempProject()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    };
+
+    struct LegacyProject
+    {
+        std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("horo-project-open-migration-test-" +
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        LegacyProject()
+        {
+            const std::filesystem::path fixture =
+                std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+                "fixtures/projects/horo_0_0_1_compression";
+            std::filesystem::copy(fixture, root, std::filesystem::copy_options::recursive);
+        }
+
+        ~LegacyProject()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    };
+
+    [[nodiscard]] nlohmann::json ReadJson(const std::filesystem::path& path)
+    {
+        std::ifstream input(path, std::ios::binary);
+        return nlohmann::json::parse(input);
     }
 
-    ~TempProject()
+    [[nodiscard]] std::string ReadText(const std::filesystem::path& path)
     {
-        std::error_code error;
-        std::filesystem::remove_all(root, error);
-    }
-};
-
-struct LegacyProject
-{
-    std::filesystem::path root = std::filesystem::temp_directory_path() /
-                                 ("horo-project-open-migration-test-" +
-                                  std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-
-    LegacyProject()
-    {
-        const std::filesystem::path fixture =
-            std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
-            "fixtures/projects/horo_0_0_1_compression";
-        std::filesystem::copy(fixture, root, std::filesystem::copy_options::recursive);
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
-    ~LegacyProject()
+    struct SlowPreparedState final : IPreparedProjectOpenDerivedState
     {
-        std::error_code error;
-        std::filesystem::remove_all(root, error);
-    }
-};
+        explicit SlowPreparedState(std::thread::id& installThread) : installThread_(installThread)
+        {
+        }
 
-[[nodiscard]] nlohmann::json ReadJson(const std::filesystem::path &path)
-{
-    std::ifstream input(path, std::ios::binary);
-    return nlohmann::json::parse(input);
-}
+        Result<std::string> Install() override
+        {
+            installThread_ = std::this_thread::get_id();
+            return Result<std::string>::Success("7");
+        }
 
-[[nodiscard]] std::string ReadText(const std::filesystem::path &path)
-{
-    std::ifstream input(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-}
+        std::thread::id& installThread_;
+    };
 
-struct SlowPreparedState final : IPreparedProjectOpenDerivedState
-{
-    explicit SlowPreparedState(std::thread::id &installThread) : installThread_(installThread)
+    struct SlowContributor final : IProjectOpenDerivedStateContributor
     {
-    }
+        std::string_view Id() const noexcept override
+        {
+            return "test.slow";
+        }
 
-    Result<std::string> Install() override
+        Result<std::unique_ptr<IPreparedProjectOpenDerivedState>> Prepare(const std::filesystem::path&,
+                                                                          const CancellationToken&) override
+        {
+            prepareThread = std::this_thread::get_id();
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            return Result<std::unique_ptr<IPreparedProjectOpenDerivedState>>::Success(
+                std::make_unique<SlowPreparedState>(installThread));
+        }
+
+        std::thread::id prepareThread;
+        std::thread::id installThread;
+    };
+
+    ProjectOpenProgressSnapshot PumpToTerminal(ProjectOpenService& service, ProjectOpenOperationId id)
     {
-        installThread_ = std::this_thread::get_id();
-        return Result<std::string>::Success("7");
+        float previousProgress = 0.0F;
+        for (int i = 0; i < 2000; ++i)
+        {
+            service.PumpOwnerThread();
+            auto snapshot = service.Query(id);
+            REQUIRE((snapshot.has_value()));
+            REQUIRE((snapshot->progress >= previousProgress));
+            previousProgress = snapshot->progress;
+            if (snapshot->outcome != ProjectOpenOutcome::Running)
+                return *snapshot;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        REQUIRE((false && "project open did not terminate"));
+        return {};
     }
-
-    std::thread::id &installThread_;
-};
-
-struct SlowContributor final : IProjectOpenDerivedStateContributor
-{
-    std::string_view Id() const noexcept override
-    {
-        return "test.slow";
-    }
-
-    Result<std::unique_ptr<IPreparedProjectOpenDerivedState>> Prepare(const std::filesystem::path &,
-                                                                      const CancellationToken &) override
-    {
-        prepareThread = std::this_thread::get_id();
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
-        return Result<std::unique_ptr<IPreparedProjectOpenDerivedState>>::Success(
-            std::make_unique<SlowPreparedState>(installThread));
-    }
-
-    std::thread::id prepareThread;
-    std::thread::id installThread;
-};
-
-ProjectOpenProgressSnapshot PumpToTerminal(ProjectOpenService &service, ProjectOpenOperationId id)
-{
-    float previousProgress = 0.0F;
-    for (int i = 0; i < 2000; ++i)
-    {
-        service.PumpOwnerThread();
-        auto snapshot = service.Query(id);
-        REQUIRE((snapshot.has_value()));
-        REQUIRE((snapshot->progress >= previousProgress));
-        previousProgress = snapshot->progress;
-        if (snapshot->outcome != ProjectOpenOutcome::Running)
-            return *snapshot;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    REQUIRE((false && "project open did not terminate"));
-    return {};
-}
 } // namespace
 
 TEST_CASE("Project Open Service Tests", "[unit][editor]")
@@ -174,7 +174,7 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
     service.Shutdown();
 
     SlowContributor slow;
-    std::array<IProjectOpenDerivedStateContributor *, 1> contributors{&slow};
+    std::array<IProjectOpenDerivedStateContributor*, 1> contributors{&slow};
     ProjectOpenService asynchronous{jobs, files, preflight, mutations, transactions, renderers, contributors};
     auto asyncStarted = asynchronous.Start(
         {.projectRoot = project.root, .expectedProjectName = "Open Test", .engineBuildIdentity = "test"});
@@ -202,7 +202,7 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
 
     LegacyProject legacy;
     SlowContributor legacyDerived;
-    std::array<IProjectOpenDerivedStateContributor *, 1> legacyContributors{&legacyDerived};
+    std::array<IProjectOpenDerivedStateContributor*, 1> legacyContributors{&legacyDerived};
     ProjectOpenService migrating{jobs, files, preflight, mutations, transactions, renderers, legacyContributors};
     auto migrationStarted = migrating.Start(
         {.projectRoot = legacy.root, .expectedProjectName = "Legacy Migration Test", .engineBuildIdentity = "test"});
@@ -211,8 +211,9 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
     if (migrationSnapshot.outcome != ProjectOpenOutcome::ReadyToActivate)
         std::fprintf(stderr, "legacy project open failed in phase %u: %s\n",
                      static_cast<unsigned>(migrationSnapshot.phase),
-                     migrationSnapshot.diagnostic.has_value() ? migrationSnapshot.diagnostic->message.c_str()
-                                                              : "missing diagnostic");
+                     migrationSnapshot.diagnostic.has_value()
+                         ? migrationSnapshot.diagnostic->message.c_str()
+                         : "missing diagnostic");
     REQUIRE((migrationSnapshot.outcome == ProjectOpenOutcome::ReadyToActivate));
     REQUIRE((migrationSnapshot.readySession.has_value()));
     auto migratedRoot = ReadJson(legacy.root / ".horo/project.json");
@@ -225,7 +226,7 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
     REQUIRE((history.is_object()));
     REQUIRE((history.at("receipts").size() == 1));
     REQUIRE((history.at("receipts").front().at("definitions").front().at("id") ==
-             "core.project_settings.compression_defaults"));
+        "core.project_settings.compression_defaults"));
     const auto activeMigrationRoot = legacy.root / ".horo/local/migration";
     REQUIRE((!std::filesystem::exists(activeMigrationRoot) || std::filesystem::is_empty(activeMigrationRoot)));
     auto migratedReservation = migrating.ReserveSession(*migrationSnapshot.readySession);
@@ -250,9 +251,11 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
         << invalidRoot.dump(2) << '\n';
     const std::string invalidBefore = ReadText(invalidLegacy.root / ".horo/project.json");
     ProjectOpenService invalidOpen{jobs, files, preflight, mutations, transactions, renderers};
-    auto invalidStarted = invalidOpen.Start({.projectRoot = invalidLegacy.root,
-                                             .expectedProjectName = "Legacy Migration Test",
-                                             .engineBuildIdentity = "test"});
+    auto invalidStarted = invalidOpen.Start({
+        .projectRoot = invalidLegacy.root,
+        .expectedProjectName = "Legacy Migration Test",
+        .engineBuildIdentity = "test"
+    });
     REQUIRE((invalidStarted.HasValue()));
     const auto invalidSnapshot = PumpToTerminal(invalidOpen, invalidStarted.Value().Id());
     REQUIRE((invalidSnapshot.outcome == ProjectOpenOutcome::Failed));

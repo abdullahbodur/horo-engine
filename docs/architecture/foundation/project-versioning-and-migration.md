@@ -2,13 +2,15 @@
 
 ## Status
 
-Implemented through the local MIG-001E slice: version/compatibility inspection, structured
-migration definitions, catalog generation, deterministic planning, constrained
-pipeline execution, verified dry-run, shared project mutation locking, durable
-journaled publication, content-addressed recovery contracts, canonical history,
-bounded committed cleanup, automatic recovery, real project-open orchestration,
-and typed Welcome-card compatibility inspection exist. MIG-001F subsystem
-adoption remains proposed.
+MIG-001A–E and the first production adoption slice MIG-001F-01 are implemented
+and locally verified on macOS/AppleClang. Version/compatibility inspection,
+structured migration definitions, catalog generation, deterministic planning,
+constrained pipeline execution, verified dry-run, shared project mutation
+locking, durable journaled publication, content-addressed recovery contracts,
+canonical history, bounded committed cleanup, automatic recovery, real
+project-open orchestration, typed Welcome-card compatibility inspection, and
+structured migration lifecycle logging exist. Future subsystem/package adoption
+remains under MIG-001F; cross-platform hardening remains under TST-001.
 
 ## Purpose
 

@@ -20,32 +20,33 @@
 
 namespace
 {
-using namespace Horo;
-using namespace Horo::Editor;
-using namespace Horo::Render;
+    using namespace Horo;
+    using namespace Horo::Editor;
+    using namespace Horo::Render;
 
-void Check(const bool condition)
-{
-    REQUIRE((condition));
-}
-
-void WritePpm(const std::filesystem::path &path, const std::span<const std::uint8_t> rgba, const std::uint32_t width,
-              const std::uint32_t height)
-{
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    Check(output.is_open());
-    output << "P6\n" << width << ' ' << height << "\n255\n";
-    for (std::uint32_t y = 0; y < height; ++y)
+    void Check(const bool condition)
     {
-        const std::uint32_t sourceY = height - 1 - y;
-        for (std::uint32_t x = 0; x < width; ++x)
-        {
-            const std::size_t offset = (static_cast<std::size_t>(sourceY) * width + x) * 4;
-            output.write(reinterpret_cast<const char *>(rgba.data() + offset), 3);
-        }
+        REQUIRE((condition));
     }
-    Check(output.good());
-}
+
+    void WritePpm(const std::filesystem::path& path, const std::span<const std::uint8_t> rgba,
+                  const std::uint32_t width,
+                  const std::uint32_t height)
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        Check(output.is_open());
+        output << "P6\n" << width << ' ' << height << "\n255\n";
+        for (std::uint32_t y = 0; y < height; ++y)
+        {
+            const std::uint32_t sourceY = height - 1 - y;
+            for (std::uint32_t x = 0; x < width; ++x)
+            {
+                const std::size_t offset = (static_cast<std::size_t>(sourceY) * width + x) * 4;
+                output.write(reinterpret_cast<const char*>(rgba.data() + offset), 3);
+            }
+        }
+        Check(output.good());
+    }
 } // namespace
 
 TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
@@ -57,7 +58,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
     Check(SDL_Init(SDL_INIT_VIDEO));
     Check(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1));
     Check(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24));
-    SDL_Window *window = SDL_CreateWindow("Horo viewport smoke", 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+    SDL_Window* window = SDL_CreateWindow("Horo viewport smoke", 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
     Check(window != nullptr);
 
     SdlOpenGLPresentationPort presentationPort{*window};
@@ -65,10 +66,12 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
     Check(RegisterOpenGLRenderBackend(registry, presentationPort).HasValue());
     Check(registry.Seal().HasValue());
     auto frontendResult = RenderFrontend::Create(registry, RenderBackendId{"opengl"},
-                                                 RenderBackendConfig{.requirePresentation = true,
-                                                                     .enableValidation = false,
-                                                                     .maxFramesInFlight = 2,
-                                                                     .presentMode = PresentMode::Immediate});
+                                                 RenderBackendConfig{
+                                                     .requirePresentation = true,
+                                                     .enableValidation = false,
+                                                     .maxFramesInFlight = 2,
+                                                     .presentMode = PresentMode::Immediate
+                                                 });
     Check(frontendResult.HasValue());
     std::unique_ptr<RenderFrontend> frontend = std::move(frontendResult).Value();
 
@@ -87,10 +90,12 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
     EditorViewportRendererOpenGL viewport;
     Check(viewport.Initialize().HasValue());
     Runtime::PrimitiveMeshCache meshCache;
-    constexpr std::array primitiveTypes{Runtime::PrimitiveMeshType::Box,     Runtime::PrimitiveMeshType::Sphere,
-                                        Runtime::PrimitiveMeshType::Capsule, Runtime::PrimitiveMeshType::Cylinder,
-                                        Runtime::PrimitiveMeshType::Cone,    Runtime::PrimitiveMeshType::Plane,
-                                        Runtime::PrimitiveMeshType::Quad};
+    constexpr std::array primitiveTypes{
+        Runtime::PrimitiveMeshType::Box, Runtime::PrimitiveMeshType::Sphere,
+        Runtime::PrimitiveMeshType::Capsule, Runtime::PrimitiveMeshType::Cylinder,
+        Runtime::PrimitiveMeshType::Cone, Runtime::PrimitiveMeshType::Plane,
+        Runtime::PrimitiveMeshType::Quad
+    };
     std::vector<Runtime::PrimitiveMeshLease> meshLeases;
     std::vector<EditorViewportMeshResourceView> meshResources;
     std::vector<EditorViewportInstance> viewportInstances;
@@ -99,26 +104,35 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
         auto acquiredMesh = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(primitiveTypes[index]));
         Check(acquiredMesh.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquiredMesh).Value();
-        const MeshData &mesh = meshLease.Data();
+        const MeshData& mesh = meshLease.Data();
         const RenderMeshHandle meshHandle{meshLease.Id(), 1};
         meshResources.push_back({meshHandle, mesh.vertices, mesh.indices, mesh.localBounds});
-        constexpr std::array positions{Math::Vec2{0, 0},       Math::Vec2{-1.0F, 0.7F},  Math::Vec2{0, 0.9F},
-                                       Math::Vec2{1.0F, 0.7F}, Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},
-                                       Math::Vec2{1.0F, -0.7F}};
-        const float scale = primitiveTypes[index] == Runtime::PrimitiveMeshType::Plane ? 0.08F
-                            : index == 0                                               ? 0.65F
-                                                                                       : 0.45F;
+        constexpr std::array positions{
+            Math::Vec2{0, 0}, Math::Vec2{-1.0F, 0.7F}, Math::Vec2{0, 0.9F},
+            Math::Vec2{1.0F, 0.7F}, Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},
+            Math::Vec2{1.0F, -0.7F}
+        };
+        const float scale = primitiveTypes[index] == Runtime::PrimitiveMeshType::Plane
+                                ? 0.08F
+                                : index == 0
+                                ? 0.65F
+                                : 0.45F;
         viewportInstances.push_back(
-            {meshHandle,
-             Math::Transform{.translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}}
-                 .ToMatrix(),
-             mesh.localBounds,
-             CoreDefaultMaterial,
-             {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}});
+            {
+                meshHandle,
+                Math::Transform{
+                    .translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}
+                }
+                .ToMatrix(),
+                mesh.localBounds,
+                CoreDefaultMaterial,
+                {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}
+            });
         meshLeases.push_back(std::move(meshLease));
     }
     const EditorViewportSceneView viewportScene{
-        .camera = {}, .meshResources = meshResources, .instances = viewportInstances};
+        .camera = {}, .meshResources = meshResources, .instances = viewportInstances
+    };
 
     GLint initializedVertexArray = 0;
     GLint initializedArrayBuffer = 0;
@@ -140,12 +154,14 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
             .id = RenderPassId{1},
             .kind = RenderPassKind::Graphics,
             .staticMesh =
-                StaticMeshPassDescriptor{
-                    .target = viewportTarget,
-                    .extent = {width, height},
-                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                                             viewportScene.instances},
+            StaticMeshPassDescriptor{
+                .target = viewportTarget,
+                .extent = {width, height},
+                .scene = RenderSceneView{
+                    ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
+                    viewportScene.instances
                 },
+            },
         },
         RenderPassDescriptor{
             .id = RenderPassId{2},
@@ -187,16 +203,16 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
     Check(restoredDrawFramebuffer == static_cast<GLint>(callerDrawFramebuffer));
     Check(restoredReadFramebuffer == static_cast<GLint>(callerReadFramebuffer));
     Check(restoredViewport[0] == 7 && restoredViewport[1] == 9 && restoredViewport[2] == 111 &&
-          restoredViewport[3] == 113);
+        restoredViewport[3] == 113);
     Check(glIsEnabled(GL_DEPTH_TEST) == GL_TRUE);
     Check(restoredDepthFunction == GL_ALWAYS);
     Check(glIsEnabled(GL_SCISSOR_TEST) == GL_TRUE);
     Check(glIsEnabled(GL_BLEND) == GL_TRUE);
     Check(glIsEnabled(GL_CULL_FACE) == GL_TRUE);
     Check(restoredScissorBox[0] == 3 && restoredScissorBox[1] == 5 && restoredScissorBox[2] == 7 &&
-          restoredScissorBox[3] == 11);
+        restoredScissorBox[3] == 11);
     Check(restoredColorMask[0] == GL_FALSE && restoredColorMask[1] == GL_FALSE && restoredColorMask[2] == GL_FALSE &&
-          restoredColorMask[3] == GL_FALSE);
+        restoredColorMask[3] == GL_FALSE);
     Check(restoredDepthMask == GL_FALSE);
     Check(std::fabs(restoredClearColor[0] - 0.2F) < 0.001F && std::fabs(restoredClearColor[3] - 0.5F) < 0.001F);
     glDisable(GL_DEPTH_TEST);

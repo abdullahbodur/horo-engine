@@ -5,6 +5,7 @@ namespace Horo
     namespace
     {
         const ErrorDomainId ConfigurationDomain{"horo.configuration"};
+        const ErrorDomainId HashingDomain{"horo.foundation.hashing"};
         const ErrorDomainId JobDomain{"horo.foundation.jobs"};
         const ErrorDomainId MathDomain{"horo.foundation.math"};
     } // namespace
@@ -155,6 +156,19 @@ namespace Horo
         };
     } // namespace JobErrors
 
+    namespace HashingErrors
+    {
+        const ErrorCodeDescriptor InvalidSha256Text{
+            .domain = HashingDomain,
+            .code = ErrorCode{"foundation.sha256.invalid_text"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "SHA-256 text is not canonical.",
+            .remediationHint = "Provide the lowercase sha256 prefix and exactly 64 lowercase hexadecimal digits.",
+            .retryable = false,
+            .userActionable = true
+        };
+    } // namespace HashingErrors
+
     namespace Math::Errors
     {
         const ErrorCodeDescriptor InvalidAffineMatrix{
@@ -257,4 +271,42 @@ namespace Horo
             .userActionable = false
         };
     } // namespace Math::Errors
+
+    namespace
+    {
+        const ErrorDomainId PathDomain{"horo.foundation.paths"};
+    } // namespace
+
+    namespace PathErrors
+    {
+        const ErrorCodeDescriptor DirectoryCreateFailed{
+            .domain = PathDomain,
+            .code = ErrorCode{"paths.directory_create_failed"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Failed to create directory.",
+            .remediationHint = "Verify parent directory permissions and available storage.",
+            .retryable = true,
+            .userActionable = true
+        };
+
+        const ErrorCodeDescriptor PathEscape{
+            .domain = PathDomain,
+            .code = ErrorCode{"paths.escape"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Path escapes the allowed root.",
+            .remediationHint = "Use a path that stays within the project directory.",
+            .retryable = false,
+            .userActionable = true
+        };
+
+        const ErrorCodeDescriptor InvalidPath{
+            .domain = PathDomain,
+            .code = ErrorCode{"paths.invalid"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Path is invalid or malformed.",
+            .remediationHint = "Provide a valid path without illegal characters or empty segments.",
+            .retryable = false,
+            .userActionable = true
+        };
+    } // namespace PathErrors
 } // namespace Horo

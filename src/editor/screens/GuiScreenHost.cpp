@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 
+#include "Horo/Editor/AssetImportModal.h"
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Editor/EditorSettingsService.h"
@@ -14,6 +15,7 @@
 #include "NavigationErrors.h"
 #include "editor/project_model/RendererAvailability.h"
 #include "editor/status_bar/EditorStatusBar.h"
+#include "runtime/assets/importer/builtin/obj_mesh/ObjMeshImporter.h"
 
 #include <algorithm>
 
@@ -242,10 +244,18 @@ void GuiScreenHost::SetActiveCreationId(std::optional<ProjectCreationOperationId
 {
     activeCreationId_ = id;
 }
-
+/** @copydoc GuiScreenHost::GetActiveCreationId */
 std::optional<ProjectCreationOperationId> GuiScreenHost::GetActiveCreationId() const noexcept
 {
     return activeCreationId_;
+}
+
+/** @copydoc GuiScreenHost::CurrentProjectRoot */
+std::filesystem::path GuiScreenHost::CurrentProjectRoot() const noexcept
+{
+    if (!currentProjectRoot_.empty())
+        return currentProjectRoot_;
+    return std::filesystem::current_path();
 }
 
 Result<void> GuiScreenHost::Navigate(GuiRoute destination)
@@ -492,6 +502,27 @@ void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocatio
     case EditorMenuAction::OpenProject:
         static_cast<void>(Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
         return;
+    case EditorMenuAction::ImportAssets:
+        if (context_ && modalHost_ && !modalHost_->HasOpenModal())
+        {
+            // Build catalog with all built-in importers
+            Assets::AssetImporterCatalog catalog;
+            static bool s_registered = false;
+            if (!s_registered)
+            {
+                RegisterAllBuiltinImporters(catalog);
+                s_registered = true;
+            }
+            auto catSnapshot = catalog.Publish();
+            auto catPtr = catSnapshot.HasValue()
+                              ? catSnapshot.Value()
+                              : std::make_shared<Assets::AssetImporterCatalogSnapshot>();
+
+            auto modal = std::make_unique<AssetImportModal>(
+                context_->theme.fonts, m_importJobs, catPtr);
+            static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
+        }
+        return;
     case EditorMenuAction::OpenEditorSettings:
         if (context_ && settingsService_ && modalHost_)
         {
@@ -513,6 +544,27 @@ void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocatio
         return;
     case EditorMenuAction::None:
         return;
+    }
+}
+
+void GuiScreenHost::HandleDropFiles(const std::vector<std::filesystem::path> &files)
+{
+    if (files.empty() || !modalHost_) return;
+
+    // Auto-open import modal if not already open
+    if (!modalHost_->HasOpenModal())
+    {
+        EditorMenuInvocation inv{EditorMenuAction::ImportAssets};
+        DispatchMenuInvocation(inv);
+    }
+
+    // Feed files into the import modal if it's the top modal.
+    auto *topModal = modalHost_->TopModal();
+    auto *importModal = dynamic_cast<AssetImportModal *>(topModal);
+    if (importModal)
+    {
+        CancellationToken cancellation;
+        static_cast<void>(importModal->BeginImport(files, CurrentProjectRoot(), cancellation));
     }
 }
 

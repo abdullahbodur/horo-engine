@@ -8,14 +8,12 @@
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace Horo::Editor
 {

@@ -42,7 +42,7 @@ namespace Horo::Application
             const auto digit = [](const char c) { return c >= '0' && c <= '9'; };
             if (!alpha(value.front()))
                 return false;
-            return std::all_of(value.begin(), value.end(), [&](const char c)
+            return std::ranges::all_of(value, [&](const char c)
             {
                 return alpha(c) || digit(c) || c == '-';
             });
@@ -79,22 +79,23 @@ namespace Horo::Application
             return Result<std::string>::Success(std::move(contents));
         }
 
-        Result<Json> ParseJson(const std::string& contents)
+        struct ParserState
         {
             bool duplicate = false;
             bool limitExceeded = false;
             std::size_t keyCount = 0;
             std::vector<std::unordered_set<std::string>> keys;
-            const Json::parser_callback_t callback = [&](const int depth, const Json::parse_event_t event, Json& parsed)
+
+            bool OnEvent(const int depth, const Json::parse_event_t event, Json& parsed)
             {
                 if (depth < 0 || static_cast<std::size_t>(depth) > kMaximumDepth)
                 {
                     limitExceeded = true;
                     return false;
                 }
+                const auto objectDepth = static_cast<std::size_t>(depth);
                 if (event == Json::parse_event_t::object_start)
                 {
-                    const std::size_t objectDepth = static_cast<std::size_t>(depth);
                     if (keys.size() <= objectDepth)
                         keys.resize(objectDepth + 1);
                     keys[objectDepth].clear();
@@ -102,10 +103,10 @@ namespace Horo::Application
                 else if (event == Json::parse_event_t::key)
                 {
                     const std::string value = parsed.get<std::string>();
-                    const std::size_t objectDepth = depth > 0 ? static_cast<std::size_t>(depth - 1) : 0;
-                    if (keys.size() <= objectDepth)
-                        keys.resize(objectDepth + 1);
-                    duplicate = !keys[objectDepth].insert(value).second || duplicate;
+                    const auto parentDepth = objectDepth > 0 ? objectDepth - 1 : 0;
+                    if (keys.size() <= parentDepth)
+                        keys.resize(parentDepth + 1);
+                    duplicate = !keys[parentDepth].insert(value).second || duplicate;
                     limitExceeded = ++keyCount > kMaximumKeys || value.size() > kMaximumKeyBytes || limitExceeded;
                 }
                 else if (event == Json::parse_event_t::value && parsed.is_string())
@@ -113,22 +114,32 @@ namespace Horo::Application
                     limitExceeded = parsed.get_ref<const std::string&>().size() > kMaximumStringBytes || limitExceeded;
                 }
                 return !duplicate && !limitExceeded;
+            }
+        };
+
+        Result<Json> ParseJson(const std::string& contents)
+        {
+            ParserState state;
+            const Json::parser_callback_t callback =
+                [&state](const int depth, const Json::parse_event_t event, Json& parsed)
+            {
+                return state.OnEvent(depth, event, parsed);
             };
 
             try
             {
                 Json document = Json::parse(contents, callback, true, false);
-                if (duplicate)
+                if (state.duplicate)
                     return Result<Json>::Failure(MetadataError(ProjectErrors::MetadataDuplicateKey));
-                if (limitExceeded)
+                if (state.limitExceeded)
                     return Result<Json>::Failure(MetadataError(ProjectErrors::MetadataLimitExceeded));
                 return Result<Json>::Success(std::move(document));
             }
             catch (const Json::exception& exception)
             {
-                if (duplicate)
+                if (state.duplicate)
                     return Result<Json>::Failure(MetadataError(ProjectErrors::MetadataDuplicateKey));
-                if (limitExceeded)
+                if (state.limitExceeded)
                     return Result<Json>::Failure(MetadataError(ProjectErrors::MetadataLimitExceeded));
                 return Result<Json>::Failure(MetadataError(ProjectErrors::MetadataInvalidJson,
                                                            "Invalid project metadata JSON: " + std::string{
@@ -176,7 +187,7 @@ namespace Horo::Application
             return parsed.HasValue() && parsed.Value() == version;
         }
 
-        ProjectCompatibilitySnapshot FailedSnapshot(const EngineReleaseVersion target,
+        ProjectCompatibilitySnapshot FailedSnapshot(const EngineReleaseVersion& target,
                                                     const ProjectCompatibilityStatus status,
                                                     Error error)
         {
@@ -198,7 +209,7 @@ namespace Horo::Application
             return Result<ReleaseCompatibilityRegistry>::Failure(MakeError(ProjectErrors::RegistryInvalid));
         }
         std::vector<ReleaseCompatibilityDecision> copy{decisions.begin(), decisions.end()};
-        std::sort(copy.begin(), copy.end(), [](const auto& lhs, const auto& rhs)
+        std::ranges::sort(copy, [](const auto& lhs, const auto& rhs)
         {
             return CompareHoroVersions(lhs.release.value, rhs.release.value) == std::strong_ordering::less;
         });
@@ -227,11 +238,11 @@ namespace Horo::Application
                 return Result<
                     ReleaseCompatibilityRegistry>::Failure(MakeError(ProjectErrors::RegistryBaselineMismatch));
             }
-            const auto baseline = std::find_if(copy.begin(), copy.end(), [&](const auto& candidate)
-            {
-                return candidate.release.value == decision.contractBaseline.value;
-            });
-            if (baseline == copy.end() || baseline->kind != CompatibilityDecisionKind::EstablishBaseline ||
+            if (const auto baseline = std::ranges::find_if(copy, [&](const auto& candidate)
+                {
+                    return candidate.release.value == decision.contractBaseline.value;
+                });
+                baseline == copy.end() || baseline->kind != CompatibilityDecisionKind::EstablishBaseline ||
                 baseline->persistentContract != decision.persistentContract)
             {
                 return Result<
@@ -253,15 +264,16 @@ namespace Horo::Application
 
     /** @copydoc ReleaseCompatibilityRegistry::Find */
     const ReleaseCompatibilityDecision* ReleaseCompatibilityRegistry::Find(
-        const EngineReleaseVersion release) const noexcept
+        const EngineReleaseVersion& release) const noexcept
     {
-        const auto found = std::lower_bound(
-            decisions_.begin(), decisions_.end(), release,
-            [](const ReleaseCompatibilityDecision& decision, const EngineReleaseVersion candidate)
+        const auto found = std::ranges::lower_bound(
+            decisions_, release,
+            [](const EngineReleaseVersion& lhs, const EngineReleaseVersion& rhs)
             {
-                return CompareHoroVersions(decision.release.value, candidate.value) == std::strong_ordering::less;
-            });
-        return found != decisions_.end() && found->release == release ? &*found : nullptr;
+                return CompareHoroVersions(lhs.value, rhs.value) == std::strong_ordering::less;
+            },
+            &ReleaseCompatibilityDecision::release);
+        return found != decisions_.end() && found->release == release ? std::to_address(found) : nullptr;
     }
 
     /** @copydoc ReleaseCompatibilityRegistry::Decisions */
@@ -349,7 +361,7 @@ namespace Horo::Application
     }
 
     ProjectCompatibilityInspector::ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry,
-                                                                 const EngineReleaseVersion currentRelease,
+                                                                 const EngineReleaseVersion& currentRelease,
                                                                  const ICompatibilityProofVerifier& proofVerifier)
         noexcept
         : registry_(registry), currentRelease_(currentRelease), proofVerifier_(proofVerifier)
@@ -379,13 +391,13 @@ namespace Horo::Application
         }
 
         ProjectCompatibilitySnapshot snapshot{.metadata = metadata, .targetVersion = currentRelease_};
-        const ReleaseCompatibilityDecision* source = registry_.Find(metadata.horoVersion);
-        if (source != nullptr)
+        if (const ReleaseCompatibilityDecision* source = registry_.Find(metadata.horoVersion); source != nullptr)
         {
+            using enum ProjectCompatibilityStatus;
             snapshot.sourceBaseline = source->contractBaseline;
             if (source->persistentContract != metadata.persistentContract)
             {
-                snapshot.status = ProjectCompatibilityStatus::FutureVersion;
+                snapshot.status = FutureVersion;
                 snapshot.diagnostic =
                     MakeError(ProjectErrors::HashInvalid, "Project contract does not match its release decision.");
                 return snapshot;
@@ -393,23 +405,24 @@ namespace Horo::Application
             const auto ordering = CompareHoroVersions(metadata.horoVersion.value, currentRelease_.value);
             if (ordering == std::strong_ordering::equal)
             {
-                snapshot.status = ProjectCompatibilityStatus::Current;
+                snapshot.status = Current;
                 return snapshot;
             }
             if (SameReleaseLine(metadata.horoVersion.value, currentRelease_.value) &&
                 source->contractBaseline == current->contractBaseline &&
                 source->persistentContract == current->persistentContract)
             {
-                snapshot.status = ProjectCompatibilityStatus::CompatibleReleaseLine;
+                snapshot.status = CompatibleReleaseLine;
                 snapshot.markerUpdateRequired = ordering == std::strong_ordering::less;
                 return snapshot;
             }
             snapshot.status = ordering == std::strong_ordering::less
-                                  ? ProjectCompatibilityStatus::MigrationPathMissing
-                                  : ProjectCompatibilityStatus::FutureVersion;
+                                  ? MigrationPathMissing
+                                  : FutureVersion;
             return snapshot;
         }
 
+        using enum ProjectCompatibilityStatus;
         const auto ordering = CompareHoroVersions(metadata.horoVersion.value, currentRelease_.value);
         if (ordering == std::strong_ordering::greater &&
             SameReleaseLine(metadata.horoVersion.value, currentRelease_.value) &&
@@ -421,15 +434,15 @@ namespace Horo::Application
                 proofVerifier_.Verify(*metadata.compatibilityProof, current->persistentContract);
             if (verification.HasValue())
             {
-                snapshot.status = ProjectCompatibilityStatus::CompatibleReleaseLine;
+                snapshot.status = CompatibleReleaseLine;
                 snapshot.sourceBaseline = current->contractBaseline;
                 return snapshot;
             }
             snapshot.diagnostic = verification.ErrorValue();
         }
         snapshot.status = ordering == std::strong_ordering::less
-                              ? ProjectCompatibilityStatus::MigrationPathMissing
-                              : ProjectCompatibilityStatus::FutureVersion;
+                              ? MigrationPathMissing
+                              : FutureVersion;
         if (!snapshot.diagnostic.has_value() && ordering == std::strong_ordering::greater)
         {
             snapshot.diagnostic = MakeError(ProjectErrors::ProofRejected);
@@ -446,10 +459,9 @@ namespace Horo::Application
         return {parsed.Value()};
     }
 
-    /** @copydoc BuiltInReleaseCompatibilityRegistry */
-    const ReleaseCompatibilityRegistry& BuiltInReleaseCompatibilityRegistry()
+    namespace
     {
-        static const ReleaseCompatibilityRegistry registry = []
+        ReleaseCompatibilityRegistry CreateBuiltInRegistry()
         {
             std::vector<ReleaseCompatibilityDecision> decisions;
             decisions.reserve(Generated::kHoroReleaseDecisionCount);
@@ -471,11 +483,17 @@ namespace Horo::Application
                         : CompatibilityDecisionKind::CompatibleReleaseLine
                 });
             }
-            const auto created = ReleaseCompatibilityRegistry::Create(decisions);
+            auto created = ReleaseCompatibilityRegistry::Create(decisions);
             if (created.HasError())
                 std::terminate();
             return std::move(created).Value();
-        }();
+        }
+    } // namespace
+
+    /** @copydoc BuiltInReleaseCompatibilityRegistry */
+    const ReleaseCompatibilityRegistry& BuiltInReleaseCompatibilityRegistry()
+    {
+        static const ReleaseCompatibilityRegistry registry = CreateBuiltInRegistry();
         return registry;
     }
 

@@ -33,7 +33,16 @@ NSString *LocalizedTitle(const Horo::Editor::ILocalizationService &localization,
     const NSInteger tag = [(NSMenuItem *)sender tag];
     if (tag > 0 && static_cast<std::size_t>(tag) <= g_invocations.size())
     {
-        g_pendingInvocation = g_invocations[static_cast<std::size_t>(tag) - 1];
+        const auto &inv = g_invocations[static_cast<std::size_t>(tag) - 1];
+        // Skip auto-fire: only accept explicit user clicks, not system-initiated menu validation.
+        // NSMenu sends performAction during first responder setup; we detect this by checking
+        // whether the event is a real mouse click (NSEventTypeLeftMouseDown) or key equivalent.
+        NSEvent *currentEvent = [NSApp currentEvent];
+        if (currentEvent && (currentEvent.type == NSEventTypeLeftMouseDown ||
+                             currentEvent.type == NSEventTypeKeyDown))
+        {
+            g_pendingInvocation = inv;
+        }
     }
 }
 @end
