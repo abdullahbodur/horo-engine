@@ -85,8 +85,11 @@ namespace Horo::Tests
             const std::string backendId = useMetal ? "metal" : "opengl";
             const std::string displayName = useMetal ? "Metal" : "OpenGL";
             return Editor::RendererAvailabilitySnapshot(
-                {Editor::RendererBackendAvailability{
-                    backendId, displayName, Editor::RendererAvailabilityState::Active, {}}},
+                {
+                    Editor::RendererBackendAvailability{
+                        backendId, displayName, Editor::RendererAvailabilityState::Active, {}
+                    }
+                },
                 backendId);
         }
 
@@ -131,8 +134,11 @@ namespace Horo::Tests
             if (!metadata)
                 throw std::runtime_error("Unable to write recent-project E2E metadata.");
 
-            if (!Editor::SaveRecentProjectsToDisk({Editor::RecentProjectEntry{
-                    name, projectRoot.string(), "Just now", "empty", std::nullopt}}))
+            if (!Editor::SaveRecentProjectsToDisk({
+                Editor::RecentProjectEntry{
+                    name, projectRoot.string(), "Just now", "empty", std::nullopt
+                }
+            }))
             {
                 throw std::runtime_error("Unable to seed the recent-project E2E list.");
             }

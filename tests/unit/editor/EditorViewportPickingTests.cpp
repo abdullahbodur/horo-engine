@@ -20,7 +20,11 @@ namespace
         return std::move(scene).Value();
     }
 
-    TEST_CASE("Center Ray Returns Nearest Stable Object Identity", "[unit][editor]")
+    TEST_CASE (
+    "Center Ray Returns Nearest Stable Object Identity"
+    ,
+    "[unit][editor]"
+    )
     {
         Runtime::PrimitiveMeshCache meshCache;
         SceneDocument document;
@@ -47,7 +51,11 @@ namespace
         REQUIRE((picked.Value().object == nearObject.Value().object));
     }
 
-    TEST_CASE("Miss And Invalid Query Remain Explicit Results", "[unit][editor]")
+    TEST_CASE (
+    "Miss And Invalid Query Remain Explicit Results"
+    ,
+    "[unit][editor]"
+    )
     {
         Runtime::PrimitiveMeshCache meshCache;
         SceneDocument document;
@@ -74,7 +82,11 @@ namespace
         REQUIRE((invalid.ErrorValue().code.Value() == "viewport_picking.invalid_query"));
     }
 
-    TEST_CASE("Identity Mapping Mismatch Is Rejected", "[unit][editor]")
+    TEST_CASE (
+    "Identity Mapping Mismatch Is Rejected"
+    ,
+    "[unit][editor]"
+    )
     {
         Runtime::PrimitiveMeshCache meshCache;
         auto acquired = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box));
@@ -109,7 +121,11 @@ namespace
         REQUIRE((invalidIdentity.ErrorValue().code.Value() == "viewport_picking.invalid_identity"));
     }
 
-    TEST_CASE("Orthographic Ray Picks Transformed Bounds", "[unit][editor]")
+    TEST_CASE (
+    "Orthographic Ray Picks Transformed Bounds"
+    ,
+    "[unit][editor]"
+    )
     {
         Runtime::PrimitiveMeshCache meshCache;
         SceneDocument document;

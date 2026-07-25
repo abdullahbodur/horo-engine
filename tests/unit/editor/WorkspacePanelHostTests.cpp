@@ -6,7 +6,11 @@ namespace
 {
     using namespace Horo::Editor;
 
-    TEST_CASE("Default Layout Contains Expected Stacks", "[unit][editor]")
+    TEST_CASE (
+    "Default Layout Contains Expected Stacks"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspacePanelHost host;
         REQUIRE((host.Layout().FindTabStack("workspace.left") != nullptr));
@@ -15,7 +19,11 @@ namespace
         REQUIRE((host.Layout().FindTabStack("workspace.document")->activeTab == "horo.viewport"));
     }
 
-    TEST_CASE("Opens And Moves Panel Transactionally", "[unit][editor]")
+    TEST_CASE (
+    "Opens And Moves Panel Transactionally"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspacePanelHost host;
         REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
@@ -28,14 +36,22 @@ namespace
         REQUIRE((left->tabs[1] == "horo.content_browser"));
     }
 
-    TEST_CASE("Rejects Duplicate Panel Without Mutation", "[unit][editor]")
+    TEST_CASE (
+    "Rejects Duplicate Panel Without Mutation"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspacePanelHost host;
         REQUIRE((!host.OpenPanel("horo.viewport", "workspace.left").Succeeded()));
         REQUIRE((host.Layout().FindTabStack("workspace.left")->tabs.size() == 1));
     }
 
-    TEST_CASE("Closes Panel And Keeps Active Tab Valid", "[unit][editor]")
+    TEST_CASE (
+    "Closes Panel And Keeps Active Tab Valid"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspacePanelHost host;
         REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
@@ -46,7 +62,11 @@ namespace
         REQUIRE((!host.ClosePanel("missing").Succeeded()));
     }
 
-    TEST_CASE("Creates A Split Without Losing The Target Node", "[unit][editor]")
+    TEST_CASE (
+    "Creates A Split Without Losing The Target Node"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspacePanelHost host;
         REQUIRE((host.DockPanel("horo.content_browser", "workspace.document", WorkspacePanelHost::DropKind::SplitBottom)

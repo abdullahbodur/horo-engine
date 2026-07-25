@@ -85,7 +85,11 @@ namespace
         ScreenStats& stats_;
     };
 
-    TEST_CASE("Shutdown Leaves Once Destroys Screen And Revokes Services", "[unit][editor]")
+    TEST_CASE (
+    "Shutdown Leaves Once Destroys Screen And Revokes Services"
+    ,
+    "[unit][editor]"
+    )
     {
         EngineDataBus engineEvents;
         EditorDataBus editorEvents;

@@ -90,7 +90,11 @@ namespace
         ModalStats& m_stats;
     };
 
-    TEST_CASE("Accepted Root Gates Interaction Before Its First Open Boundary", "[unit][editor]")
+    TEST_CASE (
+    "Accepted Root Gates Interaction Before Its First Open Boundary"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -109,7 +113,11 @@ namespace
         REQUIRE((&stats.context->modals == &host));
     }
 
-    TEST_CASE("Second Root Is Rejected As Busy", "[unit][editor]")
+    TEST_CASE (
+    "Second Root Is Rejected As Busy"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -123,7 +131,11 @@ namespace
         REQUIRE((result.ErrorValue().code.Value() == "editor.modal_host.busy"));
     }
 
-    TEST_CASE("Close Requested During Update Is Deferred Until The Frame Boundary", "[unit][editor]")
+    TEST_CASE (
+    "Close Requested During Update Is Deferred Until The Frame Boundary"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -139,7 +151,11 @@ namespace
         REQUIRE((!host.HasOpenModal()));
     }
 
-    TEST_CASE("Close Requested During Draw Is Deferred Until The Draw Boundary", "[unit][editor]")
+    TEST_CASE (
+    "Close Requested During Draw Is Deferred Until The Draw Boundary"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -155,7 +171,11 @@ namespace
         REQUIRE((stats.closeCalls == 1));
     }
 
-    TEST_CASE("Top And Scope Restore Only After Deferred Close Boundary", "[unit][editor]")
+    TEST_CASE (
+    "Top And Scope Restore Only After Deferred Close Boundary"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -173,7 +193,11 @@ namespace
         REQUIRE((host.InteractionScope().kind == EditorInteractionScopeKind::Workspace));
     }
 
-    TEST_CASE("Only Current Top Modal May Push A Child", "[unit][editor]")
+    TEST_CASE (
+    "Only Current Top Modal May Push A Child"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -193,7 +217,11 @@ namespace
         REQUIRE((host.TopModalId() == ModalId{2}));
     }
 
-    TEST_CASE("Child Push Commits At The Next Host Frame Boundary", "[unit][editor]")
+    TEST_CASE (
+    "Child Push Commits At The Next Host Frame Boundary"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -215,7 +243,11 @@ namespace
         REQUIRE((childStats.openCalls == 1));
     }
 
-    TEST_CASE("Force Detach Closes Each Modal Once And Does Not Repeat Callbacks", "[unit][editor]")
+    TEST_CASE (
+    "Force Detach Closes Each Modal Once And Does Not Repeat Callbacks"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -239,7 +271,11 @@ namespace
         REQUIRE((childStats.closeCalls == 1));
     }
 
-    TEST_CASE("Orderly Shutdown Is Synchronous Idempotent And Stops New Requests", "[unit][editor]")
+    TEST_CASE (
+    "Orderly Shutdown Is Synchronous Idempotent And Stops New Requests"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;
@@ -261,7 +297,11 @@ namespace
         REQUIRE((openAfterShutdown.ErrorValue().code.Value() == "editor.modal_host.busy"));
     }
 
-    TEST_CASE("Denied Shutdown Keeps The Modal And Host Usable", "[unit][editor]")
+    TEST_CASE (
+    "Denied Shutdown Keeps The Modal And Host Usable"
+    ,
+    "[unit][editor]"
+    )
     {
         EditorDataBus events;
         Input::InputRouter input;

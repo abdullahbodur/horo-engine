@@ -591,7 +591,7 @@ namespace Horo::Editor::Theme
         RefreshThemeList(std::getenv("HORO_THEME_OVERRIDE"));
 
         // If env var points to a specific JSON file, load it directly
-        const char *overridePath = std::getenv("HORO_THEME_OVERRIDE");
+        const char* overridePath = std::getenv("HORO_THEME_OVERRIDE");
         if (overridePath && overridePath[0] != '\0')
         {
             std::error_code ec;

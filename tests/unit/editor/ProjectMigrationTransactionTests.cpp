@@ -184,8 +184,8 @@ namespace
         static std::atomic<std::uint64_t> sequence{};
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
         return std::filesystem::temp_directory_path() /
-            ("horo-transaction-test-" + std::to_string(stamp) + "-" +
-             std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+        ("horo-transaction-test-" + std::to_string(stamp) + "-" +
+            std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
     }
 
     struct Project
@@ -271,7 +271,11 @@ namespace
         };
     }
 
-    TEST_CASE("Transaction Publishes History And Preserves Unknown Metadata", "[unit][editor]")
+    TEST_CASE (
+    "Transaction Publishes History And Preserves Unknown Metadata"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         NativeDurableFileSystem files;
@@ -313,7 +317,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Recovery Resumes After History Before Root Failure", "[unit][editor]")
+    TEST_CASE (
+    "Recovery Resumes After History Before Root Failure"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         FailingFilesystem files(project.root);
@@ -355,7 +363,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Recovery Restores Verified Originals When Forward Evidence Is Lost", "[unit][editor]")
+    TEST_CASE (
+    "Recovery Restores Verified Originals When Forward Evidence Is Lost"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         FailingFilesystem files(project.root);
@@ -401,7 +413,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Execute Revalidates Pending Recovery After Lease Acquisition", "[unit][editor]")
+    TEST_CASE (
+    "Execute Revalidates Pending Recovery After Lease Acquisition"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         FailingFilesystem files(project.root);
@@ -439,7 +455,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Recover Revalidates Cleared Evidence After Lease Acquisition", "[unit][editor]")
+    TEST_CASE (
+    "Recover Revalidates Cleared Evidence After Lease Acquisition"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string operationId(32, 'e');
@@ -470,7 +490,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Transaction Holds Mutation Lease Through Storage Admission", "[unit][editor]")
+    TEST_CASE (
+    "Transaction Holds Mutation Lease Through Storage Admission"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         FailingFilesystem files(project.root);
@@ -509,7 +533,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Storage Admission Rejects Insufficient Capacity Before Staging", "[unit][editor]")
+    TEST_CASE (
+    "Storage Admission Rejects Insufficient Capacity Before Staging"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string rootBefore = project.Read(".horo/project.json");
@@ -540,7 +568,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Storage Admission Handles Zero Margin And Saturates Declared Bounds", "[unit][editor]")
+    TEST_CASE (
+    "Storage Admission Handles Zero Margin And Saturates Declared Bounds"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         NativeDurableFileSystem files;
@@ -581,7 +613,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Cancellation Before Publish Preserves Project And History", "[unit][editor]")
+    TEST_CASE (
+    "Cancellation Before Publish Preserves Project And History"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string rootBefore = project.Read(".horo/project.json");
@@ -613,7 +649,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Committed Journal Finalizes Cleanup Without Rewriting Project", "[unit][editor]")
+    TEST_CASE (
+    "Committed Journal Finalizes Cleanup Without Rewriting Project"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string operationId(32, 'c');
@@ -652,7 +692,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Recovery Journal Rejects Duplicate Keys", "[unit][editor]")
+    TEST_CASE (
+    "Recovery Journal Rejects Duplicate Keys"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string operationId(32, 'a');
@@ -675,7 +719,11 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Supported Old Writer And Committed Cleanup Are Handled Separately", "[unit][editor]")
+    TEST_CASE (
+    "Supported Old Writer And Committed Cleanup Are Handled Separately"
+    ,
+    "[unit][editor]"
+    )
     {
         Project project;
         const std::string operationId(32, 'b');

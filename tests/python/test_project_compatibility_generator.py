@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 def _write_release(root: Path, version: str, baseline: str, contract_value: str) -> None:
     directory = root / version
     directory.mkdir(parents=True)

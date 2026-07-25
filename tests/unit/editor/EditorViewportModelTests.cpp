@@ -13,7 +13,11 @@ namespace
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-    TEST_CASE("Navigation Moves The Authoritative Camera And Publishes Once", "[unit][editor]")
+    TEST_CASE (
+    "Navigation Moves The Authoritative Camera And Publishes Once"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;
@@ -32,7 +36,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Orbit Keeps The Target Fixed And Produces A Valid Camera", "[unit][editor]")
+    TEST_CASE (
+    "Orbit Keeps The Target Fixed And Produces A Valid Camera"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;
@@ -47,7 +55,11 @@ namespace
         REQUIRE((!NearlyEqual(viewport.Current().camera.position.x, 0.0F)));
     }
 
-    TEST_CASE("Empty And Invalid Navigation Do Not Publish Or Mutate", "[unit][editor]")
+    TEST_CASE (
+    "Empty And Invalid Navigation Do Not Publish Or Mutate"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;
@@ -65,7 +77,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Projection Changes Preserve Target Plane Scale", "[unit][editor]")
+    TEST_CASE (
+    "Projection Changes Preserve Target Plane Scale"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;
@@ -82,7 +98,11 @@ namespace
         REQUIRE((viewport.Current().revision == ViewportRevision{2}));
     }
 
-    TEST_CASE("Focus And Dolly Are Projection Aware", "[unit][editor]")
+    TEST_CASE (
+    "Focus And Dolly Are Projection Aware"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;
@@ -105,7 +125,11 @@ namespace
         REQUIRE((viewport.Focus(bounds, 0.0F).HasError()));
     }
 
-    TEST_CASE("Transform Preview Is Authoritative Workspace State", "[unit][editor]")
+    TEST_CASE (
+    "Transform Preview Is Authoritative Workspace State"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         EditorDataBus events;

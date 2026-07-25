@@ -181,6 +181,7 @@ namespace Horo::Editor
         private:
             mutable std::mutex mutex;
         };
+
         Synchronization synchronization;
 
         struct Operation
@@ -305,22 +306,22 @@ namespace Horo::Editor
     }}
   }}
 }})",
-                Application::FormatHoroVersion(release.value),
-                Application::FormatPersistentContractHash(decision->persistentContract),
-                EscapeJson(projectId),
-                EscapeJson(request.projectName),
-                EscapeJson(request.projectVersion),
-                UtcTimestamp(),
-                EscapeJson(request.renderBackend),
-                request.physicsEnabled ? "true" : "false",
-                request.targetFrameRate,
-                EscapeJson(request.defaultScene),
-                EscapeJson(request.assetCompression),
-                EscapeJson(request.textureCompression),
-                EscapeJson(request.buildProfile),
-                EscapeJson(request.targetPlatform),
-                EscapeJson(request.compilerFamily),
-                request.minimumCxxStandard);
+                               Application::FormatHoroVersion(release.value),
+                               Application::FormatPersistentContractHash(decision->persistentContract),
+                               EscapeJson(projectId),
+                               EscapeJson(request.projectName),
+                               EscapeJson(request.projectVersion),
+                               UtcTimestamp(),
+                               EscapeJson(request.renderBackend),
+                               request.physicsEnabled ? "true" : "false",
+                               request.targetFrameRate,
+                               EscapeJson(request.defaultScene),
+                               EscapeJson(request.assetCompression),
+                               EscapeJson(request.textureCompression),
+                               EscapeJson(request.buildProfile),
+                               EscapeJson(request.targetPlatform),
+                               EscapeJson(request.compilerFamily),
+                               request.minimumCxxStandard);
         }
 
         struct StagingPreparationFailure
@@ -335,7 +336,7 @@ namespace Horo::Editor
             const std::filesystem::path& staging,
             std::error_code& error)
         {
-            if (std::filesystem::exists(destination, error) && 
+            if (std::filesystem::exists(destination, error) &&
                 (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error)))
             {
                 return StagingPreparationFailure{
@@ -372,10 +373,15 @@ namespace Horo::Editor
             std::filesystem::create_directories(staging / ".horo", error);
             if (error ||
                 !WriteDurableFile(staging / ".horo/project.json", ProjectJson(request, projectId)) ||
-                !WriteDurableFile(staging / ".horo/plugins.json", "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n") ||
-                !WriteDurableFile(staging / ".horo/input.json", "{\n  \"schemaVersion\": 1,\n  \"profileId\": \"project-default\",\n  \"overrides\": []\n}\n"))
+                !WriteDurableFile(staging / ".horo/plugins.json",
+                                  "{\n  \"schemaVersion\": 1,\n  \"requestedPlugins\": []\n}\n") ||
+                !WriteDurableFile(staging / ".horo/input.json",
+                                  "{\n  \"schemaVersion\": 1,\n  \"profileId\": \"project-default\",\n  \"overrides\": []\n}\n"))
             {
-                return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to write project metadata into the staging directory."};
+                return StagingPreparationFailure{
+                    ProjectCreationErrorCode::WriteFailed,
+                    "Unable to write project metadata into the staging directory."
+                };
             }
 
             for (const char* directory :
@@ -383,31 +389,40 @@ namespace Horo::Editor
             {
                 std::filesystem::create_directories(staging / directory, error);
                 if (error)
-                    return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to create project asset scaffolding."};
+                    return StagingPreparationFailure{
+                        ProjectCreationErrorCode::WriteFailed, "Unable to create project asset scaffolding."
+                    };
             }
-            
+
             if (request.includeStarterContent)
             {
                 const std::filesystem::path starterScene = staging / request.defaultScene;
                 std::filesystem::create_directories(starterScene.parent_path(), error);
                 if (error || !WriteDurableFile(starterScene, "{\n  \"schemaVersion\": 1,\n  \"objects\": []\n}\n"))
-                    return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to write the requested starter scene."};
+                    return StagingPreparationFailure{
+                        ProjectCreationErrorCode::WriteFailed, "Unable to write the requested starter scene."
+                    };
             }
-            
+
             if (request.initializeGit)
             {
                 const std::string gitignore = std::format(
                     "build/\n.horo/local/\n.horo/editor_workspace.json\n{}\n", ProjectLayout::AssetIndexPath);
                 if (!WriteDurableFile(staging / ".gitignore", gitignore))
-                    return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to write the project git ignore file."};
+                    return StagingPreparationFailure{
+                        ProjectCreationErrorCode::WriteFailed, "Unable to write the project git ignore file."
+                    };
             }
-            
+
             if (request.generateCMakeProject)
             {
-                if (!WriteDurableFile(staging / "CMakeLists.txt", "cmake_minimum_required(VERSION 3.25)\nproject(HoroGame LANGUAGES CXX)\n"))
-                    return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to write the project CMake file."};
+                if (!WriteDurableFile(staging / "CMakeLists.txt",
+                                      "cmake_minimum_required(VERSION 3.25)\nproject(HoroGame LANGUAGES CXX)\n"))
+                    return StagingPreparationFailure{
+                        ProjectCreationErrorCode::WriteFailed, "Unable to write the project CMake file."
+                    };
             }
-            
+
             return std::nullopt;
         }
 
@@ -470,7 +485,7 @@ namespace Horo::Editor
                 cleanup();
                 return;
             }
-            
+
             if (const auto failure = WriteScaffolding(staging, request, operation->snapshot.projectId))
             {
                 cleanup();

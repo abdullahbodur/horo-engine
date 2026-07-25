@@ -26,7 +26,7 @@ extern const ErrorCodeDescriptor TaskGroupClosed;
 
 namespace Horo::HashingErrors
 {
-extern const ErrorCodeDescriptor InvalidSha256Text;
+    extern const ErrorCodeDescriptor InvalidSha256Text;
 } // namespace Horo::HashingErrors
 
 namespace Horo::Math::Errors

@@ -55,7 +55,11 @@ namespace
         std::optional<std::string> previous_;
     };
 
-    TEST_CASE("Route payload validation rejects mismatched parameters", "[unit][editor][welcome]")
+    TEST_CASE (
+    "Route payload validation rejects mismatched parameters"
+    ,
+    "[unit][editor][welcome]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -73,7 +77,11 @@ namespace
         REQUIRE((!IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, ProjectBrowserRouteParameters{}})));
     }
 
-    TEST_CASE("Welcome filters invalid recent projects", "[unit][editor][welcome]")
+    TEST_CASE (
+    "Welcome filters invalid recent projects"
+    ,
+    "[unit][editor][welcome]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -105,7 +113,11 @@ namespace
         REQUIRE((!controller.RequestOpenRecentProject(1).has_value()));
     }
 
-    TEST_CASE("Welcome preview text is deterministic", "[unit][editor][welcome]")
+    TEST_CASE (
+    "Welcome preview text is deterministic"
+    ,
+    "[unit][editor][welcome]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -120,7 +132,11 @@ namespace
         REQUIRE((text.find(projectRoot) != std::string::npos));
     }
 
-    TEST_CASE("Cached compatibility projection round trips", "[unit][editor][welcome]")
+    TEST_CASE (
+    "Cached compatibility projection round trips"
+    ,
+    "[unit][editor][welcome]"
+    )
     {
         const ScopedTestHome home{"horo-welcome-controller"};
         using namespace Horo::Application;

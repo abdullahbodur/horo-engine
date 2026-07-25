@@ -67,10 +67,12 @@ namespace Horo::Tests
 
                 auto frontend = Render::RenderFrontend::Create(
                     registry, Render::RenderBackendId{"opengl"},
-                    Render::RenderBackendConfig{.requirePresentation = true,
-                                                .enableValidation = false,
-                                                .maxFramesInFlight = 2,
-                                                .presentMode = Render::PresentMode::Immediate});
+                    Render::RenderBackendConfig{
+                        .requirePresentation = true,
+                        .enableValidation = false,
+                        .maxFramesInFlight = 2,
+                        .presentMode = Render::PresentMode::Immediate
+                    });
                 if (frontend.HasError())
                     ThrowRendererError(frontend.ErrorValue());
 
@@ -93,7 +95,7 @@ namespace Horo::Tests
                     ImGui_ImplSDL3_ProcessEvent(&event);
                     if (event.type == SDL_EVENT_QUIT ||
                         (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                         event.window.windowID == SDL_GetWindowID(window_)))
+                            event.window.windowID == SDL_GetWindowID(window_)))
                     {
                         return false;
                     }

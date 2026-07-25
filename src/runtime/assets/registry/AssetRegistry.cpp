@@ -72,7 +72,8 @@ void AddDiagnostic(std::vector<AssetRegistryDiagnostic> &diagnostics, const Erro
     std::error_code error;
     const std::uintmax_t size = std::filesystem::file_size(path, error);
     if (error || size == 0 || size > maximum)
-        return Result<std::string>::Failure(Failure(descriptor, std::format("File size is invalid: {}", path.string())));
+        return Result<
+            std::string>::Failure(Failure(descriptor, std::format("File size is invalid: {}", path.string())));
     std::ifstream input(path, std::ios::binary);
     if (!input)
         return Result<std::string>::Failure(Failure(descriptor, std::format("Unable to open {}", path.string())));
@@ -88,7 +89,8 @@ void AddDiagnostic(std::vector<AssetRegistryDiagnostic> &diagnostics, const Erro
     bool duplicate = false;
     std::vector<std::unordered_set<std::string>> keys;
     const Json::parser_callback_t callback = [&duplicate, &keys](const int depth, const Json::parse_event_t event,
-                                                                 const Json &parsed) {
+                                                                 const Json& parsed)
+    {
         if (event == Json::parse_event_t::object_start)
         {
             const auto index = static_cast<std::size_t>(std::max(depth, 0));
@@ -169,17 +171,18 @@ struct ScannedAssets
 };
 
 /** @brief Scans the asset directory tree and classifies entries into sources, sidecars and symlinks. */
-[[nodiscard]] Result<ScannedAssets> ScanAssetDirectory(const std::filesystem::path &assetRoot,
-                                                       const std::filesystem::path &projectRoot)
+[[nodiscard]] Result<ScannedAssets> ScanAssetDirectory(const std::filesystem::path& assetRoot,
+                                                       const std::filesystem::path& projectRoot)
 {
     ScannedAssets result;
     std::error_code error;
     std::filesystem::recursive_directory_iterator iterator{
-        assetRoot, std::filesystem::directory_options::skip_permission_denied, error};
+        assetRoot, std::filesystem::directory_options::skip_permission_denied, error
+    };
     for (const std::filesystem::recursive_directory_iterator end; !error && iterator != end;
          iterator.increment(error))
     {
-        const std::filesystem::directory_entry &entry = *iterator;
+        const std::filesystem::directory_entry& entry = *iterator;
         const std::filesystem::file_status status = entry.symlink_status(error);
         if (error)
             break;
@@ -211,12 +214,12 @@ struct ScannedAssets
 }
 
 /** @brief Resolves source/sidecar pairs into asset records, appending diagnostics for any failures. */
-[[nodiscard]] std::vector<AssetRecord> ResolveSidecarRecords(const ScannedAssets &scanned,
-                                                             std::vector<AssetRegistryDiagnostic> &diagnostics)
+[[nodiscard]] std::vector<AssetRecord> ResolveSidecarRecords(const ScannedAssets& scanned,
+                                                             std::vector<AssetRegistryDiagnostic>& diagnostics)
 {
     std::vector<AssetRecord> records;
     records.reserve(scanned.sidecars.size());
-    for (const auto &[sourcePath, nativeSource] : scanned.sources)
+    for (const auto& [sourcePath, nativeSource] : scanned.sources)
     {
         static_cast<void>(nativeSource);
         const auto sidecar = scanned.sidecars.find(sourcePath);
@@ -226,7 +229,8 @@ struct ScannedAssets
             continue;
         }
         const std::string metadataPath = sourcePath + ".horo";
-        Result<std::string> contents = ReadBounded(sidecar->second, kMaximumSidecarBytes, AssetErrors::SidecarMalformed);
+        Result<std::string> contents =
+            ReadBounded(sidecar->second, kMaximumSidecarBytes, AssetErrors::SidecarMalformed);
         if (contents.HasError())
         {
             AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath, contents.ErrorValue().message);
@@ -266,7 +270,7 @@ struct ScannedAssets
         Result<AssetRecord> record = ParseRecord(sidecarJson);
         if (record.HasError())
         {
-            const ErrorCodeDescriptor &descriptor = record.ErrorValue().code.Value() == "asset.identity.invalid"
+            const ErrorCodeDescriptor& descriptor = record.ErrorValue().code.Value() == "asset.identity.invalid"
                                                         ? AssetErrors::RegistryIdentityInvalid
                                                         : AssetErrors::SidecarMalformed;
             AddDiagnostic(diagnostics, descriptor, metadataPath, record.ErrorValue().message);
@@ -274,7 +278,7 @@ struct ScannedAssets
         }
         records.push_back(std::move(record).Value());
     }
-    for (const auto &[sourcePath, sidecar] : scanned.sidecars)
+    for (const auto& [sourcePath, sidecar] : scanned.sidecars)
     {
         static_cast<void>(sidecar);
         if (!scanned.sources.contains(sourcePath))
@@ -469,7 +473,7 @@ Result<AssetRegistryBuildReport> RebuildAssetRegistry(AssetRegistry &registry, c
     ScannedAssets scan = std::move(scanned).Value();
 
     std::ranges::sort(scan.ambiguousSymlinks);
-    for (const std::string &path : scan.ambiguousSymlinks)
+    for (const std::string& path : scan.ambiguousSymlinks)
         AddDiagnostic(scan.diagnostics, AssetErrors::SymlinkAmbiguous, path);
 
     std::vector<AssetRecord> records = ResolveSidecarRecords(scan, scan.diagnostics);
@@ -510,7 +514,9 @@ Result<AssetRegistryBuildReport> LoadAssetRegistry(AssetRegistry &registry, cons
     AssetRegistryBuildReport report = std::move(rebuilt).Value();
     if (report.diagnostics.size() < kMaximumDiagnostics)
         report.diagnostics.emplace(
-            report.diagnostics.begin(), AssetRegistryDiagnostic{*indexFailure, std::string{ProjectLayout::AssetIndexPath}});
+            report.diagnostics.begin(), AssetRegistryDiagnostic{
+                *indexFailure, std::string{ProjectLayout::AssetIndexPath}
+            });
     if (report.status == AssetRegistryBuildStatus::Complete)
         report.status = AssetRegistryBuildStatus::Degraded;
     return Result<AssetRegistryBuildReport>::Success(std::move(report));

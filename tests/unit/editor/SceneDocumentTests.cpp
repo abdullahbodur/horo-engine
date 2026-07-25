@@ -28,7 +28,11 @@ namespace
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-    TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]")
+    TEST_CASE (
+    "Catalog Owns Stable Core Primitive Ids"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Runtime;
         const PrimitiveDescriptor* box = PrimitiveCatalog::Find("primitive.mesh.box");
@@ -48,7 +52,11 @@ namespace
         REQUIRE((PrimitiveCatalog::Find("primitive.mesh.missing") == nullptr));
     }
 
-    TEST_CASE("Catalog Creation Use Case Creates Every Core Hierarchy Primitive", "[unit][editor]")
+    TEST_CASE (
+    "Catalog Creation Use Case Creates Every Core Hierarchy Primitive"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -94,7 +102,11 @@ namespace
         REQUIRE((document.Revision() == revision));
     }
 
-    TEST_CASE("Creation Names Are Unique Per Sibling And Typed Components Survive History", "[unit][editor]")
+    TEST_CASE (
+    "Creation Names Are Unique Per Sibling And Typed Components Survive History"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -120,7 +132,11 @@ namespace
         REQUIRE((document.Objects().back().components.camera.has_value()));
     }
 
-    TEST_CASE("Failed Commands Do Not Mutate Or Advance Revision", "[unit][editor]")
+    TEST_CASE (
+    "Failed Commands Do Not Mutate Or Advance Revision"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -136,7 +152,11 @@ namespace
         REQUIRE((!document.IsDirty()));
     }
 
-    TEST_CASE("Euler Conversion Preserves The Composed Rotation", "[unit][editor]")
+    TEST_CASE (
+    "Euler Conversion Preserves The Composed Rotation"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Math;
         const Vec3 authored{0.31F, -0.47F, 0.22F};
@@ -154,7 +174,11 @@ namespace
         }
     }
 
-    TEST_CASE("Affine Inverse Restores Transformed Points", "[unit][editor]")
+    TEST_CASE (
+    "Affine Inverse Restores Transformed Points"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Math;
         const Mat4 matrix =
@@ -174,7 +198,11 @@ namespace
         REQUIRE((TryInverseAffine(Transform{.scale = {0.0F, 1.0F, 1.0F}}.ToMatrix()).HasError()));
     }
 
-    TEST_CASE("Commands Create Stable Objects And Track Saved Revision", "[unit][editor]")
+    TEST_CASE (
+    "Commands Create Stable Objects And Track Saved Revision"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -198,7 +226,11 @@ namespace
         REQUIRE((document.Snapshot().objects.front().name == "Hero Box"));
     }
 
-    TEST_CASE("Unchanged Transform Does Not Create A History Entry", "[unit][editor]")
+    TEST_CASE (
+    "Unchanged Transform Does Not Create A History Entry"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -220,7 +252,11 @@ namespace
         REQUIRE((!history.CanUndo()));
     }
 
-    TEST_CASE("Extraction Resolves Hierarchy Into World Matrices", "[unit][editor]")
+    TEST_CASE (
+    "Extraction Resolves Hierarchy Into World Matrices"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -274,7 +310,11 @@ namespace
         REQUIRE((NearlyEqual(restoredOrigin.x, 2.0F) && NearlyEqual(restoredOrigin.y, 3.0F)));
     }
 
-    TEST_CASE("Delete Removes Complete Subtree", "[unit][editor]")
+    TEST_CASE (
+    "Delete Removes Complete Subtree"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -288,7 +328,11 @@ namespace
         REQUIRE((document.Snapshot().objects.empty()));
     }
 
-    TEST_CASE("Undo Redo Preserve Monotonic Revision And Saved State Identity", "[unit][editor]")
+    TEST_CASE (
+    "Undo Redo Preserve Monotonic Revision And Saved State Identity"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -321,7 +365,11 @@ namespace
         REQUIRE((document.Snapshot().objects.front().name == "Renamed"));
     }
 
-    TEST_CASE("Undo Delete Restores Subtree And New Edit Clears Redo", "[unit][editor]")
+    TEST_CASE (
+    "Undo Delete Restores Subtree And New Edit Clears Redo"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         SceneDocument document;
@@ -346,7 +394,11 @@ namespace
         REQUIRE((redo.ErrorValue().code.Value() == "scene_document.nothing_to_redo"));
     }
 
-    TEST_CASE("Extraction Uses All Primitive Meshes And Deduplicates Descriptors", "[unit][editor]")
+    TEST_CASE (
+    "Extraction Uses All Primitive Meshes And Deduplicates Descriptors"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -385,7 +437,11 @@ namespace
         REQUIRE((extracted.Value().View().IsValid()));
     }
 
-    TEST_CASE("Primitive Parameters Survive Snapshot Duplicate And History", "[unit][editor]")
+    TEST_CASE (
+    "Primitive Parameters Survive Snapshot Duplicate And History"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;

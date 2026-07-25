@@ -122,7 +122,7 @@ struct Fonts
     ImFont *sans = nullptr;
     ImFont *sansCompact = nullptr;
     ImFont *sansEmphasis = nullptr;
-    ImFont *icon = nullptr; /**< Material Symbols Outlined for editor UI icons. */
+    ImFont* icon = nullptr; /**< Material Symbols Outlined for editor UI icons. */
 };
 
 namespace FontPx

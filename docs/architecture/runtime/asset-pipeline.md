@@ -738,8 +738,8 @@ Pipeline stages:
    typed backend capability; illustrative peers are:
     - `desktop-vulkan` → SPIR-V with validated reflection metadata
     - `desktop-opengl` → GLSL or backend-approved translated shader payload
-    - `desktop-metal` → MSL or backend-approved translated shader payload
-    - `headless-null` → reflection-only validation payload
+   - `desktop-metal` → MSL or backend-approved translated shader payload
+   - `headless-null` → reflection-only validation payload
 4. **Variant generation**: produce permutations for static shader keywords
    (e.g., `USE_NORMAL_MAP`, `SHADOWS_ENABLED`). Each canonical keyword/permutation
    set is folded into the effective settings digest, whose schema is identified by

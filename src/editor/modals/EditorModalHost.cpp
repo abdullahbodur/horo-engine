@@ -149,7 +149,7 @@ std::optional<ModalId> EditorModalHost::TopModalId() const
 }
 
 /** @copydoc EditorModalHost::TopModal */
-EditorModal *EditorModalHost::TopModal()
+EditorModal* EditorModalHost::TopModal()
 {
     if (m_stack.empty()) return nullptr;
     return m_stack.back().modal.get();

@@ -654,7 +654,8 @@ namespace Horo::Editor
                                            const std::filesystem::path& operationRoot, Journal& journal)
         {
             journal.state = "Publishing";
-            LOG_DEBUG("editor.project_migration.transaction", "Journal state operation=%s state=Publishing records=%zu.",
+            LOG_DEBUG("editor.project_migration.transaction",
+                      "Journal state operation=%s state=Publishing records=%zu.",
                       journal.operationId.c_str(), journal.records.size());
             if (auto result = WriteJournal(files, operationRoot, journal); result.HasError())
                 return result;

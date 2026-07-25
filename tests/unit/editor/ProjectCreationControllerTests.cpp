@@ -57,7 +57,11 @@ namespace
         REQUIRE((false && "expected validation diagnostic"));
     }
 
-    TEST_CASE("Provides Document Defaults", "[unit][editor]")
+    TEST_CASE (
+    "Provides Document Defaults"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -77,7 +81,11 @@ namespace
         REQUIRE((!ProjectCreationController{DefaultAvailability()}.IsDirty()));
     }
 
-    TEST_CASE("Rejects Blank And Path Like Names", "[unit][editor]")
+    TEST_CASE (
+    "Rejects Blank And Path Like Names"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -92,7 +100,11 @@ namespace
         HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator);
     }
 
-    TEST_CASE("Distinguishes Occupied Empty And Missing Destinations", "[unit][editor]")
+    TEST_CASE (
+    "Distinguishes Occupied Empty And Missing Destinations"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -123,7 +135,11 @@ namespace
         REQUIRE((!std::filesystem::exists(missing)));
     }
 
-    TEST_CASE("Tracks Draft Leave Intent", "[unit][editor]")
+    TEST_CASE (
+    "Tracks Draft Leave Intent"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
 
@@ -139,7 +155,11 @@ namespace
         REQUIRE((controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow));
     }
 
-    TEST_CASE("Defaults To Active Backend And Rejects Unavailable Selection", "[unit][editor]")
+    TEST_CASE (
+    "Defaults To Active Backend And Rejects Unavailable Selection"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         const RendererAvailabilitySnapshot availability{

@@ -213,7 +213,8 @@ void AddDisc(MeshData &mesh, const float y, const float radius, const std::uint3
         const float angle = -Math::Pi * 0.5F + t * Math::Pi * 0.5F;
         const float v = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
         rings.push_back({-bodyHalf + std::sin(angle) * parameters.radius, std::cos(angle) * parameters.radius,
-                         std::sin(angle), std::cos(angle), v});
+            std::sin(angle), std::cos(angle), v
+        });
     }
     const float midV = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
     rings.push_back(
@@ -224,7 +225,8 @@ void AddDisc(MeshData &mesh, const float y, const float radius, const std::uint3
         const float angle = t * Math::Pi * 0.5F;
         const float v = static_cast<float>(rings.size() + 1) / static_cast<float>(2 * parameters.hemisphereRings + 2);
         rings.push_back({bodyHalf + std::sin(angle) * parameters.radius, std::cos(angle) * parameters.radius,
-                         std::sin(angle), std::cos(angle), v});
+            std::sin(angle), std::cos(angle), v
+        });
     }
     mesh.vertices.push_back({{0, -parameters.totalHeight * 0.5F, 0}, {0, -1, 0}, {0.5F, 0}});
     const std::uint32_t stride = parameters.radialSegments + 1;
@@ -271,10 +273,10 @@ void HashCombine(std::size_t &seed, const std::size_t value) noexcept
 
 struct ParameterHashVisitor
 {
-    std::size_t &hash;
+    std::size_t& hash;
 
     template <typename T>
-    void operator()(const T &parameters) const noexcept
+    void operator()(const T& parameters) const noexcept
     {
         if constexpr (std::is_same_v<T, BoxMeshParameters>)
         {
@@ -311,7 +313,7 @@ struct ParameterHashVisitor
 
 struct DescriptorHash
 {
-    [[nodiscard]] std::size_t operator()(const PrimitiveMeshDescriptor &descriptor) const noexcept
+    [[nodiscard]] std::size_t operator()(const PrimitiveMeshDescriptor& descriptor) const noexcept
     {
         std::size_t hash = static_cast<std::size_t>(descriptor.type);
         HashCombine(hash, descriptor.version.value);
@@ -321,7 +323,7 @@ struct DescriptorHash
     }
 };
 
-[[nodiscard]] Result<MeshData> GenerateBoxMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateBoxMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<BoxMeshParameters>(&descriptor.parameters);
     if (!p)
@@ -333,12 +335,13 @@ struct DescriptorHash
     return Result<MeshData>::Success(GenerateBox(*p));
 }
 
-[[nodiscard]] Result<MeshData> GenerateSphereMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateSphereMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<SphereMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->radius))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidRadius, "Sphere radius must be finite and positive."));
@@ -351,12 +354,13 @@ struct DescriptorHash
     return Result<MeshData>::Success(GenerateSphere(*p));
 }
 
-[[nodiscard]] Result<MeshData> GenerateCapsuleMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateCapsuleMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<CapsuleMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->radius) || !PositiveFinite(p->totalHeight))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Capsule dimensions must be finite and positive."));
@@ -372,12 +376,13 @@ struct DescriptorHash
     return Result<MeshData>::Success(GenerateCapsule(*p));
 }
 
-[[nodiscard]] Result<MeshData> GenerateCylinderMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateCylinderMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<CylinderMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cylinder dimensions must be finite and positive."));
@@ -390,12 +395,13 @@ struct DescriptorHash
     return Result<MeshData>::Success(GenerateCylinder(*p));
 }
 
-[[nodiscard]] Result<MeshData> GenerateConeMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateConeMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<ConeMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->radius) || !PositiveFinite(p->height))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidDimensions, "Cone dimensions must be finite and positive."));
@@ -408,31 +414,33 @@ struct DescriptorHash
     return Result<MeshData>::Success(GenerateCone(*p));
 }
 
-[[nodiscard]] Result<MeshData> GeneratePlaneMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GeneratePlaneMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<PlaneMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidSize, "Plane size must be finite and positive."));
     return Result<MeshData>::Success(GeneratePlanar(p->size, false));
 }
 
-[[nodiscard]] Result<MeshData> GenerateQuadMesh(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateQuadMesh(const PrimitiveMeshDescriptor& descriptor)
 {
     const auto p = std::get_if<QuadMeshParameters>(&descriptor.parameters);
     if (!p)
         return Result<MeshData>::Failure(
-            MakePrimitiveError(PrimitiveErrors::ParameterMismatch, "Primitive type and parameter payload do not match."));
+            MakePrimitiveError(PrimitiveErrors::ParameterMismatch,
+                               "Primitive type and parameter payload do not match."));
     if (!PositiveFinite(p->size.x) || !PositiveFinite(p->size.y))
         return Result<MeshData>::Failure(
             MakePrimitiveError(PrimitiveErrors::InvalidSize, "Quad size must be finite and positive."));
     return Result<MeshData>::Success(GeneratePlanar(p->size, true));
 }
 
-[[nodiscard]] Result<MeshData> GenerateMeshTypeChecked(const PrimitiveMeshDescriptor &descriptor)
+[[nodiscard]] Result<MeshData> GenerateMeshTypeChecked(const PrimitiveMeshDescriptor& descriptor)
 {
     using enum PrimitiveMeshType;
     switch (descriptor.type)
@@ -483,7 +491,7 @@ PrimitiveMeshDescriptor PrimitiveMeshDescriptor::Defaults(const PrimitiveMeshTyp
 }
 
 /** @copydoc PrimitiveMeshGenerator::Generate */
-Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor &descriptor)
+Result<MeshData> PrimitiveMeshGenerator::Generate(const PrimitiveMeshDescriptor& descriptor)
 {
     if (descriptor.version.value != 1)
         return Result<MeshData>::Failure(

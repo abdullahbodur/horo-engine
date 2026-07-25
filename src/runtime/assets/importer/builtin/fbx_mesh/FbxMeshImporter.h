@@ -5,6 +5,6 @@
 
 namespace Horo::Assets
 {
-[[nodiscard]] std::shared_ptr<const IAssetImporter> CreateFbxMeshImporter();
-[[nodiscard]] Result<void> RegisterFbxMeshImporter(AssetImporterCatalog &catalog);
+    [[nodiscard]] std::shared_ptr<const IAssetImporter> CreateFbxMeshImporter();
+    [[nodiscard]] Result<void> RegisterFbxMeshImporter(AssetImporterCatalog& catalog);
 } // namespace Horo::Assets

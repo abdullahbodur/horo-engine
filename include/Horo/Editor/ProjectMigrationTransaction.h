@@ -106,7 +106,7 @@ class ProjectMigrationTransactionService
      */
     ProjectMigrationTransactionService(DurableFileSystem &files, WallClock &wallClock,
                                        ProjectMutationCoordinator &mutations, JobSystem &jobs,
-                                       const ProjectMigrationStoragePolicy &storagePolicy = {}) noexcept;
+                                       const ProjectMigrationStoragePolicy& storagePolicy = {}) noexcept;
 
     /** @brief Prepares, validates, and durably publishes one migration. @param request Transaction request. @return
      * Commit result or typed failure. */

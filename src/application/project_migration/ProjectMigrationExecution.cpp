@@ -631,7 +631,7 @@ namespace Horo::Application
         {
             LOG_ERROR("application.project_migration.execute", "Execution failed code=%s.",
                       executed.ErrorValue().code.Value().c_str());
-            return Result<PreparedProjectMigration>::Failure(executed.ErrorValue());
+            return Result < PreparedProjectMigration > ::Failure(executed.ErrorValue());
         }
 
         if (const Result<void> materialized = MaterializeCandidate(state); materialized.HasError())

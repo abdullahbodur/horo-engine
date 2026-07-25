@@ -762,7 +762,7 @@ class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipa
             // SDL3 drag-and-drop: forward dropped file paths to the active import modal.
             if (event.type == SDL_EVENT_DROP_FILE)
             {
-                const char *droppedPath = event.drop.data;
+                const char* droppedPath = event.drop.data;
                 if (droppedPath && droppedPath[0])
                 {
                     screenHost_->HandleDropFiles({std::filesystem::path(droppedPath)});

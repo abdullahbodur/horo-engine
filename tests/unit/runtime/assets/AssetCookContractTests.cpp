@@ -12,62 +12,66 @@
 
 namespace
 {
-using namespace Horo;
-using namespace Horo::Assets;
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-AssetId Id(const std::string_view value)
-{
-    auto parsed = AssetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetId Id(const std::string_view value)
+    {
+        auto parsed = AssetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-AssetTypeId Type(const std::string_view value)
-{
-    auto parsed = AssetTypeId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetTypeId Type(const std::string_view value)
+    {
+        auto parsed = AssetTypeId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-AssetCookTargetId Target(const std::string_view value)
-{
-    auto parsed = AssetCookTargetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetCookTargetId Target(const std::string_view value)
+    {
+        auto parsed = AssetCookTargetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-Sha256Digest DigestOf(const std::span<const std::uint8_t> bytes)
-{
-    return ComputeSha256(std::as_bytes(bytes));
-}
+    Sha256Digest DigestOf(const std::span<const std::uint8_t> bytes)
+    {
+        return ComputeSha256(std::as_bytes(bytes));
+    }
 
-Sha256Digest DigestOf(const std::span<const std::byte> bytes)
-{
-    return ComputeSha256(bytes);
-}
+    Sha256Digest DigestOf(const std::span<const std::byte> bytes)
+    {
+        return ComputeSha256(bytes);
+    }
 
-AssetCookArtifact Artifact(const AssetId id,
-                           const AssetTypeId type,
-                           const AssetCookTargetId target,
-                           std::vector<std::uint8_t> payload)
-{
-    AssetCookArtifact artifact;
-    artifact.id = id;
-    artifact.type = type;
-    artifact.target = target;
-    artifact.payload = std::move(payload);
-    artifact.payloadDigest = DigestOf(std::span<const std::uint8_t>{artifact.payload});
-    // The cache-key digest is opaque to this contract; any 32-byte value round-trips.
-    artifact.cacheKeyDigest.bytes[0] = 0x11;
-    artifact.cacheKeyDigest.bytes[31] = 0x22;
-    // The source digest is opaque to this contract; any 32-byte value round-trips.
-    artifact.sourceDigest.bytes[0] = 0x33;
-    artifact.sourceDigest.bytes[31] = 0x44;
-    return artifact;
-}
+    AssetCookArtifact Artifact(const AssetId id,
+                               const AssetTypeId type,
+                               const AssetCookTargetId target,
+                               std::vector<std::uint8_t> payload)
+    {
+        AssetCookArtifact artifact;
+        artifact.id = id;
+        artifact.type = type;
+        artifact.target = target;
+        artifact.payload = std::move(payload);
+        artifact.payloadDigest = DigestOf(std::span<const std::uint8_t>{artifact.payload});
+        // The cache-key digest is opaque to this contract; any 32-byte value round-trips.
+        artifact.cacheKeyDigest.bytes[0] = 0x11;
+        artifact.cacheKeyDigest.bytes[31] = 0x22;
+        // The source digest is opaque to this contract; any 32-byte value round-trips.
+        artifact.sourceDigest.bytes[0] = 0x33;
+        artifact.sourceDigest.bytes[31] = 0x44;
+        return artifact;
+    }
 } // namespace
 
-TEST_CASE("Cook Target Ids Accept Canonical And Reject Invalid Text", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cook Target Ids Accept Canonical And Reject Invalid Text"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     REQUIRE((AssetCookTargetId::Parse("headless-null").HasValue()));
     REQUIRE((AssetCookTargetId::Parse("desktop-opengl").HasValue()));
@@ -89,7 +93,11 @@ TEST_CASE("Cook Target Ids Accept Canonical And Reject Invalid Text", "[unit][ru
     REQUIRE((AssetCookTargetId::Parse("headless-0null").HasError()));   // segment must start with letter
 }
 
-TEST_CASE("Cook Target Ids Are Ordered And Comparable", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cook Target Ids Are Ordered And Comparable"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const auto a = Target("headless-null");
     const auto b = Target("headless-null");
@@ -99,7 +107,11 @@ TEST_CASE("Cook Target Ids Are Ordered And Comparable", "[unit][runtime][assets]
     REQUIRE((c < a));
 }
 
-TEST_CASE("Cook Limits Provide Sensible Defaults", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cook Limits Provide Sensible Defaults"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     REQUIRE((limits.maximumSourceBytes == 256U * 1024U * 1024U));
@@ -108,7 +120,11 @@ TEST_CASE("Cook Limits Provide Sensible Defaults", "[unit][runtime][assets][cook
     REQUIRE((limits.maximumConcurrentCooks == 8));
 }
 
-TEST_CASE("Cooked Artifact Round-Trips Through Binary Envelope", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Round-Trips Through Binary Envelope"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     const auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -128,7 +144,11 @@ TEST_CASE("Cooked Artifact Round-Trips Through Binary Envelope", "[unit][runtime
     REQUIRE((decoded.Value().payload == artifact.payload));
 }
 
-TEST_CASE("Cooked Artifact Round-Tips Cache-Key Digest Verbatim", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Round-Tips Cache-Key Digest Verbatim"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     auto artifact = Artifact(Id("11112233-4455-6677-8899-aabbccddeeff"),
@@ -145,7 +165,11 @@ TEST_CASE("Cooked Artifact Round-Tips Cache-Key Digest Verbatim", "[unit][runtim
     REQUIRE((decoded.Value().cacheKeyDigest == artifact.cacheKeyDigest));
 }
 
-TEST_CASE("Cooked Artifact Admits Empty Payload", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Admits Empty Payload"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     const auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -160,7 +184,11 @@ TEST_CASE("Cooked Artifact Admits Empty Payload", "[unit][runtime][assets][cook]
     REQUIRE((decoded.Value().payloadDigest == artifact.payloadDigest));
 }
 
-TEST_CASE("Cooked Artifact Rejects Unsupported Format Version", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Unsupported Format Version"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     const auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -178,7 +206,11 @@ TEST_CASE("Cooked Artifact Rejects Unsupported Format Version", "[unit][runtime]
     REQUIRE((decoded.ErrorValue().code.Value() == "asset.cook.unsupported_format"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Bad Magic", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Bad Magic"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     const auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -194,7 +226,11 @@ TEST_CASE("Cooked Artifact Rejects Bad Magic", "[unit][runtime][assets][cook]")
     REQUIRE((decoded.ErrorValue().code.Value() == "asset.cook.malformed_artifact"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Payload Digest Mismatch", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Payload Digest Mismatch"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -210,7 +246,11 @@ TEST_CASE("Cooked Artifact Rejects Payload Digest Mismatch", "[unit][runtime][as
     REQUIRE((decoded.ErrorValue().code.Value() == "asset.cook.hash_mismatch"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Too-Large Payload", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Too-Large Payload"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     AssetCookLimits limits;
     limits.maximumArtifactBytes = 64;
@@ -224,7 +264,11 @@ TEST_CASE("Cooked Artifact Rejects Too-Large Payload", "[unit][runtime][assets][
     REQUIRE((encoded.ErrorValue().code.Value() == "asset.cook.too_large"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Trailing Bytes", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Trailing Bytes"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     const auto artifact = Artifact(Id("00112233-4455-6677-8899-aabbccddeeff"),
@@ -240,7 +284,11 @@ TEST_CASE("Cooked Artifact Rejects Trailing Bytes", "[unit][runtime][assets][coo
     REQUIRE((decoded.ErrorValue().code.Value() == "asset.cook.malformed_artifact"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Truncated Input", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Truncated Input"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     std::vector<std::uint8_t> truncated{'H', 'O', 'R', 'O'};
@@ -249,7 +297,11 @@ TEST_CASE("Cooked Artifact Rejects Truncated Input", "[unit][runtime][assets][co
     REQUIRE((decoded.ErrorValue().code.Value() == "asset.cook.malformed_artifact"));
 }
 
-TEST_CASE("Cooked Artifact Rejects Empty Input", "[unit][runtime][assets][cook]")
+TEST_CASE (
+"Cooked Artifact Rejects Empty Input"
+,
+"[unit][runtime][assets][cook]"
+)
 {
     const AssetCookLimits limits;
     std::vector<std::uint8_t> empty;

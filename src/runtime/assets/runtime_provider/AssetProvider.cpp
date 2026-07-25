@@ -101,7 +101,7 @@ struct MemoryAssetProvider::State
 {
     std::unordered_map<AssetId, std::vector<std::uint8_t>, AssetIdHash> assets;
 
-    [[nodiscard]] std::mutex &Mutex() const noexcept { return mutex_; }
+    [[nodiscard]] std::mutex& Mutex() const noexcept { return mutex_; }
 
 private:
     mutable std::mutex mutex_;
@@ -160,7 +160,7 @@ struct AssetLoadHandle::Request
     std::optional<Result<AssetLoadResult>> result;
     bool consumed{};
 
-    void Complete(Result<std::vector<std::uint8_t>> &loaded, const CancellationToken &cancel)
+    void Complete(Result<std::vector<std::uint8_t>>& loaded, const CancellationToken& cancel)
     {
         using enum AssetLoadState;
         std::scoped_lock lock{resultMutex};
@@ -178,7 +178,7 @@ struct AssetLoadHandle::Request
         }
     }
 
-    void Fail(const ErrorCodeDescriptor &error)
+    void Fail(const ErrorCodeDescriptor& error)
     {
         using enum AssetLoadState;
         std::scoped_lock lock{resultMutex};
@@ -198,7 +198,7 @@ Result<void> AssetLoadHandle::RequestCancel()
 {
     if (!request_ || !request_->job)
         return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
-    JobSystem *jobs = request_->control ? request_->control->jobs.load() : nullptr;
+    JobSystem* jobs = request_->control ? request_->control->jobs.load() : nullptr;
     if (!jobs)
         return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
     if (AssetLoadState expected = AssetLoadState::Queued;
@@ -271,7 +271,6 @@ AssetLoadService::~AssetLoadService()
 }
 
 
-
 /** @copydoc AssetLoadService::LoadAsync */
 Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot &snapshot, const AssetId id)
 {
@@ -284,7 +283,7 @@ Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot 
     if (!state_->accepting)
         return Failure<AssetLoadHandle>(AssetErrors::LoadShutdown);
     std::erase_if(state_->requests,
-                  [](const auto &request) { return IsTerminal(request->state.load()); });
+                  [](const auto& request) { return IsTerminal(request->state.load()); });
     if (state_->requests.size() >= state_->maximumOutstanding)
         return Failure<AssetLoadHandle>(AssetErrors::LoadQueueFull);
 
@@ -303,7 +302,7 @@ Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot 
                 Result<std::vector<std::uint8_t>> loaded = provider->Load(request->id, cancellation);
                 request->Complete(loaded, cancellation);
             }
-            catch (const std::exception &)
+            catch (const std::exception&)
             {
                 request->Fail(AssetErrors::ProviderReadFailed);
             }

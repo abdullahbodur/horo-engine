@@ -285,7 +285,7 @@ class GuiScreenHost
     [[nodiscard]] std::optional<ProjectCreationOperationId> GetActiveCreationId() const noexcept;
 
     /** @brief Sets the current project root for import/file operations. */
-    void SetCurrentProjectRoot(const std::filesystem::path &root) noexcept { currentProjectRoot_ = root; }
+    void SetCurrentProjectRoot(const std::filesystem::path& root) noexcept { currentProjectRoot_ = root; }
 
     /** @brief Returns the current project root, or current_path() as fallback. */
     [[nodiscard]] std::filesystem::path CurrentProjectRoot() const noexcept;
@@ -318,7 +318,7 @@ class GuiScreenHost
     [[nodiscard]] EditorStatusItemRegistry &StatusItems() noexcept;
 
     /** @brief Handles files dropped onto the editor window, dispatching to the import modal. */
-    void HandleDropFiles(const std::vector<std::filesystem::path> &files);
+    void HandleDropFiles(const std::vector<std::filesystem::path>& files);
 
     /** @brief Returns the host-owned status-item registry for read-only inspection. */
     [[nodiscard]] const EditorStatusItemRegistry &StatusItems() const noexcept;

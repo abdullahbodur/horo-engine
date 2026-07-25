@@ -100,11 +100,14 @@ namespace Horo::Editor::Ui
             switch (props.componentSize)
             {
             case ButtonSize::Small:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 6.0f}); break;
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 6.0f});
+                break;
             case ButtonSize::Medium:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0f, 9.0f}); break;
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0f, 9.0f});
+                break;
             case ButtonSize::Large:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{18.0f, 12.0f}); break;
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{18.0f, 12.0f});
+                break;
             }
         }
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
+import pytest
+
+
 @pytest.fixture
 def repository_root() -> Path:
     """Return the canonical repository root containing the active scripts."""

@@ -15,7 +15,11 @@ namespace
         return catalog;
     }
 
-    TEST_CASE("Locale Tags Normalize And Reject Invalid Input", "[unit][editor]")
+    TEST_CASE (
+    "Locale Tags Normalize And Reject Invalid Input"
+    ,
+    "[unit][editor]"
+    )
     {
         const auto normalized = Horo::Editor::LocaleTag::Parse("tr-TR");
         REQUIRE((normalized.has_value()));
@@ -23,7 +27,11 @@ namespace
         REQUIRE((!Horo::Editor::LocaleTag::Parse("not a locale").has_value()));
     }
 
-    TEST_CASE("Locale Switch Uses Immutable Prepared Snapshot", "[unit][editor]")
+    TEST_CASE (
+    "Locale Switch Uses Immutable Prepared Snapshot"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
         REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
@@ -41,7 +49,11 @@ namespace
         REQUIRE((before.revision != service.Snapshot().revision));
     }
 
-    TEST_CASE("Failed Preparation Leaves Active Locale Unchanged", "[unit][editor]")
+    TEST_CASE (
+    "Failed Preparation Leaves Active Locale Unchanged"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
         REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
@@ -54,7 +66,11 @@ namespace
         REQUIRE((service.ActiveLocale().value == "en-US"));
     }
 
-    TEST_CASE("Missing Message Does Not Use Source Fallback", "[unit][editor]")
+    TEST_CASE (
+    "Missing Message Does Not Use Source Fallback"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Editor::LocalizationService service{Horo::Editor::LocaleTag{"en-US"}};
         REQUIRE((service.RegisterCatalog(Catalog("en-US", "Settings"))));
@@ -64,7 +80,11 @@ namespace
         REQUIRE((service.Get("editor", "missing") == "[missing:editor:missing]"));
     }
 
-    TEST_CASE("Catalog File Loader Parses Resource Format", "[unit][editor]")
+    TEST_CASE (
+    "Catalog File Loader Parses Resource Format"
+    ,
+    "[unit][editor]"
+    )
     {
         const auto path = std::filesystem::temp_directory_path() / "horo-localization-test.json";
         {
@@ -82,7 +102,11 @@ namespace
         std::filesystem::remove(path);
     }
 
-    TEST_CASE("Asset Localization Catalogs Contain Required Editor Messages", "[unit][editor]")
+    TEST_CASE (
+    "Asset Localization Catalogs Contain Required Editor Messages"
+    ,
+    "[unit][editor]"
+    )
     {
         constexpr std::array globalDockKeys{
             "workspace.global_dock.tab.assets",

@@ -14,7 +14,11 @@ namespace
         return LayoutNode{PanelNode{nodeId, panelId}};
     }
 
-    TEST_CASE("Finds Nodes And Panels By Stable Id", "[unit][editor]")
+    TEST_CASE (
+    "Finds Nodes And Panels By Stable Id"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = MakePanelNode("root.panel", "horo.viewport");
@@ -25,7 +29,11 @@ namespace
         REQUIRE((layout.FindPanel("missing") == nullptr));
     }
 
-    TEST_CASE("Validates A Well Formed Tab Stack", "[unit][editor]")
+    TEST_CASE (
+    "Validates A Well Formed Tab Stack"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = LayoutNode{
@@ -39,7 +47,11 @@ namespace
         REQUIRE((layout.Validate().empty()));
     }
 
-    TEST_CASE("Rejects An Active Tab That Is Not In Its Stack", "[unit][editor]")
+    TEST_CASE (
+    "Rejects An Active Tab That Is Not In Its Stack"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = LayoutNode{
@@ -55,7 +67,11 @@ namespace
         REQUIRE((issues.front().code == WorkspaceLayoutIssueCode::ActiveTabMissing));
     }
 
-    TEST_CASE("Layout Copies Own Its Tree", "[unit][editor]")
+    TEST_CASE (
+    "Layout Copies Own Its Tree"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout original;
         original.root = MakePanelNode("root.panel", "horo.viewport");
@@ -69,7 +85,11 @@ namespace
         REQUIRE((original.FindPanel("horo.inspector") == nullptr));
     }
 
-    TEST_CASE("Moves A Tab Between Stacks And Activates It", "[unit][editor]")
+    TEST_CASE (
+    "Moves A Tab Between Stacks And Activates It"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = LayoutNode{
@@ -93,7 +113,11 @@ namespace
         REQUIRE((layout.FindTabStack("right.stack")->activeTab == "horo.hierarchy"));
     }
 
-    TEST_CASE("Rejects Moving An Unknown Tab Without Mutation", "[unit][editor]")
+    TEST_CASE (
+    "Rejects Moving An Unknown Tab Without Mutation"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = LayoutNode{
@@ -105,7 +129,11 @@ namespace
         REQUIRE((layout.FindTabStack("root.stack")->tabs.size() == 1));
     }
 
-    TEST_CASE("Closes A Tab And Selects The Remaining Tab", "[unit][editor]")
+    TEST_CASE (
+    "Closes A Tab And Selects The Remaining Tab"
+    ,
+    "[unit][editor]"
+    )
     {
         WorkspaceLayout layout;
         layout.root = LayoutNode{

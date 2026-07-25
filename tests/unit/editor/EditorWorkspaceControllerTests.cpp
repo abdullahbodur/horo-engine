@@ -56,7 +56,11 @@ namespace
         EditorWorkspaceController controller_;
     };
 
-    TEST_CASE("Moving An Active Panel Across Areas Updates Its Runtime Placement", "[unit][editor]")
+    TEST_CASE (
+    "Moving An Active Panel Across Areas Updates Its Runtime Placement"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -77,7 +81,11 @@ namespace
         REQUIRE((viewModel.activityBarLayout.ItemAt(ActivityBarRail::Left, 2, 0) == "horo.content_browser"));
     }
 
-    TEST_CASE("Replacing A Target Area Preserves The Displaced Panels Placement", "[unit][editor]")
+    TEST_CASE (
+    "Replacing A Target Area Preserves The Displaced Panels Placement"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -92,7 +100,11 @@ namespace
         REQUIRE((viewModel.panelDockAreas.at("horo.content_browser") == WorkspaceDockArea::Bottom));
     }
 
-    TEST_CASE("Dropping Into Bottom Right Splits The Full Bottom Dock", "[unit][editor]")
+    TEST_CASE (
+    "Dropping Into Bottom Right Splits The Full Bottom Dock"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -113,7 +125,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
     }
 
-    TEST_CASE("Clicking A Split Panel Expands It To The Full Bottom Dock", "[unit][editor]")
+    TEST_CASE (
+    "Clicking A Split Panel Expands It To The Full Bottom Dock"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -138,7 +154,11 @@ namespace
         REQUIRE((viewModel.activeBottomRightPanelId.empty()));
     }
 
-    TEST_CASE("Dropping A Left Rail Icon Into Bottom Right Moves It To The Right Rail", "[unit][editor]")
+    TEST_CASE (
+    "Dropping A Left Rail Icon Into Bottom Right Moves It To The Right Rail"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -164,7 +184,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
     }
 
-    TEST_CASE("Places The Viewport In The Document Top Rail By Default", "[unit][editor]")
+    TEST_CASE (
+    "Places The Viewport In The Document Top Rail By Default"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -172,7 +196,11 @@ namespace
             ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
     }
 
-    TEST_CASE("Dropping Into The Lower Half Splits The Left Dock", "[unit][editor]")
+    TEST_CASE (
+    "Dropping Into The Lower Half Splits The Left Dock"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -194,7 +222,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
     }
 
-    TEST_CASE("Dropping Into The Lower Half Splits The Right Dock", "[unit][editor]")
+    TEST_CASE (
+    "Dropping Into The Lower Half Splits The Right Dock"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -216,7 +248,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Right, 1, 0}));
     }
 
-    TEST_CASE("Clicking A Split Side Panel Expands It To The Full Dock", "[unit][editor]")
+    TEST_CASE (
+    "Clicking A Split Side Panel Expands It To The Full Dock"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -241,7 +277,11 @@ namespace
         REQUIRE((viewModel.activeLeftBottomPanelId.empty()));
     }
 
-    TEST_CASE("Moving One Half Away Expands The Remaining Side Panel", "[unit][editor]")
+    TEST_CASE (
+    "Moving One Half Away Expands The Remaining Side Panel"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -267,7 +307,11 @@ namespace
         REQUIRE((viewModel.activeLeftBottomPanelId.empty()));
     }
 
-    TEST_CASE("Reordering An Active Icon Moves Its Panel And Activates A Source Fallback", "[unit][editor]")
+    TEST_CASE (
+    "Reordering An Active Icon Moves Its Panel And Activates A Source Fallback"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -308,7 +352,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.hierarchy") == ActivityBarSlot{ActivityBarRail::Left, 1, 1}));
     }
 
-    TEST_CASE("Reordering The Only Bottom Icon Does Not Leave A Half Empty Split", "[unit][editor]")
+    TEST_CASE (
+    "Reordering The Only Bottom Icon Does Not Leave A Half Empty Split"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -325,7 +373,11 @@ namespace
         REQUIRE((viewModel.activeBottomRightPanelId.empty()));
     }
 
-    TEST_CASE("Dropping On A Side Merge Target Expands The Panel Without Moving Its Icon", "[unit][editor]")
+    TEST_CASE (
+    "Dropping On A Side Merge Target Expands The Panel Without Moving Its Icon"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -365,7 +417,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
     }
 
-    TEST_CASE("Dropping On The Bottom Merge Target Preserves Its Activity Group", "[unit][editor]")
+    TEST_CASE (
+    "Dropping On The Bottom Merge Target Preserves Its Activity Group"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -395,7 +451,11 @@ namespace
             (viewModel.activityBarLayout.FindSlot("horo.inspector") == ActivityBarSlot{ActivityBarRail::Right, 2, 0}));
     }
 
-    TEST_CASE("Reordering An Active Bottom Panel To The Left Does Not Render It Twice", "[unit][editor]")
+    TEST_CASE (
+    "Reordering An Active Bottom Panel To The Left Does Not Render It Twice"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
 
@@ -414,7 +474,11 @@ namespace
         REQUIRE((viewModel.activeBottomRightPanelId.empty()));
     }
 
-    TEST_CASE("Scene Commands Publish Committed Events And Drive Undo Redo State", "[unit][editor]")
+    TEST_CASE (
+    "Scene Commands Publish Committed Events And Drive Undo Redo State"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         std::vector<SceneDocumentChangedEvent> events;
@@ -449,7 +513,11 @@ namespace
         REQUIRE((events.size() == 3 && events.back().kind == DocumentChangeKind::Redone));
     }
 
-    TEST_CASE("Catalog Creation Selects The Result And Honors The Requested Parent", "[unit][editor]")
+    TEST_CASE (
+    "Catalog Creation Selects The Result And Honors The Requested Parent"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         EditorWorkspaceViewCommandData createRoot;
@@ -473,7 +541,11 @@ namespace
         REQUIRE((controller.ViewModel().hierarchyRevealObject == camera.id));
     }
 
-    TEST_CASE("Stable Selection Drives Inspector Projection And Reconciles After Delete", "[unit][editor]")
+    TEST_CASE (
+    "Stable Selection Drives Inspector Projection And Reconciles After Delete"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -507,7 +579,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Viewport Picking Uses The Authoritative Selection Model", "[unit][editor]")
+    TEST_CASE (
+    "Viewport Picking Uses The Authoritative Selection Model"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -533,7 +609,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Transform Commands Update The Document Projection Viewport And History", "[unit][editor]")
+    TEST_CASE (
+    "Transform Commands Update The Document Projection Viewport And History"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -572,7 +652,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Viewport Navigation Updates Only The Editor Camera Authority", "[unit][editor]")
+    TEST_CASE (
+    "Viewport Navigation Updates Only The Editor Camera Authority"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const EditorViewportCamera before = controller.ViewportScene().camera;
@@ -596,7 +680,11 @@ namespace
         static_cast<void>(subscription);
     }
 
-    TEST_CASE("Gizmo Preview Is Transient And Commit Creates One Undoable Document Change", "[unit][editor]")
+    TEST_CASE (
+    "Gizmo Preview Is Transient And Commit Creates One Undoable Document Change"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -644,7 +732,11 @@ namespace
         static_cast<void>(viewportSubscription);
     }
 
-    TEST_CASE("Cancelling Gizmo Preview Restores The Exact Committed Projection", "[unit][editor]")
+    TEST_CASE (
+    "Cancelling Gizmo Preview Restores The Exact Committed Projection"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;
@@ -681,7 +773,11 @@ namespace
         static_cast<void>(viewportSubscription);
     }
 
-    TEST_CASE("No Op Gizmo Commit Clears Preview Without Creating History", "[unit][editor]")
+    TEST_CASE (
+    "No Op Gizmo Commit Clears Preview Without Creating History"
+    ,
+    "[unit][editor]"
+    )
     {
         TestWorkspaceController controller;
         const SceneObjectId object = controller.ViewModel().objects.front().id;

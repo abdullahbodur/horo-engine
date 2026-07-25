@@ -38,7 +38,11 @@ namespace
         return EditorStatusItemContent{.label = std::move(label), .value = std::move(value)};
     }
 
-    TEST_CASE("Registration rejects invalid status item descriptors", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Registration rejects invalid status item descriptors"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
 
@@ -65,7 +69,11 @@ namespace
                "interactive contributions must name a typed action");
     }
 
-    TEST_CASE("Content updates are bounded and transactional", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Content updates are bounded and transactional"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("horo.status.nav"), Content("Nav", "idle")),
@@ -82,7 +90,11 @@ namespace
                "unknown contribution updates must return a typed error");
     }
 
-    TEST_CASE("Panel visibility uses the frame context", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Panel visibility uses the frame context"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         auto descriptor = Descriptor("vendor.profiler.status");
@@ -100,7 +112,11 @@ namespace
                "panel-only status must appear while its panel is active");
     }
 
-    TEST_CASE("Status item ordering does not depend on registration order", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Status item ordering does not depend on registration order"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("vendor.z", 0, EditorStatusBarAlignment::Right, 20), Content("Z")),
@@ -120,7 +136,11 @@ namespace
                "alignment, explicit order, and stable ID must determine presentation order");
     }
 
-    TEST_CASE("Width budget keeps higher priority status items", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Width budget keeps higher priority status items"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("core.essential", 100, EditorStatusBarAlignment::Left, 0),
@@ -155,7 +175,11 @@ namespace
                "lowest-priority contribution must be removed first");
     }
 
-    TEST_CASE("Status item admission is a strict priority prefix", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Status item admission is a strict priority prefix"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("vendor.high", 100), Content("High")), "register high");
@@ -169,7 +193,11 @@ namespace
         Expect(layout.hiddenCount == 2, "strict-prefix admission must report every omitted item");
     }
 
-    TEST_CASE("Admission tie breaks ignore presentation alignment", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Admission tie breaks ignore presentation alignment"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("vendor.right", 50, EditorStatusBarAlignment::Right, 0), Content("Right")),
@@ -185,7 +213,11 @@ namespace
                "equal-priority admission must use explicit order before presentation alignment");
     }
 
-    TEST_CASE("Status registry capacity preserves stable pointers", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Status registry capacity preserves stable pointers"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("vendor.stable"), Content("Stable")), "register stable item");
@@ -204,7 +236,11 @@ namespace
                "registry must reject contributions above its hard capacity");
     }
 
-    TEST_CASE("Status layout enforces the maximum visible item count", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Status layout enforces the maximum visible item count"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         for (std::size_t index = 0; index < 13; ++index)
@@ -226,7 +262,11 @@ namespace
         Expect(layout.items.size() == 12 && layout.hiddenCount == 1, "layout must enforce the visible-item cap");
     }
 
-    TEST_CASE("Overflow reservation includes the visual gap", "[unit][editor][status-bar]")
+    TEST_CASE (
+    "Overflow reservation includes the visual gap"
+    ,
+    "[unit][editor][status-bar]"
+    )
     {
         EditorStatusItemRegistry registry;
         Expect(registry.Register(Descriptor("vendor.high", 100), Content("High")), "register high");

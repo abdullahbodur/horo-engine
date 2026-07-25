@@ -16,7 +16,11 @@ namespace
         REQUIRE((condition));
     }
 
-    TEST_CASE("Mock Hierarchy Matches Editor Reference", "[unit][editor]")
+    TEST_CASE (
+    "Mock Hierarchy Matches Editor Reference"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
@@ -30,7 +34,11 @@ namespace
         Expect(model.Roots()[2]->children[0]->type == HierarchyNodeType::Camera, "Cameras should contain a camera");
     }
 
-    TEST_CASE("Visible Rows Respect Expansion And Search Ancestors", "[unit][editor]")
+    TEST_CASE (
+    "Visible Rows Respect Expansion And Search Ancestors"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
@@ -51,7 +59,11 @@ namespace
                "search should preserve hierarchy context");
     }
 
-    TEST_CASE("Rename Validates And Updates Node", "[unit][editor]")
+    TEST_CASE (
+    "Rename Validates And Updates Node"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
@@ -65,7 +77,11 @@ namespace
         Expect(model.Find(floorId)->name == "Player Floor", "failed rename should preserve the prior name");
     }
 
-    TEST_CASE("Delete Removes Whole Subtree And Selection", "[unit][editor]")
+    TEST_CASE (
+    "Delete Removes Whole Subtree And Selection"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model;
@@ -80,7 +96,11 @@ namespace
         Expect(!model.SelectedId().has_value(), "deleting the selected subtree should clear selection");
     }
 
-    TEST_CASE("Reparent Preserves Subtree And Rejects Cycles", "[unit][editor]")
+    TEST_CASE (
+    "Reparent Preserves Subtree And Rejects Cycles"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model;
@@ -103,7 +123,11 @@ namespace
         Expect(model.ParentId(grandchild) == child, "root move should still preserve descendants");
     }
 
-    TEST_CASE("Replace Projects Stable Hierarchy And Preserves Presentation State", "[unit][editor]")
+    TEST_CASE (
+    "Replace Projects Stable Hierarchy And Preserves Presentation State"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Editor;
         HierarchyModel model;

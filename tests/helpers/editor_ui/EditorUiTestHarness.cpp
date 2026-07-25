@@ -220,7 +220,8 @@ namespace Horo::Tests
             ImGuiTestEngineIO& testIo = ImGuiTestEngine_GetIO(engine_);
             if (surface_->IsInteractive())
             {
-                if (const char* const envSpeed = std::getenv("HORO_UI_TEST_SPEED"); envSpeed != nullptr && envSpeed[0] != '\0')
+                if (const char* const envSpeed = std::getenv("HORO_UI_TEST_SPEED"); envSpeed != nullptr && envSpeed[0]
+                    != '\0')
                 {
                     if (std::string_view{envSpeed} == "cinematic")
                         testIo.ConfigRunSpeed = ImGuiTestRunSpeed_Cinematic;

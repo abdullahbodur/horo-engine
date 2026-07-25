@@ -100,7 +100,11 @@ namespace
         return result;
     }
 
-    TEST_CASE("Opening settings hydrates the authority snapshot", "[unit][editor][settings]")
+    TEST_CASE (
+    "Opening settings hydrates the authority snapshot"
+    ,
+    "[unit][editor][settings]"
+    )
     {
         const ScopedSettingsHome home;
         SettingsFixture fixture;
@@ -115,7 +119,11 @@ namespace
         REQUIRE((!modal->Draft().dirty));
     }
 
-    TEST_CASE("Closing a clean settings modal does not publish a revert", "[unit][editor][settings]")
+    TEST_CASE (
+    "Closing a clean settings modal does not publish a revert"
+    ,
+    "[unit][editor][settings]"
+    )
     {
         const ScopedSettingsHome home;
         SettingsFixture fixture;
@@ -133,7 +141,11 @@ namespace
         REQUIRE((reverted == 0));
     }
 
-    TEST_CASE("Cancelling dirty settings publishes one revert", "[unit][editor][settings]")
+    TEST_CASE (
+    "Cancelling dirty settings publishes one revert"
+    ,
+    "[unit][editor][settings]"
+    )
     {
         const ScopedSettingsHome home;
         SettingsFixture fixture;
@@ -154,7 +166,11 @@ namespace
         REQUIRE((reverted == 1));
     }
 
-    TEST_CASE("Force closing dirty settings publishes one revert", "[unit][editor][settings]")
+    TEST_CASE (
+    "Force closing dirty settings publishes one revert"
+    ,
+    "[unit][editor][settings]"
+    )
     {
         const ScopedSettingsHome home;
         SettingsFixture fixture;
@@ -174,7 +190,11 @@ namespace
         REQUIRE((reverted == 1));
     }
 
-    TEST_CASE("Applying settings publishes only the authority commit", "[unit][editor][settings]")
+    TEST_CASE (
+    "Applying settings publishes only the authority commit"
+    ,
+    "[unit][editor][settings]"
+    )
     {
         const ScopedSettingsHome home;
         SettingsFixture fixture;

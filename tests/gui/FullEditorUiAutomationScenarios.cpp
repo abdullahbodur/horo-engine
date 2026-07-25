@@ -19,7 +19,11 @@ namespace
 {
     using namespace Horo;
 
-    TEST_CASE("Selected E2E renderer produces an editor viewport texture", "[ui][imgui][editor][e2e][renderer]")
+    TEST_CASE (
+    "Selected E2E renderer produces an editor viewport texture"
+    ,
+    "[ui][imgui][editor][e2e][renderer]"
+    )
     {
         Tests::EditorUiTestHarness harness;
         Tests::IEditorUiTestSurface& surface = harness.Surface();
@@ -133,7 +137,11 @@ namespace
             REQUIRE(editor.RendererReady());
     }
 
-    TEST_CASE("Recent project opens through the loading screen", "[ui][imgui][editor][e2e][recent-project]")
+    TEST_CASE (
+    "Recent project opens through the loading screen"
+    ,
+    "[ui][imgui][editor][e2e][recent-project]"
+    )
     {
         Tests::EditorUiTestHarness harness;
         Tests::FullEditorUiTestHost editor{harness.Surface(), "en-US", "RecentProject"};

@@ -17,7 +17,11 @@ namespace
         .maxY = 600.0F,
     };
 
-    TEST_CASE("Captures Drag Without Depending On An Im Gui Window", "[unit][editor]")
+    TEST_CASE (
+    "Captures Drag Without Depending On An Im Gui Window"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Input::InputRouter router;
         auto context =
@@ -58,7 +62,11 @@ namespace
         REQUIRE((!interaction.OwnsPrimaryPointer()));
     }
 
-    TEST_CASE("Reports Hover Without Capturing", "[unit][editor]")
+    TEST_CASE (
+    "Reports Hover Without Capturing"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Input::InputRouter router;
         auto context =
@@ -79,7 +87,11 @@ namespace
         REQUIRE((hovered.delta == 0.0F));
     }
 
-    TEST_CASE("Bottom Resize Owns Pointer Outside The Overlapping Seam", "[unit][editor]")
+    TEST_CASE (
+    "Bottom Resize Owns Pointer Outside The Overlapping Seam"
+    ,
+    "[unit][editor]"
+    )
     {
         Horo::Input::InputRouter router;
         auto context =

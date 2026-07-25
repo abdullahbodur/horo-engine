@@ -503,7 +503,8 @@ void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocatio
         static_cast<void>(Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
         return;
     case EditorMenuAction::ImportAssets:
-        if (context_ && modalHost_ && !modalHost_->HasOpenModal())
+        if (context_&& modalHost_ &&!modalHost_->HasOpenModal()
+        )
         {
             // Build catalog with all built-in importers
             Assets::AssetImporterCatalog catalog;
@@ -547,7 +548,7 @@ void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocatio
     }
 }
 
-void GuiScreenHost::HandleDropFiles(const std::vector<std::filesystem::path> &files)
+void GuiScreenHost::HandleDropFiles(const std::vector<std::filesystem::path>& files)
 {
     if (files.empty() || !modalHost_) return;
 
@@ -559,8 +560,8 @@ void GuiScreenHost::HandleDropFiles(const std::vector<std::filesystem::path> &fi
     }
 
     // Feed files into the import modal if it's the top modal.
-    auto *topModal = modalHost_->TopModal();
-    auto *importModal = dynamic_cast<AssetImportModal *>(topModal);
+    auto* topModal = modalHost_->TopModal();
+    auto* importModal = dynamic_cast<AssetImportModal*>(topModal);
     if (importModal)
     {
         CancellationToken cancellation;

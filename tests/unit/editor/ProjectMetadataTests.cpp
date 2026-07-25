@@ -79,7 +79,11 @@ namespace
         };
     }
 
-    TEST_CASE("Loads Persisted Backend And Requires Composition Restart When Different", "[unit][editor]")
+    TEST_CASE (
+    "Loads Persisted Backend And Requires Composition Restart When Different"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteMetadata("opengl");
@@ -93,7 +97,11 @@ namespace
         REQUIRE((preflight.requiredBackendId == "opengl"));
     }
 
-    TEST_CASE("Accepts Project When Persisted Backend Is Already Active", "[unit][editor]")
+    TEST_CASE (
+    "Accepts Project When Persisted Backend Is Already Active"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteMetadata("metal");
@@ -103,7 +111,11 @@ namespace
         REQUIRE((preflight.requiredBackendId == "metal"));
     }
 
-    TEST_CASE("Rejects Unavailable Persisted Backend Without Fallback", "[unit][editor]")
+    TEST_CASE (
+    "Rejects Unavailable Persisted Backend Without Fallback"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteMetadata("vulkan");
@@ -113,14 +125,22 @@ namespace
         REQUIRE((preflight.requiredBackendId == "vulkan"));
     }
 
-    TEST_CASE("Reports Unreadable Metadata", "[unit][editor]")
+    TEST_CASE (
+    "Reports Unreadable Metadata"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         const ProjectOpenPreflight preflight = PreflightProjectOpen(project.Root(), Availability());
         REQUIRE((preflight.status == ProjectOpenPreflightStatus::ProjectMetadataUnreadable));
     }
 
-    TEST_CASE("Preserves Actionable Renderer Resolution States", "[unit][editor]")
+    TEST_CASE (
+    "Preserves Actionable Renderer Resolution States"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteMetadata("vulkan");
@@ -141,7 +161,11 @@ namespace
             ProjectOpenPreflightStatus::RendererCapabilityMismatch));
     }
 
-    TEST_CASE("Rejects Malformed Nested And Duplicate Metadata", "[unit][editor]")
+    TEST_CASE (
+    "Rejects Malformed Nested And Duplicate Metadata"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteRawMetadata(
@@ -152,7 +176,11 @@ namespace
         REQUIRE((Horo::Application::LoadProjectMetadata(project.Root()).HasError()));
     }
 
-    TEST_CASE("Accepts Unicode Escapes And Rejects Oversized Metadata", "[unit][editor]")
+    TEST_CASE (
+    "Accepts Unicode Escapes And Rejects Oversized Metadata"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryProject project;
         project.WriteMetadata("metal");

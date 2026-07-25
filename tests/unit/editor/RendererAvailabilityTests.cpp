@@ -8,7 +8,11 @@ namespace
 {
     using namespace Horo::Editor;
 
-    TEST_CASE("Keeps Known Unavailable Backends Visible But Not Selectable", "[unit][editor]")
+    TEST_CASE (
+    "Keeps Known Unavailable Backends Visible But Not Selectable"
+    ,
+    "[unit][editor]"
+    )
     {
         const RendererAvailabilitySnapshot snapshot{
             {
@@ -30,7 +34,11 @@ namespace
         REQUIRE((snapshot.ActiveBackendId() == "metal"));
     }
 
-    TEST_CASE("Selects Active Backend As Project Default", "[unit][editor]")
+    TEST_CASE (
+    "Selects Active Backend As Project Default"
+    ,
+    "[unit][editor]"
+    )
     {
         const RendererAvailabilitySnapshot snapshot{
             {

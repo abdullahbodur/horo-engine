@@ -187,8 +187,8 @@ namespace
         {
             const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
             root = std::filesystem::temp_directory_path() /
-                ("horo-migration-test-" + std::to_string(stamp) + "-" +
-                 std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+            ("horo-migration-test-" + std::to_string(stamp) + "-" +
+                std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
             std::error_code error;
             REQUIRE((std::filesystem::create_directories(root / ".horo/local", error)));
             REQUIRE_FALSE((error));

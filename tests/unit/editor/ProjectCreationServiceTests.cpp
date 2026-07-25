@@ -88,7 +88,11 @@ namespace
         return {};
     }
 
-    TEST_CASE("Creates Portable Project In An Atomic Promotion", "[unit][editor]")
+    TEST_CASE (
+    "Creates Portable Project In An Atomic Promotion"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryDirectory temporary;
         Horo::JobSystem jobs{{.workerCount = 1, .maxQueuedJobs = 4}};
@@ -128,7 +132,11 @@ namespace
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Refuses Occupied Destination Without Overwriting It", "[unit][editor]")
+    TEST_CASE (
+    "Refuses Occupied Destination Without Overwriting It"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryDirectory temporary;
         const auto root = temporary.Path() / "occupied";
@@ -146,7 +154,11 @@ namespace
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Cancellation Leaves No Destination Or Staging Directory", "[unit][editor]")
+    TEST_CASE (
+    "Cancellation Leaves No Destination Or Staging Directory"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryDirectory temporary;
         Horo::JobSystem jobs{{.workerCount = 0, .maxQueuedJobs = 4}};
@@ -172,7 +184,11 @@ namespace
         jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
     }
 
-    TEST_CASE("Publishes Committed Events Only After Main Thread Dispatch", "[unit][editor]")
+    TEST_CASE (
+    "Publishes Committed Events Only After Main Thread Dispatch"
+    ,
+    "[unit][editor]"
+    )
     {
         TemporaryDirectory temporary;
         Horo::JobSystem jobs{{.workerCount = 1, .maxQueuedJobs = 4}};

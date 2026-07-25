@@ -69,7 +69,7 @@ namespace Horo::Editor
                                       ? "Horo " + Application::FormatHoroVersion(
                                                        project.compatibility->projectVersion->value)
                                       : ctx.localization.Get(
-                                            "editor", "welcome.project.compatibility.version_unavailable");
+                                          "editor", "welcome.project.compatibility.version_unavailable");
                     statusText = ctx.localization.Get("editor", CompatibilityLabelKey(*project.compatibility));
                 }
 

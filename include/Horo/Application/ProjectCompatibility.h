@@ -140,7 +140,8 @@ namespace Horo::Application
          * @param currentRelease Exact running engine release.
          * @param proofVerifier Trust boundary that outlives the inspector.
          */
-        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry, const EngineReleaseVersion& currentRelease,
+        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry,
+                                      const EngineReleaseVersion& currentRelease,
                                       const ICompatibilityProofVerifier& proofVerifier) noexcept;
 
         /**

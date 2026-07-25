@@ -15,7 +15,11 @@ namespace
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-    TEST_CASE("Transform Uses Translation Rotation Scale Order", "[unit][editor]")
+    TEST_CASE (
+    "Transform Uses Translation Rotation Scale Order"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Math;
         const Transform transform{
@@ -29,7 +33,11 @@ namespace
         REQUIRE((NearlyEqual(result.z, 2.0F)));
     }
 
-    TEST_CASE("Look At Uses Right Handed Negative Z View Space", "[unit][editor]")
+    TEST_CASE (
+    "Look At Uses Right Handed Negative Z View Space"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Math;
         const Mat4 view = LookAt({0.0F, 0.0F, 4.0F}, {}, {0.0F, 1.0F, 0.0F});
@@ -39,7 +47,11 @@ namespace
         REQUIRE((NearlyEqual(originInView.z, -4.0F)));
     }
 
-    TEST_CASE("Perspective Makes Clip Depth Explicit", "[unit][editor]")
+    TEST_CASE (
+    "Perspective Makes Clip Depth Explicit"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo::Math;
         constexpr float nearPlane = 0.1F;
@@ -53,7 +65,11 @@ namespace
         REQUIRE((NearlyEqual(TransformPoint(zeroToOne, {0.0F, 0.0F, -farPlane}).z, 1.0F)));
     }
 
-    TEST_CASE("Viewport Scene Validates Typed Inputs And Shared Geometry", "[unit][editor]")
+    TEST_CASE (
+    "Viewport Scene Validates Typed Inputs And Shared Geometry"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -84,7 +100,11 @@ namespace
         REQUIRE((!invalid.IsValid()));
     }
 
-    TEST_CASE("Viewport Projection And Rays Share The Camera Contract", "[unit][editor]")
+    TEST_CASE (
+    "Viewport Projection And Rays Share The Camera Contract"
+    ,
+    "[unit][editor]"
+    )
     {
         using namespace Horo;
         using namespace Horo::Editor;
