@@ -7,6 +7,7 @@
 
 #include "Horo/Runtime/Render/Mesh.h"
 
+#include <cmath>
 #include <cstdint>
 #include <span>
 

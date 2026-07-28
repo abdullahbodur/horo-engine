@@ -105,7 +105,7 @@ std::size_t WriteDownload(
 {
     auto& buffer = *static_cast<DownloadBuffer*>(userData);
     const std::size_t byteCount = size * count;
-    if (byteCount > buffer.limit - std::min(buffer.limit, buffer.bytes.size()))
+    if (byteCount > buffer.limit - (std::min)(buffer.limit, buffer.bytes.size()))
     {
         buffer.exceeded = true;
         return 0;

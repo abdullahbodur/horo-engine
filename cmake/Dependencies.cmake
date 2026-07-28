@@ -32,7 +32,49 @@ if(HORO_ENABLE_EXTENSION_MARKETPLACE)
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(miniz)
-    find_package(CURL REQUIRED)
+
+    # Build the marketplace HTTPS stack from pinned sources so enabling the
+    # editor does not require a separately installed libcurl SDK. Prefer the
+    # native Windows trust store through Schannel; use the portable
+    # Mbed TLS backend on other targets.
+    if(NOT WIN32)
+        set(HORO_MBEDTLS_REVISION "5b64a9fdb979c8971561ec78221b528e3cc4e00a")
+        set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            MbedTLS
+            GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+            GIT_TAG "${HORO_MBEDTLS_REVISION}"
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(MbedTLS)
+    endif()
+
+    set(HORO_CURL_REVISION "6e3f8dc1f173b47de9a68516ce4b95bf25598c2f")
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
+    set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+    set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+    if(WIN32)
+        set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    else()
+        set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
+    endif()
+    set(_HORO_BUILD_TESTING "${BUILD_TESTING}")
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        CURL
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG "${HORO_CURL_REVISION}"
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(CURL)
+    set(BUILD_TESTING "${_HORO_BUILD_TESTING}" CACHE BOOL "" FORCE)
+    unset(_HORO_BUILD_TESTING)
 endif()
 
 add_library(HoroThirdPartyUfbx STATIC

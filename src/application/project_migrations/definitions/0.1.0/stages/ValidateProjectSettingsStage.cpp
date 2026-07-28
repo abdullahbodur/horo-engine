@@ -103,7 +103,8 @@ class TargetContractValidator final : public Application::IProjectMigrationValid
             return Result<void>::Failure(MakeError(Application::ProjectErrors::MigrationStageFailed,
                                                    "Target project metadata lacks required fields."));
         if (!root["horoVersion"].is_string() || root["horoVersion"] != "0.1.0" ||
-            !root["persistentContract"].is_string() || root["persistentContract"] != TargetContract ||
+            !root["persistentContract"].is_string() ||
+            root["persistentContract"].get_ref<const std::string &>() != TargetContract ||
             !root["migrationHistoryHead"].is_string())
             return Result<void>::Failure(MakeError(Application::ProjectErrors::MigrationStageFailed,
                                                    "Target version, contract, or history binding is invalid."));
